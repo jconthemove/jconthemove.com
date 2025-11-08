@@ -1,0 +1,103 @@
+Awesome 👏 here’s your mobile-optimized, branded JC ON THE MOVE fallback page — looks perfect on Android/iPhone, stays centered on desktop, and keeps the spinning loader and your truck image background.
+
+📄 Save as fallback.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JC ON THE MOVE — Maintenance</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{
+      height:100vh;width:100vw;
+      font-family:"Poppins",Arial,sans-serif;
+      background:url("FB_IMG_1675268829327.jpg") no-repeat center center/cover;
+      display:flex;align-items:center;justify-content:center;flex-direction:column;
+      color:white;text-align:center;position:relative;overflow:hidden;
+    }
+    body::before{
+      content:"";position:absolute;inset:0;
+      background:rgba(0,0,0,0.55);backdrop-filter:blur(2px);
+    }
+    .content{
+      position:relative;z-index:2;max-width:90%;
+      padding:1rem;animation:fadeIn 1.5s ease;
+    }
+    h1{
+      font-size:clamp(1.8rem,4vw,2.6rem);
+      font-weight:700;margin-bottom:0.8rem;
+      letter-spacing:1px;text-transform:uppercase;
+    }
+    p{
+      font-size:clamp(1rem,2.8vw,1.15rem);
+      line-height:1.6;margin-bottom:1rem;
+    }
+    .loader{
+      border:4px solid rgba(255,255,255,0.3);
+      border-top:4px solid #fff;border-radius:50%;
+      width:45px;height:45px;margin:1.2rem auto;
+      animation:spin 1.4s linear infinite;
+    }
+    a.button{
+      display:inline-block;margin:0.3rem;
+      padding:0.85rem 1.4rem;
+      font-size:clamp(1rem,3vw,1.05rem);
+      border:2px solid white;border-radius:10px;
+      color:white;text-decoration:none;
+      transition:all 0.3s ease;
+    }
+    a.button:hover,a.button:active{
+      background:white;color:black;transform:scale(1.03);
+    }
+    footer{
+      position:absolute;bottom:12px;width:100%;
+      text-align:center;font-size:0.9rem;opacity:0.8;
+    }
+    @keyframes spin{to{transform:rotate(360deg);}}
+    @keyframes fadeIn{
+      from{opacity:0;transform:translateY(15px);}
+      to{opacity:1;transform:translateY(0);}
+    }
+    @media(max-width:600px){
+      a.button{display:block;margin:0.4rem auto;width:80%;}
+    }
+  </style>
+</head>
+<body>
+  <div class="content">
+    <h1>🚚 JC ON THE MOVE LLC</h1>
+    <p>We MOVE with PURPOSE — Glory to GOD</p>
+    <div class="loader"></div>
+    <p>We’re updating our systems and will be back online shortly.<br>
+      Serving Michigan’s Upper Peninsula & Northern Wisconsin.</p>
+
+    <a class="button" href="tel:+19062859312">📞 Call (906) 285-9312</a>
+    <a class="button" href="https://www.JCONTHEMOVE.com">🌐 Visit Website</a>
+    <a class="button" href="https://www.facebook.com/JCONTHEMOVE">📘 Facebook Page</a>
+  </div>
+  <footer>© 2025 JC ON THE MOVE LLC — All Rights Reserved</footer>
+</body>
+</html>
+
+✅ Setup Steps
+
+Upload your truck image file
+FB_IMG_1675268829327.jpg → Replit project root.
+
+Save this file as fallback.html.
+
+In your server file (index.ts or server.ts), after your static middleware:
+
+app.use((req, res) => {
+  res.sendFile(__dirname + "/fallback.html");
+});
+
+
+Click “Run” → Test it on mobile.
+
+It should fill the screen perfectly.
+
+Buttons are large and tap-friendly.
+
+Loader spins until your main app is ready.
