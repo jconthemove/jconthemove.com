@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -12,14 +12,21 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
-import { Truck, Trash2, Snowflake, Sparkles, Send, ArrowLeft } from "lucide-react";
+import { Truck, Trash2, Snowflake, Sparkles, Send, ArrowLeft, Camera, X, ImagePlus } from "lucide-react";
 import { Link } from "wouter";
+
+interface QuotePhoto {
+  id: string;
+  dataUrl: string;
+  name: string;
+}
 
 export default function QuotePage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [location] = useLocation();
   const [selectedService, setSelectedService] = useState<string>("");
+  const [photos, setPhotos] = useState<QuotePhoto[]>([]);
 
   // Parse service from URL query parameter
   useEffect(() => {
@@ -30,6 +37,51 @@ export default function QuotePage() {
       form.setValue("serviceType", service);
     }
   }, [location]);
+
+  const handlePhotoUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files) return;
+
+    if (photos.length + files.length > 5) {
+      toast({
+        title: "Too many photos",
+        description: "You can upload up to 5 photos.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    Array.from(files).forEach((file) => {
+      if (file.size > 10 * 1024 * 1024) {
+        toast({
+          title: "File too large",
+          description: `${file.name} is larger than 10MB.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target?.result as string;
+        setPhotos((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            dataUrl,
+            name: file.name,
+          },
+        ]);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    event.target.value = "";
+  }, [photos.length, toast]);
+
+  const removePhoto = useCallback((id: string) => {
+    setPhotos((prev) => prev.filter((p) => p.id !== id));
+  }, []);
 
   const form = useForm<InsertLead>({
     resolver: zodResolver(insertLeadSchema),
@@ -49,7 +101,16 @@ export default function QuotePage() {
 
   const submitLead = useMutation({
     mutationFn: async (data: InsertLead) => {
-      const response = await apiRequest("POST", "/api/leads", data);
+      const photoData = photos.map((p) => ({
+        id: p.id,
+        url: p.dataUrl,
+        type: "before" as const,
+        timestamp: new Date().toISOString(),
+      }));
+      const response = await apiRequest("POST", "/api/leads", {
+        ...data,
+        photos: photoData,
+      });
       return response.json();
     },
     onSuccess: () => {
@@ -59,6 +120,7 @@ export default function QuotePage() {
       });
       form.reset();
       setSelectedService("");
+      setPhotos([]);
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
     },
     onError: (error: Error) => {
@@ -280,6 +342,60 @@ export default function QuotePage() {
                   {...form.register("details")}
                   data-testid="textarea-details"
                 />
+              </div>
+
+              {/* Photo Upload Section */}
+              <div>
+                <Label className="text-slate-200 mb-3 block">
+                  <Camera className="inline-block mr-2 h-4 w-4" />
+                  Add Photos (optional)
+                </Label>
+                <p className="text-slate-400 text-sm mb-3">
+                  Upload up to 5 photos to help us provide an accurate quote.
+                </p>
+                
+                {/* Photo Preview Grid */}
+                {photos.length > 0 && (
+                  <div className="grid grid-cols-3 gap-3 mb-4">
+                    {photos.map((photo) => (
+                      <div key={photo.id} className="relative aspect-square rounded-lg overflow-hidden bg-slate-700">
+                        <img
+                          src={photo.dataUrl}
+                          alt={photo.name}
+                          className="w-full h-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removePhoto(photo.id)}
+                          className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full p-1 shadow-lg transition-colors"
+                          data-testid={`button-remove-photo-${photo.id}`}
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Upload Button */}
+                {photos.length < 5 && (
+                  <label className="cursor-pointer">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handlePhotoUpload}
+                      className="hidden"
+                      data-testid="input-photo-upload"
+                    />
+                    <div className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-slate-600 rounded-xl hover:border-primary hover:bg-slate-700/50 transition-colors">
+                      <ImagePlus className="h-6 w-6 text-slate-400" />
+                      <span className="text-slate-300">
+                        {photos.length === 0 ? "Tap to add photos" : `Add more photos (${5 - photos.length} remaining)`}
+                      </span>
+                    </div>
+                  </label>
+                )}
               </div>
 
               <Button
