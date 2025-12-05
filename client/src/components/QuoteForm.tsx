@@ -185,32 +185,35 @@ export default function QuoteForm({
   };
 
   const cardClasses = isEmployee 
-    ? "bg-card border-border" 
+    ? "border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-sm shadow-xl overflow-hidden" 
     : "shadow-2xl bg-slate-800/50 border-slate-700";
   
   const labelClasses = isEmployee 
-    ? "text-foreground" 
+    ? "text-slate-200" 
     : "text-slate-200";
   
   const inputClasses = isEmployee 
-    ? "" 
+    ? "bg-slate-800/50 border-slate-600 text-slate-100 placeholder:text-slate-500 focus:border-blue-500 focus:ring-blue-500/20" 
     : "bg-slate-700 border-slate-600 text-white placeholder:text-slate-400";
 
   const errorClasses = isEmployee 
-    ? "text-destructive text-sm mt-1" 
+    ? "text-red-400 text-sm mt-1" 
     : "text-red-400 text-sm mt-1";
 
   return (
     <Card className={cardClasses}>
       {isEmployee && (
-        <CardHeader>
-          <CardTitle>Job Request Details</CardTitle>
-          <CardDescription>
+        <CardHeader className="border-b border-slate-700/50 bg-slate-800/50">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-orange-500 to-blue-500"></div>
+          <CardTitle className="flex items-center gap-3 text-slate-100 text-xl">
+            Job Request Details
+          </CardTitle>
+          <CardDescription className="text-slate-400">
             Fill out the customer's information and job details
           </CardDescription>
         </CardHeader>
       )}
-      <CardContent className={isEmployee ? "" : "p-6 md:p-8"}>
+      <CardContent className={isEmployee ? "pt-6" : "p-6 md:p-8"}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <div>
             <Label className={`block text-sm font-medium ${labelClasses} mb-3`}>Service Type *</Label>
@@ -233,16 +236,16 @@ export default function QuoteForm({
                     />
                     <div className={`p-3 border-2 rounded-xl transition-all duration-200 ${
                       isSelected 
-                        ? 'border-primary bg-gradient-to-br ' + service.color + ' shadow-lg scale-[1.02]' 
+                        ? 'border-transparent bg-gradient-to-br ' + service.color + ' shadow-lg shadow-blue-900/20 scale-[1.02]' 
                         : isEmployee 
-                          ? 'border-border bg-card hover:border-primary/50'
+                          ? 'border-slate-600 bg-slate-800/50 hover:border-blue-500/50 hover:bg-slate-700/50'
                           : 'border-slate-600 bg-slate-700/50 hover:border-slate-500'
                     }`}>
-                      <IconComponent className={`mx-auto mb-1 h-6 w-6 ${isSelected ? 'text-white' : isEmployee ? 'text-primary' : 'text-slate-300'}`} />
-                      <span className={`font-semibold block text-center text-xs ${isSelected ? 'text-white' : isEmployee ? 'text-foreground' : 'text-slate-200'}`}>
+                      <IconComponent className={`mx-auto mb-1 h-6 w-6 ${isSelected ? 'text-white' : isEmployee ? 'text-blue-400' : 'text-slate-300'}`} />
+                      <span className={`font-semibold block text-center text-xs ${isSelected ? 'text-white' : isEmployee ? 'text-slate-200' : 'text-slate-200'}`}>
                         {service.label}
                       </span>
-                      <span className={`text-[10px] block text-center ${isSelected ? 'text-white/80' : isEmployee ? 'text-muted-foreground' : 'text-slate-400'}`}>
+                      <span className={`text-[10px] block text-center ${isSelected ? 'text-white/80' : isEmployee ? 'text-slate-400' : 'text-slate-400'}`}>
                         {service.subLabel}
                       </span>
                     </div>
@@ -366,14 +369,14 @@ export default function QuoteForm({
                 <SelectTrigger className={inputClasses}>
                   <SelectValue placeholder="Select size" />
                 </SelectTrigger>
-                <SelectContent className={isEmployee ? "" : "bg-slate-700 border-slate-600"}>
-                  <SelectItem value="studio">Studio/1 BR</SelectItem>
-                  <SelectItem value="2br">2-3 Bedroom</SelectItem>
-                  <SelectItem value="4br">4+ Bedroom</SelectItem>
-                  <SelectItem value="office">Small Office</SelectItem>
-                  <SelectItem value="large-office">Large Office</SelectItem>
-                  <SelectItem value="driveway">Driveway</SelectItem>
-                  <SelectItem value="parking-lot">Parking Lot</SelectItem>
+                <SelectContent className={isEmployee ? "bg-slate-800 border-slate-600" : "bg-slate-700 border-slate-600"}>
+                  <SelectItem value="studio" className={isEmployee ? "text-slate-200 focus:bg-slate-700" : ""}>Studio/1 BR</SelectItem>
+                  <SelectItem value="2br" className={isEmployee ? "text-slate-200 focus:bg-slate-700" : ""}>2-3 Bedroom</SelectItem>
+                  <SelectItem value="4br" className={isEmployee ? "text-slate-200 focus:bg-slate-700" : ""}>4+ Bedroom</SelectItem>
+                  <SelectItem value="office" className={isEmployee ? "text-slate-200 focus:bg-slate-700" : ""}>Small Office</SelectItem>
+                  <SelectItem value="large-office" className={isEmployee ? "text-slate-200 focus:bg-slate-700" : ""}>Large Office</SelectItem>
+                  <SelectItem value="driveway" className={isEmployee ? "text-slate-200 focus:bg-slate-700" : ""}>Driveway</SelectItem>
+                  <SelectItem value="parking-lot" className={isEmployee ? "text-slate-200 focus:bg-slate-700" : ""}>Parking Lot</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -393,17 +396,17 @@ export default function QuoteForm({
 
           <div>
             <Label className={`${labelClasses} mb-3 block`}>
-              <Camera className="inline-block mr-2 h-4 w-4" />
+              <Camera className="inline-block mr-2 h-4 w-4 text-blue-400" />
               Add Photos (optional)
             </Label>
-            <p className={`${isEmployee ? 'text-muted-foreground' : 'text-slate-400'} text-sm mb-3`}>
+            <p className={`${isEmployee ? 'text-slate-400' : 'text-slate-400'} text-sm mb-3`}>
               Upload up to 5 photos to help {isEmployee ? 'assess the job' : 'us provide an accurate quote'}.
             </p>
             
             {photos.length > 0 && (
               <div className="grid grid-cols-3 gap-3 mb-4">
                 {photos.map((photo) => (
-                  <div key={photo.id} className={`relative aspect-square rounded-lg overflow-hidden ${isEmployee ? 'bg-muted' : 'bg-slate-700'}`}>
+                  <div key={photo.id} className={`relative aspect-square rounded-xl overflow-hidden ${isEmployee ? 'bg-slate-800 ring-2 ring-slate-700' : 'bg-slate-700'}`}>
                     <img
                       src={photo.dataUrl}
                       alt={photo.name}
@@ -434,11 +437,11 @@ export default function QuoteForm({
                 />
                 <div className={`flex items-center justify-center gap-2 p-4 border-2 border-dashed rounded-xl transition-colors ${
                   isEmployee 
-                    ? 'border-border hover:border-primary hover:bg-muted/50' 
+                    ? 'border-slate-600 hover:border-blue-500/50 hover:bg-slate-700/50' 
                     : 'border-slate-600 hover:border-primary hover:bg-slate-700/50'
                 }`}>
-                  <ImagePlus className={`h-6 w-6 ${isEmployee ? 'text-muted-foreground' : 'text-slate-400'}`} />
-                  <span className={isEmployee ? 'text-muted-foreground' : 'text-slate-300'}>
+                  <ImagePlus className={`h-6 w-6 ${isEmployee ? 'text-slate-400' : 'text-slate-400'}`} />
+                  <span className={isEmployee ? 'text-slate-400' : 'text-slate-300'}>
                     {photos.length === 0 ? "Tap to add photos" : `Add more photos (${5 - photos.length} remaining)`}
                   </span>
                 </div>
@@ -449,7 +452,7 @@ export default function QuoteForm({
           <Button
             type="submit"
             className={isEmployee 
-              ? "w-full" 
+              ? "w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white shadow-lg shadow-orange-500/25 py-6 text-lg font-bold" 
               : "w-full bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-600/90 text-white px-8 py-4 text-lg font-semibold shadow-lg"
             }
             disabled={submitLead.isPending}
@@ -467,9 +470,11 @@ export default function QuoteForm({
       </CardContent>
 
       {showRewardsInfo && (
-        <div className="mx-6 mb-6 p-4 bg-primary/5 border border-primary/20 rounded-lg">
-          <h3 className="font-semibold mb-2">💰 Earn Rewards</h3>
-          <p className="text-sm text-muted-foreground">
+        <div className="mx-6 mb-6 p-4 bg-gradient-to-r from-blue-500/10 to-orange-500/10 border border-blue-500/30 rounded-xl">
+          <h3 className="font-bold mb-2 text-slate-100 flex items-center gap-2">
+            <span className="text-orange-400">💰</span> Earn Rewards
+          </h3>
+          <p className="text-sm text-slate-400">
             When jobs you create are confirmed and completed, you'll earn JCMOVES tokens as a reward for bringing in business!
           </p>
         </div>
