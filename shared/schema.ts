@@ -1045,3 +1045,34 @@ export type MiningSession = typeof miningSessions.$inferSelect;
 export type InsertMiningSession = z.infer<typeof insertMiningSessionSchema>;
 export type MiningClaim = typeof miningClaims.$inferSelect;
 export type InsertMiningClaim = z.infer<typeof insertMiningClaimSchema>;
+
+// Customer testimonials and imported reviews for public showcase
+export const testimonials = pgTable("testimonials", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  reviewerName: text("reviewer_name").notNull(),
+  rating: integer("rating").notNull(), // 1-5 stars
+  content: text("content").notNull(),
+  serviceType: text("service_type"), // 'residential', 'junk', 'snow', etc. (optional)
+  sourceType: text("source_type").notNull().default("customer"), // 'customer' or 'imported'
+  sourcePlatform: text("source_platform"), // 'google', 'yelp', 'facebook', 'hireahelper', null for customer
+  sourceUrl: text("source_url"), // Original URL of imported review
+  reviewDate: text("review_date"), // Date review was left (for imported reviews)
+  status: text("status").notNull().default("pending"), // 'pending', 'published', 'hidden'
+  featured: boolean("featured").notNull().default(false), // Featured on homepage
+  verified: boolean("verified").notNull().default(false), // Verified purchase/service
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_testimonials_status").on(table.status),
+  index("idx_testimonials_source").on(table.sourceType, table.sourcePlatform),
+  index("idx_testimonials_featured").on(table.featured),
+]);
+
+export const insertTestimonialSchema = createInsertSchema(testimonials).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type Testimonial = typeof testimonials.$inferSelect;
+export type InsertTestimonial = z.infer<typeof insertTestimonialSchema>;

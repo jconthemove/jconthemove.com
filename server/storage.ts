@@ -1,4 +1,4 @@
-import { type User, type InsertUser, type UpsertUser, type Lead, type InsertLead, type Contact, type InsertContact, type Notification, type InsertNotification, type TreasuryAccount, type InsertTreasuryAccount, type FundingDeposit, type InsertFundingDeposit, type ReserveTransaction, type InsertReserveTransaction, type FaucetConfig, type InsertFaucetConfig, type FaucetClaim, type InsertFaucetClaim, type FaucetWallet, type InsertFaucetWallet, type FaucetRevenue, type InsertFaucetRevenue, type EmployeeStats, type InsertEmployeeStats, type AchievementType, type EmployeeAchievement, type InsertEmployeeAchievement, type PointTransaction, type InsertPointTransaction, type WeeklyLeaderboard, type DailyCheckin, type InsertDailyCheckin, type WalletAccount, type InsertWalletAccount, type SupportedCurrency, type InsertSupportedCurrency, type UserWallet, type InsertUserWallet, type TreasuryWallet, type InsertTreasuryWallet, type WalletTransaction, type InsertWalletTransaction, type ShopItem, type InsertShopItem, type Review, type InsertReview, leads, contacts, users, notifications, walletAccounts, rewards, treasuryAccounts, fundingDeposits, reserveTransactions, priceHistory, faucetConfig, faucetClaims, faucetWallets, faucetRevenue, employeeStats, achievementTypes, employeeAchievements, pointTransactions, weeklyLeaderboards, dailyCheckins, supportedCurrencies, userWallets, treasuryWallets, walletTransactions, shopItems, cashoutRequests, fraudLogs, helpRequests, miningSessions, miningClaims, treasuryWithdrawals, reviews } from "@shared/schema";
+import { type User, type InsertUser, type UpsertUser, type Lead, type InsertLead, type Contact, type InsertContact, type Notification, type InsertNotification, type TreasuryAccount, type InsertTreasuryAccount, type FundingDeposit, type InsertFundingDeposit, type ReserveTransaction, type InsertReserveTransaction, type FaucetConfig, type InsertFaucetConfig, type FaucetClaim, type InsertFaucetClaim, type FaucetWallet, type InsertFaucetWallet, type FaucetRevenue, type InsertFaucetRevenue, type EmployeeStats, type InsertEmployeeStats, type AchievementType, type EmployeeAchievement, type InsertEmployeeAchievement, type PointTransaction, type InsertPointTransaction, type WeeklyLeaderboard, type DailyCheckin, type InsertDailyCheckin, type WalletAccount, type InsertWalletAccount, type SupportedCurrency, type InsertSupportedCurrency, type UserWallet, type InsertUserWallet, type TreasuryWallet, type InsertTreasuryWallet, type WalletTransaction, type InsertWalletTransaction, type ShopItem, type InsertShopItem, type Review, type InsertReview, type Testimonial, type InsertTestimonial, leads, contacts, users, notifications, walletAccounts, rewards, treasuryAccounts, fundingDeposits, reserveTransactions, priceHistory, faucetConfig, faucetClaims, faucetWallets, faucetRevenue, employeeStats, achievementTypes, employeeAchievements, pointTransactions, weeklyLeaderboards, dailyCheckins, supportedCurrencies, userWallets, treasuryWallets, walletTransactions, shopItems, cashoutRequests, fraudLogs, helpRequests, miningSessions, miningClaims, treasuryWithdrawals, reviews, testimonials } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, isNull, and, isNotNull, sql, gt, gte, inArray } from "drizzle-orm";
 import { TREASURY_CONFIG } from "./constants";
@@ -162,6 +162,15 @@ export interface IStorage {
   getReviewByLeadAndUser(leadId: string, userId: string): Promise<Review | undefined>;
   getEmployeeReviewStats(employeeId: string): Promise<{ averageRating: number; totalReviews: number; ratings: { 1: number; 2: number; 3: number; 4: number; 5: number } }>;
   markReviewAsRewarded(reviewId: string): Promise<Review | undefined>;
+  
+  // Testimonial operations (customer and imported reviews for public showcase)
+  createTestimonial(testimonial: InsertTestimonial): Promise<Testimonial>;
+  getTestimonials(filters?: { status?: string; featured?: boolean; sourceType?: string; sourcePlatform?: string }, limit?: number): Promise<Testimonial[]>;
+  getTestimonial(id: string): Promise<Testimonial | undefined>;
+  updateTestimonial(id: string, updates: Partial<Omit<Testimonial, 'id' | 'createdAt'>>): Promise<Testimonial | undefined>;
+  deleteTestimonial(id: string): Promise<boolean>;
+  importTestimonials(testimonials: InsertTestimonial[]): Promise<Testimonial[]>;
+  getTestimonialStats(): Promise<{ totalCount: number; averageRating: number; platformCounts: Record<string, number> }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2112,6 +2121,103 @@ export class DatabaseStorage implements IStorage {
       .where(eq(reviews.id, reviewId))
       .returning();
     return review || undefined;
+  }
+
+  // Testimonial operations
+  async createTestimonial(testimonialData: InsertTestimonial): Promise<Testimonial> {
+    const [testimonial] = await db
+      .insert(testimonials)
+      .values(testimonialData)
+      .returning();
+    return testimonial;
+  }
+
+  async getTestimonials(
+    filters?: { status?: string; featured?: boolean; sourceType?: string; sourcePlatform?: string },
+    limit?: number
+  ): Promise<Testimonial[]> {
+    let query = db.select().from(testimonials);
+    
+    const conditions = [];
+    if (filters?.status) {
+      conditions.push(eq(testimonials.status, filters.status));
+    }
+    if (filters?.featured !== undefined) {
+      conditions.push(eq(testimonials.featured, filters.featured));
+    }
+    if (filters?.sourceType) {
+      conditions.push(eq(testimonials.sourceType, filters.sourceType));
+    }
+    if (filters?.sourcePlatform) {
+      conditions.push(eq(testimonials.sourcePlatform, filters.sourcePlatform));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as typeof query;
+    }
+    
+    query = query.orderBy(desc(testimonials.createdAt)) as typeof query;
+    
+    if (limit) {
+      query = query.limit(limit) as typeof query;
+    }
+    
+    return await query;
+  }
+
+  async getTestimonial(id: string): Promise<Testimonial | undefined> {
+    const [testimonial] = await db
+      .select()
+      .from(testimonials)
+      .where(eq(testimonials.id, id));
+    return testimonial || undefined;
+  }
+
+  async updateTestimonial(
+    id: string,
+    updates: Partial<Omit<Testimonial, 'id' | 'createdAt'>>
+  ): Promise<Testimonial | undefined> {
+    const [testimonial] = await db
+      .update(testimonials)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(testimonials.id, id))
+      .returning();
+    return testimonial || undefined;
+  }
+
+  async deleteTestimonial(id: string): Promise<boolean> {
+    const result = await db.delete(testimonials).where(eq(testimonials.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  async importTestimonials(testimonialsList: InsertTestimonial[]): Promise<Testimonial[]> {
+    if (testimonialsList.length === 0) return [];
+    
+    const imported = await db
+      .insert(testimonials)
+      .values(testimonialsList)
+      .returning();
+    return imported;
+  }
+
+  async getTestimonialStats(): Promise<{ totalCount: number; averageRating: number; platformCounts: Record<string, number> }> {
+    const allTestimonials = await db
+      .select()
+      .from(testimonials)
+      .where(eq(testimonials.status, 'published'));
+    
+    const totalCount = allTestimonials.length;
+    const averageRating = totalCount > 0
+      ? allTestimonials.reduce((sum, t) => sum + t.rating, 0) / totalCount
+      : 0;
+    
+    const platformCounts: Record<string, number> = {};
+    allTestimonials.forEach(t => {
+      const platform = t.sourcePlatform || 'customer';
+      platformCounts[platform] = (platformCounts[platform] || 0) + 1;
+    });
+    
+    return { totalCount, averageRating, platformCounts };
   }
 }
 
