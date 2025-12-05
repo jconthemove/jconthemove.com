@@ -30,6 +30,10 @@ export interface IStorage {
   updateUsername(userId: string, username: string): Promise<User | undefined>;
   checkUsernameAvailability(username: string): Promise<boolean>;
   
+  // Wallet choice management (hybrid personal/company wallet system)
+  updateUserWalletChoice(userId: string, walletMode: 'personal' | 'company', personalWalletAddress?: string, companyWalletId?: string): Promise<User | undefined>;
+  getPayoutAddress(userId: string): Promise<{ address: string | null; mode: 'personal' | 'company' | null }>;
+  
   // Help request operations
   createHelpRequest(request: { userId: string; message: string; imageUrls: string[] | null }): Promise<any>;
   
@@ -486,6 +490,45 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.username, username))
       .limit(1);
     return existingUser.length === 0;
+  }
+
+  async updateUserWalletChoice(
+    userId: string, 
+    walletMode: 'personal' | 'company', 
+    personalWalletAddress?: string, 
+    companyWalletId?: string
+  ): Promise<User | undefined> {
+    const [user] = await db
+      .update(users)
+      .set({ 
+        walletMode,
+        personalWalletAddress: walletMode === 'personal' ? personalWalletAddress : null,
+        companyWalletId: walletMode === 'company' ? companyWalletId : null,
+        updatedAt: new Date() 
+      })
+      .where(eq(users.id, userId))
+      .returning();
+    return user || undefined;
+  }
+
+  async getPayoutAddress(userId: string): Promise<{ address: string | null; mode: 'personal' | 'company' | null }> {
+    const user = await this.getUser(userId);
+    if (!user) {
+      return { address: null, mode: null };
+    }
+
+    const mode = user.walletMode as 'personal' | 'company' | null;
+    
+    if (mode === 'personal') {
+      return { address: user.personalWalletAddress || null, mode: 'personal' };
+    }
+    
+    if (mode === 'company' && user.companyWalletId) {
+      const companyWallet = await this.getUserWalletById(user.companyWalletId);
+      return { address: companyWallet?.walletAddress || null, mode: 'company' };
+    }
+    
+    return { address: null, mode: null };
   }
 
   async createHelpRequest(request: { userId: string; message: string; imageUrls: string[] | null }): Promise<any> {

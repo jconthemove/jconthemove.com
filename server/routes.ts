@@ -1226,6 +1226,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Wallet choice management (hybrid personal/company wallet system)
+  app.get('/api/user/wallet-preference', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const user = await storage.getUser(userId);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      res.json({
+        walletMode: user.walletMode || null,
+        personalWalletAddress: user.personalWalletAddress || null,
+        companyWalletId: user.companyWalletId || null,
+        hasWalletConfigured: !!user.walletMode
+      });
+    } catch (error) {
+      console.error("Error fetching wallet preference:", error);
+      res.status(500).json({ message: "Failed to fetch wallet preference" });
+    }
+  });
+
+  app.post('/api/user/wallet-choice', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { walletMode, personalWalletAddress, companyWalletId } = req.body;
+
+      // Validate wallet mode
+      if (!walletMode || !['personal', 'company'].includes(walletMode)) {
+        return res.status(400).json({ message: "Invalid wallet mode. Must be 'personal' or 'company'" });
+      }
+
+      // Validate personal wallet address if mode is personal
+      if (walletMode === 'personal') {
+        if (!personalWalletAddress || typeof personalWalletAddress !== 'string') {
+          return res.status(400).json({ message: "Personal wallet address is required when using personal mode" });
+        }
+        
+        // Basic Solana address validation (base58, 32-44 chars)
+        const solanaAddressRegex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+        if (!solanaAddressRegex.test(personalWalletAddress)) {
+          return res.status(400).json({ message: "Invalid Solana wallet address format" });
+        }
+      }
+
+      // Validate company wallet ID if mode is company
+      if (walletMode === 'company' && !companyWalletId) {
+        return res.status(400).json({ message: "Company wallet ID is required when using company mode" });
+      }
+
+      const updatedUser = await storage.updateUserWalletChoice(
+        userId,
+        walletMode,
+        personalWalletAddress,
+        companyWalletId
+      );
+
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      console.log(`✅ Wallet choice updated for user ${userId}: mode=${walletMode}`);
+      res.json({
+        success: true,
+        walletMode: updatedUser.walletMode,
+        personalWalletAddress: updatedUser.personalWalletAddress,
+        companyWalletId: updatedUser.companyWalletId
+      });
+    } catch (error) {
+      console.error("Error updating wallet choice:", error);
+      res.status(500).json({ message: "Failed to update wallet choice" });
+    }
+  });
+
+  app.get('/api/user/payout-address', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const payoutInfo = await storage.getPayoutAddress(userId);
+      
+      res.json(payoutInfo);
+    } catch (error) {
+      console.error("Error fetching payout address:", error);
+      res.status(500).json({ message: "Failed to fetch payout address" });
+    }
+  });
+
   // Profile image upload (base64 encoded)
   app.post('/api/user/profile-image', isAuthenticated, async (req: any, res) => {
     try {
