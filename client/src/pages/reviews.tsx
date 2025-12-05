@@ -3,144 +3,168 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { StarRating } from "@/components/star-rating";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { 
-  Loader2, Star, TrendingUp, Award, MessageSquare, ArrowLeft, 
-  ClipboardList, CheckCircle, Clock, Send, Phone, Mail, MapPin,
-  Calendar, User
+  Loader2, Star, Quote, MessageSquare, ArrowLeft, 
+  PenLine, CheckCircle, ExternalLink
 } from "lucide-react";
+import { SiGoogle, SiYelp, SiFacebook } from "react-icons/si";
 import { Link } from "wouter";
 
-interface UserData {
+interface Testimonial {
   id: string;
-  role: string;
-}
-
-interface Review {
-  id: string;
-  leadId: string;
-  userId: string;
-  employeeId: string;
+  reviewerName: string;
   rating: number;
-  comment: string | null;
-  rewardedAt: string | null;
-  createdAt: string;
-}
-
-interface ReviewStats {
-  averageRating: number;
-  totalReviews: number;
-  ratingDistribution: Record<string, number>;
-}
-
-interface Lead {
-  id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  serviceType: string;
-  fromAddress: string;
-  toAddress: string | null;
-  moveDate: string | null;
+  content: string;
+  serviceType: string | null;
+  sourceType: string;
+  sourcePlatform: string | null;
+  sourceUrl: string | null;
+  reviewDate: string | null;
   status: string;
+  featured: boolean;
+  verified: boolean;
   createdAt: string;
+}
+
+interface TestimonialStats {
+  totalCount: number;
+  averageRating: number;
+  platformCounts: Record<string, number>;
+}
+
+const reviewFormSchema = z.object({
+  reviewerName: z.string().min(2, "Name must be at least 2 characters"),
+  rating: z.number().min(1).max(5),
+  content: z.string().min(10, "Review must be at least 10 characters"),
+  serviceType: z.string().optional(),
+});
+
+type ReviewFormValues = z.infer<typeof reviewFormSchema>;
+
+function StarRating({ rating, onClick, readonly = false, size = "md" }: { 
+  rating: number; 
+  onClick?: (rating: number) => void;
+  readonly?: boolean;
+  size?: "sm" | "md" | "lg";
+}) {
+  const sizeClasses = {
+    sm: "h-4 w-4",
+    md: "h-6 w-6",
+    lg: "h-8 w-8",
+  };
+  
+  return (
+    <div className="flex gap-1">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          type="button"
+          onClick={() => !readonly && onClick?.(star)}
+          disabled={readonly}
+          className={`${readonly ? 'cursor-default' : 'cursor-pointer hover:scale-110'} transition-transform`}
+        >
+          <Star
+            className={`${sizeClasses[size]} ${
+              star <= rating 
+                ? 'text-yellow-400 fill-yellow-400' 
+                : 'text-gray-300 dark:text-gray-600'
+            }`}
+          />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function PlatformIcon({ platform }: { platform: string | null }) {
+  switch (platform) {
+    case 'google':
+      return <SiGoogle className="h-4 w-4 text-blue-500" />;
+    case 'yelp':
+      return <SiYelp className="h-4 w-4 text-red-500" />;
+    case 'facebook':
+      return <SiFacebook className="h-4 w-4 text-blue-600" />;
+    case 'hireahelper':
+      return <span className="text-xs font-bold text-green-600">HAH</span>;
+    default:
+      return <CheckCircle className="h-4 w-4 text-green-500" />;
+  }
+}
+
+function getPlatformLabel(platform: string | null): string {
+  switch (platform) {
+    case 'google': return 'Google';
+    case 'yelp': return 'Yelp';
+    case 'facebook': return 'Facebook';
+    case 'hireahelper': return 'HireAHelper';
+    default: return 'Customer';
+  }
 }
 
 export default function ReviewsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState("all");
-  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isReviewDialogOpen, setIsReviewDialogOpen] = useState(false);
+  const [selectedRating, setSelectedRating] = useState(5);
 
-  const { data: user, isLoading: userLoading } = useQuery<UserData>({
-    queryKey: ["/api/auth/user"],
+  const form = useForm<ReviewFormValues>({
+    resolver: zodResolver(reviewFormSchema),
+    defaultValues: {
+      reviewerName: "",
+      rating: 5,
+      content: "",
+      serviceType: "",
+    },
   });
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'business_owner';
-
-  const { data: leads = [], isLoading: leadsLoading } = useQuery<Lead[]>({
-    queryKey: ["/api/leads"],
-    enabled: !!user?.id,
+  const { data: testimonials = [], isLoading } = useQuery<Testimonial[]>({
+    queryKey: ["/api/testimonials", { status: "published" }],
   });
 
-  const { data: reviews = [], isLoading: reviewsLoading } = useQuery<Review[]>({
-    queryKey: ["/api/reviews", { employeeId: user?.id }],
-    enabled: !!user?.id,
+  const { data: stats } = useQuery<TestimonialStats>({
+    queryKey: ["/api/testimonials/stats"],
   });
 
-  const { data: stats, isLoading: statsLoading } = useQuery<ReviewStats>({
-    queryKey: [`/api/reviews/employee/${user?.id}/stats`],
-    enabled: !!user?.id,
-  });
-
-  const sendReviewRequestMutation = useMutation({
-    mutationFn: async (leadId: string) => {
-      const response = await apiRequest("POST", `/api/leads/${leadId}/request-review`, {});
+  const submitReviewMutation = useMutation({
+    mutationFn: async (data: ReviewFormValues) => {
+      const response = await apiRequest("POST", "/api/testimonials", data);
       return response.json();
     },
     onSuccess: () => {
       toast({
-        title: "Review request sent!",
-        description: "The customer will receive an email to leave a review.",
+        title: "Thank you for your review!",
+        description: "Your review has been submitted and will be published after approval.",
       });
       setIsReviewDialogOpen(false);
-      setSelectedLead(null);
+      form.reset();
+      setSelectedRating(5);
+      queryClient.invalidateQueries({ queryKey: ["/api/testimonials"] });
     },
     onError: (error: Error) => {
       toast({
         title: "Error",
-        description: error.message || "Failed to send review request.",
+        description: error.message || "Failed to submit review. Please try again.",
         variant: "destructive",
       });
     },
   });
 
-  const handleRequestReview = (lead: Lead) => {
-    setSelectedLead(lead);
-    setIsReviewDialogOpen(true);
+  const onSubmit = (data: ReviewFormValues) => {
+    submitReviewMutation.mutate({ ...data, rating: selectedRating });
   };
 
-  const handleSendReviewRequest = () => {
-    if (!selectedLead) return;
-    sendReviewRequestMutation.mutate(selectedLead.id);
-  };
-
-  if (userLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Card className="max-w-md">
-          <CardContent className="pt-6 text-center">
-            <p className="text-muted-foreground">Please log in to view reviews</p>
-            <Link href="/employee-login">
-              <Button className="mt-4">Log In</Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  const isLoading = leadsLoading || reviewsLoading || statsLoading;
-
-  const pendingLeads = leads.filter(lead => ['new', 'contacted', 'quoted'].includes(lead.status));
-  const activeLeads = leads.filter(lead => ['accepted', 'in_progress', 'confirmed'].includes(lead.status));
-  const completedLeads = leads.filter(lead => lead.status === 'completed');
-
-  const getServiceLabel = (serviceType: string) => {
+  const getServiceLabel = (serviceType: string | null) => {
+    if (!serviceType) return null;
     const services: Record<string, string> = {
       residential: "Moving",
       commercial: "Commercial Moving",
@@ -148,350 +172,292 @@ export default function ReviewsPage() {
       snow: "Snow Removal",
       cleaning: "Move In/Out Cleaning",
       handyman: "Handyman",
-      demolition: "Light Demo",
+      demolition: "Light Demolition",
       flooring: "Flooring",
       painting: "Painting",
     };
     return services[serviceType] || serviceType;
   };
 
-  const getStatusBadge = (status: string) => {
-    const statusConfig: Record<string, { color: string; label: string }> = {
-      new: { color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200", label: "New" },
-      contacted: { color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200", label: "Contacted" },
-      quoted: { color: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200", label: "Quoted" },
-      accepted: { color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200", label: "Accepted" },
-      confirmed: { color: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200", label: "Confirmed" },
-      in_progress: { color: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200", label: "In Progress" },
-      completed: { color: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200", label: "Completed" },
-    };
-    const config = statusConfig[status] || { color: "bg-gray-100 text-gray-800", label: status };
-    return <Badge className={config.color}>{config.label}</Badge>;
-  };
-
-  const renderLeadCard = (lead: Lead, showReviewButton: boolean = false) => (
-    <Card key={lead.id} className="hover:shadow-md transition-shadow" data-testid={`lead-card-${lead.id}`}>
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between mb-3">
-          <div>
-            <h3 className="font-semibold text-lg flex items-center gap-2">
-              <User className="h-4 w-4" />
-              {lead.firstName} {lead.lastName}
-            </h3>
-            <Badge variant="outline" className="mt-1">{getServiceLabel(lead.serviceType)}</Badge>
-          </div>
-          {getStatusBadge(lead.status)}
-        </div>
-        
-        <div className="space-y-2 text-sm text-muted-foreground mb-4">
-          <div className="flex items-center gap-2">
-            <Phone className="h-4 w-4" />
-            <a href={`tel:${lead.phone}`} className="hover:underline">{lead.phone}</a>
-          </div>
-          <div className="flex items-center gap-2">
-            <Mail className="h-4 w-4" />
-            <a href={`mailto:${lead.email}`} className="hover:underline">{lead.email}</a>
-          </div>
-          <div className="flex items-center gap-2">
-            <MapPin className="h-4 w-4" />
-            <span>{lead.fromAddress}</span>
-          </div>
-          {lead.moveDate && (
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
-              <span>{new Date(lead.moveDate).toLocaleDateString()}</span>
-            </div>
-          )}
-        </div>
-
-        <div className="flex gap-2">
-          <Link href={`/leads/${lead.id}`} className="flex-1">
-            <Button variant="outline" className="w-full" size="sm" data-testid={`button-view-lead-${lead.id}`}>
-              View Details
-            </Button>
-          </Link>
-          {showReviewButton && (
-            <Button 
-              onClick={() => handleRequestReview(lead)} 
-              size="sm"
-              className="bg-yellow-500 hover:bg-yellow-600"
-              data-testid={`button-request-review-${lead.id}`}
-            >
-              <Send className="h-4 w-4 mr-1" />
-              Request Review
-            </Button>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 pb-20">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <div className="flex items-center gap-4 mb-4">
-            <Link href="/employee/dashboard">
+            <Link href="/">
               <Button variant="outline" className="flex items-center gap-2" data-testid="button-back">
                 <ArrowLeft className="h-4 w-4" />
-                Back to Dashboard
+                Back to Home
               </Button>
             </Link>
           </div>
-          <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
-            <ClipboardList className="h-8 w-8 text-primary" />
-            Jobs & Reviews
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            Manage your leads and see customer feedback
-          </p>
+          
+          <div className="text-center max-w-2xl mx-auto">
+            <h1 className="text-4xl font-bold text-foreground mb-4">
+              Customer Reviews
+            </h1>
+            <p className="text-lg text-muted-foreground">
+              See what our customers are saying about JC ON THE MOVE
+            </p>
+            
+            {stats && stats.totalCount > 0 && (
+              <div className="flex items-center justify-center gap-6 mt-6">
+                <div className="flex items-center gap-2">
+                  <StarRating rating={Math.round(stats.averageRating)} readonly size="md" />
+                  <span className="text-2xl font-bold text-yellow-500">
+                    {stats.averageRating.toFixed(1)}
+                  </span>
+                </div>
+                <div className="text-muted-foreground">
+                  <span className="font-semibold text-foreground">{stats.totalCount}</span> reviews
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex justify-center mb-8">
+          <Button 
+            size="lg"
+            onClick={() => setIsReviewDialogOpen(true)}
+            className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white font-semibold shadow-lg"
+            data-testid="button-leave-review"
+          >
+            <PenLine className="h-5 w-5 mr-2" />
+            Leave Us a Review
+          </Button>
         </div>
 
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
+        ) : testimonials.length === 0 ? (
+          <Card className="max-w-lg mx-auto">
+            <CardContent className="py-16 text-center">
+              <MessageSquare className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" />
+              <h3 className="text-xl font-semibold text-foreground mb-2">No Reviews Yet</h3>
+              <p className="text-muted-foreground mb-6">
+                Be the first to share your experience with JC ON THE MOVE!
+              </p>
+              <Button 
+                onClick={() => setIsReviewDialogOpen(true)}
+                className="bg-primary hover:bg-primary/90"
+                data-testid="button-leave-first-review"
+              >
+                <PenLine className="h-4 w-4 mr-2" />
+                Write the First Review
+              </Button>
+            </CardContent>
+          </Card>
         ) : (
-          <div className="space-y-6">
-            {stats && stats.totalReviews > 0 && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Card className="bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-950 dark:to-orange-950 border-yellow-200 dark:border-yellow-800">
-                  <CardContent className="pt-6 text-center">
-                    <div className="text-3xl font-bold text-yellow-600 dark:text-yellow-400">
-                      {stats.averageRating.toFixed(1)}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {testimonials.map((testimonial) => (
+              <Card 
+                key={testimonial.id} 
+                className={`hover:shadow-lg transition-shadow ${
+                  testimonial.featured ? 'ring-2 ring-yellow-400 dark:ring-yellow-600' : ''
+                }`}
+                data-testid={`testimonial-card-${testimonial.id}`}
+              >
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <PlatformIcon platform={testimonial.sourcePlatform} />
+                      <span className="text-sm text-muted-foreground">
+                        {getPlatformLabel(testimonial.sourcePlatform)}
+                      </span>
                     </div>
-                    <div className="flex items-center justify-center mt-2">
-                      <StarRating rating={Math.round(stats.averageRating)} readonly size="sm" />
+                    {testimonial.featured && (
+                      <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                        Featured
+                      </Badge>
+                    )}
+                  </div>
+                  
+                  <div className="mb-3">
+                    <StarRating rating={testimonial.rating} readonly size="sm" />
+                  </div>
+                  
+                  <Quote className="h-6 w-6 text-muted-foreground/30 mb-2" />
+                  
+                  <p className="text-foreground leading-relaxed mb-4 line-clamp-4">
+                    {testimonial.content}
+                  </p>
+                  
+                  <div className="flex items-center justify-between mt-auto pt-4 border-t border-border">
+                    <div>
+                      <p className="font-medium text-foreground">{testimonial.reviewerName}</p>
+                      {testimonial.serviceType && (
+                        <p className="text-xs text-muted-foreground">
+                          {getServiceLabel(testimonial.serviceType)}
+                        </p>
+                      )}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-2">Average Rating</p>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardContent className="pt-6 text-center">
-                    <div className="text-3xl font-bold text-primary">{stats.totalReviews}</div>
-                    <p className="text-xs text-muted-foreground mt-2">Total Reviews</p>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardContent className="pt-6 text-center">
-                    <div className="text-3xl font-bold text-primary">{leads.length}</div>
-                    <p className="text-xs text-muted-foreground mt-2">Total Leads</p>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 border-green-200 dark:border-green-800">
-                  <CardContent className="pt-6 text-center">
-                    <div className="text-3xl font-bold text-green-600 dark:text-green-400">
-                      {completedLeads.length}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-2">Completed Jobs</p>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-              <TabsList className="grid grid-cols-4 w-full max-w-lg">
-                <TabsTrigger value="all" className="flex items-center gap-1" data-testid="tab-all">
-                  <ClipboardList className="h-4 w-4" />
-                  <span className="hidden sm:inline">All</span> ({leads.length})
-                </TabsTrigger>
-                <TabsTrigger value="pending" className="flex items-center gap-1" data-testid="tab-pending">
-                  <Clock className="h-4 w-4" />
-                  <span className="hidden sm:inline">Pending</span> ({pendingLeads.length})
-                </TabsTrigger>
-                <TabsTrigger value="active" className="flex items-center gap-1" data-testid="tab-active">
-                  <TrendingUp className="h-4 w-4" />
-                  <span className="hidden sm:inline">Active</span> ({activeLeads.length})
-                </TabsTrigger>
-                <TabsTrigger value="completed" className="flex items-center gap-1" data-testid="tab-completed">
-                  <CheckCircle className="h-4 w-4" />
-                  <span className="hidden sm:inline">Done</span> ({completedLeads.length})
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="all" className="space-y-4">
-                {leads.length === 0 ? (
-                  <Card>
-                    <CardContent className="py-12 text-center">
-                      <ClipboardList className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" />
-                      <p className="text-lg font-medium text-muted-foreground">No leads yet</p>
-                      <p className="text-sm text-muted-foreground mt-1">New leads will appear here</p>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {leads.map(lead => renderLeadCard(lead, lead.status === 'completed'))}
-                  </div>
-                )}
-              </TabsContent>
-
-              <TabsContent value="pending" className="space-y-4">
-                {pendingLeads.length === 0 ? (
-                  <Card>
-                    <CardContent className="py-12 text-center">
-                      <Clock className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" />
-                      <p className="text-lg font-medium text-muted-foreground">No pending leads</p>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {pendingLeads.map(lead => renderLeadCard(lead))}
-                  </div>
-                )}
-              </TabsContent>
-
-              <TabsContent value="active" className="space-y-4">
-                {activeLeads.length === 0 ? (
-                  <Card>
-                    <CardContent className="py-12 text-center">
-                      <TrendingUp className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" />
-                      <p className="text-lg font-medium text-muted-foreground">No active jobs</p>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {activeLeads.map(lead => renderLeadCard(lead))}
-                  </div>
-                )}
-              </TabsContent>
-
-              <TabsContent value="completed" className="space-y-4">
-                {completedLeads.length === 0 ? (
-                  <Card>
-                    <CardContent className="py-12 text-center">
-                      <CheckCircle className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" />
-                      <p className="text-lg font-medium text-muted-foreground">No completed jobs yet</p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Completed jobs will appear here for review
+                    {testimonial.reviewDate && (
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(testimonial.reviewDate).toLocaleDateString('en-US', {
+                          month: 'short',
+                          year: 'numeric'
+                        })}
                       </p>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {completedLeads.map(lead => renderLeadCard(lead, true))}
+                    )}
                   </div>
-                )}
-              </TabsContent>
-            </Tabs>
-
-            {reviews.length > 0 && (
-              <Card className="mt-8">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <MessageSquare className="h-5 w-5" />
-                    Recent Customer Reviews
-                  </CardTitle>
-                  <CardDescription>
-                    {reviews.length} review{reviews.length === 1 ? '' : 's'} from customers
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {reviews.slice(0, 5).map((review) => (
-                      <div
-                        key={review.id}
-                        className="border border-border rounded-lg p-4 space-y-3 hover:bg-accent/50 transition-colors"
-                        data-testid={`review-${review.id}`}
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-3">
-                            <StarRating rating={review.rating} readonly />
-                            <span className="text-sm text-muted-foreground">
-                              {new Date(review.createdAt).toLocaleDateString('en-US', {
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric'
-                              })}
-                            </span>
-                          </div>
-                          {review.rewardedAt && (
-                            <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
-                              <Award className="h-3 w-3 mr-1" />
-                              +{review.rating === 5 ? '50' : '25'} Tokens
-                            </Badge>
-                          )}
-                        </div>
-
-                        {review.comment ? (
-                          <p className="text-foreground leading-relaxed">
-                            "{review.comment}"
-                          </p>
-                        ) : (
-                          <p className="text-sm text-muted-foreground italic">
-                            No written feedback provided
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                  
+                  {testimonial.sourceUrl && (
+                    <a 
+                      href={testimonial.sourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-xs text-primary hover:underline mt-3"
+                    >
+                      View original <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
                 </CardContent>
               </Card>
-            )}
+            ))}
           </div>
         )}
 
-        <Dialog open={isReviewDialogOpen} onOpenChange={setIsReviewDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Mail className="h-5 w-5 text-primary" />
-                Request Customer Review
-              </DialogTitle>
-              <DialogDescription>
-                {selectedLead && (
-                  <>Send a review request email to {selectedLead.firstName} {selectedLead.lastName}?</>
-                )}
-              </DialogDescription>
-            </DialogHeader>
-            
-            <div className="py-4">
-              {selectedLead && (
-                <div className="bg-muted/50 p-4 rounded-lg space-y-2">
-                  <p className="text-sm">
-                    <strong>Customer:</strong> {selectedLead.firstName} {selectedLead.lastName}
-                  </p>
-                  <p className="text-sm">
-                    <strong>Email:</strong> {selectedLead.email}
-                  </p>
-                  <p className="text-sm">
-                    <strong>Service:</strong> {getServiceLabel(selectedLead.serviceType)}
-                  </p>
+        {stats && stats.totalCount > 0 && (
+          <div className="mt-12 text-center">
+            <p className="text-muted-foreground mb-4">
+              Reviews collected from multiple platforms
+            </p>
+            <div className="flex justify-center gap-6 flex-wrap">
+              {Object.entries(stats.platformCounts).map(([platform, count]) => (
+                <div key={platform} className="flex items-center gap-2 bg-muted/50 px-4 py-2 rounded-full">
+                  <PlatformIcon platform={platform === 'customer' ? null : platform} />
+                  <span className="text-sm font-medium">{count}</span>
                 </div>
-              )}
-              <p className="text-sm text-muted-foreground mt-4">
-                The customer will receive an email with a link to leave a review for this completed job.
-              </p>
+              ))}
             </div>
-
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsReviewDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button 
-                onClick={handleSendReviewRequest}
-                disabled={sendReviewRequestMutation.isPending}
-                className="bg-primary hover:bg-primary/90"
-                data-testid="button-send-review-request"
-              >
-                {sendReviewRequestMutation.isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Sending...
-                  </>
-                ) : (
-                  <>
-                    <Send className="h-4 w-4 mr-2" />
-                    Send Review Request
-                  </>
-                )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+          </div>
+        )}
       </div>
+
+      <Dialog open={isReviewDialogOpen} onOpenChange={setIsReviewDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <PenLine className="h-5 w-5 text-primary" />
+              Leave a Review
+            </DialogTitle>
+            <DialogDescription>
+              Share your experience with JC ON THE MOVE. Your feedback helps us improve!
+            </DialogDescription>
+          </DialogHeader>
+          
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="reviewerName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Your Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="John Smith" {...field} data-testid="input-reviewer-name" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="space-y-2">
+                <FormLabel>Rating</FormLabel>
+                <div className="flex items-center gap-2">
+                  <StarRating 
+                    rating={selectedRating} 
+                    onClick={(rating) => {
+                      setSelectedRating(rating);
+                      form.setValue('rating', rating);
+                    }}
+                    size="lg"
+                  />
+                  <span className="text-lg font-medium text-muted-foreground">
+                    {selectedRating}/5
+                  </span>
+                </div>
+              </div>
+
+              <FormField
+                control={form.control}
+                name="serviceType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Service Used (Optional)</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-service-type">
+                          <SelectValue placeholder="Select a service" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="residential">Moving</SelectItem>
+                        <SelectItem value="commercial">Commercial Moving</SelectItem>
+                        <SelectItem value="junk">Junk Removal</SelectItem>
+                        <SelectItem value="snow">Snow Removal</SelectItem>
+                        <SelectItem value="cleaning">Move In/Out Cleaning</SelectItem>
+                        <SelectItem value="handyman">Handyman</SelectItem>
+                        <SelectItem value="demolition">Light Demolition</SelectItem>
+                        <SelectItem value="flooring">Flooring</SelectItem>
+                        <SelectItem value="painting">Painting</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="content"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Your Review</FormLabel>
+                    <FormControl>
+                      <Textarea 
+                        placeholder="Tell us about your experience..."
+                        className="min-h-[120px]"
+                        {...field}
+                        data-testid="textarea-review-content"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setIsReviewDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit"
+                  disabled={submitReviewMutation.isPending}
+                  className="bg-primary hover:bg-primary/90"
+                  data-testid="button-submit-review"
+                >
+                  {submitReviewMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    "Submit Review"
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
