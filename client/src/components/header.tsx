@@ -102,13 +102,6 @@ export default function Header() {
                         >
                           Shop
                         </Link>
-                        <Link
-                          href="/reviews"
-                          className="text-muted-foreground hover:text-primary px-3 py-2 rounded-md text-sm font-medium transition-colors"
-                          data-testid="button-reviews"
-                        >
-                          Reviews
-                        </Link>
                       </>
                     )}
                     
@@ -280,14 +273,6 @@ export default function Header() {
                         onClick={() => setMobileMenuOpen(false)}
                       >
                         Shop
-                      </Link>
-                      <Link
-                        href="/reviews"
-                        className="text-muted-foreground hover:text-primary px-3 py-2 rounded-md text-sm font-medium transition-colors text-left"
-                        data-testid="button-mobile-reviews"
-                        onClick={() => setMobileMenuOpen(false)}
-                      >
-                        Reviews
                       </Link>
                     </>
                   )}
