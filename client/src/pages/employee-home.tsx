@@ -240,10 +240,13 @@ export default function EmployeeHomePage() {
     const month = currentMonth.getMonth();
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const today = new Date();
+    const isToday = (d: number) => 
+      today.getDate() === d && today.getMonth() === month && today.getFullYear() === year;
 
     const days = [];
     for (let i = 0; i < firstDay; i++) {
-      days.push(<div key={`empty-${i}`} className="h-20 border border-border bg-muted/30"></div>);
+      days.push(<div key={`empty-${i}`} className="h-20 border border-slate-700/30 bg-slate-900/50 rounded-lg"></div>);
     }
 
     for (let day = 1; day <= daysInMonth; day++) {
@@ -254,24 +257,31 @@ export default function EmployeeHomePage() {
       days.push(
         <div
           key={day}
-          className="h-20 border border-border p-1 bg-background hover:bg-accent/50 transition-colors cursor-pointer"
+          className={`h-20 border p-1.5 rounded-lg transition-all cursor-pointer ${
+            isToday(day) 
+              ? 'border-orange-500 bg-orange-500/10 shadow-lg shadow-orange-500/20' 
+              : 'border-slate-700/30 bg-slate-800/50 hover:bg-slate-700/50 hover:border-slate-600'
+          }`}
           data-testid={`calendar-day-${day}`}
           onClick={() => handleDateClick(date)}
         >
-          <div className="text-sm font-semibold">{day}</div>
+          <div className={`text-sm font-bold ${isToday(day) ? 'text-orange-400' : 'text-slate-300'}`}>{day}</div>
           <div className="space-y-0.5 mt-1">
-            {jobsOnDate.map(job => (
+            {jobsOnDate.slice(0, 2).map(job => (
               <div
                 key={job.id}
-                className={`text-[10px] px-1 rounded truncate ${
+                className={`text-[10px] px-1.5 py-0.5 rounded-md truncate font-medium ${
                   job.status === 'completed'
-                    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                    : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                    ? 'bg-green-500/20 text-green-300 border border-green-500/30'
+                    : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
                 }`}
               >
                 {job.firstName}
               </div>
             ))}
+            {jobsOnDate.length > 2 && (
+              <div className="text-[10px] text-slate-400 font-medium">+{jobsOnDate.length - 2} more</div>
+            )}
           </div>
         </div>
       );
@@ -286,45 +296,53 @@ export default function EmployeeHomePage() {
   ];
 
   return (
-    <div className="min-h-screen bg-muted/30 pb-20">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 pb-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         {/* Header */}
-        <div className="text-center">
-          <h1 className="text-4xl font-bold text-foreground mb-2">Update Center</h1>
-          <p className="text-muted-foreground">Your daily hub for JC ON THE MOVE</p>
+        <div className="text-center relative">
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 via-orange-500/10 to-blue-600/20 blur-3xl -z-10"></div>
+          <h1 className="text-5xl font-black bg-gradient-to-r from-blue-400 via-orange-400 to-blue-400 bg-clip-text text-transparent mb-3 tracking-tight">
+            Update Center
+          </h1>
+          <p className="text-slate-400 text-lg font-medium">Your daily hub for JC ON THE MOVE</p>
         </div>
 
         {/* Daily Scripture */}
-        <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-background">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BookOpen className="h-5 w-5 text-primary" />
+        <Card className="border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-sm shadow-xl shadow-blue-900/10 overflow-hidden relative">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-orange-500 to-blue-500"></div>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-3 text-slate-100">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500/20 to-blue-600/20 border border-blue-500/30">
+                <BookOpen className="h-5 w-5 text-blue-400" />
+              </div>
               Daily Scripture
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <blockquote className="text-xl font-bold italic text-foreground mb-2">
+            <blockquote className="text-xl font-semibold italic text-slate-200 mb-3 leading-relaxed">
               "{scripture.verse}"
             </blockquote>
-            <p className="text-sm text-muted-foreground font-semibold">
-              - {scripture.reference}
+            <p className="text-sm text-orange-400 font-semibold">
+              — {scripture.reference}
             </p>
           </CardContent>
         </Card>
 
         {/* Monthly Calendar */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <CalendarIcon className="h-5 w-5" />
-                {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()} Jobs
+        <Card className="border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-sm shadow-xl overflow-hidden">
+          <CardHeader className="border-b border-slate-700/50 bg-slate-800/50">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <CardTitle className="flex items-center gap-3 text-slate-100">
+                <div className="p-2 rounded-lg bg-gradient-to-br from-orange-500/20 to-orange-600/20 border border-orange-500/30">
+                  <CalendarIcon className="h-5 w-5 text-orange-400" />
+                </div>
+                <span className="text-xl">{monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()} Jobs</span>
               </CardTitle>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <Link href="/employee/add-job">
                   <Button
                     size="sm"
-                    className="gap-1"
+                    className="gap-1 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white border-0 shadow-lg shadow-orange-500/25"
                     data-testid="button-add-job"
                   >
                     <Plus className="h-4 w-4" />
@@ -335,6 +353,7 @@ export default function EmployeeHomePage() {
                   variant="outline"
                   size="sm"
                   onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))}
+                  className="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white"
                   data-testid="button-prev-month"
                 >
                   Previous
@@ -343,6 +362,7 @@ export default function EmployeeHomePage() {
                   variant="outline"
                   size="sm"
                   onClick={() => setCurrentMonth(new Date())}
+                  className="border-blue-500/50 text-blue-400 hover:bg-blue-500/20 hover:text-blue-300"
                   data-testid="button-today"
                 >
                   Today
@@ -351,25 +371,26 @@ export default function EmployeeHomePage() {
                   variant="outline"
                   size="sm"
                   onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))}
+                  className="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white"
                   data-testid="button-next-month"
                 >
                   Next
                 </Button>
               </div>
             </div>
-            <div className="flex gap-4 mt-2">
-              <Badge variant="outline" className="bg-blue-50 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+            <div className="flex gap-4 mt-4">
+              <Badge className="bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30">
                 Pending: {pendingCount}
               </Badge>
-              <Badge variant="outline" className="bg-green-50 text-green-800 dark:bg-green-900 dark:text-green-200">
+              <Badge className="bg-green-500/20 text-green-300 border border-green-500/30 hover:bg-green-500/30">
                 Completed: {completedCount}
               </Badge>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4">
             <div className="grid grid-cols-7 gap-1 mb-2">
               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                <div key={day} className="text-center text-sm font-semibold text-muted-foreground py-2">
+                <div key={day} className="text-center text-sm font-bold text-slate-400 py-2 uppercase tracking-wider">
                   {day}
                 </div>
               ))}
@@ -381,40 +402,42 @@ export default function EmployeeHomePage() {
         </Card>
 
         {/* Split Section: Mini Shop & Google Reviews */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Mini Shop */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Store className="h-5 w-5" />
+          <Card className="border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-sm shadow-xl overflow-hidden">
+            <CardHeader className="border-b border-slate-700/50">
+              <CardTitle className="flex items-center gap-3 text-slate-100">
+                <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500/20 to-blue-600/20 border border-blue-500/30">
+                  <Store className="h-5 w-5 text-blue-400" />
+                </div>
                 Mini Shop
               </CardTitle>
-              <CardDescription>Latest items for sale</CardDescription>
+              <CardDescription className="text-slate-400">Latest items for sale</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 pt-4">
               {recentShopItems.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">No items available</p>
+                <p className="text-sm text-slate-400 text-center py-8">No items available</p>
               ) : (
                 recentShopItems.map(item => (
                   <Link key={item.id} href={`/shop/${item.id}`}>
-                    <div className="flex gap-3 p-3 border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer" data-testid={`shop-item-${item.id}`}>
+                    <div className="flex gap-3 p-3 border border-slate-700/50 rounded-xl bg-slate-800/50 hover:bg-slate-700/50 hover:border-blue-500/30 transition-all cursor-pointer group" data-testid={`shop-item-${item.id}`}>
                       {item.photos && item.photos[0] && (
                         <img
                           src={item.photos[0]}
                           alt={item.title}
-                          className="w-16 h-16 object-cover rounded"
+                          className="w-16 h-16 object-cover rounded-lg ring-2 ring-slate-700 group-hover:ring-blue-500/50 transition-all"
                         />
                       )}
                       <div className="flex-1">
-                        <h3 className="font-semibold text-sm line-clamp-1">{item.title}</h3>
-                        <p className="text-lg font-bold text-primary">${item.price}</p>
+                        <h3 className="font-semibold text-sm line-clamp-1 text-slate-200">{item.title}</h3>
+                        <p className="text-lg font-bold text-orange-400">${item.price}</p>
                       </div>
                     </div>
                   </Link>
                 ))
               )}
               <Link href="/shop">
-                <Button variant="outline" className="w-full" data-testid="button-view-all-shop">
+                <Button variant="outline" className="w-full border-slate-600 text-slate-300 hover:bg-blue-500/20 hover:border-blue-500/50 hover:text-blue-300" data-testid="button-view-all-shop">
                   View All Items
                 </Button>
               </Link>
@@ -422,31 +445,33 @@ export default function EmployeeHomePage() {
           </Card>
 
           {/* Google Reviews */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Star className="h-5 w-5 text-yellow-500 fill-yellow-500" />
+          <Card className="border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-sm shadow-xl overflow-hidden">
+            <CardHeader className="border-b border-slate-700/50">
+              <CardTitle className="flex items-center gap-3 text-slate-100">
+                <div className="p-2 rounded-lg bg-gradient-to-br from-orange-500/20 to-yellow-500/20 border border-orange-500/30">
+                  <Star className="h-5 w-5 text-orange-400 fill-orange-400" />
+                </div>
                 Recent Google Reviews
               </CardTitle>
-              <CardDescription>What customers are saying</CardDescription>
+              <CardDescription className="text-slate-400">What customers are saying</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 pt-4">
               {googleReviews.map(review => (
-                <div key={review.id} className="border-b last:border-0 pb-4 last:pb-0" data-testid={`review-${review.id}`}>
+                <div key={review.id} className="border-b border-slate-700/30 last:border-0 pb-4 last:pb-0" data-testid={`review-${review.id}`}>
                   <div className="flex items-center gap-2 mb-2">
                     <div className="flex">
                       {[...Array(review.rating)].map((_, i) => (
-                        <Star key={i} className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+                        <Star key={i} className="h-4 w-4 text-orange-400 fill-orange-400" />
                       ))}
                     </div>
-                    <span className="text-sm font-semibold">{review.author}</span>
+                    <span className="text-sm font-semibold text-slate-200">{review.author}</span>
                   </div>
-                  <p className="text-sm text-muted-foreground line-clamp-2">{review.text}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{review.date}</p>
+                  <p className="text-sm text-slate-400 line-clamp-2">{review.text}</p>
+                  <p className="text-xs text-slate-500 mt-1">{review.date}</p>
                 </div>
               ))}
               <Link href="/reviews">
-                <Button variant="outline" className="w-full" data-testid="button-view-all-reviews">
+                <Button variant="outline" className="w-full border-slate-600 text-slate-300 hover:bg-orange-500/20 hover:border-orange-500/50 hover:text-orange-300" data-testid="button-view-all-reviews">
                   View All Reviews
                 </Button>
               </Link>
@@ -455,26 +480,28 @@ export default function EmployeeHomePage() {
         </div>
 
         {/* Google Photos Showcase */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Camera className="h-5 w-5" />
+        <Card className="border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-sm shadow-xl overflow-hidden">
+          <CardHeader className="border-b border-slate-700/50">
+            <CardTitle className="flex items-center gap-3 text-slate-100">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-gray-500/20 to-gray-600/20 border border-gray-500/30">
+                <Camera className="h-5 w-5 text-gray-300" />
+              </div>
               JC ON THE MOVE Photo Gallery
             </CardTitle>
-            <CardDescription>Recent photos from our Google page</CardDescription>
+            <CardDescription className="text-slate-400">Recent photos from our Google page</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {googlePhotos.map((photo, index) => (
                 <div
                   key={index}
-                  className="aspect-square overflow-hidden rounded-lg border border-border hover:scale-105 transition-transform cursor-pointer"
+                  className="aspect-square overflow-hidden rounded-xl border-2 border-slate-700/50 hover:border-blue-500/50 hover:scale-105 transition-all cursor-pointer shadow-lg group"
                   data-testid={`gallery-photo-${index}`}
                 >
                   <img
                     src={photo}
                     alt={`JC ON THE MOVE photo ${index + 1}`}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover group-hover:brightness-110 transition-all"
                   />
                 </div>
               ))}
@@ -485,7 +512,7 @@ export default function EmployeeHomePage() {
               rel="noopener noreferrer"
               className="mt-4 block"
             >
-              <Button variant="outline" className="w-full" data-testid="button-view-more-photos">
+              <Button variant="outline" className="w-full border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white" data-testid="button-view-more-photos">
                 View More Photos on Google
               </Button>
             </a>
@@ -495,23 +522,25 @@ export default function EmployeeHomePage() {
         {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Link href="/employee/dashboard">
-            <Button className="w-full h-20 text-lg bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700" data-testid="button-my-dashboard">
-              <User className="h-5 w-5 mr-2" />
+            <Button className="w-full h-20 text-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 shadow-lg shadow-blue-900/30 border-0 font-bold" data-testid="button-my-dashboard">
+              <User className="h-6 w-6 mr-2" />
               My Dashboard
             </Button>
           </Link>
           <Link href="/dashboard">
-            <Button variant="outline" className="w-full h-20 text-lg" data-testid="button-view-jobs">
+            <Button className="w-full h-20 text-lg bg-gradient-to-r from-slate-700 to-slate-800 hover:from-slate-600 hover:to-slate-700 border border-slate-600 text-slate-100 shadow-lg font-bold" data-testid="button-view-jobs">
               View My Jobs
             </Button>
           </Link>
           <Link href="/rewards">
-            <Button variant="outline" className="w-full h-20 text-lg" data-testid="button-rewards">
+            <Button className="w-full h-20 text-lg bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-400 hover:to-orange-500 shadow-lg shadow-orange-900/30 border-0 text-white font-bold" data-testid="button-rewards">
+              <Award className="h-6 w-6 mr-2" />
               Rewards & Faucet
             </Button>
           </Link>
           <Link href="/shop/create">
-            <Button variant="outline" className="w-full h-20 text-lg" data-testid="button-post-item">
+            <Button className="w-full h-20 text-lg bg-gradient-to-r from-gray-700 to-gray-800 hover:from-gray-600 hover:to-gray-700 border border-gray-600 text-gray-100 shadow-lg font-bold" data-testid="button-post-item">
+              <Plus className="h-6 w-6 mr-2" />
               Post Shop Item
             </Button>
           </Link>
