@@ -62,9 +62,9 @@ export default function HomePage() {
             JC ON THE MOVE LLC
           </h1>
           
-          {/* Large Centered Video */}
-          <div className="relative mx-auto max-w-3xl">
-            <div className="relative aspect-[5/8] md:aspect-[16/10] overflow-hidden rounded-2xl shadow-2xl border-4 border-primary/30">
+          {/* Centered Video - Compact Size */}
+          <div className="relative mx-auto max-w-xl">
+            <div className="relative aspect-[4/5] md:aspect-[16/9] overflow-hidden rounded-2xl shadow-2xl border-4 border-primary/30">
               <video
                 ref={videoRef}
                 src="/attached_assets/hero-video-compressed.mp4"
