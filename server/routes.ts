@@ -1556,6 +1556,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Request a review from customer for completed job
+  app.post("/api/leads/:id/request-review", isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Get the lead
+      const lead = await storage.getLead(id);
+      if (!lead) {
+        return res.status(404).json({ error: "Lead not found" });
+      }
+      
+      // Only completed jobs can receive review requests
+      if (lead.status !== 'completed') {
+        return res.status(400).json({ error: "Can only request reviews for completed jobs" });
+      }
+      
+      // Get the service type label
+      const serviceLabels: Record<string, string> = {
+        residential: "Moving",
+        commercial: "Commercial Moving",
+        junk: "Junk Removal",
+        snow: "Snow Removal",
+        cleaning: "Move In/Out Cleaning",
+        handyman: "Handyman",
+        demolition: "Light Demolition",
+        flooring: "Flooring",
+        painting: "Painting",
+      };
+      const serviceLabel = serviceLabels[lead.serviceType] || lead.serviceType;
+      
+      // Generate review link
+      const reviewLink = `${process.env.APP_URL || 'https://jconthemove.com'}/leave-review?jobId=${lead.id}`;
+      
+      // Send review request email to customer
+      const companyEmail = process.env.COMPANY_EMAIL || "upmichiganstatemovers@gmail.com";
+      
+      const emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">How was your experience with JC ON THE MOVE?</h2>
+          <p>Hi ${lead.firstName},</p>
+          <p>Thank you for choosing JC ON THE MOVE for your ${serviceLabel} service! We hope everything went smoothly.</p>
+          <p>We'd love to hear about your experience. Your feedback helps us improve and helps other customers find quality service.</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${reviewLink}" style="background-color: #f59e0b; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Leave a Review</a>
+          </div>
+          <p>Thank you for your business!</p>
+          <p>- The JC ON THE MOVE Team</p>
+        </div>
+      `;
+      
+      const emailText = `Hi ${lead.firstName},
+
+Thank you for choosing JC ON THE MOVE for your ${serviceLabel} service! We hope everything went smoothly.
+
+We'd love to hear about your experience. Your feedback helps us improve and helps other customers find quality service.
+
+Leave a review here: ${reviewLink}
+
+Thank you for your business!
+- The JC ON THE MOVE Team`;
+      
+      await sendEmail({
+        to: lead.email,
+        from: companyEmail,
+        subject: `How was your ${serviceLabel} service with JC ON THE MOVE?`,
+        text: emailText,
+        html: emailHtml,
+      });
+      
+      console.log(`📧 Review request sent to ${lead.email} for job ${id}`);
+      
+      res.json({ success: true, message: "Review request sent successfully" });
+    } catch (error) {
+      console.error("Error sending review request:", error);
+      res.status(500).json({ error: "Failed to send review request" });
+    }
+  });
+
   // General update lead endpoint (admin or employee)
   // TEMPORARY: Authentication temporarily disabled for debugging
   app.patch("/api/leads/:id", async (req, res) => {

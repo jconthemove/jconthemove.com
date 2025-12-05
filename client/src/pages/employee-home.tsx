@@ -445,15 +445,11 @@ export default function EmployeeHomePage() {
                   <p className="text-xs text-muted-foreground mt-1">{review.date}</p>
                 </div>
               ))}
-              <a 
-                href="https://www.google.com/search?q=jc+on+the+move" 
-                target="_blank" 
-                rel="noopener noreferrer"
-              >
+              <Link href="/reviews">
                 <Button variant="outline" className="w-full" data-testid="button-view-all-reviews">
                   View All Reviews
                 </Button>
-              </a>
+              </Link>
             </CardContent>
           </Card>
         </div>
