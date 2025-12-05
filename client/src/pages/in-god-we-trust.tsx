@@ -22,7 +22,9 @@ import {
   BarChart3,
   Users,
   Activity,
-  ExternalLink
+  ExternalLink,
+  Star,
+  Plus
 } from "lucide-react";
 
 export default function InGodWeTrustPage() {
@@ -202,7 +204,7 @@ export default function InGodWeTrustPage() {
         )}
 
         <Tabs defaultValue="operations" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="operations" data-testid="tab-operations">
               <Activity className="h-4 w-4 mr-2" />
               Operations
@@ -218,6 +220,10 @@ export default function InGodWeTrustPage() {
             <TabsTrigger value="analytics" data-testid="tab-analytics">
               <BarChart3 className="h-4 w-4 mr-2" />
               Analytics
+            </TabsTrigger>
+            <TabsTrigger value="reviews" data-testid="tab-reviews">
+              <Star className="h-4 w-4 mr-2" />
+              Reviews
             </TabsTrigger>
           </TabsList>
 
@@ -475,6 +481,58 @@ export default function InGodWeTrustPage() {
                 </div>
               </Card>
             </div>
+          </TabsContent>
+
+          {/* Reviews Tab */}
+          <TabsContent value="reviews" className="space-y-6">
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <Star className="h-5 w-5 text-yellow-500" />
+                    Review Management
+                  </h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Import reviews from external platforms and manage customer testimonials
+                  </p>
+                </div>
+                <Link href="/admin/testimonials">
+                  <Button className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Import Reviews
+                  </Button>
+                </Link>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                  <h4 className="font-medium text-yellow-800 dark:text-yellow-200 mb-2">Supported Platforms</h4>
+                  <ul className="text-sm text-yellow-700 dark:text-yellow-300 space-y-1">
+                    <li>• Yelp Reviews</li>
+                    <li>• Google Reviews</li>
+                    <li>• Facebook Reviews</li>
+                    <li>• HireAHelper Reviews</li>
+                  </ul>
+                </div>
+                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <h4 className="font-medium text-blue-800 dark:text-blue-200 mb-2">Quick Actions</h4>
+                  <div className="space-y-2">
+                    <Link href="/admin/testimonials">
+                      <Button variant="outline" size="sm" className="w-full justify-start">
+                        <Star className="h-4 w-4 mr-2" />
+                        Manage All Reviews
+                      </Button>
+                    </Link>
+                    <Link href="/reviews">
+                      <Button variant="outline" size="sm" className="w-full justify-start">
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        View Public Reviews Page
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
