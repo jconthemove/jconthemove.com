@@ -170,10 +170,22 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Bottom Row - Rewards, Shop, Reviews, Sponsors */}
+      {/* Bottom Row - Reviews, Rewards, Shop, Sponsors */}
       <section className="py-8 px-4 pb-12">
         <div className="max-w-4xl mx-auto">
           <div className="grid grid-cols-4 gap-2 md:gap-4">
+            {/* Reviews */}
+            <a href="https://www.google.com/search?q=JC+ON+THE+MOVE+reviews" target="_blank" rel="noopener noreferrer">
+              <Card className="group cursor-pointer bg-gradient-to-br from-yellow-600 to-yellow-800 border border-yellow-500/30 hover:border-yellow-400 hover:shadow-lg hover:shadow-yellow-500/20 transition-all duration-300" data-testid="card-reviews">
+                <CardContent className="p-3 md:p-4 text-center">
+                  <div className="mb-2 flex justify-center">
+                    <Star className="h-6 w-6 md:h-8 md:w-8 text-yellow-200" />
+                  </div>
+                  <h3 className="text-xs md:text-sm font-semibold text-white">Reviews</h3>
+                </CardContent>
+              </Card>
+            </a>
+
             {/* Rewards */}
             <Link href="/employee-login">
               <Card className="group cursor-pointer bg-gradient-to-br from-purple-700 to-purple-900 border border-purple-500/30 hover:border-purple-400 hover:shadow-lg hover:shadow-purple-500/20 transition-all duration-300" data-testid="card-rewards">
@@ -198,19 +210,7 @@ export default function HomePage() {
               </Card>
             </a>
 
-            {/* Reviews */}
-            <a href="https://www.google.com/search?q=JC+ON+THE+MOVE+reviews" target="_blank" rel="noopener noreferrer">
-              <Card className="group cursor-pointer bg-gradient-to-br from-yellow-600 to-yellow-800 border border-yellow-500/30 hover:border-yellow-400 hover:shadow-lg hover:shadow-yellow-500/20 transition-all duration-300" data-testid="card-reviews">
-                <CardContent className="p-3 md:p-4 text-center">
-                  <div className="mb-2 flex justify-center">
-                    <Star className="h-6 w-6 md:h-8 md:w-8 text-yellow-200" />
-                  </div>
-                  <h3 className="text-xs md:text-sm font-semibold text-white">Reviews</h3>
-                </CardContent>
-              </Card>
-            </a>
-
-            {/* Our Sponsors */}
+            {/* Sponsors */}
             <Link href="/sponsors">
               <Card className="group cursor-pointer bg-gradient-to-br from-slate-600 to-slate-800 border border-slate-500/30 hover:border-slate-400 hover:shadow-lg hover:shadow-slate-500/20 transition-all duration-300" data-testid="card-sponsors">
                 <CardContent className="p-3 md:p-4 text-center">
