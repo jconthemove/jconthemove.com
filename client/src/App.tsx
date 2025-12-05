@@ -37,6 +37,8 @@ import EmployeesPage from "@/pages/employees";
 import LeadDetailPage from "@/pages/lead-detail";
 import EmployeeRegister from "@/pages/employee-register";
 import EmployeeLogin from "@/pages/employee-login";
+import QuotePage from "@/pages/quote";
+import SponsorsPage from "@/pages/sponsors";
 
 // Landing page for unauthenticated users
 function LandingPage() {
@@ -197,6 +199,12 @@ function Router() {
       
       {/* Terms of Service - accessible to all */}
       <Route path="/terms" component={TermsOfService} />
+      
+      {/* Quote page - accessible to all */}
+      <Route path="/quote" component={QuotePage} />
+      
+      {/* Sponsors page - accessible to all */}
+      <Route path="/sponsors" component={SponsorsPage} />
       
       {/* Lead detail - accessible without authentication (temporary for debugging) */}
       <Route path="/lead/:id">
