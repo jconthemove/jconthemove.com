@@ -1638,6 +1638,18 @@ Thank you for your business!
   // TESTIMONIALS ROUTES
   // =====================
   
+  // Get ALL testimonials (admin only - for management)
+  app.get("/api/admin/testimonials", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      // Admins see all testimonials regardless of status
+      const allTestimonials = await storage.getTestimonials({});
+      res.json(allTestimonials);
+    } catch (error) {
+      console.error("Error fetching admin testimonials:", error);
+      res.status(500).json({ error: "Failed to fetch testimonials" });
+    }
+  });
+  
   // Get published testimonials (public - for showcase page)
   app.get("/api/testimonials", async (req, res) => {
     try {

@@ -24,6 +24,7 @@ import AdminDashboardFull from "@/pages/admin-dashboard-full";
 import AdminMoonshotPage from "@/pages/admin-moonshot";
 import InGodWeTrustPage from "@/pages/in-god-we-trust";
 import AdminUsersPage from "@/pages/admin-users";
+import AdminTestimonialsPage from "@/pages/admin-testimonials";
 import NotFound from "@/pages/not-found";
 import MobileLeadManager from "@/components/mobile-lead-manager";
 import CustomerMobileInterface from "@/components/customer-mobile-interface";
@@ -120,9 +121,7 @@ function AuthenticatedApp() {
             <PageWrapper component={RewardsPage} />
           </Route>
           <Route path="/reviews">
-            <RouteGuard allowedRoles={['admin', 'employee']}>
-              <PageWrapper component={ReviewsPage} />
-            </RouteGuard>
+            <PageWrapper component={ReviewsPage} />
           </Route>
           <Route path="/profile">
             <PageWrapper component={ProfilePage} />
@@ -138,6 +137,11 @@ function AuthenticatedApp() {
           <Route path="/admin/users">
             <RouteGuard allowedRoles={['admin', 'business_owner']}>
               <PageWrapper component={AdminUsersPage} />
+            </RouteGuard>
+          </Route>
+          <Route path="/admin/testimonials">
+            <RouteGuard allowedRoles={['admin', 'business_owner']}>
+              <PageWrapper component={AdminTestimonialsPage} />
             </RouteGuard>
           </Route>
           
@@ -219,6 +223,9 @@ function Router() {
       
       {/* Gallery page - accessible to all */}
       <Route path="/gallery" component={GalleryPage} />
+      
+      {/* Reviews page - accessible to all */}
+      <Route path="/reviews" component={ReviewsPage} />
       
       {/* Lead detail - accessible without authentication (temporary for debugging) */}
       <Route path="/lead/:id">

@@ -128,7 +128,7 @@ export default function ReviewsPage() {
   });
 
   const { data: testimonials = [], isLoading } = useQuery<Testimonial[]>({
-    queryKey: ["/api/testimonials", { status: "published" }],
+    queryKey: ["/api/testimonials?status=published"],
   });
 
   const { data: stats } = useQuery<TestimonialStats>({
