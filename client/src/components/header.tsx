@@ -134,13 +134,13 @@ export default function Header() {
                     >
                       Home
                     </button>
-                    <button
-                      onClick={() => scrollToSection("gallery")}
+                    <Link
+                      href="/gallery"
                       className="text-muted-foreground hover:text-primary px-3 py-2 rounded-md text-sm font-medium transition-colors"
                       data-testid="button-gallery"
                     >
                       Gallery
-                    </button>
+                    </Link>
                     <Link
                       href="/services"
                       className="bg-maroon-700 text-white hover:bg-maroon-600 px-4 py-2 rounded-full text-sm font-medium transition-colors"
@@ -308,13 +308,14 @@ export default function Header() {
                   >
                     Home
                   </button>
-                  <button
-                    onClick={() => scrollToSection("gallery")}
+                  <Link
+                    href="/gallery"
                     className="text-muted-foreground hover:text-primary px-3 py-2 rounded-md text-sm font-medium transition-colors text-left"
                     data-testid="button-mobile-gallery"
+                    onClick={() => setMobileMenuOpen(false)}
                   >
                     Gallery
-                  </button>
+                  </Link>
                   <Link
                     href="/services"
                     className="text-white px-4 py-2 rounded-full text-sm font-medium transition-colors text-left inline-block"
