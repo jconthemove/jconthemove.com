@@ -175,7 +175,7 @@ export default function HomePage() {
         <div className="max-w-4xl mx-auto">
           <div className="grid grid-cols-4 gap-2 md:gap-4">
             {/* Reviews */}
-            <a href="https://www.google.com/search?q=JC+ON+THE+MOVE+reviews" target="_blank" rel="noopener noreferrer">
+            <Link href="/reviews">
               <Card className="group cursor-pointer bg-gradient-to-br from-yellow-600 to-yellow-800 border border-yellow-500/30 hover:border-yellow-400 hover:shadow-lg hover:shadow-yellow-500/20 transition-all duration-300" data-testid="card-reviews">
                 <CardContent className="p-3 md:p-4 text-center">
                   <div className="mb-2 flex justify-center">
@@ -184,7 +184,7 @@ export default function HomePage() {
                   <h3 className="text-xs md:text-sm font-semibold text-white">Reviews</h3>
                 </CardContent>
               </Card>
-            </a>
+            </Link>
 
             {/* Rewards */}
             <Link href="/employee-login">
