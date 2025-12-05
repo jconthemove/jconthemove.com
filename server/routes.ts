@@ -1634,6 +1634,152 @@ Thank you for your business!
     }
   });
 
+  // =====================
+  // TESTIMONIALS ROUTES
+  // =====================
+  
+  // Get published testimonials (public - for showcase page)
+  app.get("/api/testimonials", async (req, res) => {
+    try {
+      const { status, featured, sourceType, sourcePlatform, limit } = req.query;
+      
+      const filters: any = {};
+      if (status) filters.status = status as string;
+      if (featured === 'true') filters.featured = true;
+      if (featured === 'false') filters.featured = false;
+      if (sourceType) filters.sourceType = sourceType as string;
+      if (sourcePlatform) filters.sourcePlatform = sourcePlatform as string;
+      
+      const testimonials = await storage.getTestimonials(
+        filters,
+        limit ? parseInt(limit as string) : undefined
+      );
+      
+      res.json(testimonials);
+    } catch (error) {
+      console.error("Error fetching testimonials:", error);
+      res.status(500).json({ error: "Failed to fetch testimonials" });
+    }
+  });
+
+  // Get testimonial stats (public)
+  app.get("/api/testimonials/stats", async (req, res) => {
+    try {
+      const stats = await storage.getTestimonialStats();
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching testimonial stats:", error);
+      res.status(500).json({ error: "Failed to fetch testimonial stats" });
+    }
+  });
+
+  // Submit a new testimonial (public - customers can leave reviews)
+  app.post("/api/testimonials", async (req, res) => {
+    try {
+      const { reviewerName, rating, content, serviceType } = req.body;
+      
+      if (!reviewerName || !rating || !content) {
+        return res.status(400).json({ error: "Name, rating, and review content are required" });
+      }
+      
+      if (rating < 1 || rating > 5) {
+        return res.status(400).json({ error: "Rating must be between 1 and 5" });
+      }
+      
+      const testimonial = await storage.createTestimonial({
+        reviewerName,
+        rating,
+        content,
+        serviceType: serviceType || null,
+        sourceType: 'customer',
+        sourcePlatform: null,
+        sourceUrl: null,
+        reviewDate: new Date().toISOString().split('T')[0],
+        status: 'pending', // Customer reviews need approval
+        featured: false,
+        verified: false,
+      });
+      
+      console.log(`📝 New customer testimonial submitted by ${reviewerName}`);
+      
+      res.json({ success: true, message: "Thank you for your review! It will be published after approval." });
+    } catch (error) {
+      console.error("Error creating testimonial:", error);
+      res.status(500).json({ error: "Failed to submit review" });
+    }
+  });
+
+  // Import testimonials from external sources (admin only)
+  app.post("/api/testimonials/import", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const { testimonials: testimonialsToImport } = req.body;
+      
+      if (!Array.isArray(testimonialsToImport) || testimonialsToImport.length === 0) {
+        return res.status(400).json({ error: "Please provide an array of testimonials to import" });
+      }
+      
+      const formattedTestimonials = testimonialsToImport.map((t: any) => ({
+        reviewerName: t.reviewerName || 'Anonymous',
+        rating: Math.min(5, Math.max(1, parseInt(t.rating) || 5)),
+        content: t.content || '',
+        serviceType: t.serviceType || null,
+        sourceType: 'imported' as const,
+        sourcePlatform: t.sourcePlatform || null,
+        sourceUrl: t.sourceUrl || null,
+        reviewDate: t.reviewDate || null,
+        status: 'published' as const, // Imported reviews go directly to published
+        featured: t.featured || false,
+        verified: true, // Imported reviews are considered verified
+      }));
+      
+      const imported = await storage.importTestimonials(formattedTestimonials);
+      
+      console.log(`📥 Imported ${imported.length} testimonials`);
+      
+      res.json({ success: true, count: imported.length, testimonials: imported });
+    } catch (error) {
+      console.error("Error importing testimonials:", error);
+      res.status(500).json({ error: "Failed to import testimonials" });
+    }
+  });
+
+  // Update testimonial (admin only - for moderation)
+  app.patch("/api/testimonials/:id", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+      
+      const testimonial = await storage.updateTestimonial(id, updates);
+      
+      if (!testimonial) {
+        return res.status(404).json({ error: "Testimonial not found" });
+      }
+      
+      res.json(testimonial);
+    } catch (error) {
+      console.error("Error updating testimonial:", error);
+      res.status(500).json({ error: "Failed to update testimonial" });
+    }
+  });
+
+  // Delete testimonial (admin only)
+  app.delete("/api/testimonials/:id", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      const deleted = await storage.deleteTestimonial(id);
+      
+      if (!deleted) {
+        return res.status(404).json({ error: "Testimonial not found" });
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting testimonial:", error);
+      res.status(500).json({ error: "Failed to delete testimonial" });
+    }
+  });
+
   // General update lead endpoint (admin or employee)
   // TEMPORARY: Authentication temporarily disabled for debugging
   app.patch("/api/leads/:id", async (req, res) => {
