@@ -541,20 +541,19 @@ export default function EmployeeHomePage() {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 mt-4">
-              {/* Add Job Button */}
-              <Link href={`/employee/add-job${selectedDate ? `?date=${selectedDate.toISOString().split('T')[0]}` : ''}`}>
-                <Button 
-                  className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
-                  data-testid="button-add-job-calendar"
-                >
-                  <Plus className="h-5 w-5 mr-2" />
-                  Add a Job for This Date
-                </Button>
-              </Link>
-
               {selectedDateJobs.length === 0 ? (
-                <div className="text-center py-6 text-muted-foreground">
-                  No jobs scheduled for this date yet
+                <div className="text-center py-6 space-y-4">
+                  <p className="text-muted-foreground">No jobs scheduled for this date</p>
+                  <Link href={`/employee/add-job${selectedDate ? `?date=${selectedDate.toISOString().split('T')[0]}` : ''}`}>
+                    <Button 
+                      size="lg"
+                      className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+                      data-testid="button-add-job-calendar"
+                    >
+                      <Plus className="h-5 w-5 mr-2" />
+                      Add a Job
+                    </Button>
+                  </Link>
                 </div>
               ) : (
                 selectedDateJobs.map(job => (
@@ -638,6 +637,22 @@ export default function EmployeeHomePage() {
                     </CardContent>
                   </Card>
                 ))
+              )}
+              
+              {/* Add Job Button - shown at bottom when there are jobs */}
+              {selectedDateJobs.length > 0 && (
+                <div className="pt-2 border-t">
+                  <Link href={`/employee/add-job${selectedDate ? `?date=${selectedDate.toISOString().split('T')[0]}` : ''}`}>
+                    <Button 
+                      variant="outline"
+                      className="w-full"
+                      data-testid="button-add-another-job"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Another Job
+                    </Button>
+                  </Link>
+                </div>
               )}
             </div>
           </DialogContent>
