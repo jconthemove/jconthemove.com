@@ -41,6 +41,7 @@ import QuotePage from "@/pages/quote";
 import SponsorsPage from "@/pages/sponsors";
 import ServicesPage from "@/pages/services";
 import GalleryPage from "@/pages/gallery";
+import ReviewsPage from "@/pages/reviews";
 
 // Landing page for unauthenticated users
 function LandingPage() {
@@ -117,6 +118,11 @@ function AuthenticatedApp() {
           </Route>
           <Route path="/rewards">
             <PageWrapper component={RewardsPage} />
+          </Route>
+          <Route path="/reviews">
+            <RouteGuard allowedRoles={['admin', 'employee']}>
+              <PageWrapper component={ReviewsPage} />
+            </RouteGuard>
           </Route>
           <Route path="/profile">
             <PageWrapper component={ProfilePage} />
