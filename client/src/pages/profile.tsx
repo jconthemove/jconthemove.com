@@ -28,8 +28,12 @@ import {
   Copy,
   CheckCircle2,
   ExternalLink,
-  Building2
+  Building2,
+  Edit2,
+  AlertCircle
 } from 'lucide-react';
+import { SiSolana } from 'react-icons/si';
+import { WalletChoiceModal } from '@/components/WalletChoiceModal';
 
 interface UserWallet {
   id: string;
@@ -56,6 +60,18 @@ export default function ProfilePage() {
   const [checkingUsername, setCheckingUsername] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
+  const [showWalletChoiceModal, setShowWalletChoiceModal] = useState(false);
+
+  // Fetch wallet preference (hybrid wallet system)
+  const { data: walletPreference, isLoading: prefLoading } = useQuery<{
+    walletMode: 'personal' | 'company' | null;
+    personalWalletAddress: string | null;
+    companyWalletId: string | null;
+    hasWalletConfigured: boolean;
+  }>({
+    queryKey: ['/api/user/wallet-preference'],
+    enabled: !!user,
+  });
 
   // Fetch user wallets
   const { data: walletsResponse, isLoading: walletsLoading, error: walletsError } = useQuery<{ wallets: UserWallet[] }>({
@@ -458,11 +474,92 @@ export default function ProfilePage() {
 
                 {/* Wallet Tab */}
                 <TabsContent value="wallet" className="space-y-6">
+                  {/* JCMOVES Payout Preference Section */}
+                  <div className="p-4 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950 dark:to-blue-950 border border-purple-200 dark:border-purple-800 rounded-lg">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <SiSolana className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                        <h3 className="text-lg font-semibold text-purple-900 dark:text-purple-100">JCMOVES Payout Wallet</h3>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowWalletChoiceModal(true)}
+                        className="border-purple-300 dark:border-purple-700"
+                        data-testid="button-change-wallet-preference"
+                      >
+                        <Edit2 className="h-4 w-4 mr-2" />
+                        {walletPreference?.hasWalletConfigured ? 'Change' : 'Set Up'}
+                      </Button>
+                    </div>
+                    
+                    {prefLoading ? (
+                      <div className="flex items-center gap-2 py-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600"></div>
+                        <span className="text-sm text-purple-600">Loading preference...</span>
+                      </div>
+                    ) : walletPreference?.hasWalletConfigured ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          {walletPreference.walletMode === 'personal' ? (
+                            <>
+                              <div className="h-8 w-8 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center">
+                                <SiSolana className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                              </div>
+                              <div>
+                                <p className="font-medium text-purple-900 dark:text-purple-100">Personal Phantom Wallet</p>
+                                <p className="text-xs text-purple-600 dark:text-purple-400">Direct blockchain transfers</p>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                                <Building2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                              </div>
+                              <div>
+                                <p className="font-medium text-blue-900 dark:text-blue-100">Company Wallet</p>
+                                <p className="text-xs text-blue-600 dark:text-blue-400">
+                                  {walletPreference.companyWalletId 
+                                    ? "Managed by JC ON THE MOVE" 
+                                    : "Pending admin assignment"}
+                                </p>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                        {walletPreference.walletMode === 'personal' && walletPreference.personalWalletAddress && (
+                          <div className="mt-2 p-2 bg-purple-100 dark:bg-purple-900 rounded text-xs font-mono break-all text-purple-700 dark:text-purple-300 flex items-center gap-2">
+                            <code className="flex-1">{walletPreference.personalWalletAddress}</code>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => copyToClipboard(walletPreference.personalWalletAddress!)}
+                              className="h-6 w-6 p-0 shrink-0"
+                            >
+                              {copiedAddress === walletPreference.personalWalletAddress ? (
+                                <Check className="h-3 w-3 text-green-500" />
+                              ) : (
+                                <Copy className="h-3 w-3" />
+                              )}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg">
+                        <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                        <p className="text-sm text-amber-700 dark:text-amber-300">
+                          Set up your wallet to receive JCMOVES token rewards
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Personal Wallets Section */}
                   <div>
                     <div className="flex items-center gap-2 mb-4">
                       <Wallet className="h-5 w-5 text-primary" />
-                      <h3 className="text-lg font-semibold">Personal Wallets</h3>
+                      <h3 className="text-lg font-semibold">Token Balances</h3>
                     </div>
                     {isSolanaConnected && (
                       <div className="flex items-center gap-2 mb-4 p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg">
@@ -743,6 +840,15 @@ export default function ProfilePage() {
           </Card>
         </div>
       </div>
+
+      {/* Wallet Choice Modal */}
+      <WalletChoiceModal
+        open={showWalletChoiceModal}
+        onClose={() => setShowWalletChoiceModal(false)}
+        onComplete={() => {
+          queryClient.invalidateQueries({ queryKey: ['/api/user/wallet-preference'] });
+        }}
+      />
     </div>
   );
 }

@@ -32,7 +32,7 @@ export interface IStorage {
   
   // Wallet choice management (hybrid personal/company wallet system)
   updateUserWalletChoice(userId: string, walletMode: 'personal' | 'company', personalWalletAddress?: string, companyWalletId?: string): Promise<User | undefined>;
-  getPayoutAddress(userId: string): Promise<{ address: string | null; mode: 'personal' | 'company' | null }>;
+  getPayoutAddress(userId: string): Promise<{ address: string | null; mode: 'personal' | 'company' | null; pendingAssignment?: boolean }>;
   
   // Help request operations
   createHelpRequest(request: { userId: string; message: string; imageUrls: string[] | null }): Promise<any>;
@@ -511,7 +511,7 @@ export class DatabaseStorage implements IStorage {
     return user || undefined;
   }
 
-  async getPayoutAddress(userId: string): Promise<{ address: string | null; mode: 'personal' | 'company' | null }> {
+  async getPayoutAddress(userId: string): Promise<{ address: string | null; mode: 'personal' | 'company' | null; pendingAssignment?: boolean }> {
     const user = await this.getUser(userId);
     if (!user) {
       return { address: null, mode: null };
@@ -523,9 +523,12 @@ export class DatabaseStorage implements IStorage {
       return { address: user.personalWalletAddress || null, mode: 'personal' };
     }
     
-    if (mode === 'company' && user.companyWalletId) {
-      const companyWallet = await this.getUserWalletById(user.companyWalletId);
-      return { address: companyWallet?.walletAddress || null, mode: 'company' };
+    if (mode === 'company') {
+      if (user.companyWalletId) {
+        const companyWallet = await this.getUserWalletById(user.companyWalletId);
+        return { address: companyWallet?.walletAddress || null, mode: 'company' };
+      }
+      return { address: null, mode: 'company', pendingAssignment: true };
     }
     
     return { address: null, mode: null };

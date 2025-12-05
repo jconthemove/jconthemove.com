@@ -1271,11 +1271,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Validate company wallet ID if mode is company
-      if (walletMode === 'company' && !companyWalletId) {
-        return res.status(400).json({ message: "Company wallet ID is required when using company mode" });
-      }
-
       const updatedUser = await storage.updateUserWalletChoice(
         userId,
         walletMode,
