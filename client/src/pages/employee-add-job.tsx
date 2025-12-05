@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { ArrowLeft, Home, Building, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,9 +15,14 @@ import { insertLeadSchema, type InsertLead } from "@shared/schema";
 
 export default function EmployeeAddJob() {
   const [, setLocation] = useLocation();
+  const searchString = useSearch();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedService, setSelectedService] = useState("");
+
+  // Parse date from URL query parameter
+  const urlParams = new URLSearchParams(searchString);
+  const prefilledDate = urlParams.get('date') || "";
 
   const serviceOptions = [
     { value: "residential", label: "Residential Moving", icon: Home },
@@ -35,11 +40,18 @@ export default function EmployeeAddJob() {
       serviceType: "",
       fromAddress: "",
       toAddress: "",
-      moveDate: "",
+      moveDate: prefilledDate,
       propertySize: "",
       details: "",
     },
   });
+
+  // Update moveDate if URL parameter changes
+  useEffect(() => {
+    if (prefilledDate) {
+      form.setValue('moveDate', prefilledDate);
+    }
+  }, [prefilledDate, form]);
 
   const submitJob = useMutation({
     mutationFn: async (data: InsertLead) => {
