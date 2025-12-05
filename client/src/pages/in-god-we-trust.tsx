@@ -124,78 +124,83 @@ export default function InGodWeTrustPage() {
   const balanceDiscrepancy = Math.abs(blockchainBalance - databaseBalance);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 pb-20">
       <div className="container mx-auto px-4 py-8 max-w-7xl">
         {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
+        <div className="text-center mb-8 relative">
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 via-purple-500/10 to-blue-600/20 blur-3xl -z-10"></div>
+          <h1 className="text-4xl md:text-5xl font-black bg-gradient-to-r from-blue-400 via-purple-400 to-blue-400 bg-clip-text text-transparent mb-3 tracking-tight">
             IN GOD WE TRUST
           </h1>
-          <p className="text-gray-600 dark:text-gray-400">
+          <p className="text-slate-400 text-lg">
             Treasury Management • Blockchain Operations • Business Intelligence
           </p>
         </div>
 
         {/* Top Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <Card className="p-6 bg-gradient-to-br from-blue-500 to-blue-600 text-white">
+          <Card className="p-6 bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0 shadow-xl shadow-blue-900/30 overflow-hidden relative">
+            <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -mr-10 -mt-10"></div>
             <div className="flex items-center justify-between mb-2">
-              <Wallet className="h-8 w-8 opacity-80" />
-              <span className="text-sm opacity-80">Live Price</span>
+              <Wallet className="h-8 w-8 opacity-90" />
+              <span className="text-sm opacity-80 font-medium">Live Price</span>
             </div>
-            <div className="text-3xl font-bold">${tokenPrice.toFixed(8)}</div>
-            <div className="text-sm opacity-80 mt-1">JCMOVES Token</div>
+            <div className="text-3xl font-black">${tokenPrice.toFixed(8)}</div>
+            <div className="text-sm opacity-80 mt-1 font-medium">JCMOVES Token</div>
           </Card>
 
-          <Card className="p-6 bg-gradient-to-br from-purple-500 to-purple-600 text-white">
+          <Card className="p-6 bg-gradient-to-br from-purple-500 to-purple-600 text-white border-0 shadow-xl shadow-purple-900/30 overflow-hidden relative">
+            <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -mr-10 -mt-10"></div>
             <div className="flex items-center justify-between mb-2">
-              <TrendingUp className="h-8 w-8 opacity-80" />
-              <span className="text-sm opacity-80">Blockchain</span>
+              <TrendingUp className="h-8 w-8 opacity-90" />
+              <span className="text-sm opacity-80 font-medium">Blockchain</span>
             </div>
-            <div className="text-3xl font-bold">
+            <div className="text-3xl font-black">
               {blockchainBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}
             </div>
-            <div className="text-sm opacity-80 mt-1">JCMOVES Balance</div>
+            <div className="text-sm opacity-80 mt-1 font-medium">JCMOVES Balance</div>
           </Card>
 
-          <Card className="p-6 bg-gradient-to-br from-green-500 to-green-600 text-white">
+          <Card className="p-6 bg-gradient-to-br from-green-500 to-green-600 text-white border-0 shadow-xl shadow-green-900/30 overflow-hidden relative">
+            <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -mr-10 -mt-10"></div>
             <div className="flex items-center justify-between mb-2">
-              <DollarSign className="h-8 w-8 opacity-80" />
-              <span className="text-sm opacity-80">Treasury</span>
+              <DollarSign className="h-8 w-8 opacity-90" />
+              <span className="text-sm opacity-80 font-medium">Treasury</span>
             </div>
-            <div className="text-3xl font-bold">
+            <div className="text-3xl font-black">
               ${stats.currentMarketValueUsd?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || "0"}
             </div>
-            <div className="text-sm opacity-80 mt-1">Market Value (USD)</div>
+            <div className="text-sm opacity-80 mt-1 font-medium">Market Value (USD)</div>
           </Card>
 
           <Link href="/admin/users" className="block">
-            <Card className="p-6 bg-gradient-to-br from-orange-500 to-orange-600 text-white cursor-pointer hover:from-orange-600 hover:to-orange-700 transition-all duration-200 transform hover:scale-105">
+            <Card className="p-6 bg-gradient-to-br from-orange-500 to-orange-600 text-white cursor-pointer hover:from-orange-400 hover:to-orange-500 transition-all duration-200 transform hover:scale-[1.02] border-0 shadow-xl shadow-orange-900/30 overflow-hidden relative">
+              <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -mr-10 -mt-10"></div>
               <div className="flex items-center justify-between mb-2">
-                <Users className="h-8 w-8 opacity-80" />
-                <span className="text-sm opacity-80">System</span>
+                <Users className="h-8 w-8 opacity-90" />
+                <span className="text-sm opacity-80 font-medium">System</span>
               </div>
-              <div className="text-3xl font-bold">{adminStats?.totalUsers || 0}</div>
-              <div className="text-sm opacity-80 mt-1">Total Users</div>
+              <div className="text-3xl font-black">{adminStats?.totalUsers || 0}</div>
+              <div className="text-sm opacity-80 mt-1 font-medium">Total Users</div>
             </Card>
           </Link>
         </div>
 
         {/* Balance Discrepancy Alert */}
         {balanceDiscrepancy > 100 && (
-          <Card className="p-4 bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-900 mb-6">
+          <Card className="p-4 bg-yellow-500/10 border-yellow-500/30 mb-6">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="h-6 w-6 text-yellow-600 flex-shrink-0" />
+              <AlertTriangle className="h-6 w-6 text-yellow-400 flex-shrink-0" />
               <div className="flex-1">
-                <h3 className="font-semibold text-yellow-900 dark:text-yellow-100">
+                <h3 className="font-bold text-yellow-300">
                   Balance Discrepancy Detected
                 </h3>
-                <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
+                <p className="text-sm text-yellow-400/80 mt-1">
                   Blockchain: {blockchainBalance.toLocaleString()} JCMOVES • Database:{" "}
                   {databaseBalance.toLocaleString()} JCMOVES • Difference:{" "}
                   {balanceDiscrepancy.toLocaleString()} JCMOVES
                 </p>
-                <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-2">
+                <p className="text-xs text-yellow-500/70 mt-2">
                   The blockchain is the source of truth. Database tracking may be incomplete.
                 </p>
               </div>
@@ -204,24 +209,24 @@ export default function InGodWeTrustPage() {
         )}
 
         <Tabs defaultValue="operations" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="operations" data-testid="tab-operations">
+          <TabsList className="grid w-full grid-cols-5 bg-slate-800/50 border border-slate-700/50 p-1">
+            <TabsTrigger value="operations" className="data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-300" data-testid="tab-operations">
               <Activity className="h-4 w-4 mr-2" />
               Operations
             </TabsTrigger>
-            <TabsTrigger value="transfers" data-testid="tab-transfers">
+            <TabsTrigger value="transfers" className="data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-300" data-testid="tab-transfers">
               <Send className="h-4 w-4 mr-2" />
               Transfers
             </TabsTrigger>
-            <TabsTrigger value="deposits" data-testid="tab-deposits">
+            <TabsTrigger value="deposits" className="data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-300" data-testid="tab-deposits">
               <Upload className="h-4 w-4 mr-2" />
               Deposits
             </TabsTrigger>
-            <TabsTrigger value="analytics" data-testid="tab-analytics">
+            <TabsTrigger value="analytics" className="data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-300" data-testid="tab-analytics">
               <BarChart3 className="h-4 w-4 mr-2" />
               Analytics
             </TabsTrigger>
-            <TabsTrigger value="reviews" data-testid="tab-reviews">
+            <TabsTrigger value="reviews" className="data-[state=active]:bg-orange-500/20 data-[state=active]:text-orange-300" data-testid="tab-reviews">
               <Star className="h-4 w-4 mr-2" />
               Reviews
             </TabsTrigger>
@@ -231,15 +236,17 @@ export default function InGodWeTrustPage() {
           <TabsContent value="operations" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Blockchain Verification */}
-              <Card className="p-6">
-                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                  <Wallet className="h-5 w-5" />
+              <Card className="p-6 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
+                <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-slate-100">
+                  <div className="p-2 rounded-lg bg-blue-500/20 border border-blue-500/30">
+                    <Wallet className="h-5 w-5 text-blue-400" />
+                  </div>
                   Blockchain Verification
                 </h3>
                 <div className="space-y-4">
                   <div>
-                    <div className="text-sm text-gray-500 dark:text-gray-400">Treasury Wallet</div>
-                    <div className="font-mono text-xs bg-gray-100 dark:bg-gray-800 p-2 rounded mt-1 break-all">
+                    <div className="text-sm text-slate-400">Treasury Wallet</div>
+                    <div className="font-mono text-xs bg-slate-900/50 border border-slate-700/50 text-slate-300 p-2 rounded-lg mt-1 break-all">
                       {liveBalance?.walletAddress || "Not configured"}
                     </div>
                   </div>
@@ -247,7 +254,7 @@ export default function InGodWeTrustPage() {
                     <Button
                       onClick={() => refetchBalance()}
                       variant="outline"
-                      className="flex-1"
+                      className="flex-1 border-slate-600 text-slate-300 hover:bg-blue-500/20 hover:border-blue-500/50"
                       data-testid="button-refresh-balance"
                     >
                       <RefreshCw className="h-4 w-4 mr-2" />
@@ -255,7 +262,7 @@ export default function InGodWeTrustPage() {
                     </Button>
                     <Button
                       variant="outline"
-                      className="flex-1"
+                      className="flex-1 border-slate-600 text-slate-300 hover:bg-blue-500/20 hover:border-blue-500/50"
                       asChild
                       data-testid="button-view-solscan"
                     >
@@ -273,41 +280,43 @@ export default function InGodWeTrustPage() {
               </Card>
 
               {/* Treasury Health */}
-              <Card className="p-6">
-                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                  <Activity className="h-5 w-5" />
+              <Card className="p-6 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
+                <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-slate-100">
+                  <div className="p-2 rounded-lg bg-green-500/20 border border-green-500/30">
+                    <Activity className="h-5 w-5 text-green-400" />
+                  </div>
                   Treasury Health
                 </h3>
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Total Funding</span>
-                    <span className="font-semibold">
+                    <span className="text-sm text-slate-400">Total Funding</span>
+                    <span className="font-bold text-slate-100">
                       ${stats.totalFunding?.toLocaleString() || "0"}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Distributed</span>
-                    <span className="font-semibold">
+                    <span className="text-sm text-slate-400">Distributed</span>
+                    <span className="font-bold text-slate-100">
                       ${stats.totalDistributed?.toLocaleString() || "0"}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Available</span>
-                    <span className="font-semibold text-green-600">
+                    <span className="text-sm text-slate-400">Available</span>
+                    <span className="font-bold text-green-400">
                       ${stats.availableFunding?.toLocaleString() || "0"}
                     </span>
                   </div>
-                  <div className="pt-3 border-t">
+                  <div className="pt-3 border-t border-slate-700/50">
                     <div className="flex items-center gap-2">
                       {stats.isHealthy ? (
                         <>
-                          <CheckCircle className="h-4 w-4 text-green-600" />
-                          <span className="text-sm text-green-600 font-medium">Healthy</span>
+                          <CheckCircle className="h-4 w-4 text-green-400" />
+                          <span className="text-sm text-green-400 font-bold">Healthy</span>
                         </>
                       ) : (
                         <>
-                          <AlertTriangle className="h-4 w-4 text-red-600" />
-                          <span className="text-sm text-red-600 font-medium">Critical</span>
+                          <AlertTriangle className="h-4 w-4 text-red-400" />
+                          <span className="text-sm text-red-400 font-bold">Critical</span>
                         </>
                       )}
                     </div>
@@ -319,38 +328,41 @@ export default function InGodWeTrustPage() {
 
           {/* Transfers Tab */}
           <TabsContent value="transfers" className="space-y-6">
-            <Card className="p-6">
-              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <Send className="h-5 w-5" />
+            <Card className="p-6 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
+              <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-slate-100">
+                <div className="p-2 rounded-lg bg-purple-500/20 border border-purple-500/30">
+                  <Send className="h-5 w-5 text-purple-400" />
+                </div>
                 Send JCMOVES Tokens
               </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+              <p className="text-sm text-slate-400 mb-6">
                 Transfer JCMOVES tokens directly from the treasury to any Solana wallet address.
                 Transfers are recorded on the blockchain and update in real-time.
               </p>
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="recipient-address">Recipient Wallet Address</Label>
+                  <Label htmlFor="recipient-address" className="text-slate-200">Recipient Wallet Address</Label>
                   <Input
                     id="recipient-address"
                     placeholder="Solana wallet address (e.g., 7xK...bkK)"
                     value={recipientAddress}
                     onChange={(e) => setRecipientAddress(e.target.value)}
-                    className="font-mono text-sm"
+                    className="font-mono text-sm bg-slate-800/50 border-slate-600 text-slate-100 placeholder:text-slate-500"
                     data-testid="input-recipient-address"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="transfer-amount">Amount (JCMOVES)</Label>
+                  <Label htmlFor="transfer-amount" className="text-slate-200">Amount (JCMOVES)</Label>
                   <Input
                     id="transfer-amount"
                     type="number"
                     placeholder="0.00"
                     value={transferAmount}
                     onChange={(e) => setTransferAmount(e.target.value)}
+                    className="bg-slate-800/50 border-slate-600 text-slate-100 placeholder:text-slate-500"
                     data-testid="input-transfer-amount"
                   />
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-slate-500 mt-1">
                     Available: {blockchainBalance.toLocaleString()} JCMOVES (~$
                     {(blockchainBalance * tokenPrice).toFixed(2)})
                   </p>
@@ -363,7 +375,7 @@ export default function InGodWeTrustPage() {
                     !recipientAddress ||
                     parseFloat(transferAmount) > blockchainBalance
                   }
-                  className="w-full"
+                  className="w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
                   data-testid="button-send-transfer"
                 >
                   {transferMutation.isPending ? (
@@ -385,27 +397,30 @@ export default function InGodWeTrustPage() {
           {/* Deposits Tab */}
           <TabsContent value="deposits" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="p-6">
-                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                  <Upload className="h-5 w-5" />
+              <Card className="p-6 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
+                <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-slate-100">
+                  <div className="p-2 rounded-lg bg-green-500/20 border border-green-500/30">
+                    <Upload className="h-5 w-5 text-green-400" />
+                  </div>
                   Record Manual Deposit
                 </h3>
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="deposit-amount">USD Amount</Label>
+                    <Label htmlFor="deposit-amount" className="text-slate-200">USD Amount</Label>
                     <Input
                       id="deposit-amount"
                       type="number"
                       placeholder="0.00"
                       value={depositAmount}
                       onChange={(e) => setDepositAmount(e.target.value)}
+                      className="bg-slate-800/50 border-slate-600 text-slate-100 placeholder:text-slate-500"
                       data-testid="input-deposit-amount"
                     />
                   </div>
                   <Button
                     onClick={() => depositMutation.mutate()}
                     disabled={depositMutation.isPending || !depositAmount}
-                    className="w-full"
+                    className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
                     data-testid="button-record-deposit"
                   >
                     {depositMutation.isPending ? (
@@ -423,9 +438,11 @@ export default function InGodWeTrustPage() {
                 </div>
               </Card>
 
-              <Card className="p-6">
-                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                  <Download className="h-5 w-5" />
+              <Card className="p-6 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
+                <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-slate-100">
+                  <div className="p-2 rounded-lg bg-blue-500/20 border border-blue-500/30">
+                    <Download className="h-5 w-5 text-blue-400" />
+                  </div>
                   Recent Deposits
                 </h3>
                 <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -433,24 +450,24 @@ export default function InGodWeTrustPage() {
                     deposits.deposits.slice(0, 5).map((deposit: any) => (
                       <div
                         key={deposit.id}
-                        className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-800 rounded text-sm"
+                        className="flex justify-between items-center p-3 bg-slate-900/50 border border-slate-700/50 rounded-lg text-sm"
                       >
                         <div>
-                          <div className="font-medium">${parseFloat(deposit.depositAmount).toLocaleString()}</div>
-                          <div className="text-xs text-gray-500">
+                          <div className="font-bold text-slate-100">${parseFloat(deposit.depositAmount).toLocaleString()}</div>
+                          <div className="text-xs text-slate-500">
                             {new Date(deposit.createdAt).toLocaleDateString()}
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="font-mono text-xs">
+                          <div className="font-mono text-xs text-slate-300">
                             {parseFloat(deposit.tokensPurchased).toLocaleString()} JCMOVES
                           </div>
-                          <div className="text-xs text-gray-500">{deposit.depositMethod}</div>
+                          <div className="text-xs text-slate-500">{deposit.depositMethod}</div>
                         </div>
                       </div>
                     ))
                   ) : (
-                    <p className="text-sm text-gray-500 text-center py-4">No recent deposits</p>
+                    <p className="text-sm text-slate-500 text-center py-4">No recent deposits</p>
                   )}
                 </div>
               </Card>
@@ -460,23 +477,26 @@ export default function InGodWeTrustPage() {
           {/* Analytics Tab */}
           <TabsContent value="analytics" className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <Card className="p-6">
-                <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">
+              <Card className="p-6 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80 overflow-hidden relative">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-blue-600"></div>
+                <h3 className="text-sm font-medium text-slate-400 mb-2">
                   Total Leads
                 </h3>
-                <div className="text-3xl font-bold">{adminStats?.totalLeads || 0}</div>
+                <div className="text-4xl font-black text-blue-400">{adminStats?.totalLeads || 0}</div>
               </Card>
-              <Card className="p-6">
-                <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">
+              <Card className="p-6 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80 overflow-hidden relative">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-green-500 to-green-600"></div>
+                <h3 className="text-sm font-medium text-slate-400 mb-2">
                   Active Jobs
                 </h3>
-                <div className="text-3xl font-bold">{adminStats?.activeJobs || 0}</div>
+                <div className="text-4xl font-black text-green-400">{adminStats?.activeJobs || 0}</div>
               </Card>
-              <Card className="p-6">
-                <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">
+              <Card className="p-6 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80 overflow-hidden relative">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-orange-500 to-orange-600"></div>
+                <h3 className="text-sm font-medium text-slate-400 mb-2">
                   Total Rewards Distributed
                 </h3>
-                <div className="text-3xl font-bold">
+                <div className="text-4xl font-black text-orange-400">
                   ${stats.totalDistributed?.toLocaleString() || "0"}
                 </div>
               </Card>
@@ -485,19 +505,21 @@ export default function InGodWeTrustPage() {
 
           {/* Reviews Tab */}
           <TabsContent value="reviews" className="space-y-6">
-            <Card className="p-6">
+            <Card className="p-6 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h3 className="text-lg font-semibold flex items-center gap-2">
-                    <Star className="h-5 w-5 text-yellow-500" />
+                  <h3 className="text-lg font-bold flex items-center gap-2 text-slate-100">
+                    <div className="p-2 rounded-lg bg-orange-500/20 border border-orange-500/30">
+                      <Star className="h-5 w-5 text-orange-400" />
+                    </div>
                     Review Management
                   </h3>
-                  <p className="text-sm text-gray-500 mt-1">
+                  <p className="text-sm text-slate-400 mt-2">
                     Import reviews from external platforms and manage customer testimonials
                   </p>
                 </div>
                 <Link href="/admin/testimonials">
-                  <Button className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600">
+                  <Button className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 shadow-lg shadow-orange-500/25">
                     <Plus className="h-4 w-4 mr-2" />
                     Import Reviews
                   </Button>
@@ -505,26 +527,26 @@ export default function InGodWeTrustPage() {
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
-                  <h4 className="font-medium text-yellow-800 dark:text-yellow-200 mb-2">Supported Platforms</h4>
-                  <ul className="text-sm text-yellow-700 dark:text-yellow-300 space-y-1">
+                <div className="p-4 bg-orange-500/10 rounded-xl border border-orange-500/30">
+                  <h4 className="font-bold text-orange-300 mb-2">Supported Platforms</h4>
+                  <ul className="text-sm text-orange-200/80 space-y-1">
                     <li>• Yelp Reviews</li>
                     <li>• Google Reviews</li>
                     <li>• Facebook Reviews</li>
                     <li>• HireAHelper Reviews</li>
                   </ul>
                 </div>
-                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                  <h4 className="font-medium text-blue-800 dark:text-blue-200 mb-2">Quick Actions</h4>
+                <div className="p-4 bg-blue-500/10 rounded-xl border border-blue-500/30">
+                  <h4 className="font-bold text-blue-300 mb-2">Quick Actions</h4>
                   <div className="space-y-2">
                     <Link href="/admin/testimonials">
-                      <Button variant="outline" size="sm" className="w-full justify-start">
+                      <Button variant="outline" size="sm" className="w-full justify-start border-slate-600 text-slate-300 hover:bg-blue-500/20 hover:border-blue-500/50">
                         <Star className="h-4 w-4 mr-2" />
                         Manage All Reviews
                       </Button>
                     </Link>
                     <Link href="/reviews">
-                      <Button variant="outline" size="sm" className="w-full justify-start">
+                      <Button variant="outline" size="sm" className="w-full justify-start border-slate-600 text-slate-300 hover:bg-blue-500/20 hover:border-blue-500/50">
                         <ExternalLink className="h-4 w-4 mr-2" />
                         View Public Reviews Page
                       </Button>

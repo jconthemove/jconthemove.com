@@ -341,25 +341,26 @@ export default function RewardsDashboard() {
   const isPositiveChange = priceChange24h >= 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-gray-100 dark:from-gray-900 dark:via-blue-950 dark:to-gray-900">
+    <div className="min-h-screen">
       <div className="container mx-auto p-4 md:p-6 max-w-7xl">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-foreground">Rewards Center</h1>
-          <p className="text-sm text-muted-foreground mt-1">
+        <div className="relative">
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 via-orange-500/10 to-blue-600/20 blur-3xl -z-10"></div>
+          <h1 className="text-3xl md:text-4xl font-black bg-gradient-to-r from-blue-400 via-orange-400 to-blue-400 bg-clip-text text-transparent tracking-tight">Rewards Center</h1>
+          <p className="text-sm text-slate-400 mt-1">
             Earn {tokenInfo?.symbol || 'JCMOVES'} through mining and referrals
           </p>
         </div>
         {/* Enhanced Token Price Widget */}
-        <Card className="w-full md:w-auto min-w-[280px]">
+        <Card className="w-full md:w-auto min-w-[280px] border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-sm shadow-xl">
           <CardContent className="p-4">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
-                <p className="text-xs text-muted-foreground mb-1">Token Price</p>
-                <p className="text-2xl font-bold text-foreground" data-testid="token-price">
+                <p className="text-xs text-slate-400 mb-1">Token Price</p>
+                <p className="text-2xl font-black text-slate-100" data-testid="token-price">
                   ${tokenInfo?.price?.toFixed(6) || '0.000000'}
                 </p>
-                <div className={`flex items-center gap-1 mt-1 ${isPositiveChange ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                <div className={`flex items-center gap-1 mt-1 ${isPositiveChange ? 'text-green-400' : 'text-red-400'}`}>
                   {isPositiveChange ? (
                     <ArrowUpRight className="h-3 w-3" />
                   ) : (
@@ -370,7 +371,7 @@ export default function RewardsDashboard() {
                   </span>
                 </div>
                 {tokenInfo?.volume24h && tokenInfo.volume24h > 0 && (
-                  <p className="text-xs text-muted-foreground mt-1">
+                  <p className="text-xs text-slate-500 mt-1">
                     Vol: ${(tokenInfo.volume24h / 1000).toFixed(1)}k
                   </p>
                 )}
@@ -390,9 +391,9 @@ export default function RewardsDashboard() {
                 </ResponsiveContainer>
               </div>
             </div>
-            <div className="mt-2 pt-2 border-t border-border">
-              <p className="text-xs text-muted-foreground">
-                Your Holdings: <span className="font-semibold text-foreground">${(tokenBalance * (tokenInfo?.price || 0)).toFixed(2)}</span>
+            <div className="mt-2 pt-2 border-t border-slate-700/50">
+              <p className="text-xs text-slate-400">
+                Your Holdings: <span className="font-bold text-orange-400">${(tokenBalance * (tokenInfo?.price || 0)).toFixed(2)}</span>
               </p>
             </div>
           </CardContent>
@@ -402,43 +403,47 @@ export default function RewardsDashboard() {
       {/* Wallet Overview - Condensed to 2 Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <Card 
-          className="cursor-pointer hover:shadow-lg transition-all hover:scale-[1.02]"
+          className="cursor-pointer transition-all border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80 hover:border-blue-500/50 hover:shadow-xl hover:shadow-blue-900/20 hover:scale-[1.02]"
           onClick={() => setWalletModalOpen(true)}
           data-testid="card-wallet-balance"
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Balance & Holdings</CardTitle>
-            <Wallet className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-slate-300">Balance & Holdings</CardTitle>
+            <div className="p-2 rounded-lg bg-blue-500/20 border border-blue-500/30">
+              <Wallet className="h-4 w-4 text-blue-400" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold" data-testid="token-balance">
+            <div className="text-2xl font-black text-slate-100" data-testid="token-balance">
               {tokenBalance.toFixed(2)} {tokenInfo?.symbol || 'JCMOVES'}
             </div>
-            <p className="text-xs text-muted-foreground mt-1 flex items-center">
-              Portfolio Value: <span className="font-semibold text-foreground ml-1">${(tokenBalance * (tokenInfo?.price || 0)).toFixed(2)}</span>
-              <ChevronRight className="h-3 w-3 ml-1" />
+            <p className="text-xs text-slate-400 mt-1 flex items-center">
+              Portfolio Value: <span className="font-bold text-orange-400 ml-1">${(tokenBalance * (tokenInfo?.price || 0)).toFixed(2)}</span>
+              <ChevronRight className="h-3 w-3 ml-1 text-slate-500" />
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Streak & Earnings</CardTitle>
-            <Zap className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-slate-300">Streak & Earnings</CardTitle>
+            <div className="p-2 rounded-lg bg-orange-500/20 border border-orange-500/30">
+              <Zap className="h-4 w-4 text-orange-400" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold" data-testid="streak-count">
+              <span className="text-2xl font-black text-orange-400" data-testid="streak-count">
                 {miningStatus?.streakCount || 0} days
               </span>
               {miningStatus?.streakCount && miningStatus.streakCount > 1 && (
-                <Badge variant="secondary" className="text-xs">
+                <Badge className="text-xs bg-green-500/20 text-green-300 border border-green-500/30">
                   +{((miningStatus.streakCount - 1) * 1)}% bonus
                 </Badge>
               )}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Total Earned: <span className="font-semibold text-foreground" data-testid="total-earned">{parseFloat(wallet?.totalEarned || '0').toFixed(2)}</span>
+            <p className="text-xs text-slate-400 mt-1">
+              Total Earned: <span className="font-bold text-green-400" data-testid="total-earned">{parseFloat(wallet?.totalEarned || '0').toFixed(2)}</span>
             </p>
           </CardContent>
         </Card>
@@ -446,16 +451,16 @@ export default function RewardsDashboard() {
 
       {/* Main Tabs */}
       <Tabs defaultValue="mining" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="mining" data-testid="tab-mining">
+        <TabsList className="grid w-full grid-cols-3 bg-slate-800/50 border border-slate-700/50 p-1">
+          <TabsTrigger value="mining" className="data-[state=active]:bg-orange-500/20 data-[state=active]:text-orange-300" data-testid="tab-mining">
             <Zap className="h-4 w-4 mr-2" />
             Mining
           </TabsTrigger>
-          <TabsTrigger value="referrals" data-testid="tab-referrals">
+          <TabsTrigger value="referrals" className="data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-300" data-testid="tab-referrals">
             <Users className="h-4 w-4 mr-2" />
             Referrals
           </TabsTrigger>
-          <TabsTrigger value="history" data-testid="tab-history">
+          <TabsTrigger value="history" className="data-[state=active]:bg-green-500/20 data-[state=active]:text-green-300" data-testid="tab-history">
             <Clock className="h-4 w-4 mr-2" />
             History
           </TabsTrigger>
@@ -465,30 +470,33 @@ export default function RewardsDashboard() {
         <TabsContent value="mining" className="space-y-4">
           <div className="max-w-2xl mx-auto space-y-4">
             {/* Balance Card - Gradient Style */}
-            <Card className="p-6 bg-gradient-to-br from-purple-500 via-pink-500 to-red-500 text-white border-0 shadow-xl">
+            <Card className="p-6 bg-gradient-to-br from-purple-500 via-pink-500 to-red-500 text-white border-0 shadow-xl shadow-purple-900/30 overflow-hidden relative">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-12 -mt-12"></div>
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm opacity-90">Mining Balance</p>
-                  <p className="text-3xl font-bold mt-1">
+                  <p className="text-sm opacity-90 font-medium">Mining Balance</p>
+                  <p className="text-4xl font-black mt-1">
                     {parseFloat(accumulatedTokens).toFixed(2)}
                   </p>
-                  <p className="text-xs opacity-75 mt-1">JCMOVES</p>
+                  <p className="text-xs opacity-75 mt-1 font-medium">JCMOVES</p>
                 </div>
-                <Coins className="h-12 w-12 opacity-80" />
+                <Coins className="h-14 w-14 opacity-90" />
               </div>
             </Card>
 
             {!hasActiveSession ? (
-              <Card className="p-8 text-center">
-                <Zap className="h-16 w-16 mx-auto text-orange-500 mb-4" />
-                <h2 className="text-xl font-bold mb-2">Start Mining JCMOVES</h2>
-                <p className="text-gray-600 dark:text-gray-400 mb-6">
+              <Card className="p-8 text-center border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
+                <div className="p-4 rounded-full bg-orange-500/20 border border-orange-500/30 w-fit mx-auto mb-4">
+                  <Zap className="h-12 w-12 text-orange-400" />
+                </div>
+                <h2 className="text-2xl font-black text-slate-100 mb-2">Start Mining JCMOVES</h2>
+                <p className="text-slate-400 mb-6">
                   Begin earning passive tokens automatically. You'll receive 1,728 JCMOVES every 24 hours! (2x Boost Active)
                 </p>
                 <Button
                   onClick={() => startMiningMutation.mutate()}
                   disabled={startMiningMutation.isPending}
-                  className="w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
+                  className="w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 shadow-lg shadow-orange-500/25"
                   data-testid="button-start-mining"
                 >
                   {startMiningMutation.isPending ? (
@@ -506,26 +514,27 @@ export default function RewardsDashboard() {
               </Card>
             ) : (
               <>
-                <Card className="p-6 bg-gradient-to-br from-orange-400 to-red-500 text-white border-0 shadow-lg">
+                <Card className="p-6 bg-gradient-to-br from-orange-400 to-red-500 text-white border-0 shadow-xl shadow-orange-900/30 overflow-hidden relative">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
                   <div className="space-y-4">
                     <div className="text-center">
-                      <p className="text-sm opacity-90">Next Claim In</p>
-                      <p className="text-4xl font-bold font-mono mt-1" data-testid="text-countdown-timer">
+                      <p className="text-sm opacity-90 font-medium">Next Claim In</p>
+                      <p className="text-5xl font-black font-mono mt-1" data-testid="text-countdown-timer">
                         {formatTimeRemaining(timeRemaining)}
                       </p>
                     </div>
 
-                    <div className="bg-white/20 rounded-lg p-4 backdrop-blur-sm space-y-3">
+                    <div className="bg-white/20 rounded-xl p-4 backdrop-blur-sm space-y-3">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-xs opacity-90">Base Tokens</p>
-                          <p className="text-2xl font-bold" data-testid="text-accumulated-tokens">
+                          <p className="text-xs opacity-90 font-medium">Base Tokens</p>
+                          <p className="text-2xl font-black" data-testid="text-accumulated-tokens">
                             {parseFloat(accumulatedTokens).toFixed(4)}
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="text-xs opacity-90">Speed</p>
-                          <p className="text-2xl font-bold" data-testid="text-mining-speed">
+                          <p className="text-xs opacity-90 font-medium">Speed</p>
+                          <p className="text-2xl font-black" data-testid="text-mining-speed">
                             {parseFloat(miningStatus.miningSpeed || "1.00").toFixed(0)}X
                           </p>
                         </div>
@@ -536,16 +545,16 @@ export default function RewardsDashboard() {
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <Award className="h-4 w-4" />
-                              <span className="text-xs opacity-90">
+                              <span className="text-xs opacity-90 font-medium">
                                 {miningStatus.streakCount} Day Streak Bonus
                               </span>
                             </div>
-                            <span className="text-lg font-bold" data-testid="text-streak-bonus">
+                            <span className="text-lg font-black" data-testid="text-streak-bonus">
                               +{parseFloat(streakBonus || "0").toFixed(4)}
                             </span>
                           </div>
                           <div className="mt-2 text-center">
-                            <p className="text-sm font-semibold">
+                            <p className="text-sm font-black">
                               Total: {(parseFloat(accumulatedTokens) + parseFloat(streakBonus || "0")).toFixed(4)} JCMOVES
                             </p>
                           </div>
@@ -565,7 +574,7 @@ export default function RewardsDashboard() {
                     <Button
                       onClick={() => claimMutation.mutate()}
                       disabled={claimMutation.isPending || parseFloat(accumulatedTokens) === 0}
-                      className="w-full bg-white text-orange-600 hover:bg-gray-100"
+                      className="w-full bg-white text-orange-600 hover:bg-gray-100 font-bold"
                       data-testid="button-claim-tokens"
                     >
                       {claimMutation.isPending ? (
@@ -583,19 +592,19 @@ export default function RewardsDashboard() {
                   </div>
                 </Card>
 
-                <Card className="p-4">
+                <Card className="p-4 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
                   <div className="grid grid-cols-2 gap-4 text-center">
                     <div>
-                      <p className="text-2xl font-bold text-orange-500" data-testid="text-daily-rate">
+                      <p className="text-2xl font-black text-orange-400" data-testid="text-daily-rate">
                         1,728
                       </p>
-                      <p className="text-xs text-gray-600 dark:text-gray-400">Tokens/Day (2X)</p>
+                      <p className="text-xs text-slate-400">Tokens/Day (2X)</p>
                     </div>
                     <div>
-                      <p className="text-2xl font-bold text-orange-500" data-testid="text-claimed-today">
+                      <p className="text-2xl font-black text-orange-400" data-testid="text-claimed-today">
                         {parseFloat(miningStatus.totalClaimedToday || "0").toFixed(2)}
                       </p>
-                      <p className="text-xs text-gray-600 dark:text-gray-400">Claimed Today</p>
+                      <p className="text-xs text-slate-400">Claimed Today</p>
                     </div>
                   </div>
                 </Card>
@@ -720,41 +729,45 @@ export default function RewardsDashboard() {
         {/* Referrals Tab */}
         <TabsContent value="referrals" className="space-y-4">
           <div className="grid gap-6">
-            <Card>
+            <Card className="border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Share2 className="h-5 w-5" />
+                <CardTitle className="flex items-center gap-2 text-slate-100">
+                  <div className="p-2 rounded-lg bg-blue-500/20 border border-blue-500/30">
+                    <Share2 className="h-5 w-5 text-blue-400" />
+                  </div>
                   Your Referral Code
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-slate-400">
                   Share your code and earn $10.00 worth of {tokenInfo?.symbol || 'tokens'} for each friend who signs up!
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 {referralCode?.referralCode ? (
                   <div className="flex items-center gap-3">
-                    <div className="flex-1 p-3 bg-muted rounded-lg font-mono text-lg text-center">
+                    <div className="flex-1 p-3 bg-slate-900/50 border border-slate-700/50 rounded-lg font-mono text-lg text-center text-orange-400 font-bold">
                       {referralCode.referralCode}
                     </div>
-                    <Button onClick={copyReferralCode} variant="outline" data-testid="copy-referral-code">
+                    <Button onClick={copyReferralCode} variant="outline" className="border-slate-600 text-slate-300 hover:bg-blue-500/20 hover:border-blue-500/50" data-testid="copy-referral-code">
                       <Copy className="h-4 w-4" />
                     </Button>
                   </div>
                 ) : (
                   <div className="text-center py-4">
-                    <p className="text-muted-foreground">Loading your referral code...</p>
+                    <p className="text-slate-400">Loading your referral code...</p>
                   </div>
                 )}
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Gift className="h-5 w-5" />
+                <CardTitle className="flex items-center gap-2 text-slate-100">
+                  <div className="p-2 rounded-lg bg-green-500/20 border border-green-500/30">
+                    <Gift className="h-5 w-5 text-green-400" />
+                  </div>
                   Have a Referral Code?
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-slate-400">
                   Enter a friend's referral code to help them earn rewards!
                 </CardDescription>
               </CardHeader>
@@ -764,12 +777,13 @@ export default function RewardsDashboard() {
                     value={referralCodeInput}
                     onChange={(e) => setReferralCodeInput(e.target.value.toUpperCase())}
                     placeholder="Enter referral code"
-                    className="font-mono"
+                    className="font-mono bg-slate-800/50 border-slate-600 text-slate-100 placeholder:text-slate-500"
                     data-testid="input-referral-code"
                   />
                   <Button 
                     onClick={() => applyReferralMutation.mutate(referralCodeInput)}
                     disabled={!referralCodeInput || applyReferralMutation.isPending}
+                    className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
                     data-testid="apply-referral-code"
                   >
                     {applyReferralMutation.isPending ? 'Applying...' : 'Apply'}
@@ -778,13 +792,15 @@ export default function RewardsDashboard() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Users className="h-5 w-5" />
+                <CardTitle className="flex items-center gap-2 text-slate-100">
+                  <div className="p-2 rounded-lg bg-purple-500/20 border border-purple-500/30">
+                    <Users className="h-5 w-5 text-purple-400" />
+                  </div>
                   Your Referral Stats
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-slate-400">
                   Track your referral earnings and see who you've referred
                 </CardDescription>
               </CardHeader>
@@ -792,33 +808,33 @@ export default function RewardsDashboard() {
                 {referralStats ? (
                   <div className="space-y-6">
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="text-center p-4 bg-muted rounded-lg">
-                        <p className="text-2xl font-bold">{referralStats.referralCount}</p>
-                        <p className="text-sm text-muted-foreground">Friends Referred</p>
+                      <div className="text-center p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl">
+                        <p className="text-3xl font-black text-blue-400">{referralStats.referralCount}</p>
+                        <p className="text-sm text-slate-400">Friends Referred</p>
                       </div>
-                      <div className="text-center p-4 bg-muted rounded-lg">
-                        <p className="text-2xl font-bold">${referralStats.totalEarned.toFixed(2)}</p>
-                        <p className="text-sm text-muted-foreground">Total Earned</p>
+                      <div className="text-center p-4 bg-green-500/10 border border-green-500/30 rounded-xl">
+                        <p className="text-3xl font-black text-green-400">${referralStats.totalEarned.toFixed(2)}</p>
+                        <p className="text-sm text-slate-400">Total Earned</p>
                       </div>
                     </div>
 
                     {referralStats.referredUsers.length > 0 && (
                       <div>
-                        <h4 className="font-semibold mb-3">Recent Referrals</h4>
+                        <h4 className="font-bold mb-3 text-slate-200">Recent Referrals</h4>
                         <div className="space-y-2">
                           {referralStats.referredUsers.slice(0, 5).map((user) => (
-                            <div key={user.id} className="flex items-center justify-between p-3 border rounded-lg">
+                            <div key={user.id} className="flex items-center justify-between p-3 border border-slate-700/50 rounded-lg bg-slate-900/50">
                               <div>
-                                <p className="font-medium">
+                                <p className="font-medium text-slate-200">
                                   {user.firstName && user.lastName 
                                     ? `${user.firstName} ${user.lastName}` 
                                     : user.email || 'Anonymous User'}
                                 </p>
-                                <p className="text-sm text-muted-foreground">
+                                <p className="text-sm text-slate-500">
                                   Joined {new Date(user.createdAt).toLocaleDateString()}
                                 </p>
                               </div>
-                              <Badge variant="secondary">
+                              <Badge className="bg-green-500/20 text-green-300 border border-green-500/30">
                                 <Award className="h-3 w-3 mr-1" />
                                 $10.00
                               </Badge>
@@ -830,8 +846,8 @@ export default function RewardsDashboard() {
                   </div>
                 ) : (
                   <div className="text-center py-8">
-                    <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground">Loading referral stats...</p>
+                    <Users className="h-12 w-12 text-slate-500 mx-auto mb-4" />
+                    <p className="text-slate-400">Loading referral stats...</p>
                   </div>
                 )}
               </CardContent>
@@ -841,30 +857,37 @@ export default function RewardsDashboard() {
 
         {/* Rewards History Tab */}
         <TabsContent value="history" className="space-y-4">
-          <Card>
+          <Card className="border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
             <CardHeader>
-              <CardTitle>Recent Rewards</CardTitle>
-              <CardDescription>Your earning history and reward activities</CardDescription>
+              <CardTitle className="flex items-center gap-2 text-slate-100">
+                <div className="p-2 rounded-lg bg-green-500/20 border border-green-500/30">
+                  <Clock className="h-5 w-5 text-green-400" />
+                </div>
+                Recent Rewards
+              </CardTitle>
+              <CardDescription className="text-slate-400">Your earning history and reward activities</CardDescription>
             </CardHeader>
             <CardContent>
               {rewardsHistory && rewardsHistory.length > 0 ? (
                 <div className="space-y-4">
                   {rewardsHistory.slice(0, 10).map((reward) => (
-                    <div key={reward.id} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div key={reward.id} className="flex items-center justify-between p-4 border border-slate-700/50 rounded-lg bg-slate-900/50">
                       <div className="flex items-center gap-3">
-                        {getRewardTypeIcon(reward.rewardType)}
+                        <div className="p-2 rounded-lg bg-slate-800 border border-slate-700">
+                          {getRewardTypeIcon(reward.rewardType)}
+                        </div>
                         <div>
-                          <p className="font-medium">{getRewardTypeLabel(reward.rewardType)}</p>
-                          <p className="text-sm text-muted-foreground">
+                          <p className="font-medium text-slate-200">{getRewardTypeLabel(reward.rewardType)}</p>
+                          <p className="text-sm text-slate-500">
                             {new Date(reward.earnedDate).toLocaleDateString()}
                           </p>
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="font-bold">
+                        <p className="font-bold text-green-400">
                           +{parseFloat(reward.tokenAmount).toFixed(8)} {tokenInfo?.symbol || 'tokens'}
                         </p>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-sm text-slate-500">
                           ${parseFloat(reward.cashValue).toFixed(4)}
                         </p>
                         <Badge className={getStatusColor(reward.status)}>
@@ -876,8 +899,8 @@ export default function RewardsDashboard() {
                 </div>
               ) : (
                 <div className="text-center py-8">
-                  <Coins className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">No rewards yet. Start mining to earn tokens!</p>
+                  <Coins className="h-12 w-12 text-slate-500 mx-auto mb-4" />
+                  <p className="text-slate-400">No rewards yet. Start mining to earn tokens!</p>
                 </div>
               )}
             </CardContent>
@@ -887,41 +910,43 @@ export default function RewardsDashboard() {
 
       {/* Wallet Details Modal */}
       <Dialog open={walletModalOpen} onOpenChange={setWalletModalOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col bg-slate-900 border-slate-700">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Wallet className="h-5 w-5" />
+            <DialogTitle className="flex items-center gap-2 text-slate-100">
+              <div className="p-2 rounded-lg bg-blue-500/20 border border-blue-500/30">
+                <Wallet className="h-5 w-5 text-blue-400" />
+              </div>
               My Wallet
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-slate-400">
               View your token balance and transaction history
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             {/* Wallet Balance Summary */}
-            <Card>
+            <Card className="border border-slate-700/50 bg-slate-800/50">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Balance Overview</CardTitle>
+                <CardTitle className="text-base text-slate-200">Balance Overview</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Token Balance</span>
-                  <span className="text-2xl font-bold">
+                  <span className="text-slate-400">Token Balance</span>
+                  <span className="text-2xl font-black text-slate-100">
                     {tokenBalance.toFixed(2)} {tokenInfo?.symbol || 'JCMOVES'}
                   </span>
                 </div>
-                <Separator />
+                <Separator className="bg-slate-700" />
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">USD Value</span>
-                  <span className="text-xl font-bold text-green-600 dark:text-green-400">
+                  <span className="text-slate-400">USD Value</span>
+                  <span className="text-xl font-black text-green-400">
                     ${cashValue.toFixed(2)}
                   </span>
                 </div>
-                <Separator />
+                <Separator className="bg-slate-700" />
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Total Earned</span>
-                  <span className="font-medium">
+                  <span className="text-slate-400">Total Earned</span>
+                  <span className="font-bold text-orange-400">
                     {parseFloat(wallet?.totalEarned || '0').toFixed(2)} {tokenInfo?.symbol || 'JCMOVES'}
                   </span>
                 </div>
@@ -929,10 +954,10 @@ export default function RewardsDashboard() {
             </Card>
 
             {/* Recent Transactions */}
-            <Card>
+            <Card className="border border-slate-700/50 bg-slate-800/50">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <History className="h-4 w-4" />
+                <CardTitle className="text-base flex items-center gap-2 text-slate-200">
+                  <History className="h-4 w-4 text-green-400" />
                   Recent Activity
                 </CardTitle>
               </CardHeader>
@@ -941,21 +966,23 @@ export default function RewardsDashboard() {
                   {rewardsHistory && rewardsHistory.length > 0 ? (
                     <div className="space-y-3">
                       {rewardsHistory.slice(0, 15).map((reward) => (
-                        <div key={reward.id} className="flex items-start justify-between p-3 bg-muted rounded-lg">
+                        <div key={reward.id} className="flex items-start justify-between p-3 bg-slate-900/50 border border-slate-700/50 rounded-lg">
                           <div className="flex items-start gap-3">
-                            {getRewardTypeIcon(reward.rewardType)}
+                            <div className="p-1.5 rounded bg-slate-800 border border-slate-700">
+                              {getRewardTypeIcon(reward.rewardType)}
+                            </div>
                             <div>
-                              <p className="font-medium text-sm">{getRewardTypeLabel(reward.rewardType)}</p>
-                              <p className="text-xs text-muted-foreground">
+                              <p className="font-medium text-sm text-slate-200">{getRewardTypeLabel(reward.rewardType)}</p>
+                              <p className="text-xs text-slate-500">
                                 {new Date(reward.earnedDate).toLocaleDateString()} {new Date(reward.earnedDate).toLocaleTimeString()}
                               </p>
                             </div>
                           </div>
                           <div className="text-right">
-                            <p className="font-bold text-sm text-green-600 dark:text-green-400">
+                            <p className="font-bold text-sm text-green-400">
                               +{parseFloat(reward.tokenAmount).toFixed(4)}
                             </p>
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-xs text-slate-500">
                               ${parseFloat(reward.cashValue).toFixed(4)}
                             </p>
                             <Badge variant="outline" className={`mt-1 text-xs ${getStatusColor(reward.status)}`}>
@@ -967,8 +994,8 @@ export default function RewardsDashboard() {
                     </div>
                   ) : (
                     <div className="text-center py-8">
-                      <History className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                      <p className="text-muted-foreground">No transactions yet</p>
+                      <History className="h-12 w-12 text-slate-500 mx-auto mb-4" />
+                      <p className="text-slate-400">No transactions yet</p>
                     </div>
                   )}
                 </ScrollArea>
