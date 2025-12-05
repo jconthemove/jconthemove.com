@@ -21,6 +21,7 @@ interface WalletPreference {
   walletMode: 'personal' | 'company' | null;
   personalWalletAddress: string | null;
   companyWalletId: string | null;
+  companyWalletAddress: string | null;
   hasWalletConfigured: boolean;
 }
 
@@ -63,16 +64,17 @@ export function WalletChoiceModal({ open, onClose, onComplete }: WalletChoiceMod
   }, [open]);
 
   const saveWalletChoice = useMutation({
-    mutationFn: async (data: { walletMode: string; personalWalletAddress?: string; companyWalletId?: string }) => {
+    mutationFn: async (data: { walletMode: string; personalWalletAddress?: string }) => {
       const response = await apiRequest('POST', '/api/user/wallet-choice', data);
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
+      const companyAddr = data.companyWalletAddress;
       toast({
-        title: "Wallet configured",
+        title: "Wallet Configured!",
         description: walletMode === 'personal' 
           ? "Your personal Phantom wallet is now connected for JCMOVES payouts!"
-          : "You'll receive JCMOVES tokens in your company-assigned wallet.",
+          : `Your company wallet is ready! Address: ${companyAddr?.slice(0, 8)}...${companyAddr?.slice(-6)}`,
       });
       queryClient.invalidateQueries({ queryKey: ['/api/user/wallet-preference'] });
       queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
@@ -130,20 +132,22 @@ export function WalletChoiceModal({ open, onClose, onComplete }: WalletChoiceMod
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-lg" data-testid="wallet-choice-modal">
+      <DialogContent className="sm:max-w-lg bg-slate-900 border-slate-700" data-testid="wallet-choice-modal">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Wallet className="h-5 w-5 text-primary" />
+          <DialogTitle className="flex items-center gap-2 text-slate-100">
+            <div className="p-2 rounded-lg bg-gradient-to-br from-purple-500/20 to-blue-500/20 border border-purple-500/30">
+              <Wallet className="h-5 w-5 text-purple-400" />
+            </div>
             Set Up Your Wallet
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-slate-400">
             Choose how you want to receive your JCMOVES token rewards
           </DialogDescription>
         </DialogHeader>
 
         {preferenceLoading ? (
           <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <Loader2 className="h-8 w-8 animate-spin text-purple-400" />
           </div>
         ) : (
           <div className="space-y-6 pt-4">
@@ -153,37 +157,37 @@ export function WalletChoiceModal({ open, onClose, onComplete }: WalletChoiceMod
               className="space-y-4"
             >
               <Card 
-                className={`cursor-pointer transition-all ${walletMode === 'personal' ? 'ring-2 ring-primary border-primary' : 'hover:border-primary/50'}`}
+                className={`cursor-pointer transition-all border-slate-700 bg-slate-800/50 ${walletMode === 'personal' ? 'ring-2 ring-purple-500 border-purple-500' : 'hover:border-purple-500/50'}`}
                 onClick={() => setWalletMode('personal')}
               >
                 <CardHeader className="pb-2">
                   <div className="flex items-start gap-4">
-                    <RadioGroupItem value="personal" id="personal" className="mt-1" />
+                    <RadioGroupItem value="personal" id="personal" className="mt-1 border-slate-600" />
                     <div className="flex-1">
-                      <CardTitle className="flex items-center gap-2 text-lg">
-                        <div className="bg-purple-100 dark:bg-purple-900 p-2 rounded-lg">
-                          <SiSolana className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                      <CardTitle className="flex items-center gap-2 text-lg text-slate-100">
+                        <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/20 p-2 rounded-lg border border-purple-500/30">
+                          <SiSolana className="h-5 w-5 text-purple-400" />
                         </div>
                         Personal Phantom Wallet
                       </CardTitle>
-                      <CardDescription className="mt-2">
+                      <CardDescription className="mt-2 text-slate-400">
                         Use your own Phantom wallet to receive JCMOVES tokens directly
                       </CardDescription>
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent className="pl-12">
-                  <ul className="text-sm text-muted-foreground space-y-1">
+                  <ul className="text-sm text-slate-400 space-y-1">
                     <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-green-500" />
+                      <Check className="h-4 w-4 text-green-400" />
                       Full control over your tokens
                     </li>
                     <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-green-500" />
+                      <Check className="h-4 w-4 text-green-400" />
                       Trade on any exchange
                     </li>
                     <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-green-500" />
+                      <Check className="h-4 w-4 text-green-400" />
                       Direct blockchain transfers
                     </li>
                   </ul>
@@ -191,37 +195,37 @@ export function WalletChoiceModal({ open, onClose, onComplete }: WalletChoiceMod
               </Card>
 
               <Card 
-                className={`cursor-pointer transition-all ${walletMode === 'company' ? 'ring-2 ring-primary border-primary' : 'hover:border-primary/50'}`}
+                className={`cursor-pointer transition-all border-slate-700 bg-slate-800/50 ${walletMode === 'company' ? 'ring-2 ring-blue-500 border-blue-500' : 'hover:border-blue-500/50'}`}
                 onClick={() => setWalletMode('company')}
               >
                 <CardHeader className="pb-2">
                   <div className="flex items-start gap-4">
-                    <RadioGroupItem value="company" id="company" className="mt-1" />
+                    <RadioGroupItem value="company" id="company" className="mt-1 border-slate-600" />
                     <div className="flex-1">
-                      <CardTitle className="flex items-center gap-2 text-lg">
-                        <div className="bg-blue-100 dark:bg-blue-900 p-2 rounded-lg">
-                          <Building2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                      <CardTitle className="flex items-center gap-2 text-lg text-slate-100">
+                        <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/20 p-2 rounded-lg border border-blue-500/30">
+                          <Building2 className="h-5 w-5 text-blue-400" />
                         </div>
                         Company Wallet
                       </CardTitle>
-                      <CardDescription className="mt-2">
+                      <CardDescription className="mt-2 text-slate-400">
                         We'll assign a managed wallet for your rewards
                       </CardDescription>
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent className="pl-12">
-                  <ul className="text-sm text-muted-foreground space-y-1">
+                  <ul className="text-sm text-slate-400 space-y-1">
                     <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-green-500" />
+                      <Check className="h-4 w-4 text-green-400" />
                       No wallet setup required
                     </li>
                     <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-green-500" />
+                      <Check className="h-4 w-4 text-green-400" />
                       Easy in-app balance tracking
                     </li>
                     <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-green-500" />
+                      <Check className="h-4 w-4 text-green-400" />
                       Transfer to personal wallet anytime
                     </li>
                   </ul>
@@ -230,9 +234,9 @@ export function WalletChoiceModal({ open, onClose, onComplete }: WalletChoiceMod
             </RadioGroup>
 
             {walletMode === 'personal' && (
-              <div className="space-y-3 p-4 bg-muted/50 rounded-lg border">
-                <Label htmlFor="wallet-address" className="flex items-center gap-2">
-                  <SiSolana className="h-4 w-4 text-purple-600" />
+              <div className="space-y-3 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+                <Label htmlFor="wallet-address" className="flex items-center gap-2 text-slate-200">
+                  <SiSolana className="h-4 w-4 text-purple-400" />
                   Your Phantom Wallet Address
                 </Label>
                 <Input
@@ -240,22 +244,22 @@ export function WalletChoiceModal({ open, onClose, onComplete }: WalletChoiceMod
                   placeholder="e.g., 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
                   value={personalAddress}
                   onChange={(e) => handlePersonalAddressChange(e.target.value)}
-                  className={addressError ? 'border-destructive' : ''}
+                  className={`bg-slate-900 border-slate-600 text-slate-100 placeholder:text-slate-500 ${addressError ? 'border-red-500' : ''}`}
                   data-testid="input-wallet-address"
                 />
                 {addressError && (
-                  <p className="text-sm text-destructive flex items-center gap-1">
+                  <p className="text-sm text-red-400 flex items-center gap-1">
                     <AlertCircle className="h-3 w-3" />
                     {addressError}
                   </p>
                 )}
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <p className="text-xs text-slate-500 flex items-center gap-1">
                   <ExternalLink className="h-3 w-3" />
                   <a 
                     href="https://phantom.app" 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="hover:underline text-primary"
+                    className="hover:underline text-purple-400"
                   >
                     Don't have a wallet? Get Phantom
                   </a>
@@ -264,13 +268,13 @@ export function WalletChoiceModal({ open, onClose, onComplete }: WalletChoiceMod
             )}
 
             <div className="flex gap-3 pt-2">
-              <Button variant="outline" onClick={onClose} className="flex-1" data-testid="button-cancel-wallet">
+              <Button variant="outline" onClick={onClose} className="flex-1 border-slate-600 text-slate-300 hover:bg-slate-800" data-testid="button-cancel-wallet">
                 Later
               </Button>
               <Button 
                 onClick={handleSubmit} 
                 disabled={!canSubmit || saveWalletChoice.isPending}
-                className="flex-1"
+                className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white"
                 data-testid="button-confirm-wallet"
               >
                 {saveWalletChoice.isPending ? (

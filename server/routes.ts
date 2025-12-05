@@ -27,6 +27,7 @@ import { walletService } from "./services/wallet";
 import { solanaMonitor } from "./services/solana-monitor";
 import { crewSuggestionService } from "./services/crew-suggestions";
 import { ObjectStorageService } from "./objectStorage";
+import { solanaTransferService } from "./services/solana-transfer";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Public health check endpoint for deployment monitoring (MUST be before auth setup)
@@ -1236,10 +1237,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "User not found" });
       }
 
+      let companyWalletAddress: string | null = null;
+      if (user.companyWalletId) {
+        const companyWallet = await storage.getUserWalletById(user.companyWalletId);
+        companyWalletAddress = companyWallet?.walletAddress || null;
+      }
+
       res.json({
         walletMode: user.walletMode || null,
         personalWalletAddress: user.personalWalletAddress || null,
         companyWalletId: user.companyWalletId || null,
+        companyWalletAddress,
         hasWalletConfigured: !!user.walletMode
       });
     } catch (error) {
@@ -1251,7 +1259,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/user/wallet-choice', isAuthenticated, async (req: any, res) => {
     try {
       const userId = (req.session as any).userId;
-      const { walletMode, personalWalletAddress, companyWalletId } = req.body;
+      const { walletMode, personalWalletAddress } = req.body;
 
       // Validate wallet mode
       if (!walletMode || !['personal', 'company'].includes(walletMode)) {
@@ -1271,6 +1279,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      let companyWalletId: string | undefined;
+      let generatedWalletAddress: string | undefined;
+
+      // If company mode, generate a real Solana wallet for the user
+      if (walletMode === 'company') {
+        try {
+          const { walletService } = await import('./services/wallet');
+          const companyWallet = await walletService.createUserWallet(userId, 'JCMOVES');
+          companyWalletId = companyWallet.id;
+          generatedWalletAddress = companyWallet.walletAddress;
+          console.log(`✅ Generated company Solana wallet for user ${userId}: ${generatedWalletAddress}`);
+        } catch (walletError) {
+          console.error('Error generating company wallet:', walletError);
+          return res.status(500).json({ message: "Failed to generate company wallet. Please try again." });
+        }
+      }
+
       const updatedUser = await storage.updateUserWalletChoice(
         userId,
         walletMode,
@@ -1287,7 +1312,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: true,
         walletMode: updatedUser.walletMode,
         personalWalletAddress: updatedUser.personalWalletAddress,
-        companyWalletId: updatedUser.companyWalletId
+        companyWalletId: updatedUser.companyWalletId,
+        companyWalletAddress: generatedWalletAddress
       });
     } catch (error) {
       console.error("Error updating wallet choice:", error);
@@ -3354,10 +3380,10 @@ Thank you for your business!
     }
   });
 
-  // Transfer JCMOVES tokens between wallets
+  // Transfer JCMOVES tokens between wallets - REAL BLOCKCHAIN TRANSFER
   app.post("/api/treasury/transfer", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
-      const { recipientAddress, amount } = req.body;
+      const { recipientAddress, amount, executeOnChain } = req.body;
 
       if (!recipientAddress || typeof recipientAddress !== 'string') {
         return res.status(400).json({ error: "Recipient address is required" });
@@ -3375,11 +3401,53 @@ Thank you for your business!
         });
       }
 
-      // Record the transfer intent in database
       const tokenPrice = await moonshotService.getTokenPrice();
       const usdValue = amount * tokenPrice;
-      
-      // Deduct from treasury reserve (this tracks the withdrawal)
+
+      // If executeOnChain is true and the transfer service is operational, execute real blockchain transfer
+      if (executeOnChain && solanaTransferService.isOperational()) {
+        console.log(`[BLOCKCHAIN TRANSFER] Executing on-chain transfer: ${amount} JCMOVES to ${recipientAddress}`);
+        
+        const transferResult = await solanaTransferService.transferTokens({
+          recipientAddress,
+          amount,
+          memo: `Treasury transfer by admin ${req.currentUser?.email}`
+        });
+
+        if (!transferResult.success) {
+          return res.status(400).json({ 
+            success: false,
+            error: transferResult.error || "Blockchain transfer failed"
+          });
+        }
+
+        // Record successful blockchain transfer in database
+        const transaction = await storage.deductFromReserve(
+          amount,
+          `Blockchain transfer to ${recipientAddress.slice(0, 8)}...${recipientAddress.slice(-6)}`,
+          tokenPrice,
+          'blockchain_transfer',
+          recipientAddress
+        );
+
+        console.log(`[BLOCKCHAIN TRANSFER] ✅ Success! TX: ${transferResult.transactionHash}`);
+
+        return res.json({
+          success: true,
+          message: "Blockchain transfer completed successfully",
+          transactionHash: transferResult.transactionHash,
+          transaction: {
+            id: transaction.id,
+            amount,
+            usdValue,
+            recipientAddress,
+            timestamp: transaction.createdAt
+          },
+          explorerUrl: `https://solscan.io/tx/${transferResult.transactionHash}`
+        });
+      }
+
+      // Fallback: Record transfer intent only (no blockchain execution)
       const transaction = await storage.deductFromReserve(
         amount,
         `Transfer to ${recipientAddress.slice(0, 8)}...${recipientAddress.slice(-6)}`,
@@ -3388,8 +3456,10 @@ Thank you for your business!
         recipientAddress
       );
 
-      console.log(`[TRANSFER] Initiated: ${amount} JCMOVES to ${recipientAddress}, USD value: $${usdValue.toFixed(2)}`);
+      console.log(`[TRANSFER] Recorded: ${amount} JCMOVES to ${recipientAddress}, USD value: $${usdValue.toFixed(2)}`);
 
+      const transferServiceStatus = solanaTransferService.getStatus();
+      
       res.json({
         success: true,
         message: "Transfer recorded successfully",
@@ -3400,12 +3470,36 @@ Thank you for your business!
           recipientAddress,
           timestamp: transaction.createdAt
         },
-        note: "Blockchain transfer execution requires manual signing via Solana wallet. This records the transfer intent in the treasury system."
+        blockchainEnabled: transferServiceStatus.operational,
+        note: transferServiceStatus.operational 
+          ? "Set executeOnChain=true to execute real blockchain transfer"
+          : `Blockchain transfers disabled: ${transferServiceStatus.error}`
       });
     } catch (error) {
       console.error("Error processing transfer:", error);
       res.status(500).json({ 
         error: error instanceof Error ? error.message : "Failed to process transfer" 
+      });
+    }
+  });
+
+  // Get blockchain transfer service status
+  app.get("/api/treasury/transfer/status", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const status = solanaTransferService.getStatus();
+      const balance = await solanaTransferService.getTreasuryBalance();
+      
+      res.json({
+        ...status,
+        balance: {
+          sol: balance.solBalance,
+          tokens: balance.tokenBalance
+        }
+      });
+    } catch (error) {
+      console.error("Error getting transfer status:", error);
+      res.status(500).json({ 
+        error: error instanceof Error ? error.message : "Failed to get status" 
       });
     }
   });

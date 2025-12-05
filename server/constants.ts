@@ -32,6 +32,11 @@ export const TREASURY_CONFIG = {
   ENABLE_REAL_CRYPTO: true, // Toggle for crypto vs internal tokens
   MIN_WITHDRAWAL_TOKENS: 100, // Minimum JCMOVES for withdrawal
   WITHDRAWAL_FEE_PERCENT: 2, // 2% fee for crypto withdrawals
+  
+  // Treasury safety limits
+  MAX_TRANSFER_PER_TX: 10000, // Maximum tokens per single transfer
+  MAX_DAILY_TRANSFER: 100000, // Maximum daily transfer limit
+  MIN_TREASURY_RESERVE: 50000, // Minimum tokens to keep in treasury
 } as const;
 
 export const REWARD_TYPES = {

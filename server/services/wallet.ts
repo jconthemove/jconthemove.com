@@ -8,10 +8,13 @@ import type {
   InsertWalletTransaction 
 } from '@shared/schema';
 import { TREASURY_CONFIG } from '../constants';
+import { Keypair } from '@solana/web3.js';
+import bs58 from 'bs58';
 
 /**
  * Crypto Wallet Service
  * Manages individual user crypto wallets for multiple currencies
+ * Now with REAL Solana wallet generation!
  */
 export class WalletService {
   
@@ -79,8 +82,29 @@ export class WalletService {
   }
 
   /**
-   * Generate a crypto wallet address (simplified for demo)
-   * In production, this would use proper crypto libraries
+   * Generate a REAL Solana wallet using @solana/web3.js
+   * Returns the public key (address) and encrypted private key
+   */
+  private generateSolanaWallet(): { address: string; publicKey: string; privateKeyHash: string; seedPhrase?: string } {
+    try {
+      const keypair = Keypair.generate();
+      const publicKey = keypair.publicKey.toBase58();
+      const secretKey = bs58.encode(keypair.secretKey);
+      
+      return {
+        address: publicKey,
+        publicKey: publicKey,
+        privateKeyHash: secretKey // In production, this should be encrypted with a master key
+      };
+    } catch (error) {
+      console.error('Error generating Solana wallet:', error);
+      throw new Error('Failed to generate Solana wallet');
+    }
+  }
+
+  /**
+   * Generate a crypto wallet address
+   * Uses real Solana keypairs for Solana network, mock for others
    */
   private generateWalletAddress(network: string): { address: string; publicKey: string; privateKeyHash: string } {
     const timestamp = Date.now();
@@ -88,20 +112,16 @@ export class WalletService {
     
     switch (network.toLowerCase()) {
       case 'solana':
-        return {
-          address: `Sol${timestamp}${random}`.substring(0, 44), // Solana addresses are ~44 chars
-          publicKey: `pk_${timestamp}_${random}`,
-          privateKeyHash: `enc_${timestamp}_${random}_hash` // In production: encrypted private key
-        };
+        return this.generateSolanaWallet();
       case 'bitcoin':
         return {
-          address: `1BTC${timestamp}${random}`.substring(0, 34), // Bitcoin addresses are ~34 chars
+          address: `1BTC${timestamp}${random}`.substring(0, 34),
           publicKey: `pk_${timestamp}_${random}`,
           privateKeyHash: `enc_${timestamp}_${random}_hash`
         };
       case 'ethereum':
         return {
-          address: `0x${timestamp}${random}`.substring(0, 42), // Ethereum addresses are 42 chars
+          address: `0x${timestamp}${random}`.substring(0, 42),
           publicKey: `pk_${timestamp}_${random}`,
           privateKeyHash: `enc_${timestamp}_${random}_hash`
         };
