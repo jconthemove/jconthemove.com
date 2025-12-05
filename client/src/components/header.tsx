@@ -135,26 +135,20 @@ export default function Header() {
                       Home
                     </button>
                     <button
-                      onClick={() => scrollToSection("services")}
-                      className="text-muted-foreground hover:text-primary px-3 py-2 rounded-md text-sm font-medium transition-colors"
-                      data-testid="button-services"
-                    >
-                      Services
-                    </button>
-                    <button
                       onClick={() => scrollToSection("gallery")}
                       className="text-muted-foreground hover:text-primary px-3 py-2 rounded-md text-sm font-medium transition-colors"
                       data-testid="button-gallery"
                     >
                       Gallery
                     </button>
-                    <button
-                      onClick={() => scrollToSection("quote")}
-                      className="text-muted-foreground hover:text-primary px-3 py-2 rounded-md text-sm font-medium transition-colors"
-                      data-testid="button-quote"
+                    <Link
+                      href="/services"
+                      className="bg-maroon-700 text-white hover:bg-maroon-600 px-4 py-2 rounded-full text-sm font-medium transition-colors"
+                      style={{ backgroundColor: '#800000' }}
+                      data-testid="button-quotes-services"
                     >
-                      Get Quote
-                    </button>
+                      Quotes / Services
+                    </Link>
                   </>
                 )}
                 
@@ -192,10 +186,11 @@ export default function Header() {
                   <div className="flex items-center space-x-2">
                     <Link 
                       href="/employee-login" 
-                      className="bg-primary text-primary-foreground hover:bg-primary/90 px-3 py-2 rounded-md text-sm font-medium transition-colors"
+                      className="text-white hover:opacity-90 px-4 py-2 rounded-full text-sm font-medium transition-colors"
+                      style={{ backgroundColor: '#800000' }}
                       data-testid="button-employee-login"
                     >
-                      Employee Portal
+                      JC CREW HQ
                     </Link>
                   </div>
                 )}
@@ -314,26 +309,21 @@ export default function Header() {
                     Home
                   </button>
                   <button
-                    onClick={() => scrollToSection("services")}
-                    className="text-muted-foreground hover:text-primary px-3 py-2 rounded-md text-sm font-medium transition-colors text-left"
-                    data-testid="button-mobile-services"
-                  >
-                    Services
-                  </button>
-                  <button
                     onClick={() => scrollToSection("gallery")}
                     className="text-muted-foreground hover:text-primary px-3 py-2 rounded-md text-sm font-medium transition-colors text-left"
                     data-testid="button-mobile-gallery"
                   >
                     Gallery
                   </button>
-                  <button
-                    onClick={() => scrollToSection("quote")}
-                    className="text-muted-foreground hover:text-primary px-3 py-2 rounded-md text-sm font-medium transition-colors text-left"
-                    data-testid="button-mobile-quote"
+                  <Link
+                    href="/services"
+                    className="text-white px-4 py-2 rounded-full text-sm font-medium transition-colors text-left inline-block"
+                    style={{ backgroundColor: '#800000' }}
+                    data-testid="button-mobile-quotes-services"
+                    onClick={() => setMobileMenuOpen(false)}
                   >
-                    Get Quote
-                  </button>
+                    Quotes / Services
+                  </Link>
                 </>
               )}
               
@@ -372,11 +362,12 @@ export default function Header() {
                 <div className="flex flex-col space-y-2">
                   <Link 
                     href="/employee-login" 
-                    className="bg-primary text-primary-foreground hover:bg-primary/90 px-3 py-2 rounded-md text-sm font-medium transition-colors text-left"
+                    className="text-white px-4 py-2 rounded-full text-sm font-medium transition-colors text-left inline-block"
+                    style={{ backgroundColor: '#800000' }}
                     data-testid="button-mobile-employee-login"
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    Employee Portal
+                    JC CREW HQ
                   </Link>
                 </div>
               )}

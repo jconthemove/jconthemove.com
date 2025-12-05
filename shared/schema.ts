@@ -24,7 +24,7 @@ export const leads = pgTable("leads", {
   lastName: text("last_name").notNull(),
   email: text("email").notNull(),
   phone: text("phone").notNull(),
-  serviceType: text("service_type").notNull(), // 'residential', 'commercial', 'junk'
+  serviceType: text("service_type").notNull(), // 'residential', 'junk', 'snow', 'cleaning', 'handyman', 'demolition', 'flooring', 'painting'
   fromAddress: text("from_address").notNull(),
   toAddress: text("to_address"),
   moveDate: text("move_date"),

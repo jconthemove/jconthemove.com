@@ -39,6 +39,7 @@ import EmployeeRegister from "@/pages/employee-register";
 import EmployeeLogin from "@/pages/employee-login";
 import QuotePage from "@/pages/quote";
 import SponsorsPage from "@/pages/sponsors";
+import ServicesPage from "@/pages/services";
 
 // Landing page for unauthenticated users
 function LandingPage() {
@@ -205,6 +206,9 @@ function Router() {
       
       {/* Sponsors page - accessible to all */}
       <Route path="/sponsors" component={SponsorsPage} />
+      
+      {/* Services page - accessible to all */}
+      <Route path="/services" component={ServicesPage} />
       
       {/* Lead detail - accessible without authentication (temporary for debugging) */}
       <Route path="/lead/:id">

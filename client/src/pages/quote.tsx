@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
-import { Truck, Trash2, Snowflake, Sparkles, Send, ArrowLeft, Camera, X, ImagePlus } from "lucide-react";
+import { Truck, Trash2, Snowflake, Sparkles, Send, ArrowLeft, Camera, X, ImagePlus, Wrench, HardHat, Layers, PaintBucket } from "lucide-react";
 import { Link } from "wouter";
 
 interface QuotePhoto {
@@ -142,6 +142,10 @@ export default function QuotePage() {
     { value: "junk", label: "Junk Removal", subLabel: "Haul Away", icon: Trash2, color: "from-orange-600 to-orange-800" },
     { value: "snow", label: "Snow Removal", subLabel: "Plowing & Shoveling", icon: Snowflake, color: "from-cyan-600 to-cyan-800" },
     { value: "cleaning", label: "Move In/Out", subLabel: "Cleaning", icon: Sparkles, color: "from-green-600 to-green-800" },
+    { value: "handyman", label: "Handyman", subLabel: "General Repairs", icon: Wrench, color: "from-amber-600 to-amber-800" },
+    { value: "demolition", label: "Light Demo", subLabel: "Demolition", icon: HardHat, color: "from-red-600 to-red-800" },
+    { value: "flooring", label: "Flooring", subLabel: "Install & Repair", icon: Layers, color: "from-stone-600 to-stone-800" },
+    { value: "painting", label: "Painting", subLabel: "Interior & Exterior", icon: PaintBucket, color: "from-violet-600 to-violet-800" },
   ];
 
   const getServiceTitle = () => {
