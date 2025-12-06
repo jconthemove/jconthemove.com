@@ -3000,7 +3000,7 @@ Thank you for your business!
       const depositData = treasuryDepositSchema.parse(req.body);
       const userId = (req.session as any).userId;
       
-      const result = await treasuryService.depositFunds(
+      const result = await treasuryService.depositTokens(
         userId,
         depositData.amount,
         depositData.depositMethod,
@@ -3011,7 +3011,7 @@ Thank you for your business!
         res.json({ 
           success: true, 
           deposit: result.deposit,
-          message: `Successfully deposited $${depositData.amount.toFixed(2)} into treasury`
+          message: `Successfully deposited ${depositData.amount.toLocaleString()} JCMOVES into treasury`
         });
       } else {
         res.status(400).json({ 
@@ -3020,7 +3020,7 @@ Thank you for your business!
         });
       }
     } catch (error) {
-      console.error("Error depositing treasury funds:", error);
+      console.error("Error depositing treasury tokens:", error);
       res.status(400).json({ error: "Invalid deposit data" });
     }
   });

@@ -17,12 +17,8 @@ import {
   ArrowDownUp,
   Loader2,
   Wallet,
-  TrendingUp,
   AlertTriangle,
   ExternalLink,
-  RefreshCw,
-  Coins,
-  DollarSign,
   Info,
 } from "lucide-react";
 
@@ -271,7 +267,7 @@ export default function SwapPage() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">Network Fee</span>
-                  <span className="text-slate-200">~$0.01</span>
+                  <span className="text-slate-200">~0.00005 SOL</span>
                 </div>
               </div>
             )}
@@ -344,7 +340,7 @@ export default function SwapPage() {
                 <li>Swaps are powered by Jupiter, Solana's leading DEX aggregator</li>
                 <li>You'll sign the transaction with your connected wallet</li>
                 <li>Swaps are final and cannot be reversed</li>
-                <li>Network fees are paid in SOL (~$0.01)</li>
+                <li>Network fees are paid in SOL (~0.00005 SOL)</li>
               </ul>
             </div>
           </div>

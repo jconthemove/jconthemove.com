@@ -254,7 +254,7 @@ export class TreasuryService {
   }
 
   /**
-   * Add funds to the treasury (business owner deposit)
+   * Add funds to the treasury (business owner deposit) - USD-based
    */
   async depositFunds(
     depositedBy: string,
@@ -274,6 +274,33 @@ export class TreasuryService {
       return { success: true, deposit };
     } catch (error) {
       console.error(`Treasury deposit error:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown deposit error"
+      };
+    }
+  }
+
+  /**
+   * Deposit JCMOVES tokens directly to treasury (crypto-only, no fiat conversion)
+   */
+  async depositTokens(
+    depositedBy: string,
+    tokenAmount: number,
+    depositMethod: string = 'manual',
+    notes?: string
+  ): Promise<{ success: boolean; deposit?: FundingDeposit; error?: string }> {
+    try {
+      const deposit = await storage.atomicDepositTokens(
+        depositedBy,
+        tokenAmount,
+        depositMethod,
+        notes
+      );
+
+      return { success: true, deposit };
+    } catch (error) {
+      console.error(`Token deposit error:`, error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown deposit error"

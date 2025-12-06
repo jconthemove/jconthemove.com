@@ -10,7 +10,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import {
-  DollarSign,
   TrendingUp,
   Wallet,
   Send,
@@ -25,11 +24,12 @@ import {
   Activity,
   ExternalLink,
   Star,
-  Plus,
   Shield,
   History,
   Clock,
-  Lock
+  Lock,
+  Coins,
+  Plus
 } from "lucide-react";
 
 export default function InGodWeTrustPage() {
@@ -186,13 +186,13 @@ export default function InGodWeTrustPage() {
           <Card className="p-6 bg-gradient-to-br from-green-500 to-green-600 text-white border-0 shadow-xl shadow-green-900/30 overflow-hidden relative">
             <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -mr-10 -mt-10"></div>
             <div className="flex items-center justify-between mb-2">
-              <DollarSign className="h-8 w-8 opacity-90" />
-              <span className="text-sm opacity-80 font-medium">Treasury</span>
+              <Activity className="h-8 w-8 opacity-90" />
+              <span className="text-sm opacity-80 font-medium">Database</span>
             </div>
             <div className="text-3xl font-black">
-              ${stats.currentMarketValueUsd?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || "0"}
+              {databaseBalance?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || "0"}
             </div>
-            <div className="text-sm opacity-80 mt-1 font-medium">Market Value (USD)</div>
+            <div className="text-sm opacity-80 mt-1 font-medium">JCMOVES Tracked</div>
           </Card>
 
           <Link href="/admin/users" className="block">
@@ -315,34 +315,39 @@ export default function InGodWeTrustPage() {
                 </h3>
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-slate-400">Total Funding</span>
+                    <span className="text-sm text-slate-400">Blockchain Balance</span>
                     <span className="font-bold text-slate-100">
-                      ${stats.totalFunding?.toLocaleString() || "0"}
+                      {blockchainBalance?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || "0"} JCMOVES
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-slate-400">Distributed</span>
+                    <span className="text-sm text-slate-400">Database Tracked</span>
                     <span className="font-bold text-slate-100">
-                      ${stats.totalDistributed?.toLocaleString() || "0"}
+                      {databaseBalance?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || "0"} JCMOVES
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-slate-400">Available</span>
-                    <span className="font-bold text-green-400">
-                      ${stats.availableFunding?.toLocaleString() || "0"}
+                    <span className="text-sm text-slate-400">Balance Sync</span>
+                    <span className={`font-bold ${balanceDiscrepancy < 100 ? 'text-green-400' : 'text-orange-400'}`}>
+                      {balanceDiscrepancy < 100 ? 'In Sync' : `${balanceDiscrepancy.toLocaleString()} diff`}
                     </span>
                   </div>
                   <div className="pt-3 border-t border-slate-700/50">
                     <div className="flex items-center gap-2">
-                      {stats.isHealthy ? (
+                      {blockchainBalance > 50000 ? (
                         <>
                           <CheckCircle className="h-4 w-4 text-green-400" />
-                          <span className="text-sm text-green-400 font-bold">Healthy</span>
+                          <span className="text-sm text-green-400 font-bold">Healthy - Above Reserve</span>
+                        </>
+                      ) : blockchainBalance > 10000 ? (
+                        <>
+                          <AlertTriangle className="h-4 w-4 text-yellow-400" />
+                          <span className="text-sm text-yellow-400 font-bold">Low Balance</span>
                         </>
                       ) : (
                         <>
                           <AlertTriangle className="h-4 w-4 text-red-400" />
-                          <span className="text-sm text-red-400 font-bold">Critical</span>
+                          <span className="text-sm text-red-400 font-bold">Critical - Below Reserve</span>
                         </>
                       )}
                     </div>
@@ -388,12 +393,12 @@ export default function InGodWeTrustPage() {
                   
                   <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700/50">
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm text-slate-400">Minimum Balance Required</span>
-                      <span className="font-bold text-orange-400">$100 USD</span>
+                      <span className="text-sm text-slate-400">Minimum Reserve Required</span>
+                      <span className="font-bold text-orange-400">50,000 JCMOVES</span>
                     </div>
                     <div className="flex items-center gap-2 mt-2">
                       <CheckCircle className="h-4 w-4 text-green-400" />
-                      <span className="text-xs text-green-400">Current balance exceeds minimum</span>
+                      <span className="text-xs text-green-400">Current balance exceeds minimum reserve</span>
                     </div>
                   </div>
                 </div>
@@ -450,6 +455,92 @@ export default function InGodWeTrustPage() {
               </Card>
             </div>
 
+            {/* Treasury Wallet Setup */}
+            <Card className="p-6 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
+              <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-slate-100">
+                <div className="p-2 rounded-lg bg-orange-500/20 border border-orange-500/30">
+                  <Wallet className="h-5 w-5 text-orange-400" />
+                </div>
+                Treasury Wallet Setup
+              </h3>
+              <div className="space-y-4">
+                <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700/50">
+                  <div className="flex items-center gap-3 mb-3">
+                    {transferStatus?.operational ? (
+                      <>
+                        <div className="p-2 rounded-lg bg-green-500/10 border border-green-500/30">
+                          <CheckCircle className="h-5 w-5 text-green-400" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-green-300">Wallet Configured</p>
+                          <p className="text-xs text-green-400/70">Real blockchain transfers enabled</p>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="p-2 rounded-lg bg-orange-500/10 border border-orange-500/30">
+                          <AlertTriangle className="h-5 w-5 text-orange-400" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-orange-300">Wallet Not Configured</p>
+                          <p className="text-xs text-orange-400/70">Treasury private key required</p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  
+                  {liveBalance?.walletAddress && (
+                    <div className="mb-3">
+                      <p className="text-xs text-slate-500 mb-1">Treasury Wallet Address</p>
+                      <div className="font-mono text-xs bg-slate-950/50 text-slate-300 p-2 rounded-lg break-all border border-slate-700/50">
+                        {liveBalance.walletAddress}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-2 text-xs text-slate-400">
+                    <p className="font-medium text-slate-300">To enable real token transfers:</p>
+                    <ol className="list-decimal list-inside space-y-1 pl-2">
+                      <li>Create a new Solana wallet or use an existing one</li>
+                      <li>Transfer JCMOVES tokens to the wallet</li>
+                      <li>Add the private key to Replit Secrets as <code className="bg-slate-800 px-1 py-0.5 rounded text-orange-300">TREASURY_WALLET_PRIVATE_KEY</code></li>
+                      <li>Restart the application to apply changes</li>
+                    </ol>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => refetchBalance()}
+                    className="border-slate-600 text-slate-300 hover:bg-slate-700/50"
+                    data-testid="button-refresh-wallet-status"
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Refresh Status
+                  </Button>
+                  {liveBalance?.walletAddress && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-slate-600 text-slate-300 hover:bg-slate-700/50"
+                      asChild
+                    >
+                      <a
+                        href={`https://solscan.io/account/${liveBalance.walletAddress}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        View on Solscan
+                      </a>
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </Card>
+
             {/* Transaction History */}
             <Card className="p-6 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
               <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-slate-100">
@@ -484,12 +575,12 @@ export default function InGodWeTrustPage() {
                       <Upload className="h-4 w-4 text-green-400" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-slate-200">Deposit Recorded</p>
-                      <p className="text-xs text-slate-500">Manual funding deposit</p>
+                      <p className="text-sm font-medium text-slate-200">Treasury Deposit</p>
+                      <p className="text-xs text-slate-500">Token transfer to treasury wallet</p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-bold text-green-400">+$500.00 USD</p>
+                    <p className="text-sm font-bold text-green-400">+50,000 JCMOVES</p>
                     <p className="text-xs text-slate-500 flex items-center gap-1 justify-end">
                       <Clock className="h-3 w-3" />
                       1 day ago
@@ -500,7 +591,7 @@ export default function InGodWeTrustPage() {
                 <div className="flex items-center justify-between p-4 bg-slate-900/50 rounded-xl border border-slate-700/50">
                   <div className="flex items-center gap-3">
                     <div className="p-2 rounded-lg bg-orange-500/10 border border-orange-500/30">
-                      <DollarSign className="h-4 w-4 text-orange-400" />
+                      <Coins className="h-4 w-4 text-orange-400" />
                     </div>
                     <div>
                       <p className="text-sm font-medium text-slate-200">Mining Reward Payout</p>
@@ -583,8 +674,7 @@ export default function InGodWeTrustPage() {
                     data-testid="input-transfer-amount"
                   />
                   <p className="text-xs text-slate-500 mt-1">
-                    Available: {blockchainBalance.toLocaleString()} JCMOVES (~$
-                    {(blockchainBalance * tokenPrice).toFixed(2)})
+                    Available: {blockchainBalance.toLocaleString()} JCMOVES
                   </p>
                 </div>
                 
@@ -654,20 +744,26 @@ export default function InGodWeTrustPage() {
                   <div className="p-2 rounded-lg bg-green-500/20 border border-green-500/30">
                     <Upload className="h-5 w-5 text-green-400" />
                   </div>
-                  Record Manual Deposit
+                  Record Token Deposit
                 </h3>
+                <p className="text-sm text-slate-400 mb-4">
+                  Record tokens deposited to the treasury wallet. This updates the database tracking.
+                </p>
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="deposit-amount" className="text-slate-200">USD Amount</Label>
+                    <Label htmlFor="deposit-amount" className="text-slate-200">JCMOVES Amount</Label>
                     <Input
                       id="deposit-amount"
                       type="number"
-                      placeholder="0.00"
+                      placeholder="0"
                       value={depositAmount}
                       onChange={(e) => setDepositAmount(e.target.value)}
                       className="bg-slate-800/50 border-slate-600 text-slate-100 placeholder:text-slate-500"
                       data-testid="input-deposit-amount"
                     />
+                    <p className="text-xs text-slate-500 mt-1">
+                      Enter the number of JCMOVES tokens deposited
+                    </p>
                   </div>
                   <Button
                     onClick={() => depositMutation.mutate()}
@@ -705,16 +801,13 @@ export default function InGodWeTrustPage() {
                         className="flex justify-between items-center p-3 bg-slate-900/50 border border-slate-700/50 rounded-lg text-sm"
                       >
                         <div>
-                          <div className="font-bold text-slate-100">${parseFloat(deposit.depositAmount).toLocaleString()}</div>
+                          <div className="font-bold text-green-400">+{parseFloat(deposit.tokensPurchased || deposit.depositAmount).toLocaleString()} JCMOVES</div>
                           <div className="text-xs text-slate-500">
                             {new Date(deposit.createdAt).toLocaleDateString()}
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="font-mono text-xs text-slate-300">
-                            {parseFloat(deposit.tokensPurchased).toLocaleString()} JCMOVES
-                          </div>
-                          <div className="text-xs text-slate-500">{deposit.depositMethod}</div>
+                          <div className="text-xs text-slate-400 capitalize">{deposit.depositMethod}</div>
                         </div>
                       </div>
                     ))

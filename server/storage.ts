@@ -1455,6 +1455,62 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
+  async atomicDepositTokens(depositedBy: string, tokenAmount: number, depositMethod: string = 'manual', notes?: string): Promise<FundingDeposit> {
+    return await db.transaction(async (tx) => {
+      const [treasury] = await tx
+        .select()
+        .from(treasuryAccounts)
+        .where(eq(treasuryAccounts.isActive, true))
+        .orderBy(treasuryAccounts.createdAt)
+        .limit(1)
+        .for('update');
+
+      if (!treasury) {
+        throw new Error("No active treasury account found");
+      }
+
+      const [deposit] = await tx
+        .insert(fundingDeposits)
+        .values({
+          treasuryAccountId: treasury.id,
+          depositedBy,
+          depositAmount: "0.00",
+          tokensPurchased: tokenAmount.toFixed(8),
+          tokenPrice: "0.00000000",
+          depositMethod,
+          status: 'completed',
+          notes: notes || `Direct token deposit: ${tokenAmount.toLocaleString()} JCMOVES`
+        })
+        .returning();
+
+      const newTokenReserve = parseFloat(treasury.tokenReserve) + tokenAmount;
+
+      await tx
+        .update(treasuryAccounts)
+        .set({
+          tokenReserve: newTokenReserve.toFixed(8),
+          updatedAt: new Date()
+        })
+        .where(eq(treasuryAccounts.id, treasury.id));
+
+      await tx
+        .insert(reserveTransactions)
+        .values({
+          treasuryAccountId: treasury.id,
+          transactionType: 'deposit',
+          relatedEntityType: 'funding_deposit',
+          relatedEntityId: deposit.id,
+          tokenAmount: tokenAmount.toFixed(8),
+          cashValue: "0.00",
+          balanceAfter: parseFloat(treasury.availableFunding).toFixed(2),
+          tokenReserveAfter: newTokenReserve.toFixed(8),
+          description: `Token deposit: ${tokenAmount.toLocaleString()} JCMOVES`
+        });
+
+      return deposit;
+    });
+  }
+
   // Faucet operations implementation
   async getFaucetConfig(currency?: string): Promise<FaucetConfig[]> {
     if (currency) {
