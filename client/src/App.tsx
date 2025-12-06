@@ -43,6 +43,7 @@ import SponsorsPage from "@/pages/sponsors";
 import ServicesPage from "@/pages/services";
 import GalleryPage from "@/pages/gallery";
 import ReviewsPage from "@/pages/reviews";
+import SwapPage from "@/pages/swap";
 
 // Landing page for unauthenticated users
 function LandingPage() {
@@ -119,6 +120,9 @@ function AuthenticatedApp() {
           </Route>
           <Route path="/rewards">
             <PageWrapper component={RewardsPage} />
+          </Route>
+          <Route path="/swap">
+            <PageWrapper component={SwapPage} />
           </Route>
           <Route path="/reviews">
             <PageWrapper component={ReviewsPage} />

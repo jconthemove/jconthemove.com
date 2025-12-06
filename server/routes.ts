@@ -28,6 +28,7 @@ import { solanaMonitor } from "./services/solana-monitor";
 import { crewSuggestionService } from "./services/crew-suggestions";
 import { ObjectStorageService } from "./objectStorage";
 import { solanaTransferService } from "./services/solana-transfer";
+import { jupiterSwapService, SUPPORTED_TOKENS } from "./services/jupiter-swap";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Public health check endpoint for deployment monitoring (MUST be before auth setup)
@@ -3501,6 +3502,125 @@ Thank you for your business!
       res.status(500).json({ 
         error: error instanceof Error ? error.message : "Failed to get status" 
       });
+    }
+  });
+
+  // ====================== JUPITER SWAP API ======================
+
+  // Get supported tokens for swapping
+  app.get("/api/swap/tokens", isAuthenticated, async (req, res) => {
+    try {
+      const tokens = jupiterSwapService.getSupportedTokens();
+      res.json({ tokens });
+    } catch (error) {
+      console.error("Error getting supported tokens:", error);
+      res.status(500).json({ error: "Failed to get supported tokens" });
+    }
+  });
+
+  // Get swap quote
+  app.post("/api/swap/quote", isAuthenticated, async (req, res) => {
+    try {
+      const { inputMint, outputMint, amount, slippageBps } = req.body;
+
+      if (!inputMint || !outputMint || amount === undefined) {
+        return res.status(400).json({ error: "inputMint, outputMint, and amount are required" });
+      }
+
+      const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+      
+      if (typeof numAmount !== 'number' || isNaN(numAmount) || numAmount <= 0) {
+        return res.status(400).json({ error: "Amount must be a positive number" });
+      }
+
+      if (numAmount < 0.000001) {
+        return res.status(400).json({ error: "Amount is too small for a swap" });
+      }
+
+      const quote = await jupiterSwapService.getSwapQuote(
+        inputMint,
+        outputMint,
+        numAmount,
+        slippageBps || 50
+      );
+
+      if (!quote) {
+        return res.status(400).json({ error: "Unable to get swap quote. The token pair may not have sufficient liquidity." });
+      }
+
+      res.json({ quote });
+    } catch (error) {
+      console.error("Error getting swap quote:", error);
+      res.status(500).json({ error: "Failed to get swap quote" });
+    }
+  });
+
+  // Get swap transaction for user to sign
+  app.post("/api/swap/transaction", isAuthenticated, async (req, res) => {
+    try {
+      const { inputMint, outputMint, amount, slippageBps } = req.body;
+      const user = req.currentUser;
+
+      if (!user) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+
+      if (!inputMint || !outputMint || !amount) {
+        return res.status(400).json({ error: "inputMint, outputMint, and amount are required" });
+      }
+
+      // Get user's wallet address
+      const payoutInfo = await storage.getPayoutAddress(user.id.toString());
+      
+      if (!payoutInfo.address) {
+        return res.status(400).json({ 
+          error: "No wallet configured. Please set up your wallet first.",
+          needsWallet: true
+        });
+      }
+
+      const result = await jupiterSwapService.getSwapTransaction(
+        inputMint,
+        outputMint,
+        amount,
+        payoutInfo.address,
+        slippageBps || 50
+      );
+
+      if (!result) {
+        return res.status(400).json({ error: "Unable to create swap transaction" });
+      }
+
+      res.json({
+        transaction: result.transaction,
+        quote: result.quote,
+        userWallet: payoutInfo.address,
+        walletMode: payoutInfo.mode
+      });
+    } catch (error) {
+      console.error("Error getting swap transaction:", error);
+      res.status(500).json({ error: "Failed to create swap transaction" });
+    }
+  });
+
+  // Get token price in USDC
+  app.get("/api/swap/price/:tokenMint", isAuthenticated, async (req, res) => {
+    try {
+      const { tokenMint } = req.params;
+      const price = await jupiterSwapService.getTokenPrice(tokenMint);
+      
+      if (price === null) {
+        return res.status(400).json({ error: "Unable to get token price" });
+      }
+
+      res.json({ 
+        tokenMint,
+        priceUsd: price,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Error getting token price:", error);
+      res.status(500).json({ error: "Failed to get token price" });
     }
   });
 
