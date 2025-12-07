@@ -126,30 +126,32 @@ export default function Header() {
                   </>
                 ) : (
                   // Navigation for unauthenticated users (landing page)
-                  <>
+                  <div className="flex items-center gap-3">
                     <button
                       onClick={() => scrollToSection("home")}
-                      className="text-foreground hover:text-primary px-3 py-2 rounded-md text-sm font-medium transition-colors"
+                      className="text-white hover:opacity-90 px-6 py-2.5 rounded-full text-sm font-medium transition-all"
+                      style={{ backgroundColor: '#800000' }}
                       data-testid="button-home"
                     >
                       Home
                     </button>
                     <Link
                       href="/gallery"
-                      className="text-muted-foreground hover:text-primary px-3 py-2 rounded-md text-sm font-medium transition-colors"
+                      className="text-white hover:opacity-90 px-6 py-2.5 rounded-full text-sm font-medium transition-all"
+                      style={{ backgroundColor: '#800000' }}
                       data-testid="button-gallery"
                     >
                       Gallery
                     </Link>
                     <Link
                       href="/services"
-                      className="bg-maroon-700 text-white hover:bg-maroon-600 px-4 py-2 rounded-full text-sm font-medium transition-colors"
+                      className="text-white hover:opacity-90 px-6 py-2.5 rounded-full text-sm font-medium transition-all"
                       style={{ backgroundColor: '#800000' }}
                       data-testid="button-quotes-services"
                     >
                       Quotes / Services
                     </Link>
-                  </>
+                  </div>
                 )}
                 
                 {isAuthenticated ? (
@@ -183,10 +185,10 @@ export default function Header() {
                     </button>
                   </div>
                 ) : (
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center ml-3">
                     <Link 
                       href="/employee-login" 
-                      className="text-white hover:opacity-90 px-4 py-2 rounded-full text-sm font-medium transition-colors"
+                      className="text-white hover:opacity-90 px-6 py-2.5 rounded-full text-sm font-medium transition-all"
                       style={{ backgroundColor: '#800000' }}
                       data-testid="button-employee-login"
                     >
@@ -300,17 +302,19 @@ export default function Header() {
                 </>
               ) : (
                 // Mobile navigation for unauthenticated users (landing page)
-                <>
+                <div className="flex flex-col gap-2">
                   <button
                     onClick={() => scrollToSection("home")}
-                    className="text-foreground hover:text-primary px-3 py-2 rounded-md text-sm font-medium transition-colors text-left"
+                    className="text-white hover:opacity-90 px-6 py-2.5 rounded-full text-sm font-medium transition-all text-center"
+                    style={{ backgroundColor: '#800000' }}
                     data-testid="button-mobile-home"
                   >
                     Home
                   </button>
                   <Link
                     href="/gallery"
-                    className="text-muted-foreground hover:text-primary px-3 py-2 rounded-md text-sm font-medium transition-colors text-left"
+                    className="text-white hover:opacity-90 px-6 py-2.5 rounded-full text-sm font-medium transition-all text-center"
+                    style={{ backgroundColor: '#800000' }}
                     data-testid="button-mobile-gallery"
                     onClick={() => setMobileMenuOpen(false)}
                   >
@@ -318,14 +322,14 @@ export default function Header() {
                   </Link>
                   <Link
                     href="/services"
-                    className="text-white px-4 py-2 rounded-full text-sm font-medium transition-colors text-left inline-block"
+                    className="text-white hover:opacity-90 px-6 py-2.5 rounded-full text-sm font-medium transition-all text-center"
                     style={{ backgroundColor: '#800000' }}
                     data-testid="button-mobile-quotes-services"
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     Quotes / Services
                   </Link>
-                </>
+                </div>
               )}
               
               {isAuthenticated ? (
@@ -360,10 +364,10 @@ export default function Header() {
                   </button>
                 </>
               ) : (
-                <div className="flex flex-col space-y-2">
+                <div className="flex flex-col gap-2 mt-2">
                   <Link 
                     href="/employee-login" 
-                    className="text-white px-4 py-2 rounded-full text-sm font-medium transition-colors text-left inline-block"
+                    className="text-white hover:opacity-90 px-6 py-2.5 rounded-full text-sm font-medium transition-all text-center"
                     style={{ backgroundColor: '#800000' }}
                     data-testid="button-mobile-employee-login"
                     onClick={() => setMobileMenuOpen(false)}
