@@ -29,6 +29,7 @@ import { crewSuggestionService } from "./services/crew-suggestions";
 import { ObjectStorageService } from "./objectStorage";
 import { solanaTransferService } from "./services/solana-transfer";
 import { jupiterSwapService, SUPPORTED_TOKENS } from "./services/jupiter-swap";
+import { smsService } from "./services/sms";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Public health check endpoint for deployment monitoring (MUST be before auth setup)
@@ -468,6 +469,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         text: emailContent.text,
         html: emailContent.html,
       });
+
+      // Send SMS notification for new quote
+      try {
+        await smsService.notifyNewQuote({
+          customerName: `${lead.firstName} ${lead.lastName}`,
+          serviceType: lead.serviceType,
+          phone: lead.phone,
+          moveDate: lead.moveDate
+        });
+      } catch (smsError) {
+        console.error("SMS notification failed:", smsError);
+      }
 
       res.json({ success: true, leadId: lead.id });
     } catch (error) {
@@ -1557,6 +1570,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
             `${updatedLead.serviceType} job available for ${updatedLead.firstName} ${updatedLead.lastName}`,
             { jobId: updatedLead.id, type: 'job_available' }
           );
+          
+          // Send SMS to admin about job availability
+          try {
+            await smsService.sendSMS(
+              process.env.ADMIN_PHONE_NUMBER || '',
+              `🚚 JOB AVAILABLE\n\n${updatedLead.serviceType} job for ${updatedLead.firstName} ${updatedLead.lastName} is now available for employees to claim.`
+            );
+          } catch (e) { /* SMS optional */ }
+        }
+        
+        // Notify when job is completed
+        if (status === 'completed') {
+          try {
+            const assignedUser = updatedLead.assignedToUserId 
+              ? await storage.getUser(updatedLead.assignedToUserId)
+              : null;
+            await smsService.notifyJobCompleted({
+              customerName: `${updatedLead.firstName} ${updatedLead.lastName}`,
+              serviceType: updatedLead.serviceType,
+              completedBy: assignedUser ? `${assignedUser.firstName} ${assignedUser.lastName}` : undefined
+            });
+          } catch (e) { /* SMS optional */ }
         }
         
         // Notify assigned employee about status changes
