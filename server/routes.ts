@@ -4722,6 +4722,59 @@ Thank you for your business!
     }
   });
 
+  // Update treasury wallet address (Admin only)
+  app.put("/api/treasury/wallets/:walletId", isAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const { walletId } = req.params;
+      const { walletAddress } = req.body;
+
+      if (!walletAddress || typeof walletAddress !== 'string') {
+        return res.status(400).json({ error: "Wallet address is required" });
+      }
+
+      // Validate Solana address format
+      const solanaAddressRegex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+      if (!solanaAddressRegex.test(walletAddress)) {
+        return res.status(400).json({ error: "Invalid Solana wallet address format" });
+      }
+
+      const updatedWallet = await storage.updateTreasuryWalletAddress(walletId, walletAddress);
+      if (!updatedWallet) {
+        return res.status(404).json({ error: "Treasury wallet not found" });
+      }
+
+      console.log(`✅ Treasury wallet ${walletId} updated to address: ${walletAddress}`);
+      res.json({ success: true, wallet: updatedWallet });
+    } catch (error) {
+      console.error("Error updating treasury wallet:", error);
+      res.status(500).json({ error: "Failed to update treasury wallet" });
+    }
+  });
+
+  // Create or update treasury wallet for a currency (Admin only)
+  app.post("/api/treasury/wallets", isAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const { currencyId, walletAddress, purpose } = req.body;
+
+      if (!currencyId || !walletAddress) {
+        return res.status(400).json({ error: "Currency ID and wallet address are required" });
+      }
+
+      // Validate Solana address format
+      const solanaAddressRegex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+      if (!solanaAddressRegex.test(walletAddress)) {
+        return res.status(400).json({ error: "Invalid Solana wallet address format" });
+      }
+
+      const wallet = await storage.upsertTreasuryWallet(currencyId, walletAddress, purpose || 'treasury');
+      console.log(`✅ Treasury wallet upserted: ${wallet.id} with address ${walletAddress}`);
+      res.json({ success: true, wallet });
+    } catch (error) {
+      console.error("Error upserting treasury wallet:", error);
+      res.status(500).json({ error: "Failed to create/update treasury wallet" });
+    }
+  });
+
   // Get wallet transactions
   app.get("/api/wallets/:walletId/transactions", isAuthenticated, async (req: any, res) => {
     try {

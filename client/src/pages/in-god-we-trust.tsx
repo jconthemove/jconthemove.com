@@ -38,6 +38,8 @@ export default function InGodWeTrustPage() {
   const [recipientAddress, setRecipientAddress] = useState("");
   const [depositAmount, setDepositAmount] = useState("");
   const [executeOnChain, setExecuteOnChain] = useState(false);
+  const [newTreasuryAddress, setNewTreasuryAddress] = useState("");
+  const [isEditingTreasury, setIsEditingTreasury] = useState(false);
 
   // Treasury stats query
   const { data: treasurySummary, refetch: refetchTreasury } = useQuery({
@@ -70,6 +72,11 @@ export default function InGodWeTrustPage() {
   const { data: transferStatus } = useQuery({
     queryKey: ["/api/treasury/transfer/status"],
     refetchInterval: 60000,
+  });
+
+  // Treasury wallets configuration
+  const { data: treasuryWallets, refetch: refetchTreasuryWallets } = useQuery({
+    queryKey: ["/api/treasury/wallets"],
   });
 
   // Token transfer mutation
@@ -134,6 +141,34 @@ export default function InGodWeTrustPage() {
       toast({
         title: "Deposit failed",
         description: error.message || "Failed to record deposit",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Update treasury wallet mutation
+  const updateTreasuryWalletMutation = useMutation({
+    mutationFn: async ({ walletId, walletAddress }: { walletId: string; walletAddress: string }) => {
+      const response = await apiRequest("PUT", `/api/treasury/wallets/${walletId}`, {
+        walletAddress,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/treasury/wallets"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/solana/balance"] });
+      refetchBalance();
+      setIsEditingTreasury(false);
+      setNewTreasuryAddress("");
+      toast({
+        title: "Treasury wallet updated",
+        description: "The treasury wallet address has been updated successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Update failed",
+        description: error.message || "Failed to update treasury wallet",
         variant: "destructive",
       });
     },
@@ -355,6 +390,112 @@ export default function InGodWeTrustPage() {
                 </div>
               </Card>
             </div>
+
+            {/* Treasury Wallet Configuration */}
+            <Card className="p-6 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
+              <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-slate-100">
+                <div className="p-2 rounded-lg bg-purple-500/20 border border-purple-500/30">
+                  <Coins className="h-5 w-5 text-purple-400" />
+                </div>
+                Treasury Wallet Configuration
+              </h3>
+              <div className="space-y-4">
+                {treasuryWallets?.wallets?.map((wallet: any) => (
+                  <div key={wallet.id} className="p-4 bg-slate-900/50 rounded-xl border border-slate-700/50">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-slate-300">
+                        {wallet.currency?.symbol || 'Unknown'} - {wallet.purpose}
+                      </span>
+                      <span className="text-xs text-slate-500">
+                        Balance: {parseFloat(wallet.balance).toLocaleString()} tokens
+                      </span>
+                    </div>
+                    
+                    {isEditingTreasury ? (
+                      <div className="space-y-3">
+                        <Input
+                          value={newTreasuryAddress}
+                          onChange={(e) => setNewTreasuryAddress(e.target.value)}
+                          placeholder="Enter new Solana wallet address"
+                          className="bg-slate-800 border-slate-600 text-slate-200"
+                          data-testid="input-new-treasury-address"
+                        />
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={() => {
+                              if (newTreasuryAddress) {
+                                updateTreasuryWalletMutation.mutate({
+                                  walletId: wallet.id,
+                                  walletAddress: newTreasuryAddress,
+                                });
+                              }
+                            }}
+                            disabled={!newTreasuryAddress || updateTreasuryWalletMutation.isPending}
+                            className="flex-1 bg-purple-600 hover:bg-purple-500"
+                            data-testid="button-save-treasury"
+                          >
+                            {updateTreasuryWalletMutation.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            ) : null}
+                            Save Address
+                          </Button>
+                          <Button
+                            onClick={() => {
+                              setIsEditingTreasury(false);
+                              setNewTreasuryAddress("");
+                            }}
+                            variant="outline"
+                            className="border-slate-600"
+                            data-testid="button-cancel-treasury-edit"
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="font-mono text-xs bg-slate-800/50 text-slate-300 p-2 rounded-lg break-all">
+                          {wallet.walletAddress}
+                        </div>
+                        <div className="flex gap-2 mt-3">
+                          <Button
+                            onClick={() => {
+                              setIsEditingTreasury(true);
+                              setNewTreasuryAddress(wallet.walletAddress);
+                            }}
+                            variant="outline"
+                            size="sm"
+                            className="border-slate-600 text-slate-300 hover:bg-purple-500/20"
+                            data-testid="button-edit-treasury"
+                          >
+                            Edit Address
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="border-slate-600 text-slate-300 hover:bg-blue-500/20"
+                            asChild
+                          >
+                            <a
+                              href={`https://solscan.io/account/${wallet.walletAddress}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <ExternalLink className="h-3 w-3 mr-1" />
+                              View on Solscan
+                            </a>
+                          </Button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )) || (
+                  <div className="text-center py-8 text-slate-500">
+                    No treasury wallets configured. Contact system administrator.
+                  </div>
+                )}
+              </div>
+            </Card>
           </TabsContent>
 
           {/* Safety Tab - Treasury Safety Controls */}

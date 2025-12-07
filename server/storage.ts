@@ -148,7 +148,10 @@ export interface IStorage {
   // Treasury wallet operations
   getTreasuryWallets(roleScope?: string): Promise<(TreasuryWallet & { currency: SupportedCurrency })[]>;
   getTreasuryWallet(currencyId: string, purpose?: string): Promise<TreasuryWallet | undefined>;
+  getTreasuryWalletById(walletId: string): Promise<TreasuryWallet | undefined>;
   updateTreasuryWalletBalance(walletId: string, newBalance: string): Promise<void>;
+  upsertTreasuryWallet(currencyId: string, walletAddress: string, purpose?: string): Promise<TreasuryWallet>;
+  updateTreasuryWalletAddress(walletId: string, newAddress: string): Promise<TreasuryWallet | undefined>;
   
   // Price history operations
   addPricePoint(priceUsd: string, source: string, marketData?: any): Promise<void>;
@@ -2054,6 +2057,51 @@ export class DatabaseStorage implements IStorage {
         updatedAt: new Date()
       })
       .where(eq(treasuryWallets.id, walletId));
+  }
+
+  async getTreasuryWalletById(walletId: string): Promise<TreasuryWallet | undefined> {
+    const [wallet] = await db.select().from(treasuryWallets)
+      .where(eq(treasuryWallets.id, walletId));
+    return wallet || undefined;
+  }
+
+  async upsertTreasuryWallet(currencyId: string, walletAddress: string, purpose: string = 'treasury'): Promise<TreasuryWallet> {
+    const existing = await this.getTreasuryWallet(currencyId, purpose);
+    
+    if (existing) {
+      const [updated] = await db.update(treasuryWallets)
+        .set({ 
+          walletAddress,
+          updatedAt: new Date()
+        })
+        .where(eq(treasuryWallets.id, existing.id))
+        .returning();
+      return updated;
+    }
+    
+    const [newWallet] = await db.insert(treasuryWallets)
+      .values({
+        currencyId,
+        walletAddress,
+        purpose,
+        walletType: 'hot_wallet',
+        roleScope: 'admin',
+        isActive: true,
+        balance: '0.00000000'
+      })
+      .returning();
+    return newWallet;
+  }
+
+  async updateTreasuryWalletAddress(walletId: string, newAddress: string): Promise<TreasuryWallet | undefined> {
+    const [updated] = await db.update(treasuryWallets)
+      .set({ 
+        walletAddress: newAddress,
+        updatedAt: new Date()
+      })
+      .where(eq(treasuryWallets.id, walletId))
+      .returning();
+    return updated || undefined;
   }
 
   // Price history operations
