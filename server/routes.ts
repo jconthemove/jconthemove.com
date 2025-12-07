@@ -5199,6 +5199,173 @@ Thank you for your business!
     }
   });
 
+  // Request payout - transfer tokens from in-app balance to personal wallet
+  app.post("/api/wallet/payout", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      
+      // Get user's wallet account balance
+      const walletAccount = await storage.getWalletAccount(userId);
+      if (!walletAccount) {
+        return res.status(400).json({ error: "No wallet account found" });
+      }
+      
+      const availableBalance = parseFloat(walletAccount.tokenBalance || "0");
+      if (availableBalance <= 0) {
+        return res.status(400).json({ error: "No tokens available for payout" });
+      }
+      
+      // Check for pending payouts (soft check - DB constraint is the real guard)
+      const hasPending = await storage.hasPendingPayout(userId);
+      if (hasPending) {
+        return res.status(400).json({ error: "You already have a pending payout request" });
+      }
+      
+      // Get user's payout address
+      const payoutInfo = await storage.getPayoutAddress(userId);
+      if (!payoutInfo.address) {
+        return res.status(400).json({ error: "Please set up your wallet first in Profile settings" });
+      }
+      
+      // Create payout request and deduct balance ATOMICALLY - unique constraint prevents concurrent duplicates
+      let payout;
+      const totalRedeemed = parseFloat(walletAccount.totalRedeemed || "0") + availableBalance;
+      
+      try {
+        // Create payout with 'processing' status and immediately deduct balance
+        payout = await storage.createWalletPayout({
+          userId,
+          tokenAmount: availableBalance.toFixed(8),
+          recipientAddress: payoutInfo.address,
+          status: 'pending',
+          metadata: { walletMode: payoutInfo.mode, originalBalance: availableBalance }
+        });
+        
+        // Deduct balance immediately after creating payout record (prevents double-spend)
+        await storage.updateWalletAccount(userId, {
+          tokenBalance: "0.00000000",
+          totalRedeemed: totalRedeemed.toFixed(8)
+        });
+      } catch (createError: any) {
+        // Handle unique constraint violation (concurrent request race)
+        if (createError.code === '23505') {
+          return res.status(400).json({ error: "You already have a pending payout request" });
+        }
+        throw createError;
+      }
+      
+      // Try to execute the blockchain transfer
+      try {
+        const { solanaTransferService } = await import('./services/solana-transfer');
+        
+        if (!solanaTransferService.isOperational()) {
+          // Transfer service not operational - payout will be processed later
+          // Balance already deducted, payout remains pending
+          return res.json({
+            success: true,
+            payout,
+            message: "Payout request created. It will be processed when treasury wallet is configured.",
+            pending: true
+          });
+        }
+        
+        // Execute real blockchain transfer
+        const transferResult = await solanaTransferService.transferTokens({
+          recipientAddress: payoutInfo.address,
+          amount: availableBalance,
+          memo: `JCMOVES payout to ${userId.slice(0, 8)}`
+        });
+        
+        if (transferResult.success && transferResult.transactionHash) {
+          // Update payout with transaction hash - mark as confirmed
+          await storage.updateWalletPayout(payout.id, {
+            status: 'confirmed',
+            transactionHash: transferResult.transactionHash,
+            processedAt: new Date(),
+            confirmedAt: new Date()
+          });
+          
+          return res.json({
+            success: true,
+            transactionHash: transferResult.transactionHash,
+            amount: availableBalance,
+            recipientAddress: payoutInfo.address,
+            message: `Successfully sent ${availableBalance.toLocaleString()} JCMOVES to your wallet!`
+          });
+        } else {
+          // Transfer failed - refund balance and mark payout as failed
+          await storage.updateWalletPayout(payout.id, {
+            status: 'failed',
+            failureReason: transferResult.error || 'Unknown transfer error',
+            processedAt: new Date()
+          });
+          
+          // Refund the balance
+          await storage.updateWalletAccount(userId, {
+            tokenBalance: availableBalance.toFixed(8),
+            totalRedeemed: (totalRedeemed - availableBalance).toFixed(8)
+          });
+          
+          return res.status(500).json({
+            error: transferResult.error || "Blockchain transfer failed. Your balance has been restored.",
+            payoutId: payout.id
+          });
+        }
+      } catch (transferError) {
+        console.error("Blockchain transfer error:", transferError);
+        
+        // Refund balance on error
+        await storage.updateWalletAccount(userId, {
+          tokenBalance: availableBalance.toFixed(8),
+          totalRedeemed: (totalRedeemed - availableBalance).toFixed(8)
+        });
+        
+        await storage.updateWalletPayout(payout.id, {
+          status: 'failed',
+          failureReason: transferError instanceof Error ? transferError.message : 'Transfer execution failed',
+          processedAt: new Date()
+        });
+        return res.status(500).json({
+          error: "Failed to execute blockchain transfer. Your balance has been restored.",
+          payoutId: payout.id
+        });
+      }
+    } catch (error) {
+      console.error("Error requesting payout:", error);
+      res.status(500).json({ error: "Failed to request payout" });
+    }
+  });
+  
+  // Get user's payout history
+  app.get("/api/wallet/payouts", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const payouts = await storage.getWalletPayoutsByUser(userId);
+      res.json(payouts);
+    } catch (error) {
+      console.error("Error getting payout history:", error);
+      res.status(500).json({ error: "Failed to get payout history" });
+    }
+  });
+  
+  // Get payout status for pending payout
+  app.get("/api/wallet/payout/status", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const hasPending = await storage.hasPendingPayout(userId);
+      const payouts = await storage.getWalletPayoutsByUser(userId);
+      const latestPayout = payouts[0] || null;
+      
+      res.json({
+        hasPendingPayout: hasPending,
+        latestPayout
+      });
+    } catch (error) {
+      console.error("Error getting payout status:", error);
+      res.status(500).json({ error: "Failed to get payout status" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

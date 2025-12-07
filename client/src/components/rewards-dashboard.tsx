@@ -125,6 +125,19 @@ export default function RewardsDashboard() {
     refetchInterval: 5000,
   });
 
+  // Fetch payout history
+  const { data: payoutHistory } = useQuery<Array<{
+    id: string;
+    tokenAmount: string;
+    recipientAddress: string;
+    transactionHash: string | null;
+    status: string;
+    requestedAt: string;
+    confirmedAt: string | null;
+  }>>({
+    queryKey: ["/api/wallet/payouts"],
+  });
+
   // Start mining mutation
   const startMiningMutation = useMutation({
     mutationFn: async () => {
@@ -167,6 +180,37 @@ export default function RewardsDashboard() {
     onError: (error: any) => {
       toast({
         title: "Claim Failed",
+        description: error.message || "Please try again",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Payout to wallet mutation - send tokens to personal Solana wallet
+  const payoutMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/wallet/payout");
+      return await response.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/rewards/wallet"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet/payouts"] });
+      
+      if (data.transactionHash) {
+        toast({
+          title: "Payout Successful!",
+          description: `${data.amount?.toFixed(2)} JCMOVES sent to your wallet. TX: ${data.transactionHash.slice(0, 8)}...`,
+        });
+      } else if (data.pending) {
+        toast({
+          title: "Payout Requested",
+          description: data.message || "Your payout will be processed soon.",
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Payout Failed",
         description: error.message || "Please try again",
         variant: "destructive",
       });
@@ -403,8 +447,7 @@ export default function RewardsDashboard() {
       {/* Wallet Overview - Condensed to 2 Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <Card 
-          className="cursor-pointer transition-all border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80 hover:border-blue-500/50 hover:shadow-xl hover:shadow-blue-900/20 hover:scale-[1.02]"
-          onClick={() => setWalletModalOpen(true)}
+          className="transition-all border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80 hover:border-blue-500/50 hover:shadow-xl hover:shadow-blue-900/20"
           data-testid="card-wallet-balance"
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -417,10 +460,31 @@ export default function RewardsDashboard() {
             <div className="text-2xl font-black text-slate-100" data-testid="token-balance">
               {tokenBalance.toFixed(2)} {tokenInfo?.symbol || 'JCMOVES'}
             </div>
-            <p className="text-xs text-slate-400 mt-1 flex items-center">
+            <p className="text-xs text-slate-400 mt-1 flex items-center mb-3">
               Portfolio Value: <span className="font-bold text-orange-400 ml-1">${(tokenBalance * (tokenInfo?.price || 0)).toFixed(2)}</span>
-              <ChevronRight className="h-3 w-3 ml-1 text-slate-500" />
             </p>
+            <Button
+              onClick={(e) => {
+                e.stopPropagation();
+                payoutMutation.mutate();
+              }}
+              disabled={payoutMutation.isPending || tokenBalance <= 0}
+              className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white shadow-lg shadow-green-500/20"
+              size="sm"
+              data-testid="button-claim-to-wallet"
+            >
+              {payoutMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <ArrowUpRight className="mr-2 h-4 w-4" />
+                  Claim to Wallet
+                </>
+              )}
+            </Button>
           </CardContent>
         </Card>
 
@@ -905,6 +969,78 @@ export default function RewardsDashboard() {
               )}
             </CardContent>
           </Card>
+
+          {/* Wallet Payouts History */}
+          {payoutHistory && payoutHistory.length > 0 && (
+            <Card className="border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-slate-100">
+                  <div className="p-2 rounded-lg bg-blue-500/20 border border-blue-500/30">
+                    <ArrowUpRight className="h-5 w-5 text-blue-400" />
+                  </div>
+                  Wallet Payouts
+                </CardTitle>
+                <CardDescription className="text-slate-400">Tokens sent to your personal wallet</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {payoutHistory.slice(0, 10).map((payout) => (
+                    <div key={payout.id} className="flex items-center justify-between p-4 border border-slate-700/50 rounded-lg bg-slate-900/50">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg border ${
+                          payout.status === 'confirmed' 
+                            ? 'bg-green-500/20 border-green-500/30' 
+                            : payout.status === 'failed'
+                            ? 'bg-red-500/20 border-red-500/30'
+                            : 'bg-yellow-500/20 border-yellow-500/30'
+                        }`}>
+                          {payout.status === 'confirmed' ? (
+                            <CheckCircle className="h-4 w-4 text-green-400" />
+                          ) : payout.status === 'failed' ? (
+                            <Clock className="h-4 w-4 text-red-400" />
+                          ) : (
+                            <Loader2 className="h-4 w-4 text-yellow-400 animate-spin" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-medium text-slate-200">
+                            Payout to {payout.recipientAddress.slice(0, 6)}...{payout.recipientAddress.slice(-4)}
+                          </p>
+                          <p className="text-sm text-slate-500">
+                            {new Date(payout.requestedAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-blue-400">
+                          -{parseFloat(payout.tokenAmount).toFixed(2)} JCMOVES
+                        </p>
+                        {payout.transactionHash && (
+                          <a 
+                            href={`https://solscan.io/tx/${payout.transactionHash}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-blue-400 hover:underline flex items-center justify-end gap-1"
+                          >
+                            View TX <ArrowUpRight className="h-3 w-3" />
+                          </a>
+                        )}
+                        <Badge className={
+                          payout.status === 'confirmed' 
+                            ? 'bg-green-500/20 text-green-300 border border-green-500/30'
+                            : payout.status === 'failed'
+                            ? 'bg-red-500/20 text-red-300 border border-red-500/30'
+                            : 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30'
+                        }>
+                          {payout.status}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
 

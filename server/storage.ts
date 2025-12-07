@@ -1,4 +1,4 @@
-import { type User, type InsertUser, type UpsertUser, type Lead, type InsertLead, type Contact, type InsertContact, type Notification, type InsertNotification, type TreasuryAccount, type InsertTreasuryAccount, type FundingDeposit, type InsertFundingDeposit, type ReserveTransaction, type InsertReserveTransaction, type FaucetConfig, type InsertFaucetConfig, type FaucetClaim, type InsertFaucetClaim, type FaucetWallet, type InsertFaucetWallet, type FaucetRevenue, type InsertFaucetRevenue, type EmployeeStats, type InsertEmployeeStats, type AchievementType, type EmployeeAchievement, type InsertEmployeeAchievement, type PointTransaction, type InsertPointTransaction, type WeeklyLeaderboard, type DailyCheckin, type InsertDailyCheckin, type WalletAccount, type InsertWalletAccount, type SupportedCurrency, type InsertSupportedCurrency, type UserWallet, type InsertUserWallet, type TreasuryWallet, type InsertTreasuryWallet, type WalletTransaction, type InsertWalletTransaction, type ShopItem, type InsertShopItem, type Review, type InsertReview, type Testimonial, type InsertTestimonial, leads, contacts, users, notifications, walletAccounts, rewards, treasuryAccounts, fundingDeposits, reserveTransactions, priceHistory, faucetConfig, faucetClaims, faucetWallets, faucetRevenue, employeeStats, achievementTypes, employeeAchievements, pointTransactions, weeklyLeaderboards, dailyCheckins, supportedCurrencies, userWallets, treasuryWallets, walletTransactions, shopItems, cashoutRequests, fraudLogs, helpRequests, miningSessions, miningClaims, treasuryWithdrawals, reviews, testimonials } from "@shared/schema";
+import { type User, type InsertUser, type UpsertUser, type Lead, type InsertLead, type Contact, type InsertContact, type Notification, type InsertNotification, type TreasuryAccount, type InsertTreasuryAccount, type FundingDeposit, type InsertFundingDeposit, type ReserveTransaction, type InsertReserveTransaction, type FaucetConfig, type InsertFaucetConfig, type FaucetClaim, type InsertFaucetClaim, type FaucetWallet, type InsertFaucetWallet, type FaucetRevenue, type InsertFaucetRevenue, type EmployeeStats, type InsertEmployeeStats, type AchievementType, type EmployeeAchievement, type InsertEmployeeAchievement, type PointTransaction, type InsertPointTransaction, type WeeklyLeaderboard, type DailyCheckin, type InsertDailyCheckin, type WalletAccount, type InsertWalletAccount, type SupportedCurrency, type InsertSupportedCurrency, type UserWallet, type InsertUserWallet, type TreasuryWallet, type InsertTreasuryWallet, type WalletTransaction, type InsertWalletTransaction, type ShopItem, type InsertShopItem, type Review, type InsertReview, type Testimonial, type InsertTestimonial, type WalletPayout, type InsertWalletPayout, leads, contacts, users, notifications, walletAccounts, rewards, treasuryAccounts, fundingDeposits, reserveTransactions, priceHistory, faucetConfig, faucetClaims, faucetWallets, faucetRevenue, employeeStats, achievementTypes, employeeAchievements, pointTransactions, weeklyLeaderboards, dailyCheckins, supportedCurrencies, userWallets, treasuryWallets, walletTransactions, shopItems, cashoutRequests, fraudLogs, helpRequests, miningSessions, miningClaims, treasuryWithdrawals, reviews, testimonials, walletPayouts } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, isNull, and, isNotNull, sql, gt, gte, inArray } from "drizzle-orm";
 import { TREASURY_CONFIG } from "./constants";
@@ -2322,6 +2322,32 @@ export class DatabaseStorage implements IStorage {
     });
     
     return { totalCount, averageRating, platformCounts };
+  }
+
+  // Wallet Payout operations
+  async createWalletPayout(payout: InsertWalletPayout): Promise<WalletPayout> {
+    const [created] = await db.insert(walletPayouts).values(payout).returning();
+    return created;
+  }
+
+  async getWalletPayoutsByUser(userId: string): Promise<WalletPayout[]> {
+    return await db.select().from(walletPayouts).where(eq(walletPayouts.userId, userId)).orderBy(desc(walletPayouts.requestedAt));
+  }
+
+  async getPendingPayouts(): Promise<WalletPayout[]> {
+    return await db.select().from(walletPayouts).where(eq(walletPayouts.status, 'pending')).orderBy(walletPayouts.requestedAt);
+  }
+
+  async updateWalletPayout(payoutId: string, updates: Partial<WalletPayout>): Promise<WalletPayout | undefined> {
+    const [updated] = await db.update(walletPayouts).set(updates).where(eq(walletPayouts.id, payoutId)).returning();
+    return updated || undefined;
+  }
+
+  async hasPendingPayout(userId: string): Promise<boolean> {
+    const [pending] = await db.select().from(walletPayouts)
+      .where(and(eq(walletPayouts.userId, userId), eq(walletPayouts.status, 'pending')))
+      .limit(1);
+    return !!pending;
   }
 }
 

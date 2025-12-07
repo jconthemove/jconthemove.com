@@ -1076,3 +1076,32 @@ export const insertTestimonialSchema = createInsertSchema(testimonials).omit({
 
 export type Testimonial = typeof testimonials.$inferSelect;
 export type InsertTestimonial = z.infer<typeof insertTestimonialSchema>;
+
+// Wallet payouts - Track blockchain transfers of rewards to user wallets
+export const walletPayouts = pgTable("wallet_payouts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  tokenAmount: decimal("token_amount", { precision: 18, scale: 8 }).notNull(),
+  recipientAddress: text("recipient_address").notNull(),
+  transactionHash: text("transaction_hash"),
+  status: text("status").notNull().default("pending"), // 'pending', 'processing', 'confirmed', 'failed'
+  failureReason: text("failure_reason"),
+  requestedAt: timestamp("requested_at").notNull().default(sql`now()`),
+  processedAt: timestamp("processed_at"),
+  confirmedAt: timestamp("confirmed_at"),
+  metadata: jsonb("metadata"),
+}, (table) => [
+  index("idx_wallet_payouts_user").on(table.userId),
+  index("idx_wallet_payouts_status").on(table.status),
+  index("idx_wallet_payouts_tx_hash").on(table.transactionHash),
+]);
+
+export const insertWalletPayoutSchema = createInsertSchema(walletPayouts).omit({
+  id: true,
+  requestedAt: true,
+  processedAt: true,
+  confirmedAt: true,
+});
+
+export type WalletPayout = typeof walletPayouts.$inferSelect;
+export type InsertWalletPayout = z.infer<typeof insertWalletPayoutSchema>;
