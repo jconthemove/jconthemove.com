@@ -228,23 +228,11 @@ export function LeadQuoteDialog({ open, onOpenChange, lead, employees, onSave }:
                       <SelectValue placeholder="Select status" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="new" data-testid="option-status-new">
-                        New
-                      </SelectItem>
-                      <SelectItem value="contacted" data-testid="option-status-contacted">
-                        Contacted
-                      </SelectItem>
-                      <SelectItem value="quoted" data-testid="option-status-quoted">
-                        Quoted
-                      </SelectItem>
-                      <SelectItem value="confirmed" data-testid="option-status-confirmed">
-                        Confirmed
+                      <SelectItem value="quote_requested" data-testid="option-status-quote-requested">
+                        Quote Requested
                       </SelectItem>
                       <SelectItem value="available" data-testid="option-status-available">
-                        Available
-                      </SelectItem>
-                      <SelectItem value="in_progress" data-testid="option-status-in-progress">
-                        In Progress
+                        Job Available
                       </SelectItem>
                       <SelectItem value="completed" data-testid="option-status-completed">
                         Completed

@@ -470,16 +470,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         html: emailContent.html,
       });
 
-      // Send SMS notification for new quote
+      // Send SMS notification for new quote to admin
       try {
         await smsService.notifyNewQuote({
           customerName: `${lead.firstName} ${lead.lastName}`,
           serviceType: lead.serviceType,
-          phone: lead.phone,
-          moveDate: lead.moveDate
+          phone: lead.phone || undefined,
+          moveDate: lead.moveDate || undefined
         });
       } catch (smsError) {
-        console.error("SMS notification failed:", smsError);
+        console.error("Admin SMS notification failed:", smsError);
+      }
+      
+      // Send SMS confirmation to customer
+      if (lead.phone) {
+        try {
+          await smsService.sendSMS(
+            lead.phone,
+            `📝 JC ON THE MOVE\n\nThank you ${lead.firstName}! We received your ${lead.serviceType} quote request.\n\nWe'll review your request and get back to you soon with a quote!\n\nQuestions? Call us anytime.`
+          );
+        } catch (customerSmsError) {
+          console.error("Customer SMS notification failed:", customerSmsError);
+        }
       }
 
       res.json({ success: true, leadId: lead.id });
@@ -1550,7 +1562,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const { status } = req.body;
       
-      if (!status || !["new", "contacted", "quoted", "confirmed", "available", "accepted"].includes(status)) {
+      if (!status || !["quote_requested", "available", "completed"].includes(status)) {
         return res.status(400).json({ error: "Invalid status" });
       }
 
@@ -1559,11 +1571,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Lead not found" });
       }
 
-      // Send notifications for important status changes
+      // Send SMS notifications for status changes
       try {
         const { notificationService } = await import("./services/notification");
         
-        // Notify when job becomes available for assignment
+        // Notify when job becomes available
         if (status === 'available') {
           await notificationService.notifyAllEmployees(
             'New Job Available',
@@ -1571,17 +1583,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
             { jobId: updatedLead.id, type: 'job_available' }
           );
           
-          // Send SMS to admin about job availability
+          // Send SMS to all employees with phone numbers
           try {
-            await smsService.sendSMS(
-              process.env.ADMIN_PHONE_NUMBER || '',
-              `🚚 JOB AVAILABLE\n\n${updatedLead.serviceType} job for ${updatedLead.firstName} ${updatedLead.lastName} is now available for employees to claim.`
-            );
-          } catch (e) { /* SMS optional */ }
+            const allUsers = await storage.getAllUsers();
+            const employees = allUsers.filter(u => u.role === 'employee' && u.status === 'active' && u.phoneNumber);
+            for (const emp of employees) {
+              if (emp.phoneNumber) {
+                await smsService.notifyJobAvailable(emp.phoneNumber, {
+                  customerName: `${updatedLead.firstName} ${updatedLead.lastName}`,
+                  serviceType: updatedLead.serviceType,
+                  moveDate: updatedLead.confirmedDate || updatedLead.moveDate || undefined,
+                  tokensReward: updatedLead.tokenAllocation ? parseFloat(updatedLead.tokenAllocation) : undefined
+                });
+              }
+            }
+          } catch (e) { console.error('SMS to employees failed:', e); }
+          
+          // Send SMS to customer confirming job availability
+          if (updatedLead.phone) {
+            try {
+              await smsService.sendSMS(
+                updatedLead.phone,
+                `✅ JC ON THE MOVE\n\nGreat news! Your ${updatedLead.serviceType} job has been confirmed and is now available for scheduling. We'll be in touch soon!\n\nQuestions? Call us anytime.`
+              );
+            } catch (e) { console.error('Customer SMS failed:', e); }
+          }
         }
         
         // Notify when job is completed
         if (status === 'completed') {
+          // Send SMS to admin
           try {
             const assignedUser = updatedLead.assignedToUserId 
               ? await storage.getUser(updatedLead.assignedToUserId)
@@ -1591,11 +1622,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
               serviceType: updatedLead.serviceType,
               completedBy: assignedUser ? `${assignedUser.firstName} ${assignedUser.lastName}` : undefined
             });
-          } catch (e) { /* SMS optional */ }
+          } catch (e) { console.error('Admin SMS failed:', e); }
+          
+          // Send SMS to customer thanking them
+          if (updatedLead.phone) {
+            try {
+              await smsService.sendSMS(
+                updatedLead.phone,
+                `🎉 JC ON THE MOVE\n\nThank you for choosing us! Your ${updatedLead.serviceType} job has been completed.\n\nWe'd love your feedback! Please leave us a review.\n\nQuestions? Call anytime!`
+              );
+            } catch (e) { console.error('Customer SMS failed:', e); }
+          }
         }
         
         // Notify assigned employee about status changes
-        if (updatedLead.assignedToUserId && ['confirmed', 'in_progress', 'completed'].includes(status)) {
+        if (updatedLead.assignedToUserId && ['available', 'completed'].includes(status)) {
           await notificationService.notifyJobStatusChange(
             updatedLead.assignedToUserId,
             updatedLead.id,

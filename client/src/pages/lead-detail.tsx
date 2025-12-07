@@ -253,21 +253,17 @@ export default function LeadDetailPage() {
     }
   };
 
-  // 5-step workflow system
+  // 3-step workflow system
   const workflow = [
-    { step: 1, name: "Quote", status: ["new", "contacted", "quoted"] },
-    { step: 2, name: "Assign & Price", status: ["quoted", "confirmed"] },
-    { step: 3, name: "Day Before Reminder", status: ["confirmed"] },
-    { step: 4, name: "Check In", status: ["confirmed", "in-progress"] },
-    { step: 5, name: "Complete & Review", status: ["in-progress", "completed"] }
+    { step: 1, name: "Quote Requested", status: ["quote_requested"] },
+    { step: 2, name: "Job Available", status: ["available"] },
+    { step: 3, name: "Completed", status: ["completed"] }
   ];
 
   const getCurrentStep = () => {
     if (!lead) return 1;
-    if (lead.status === "completed") return 5;
-    if (lead.status === "in-progress") return 4;
-    if (lead.status === "confirmed" && lead.basePrice) return 3;
-    if (lead.basePrice && lead.crewSize) return 2;
+    if (lead.status === "completed") return 3;
+    if (lead.status === "available") return 2;
     return 1;
   };
 
@@ -280,21 +276,13 @@ export default function LeadDetailPage() {
 
       switch (targetStep) {
         case 2:
-          newStatus = "quoted";
-          break;
-        case 3:
-          newStatus = "confirmed";
-          // Persist token allocation when confirming assignment
+          newStatus = "available";
+          // Persist token allocation when making job available
           if (tokenAllocation) {
             updateData.tokenAllocation = parseFloat(tokenAllocation);
           }
           break;
-        case 4:
-          newStatus = "in-progress";
-          // Record check-in timestamp for bonus calculation
-          updateData.checkedInAt = new Date().toISOString();
-          break;
-        case 5:
+        case 3:
           newStatus = "completed";
           // Record completion timestamp
           updateData.completedAt = new Date().toISOString();
@@ -461,29 +449,10 @@ export default function LeadDetailPage() {
                   <div className="space-y-3">
                     <h4 className="font-semibold flex items-center gap-2">
                       <Circle className="h-4 w-4 text-primary" />
-                      Step 1: Create Quote
+                      Step 1: Quote Requested
                     </h4>
                     <p className="text-sm text-muted-foreground">
-                      Review customer details and create a quote with pricing information.
-                    </p>
-                    <Button 
-                      onClick={() => setIsEditing(true)} 
-                      disabled={!lead}
-                      data-testid="button-start-quote"
-                    >
-                      Start Quote
-                    </Button>
-                  </div>
-                )}
-
-                {currentStep === 2 && (
-                  <div className="space-y-3">
-                    <h4 className="font-semibold flex items-center gap-2">
-                      <Circle className="h-4 w-4 text-primary" />
-                      Step 2: Assign Crew, Price & Tokens
-                    </h4>
-                    <p className="text-sm text-muted-foreground">
-                      Set the crew size, final price, and JCMOVES token allocation for this job.
+                      Customer has requested a quote. Review details and set pricing.
                     </p>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                       <div>
@@ -499,11 +468,35 @@ export default function LeadDetailPage() {
                       </div>
                     </div>
                     <Button 
-                      onClick={() => advanceToStep.mutate(3)}
-                      disabled={!lead?.basePrice || !lead?.crewSize}
-                      data-testid="button-confirm-assignment"
+                      onClick={() => advanceToStep.mutate(2)} 
+                      disabled={!lead?.basePrice}
+                      data-testid="button-make-available"
                     >
-                      Confirm Assignment
+                      Make Job Available
+                    </Button>
+                  </div>
+                )}
+
+                {currentStep === 2 && (
+                  <div className="space-y-3">
+                    <h4 className="font-semibold flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-primary" />
+                      Step 2: Job Available
+                    </h4>
+                    <p className="text-sm text-muted-foreground">
+                      Job is available for employees to accept. Mark complete when finished.
+                    </p>
+                    <div className="p-3 bg-primary/10 rounded-lg">
+                      <p className="text-sm font-semibold text-primary">
+                        Token Reward: {lead?.tokenAllocation || 0} JCMOVES
+                      </p>
+                    </div>
+                    <Button 
+                      onClick={() => advanceToStep.mutate(3)}
+                      disabled={advanceToStep.isPending}
+                      data-testid="button-mark-complete"
+                    >
+                      {advanceToStep.isPending ? "Completing..." : "Mark as Complete"}
                     </Button>
                   </div>
                 )}
@@ -511,80 +504,11 @@ export default function LeadDetailPage() {
                 {currentStep === 3 && (
                   <div className="space-y-3">
                     <h4 className="font-semibold flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-primary" />
-                      Step 3: Day-Before Reminder
-                    </h4>
-                    <p className="text-sm text-muted-foreground">
-                      Send a reminder to the customer one day before the scheduled move.
-                    </p>
-                    <div className="flex gap-2">
-                      <Button 
-                        onClick={() => sendReminder.mutate()}
-                        disabled={sendReminder.isPending}
-                        variant="outline"
-                        data-testid="button-send-reminder"
-                      >
-                        {sendReminder.isPending ? "Sending..." : "Send Reminder"}
-                      </Button>
-                      <Button 
-                        onClick={() => advanceToStep.mutate(4)}
-                        data-testid="button-skip-to-checkin"
-                      >
-                        Continue to Check-In
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {currentStep === 4 && (
-                  <div className="space-y-3">
-                    <h4 className="font-semibold flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-primary" />
-                      Step 4: Check In & Collect Bonus
-                    </h4>
-                    <p className="text-sm text-muted-foreground">
-                      Check in when you arrive at the job site. Arrive early or on-time to earn your bonus!
-                    </p>
-                    <div className="p-3 bg-primary/10 rounded-lg">
-                      <p className="text-sm font-semibold text-primary">
-                        🎁 On-Time Bonus: +20% ({potentialEarnings.withOnTime.tokens} JCMOVES)
-                      </p>
-                    </div>
-                    {lead?.status !== "in-progress" ? (
-                      <Button 
-                        onClick={() => advanceToStep.mutate(4)}
-                        disabled={advanceToStep.isPending}
-                        data-testid="button-check-in"
-                      >
-                        {advanceToStep.isPending ? "Checking In..." : "Check In Now"}
-                      </Button>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-900 rounded-lg">
-                          <p className="text-sm font-semibold text-green-800 dark:text-green-200">
-                            ✅ Checked In! Job is in progress.
-                          </p>
-                        </div>
-                        <Button 
-                          onClick={() => advanceToStep.mutate(5)}
-                          disabled={advanceToStep.isPending}
-                          data-testid="button-mark-complete"
-                        >
-                          Mark as Complete
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {currentStep === 5 && (
-                  <div className="space-y-3">
-                    <h4 className="font-semibold flex items-center gap-2">
                       <Star className="h-4 w-4 text-primary" />
-                      Step 5: Complete & Request Review
+                      Step 3: Completed
                     </h4>
                     <p className="text-sm text-muted-foreground">
-                      Job complete! Request a review from the customer to earn your review bonus.
+                      Job complete! Request a review from the customer.
                     </p>
                     <div className="p-3 bg-primary/10 rounded-lg">
                       <p className="text-sm font-semibold text-primary">
