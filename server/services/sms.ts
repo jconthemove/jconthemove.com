@@ -53,6 +53,20 @@ export interface SMSResult {
   error?: string;
 }
 
+function formatPhoneNumber(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.startsWith('1') && digits.length === 11) {
+    return '+' + digits;
+  }
+  if (digits.length === 10) {
+    return '+1' + digits;
+  }
+  if (phone.startsWith('+')) {
+    return phone;
+  }
+  return '+1' + digits;
+}
+
 const ADMIN_PHONE = process.env.ADMIN_PHONE_NUMBER;
 
 export class SMSService {
@@ -81,10 +95,11 @@ export class SMSService {
         return { success: false, error: 'No Twilio phone number configured' };
       }
 
+      const formattedTo = formatPhoneNumber(to);
       const result = await client.messages.create({
         body: message,
         from: fromNumber,
-        to: to
+        to: formattedTo
       });
 
       console.log(`📱 SMS sent to ${to}: ${result.sid}`);
