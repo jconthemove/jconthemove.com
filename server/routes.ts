@@ -2070,52 +2070,39 @@ Thank you for your business!
       if (newStatus && newStatus !== previousStatus) {
         console.log(`📱 Status changed from ${previousStatus} to ${newStatus} - sending SMS notifications`);
         
-        try {
-          const { notificationService } = await import("./services/notification");
-          
-          // Notify when job becomes available
-          if (newStatus === 'available') {
-            await notificationService.notifyAllEmployees(
-              'New Job Available',
-              `${updatedLead.serviceType} job available for ${updatedLead.firstName} ${updatedLead.lastName}`,
-              { jobId: updatedLead.id, type: 'job_available' }
-            );
-            
-            // Send SMS to all employees (JC Crew) with phone numbers
-            try {
-              const allUsers = await storage.getAllUsers();
-              const employees = allUsers.filter(u => u.role === 'employee' && u.status === 'active' && u.phoneNumber);
-              console.log(`📱 Sending SMS to ${employees.length} JC Crew members`);
-              for (const emp of employees) {
-                if (emp.phoneNumber) {
-                  await smsService.notifyJobAvailable(emp.phoneNumber, {
-                    customerName: `${updatedLead.firstName} ${updatedLead.lastName}`,
-                    serviceType: updatedLead.serviceType,
-                    moveDate: updatedLead.confirmedDate || updatedLead.moveDate || undefined,
-                    tokensReward: updatedLead.tokenAllocation ? parseFloat(updatedLead.tokenAllocation) : undefined
-                  });
-                  console.log(`✅ SMS sent to JC Crew: ${emp.firstName} ${emp.lastName}`);
-                }
+        // Notify when job becomes available - send SMS to JC Crew
+        if (newStatus === 'available') {
+          try {
+            const allUsers = await storage.getAllUsers();
+            const employees = allUsers.filter(u => u.role === 'employee' && u.status === 'active' && u.phoneNumber);
+            console.log(`📱 Sending SMS to ${employees.length} JC Crew members`);
+            for (const emp of employees) {
+              if (emp.phoneNumber) {
+                await smsService.notifyJobAvailable(emp.phoneNumber, {
+                  customerName: `${updatedLead.firstName} ${updatedLead.lastName}`,
+                  serviceType: updatedLead.serviceType,
+                  moveDate: updatedLead.confirmedDate || updatedLead.moveDate || undefined,
+                  tokensReward: updatedLead.tokenAllocation ? parseFloat(updatedLead.tokenAllocation) : undefined
+                });
+                console.log(`✅ SMS sent to JC Crew: ${emp.firstName} ${emp.lastName}`);
               }
-            } catch (e) { console.error('SMS to JC Crew failed:', e); }
-          }
-          
-          // Notify admin when job is completed
-          if (newStatus === 'completed') {
-            try {
-              const assignedUser = updatedLead.assignedToUserId 
-                ? await storage.getUser(updatedLead.assignedToUserId)
-                : null;
-              await smsService.notifyJobCompleted({
-                customerName: `${updatedLead.firstName} ${updatedLead.lastName}`,
-                serviceType: updatedLead.serviceType,
-                completedBy: assignedUser ? `${assignedUser.firstName} ${assignedUser.lastName}` : undefined
-              });
-              console.log(`✅ SMS sent to admin for job completion`);
-            } catch (e) { console.error('Admin SMS failed:', e); }
-          }
-        } catch (notificationError) {
-          console.error("Error sending status change notifications:", notificationError);
+            }
+          } catch (e) { console.error('SMS to JC Crew failed:', e); }
+        }
+        
+        // Notify admin when job is completed
+        if (newStatus === 'completed') {
+          try {
+            const assignedUser = updatedLead.assignedToUserId 
+              ? await storage.getUser(updatedLead.assignedToUserId)
+              : null;
+            await smsService.notifyJobCompleted({
+              customerName: `${updatedLead.firstName} ${updatedLead.lastName}`,
+              serviceType: updatedLead.serviceType,
+              completedBy: assignedUser ? `${assignedUser.firstName} ${assignedUser.lastName}` : undefined
+            });
+            console.log(`✅ SMS sent to admin for job completion`);
+          } catch (e) { console.error('Admin SMS failed:', e); }
         }
       }
       
