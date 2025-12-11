@@ -1615,7 +1615,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Send SMS to all employees with phone numbers
           try {
             const allUsers = await storage.getAllUsers();
-            const employees = allUsers.filter(u => u.role === 'employee' && u.status === 'active' && u.phoneNumber);
+            const employees = allUsers.filter(u => u.role === 'employee' && (u.status === 'active' || u.status === 'approved') && u.phoneNumber);
             for (const emp of employees) {
               if (emp.phoneNumber) {
                 await smsService.notifyJobAvailable(emp.phoneNumber, {
@@ -2074,7 +2074,7 @@ Thank you for your business!
         if (newStatus === 'available') {
           try {
             const allUsers = await storage.getAllUsers();
-            const employees = allUsers.filter(u => u.role === 'employee' && u.status === 'active' && u.phoneNumber);
+            const employees = allUsers.filter(u => u.role === 'employee' && (u.status === 'active' || u.status === 'approved') && u.phoneNumber);
             console.log(`📱 Sending SMS to ${employees.length} JC Crew members`);
             for (const emp of employees) {
               if (emp.phoneNumber) {
