@@ -1447,6 +1447,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         html: `${emailContent.html}<p><strong>Created by Employee ID:</strong> ${employeeId}</p>`,
       });
 
+      // Send SMS notification to admin for new lead
+      try {
+        const creator = await storage.getUser(employeeId);
+        const creatorName = creator ? `${creator.firstName} ${creator.lastName}` : 'Unknown Employee';
+        
+        await smsService.notifyNewLead({
+          customerName: `${lead.firstName} ${lead.lastName}`,
+          serviceType: lead.serviceType,
+          phone: lead.phone || undefined,
+          createdBy: creatorName
+        });
+        console.log(`📱 SMS sent to admin for new lead created by ${creatorName}`);
+      } catch (smsError) {
+        console.error('SMS notification failed:', smsError);
+      }
+
       res.json({ success: true, leadId: lead.id, message: "Job created! You'll earn rewards when it's confirmed and completed." });
     } catch (error: any) {
       console.error("❌ Error creating employee lead:", error);

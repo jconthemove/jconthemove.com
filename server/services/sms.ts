@@ -138,6 +138,22 @@ export class SMSService {
     return this.sendSMS(employeePhone, message);
   }
 
+  async notifyNewLead(leadData: {
+    customerName: string;
+    serviceType: string;
+    phone?: string;
+    createdBy?: string;
+  }): Promise<SMSResult> {
+    if (!ADMIN_PHONE) {
+      console.warn('ADMIN_PHONE_NUMBER not set, skipping SMS notification');
+      return { success: false, error: 'Admin phone number not configured' };
+    }
+
+    const message = `📋 NEW LEAD CREATED\n\nCustomer: ${leadData.customerName}\nService: ${leadData.serviceType}\nPhone: ${leadData.phone || 'Not provided'}${leadData.createdBy ? `\nCreated by: ${leadData.createdBy}` : ''}\n\nCheck the dashboard to review.`;
+
+    return this.sendSMS(ADMIN_PHONE, message);
+  }
+
   isAvailable(): boolean {
     return this.initialized && !this.initError;
   }
