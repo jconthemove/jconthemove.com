@@ -97,7 +97,7 @@ export class SolanaTransferService {
     const rpcUrl = isValidUrl ? envRpcUrl : 'https://api.mainnet-beta.solana.com';
     
     this.connection = new Connection(rpcUrl, 'confirmed');
-    this.tokenMintAddress = process.env.MOONSHOT_TOKEN_ADDRESS || 'AY9NPebnvjcKSoUteYwNER3JHiJNPh6ptKmC8E4VGrxp';
+    this.tokenMintAddress = process.env.MOONSHOT_TOKEN_ADDRESS || 'BHZW4jds7NSe5Fqvw9Z4pvt423EJSx63k8MT11F2moon';
     
     console.log('🔗 SolanaTransferService initialized');
     console.log(`📍 RPC: ${rpcUrl}`);

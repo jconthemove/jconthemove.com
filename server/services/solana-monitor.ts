@@ -2,6 +2,7 @@ import { Connection, PublicKey, ParsedTransactionWithMeta } from '@solana/web3.j
 import { storage } from '../storage';
 import { treasuryService } from './treasury';
 import { moonshotService } from './moonshot';
+import { treasuryKeyManager } from './solana-transfer';
 
 /**
  * Solana Blockchain Transaction Monitor
@@ -28,36 +29,38 @@ export class SolanaMonitor {
     }
     
     this.connection = new Connection(rpcUrl, 'confirmed');
-    this.jcmovesTokenAddress = process.env.MOONSHOT_TOKEN_ADDRESS || 'AY9NPebnvjcKSoUteYwNER3JHiJNPh6ptKmC8E4VGrxp';
+    // Use consistent token address - JCMOVES on Moonshot
+    this.jcmovesTokenAddress = process.env.MOONSHOT_TOKEN_ADDRESS || 'BHZW4jds7NSe5Fqvw9Z4pvt423EJSx63k8MT11F2moon';
   }
 
   /**
-   * Initialize treasury wallet address from database
+   * Initialize treasury wallet address from TreasuryKeyManager (private key)
    */
   async initializeTreasuryAddress(): Promise<void> {
     try {
-      console.log('🔍 Initializing treasury address...');
+      console.log('🔍 Initializing treasury address from KeyManager...');
+      
+      // First try to get address from TreasuryKeyManager (derived from private key)
+      const keyManagerAddress = treasuryKeyManager.getAddress();
+      if (keyManagerAddress) {
+        this.treasuryWalletAddress = keyManagerAddress;
+        console.log(`✅ Treasury wallet initialized from KeyManager: ${this.treasuryWalletAddress}`);
+        return;
+      }
+      
+      // Fallback to database if KeyManager not ready
+      console.log('⚠️ KeyManager not ready, falling back to database...');
       const treasuryWallets = await storage.getTreasuryWallets('admin');
       console.log(`📊 Found ${treasuryWallets.length} treasury wallet(s) with admin scope`);
-      
-      if (treasuryWallets.length > 0) {
-        console.log('📋 Treasury wallets:', treasuryWallets.map(w => ({ address: w.walletAddress, purpose: w.purpose })));
-      }
       
       const mainTreasury = treasuryWallets.find(w => w.purpose === 'treasury');
       
       if (mainTreasury) {
         this.treasuryWalletAddress = mainTreasury.walletAddress;
-        console.log(`✅ Treasury wallet initialized: ${this.treasuryWalletAddress}`);
+        console.log(`✅ Treasury wallet initialized from DB: ${this.treasuryWalletAddress}`);
       } else {
-        console.warn('⚠️ No treasury wallet found with purpose="treasury"');
-        console.warn('⚠️ Available wallets:', treasuryWallets.map(w => w.purpose));
-        
         // Try without role scope as fallback
-        console.log('🔍 Trying to find treasury wallet without role scope filter...');
         const allTreasuryWallets = await storage.getTreasuryWallets();
-        console.log(`📊 Found ${allTreasuryWallets.length} total treasury wallet(s)`);
-        
         const fallbackTreasury = allTreasuryWallets.find(w => w.purpose === 'treasury');
         if (fallbackTreasury) {
           this.treasuryWalletAddress = fallbackTreasury.walletAddress;
