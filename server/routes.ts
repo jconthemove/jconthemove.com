@@ -1999,6 +1999,11 @@ Thank you for your business!
       const { id } = req.params;
       const quoteData = req.body;
       
+      // Get the current lead to check for status change
+      const currentLead = await storage.getLead(id);
+      const previousStatus = currentLead?.status;
+      const newStatus = quoteData.status;
+      
       // Calculate special items fees based on weight ($200 base + $150 per 100lbs up to 1000lbs)
       const calculateHeavyItemFee = (weight: number | null | undefined): number => {
         if (!weight || weight <= 0) return 0;
@@ -2030,6 +2035,82 @@ Thank you for your business!
       
       if (!updatedLead) {
         return res.status(404).json({ error: "Lead not found" });
+      }
+      
+      // Send SMS notifications if status changed
+      if (newStatus && newStatus !== previousStatus) {
+        console.log(`📱 Status changed from ${previousStatus} to ${newStatus} - sending SMS notifications`);
+        
+        try {
+          const { notificationService } = await import("./services/notification");
+          
+          // Notify when job becomes available
+          if (newStatus === 'available') {
+            await notificationService.notifyAllEmployees(
+              'New Job Available',
+              `${updatedLead.serviceType} job available for ${updatedLead.firstName} ${updatedLead.lastName}`,
+              { jobId: updatedLead.id, type: 'job_available' }
+            );
+            
+            // Send SMS to all employees with phone numbers
+            try {
+              const allUsers = await storage.getAllUsers();
+              const employees = allUsers.filter(u => u.role === 'employee' && u.status === 'active' && u.phoneNumber);
+              console.log(`📱 Sending SMS to ${employees.length} employees`);
+              for (const emp of employees) {
+                if (emp.phoneNumber) {
+                  await smsService.notifyJobAvailable(emp.phoneNumber, {
+                    customerName: `${updatedLead.firstName} ${updatedLead.lastName}`,
+                    serviceType: updatedLead.serviceType,
+                    moveDate: updatedLead.confirmedDate || updatedLead.moveDate || undefined,
+                    tokensReward: updatedLead.tokenAllocation ? parseFloat(updatedLead.tokenAllocation) : undefined
+                  });
+                  console.log(`✅ SMS sent to employee: ${emp.firstName} ${emp.lastName}`);
+                }
+              }
+            } catch (e) { console.error('SMS to employees failed:', e); }
+            
+            // Send SMS to customer confirming job availability
+            if (updatedLead.phone) {
+              try {
+                await smsService.sendSMS(
+                  updatedLead.phone,
+                  `✅ JC ON THE MOVE\n\nGreat news! Your ${updatedLead.serviceType} job has been confirmed and is now available for scheduling. We'll be in touch soon!\n\nQuestions? Call us anytime.`
+                );
+                console.log(`✅ SMS sent to customer: ${updatedLead.phone}`);
+              } catch (e) { console.error('Customer SMS failed:', e); }
+            }
+          }
+          
+          // Notify when job is completed
+          if (newStatus === 'completed') {
+            // Send SMS to admin
+            try {
+              const assignedUser = updatedLead.assignedToUserId 
+                ? await storage.getUser(updatedLead.assignedToUserId)
+                : null;
+              await smsService.notifyJobCompleted({
+                customerName: `${updatedLead.firstName} ${updatedLead.lastName}`,
+                serviceType: updatedLead.serviceType,
+                completedBy: assignedUser ? `${assignedUser.firstName} ${assignedUser.lastName}` : undefined
+              });
+              console.log(`✅ SMS sent to admin for job completion`);
+            } catch (e) { console.error('Admin SMS failed:', e); }
+            
+            // Send SMS to customer thanking them
+            if (updatedLead.phone) {
+              try {
+                await smsService.sendSMS(
+                  updatedLead.phone,
+                  `🎉 JC ON THE MOVE\n\nThank you for choosing us! Your ${updatedLead.serviceType} job has been completed.\n\nWe'd love your feedback! Please leave us a review.\n\nQuestions? Call anytime!`
+                );
+                console.log(`✅ Thank you SMS sent to customer: ${updatedLead.phone}`);
+              } catch (e) { console.error('Customer SMS failed:', e); }
+            }
+          }
+        } catch (notificationError) {
+          console.error("Error sending status change notifications:", notificationError);
+        }
       }
       
       res.json(updatedLead);
