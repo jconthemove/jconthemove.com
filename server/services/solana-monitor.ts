@@ -380,6 +380,7 @@ export class SolanaMonitor {
       await this.initializeTreasuryAddress();
       
       if (!this.treasuryWalletAddress) {
+        console.log('❌ Treasury wallet address not found');
         return {
           success: false,
           balance: 0,
@@ -388,15 +389,46 @@ export class SolanaMonitor {
         };
       }
 
+      console.log(`🔍 Fetching balance for wallet: ${this.treasuryWalletAddress}`);
+      console.log(`🪙 Token mint: ${this.jcmovesTokenAddress}`);
+      
       const publicKey = new PublicKey(this.treasuryWalletAddress);
       const tokenMint = new PublicKey(this.jcmovesTokenAddress);
 
       // Get all token accounts for this wallet
+      console.log('📡 Querying Solana RPC for token accounts...');
       const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(publicKey, {
         mint: tokenMint
       });
 
+      console.log(`📊 Found ${tokenAccounts.value.length} token account(s)`);
+
       if (tokenAccounts.value.length === 0) {
+        // Try alternative: get associated token address directly
+        console.log('⚠️ No token accounts found via getParsedTokenAccountsByOwner, trying ATA...');
+        try {
+          const { getAssociatedTokenAddress } = await import('@solana/spl-token');
+          const ata = await getAssociatedTokenAddress(tokenMint, publicKey);
+          console.log(`📍 Associated Token Address: ${ata.toBase58()}`);
+          
+          try {
+            const ataInfo = await this.connection.getTokenAccountBalance(ata);
+            if (ataInfo && ataInfo.value && ataInfo.value.uiAmountString) {
+              const balance = parseFloat(ataInfo.value.uiAmountString);
+              console.log(`💰 Live blockchain balance (via ATA): ${balance.toLocaleString()} JCMOVES`);
+              return {
+                success: true,
+                balance,
+                walletAddress: this.treasuryWalletAddress
+              };
+            }
+          } catch (balanceError) {
+            console.log('⚠️ Token account balance query failed (account may not exist):', balanceError instanceof Error ? balanceError.message : 'Unknown error');
+          }
+        } catch (ataError) {
+          console.log('⚠️ ATA lookup failed:', ataError instanceof Error ? ataError.message : 'Unknown error');
+        }
+        
         return {
           success: true,
           balance: 0,
@@ -416,7 +448,7 @@ export class SolanaMonitor {
         walletAddress: this.treasuryWalletAddress
       };
     } catch (error) {
-      console.error('Error fetching live token balance:', error);
+      console.error('❌ Error fetching live token balance:', error);
       return {
         success: false,
         balance: 0,

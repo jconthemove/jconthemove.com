@@ -1,4 +1,4 @@
-import { type User, type InsertUser, type UpsertUser, type Lead, type InsertLead, type Contact, type InsertContact, type Notification, type InsertNotification, type TreasuryAccount, type InsertTreasuryAccount, type FundingDeposit, type InsertFundingDeposit, type ReserveTransaction, type InsertReserveTransaction, type FaucetConfig, type InsertFaucetConfig, type FaucetClaim, type InsertFaucetClaim, type FaucetWallet, type InsertFaucetWallet, type FaucetRevenue, type InsertFaucetRevenue, type EmployeeStats, type InsertEmployeeStats, type AchievementType, type EmployeeAchievement, type InsertEmployeeAchievement, type PointTransaction, type InsertPointTransaction, type WeeklyLeaderboard, type DailyCheckin, type InsertDailyCheckin, type WalletAccount, type InsertWalletAccount, type SupportedCurrency, type InsertSupportedCurrency, type UserWallet, type InsertUserWallet, type TreasuryWallet, type InsertTreasuryWallet, type WalletTransaction, type InsertWalletTransaction, type ShopItem, type InsertShopItem, type Review, type InsertReview, type Testimonial, type InsertTestimonial, type WalletPayout, type InsertWalletPayout, leads, contacts, users, notifications, walletAccounts, rewards, treasuryAccounts, fundingDeposits, reserveTransactions, priceHistory, faucetConfig, faucetClaims, faucetWallets, faucetRevenue, employeeStats, achievementTypes, employeeAchievements, pointTransactions, weeklyLeaderboards, dailyCheckins, supportedCurrencies, userWallets, treasuryWallets, walletTransactions, shopItems, cashoutRequests, fraudLogs, helpRequests, miningSessions, miningClaims, treasuryWithdrawals, reviews, testimonials, walletPayouts } from "@shared/schema";
+import { type User, type InsertUser, type UpsertUser, type Lead, type InsertLead, type Contact, type InsertContact, type Notification, type InsertNotification, type TreasuryAccount, type InsertTreasuryAccount, type FundingDeposit, type InsertFundingDeposit, type ReserveTransaction, type InsertReserveTransaction, type FaucetConfig, type InsertFaucetConfig, type FaucetClaim, type InsertFaucetClaim, type FaucetWallet, type InsertFaucetWallet, type FaucetRevenue, type InsertFaucetRevenue, type EmployeeStats, type InsertEmployeeStats, type AchievementType, type EmployeeAchievement, type InsertEmployeeAchievement, type PointTransaction, type InsertPointTransaction, type WeeklyLeaderboard, type DailyCheckin, type InsertDailyCheckin, type WalletAccount, type InsertWalletAccount, type SupportedCurrency, type InsertSupportedCurrency, type UserWallet, type InsertUserWallet, type TreasuryWallet, type InsertTreasuryWallet, type WalletTransaction, type InsertWalletTransaction, type ShopItem, type InsertShopItem, type Review, type InsertReview, type Testimonial, type InsertTestimonial, type WalletPayout, type InsertWalletPayout, type TokenConversion, type InsertTokenConversion, type TreasuryLimit, type InsertTreasuryLimit, leads, contacts, users, notifications, walletAccounts, rewards, treasuryAccounts, fundingDeposits, reserveTransactions, priceHistory, faucetConfig, faucetClaims, faucetWallets, faucetRevenue, employeeStats, achievementTypes, employeeAchievements, pointTransactions, weeklyLeaderboards, dailyCheckins, supportedCurrencies, userWallets, treasuryWallets, walletTransactions, shopItems, cashoutRequests, fraudLogs, helpRequests, miningSessions, miningClaims, treasuryWithdrawals, reviews, testimonials, walletPayouts, tokenConversions, treasuryLimits } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, isNull, and, isNotNull, sql, gt, gte, inArray } from "drizzle-orm";
 import { TREASURY_CONFIG } from "./constants";
@@ -174,6 +174,16 @@ export interface IStorage {
   deleteTestimonial(id: string): Promise<boolean>;
   importTestimonials(testimonials: InsertTestimonial[]): Promise<Testimonial[]>;
   getTestimonialStats(): Promise<{ totalCount: number; averageRating: number; platformCounts: Record<string, number> }>;
+  
+  // Treasury limits operations (admin configurable up to 500M JCMOVES)
+  getTreasuryLimits(): Promise<TreasuryLimit[]>;
+  getTreasuryLimit(limitType: string): Promise<TreasuryLimit | undefined>;
+  updateTreasuryLimit(limitType: string, limitValue: number, updatedBy: string, notes?: string): Promise<TreasuryLimit | undefined>;
+  
+  // Token conversions operations (JCMOVES/SOL/ETH swap tracking)
+  createTokenConversion(conversion: InsertTokenConversion): Promise<TokenConversion>;
+  getTokenConversions(userId?: string, limit?: number): Promise<TokenConversion[]>;
+  updateTokenConversionStatus(id: string, status: string, transactionHash?: string, executedAt?: Date): Promise<TokenConversion | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2348,6 +2358,69 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(walletPayouts.userId, userId), eq(walletPayouts.status, 'pending')))
       .limit(1);
     return !!pending;
+  }
+
+  // Treasury limits operations (admin configurable up to 500M JCMOVES)
+  async getTreasuryLimits(): Promise<TreasuryLimit[]> {
+    return await db.select().from(treasuryLimits).orderBy(treasuryLimits.limitType);
+  }
+
+  async getTreasuryLimit(limitType: string): Promise<TreasuryLimit | undefined> {
+    const [limit] = await db.select().from(treasuryLimits).where(eq(treasuryLimits.limitType, limitType));
+    return limit || undefined;
+  }
+
+  async updateTreasuryLimit(limitType: string, limitValue: number, updatedBy: string, notes?: string): Promise<TreasuryLimit | undefined> {
+    // Validate limit is within 500M cap
+    const maxLimit = 500000000;
+    if (limitValue > maxLimit) {
+      throw new Error(`Limit cannot exceed ${maxLimit.toLocaleString()} JCMOVES`);
+    }
+    
+    const [updated] = await db.update(treasuryLimits)
+      .set({ 
+        limitValue: limitValue.toString(),
+        updatedBy,
+        notes,
+        updatedAt: new Date()
+      })
+      .where(eq(treasuryLimits.limitType, limitType))
+      .returning();
+    return updated || undefined;
+  }
+
+  // Token conversions operations (JCMOVES/SOL/ETH swap tracking)
+  async createTokenConversion(conversion: InsertTokenConversion): Promise<TokenConversion> {
+    const [created] = await db.insert(tokenConversions).values(conversion).returning();
+    return created;
+  }
+
+  async getTokenConversions(userId?: string, limit?: number): Promise<TokenConversion[]> {
+    let query = db.select().from(tokenConversions);
+    
+    if (userId) {
+      query = query.where(eq(tokenConversions.userId, userId)) as typeof query;
+    }
+    
+    query = query.orderBy(desc(tokenConversions.createdAt)) as typeof query;
+    
+    if (limit) {
+      query = query.limit(limit) as typeof query;
+    }
+    
+    return await query;
+  }
+
+  async updateTokenConversionStatus(id: string, status: string, transactionHash?: string, executedAt?: Date): Promise<TokenConversion | undefined> {
+    const updateData: any = { status };
+    if (transactionHash) updateData.transactionHash = transactionHash;
+    if (executedAt) updateData.executedAt = executedAt;
+    
+    const [updated] = await db.update(tokenConversions)
+      .set(updateData)
+      .where(eq(tokenConversions.id, id))
+      .returning();
+    return updated || undefined;
   }
 }
 

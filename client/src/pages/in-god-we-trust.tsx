@@ -79,6 +79,11 @@ export default function InGodWeTrustPage() {
     queryKey: ["/api/treasury/wallets"],
   });
 
+  // Treasury limits (admin configurable up to 500M)
+  const { data: treasuryLimits } = useQuery<{ limits: Array<{ limitType: string; limitValue: string }> }>({
+    queryKey: ["/api/treasury/limits"],
+  });
+
   // Token transfer mutation
   const transferMutation = useMutation({
     mutationFn: async () => {
@@ -513,33 +518,45 @@ export default function InGodWeTrustPage() {
                   <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700/50">
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-sm text-slate-400">Per Transaction Limit</span>
-                      <span className="font-bold text-green-400">10,000 JCMOVES</span>
+                      <span className="font-bold text-green-400">
+                        {treasuryLimits?.limits?.find(l => l.limitType === 'per_transaction')
+                          ? parseFloat(treasuryLimits.limits.find(l => l.limitType === 'per_transaction')!.limitValue).toLocaleString()
+                          : '500,000,000'} JCMOVES
+                      </span>
                     </div>
                     <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-green-500 to-green-400 w-1/3 rounded-full"></div>
+                      <div className="h-full bg-gradient-to-r from-green-500 to-green-400 w-full rounded-full"></div>
                     </div>
-                    <p className="text-xs text-slate-500 mt-1">Max single transfer allowed</p>
+                    <p className="text-xs text-slate-500 mt-1">Admin configurable up to 500 million</p>
                   </div>
                   
                   <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700/50">
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-sm text-slate-400">Daily Limit</span>
-                      <span className="font-bold text-blue-400">100,000 JCMOVES</span>
+                      <span className="font-bold text-blue-400">
+                        {treasuryLimits?.limits?.find(l => l.limitType === 'daily')
+                          ? parseFloat(treasuryLimits.limits.find(l => l.limitType === 'daily')!.limitValue).toLocaleString()
+                          : '500,000,000'} JCMOVES
+                      </span>
                     </div>
                     <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-blue-500 to-blue-400 w-1/4 rounded-full"></div>
+                      <div className="h-full bg-gradient-to-r from-blue-500 to-blue-400 w-full rounded-full"></div>
                     </div>
-                    <p className="text-xs text-slate-500 mt-1">~25,000 used today</p>
+                    <p className="text-xs text-slate-500 mt-1">Admin configurable up to 500 million</p>
                   </div>
                   
                   <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700/50">
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-sm text-slate-400">Minimum Reserve Required</span>
-                      <span className="font-bold text-orange-400">50,000 JCMOVES</span>
+                      <span className="font-bold text-orange-400">
+                        {treasuryLimits?.limits?.find(l => l.limitType === 'minimum_reserve')
+                          ? parseFloat(treasuryLimits.limits.find(l => l.limitType === 'minimum_reserve')!.limitValue).toLocaleString()
+                          : '50,000'} JCMOVES
+                      </span>
                     </div>
                     <div className="flex items-center gap-2 mt-2">
                       <CheckCircle className="h-4 w-4 text-green-400" />
-                      <span className="text-xs text-green-400">Current balance exceeds minimum reserve</span>
+                      <span className="text-xs text-green-400">Safety reserve to maintain liquidity</span>
                     </div>
                   </div>
                 </div>

@@ -3395,6 +3395,70 @@ Thank you for your business!
     }
   });
 
+  // Treasury limits API (admin configurable up to 500M JCMOVES)
+  app.get("/api/treasury/limits", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const limits = await storage.getTreasuryLimits();
+      res.json({ limits });
+    } catch (error) {
+      console.error("Error getting treasury limits:", error);
+      res.status(500).json({ error: "Failed to get treasury limits" });
+    }
+  });
+
+  app.put("/api/treasury/limits/:limitType", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const { limitType } = req.params;
+      const { limitValue, notes } = req.body;
+      const userId = (req.session as any).userId;
+
+      // Validate limit type is one of the known types
+      const validLimitTypes = ['per_transaction', 'daily', 'minimum_reserve'];
+      if (!validLimitTypes.includes(limitType)) {
+        return res.status(400).json({ error: "Invalid limit type" });
+      }
+
+      if (typeof limitValue !== 'number' || limitValue < 0) {
+        return res.status(400).json({ error: "Invalid limit value" });
+      }
+
+      // Validate limit doesn't exceed 500M cap
+      const maxLimit = 500000000;
+      if (limitValue > maxLimit) {
+        return res.status(400).json({ error: `Limit cannot exceed ${maxLimit.toLocaleString()} JCMOVES` });
+      }
+
+      const updated = await storage.updateTreasuryLimit(limitType, limitValue, userId, notes);
+      if (!updated) {
+        return res.status(404).json({ error: "Limit type not found" });
+      }
+
+      console.log(`[TREASURY] Admin ${userId} updated ${limitType} limit to ${limitValue.toLocaleString()} JCMOVES`);
+      res.json({ success: true, limit: updated });
+    } catch (error) {
+      console.error("Error updating treasury limit:", error);
+      res.status(500).json({ error: "Failed to update treasury limit" });
+    }
+  });
+
+  // Token conversions API (JCMOVES/SOL/ETH swap tracking)
+  app.get("/api/conversions", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const user = await storage.getUser(userId);
+      
+      // Admin can see all conversions, others only their own
+      const conversions = user?.role === 'admin' 
+        ? await storage.getTokenConversions(undefined, 100)
+        : await storage.getTokenConversions(userId, 50);
+      
+      res.json({ conversions });
+    } catch (error) {
+      console.error("Error getting token conversions:", error);
+      res.status(500).json({ error: "Failed to get token conversions" });
+    }
+  });
+
   // ====================== CRYPTO PORTFOLIO MANAGEMENT API ======================
 
   // Get comprehensive crypto portfolio performance metrics
