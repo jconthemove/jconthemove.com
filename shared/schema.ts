@@ -430,6 +430,40 @@ export const treasuryWithdrawals = pgTable("treasury_withdrawals", {
   index("idx_treasury_withdrawals_signature").on(table.transactionSignature),
 ]);
 
+// Token conversions for JCMOVES/SOL/ETH swaps tracking
+export const tokenConversions = pgTable("token_conversions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  inputToken: text("input_token").notNull(), // 'JCMOVES', 'SOL', 'ETH', 'USDC', 'USDT'
+  outputToken: text("output_token").notNull(), // 'JCMOVES', 'SOL', 'ETH', 'USDC', 'USDT'
+  inputAmount: decimal("input_amount", { precision: 18, scale: 8 }).notNull(),
+  outputAmount: decimal("output_amount", { precision: 18, scale: 8 }).notNull(),
+  exchangeRate: decimal("exchange_rate", { precision: 18, scale: 12 }).notNull(), // Rate at time of swap
+  slippagePercent: decimal("slippage_percent", { precision: 5, scale: 2 }), // Actual slippage
+  transactionHash: text("transaction_hash"), // Solana transaction signature
+  status: text("status").notNull().default("pending"), // 'pending', 'completed', 'failed'
+  swapProvider: text("swap_provider").default("jupiter"), // 'jupiter', 'raydium', etc.
+  feeAmount: decimal("fee_amount", { precision: 18, scale: 8 }), // Platform fees
+  metadata: jsonb("metadata"), // Additional swap data (route info, price impact, etc.)
+  executedAt: timestamp("executed_at"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_token_conversions_user").on(table.userId),
+  index("idx_token_conversions_status").on(table.status),
+  index("idx_token_conversions_created").on(table.createdAt),
+]);
+
+// Treasury limits - admin configurable spending limits (up to 500M JCMOVES)
+export const treasuryLimits = pgTable("treasury_limits", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  limitType: text("limit_type").notNull().unique(), // 'per_transaction', 'daily', 'minimum_reserve'
+  limitValue: decimal("limit_value", { precision: 18, scale: 2 }).notNull(), // Amount in JCMOVES
+  updatedBy: varchar("updated_by").references(() => users.id),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
 // Shop items for marketplace - photos/videos stored as base64 data URLs
 export const shopMediaSchema = z.string().refine(
   (val) => val.startsWith("data:image/") || val.startsWith("data:video/"),
@@ -597,6 +631,25 @@ export type InsertReserveTransaction = z.infer<typeof insertReserveTransactionSc
 export type ReserveTransaction = typeof reserveTransactions.$inferSelect;
 export type InsertTreasuryWithdrawal = z.infer<typeof insertTreasuryWithdrawalSchema>;
 export type TreasuryWithdrawal = typeof treasuryWithdrawals.$inferSelect;
+
+// Token conversions schemas
+export const insertTokenConversionSchema = createInsertSchema(tokenConversions).omit({
+  id: true,
+  status: true,
+  executedAt: true,
+  createdAt: true,
+});
+export type InsertTokenConversion = z.infer<typeof insertTokenConversionSchema>;
+export type TokenConversion = typeof tokenConversions.$inferSelect;
+
+// Treasury limits schemas
+export const insertTreasuryLimitSchema = createInsertSchema(treasuryLimits).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertTreasuryLimit = z.infer<typeof insertTreasuryLimitSchema>;
+export type TreasuryLimit = typeof treasuryLimits.$inferSelect;
 
 // Shop system schemas
 export const insertShopItemSchema = createInsertSchema(shopItems).omit({

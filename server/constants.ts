@@ -33,10 +33,13 @@ export const TREASURY_CONFIG = {
   MIN_WITHDRAWAL_TOKENS: 100, // Minimum JCMOVES for withdrawal
   WITHDRAWAL_FEE_PERCENT: 2, // 2% fee for crypto withdrawals
   
-  // Treasury safety limits
-  MAX_TRANSFER_PER_TX: 10000, // Maximum tokens per single transfer
-  MAX_DAILY_TRANSFER: 100000, // Maximum daily transfer limit
+  // Treasury safety limits (admin configurable up to 500M)
+  MAX_TRANSFER_PER_TX: 500000000, // Maximum tokens per single transfer (500M admin limit)
+  MAX_DAILY_TRANSFER: 500000000, // Maximum daily transfer limit (500M admin limit)
   MIN_TREASURY_RESERVE: 50000, // Minimum tokens to keep in treasury
+  
+  // Admin-configurable limit caps
+  ADMIN_MAX_LIMIT_CAP: 500000000, // 500 million - maximum admin can set
 } as const;
 
 export const REWARD_TYPES = {
