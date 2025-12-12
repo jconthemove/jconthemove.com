@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Home, Building, Trash2, Send } from "lucide-react";
 
 export default function QuoteForm() {
@@ -31,6 +32,7 @@ export default function QuoteForm() {
       moveDate: "",
       propertySize: "",
       details: "",
+      smsConsent: false,
     },
   });
 
@@ -228,6 +230,26 @@ export default function QuoteForm() {
                   {...form.register("details")}
                   data-testid="textarea-details"
                 />
+              </div>
+
+              <div className="flex items-start space-x-3 p-4 bg-muted/50 rounded-lg border">
+                <Checkbox
+                  id="smsConsent"
+                  checked={form.watch("smsConsent") ?? false}
+                  onCheckedChange={(checked) => form.setValue("smsConsent", checked === true)}
+                  data-testid="checkbox-sms-consent"
+                />
+                <div className="grid gap-1.5 leading-none">
+                  <Label
+                    htmlFor="smsConsent"
+                    className="text-sm font-medium leading-none cursor-pointer"
+                  >
+                    I agree to receive text messages
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    By checking this box, you consent to receive SMS notifications about your quote and service updates from JC ON THE MOVE. Message and data rates may apply. Reply STOP to unsubscribe.
+                  </p>
+                </div>
               </div>
 
               <Button

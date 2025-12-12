@@ -482,16 +482,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("Admin SMS notification failed:", smsError);
       }
       
-      // Send SMS confirmation to customer
-      if (lead.phone) {
+      // Send SMS confirmation to customer (only if they consented)
+      if (lead.phone && lead.smsConsent) {
         try {
           await smsService.sendSMS(
             lead.phone,
             `📝 JC ON THE MOVE\n\nThank you ${lead.firstName}! We received your ${lead.serviceType} quote request.\n\nWe'll review your request and get back to you soon with a quote!\n\nQuestions? Call us anytime.`
           );
+          console.log(`📱 SMS sent to customer: ${lead.phone}`);
         } catch (customerSmsError) {
           console.error("Customer SMS notification failed:", customerSmsError);
         }
+      } else if (lead.phone && !lead.smsConsent) {
+        console.log(`📵 Customer did not consent to SMS: ${lead.phone}`);
       }
 
       res.json({ success: true, leadId: lead.id });
@@ -1463,8 +1466,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error('Admin SMS notification failed:', smsError);
       }
 
-      // Send SMS confirmation to customer
-      if (lead.phone) {
+      // Send SMS confirmation to customer (only if they consented)
+      if (lead.phone && lead.smsConsent) {
         try {
           await smsService.sendSMS(
             lead.phone,
@@ -1474,6 +1477,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } catch (customerSmsError) {
           console.error('Customer SMS notification failed:', customerSmsError);
         }
+      } else if (lead.phone && !lead.smsConsent) {
+        console.log(`📵 Customer did not consent to SMS: ${lead.phone}`);
       }
 
       res.json({ success: true, leadId: lead.id, message: "Job created! You'll earn rewards when it's confirmed and completed." });

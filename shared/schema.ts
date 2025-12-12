@@ -70,6 +70,9 @@ export const leads = pgTable("leads", {
   quoteNotes: text("quote_notes"), // Project-specific notes and updates
   lastQuoteUpdatedAt: timestamp("last_quote_updated_at"), // Track when quote was last modified
   
+  // SMS consent for customer communication
+  smsConsent: boolean("sms_consent").default(false), // Customer opted in to receive SMS notifications
+  
   // Token distribution tracking
   completionRewardedAt: timestamp("completion_rewarded_at"), // Timestamp when job completion tokens were distributed (idempotency flag)
   
