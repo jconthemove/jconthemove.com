@@ -40,7 +40,10 @@ export default function Header() {
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center">
             <Link href="/" data-testid="link-home">
-              <h1 className="text-2xl font-bold text-primary">JC ON THE MOVE</h1>
+              <div className="flex flex-col">
+                <h1 className="text-2xl font-bold text-primary">JC ON THE MOVE</h1>
+                <span className="text-xs text-muted-foreground -mt-1">Northwoods Moving</span>
+              </div>
             </Link>
           </div>
           
