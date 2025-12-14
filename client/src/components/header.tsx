@@ -41,8 +41,9 @@ export default function Header() {
           <div className="flex items-center">
             <Link href="/" data-testid="link-home">
               <div className="flex flex-col">
-                <h1 className="text-2xl font-bold text-primary">JC ON THE MOVE</h1>
+                <h1 className="text-2xl font-bold text-primary">JC ON THE MOVE LLC</h1>
                 <span className="text-xs text-muted-foreground -mt-1">Northwoods Moving</span>
+                <span className="text-[10px] text-muted-foreground/80 -mt-0.5">Serving Ironwood & Iron River, MI | Green Bay & Wausau, WI</span>
               </div>
             </Link>
           </div>
