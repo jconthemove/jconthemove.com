@@ -1161,3 +1161,39 @@ export const insertWalletPayoutSchema = createInsertSchema(walletPayouts).omit({
 
 export type WalletPayout = typeof walletPayouts.$inferSelect;
 export type InsertWalletPayout = z.infer<typeof insertWalletPayoutSchema>;
+
+// Square invoices - Track invoices created through Square API
+export const squareInvoices = pgTable("square_invoices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  leadId: varchar("lead_id").references(() => leads.id),
+  squareInvoiceId: varchar("square_invoice_id").unique(), // Square's invoice ID
+  squareOrderId: varchar("square_order_id"), // Square's order ID
+  customerId: varchar("customer_id"), // Square customer ID
+  customerEmail: text("customer_email").notNull(),
+  customerName: text("customer_name").notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(), // Invoice amount in dollars
+  currency: varchar("currency").notNull().default("USD"),
+  description: text("description"),
+  status: text("status").notNull().default("draft"), // 'draft', 'sent', 'paid', 'canceled', 'failed'
+  invoiceUrl: text("invoice_url"), // Square-hosted payment URL
+  dueDate: text("due_date"),
+  paidAt: timestamp("paid_at"),
+  sentAt: timestamp("sent_at"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_square_invoices_lead").on(table.leadId),
+  index("idx_square_invoices_status").on(table.status),
+  index("idx_square_invoices_square_id").on(table.squareInvoiceId),
+]);
+
+export const insertSquareInvoiceSchema = createInsertSchema(squareInvoices).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  paidAt: true,
+  sentAt: true,
+});
+
+export type SquareInvoice = typeof squareInvoices.$inferSelect;
+export type InsertSquareInvoice = z.infer<typeof insertSquareInvoiceSchema>;

@@ -1,4 +1,4 @@
-import { type User, type InsertUser, type UpsertUser, type Lead, type InsertLead, type Contact, type InsertContact, type Notification, type InsertNotification, type TreasuryAccount, type InsertTreasuryAccount, type FundingDeposit, type InsertFundingDeposit, type ReserveTransaction, type InsertReserveTransaction, type FaucetConfig, type InsertFaucetConfig, type FaucetClaim, type InsertFaucetClaim, type FaucetWallet, type InsertFaucetWallet, type FaucetRevenue, type InsertFaucetRevenue, type EmployeeStats, type InsertEmployeeStats, type AchievementType, type EmployeeAchievement, type InsertEmployeeAchievement, type PointTransaction, type InsertPointTransaction, type WeeklyLeaderboard, type DailyCheckin, type InsertDailyCheckin, type WalletAccount, type InsertWalletAccount, type SupportedCurrency, type InsertSupportedCurrency, type UserWallet, type InsertUserWallet, type TreasuryWallet, type InsertTreasuryWallet, type WalletTransaction, type InsertWalletTransaction, type ShopItem, type InsertShopItem, type Review, type InsertReview, type Testimonial, type InsertTestimonial, type WalletPayout, type InsertWalletPayout, type TokenConversion, type InsertTokenConversion, type TreasuryLimit, type InsertTreasuryLimit, leads, contacts, users, notifications, walletAccounts, rewards, treasuryAccounts, fundingDeposits, reserveTransactions, priceHistory, faucetConfig, faucetClaims, faucetWallets, faucetRevenue, employeeStats, achievementTypes, employeeAchievements, pointTransactions, weeklyLeaderboards, dailyCheckins, supportedCurrencies, userWallets, treasuryWallets, walletTransactions, shopItems, cashoutRequests, fraudLogs, helpRequests, miningSessions, miningClaims, treasuryWithdrawals, reviews, testimonials, walletPayouts, tokenConversions, treasuryLimits } from "@shared/schema";
+import { type User, type InsertUser, type UpsertUser, type Lead, type InsertLead, type Contact, type InsertContact, type Notification, type InsertNotification, type TreasuryAccount, type InsertTreasuryAccount, type FundingDeposit, type InsertFundingDeposit, type ReserveTransaction, type InsertReserveTransaction, type FaucetConfig, type InsertFaucetConfig, type FaucetClaim, type InsertFaucetClaim, type FaucetWallet, type InsertFaucetWallet, type FaucetRevenue, type InsertFaucetRevenue, type EmployeeStats, type InsertEmployeeStats, type AchievementType, type EmployeeAchievement, type InsertEmployeeAchievement, type PointTransaction, type InsertPointTransaction, type WeeklyLeaderboard, type DailyCheckin, type InsertDailyCheckin, type WalletAccount, type InsertWalletAccount, type SupportedCurrency, type InsertSupportedCurrency, type UserWallet, type InsertUserWallet, type TreasuryWallet, type InsertTreasuryWallet, type WalletTransaction, type InsertWalletTransaction, type ShopItem, type InsertShopItem, type Review, type InsertReview, type Testimonial, type InsertTestimonial, type WalletPayout, type InsertWalletPayout, type TokenConversion, type InsertTokenConversion, type TreasuryLimit, type InsertTreasuryLimit, type SquareInvoice, type InsertSquareInvoice, leads, contacts, users, notifications, walletAccounts, rewards, treasuryAccounts, fundingDeposits, reserveTransactions, priceHistory, faucetConfig, faucetClaims, faucetWallets, faucetRevenue, employeeStats, achievementTypes, employeeAchievements, pointTransactions, weeklyLeaderboards, dailyCheckins, supportedCurrencies, userWallets, treasuryWallets, walletTransactions, shopItems, cashoutRequests, fraudLogs, helpRequests, miningSessions, miningClaims, treasuryWithdrawals, reviews, testimonials, walletPayouts, tokenConversions, treasuryLimits, squareInvoices } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, isNull, and, isNotNull, sql, gt, gte, inArray } from "drizzle-orm";
 import { TREASURY_CONFIG } from "./constants";
@@ -184,6 +184,13 @@ export interface IStorage {
   createTokenConversion(conversion: InsertTokenConversion): Promise<TokenConversion>;
   getTokenConversions(userId?: string, limit?: number): Promise<TokenConversion[]>;
   updateTokenConversionStatus(id: string, status: string, transactionHash?: string, executedAt?: Date): Promise<TokenConversion | undefined>;
+  
+  // Square invoice operations
+  createSquareInvoice(invoice: InsertSquareInvoice): Promise<SquareInvoice>;
+  getSquareInvoices(filters?: { leadId?: string; status?: string }, limit?: number): Promise<SquareInvoice[]>;
+  getSquareInvoice(id: string): Promise<SquareInvoice | undefined>;
+  getSquareInvoiceBySquareId(squareInvoiceId: string): Promise<SquareInvoice | undefined>;
+  updateSquareInvoiceStatus(squareInvoiceId: string, status: string, paidAt?: Date): Promise<SquareInvoice | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2419,6 +2426,54 @@ export class DatabaseStorage implements IStorage {
     const [updated] = await db.update(tokenConversions)
       .set(updateData)
       .where(eq(tokenConversions.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  // Square invoice operations
+  async createSquareInvoice(invoice: InsertSquareInvoice): Promise<SquareInvoice> {
+    const [created] = await db.insert(squareInvoices).values(invoice).returning();
+    return created;
+  }
+
+  async getSquareInvoices(filters?: { leadId?: string; status?: string }, limit?: number): Promise<SquareInvoice[]> {
+    let query = db.select().from(squareInvoices);
+    
+    const conditions: any[] = [];
+    if (filters?.leadId) conditions.push(eq(squareInvoices.leadId, filters.leadId));
+    if (filters?.status) conditions.push(eq(squareInvoices.status, filters.status));
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as typeof query;
+    }
+    
+    query = query.orderBy(desc(squareInvoices.createdAt)) as typeof query;
+    
+    if (limit) {
+      query = query.limit(limit) as typeof query;
+    }
+    
+    return await query;
+  }
+
+  async getSquareInvoice(id: string): Promise<SquareInvoice | undefined> {
+    const [invoice] = await db.select().from(squareInvoices).where(eq(squareInvoices.id, id));
+    return invoice || undefined;
+  }
+
+  async getSquareInvoiceBySquareId(squareInvoiceId: string): Promise<SquareInvoice | undefined> {
+    const [invoice] = await db.select().from(squareInvoices).where(eq(squareInvoices.squareInvoiceId, squareInvoiceId));
+    return invoice || undefined;
+  }
+
+  async updateSquareInvoiceStatus(squareInvoiceId: string, status: string, paidAt?: Date): Promise<SquareInvoice | undefined> {
+    const updateData: any = { status, updatedAt: new Date() };
+    if (paidAt) updateData.paidAt = paidAt;
+    if (status === 'sent') updateData.sentAt = new Date();
+    
+    const [updated] = await db.update(squareInvoices)
+      .set(updateData)
+      .where(eq(squareInvoices.squareInvoiceId, squareInvoiceId))
       .returning();
     return updated || undefined;
   }

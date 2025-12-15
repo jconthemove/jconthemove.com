@@ -5564,6 +5564,185 @@ Thank you for your business!
     }
   });
 
+  // ===========================================
+  // SQUARE INVOICING API ROUTES
+  // ===========================================
+
+  // Create an invoice for a lead/job
+  app.post("/api/invoices/lead/:leadId", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const { leadId } = req.params;
+      const { amount, description, dueDate } = req.body;
+
+      if (!amount || amount <= 0) {
+        return res.status(400).json({ error: "Valid amount is required" });
+      }
+
+      const lead = await storage.getLead(leadId);
+      if (!lead) {
+        return res.status(404).json({ error: "Lead not found" });
+      }
+
+      const { squareInvoiceService } = await import('./services/square-invoice');
+      
+      if (!squareInvoiceService.isConfigured()) {
+        return res.status(503).json({ 
+          error: "Square is not configured. Please add SQUARE_ACCESS_TOKEN to your environment secrets." 
+        });
+      }
+
+      const result = await squareInvoiceService.createInvoiceForLead(
+        lead,
+        amount,
+        description,
+        dueDate
+      );
+
+      res.json({
+        success: true,
+        invoiceId: result.invoiceId,
+        invoiceUrl: result.invoiceUrl,
+        squareInvoiceId: result.squareInvoiceId,
+        message: "Invoice created and sent to customer"
+      });
+    } catch (error: any) {
+      console.error("Error creating invoice for lead:", error);
+      res.status(500).json({ error: error.message || "Failed to create invoice" });
+    }
+  });
+
+  // Create a standalone invoice (not linked to a lead)
+  app.post("/api/invoices", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const { email, name, phone, amount, description, dueDate } = req.body;
+
+      if (!email || !name || !amount || amount <= 0 || !description) {
+        return res.status(400).json({ error: "Email, name, amount, and description are required" });
+      }
+
+      const { squareInvoiceService } = await import('./services/square-invoice');
+      
+      if (!squareInvoiceService.isConfigured()) {
+        return res.status(503).json({ 
+          error: "Square is not configured. Please add SQUARE_ACCESS_TOKEN to your environment secrets." 
+        });
+      }
+
+      const result = await squareInvoiceService.createStandaloneInvoice(
+        email,
+        name,
+        phone,
+        amount,
+        description,
+        dueDate
+      );
+
+      res.json({
+        success: true,
+        invoiceId: result.invoiceId,
+        invoiceUrl: result.invoiceUrl,
+        squareInvoiceId: result.squareInvoiceId,
+        message: "Invoice created and sent to customer"
+      });
+    } catch (error: any) {
+      console.error("Error creating standalone invoice:", error);
+      res.status(500).json({ error: error.message || "Failed to create invoice" });
+    }
+  });
+
+  // Get all invoices (admin view)
+  app.get("/api/invoices", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const { leadId, status } = req.query;
+      const filters: any = {};
+      if (leadId) filters.leadId = leadId as string;
+      if (status) filters.status = status as string;
+      
+      const invoices = await storage.getSquareInvoices(filters, 100);
+      res.json(invoices);
+    } catch (error) {
+      console.error("Error getting invoices:", error);
+      res.status(500).json({ error: "Failed to get invoices" });
+    }
+  });
+
+  // Get invoices for a specific lead
+  app.get("/api/invoices/lead/:leadId", isAuthenticated, async (req: any, res) => {
+    try {
+      const { leadId } = req.params;
+      const invoices = await storage.getSquareInvoices({ leadId });
+      res.json(invoices);
+    } catch (error) {
+      console.error("Error getting lead invoices:", error);
+      res.status(500).json({ error: "Failed to get invoices" });
+    }
+  });
+
+  // Sync invoice status from Square
+  app.post("/api/invoices/:id/sync", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      
+      const invoice = await storage.getSquareInvoice(id);
+      if (!invoice || !invoice.squareInvoiceId) {
+        return res.status(404).json({ error: "Invoice not found" });
+      }
+
+      const { squareInvoiceService } = await import('./services/square-invoice');
+      
+      if (!squareInvoiceService.isConfigured()) {
+        return res.status(503).json({ error: "Square is not configured" });
+      }
+
+      const newStatus = await squareInvoiceService.syncInvoiceStatus(invoice.squareInvoiceId);
+      
+      res.json({ success: true, status: newStatus });
+    } catch (error: any) {
+      console.error("Error syncing invoice:", error);
+      res.status(500).json({ error: error.message || "Failed to sync invoice" });
+    }
+  });
+
+  // Cancel an invoice
+  app.post("/api/invoices/:id/cancel", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      
+      const invoice = await storage.getSquareInvoice(id);
+      if (!invoice || !invoice.squareInvoiceId) {
+        return res.status(404).json({ error: "Invoice not found" });
+      }
+
+      const { squareInvoiceService } = await import('./services/square-invoice');
+      
+      if (!squareInvoiceService.isConfigured()) {
+        return res.status(503).json({ error: "Square is not configured" });
+      }
+
+      await squareInvoiceService.cancelInvoice(invoice.squareInvoiceId);
+      
+      res.json({ success: true, message: "Invoice canceled" });
+    } catch (error: any) {
+      console.error("Error canceling invoice:", error);
+      res.status(500).json({ error: error.message || "Failed to cancel invoice" });
+    }
+  });
+
+  // Check Square configuration status
+  app.get("/api/invoices/config/status", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const { squareInvoiceService } = await import('./services/square-invoice');
+      
+      res.json({
+        configured: squareInvoiceService.isConfigured(),
+        environment: process.env.SQUARE_ENVIRONMENT || 'sandbox'
+      });
+    } catch (error) {
+      console.error("Error checking Square config:", error);
+      res.status(500).json({ error: "Failed to check configuration" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
