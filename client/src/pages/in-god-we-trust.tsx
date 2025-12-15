@@ -44,6 +44,13 @@ export default function InGodWeTrustPage() {
   const [isEditingTreasury, setIsEditingTreasury] = useState(false);
   const [editingLimit, setEditingLimit] = useState<string | null>(null);
   const [newLimitValue, setNewLimitValue] = useState("");
+  const [invoiceForm, setInvoiceForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    amount: "",
+    description: ""
+  });
 
   // Treasury stats query
   const { data: treasurySummary, refetch: refetchTreasury } = useQuery({
@@ -86,6 +93,45 @@ export default function InGodWeTrustPage() {
   // Treasury limits (admin configurable up to 500M)
   const { data: treasuryLimits, refetch: refetchLimits } = useQuery<{ limits: Array<{ limitType: string; limitValue: string }> }>({
     queryKey: ["/api/treasury/limits"],
+  });
+
+  // Square config status
+  const { data: squareConfig } = useQuery<{ configured: boolean; environment: string }>({
+    queryKey: ["/api/invoices/config/status"],
+  });
+
+  // Invoices list
+  const { data: invoices, refetch: refetchInvoices } = useQuery({
+    queryKey: ["/api/invoices"],
+  });
+
+  // Create invoice mutation
+  const createInvoiceMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/invoices", {
+        email: invoiceForm.email,
+        name: invoiceForm.name,
+        phone: invoiceForm.phone || undefined,
+        amount: parseFloat(invoiceForm.amount),
+        description: invoiceForm.description,
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      refetchInvoices();
+      setInvoiceForm({ name: "", email: "", phone: "", amount: "", description: "" });
+      toast({
+        title: "Invoice sent!",
+        description: `Invoice sent to ${invoiceForm.email}`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to create invoice",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   // Update limit mutation
@@ -292,10 +338,14 @@ export default function InGodWeTrustPage() {
         )}
 
         <Tabs defaultValue="operations" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6 bg-slate-800/50 border border-slate-700/50 p-1">
+          <TabsList className="grid w-full grid-cols-7 bg-slate-800/50 border border-slate-700/50 p-1">
             <TabsTrigger value="operations" className="data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-300" data-testid="tab-operations">
               <Activity className="h-4 w-4 mr-2" />
               Operations
+            </TabsTrigger>
+            <TabsTrigger value="invoices" className="data-[state=active]:bg-emerald-500/20 data-[state=active]:text-emerald-300" data-testid="tab-invoices">
+              <Coins className="h-4 w-4 mr-2" />
+              Invoices
             </TabsTrigger>
             <TabsTrigger value="safety" className="data-[state=active]:bg-green-500/20 data-[state=active]:text-green-300" data-testid="tab-safety">
               <Shield className="h-4 w-4 mr-2" />
@@ -518,6 +568,192 @@ export default function InGodWeTrustPage() {
                 )) || (
                   <div className="text-center py-8 text-slate-500">
                     No treasury wallets configured. Contact system administrator.
+                  </div>
+                )}
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* Invoices Tab - Square Invoicing */}
+          <TabsContent value="invoices" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Square Configuration Status */}
+              <Card className="p-6 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
+                <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-slate-100">
+                  <div className="p-2 rounded-lg bg-emerald-500/20 border border-emerald-500/30">
+                    <Coins className="h-5 w-5 text-emerald-400" />
+                  </div>
+                  Square Integration
+                </h3>
+                <div className="space-y-4">
+                  <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700/50">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-slate-400">Status</span>
+                      {squareConfig?.configured ? (
+                        <span className="flex items-center gap-2 text-emerald-400">
+                          <CheckCircle className="h-4 w-4" />
+                          Connected
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-2 text-yellow-400">
+                          <AlertTriangle className="h-4 w-4" />
+                          Not Configured
+                        </span>
+                      )}
+                    </div>
+                    {squareConfig?.configured && (
+                      <div className="mt-2 text-xs text-slate-500">
+                        Environment: {squareConfig.environment}
+                      </div>
+                    )}
+                  </div>
+                  {!squareConfig?.configured && (
+                    <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl">
+                      <p className="text-sm text-yellow-300">
+                        Add SQUARE_ACCESS_TOKEN secret to enable invoicing.
+                      </p>
+                      <p className="text-xs text-yellow-400/70 mt-1">
+                        Get your API key from developer.squareup.com
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </Card>
+
+              {/* Create Invoice Form */}
+              <Card className="p-6 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
+                <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-slate-100">
+                  <div className="p-2 rounded-lg bg-emerald-500/20 border border-emerald-500/30">
+                    <Plus className="h-5 w-5 text-emerald-400" />
+                  </div>
+                  Create Invoice
+                </h3>
+                <div className="space-y-4">
+                  <div>
+                    <Label className="text-slate-400">Customer Name</Label>
+                    <Input
+                      value={invoiceForm.name}
+                      onChange={(e) => setInvoiceForm({ ...invoiceForm, name: e.target.value })}
+                      placeholder="John Smith"
+                      className="bg-slate-900/50 border-slate-700"
+                      data-testid="input-invoice-name"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-slate-400">Email</Label>
+                    <Input
+                      type="email"
+                      value={invoiceForm.email}
+                      onChange={(e) => setInvoiceForm({ ...invoiceForm, email: e.target.value })}
+                      placeholder="customer@email.com"
+                      className="bg-slate-900/50 border-slate-700"
+                      data-testid="input-invoice-email"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-slate-400">Phone (optional)</Label>
+                    <Input
+                      value={invoiceForm.phone}
+                      onChange={(e) => setInvoiceForm({ ...invoiceForm, phone: e.target.value })}
+                      placeholder="555-123-4567"
+                      className="bg-slate-900/50 border-slate-700"
+                      data-testid="input-invoice-phone"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-slate-400">Amount ($)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={invoiceForm.amount}
+                      onChange={(e) => setInvoiceForm({ ...invoiceForm, amount: e.target.value })}
+                      placeholder="500.00"
+                      className="bg-slate-900/50 border-slate-700"
+                      data-testid="input-invoice-amount"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-slate-400">Description</Label>
+                    <Input
+                      value={invoiceForm.description}
+                      onChange={(e) => setInvoiceForm({ ...invoiceForm, description: e.target.value })}
+                      placeholder="Moving service - 2BR apartment"
+                      className="bg-slate-900/50 border-slate-700"
+                      data-testid="input-invoice-description"
+                    />
+                  </div>
+                  <Button
+                    onClick={() => createInvoiceMutation.mutate()}
+                    disabled={createInvoiceMutation.isPending || !squareConfig?.configured}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700"
+                    data-testid="button-create-invoice"
+                  >
+                    {createInvoiceMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Send className="h-4 w-4 mr-2" />
+                    )}
+                    Send Invoice
+                  </Button>
+                </div>
+              </Card>
+            </div>
+
+            {/* Recent Invoices */}
+            <Card className="p-6 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold flex items-center gap-2 text-slate-100">
+                  <History className="h-5 w-5 text-emerald-400" />
+                  Recent Invoices
+                </h3>
+                <Button
+                  onClick={() => refetchInvoices()}
+                  variant="ghost"
+                  size="sm"
+                  data-testid="button-refresh-invoices"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="space-y-3">
+                {invoices && invoices.length > 0 ? (
+                  invoices.map((invoice: any) => (
+                    <div
+                      key={invoice.id}
+                      className="p-4 bg-slate-900/50 rounded-xl border border-slate-700/50 flex justify-between items-center"
+                      data-testid={`invoice-row-${invoice.id}`}
+                    >
+                      <div>
+                        <div className="font-medium text-slate-200">{invoice.customerName}</div>
+                        <div className="text-sm text-slate-400">{invoice.customerEmail}</div>
+                        <div className="text-xs text-slate-500 mt-1">{invoice.description}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-bold text-emerald-400">${parseFloat(invoice.amount).toFixed(2)}</div>
+                        <div className={`text-xs px-2 py-1 rounded-full ${
+                          invoice.status === 'paid' ? 'bg-green-500/20 text-green-400' :
+                          invoice.status === 'sent' ? 'bg-blue-500/20 text-blue-400' :
+                          invoice.status === 'canceled' ? 'bg-red-500/20 text-red-400' :
+                          'bg-slate-500/20 text-slate-400'
+                        }`}>
+                          {invoice.status}
+                        </div>
+                        {invoice.invoiceUrl && (
+                          <a
+                            href={invoice.invoiceUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-blue-400 hover:underline mt-1 flex items-center gap-1 justify-end"
+                          >
+                            View <ExternalLink className="h-3 w-3" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-slate-500">
+                    No invoices yet. Create your first invoice above.
                   </div>
                 )}
               </div>
