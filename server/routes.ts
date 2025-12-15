@@ -5453,6 +5453,20 @@ Thank you for your business!
           });
         }
         
+        // Check treasury balance BEFORE attempting transfer
+        const treasuryBalance = await solanaTransferService.getTreasuryBalance();
+        if (treasuryBalance.tokenBalance < availableBalance) {
+          // Treasury is empty or has insufficient balance - queue as pending
+          console.log(`[PAYOUT] Treasury balance (${treasuryBalance.tokenBalance}) insufficient for payout (${availableBalance}). Queuing as pending.`);
+          return res.json({
+            success: true,
+            payout,
+            message: "Payout request queued. Your tokens have been reserved and will be sent when treasury is funded.",
+            pending: true,
+            queuedReason: "insufficient_treasury_balance"
+          });
+        }
+        
         // Execute real blockchain transfer
         const transferResult = await solanaTransferService.transferTokens({
           recipientAddress: payoutInfo.address,

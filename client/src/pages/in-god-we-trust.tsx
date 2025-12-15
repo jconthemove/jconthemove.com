@@ -29,7 +29,9 @@ import {
   Clock,
   Lock,
   Coins,
-  Plus
+  Plus,
+  Edit,
+  Save
 } from "lucide-react";
 
 export default function InGodWeTrustPage() {
@@ -40,6 +42,8 @@ export default function InGodWeTrustPage() {
   const [executeOnChain, setExecuteOnChain] = useState(false);
   const [newTreasuryAddress, setNewTreasuryAddress] = useState("");
   const [isEditingTreasury, setIsEditingTreasury] = useState(false);
+  const [editingLimit, setEditingLimit] = useState<string | null>(null);
+  const [newLimitValue, setNewLimitValue] = useState("");
 
   // Treasury stats query
   const { data: treasurySummary, refetch: refetchTreasury } = useQuery({
@@ -80,8 +84,25 @@ export default function InGodWeTrustPage() {
   });
 
   // Treasury limits (admin configurable up to 500M)
-  const { data: treasuryLimits } = useQuery<{ limits: Array<{ limitType: string; limitValue: string }> }>({
+  const { data: treasuryLimits, refetch: refetchLimits } = useQuery<{ limits: Array<{ limitType: string; limitValue: string }> }>({
     queryKey: ["/api/treasury/limits"],
+  });
+
+  // Update limit mutation
+  const updateLimitMutation = useMutation({
+    mutationFn: async ({ limitType, limitValue }: { limitType: string; limitValue: number }) => {
+      const response = await apiRequest("PUT", `/api/treasury/limits/${limitType}`, { limitValue });
+      return response.json();
+    },
+    onSuccess: () => {
+      refetchLimits();
+      setEditingLimit(null);
+      setNewLimitValue("");
+      toast({ title: "Limit updated successfully" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to update limit", description: error.message, variant: "destructive" });
+    }
   });
 
   // Token transfer mutation
@@ -515,44 +536,152 @@ export default function InGodWeTrustPage() {
                   Spending Limits
                 </h3>
                 <div className="space-y-4">
+                  {/* Per Transaction Limit */}
                   <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700/50">
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-sm text-slate-400">Per Transaction Limit</span>
-                      <span className="font-bold text-green-400">
-                        {treasuryLimits?.limits?.find(l => l.limitType === 'per_transaction')
-                          ? parseFloat(treasuryLimits.limits.find(l => l.limitType === 'per_transaction')!.limitValue).toLocaleString()
-                          : '500,000,000'} JCMOVES
-                      </span>
+                      {editingLimit === 'per_transaction' ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            value={newLimitValue}
+                            onChange={(e) => setNewLimitValue(e.target.value)}
+                            className="w-32 px-2 py-1 text-sm bg-slate-800 border border-slate-600 rounded text-white"
+                            placeholder="Amount"
+                            data-testid="input-per-transaction-limit"
+                          />
+                          <Button
+                            size="sm"
+                            onClick={() => updateLimitMutation.mutate({ limitType: 'per_transaction', limitValue: parseFloat(newLimitValue) })}
+                            disabled={updateLimitMutation.isPending}
+                            data-testid="button-save-per-transaction"
+                          >
+                            <Save className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-green-400">
+                            {treasuryLimits?.limits?.find(l => l.limitType === 'per_transaction')
+                              ? parseFloat(treasuryLimits.limits.find(l => l.limitType === 'per_transaction')!.limitValue).toLocaleString()
+                              : '500,000,000'} JCMOVES
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setEditingLimit('per_transaction');
+                              const current = treasuryLimits?.limits?.find(l => l.limitType === 'per_transaction');
+                              setNewLimitValue(current ? current.limitValue : '500000000');
+                            }}
+                            data-testid="button-edit-per-transaction"
+                          >
+                            <Edit className="h-3 w-3 text-slate-400" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                     <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
                       <div className="h-full bg-gradient-to-r from-green-500 to-green-400 w-full rounded-full"></div>
                     </div>
-                    <p className="text-xs text-slate-500 mt-1">Admin configurable up to 500 million</p>
+                    <p className="text-xs text-slate-500 mt-1">Max per withdrawal/transfer (up to 500M)</p>
                   </div>
                   
+                  {/* Daily Limit */}
                   <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700/50">
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-sm text-slate-400">Daily Limit</span>
-                      <span className="font-bold text-blue-400">
-                        {treasuryLimits?.limits?.find(l => l.limitType === 'daily')
-                          ? parseFloat(treasuryLimits.limits.find(l => l.limitType === 'daily')!.limitValue).toLocaleString()
-                          : '500,000,000'} JCMOVES
-                      </span>
+                      {editingLimit === 'daily' ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            value={newLimitValue}
+                            onChange={(e) => setNewLimitValue(e.target.value)}
+                            className="w-32 px-2 py-1 text-sm bg-slate-800 border border-slate-600 rounded text-white"
+                            placeholder="Amount"
+                            data-testid="input-daily-limit"
+                          />
+                          <Button
+                            size="sm"
+                            onClick={() => updateLimitMutation.mutate({ limitType: 'daily', limitValue: parseFloat(newLimitValue) })}
+                            disabled={updateLimitMutation.isPending}
+                            data-testid="button-save-daily"
+                          >
+                            <Save className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-blue-400">
+                            {treasuryLimits?.limits?.find(l => l.limitType === 'daily')
+                              ? parseFloat(treasuryLimits.limits.find(l => l.limitType === 'daily')!.limitValue).toLocaleString()
+                              : '500,000,000'} JCMOVES
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setEditingLimit('daily');
+                              const current = treasuryLimits?.limits?.find(l => l.limitType === 'daily');
+                              setNewLimitValue(current ? current.limitValue : '500000000');
+                            }}
+                            data-testid="button-edit-daily"
+                          >
+                            <Edit className="h-3 w-3 text-slate-400" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                     <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
                       <div className="h-full bg-gradient-to-r from-blue-500 to-blue-400 w-full rounded-full"></div>
                     </div>
-                    <p className="text-xs text-slate-500 mt-1">Admin configurable up to 500 million</p>
+                    <p className="text-xs text-slate-500 mt-1">Max total withdrawals per day (up to 500M)</p>
                   </div>
                   
+                  {/* Minimum Reserve */}
                   <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700/50">
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-sm text-slate-400">Minimum Reserve Required</span>
-                      <span className="font-bold text-orange-400">
-                        {treasuryLimits?.limits?.find(l => l.limitType === 'minimum_reserve')
-                          ? parseFloat(treasuryLimits.limits.find(l => l.limitType === 'minimum_reserve')!.limitValue).toLocaleString()
-                          : '50,000'} JCMOVES
-                      </span>
+                      {editingLimit === 'minimum_reserve' ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            value={newLimitValue}
+                            onChange={(e) => setNewLimitValue(e.target.value)}
+                            className="w-32 px-2 py-1 text-sm bg-slate-800 border border-slate-600 rounded text-white"
+                            placeholder="Amount"
+                            data-testid="input-reserve-limit"
+                          />
+                          <Button
+                            size="sm"
+                            onClick={() => updateLimitMutation.mutate({ limitType: 'minimum_reserve', limitValue: parseFloat(newLimitValue) })}
+                            disabled={updateLimitMutation.isPending}
+                            data-testid="button-save-reserve"
+                          >
+                            <Save className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-orange-400">
+                            {treasuryLimits?.limits?.find(l => l.limitType === 'minimum_reserve')
+                              ? parseFloat(treasuryLimits.limits.find(l => l.limitType === 'minimum_reserve')!.limitValue).toLocaleString()
+                              : '50,000'} JCMOVES
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setEditingLimit('minimum_reserve');
+                              const current = treasuryLimits?.limits?.find(l => l.limitType === 'minimum_reserve');
+                              setNewLimitValue(current ? current.limitValue : '50000');
+                            }}
+                            data-testid="button-edit-reserve"
+                          >
+                            <Edit className="h-3 w-3 text-slate-400" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 mt-2">
                       <CheckCircle className="h-4 w-4 text-green-400" />
