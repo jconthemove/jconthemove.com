@@ -1197,3 +1197,66 @@ export const insertSquareInvoiceSchema = createInsertSchema(squareInvoices).omit
 
 export type SquareInvoice = typeof squareInvoices.$inferSelect;
 export type InsertSquareInvoice = z.infer<typeof insertSquareInvoiceSchema>;
+
+// Transfer fees - Track platform fees collected on token transfers
+export const transferFees = pgTable("transfer_fees", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  transactionHash: text("transaction_hash").notNull(), // Token transfer tx hash
+  feeTransactionHash: text("fee_transaction_hash"), // Fee collection tx hash (if separate)
+  fromWallet: text("from_wallet").notNull(), // Treasury wallet that sent tokens
+  toWallet: text("to_wallet").notNull(), // Recipient wallet
+  tokenAmount: decimal("token_amount", { precision: 20, scale: 8 }).notNull(), // JCMOVES transferred
+  baseFee: decimal("base_fee", { precision: 20, scale: 9 }).notNull(), // Base Solana fee in SOL
+  platformFee: decimal("platform_fee", { precision: 20, scale: 9 }).notNull(), // Platform fee (2x base) in SOL
+  totalFee: decimal("total_fee", { precision: 20, scale: 9 }).notNull(), // Total fee collected
+  status: text("status").notNull().default("collected"), // 'collected', 'pooled', 'used_for_buyback'
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_transfer_fees_from").on(table.fromWallet),
+  index("idx_transfer_fees_status").on(table.status),
+  index("idx_transfer_fees_created").on(table.createdAt),
+]);
+
+export const insertTransferFeeSchema = createInsertSchema(transferFees).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type TransferFee = typeof transferFees.$inferSelect;
+export type InsertTransferFee = z.infer<typeof insertTransferFeeSchema>;
+
+// Buyback fund - Track accumulated fees for token buybacks
+export const buybackFund = pgTable("buyback_fund", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  solBalance: decimal("sol_balance", { precision: 20, scale: 9 }).notNull().default("0"), // Current SOL in fund
+  totalCollected: decimal("total_collected", { precision: 20, scale: 9 }).notNull().default("0"), // Lifetime SOL collected
+  totalUsedForBuyback: decimal("total_used_for_buyback", { precision: 20, scale: 9 }).notNull().default("0"), // SOL spent on buybacks
+  totalTokensBought: decimal("total_tokens_bought", { precision: 20, scale: 8 }).notNull().default("0"), // Total JCMOVES bought back
+  buybackCount: integer("buyback_count").notNull().default(0), // Number of buyback transactions
+  lastUpdated: timestamp("last_updated").notNull().default(sql`now()`),
+});
+
+// Buyback transactions - History of token buybacks
+export const buybackTransactions = pgTable("buyback_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  transactionHash: text("transaction_hash").notNull().unique(),
+  solSpent: decimal("sol_spent", { precision: 20, scale: 9 }).notNull(),
+  tokensBought: decimal("tokens_bought", { precision: 20, scale: 8 }).notNull(),
+  tokenPrice: decimal("token_price", { precision: 20, scale: 12 }), // Price at time of buyback
+  jupiterQuoteId: text("jupiter_quote_id"),
+  slippage: decimal("slippage", { precision: 5, scale: 2 }),
+  status: text("status").notNull().default("completed"), // 'pending', 'completed', 'failed'
+  initiatedBy: text("initiated_by"), // Admin username who triggered buyback
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_buyback_tx_status").on(table.status),
+  index("idx_buyback_tx_created").on(table.createdAt),
+]);
+
+export const insertBuybackTransactionSchema = createInsertSchema(buybackTransactions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type BuybackTransaction = typeof buybackTransactions.$inferSelect;
+export type InsertBuybackTransaction = z.infer<typeof insertBuybackTransactionSchema>;

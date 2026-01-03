@@ -19,69 +19,128 @@ export interface TransferRequest {
   memo?: string;
 }
 
+export type TreasuryWalletType = 'primary' | 'jcmoves_banks';
+
+interface WalletConfig {
+  envVar: string;
+  name: string;
+  description: string;
+}
+
+const WALLET_CONFIGS: Record<TreasuryWalletType, WalletConfig> = {
+  primary: {
+    envVar: 'TREASURY_WALLET_PRIVATE_KEY',
+    name: 'Primary Treasury',
+    description: 'Original treasury wallet for token operations'
+  },
+  jcmoves_banks: {
+    envVar: 'JCMOVES_BANKS_PRIVATE_KEY',
+    name: 'JC MOVES BANKS',
+    description: 'Main operations wallet for JC MOVES'
+  }
+};
+
 class TreasuryKeyManager {
-  private keypair: Keypair | null = null;
+  private keypairs: Map<TreasuryWalletType, Keypair> = new Map();
+  private activeWallet: TreasuryWalletType = 'jcmoves_banks';
   private initialized: boolean = false;
-  private initError: string | null = null;
+  private initErrors: Map<TreasuryWalletType, string> = new Map();
 
   initialize(): boolean {
     if (this.initialized) {
-      return this.keypair !== null;
+      return this.keypairs.size > 0;
     }
 
     this.initialized = true;
     
-    const privateKeyBase58 = process.env.TREASURY_WALLET_PRIVATE_KEY?.trim();
-    
-    if (!privateKeyBase58) {
-      this.initError = 'TREASURY_WALLET_PRIVATE_KEY environment variable not set. Real blockchain transfers disabled.';
-      console.warn(`⚠️ ${this.initError}`);
-      return false;
-    }
-
-    try {
-      const secretKey = bs58.decode(privateKeyBase58);
+    for (const [walletType, config] of Object.entries(WALLET_CONFIGS) as [TreasuryWalletType, WalletConfig][]) {
+      const privateKeyBase58 = process.env[config.envVar]?.trim();
       
-      if (secretKey.length !== 64) {
-        this.initError = 'Invalid private key length. Expected 64 bytes.';
-        console.error(`❌ ${this.initError}`);
-        return false;
+      if (!privateKeyBase58) {
+        this.initErrors.set(walletType, `${config.envVar} not set`);
+        console.warn(`⚠️ ${config.name}: ${config.envVar} not configured`);
+        continue;
       }
 
-      this.keypair = Keypair.fromSecretKey(secretKey);
-      console.log(`✅ Treasury KeyManager initialized: ${this.keypair.publicKey.toBase58()}`);
+      try {
+        const secretKey = bs58.decode(privateKeyBase58);
+        
+        if (secretKey.length !== 64) {
+          this.initErrors.set(walletType, 'Invalid private key length');
+          console.error(`❌ ${config.name}: Invalid key length`);
+          continue;
+        }
+
+        const keypair = Keypair.fromSecretKey(secretKey);
+        this.keypairs.set(walletType, keypair);
+        console.log(`✅ ${config.name} initialized: ${keypair.publicKey.toBase58()}`);
+      } catch (error) {
+        this.initErrors.set(walletType, `Failed to decode: ${error instanceof Error ? error.message : 'Unknown'}`);
+        console.error(`❌ ${config.name}: Failed to initialize`);
+      }
+    }
+
+    if (!this.keypairs.has(this.activeWallet) && this.keypairs.size > 0) {
+      this.activeWallet = Array.from(this.keypairs.keys())[0];
+      console.log(`📍 Active wallet set to: ${this.activeWallet}`);
+    }
+
+    return this.keypairs.size > 0;
+  }
+
+  setActiveWallet(walletType: TreasuryWalletType): boolean {
+    if (this.keypairs.has(walletType)) {
+      this.activeWallet = walletType;
+      console.log(`🔄 Switched active treasury to: ${WALLET_CONFIGS[walletType].name}`);
       return true;
-    } catch (error) {
-      this.initError = `Failed to decode treasury private key: ${error instanceof Error ? error.message : 'Unknown error'}`;
-      console.error(`❌ ${this.initError}`);
-      return false;
     }
+    return false;
   }
 
-  getKeypair(): Keypair | null {
+  getActiveWalletType(): TreasuryWalletType {
+    return this.activeWallet;
+  }
+
+  getAvailableWallets(): { type: TreasuryWalletType; name: string; address: string; isActive: boolean }[] {
+    if (!this.initialized) this.initialize();
+    
+    return Array.from(this.keypairs.entries()).map(([type, keypair]) => ({
+      type,
+      name: WALLET_CONFIGS[type].name,
+      address: keypair.publicKey.toBase58(),
+      isActive: type === this.activeWallet
+    }));
+  }
+
+  getKeypair(walletType?: TreasuryWalletType): Keypair | null {
     if (!this.initialized) {
       this.initialize();
     }
-    return this.keypair;
+    const type = walletType || this.activeWallet;
+    return this.keypairs.get(type) || null;
   }
 
-  getPublicKey(): PublicKey | null {
-    return this.keypair?.publicKey || null;
+  getPublicKey(walletType?: TreasuryWalletType): PublicKey | null {
+    const keypair = this.getKeypair(walletType);
+    return keypair?.publicKey || null;
   }
 
-  getAddress(): string | null {
-    return this.keypair?.publicKey.toBase58() || null;
+  getAddress(walletType?: TreasuryWalletType): string | null {
+    const keypair = this.getKeypair(walletType);
+    return keypair?.publicKey.toBase58() || null;
   }
 
-  isReady(): boolean {
+  isReady(walletType?: TreasuryWalletType): boolean {
     if (!this.initialized) {
       this.initialize();
     }
-    return this.keypair !== null;
+    const type = walletType || this.activeWallet;
+    return this.keypairs.has(type);
   }
 
-  getError(): string | null {
-    return this.initError;
+  getError(walletType?: TreasuryWalletType): string | null {
+    const type = walletType || this.activeWallet;
+    return this.initErrors.get(type) || null;
   }
 }
 
@@ -110,17 +169,29 @@ export class SolanaTransferService {
     return treasuryKeyManager.isReady();
   }
 
-  getStatus(): { operational: boolean; address?: string; error?: string } {
+  getStatus(): { 
+    operational: boolean; 
+    address?: string; 
+    error?: string;
+    activeWallet?: TreasuryWalletType;
+    availableWallets?: { type: TreasuryWalletType; name: string; address: string; isActive: boolean }[];
+  } {
     if (treasuryKeyManager.isReady()) {
       return {
         operational: true,
-        address: treasuryKeyManager.getAddress() || undefined
+        address: treasuryKeyManager.getAddress() || undefined,
+        activeWallet: treasuryKeyManager.getActiveWalletType(),
+        availableWallets: treasuryKeyManager.getAvailableWallets()
       };
     }
     return {
       operational: false,
       error: treasuryKeyManager.getError() || 'Treasury wallet not configured'
     };
+  }
+
+  switchActiveWallet(walletType: TreasuryWalletType): boolean {
+    return treasuryKeyManager.setActiveWallet(walletType);
   }
 
   async getTreasuryBalance(): Promise<{ solBalance: number; tokenBalance: number }> {

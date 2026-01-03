@@ -3724,6 +3724,73 @@ Thank you for your business!
     }
   });
 
+  // Switch active treasury wallet
+  app.post("/api/treasury/switch-wallet", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const { walletType } = req.body;
+      
+      if (!walletType || !['primary', 'jcmoves_banks'].includes(walletType)) {
+        return res.status(400).json({ error: "Invalid wallet type. Must be 'primary' or 'jcmoves_banks'" });
+      }
+
+      const success = solanaTransferService.switchActiveWallet(walletType);
+      
+      if (!success) {
+        return res.status(400).json({ error: `Wallet '${walletType}' is not configured or available` });
+      }
+
+      const status = solanaTransferService.getStatus();
+      const balance = await solanaTransferService.getTreasuryBalance();
+
+      console.log(`[TREASURY] Admin ${req.currentUser?.email} switched active wallet to: ${walletType}`);
+
+      res.json({
+        success: true,
+        message: `Switched to ${walletType} wallet`,
+        activeWallet: status.activeWallet,
+        address: status.address,
+        balance: {
+          sol: balance.solBalance,
+          tokens: balance.tokenBalance
+        }
+      });
+    } catch (error) {
+      console.error("Error switching wallet:", error);
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to switch wallet" });
+    }
+  });
+
+  // Get buyback fund status
+  app.get("/api/treasury/buyback/status", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const fund = await db.query.buybackFund.findFirst();
+      const recentBuybacks = await db.query.buybackTransactions.findMany({
+        orderBy: (tx, { desc }) => [desc(tx.createdAt)],
+        limit: 10
+      });
+      const recentFees = await db.query.transferFees.findMany({
+        orderBy: (fee, { desc }) => [desc(fee.createdAt)],
+        limit: 20
+      });
+
+      res.json({
+        fund: fund || {
+          solBalance: "0",
+          totalCollected: "0",
+          totalUsedForBuyback: "0",
+          totalTokensBought: "0",
+          buybackCount: 0
+        },
+        recentBuybacks,
+        recentFees,
+        platformFeeRate: 0.00001 // 2x base Solana fee (~0.000005 SOL)
+      });
+    } catch (error) {
+      console.error("Error getting buyback status:", error);
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to get buyback status" });
+    }
+  });
+
   // ====================== JUPITER SWAP API ======================
 
   // Get supported tokens for swapping
