@@ -26,24 +26,33 @@ export interface TransferRequest {
   memo?: string;
 }
 
-export type TreasuryWalletType = 'primary' | 'jcmoves_banks';
+export type TreasuryWalletType = 'primary' | 'jcmoves_banks' | 'in_god_we_trust';
 
 interface WalletConfig {
   envVar: string;
   name: string;
   description: string;
+  purpose: 'operations' | 'buybacks' | 'general';
 }
 
 const WALLET_CONFIGS: Record<TreasuryWalletType, WalletConfig> = {
   primary: {
     envVar: 'TREASURY_WALLET_PRIVATE_KEY',
     name: 'Primary Treasury',
-    description: 'Original treasury wallet for token operations'
+    description: 'Original treasury wallet for token operations',
+    purpose: 'general'
   },
   jcmoves_banks: {
     envVar: 'JCMOVES_BANKS_PRIVATE_KEY',
     name: 'JC MOVES BANKS',
-    description: 'Main operations wallet for JC MOVES'
+    description: 'Main operations wallet for employee rewards and transfers',
+    purpose: 'operations'
+  },
+  in_god_we_trust: {
+    envVar: 'IN_GOD_WE_TRUST_PRIVATE_KEY',
+    name: 'IN GOD WE TRUST',
+    description: 'Dedicated wallet for token buybacks and swaps',
+    purpose: 'buybacks'
   }
 };
 

@@ -3729,8 +3729,8 @@ Thank you for your business!
     try {
       const { walletType } = req.body;
       
-      if (!walletType || !['primary', 'jcmoves_banks'].includes(walletType)) {
-        return res.status(400).json({ error: "Invalid wallet type. Must be 'primary' or 'jcmoves_banks'" });
+      if (!walletType || !['primary', 'jcmoves_banks', 'in_god_we_trust'].includes(walletType)) {
+        return res.status(400).json({ error: "Invalid wallet type. Must be 'primary', 'jcmoves_banks', or 'in_god_we_trust'" });
       }
 
       const success = solanaTransferService.switchActiveWallet(walletType);
