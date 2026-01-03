@@ -3,6 +3,13 @@ import { createTransferInstruction, getAssociatedTokenAddress, getOrCreateAssoci
 import bs58 from 'bs58';
 import { storage } from '../storage';
 import { TREASURY_CONFIG } from '../constants';
+import { db } from '../db';
+import { transferFees, buybackFund } from '@shared/schema';
+import { sql } from 'drizzle-orm';
+
+// Platform fee configuration (2x base Solana fee ~0.000005 SOL)
+const PLATFORM_FEE_SOL = 0.00001; // 2x base fee
+const BASE_FEE_SOL = 0.000005; // Base Solana transaction fee
 
 export interface TransferResult {
   success: boolean;
@@ -328,6 +335,14 @@ export class SolanaTransferService {
 
       console.log(`✅ Transfer successful! TX: ${signature}`);
 
+      // Record transfer fee for buyback fund
+      await this.recordTransferFee({
+        transactionHash: signature,
+        fromWallet: keypair.publicKey.toBase58(),
+        toWallet: recipientAddress,
+        tokenAmount: amount
+      });
+
       return {
         success: true,
         transactionHash: signature,
@@ -342,6 +357,54 @@ export class SolanaTransferService {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown transfer error'
       };
+    }
+  }
+
+  private async recordTransferFee(params: {
+    transactionHash: string;
+    fromWallet: string;
+    toWallet: string;
+    tokenAmount: number;
+  }): Promise<void> {
+    try {
+      const totalFee = BASE_FEE_SOL + PLATFORM_FEE_SOL;
+
+      // Record the fee
+      await db.insert(transferFees).values({
+        transactionHash: params.transactionHash,
+        fromWallet: params.fromWallet,
+        toWallet: params.toWallet,
+        tokenAmount: params.tokenAmount.toString(),
+        baseFee: BASE_FEE_SOL.toString(),
+        platformFee: PLATFORM_FEE_SOL.toString(),
+        totalFee: totalFee.toString(),
+        status: 'collected'
+      });
+
+      // Update or create the buyback fund
+      const existingFund = await db.query.buybackFund.findFirst();
+      
+      if (existingFund) {
+        await db.update(buybackFund)
+          .set({
+            solBalance: sql`${buybackFund.solBalance} + ${PLATFORM_FEE_SOL}`,
+            totalCollected: sql`${buybackFund.totalCollected} + ${PLATFORM_FEE_SOL}`,
+            lastUpdated: new Date()
+          });
+      } else {
+        await db.insert(buybackFund).values({
+          solBalance: PLATFORM_FEE_SOL.toString(),
+          totalCollected: PLATFORM_FEE_SOL.toString(),
+          totalUsedForBuyback: "0",
+          totalTokensBought: "0",
+          buybackCount: 0
+        });
+      }
+
+      console.log(`💰 Fee collected: ${PLATFORM_FEE_SOL} SOL for buyback fund`);
+    } catch (error) {
+      // Don't fail the transfer if fee recording fails
+      console.error('Warning: Failed to record transfer fee:', error);
     }
   }
 
