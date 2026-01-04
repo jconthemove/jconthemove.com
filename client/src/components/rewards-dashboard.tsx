@@ -435,70 +435,23 @@ export default function RewardsDashboard() {
             Earn {tokenInfo?.symbol || 'JCMOVES'} through mining and referrals
           </p>
         </div>
-        {/* Enhanced Token Price Widget */}
-        <Card className="w-full md:w-auto min-w-[280px] border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-sm shadow-xl">
-          <CardContent className="p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1">
-                <p className="text-xs text-slate-400 mb-1">Token Price</p>
-                <p className="text-2xl font-black text-slate-100" data-testid="token-price">
-                  ${tokenInfo?.price?.toFixed(6) || '0.000000'}
-                </p>
-                <div className={`flex items-center gap-1 mt-1 ${isPositiveChange ? 'text-green-400' : 'text-red-400'}`}>
-                  {isPositiveChange ? (
-                    <ArrowUpRight className="h-3 w-3" />
-                  ) : (
-                    <ArrowDownRight className="h-3 w-3" />
-                  )}
-                  <span className="text-xs font-medium">
-                    {isPositiveChange ? '+' : ''}{priceChange24h.toFixed(2)}% (24h)
-                  </span>
-                </div>
-                {tokenInfo?.volume24h && tokenInfo.volume24h > 0 && (
-                  <p className="text-xs text-slate-500 mt-1">
-                    Vol: ${(tokenInfo.volume24h / 1000).toFixed(1)}k
-                  </p>
-                )}
-              </div>
-              {/* Mini Holdings Chart */}
-              <div className="w-24 h-16">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
-                    <Line 
-                      type="monotone" 
-                      dataKey="value" 
-                      stroke={isPositiveChange ? "#22c55e" : "#ef4444"}
-                      strokeWidth={2}
-                      dot={false}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-            <div className="mt-2 pt-2 border-t border-slate-700/50">
-              <p className="text-xs text-slate-400">
-                Your Holdings: <span className="font-bold text-orange-400">${(tokenBalance * (tokenInfo?.price || 0)).toFixed(2)}</span>
-              </p>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
-      {/* Pending Payout Alert */}
+      {/* Pending Payout Alert - Fancy Blue Design */}
       {payoutStatus?.hasPendingPayout && payoutStatus.pendingPayout && (
-        <Card className="mb-4 border border-yellow-500/50 bg-gradient-to-br from-yellow-900/30 to-orange-900/30" data-testid="card-pending-payout">
+        <Card className="mb-4 border border-blue-500/50 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 shadow-lg shadow-blue-500/20" data-testid="card-pending-payout">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-yellow-500/20 border border-yellow-500/30">
-                  <Loader2 className="h-5 w-5 text-yellow-400 animate-spin" />
+                <div className="p-2 rounded-lg bg-white/20 border border-white/30 backdrop-blur-sm">
+                  <Loader2 className="h-5 w-5 text-white animate-spin" />
                 </div>
                 <div>
-                  <p className="font-semibold text-yellow-200">Pending Payout Request</p>
-                  <p className="text-sm text-yellow-300/80">
+                  <p className="font-semibold text-white">Pending Payout Request</p>
+                  <p className="text-sm text-white/90">
                     {parseFloat(payoutStatus.pendingPayout.tokenAmount).toFixed(2)} JCMOVES → {payoutStatus.pendingPayout.recipientAddress.slice(0, 6)}...{payoutStatus.pendingPayout.recipientAddress.slice(-4)}
                   </p>
-                  <p className="text-xs text-slate-400 mt-1">
+                  <p className="text-xs text-white/70 mt-1">
                     Requested: {new Date(payoutStatus.pendingPayout.requestedAt).toLocaleString()}
                   </p>
                 </div>
@@ -508,7 +461,7 @@ export default function RewardsDashboard() {
                 size="sm"
                 onClick={() => cancelPayoutMutation.mutate(payoutStatus.pendingPayout!.id)}
                 disabled={cancelPayoutMutation.isPending}
-                className="border-red-500/50 text-red-300 hover:bg-red-500/20 hover:text-red-200"
+                className="border-white/50 text-white hover:bg-white/20 hover:text-white bg-white/10"
                 data-testid="button-cancel-payout"
               >
                 {cancelPayoutMutation.isPending ? (
