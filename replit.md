@@ -121,3 +121,11 @@ Preferred communication style: Simple, everyday language.
 ## Blockchain Integration
 - **Solana Blockchain**: For JCMOVES token treasury and transaction history.
 - **DexScreener API**: For live JCMOVES token pricing data.
+
+## Mobile App Deployment
+- **Framework**: Capacitor for hybrid mobile app wrapping the React web app.
+- **App ID**: `com.jconthemove.mobile`
+- **App Name**: "JC ON THE MOVE"
+- **Android Project**: Located in `/android` folder, ready for Android Studio.
+- **Build Process**: Run `npm run build && npx cap sync android` to update the Android project with latest web changes.
+- **Play Store Submission**: Open `/android` folder in Android Studio, generate signed AAB, upload to Google Play Console.
