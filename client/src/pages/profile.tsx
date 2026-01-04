@@ -304,7 +304,7 @@ export default function ProfilePage() {
                   </div>
                   <div>
                     <p className="text-white font-medium text-sm">
-                      {walletPreference.walletMode === 'personal' ? 'Phantom Wallet' : 'Company Wallet'}
+                      {walletPreference.walletMode === 'personal' ? 'Phantom Wallet' : 'Company Rewards Account'}
                     </p>
                     {walletPreference.personalWalletAddress && (
                       <p className="text-slate-400 text-xs font-mono truncate max-w-[200px]">

@@ -63,6 +63,30 @@ export default function TermsOfService() {
             </p>
           </section>
 
+          <section className="mb-8 p-6 bg-slate-800/50 border border-slate-700 rounded-lg">
+            <h2 className="text-2xl font-semibold mb-4 text-white" data-testid="text-section-rewards">Rewards Disclaimer</h2>
+            <p className="mb-4 text-slate-300">
+              JC ON THE MOVE provides digital reward credits for participation in company services and promotions.
+            </p>
+            <p className="mb-4 text-slate-300">
+              Rewards are not investments, do not represent ownership, and are not guaranteed to have monetary value.
+            </p>
+            <p className="mb-4 text-slate-300">
+              JC ON THE MOVE does not provide custodial wallet services, financial accounts, or trading facilities.
+            </p>
+            <p className="mb-4 text-slate-300">
+              Blockchain tokens, if issued, are distributed solely as rewards and only upon user request.
+            </p>
+            <div className="mt-4 pt-4 border-t border-slate-700">
+              <p className="text-sm text-slate-400 mb-2">JC ON THE MOVE is:</p>
+              <ul className="text-sm text-slate-400 space-y-1">
+                <li className="flex items-center gap-2">✗ Not an exchange</li>
+                <li className="flex items-center gap-2">✗ Not a broker</li>
+                <li className="flex items-center gap-2">✗ Not a money service</li>
+              </ul>
+            </div>
+          </section>
+
           <section className="mb-8">
             <h2 className="text-2xl font-semibold mb-4" data-testid="text-section-changes">Changes to Terms</h2>
             <p className="mb-4">

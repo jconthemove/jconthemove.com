@@ -68,13 +68,12 @@ export function WalletChoiceModal({ open, onClose, onComplete }: WalletChoiceMod
       const response = await apiRequest('POST', '/api/user/wallet-choice', data);
       return response.json();
     },
-    onSuccess: (data: any) => {
-      const companyAddr = data.companyWalletAddress;
+    onSuccess: () => {
       toast({
-        title: "Wallet Configured!",
+        title: walletMode === 'personal' ? "Wallet Connected!" : "Rewards Account Set Up!",
         description: walletMode === 'personal' 
-          ? "Your personal Phantom wallet is now connected for JCMOVES payouts!"
-          : `Your company wallet is ready! Address: ${companyAddr?.slice(0, 8)}...${companyAddr?.slice(-6)}`,
+          ? "Your personal Phantom wallet is now connected. You control your keys."
+          : "Your company rewards account is ready! Rewards will be tracked internally.",
       });
       queryClient.invalidateQueries({ queryKey: ['/api/user/wallet-preference'] });
       queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
@@ -171,7 +170,7 @@ export function WalletChoiceModal({ open, onClose, onComplete }: WalletChoiceMod
                         Personal Phantom Wallet
                       </CardTitle>
                       <CardDescription className="mt-2 text-slate-400">
-                        Use your own Phantom wallet to receive JCMOVES tokens directly
+                        Tokens are sent directly to your personal wallet. You control your keys.
                       </CardDescription>
                     </div>
                   </div>
@@ -206,10 +205,10 @@ export function WalletChoiceModal({ open, onClose, onComplete }: WalletChoiceMod
                         <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/20 p-2 rounded-lg border border-blue-500/30">
                           <Building2 className="h-5 w-5 text-blue-400" />
                         </div>
-                        Company Wallet
+                        Company Rewards Account
                       </CardTitle>
                       <CardDescription className="mt-2 text-slate-400">
-                        We'll assign a managed wallet for your rewards
+                        Your rewards are tracked internally by JC ON THE MOVE. Tokens are issued on the blockchain only if and when you choose to withdraw.
                       </CardDescription>
                     </div>
                   </div>
@@ -222,13 +221,16 @@ export function WalletChoiceModal({ open, onClose, onComplete }: WalletChoiceMod
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-green-400" />
-                      Easy in-app balance tracking
+                      Rewards tracked internally
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-green-400" />
-                      Transfer to personal wallet anytime
+                      Optional on-chain withdrawal
                     </li>
                   </ul>
+                  <p className="text-xs text-slate-500 mt-3 italic">
+                    This is a rewards account, not a crypto wallet.
+                  </p>
                 </CardContent>
               </Card>
             </RadioGroup>

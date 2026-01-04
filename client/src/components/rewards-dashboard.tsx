@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'wouter';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -1275,6 +1276,17 @@ export default function RewardsDashboard() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Legal Disclaimer Footer */}
+      <div className="mt-8 p-4 bg-slate-800/30 rounded-lg border border-slate-700/50">
+        <p className="text-xs text-slate-500 text-center">
+          Rewards are internal company credits for participation in JC ON THE MOVE services. 
+          Blockchain tokens are distributed only upon user request. 
+          <Link href="/terms" className="text-blue-400 hover:underline ml-1">
+            View Terms & Rewards Disclaimer
+          </Link>
+        </p>
+      </div>
     </div>
     </div>
   );
