@@ -2,10 +2,11 @@ import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.jconthemove.mobile',
-  appName: 'JC Mobile',
+  appName: 'JC ON THE MOVE',
   webDir: 'dist/public',
   server: {
-    androidScheme: 'https'
+    androidScheme: 'https',
+    allowNavigation: ['*']
   },
   plugins: {
     SplashScreen: {
