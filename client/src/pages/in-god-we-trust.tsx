@@ -257,19 +257,21 @@ export default function InGodWeTrustPage() {
   const [fulfilledAmount, setFulfilledAmount] = useState("");
   const [fulfillmentTxHash, setFulfillmentTxHash] = useState("");
 
-  // Swap requests query
+  // Swap requests query (admin only - uses requireBusinessOwner middleware)
   const { data: swapRequests, refetch: refetchSwapRequests } = useQuery<{ requests: any[] }>({
-    queryKey: ["/api/admin/swap-requests"],
+    queryKey: ["/api/swap-requests"],
   });
 
-  // Approve swap request mutation
+  // Approve swap request mutation (PATCH to /api/swap-requests/:id/review)
   const approveSwapMutation = useMutation({
     mutationFn: async (requestId: string) => {
-      const response = await apiRequest("POST", `/api/admin/swap-requests/${requestId}/approve`, {});
+      const response = await apiRequest("PATCH", `/api/swap-requests/${requestId}/review`, {
+        action: "approve"
+      });
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/swap-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/swap-requests"] });
       toast({ title: "Request Approved", description: "Swap request has been approved for fulfillment." });
     },
     onError: (error: any) => {
@@ -277,14 +279,17 @@ export default function InGodWeTrustPage() {
     },
   });
 
-  // Decline swap request mutation
+  // Decline swap request mutation (PATCH to /api/swap-requests/:id/review)
   const declineSwapMutation = useMutation({
     mutationFn: async ({ requestId, reason }: { requestId: string; reason: string }) => {
-      const response = await apiRequest("POST", `/api/admin/swap-requests/${requestId}/decline`, { reason });
+      const response = await apiRequest("PATCH", `/api/swap-requests/${requestId}/review`, {
+        action: "decline",
+        declineReason: reason
+      });
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/swap-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/swap-requests"] });
       setSelectedRequest(null);
       setDeclineReason("");
       toast({ title: "Request Declined", description: "Swap request has been declined." });
@@ -294,17 +299,18 @@ export default function InGodWeTrustPage() {
     },
   });
 
-  // Complete swap request mutation
+  // Complete swap request mutation (PATCH to /api/swap-requests/:id/fulfill)
   const completeSwapMutation = useMutation({
     mutationFn: async ({ requestId, amount, txHash }: { requestId: string; amount: string; txHash: string }) => {
-      const response = await apiRequest("POST", `/api/admin/swap-requests/${requestId}/complete`, {
+      const response = await apiRequest("PATCH", `/api/swap-requests/${requestId}/fulfill`, {
         fulfilledAmount: amount,
         fulfillmentTxHash: txHash,
+        fulfillmentMethod: "treasury"
       });
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/swap-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/swap-requests"] });
       setSelectedRequest(null);
       setFulfilledAmount("");
       setFulfillmentTxHash("");
