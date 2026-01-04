@@ -6030,6 +6030,223 @@ Thank you for your business!
   });
 
   // ===========================================
+  // ADMIN PAYOUT MANAGEMENT ROUTES
+  // ===========================================
+
+  // Get all pending payouts (admin only)
+  app.get("/api/admin/payouts/pending", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const pendingPayouts = await storage.getPendingPayouts();
+      
+      // Enrich with user info
+      const enrichedPayouts = await Promise.all(
+        pendingPayouts.map(async (payout) => {
+          const user = await storage.getUser(payout.userId);
+          return {
+            ...payout,
+            userName: user?.name || user?.email || 'Unknown User',
+            userEmail: user?.email || 'Unknown'
+          };
+        })
+      );
+      
+      res.json({ payouts: enrichedPayouts });
+    } catch (error) {
+      console.error("Error getting pending payouts:", error);
+      res.status(500).json({ error: "Failed to get pending payouts" });
+    }
+  });
+
+  // Get all payouts with optional status filter (admin only)
+  app.get("/api/admin/payouts", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const { status } = req.query;
+      
+      let payouts;
+      if (status === 'pending') {
+        payouts = await storage.getPendingPayouts();
+      } else {
+        payouts = await db.select().from(walletPayouts).orderBy(desc(walletPayouts.requestedAt)).limit(100);
+      }
+      
+      // Enrich with user info
+      const enrichedPayouts = await Promise.all(
+        payouts.map(async (payout) => {
+          const user = await storage.getUser(payout.userId);
+          return {
+            ...payout,
+            userName: user?.name || user?.email || 'Unknown User',
+            userEmail: user?.email || 'Unknown'
+          };
+        })
+      );
+      
+      res.json({ payouts: enrichedPayouts });
+    } catch (error) {
+      console.error("Error getting payouts:", error);
+      res.status(500).json({ error: "Failed to get payouts" });
+    }
+  });
+
+  // Process/approve a payout request (admin only)
+  app.post("/api/admin/payouts/:payoutId/process", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const { payoutId } = req.params;
+      const { txHash, executeOnChain } = req.body;
+      const adminUserId = (req.session as any).userId;
+
+      // Get the payout
+      const payouts = await db.select().from(walletPayouts).where(eq(walletPayouts.id, payoutId)).limit(1);
+      const payout = payouts[0];
+
+      if (!payout) {
+        return res.status(404).json({ error: "Payout request not found" });
+      }
+
+      if (payout.status !== 'pending') {
+        return res.status(400).json({ error: "Only pending payouts can be processed" });
+      }
+
+      // If executeOnChain is true, attempt real blockchain transfer
+      if (executeOnChain) {
+        try {
+          const result = await solanaTransferService.transferTokens(
+            payout.destinationAddress,
+            parseFloat(payout.tokenAmount)
+          );
+
+          if (!result.success) {
+            return res.status(500).json({ 
+              error: "Blockchain transfer failed", 
+              details: result.error 
+            });
+          }
+
+          // Update payout with blockchain tx hash
+          await storage.updateWalletPayout(payoutId, {
+            status: 'completed',
+            txHash: result.signature,
+            processedAt: new Date()
+          });
+
+          console.log(`[PAYOUT] Admin ${adminUserId} processed payout ${payoutId} on-chain: ${result.signature}`);
+
+          return res.json({
+            success: true,
+            message: "Payout processed and tokens sent on blockchain",
+            txHash: result.signature,
+            amount: payout.tokenAmount,
+            destination: payout.destinationAddress
+          });
+
+        } catch (transferError: any) {
+          console.error("Blockchain transfer error:", transferError);
+          return res.status(500).json({ 
+            error: "Blockchain transfer failed", 
+            details: transferError.message 
+          });
+        }
+      }
+
+      // Record-only mode (manual off-chain processing)
+      if (!txHash) {
+        return res.status(400).json({ error: "Transaction hash required for manual processing" });
+      }
+
+      await storage.updateWalletPayout(payoutId, {
+        status: 'completed',
+        txHash,
+        processedAt: new Date()
+      });
+
+      console.log(`[PAYOUT] Admin ${adminUserId} manually processed payout ${payoutId}: ${txHash}`);
+
+      res.json({
+        success: true,
+        message: "Payout marked as completed",
+        txHash,
+        amount: payout.tokenAmount,
+        destination: payout.destinationAddress
+      });
+
+    } catch (error) {
+      console.error("Error processing payout:", error);
+      res.status(500).json({ error: "Failed to process payout" });
+    }
+  });
+
+  // Decline/reject a payout request (admin only)
+  app.post("/api/admin/payouts/:payoutId/decline", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const { payoutId } = req.params;
+      const { reason } = req.body;
+      const adminUserId = (req.session as any).userId;
+
+      // Use transaction to safely refund tokens
+      const result = await db.transaction(async (tx) => {
+        const [payout] = await tx
+          .select()
+          .from(walletPayouts)
+          .where(eq(walletPayouts.id, payoutId))
+          .for('update')
+          .limit(1);
+
+        if (!payout) {
+          return { error: "Payout request not found", status: 404 };
+        }
+
+        if (payout.status !== 'pending') {
+          return { error: "Only pending payouts can be declined", status: 400 };
+        }
+
+        const payoutAmount = parseFloat(payout.tokenAmount);
+
+        // Refund tokens to user's wallet
+        const [wallet] = await tx
+          .select()
+          .from(walletAccounts)
+          .where(eq(walletAccounts.userId, payout.userId))
+          .for('update')
+          .limit(1);
+
+        if (wallet) {
+          const currentBalance = parseFloat(wallet.tokenBalance || "0");
+          await tx
+            .update(walletAccounts)
+            .set({ tokenBalance: (currentBalance + payoutAmount).toFixed(2) })
+            .where(eq(walletAccounts.userId, payout.userId));
+        }
+
+        // Update payout status
+        await tx
+          .update(walletPayouts)
+          .set({
+            status: 'declined',
+            processedAt: new Date()
+          })
+          .where(eq(walletPayouts.id, payoutId));
+
+        console.log(`[PAYOUT] Admin ${adminUserId} declined payout ${payoutId}, refunded ${payoutAmount} tokens. Reason: ${reason}`);
+
+        return {
+          success: true,
+          message: "Payout declined and tokens refunded to user",
+          refundedAmount: payoutAmount
+        };
+      });
+
+      if ('error' in result) {
+        return res.status(result.status || 500).json({ error: result.error });
+      }
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error declining payout:", error);
+      res.status(500).json({ error: "Failed to decline payout" });
+    }
+  });
+
+  // ===========================================
   // SQUARE INVOICING API ROUTES
   // ===========================================
 

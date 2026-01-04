@@ -321,6 +321,60 @@ export default function InGodWeTrustPage() {
     },
   });
 
+  // Payout request management state
+  const [selectedPayout, setSelectedPayout] = useState<string | null>(null);
+  const [payoutMode, setPayoutMode] = useState<'process' | 'decline'>('process');
+  const [payoutDeclineReason, setPayoutDeclineReason] = useState("");
+  const [manualTxHash, setManualTxHash] = useState("");
+  const [executePayoutOnChain, setExecutePayoutOnChain] = useState(false);
+
+  // Pending payouts query (admin only)
+  const { data: pendingPayouts, refetch: refetchPayouts } = useQuery<{ payouts: any[] }>({
+    queryKey: ["/api/admin/payouts/pending"],
+  });
+
+  // Process payout mutation
+  const processPayoutMutation = useMutation({
+    mutationFn: async ({ payoutId, txHash, executeOnChain }: { payoutId: string; txHash?: string; executeOnChain: boolean }) => {
+      const response = await apiRequest("POST", `/api/admin/payouts/${payoutId}/process`, {
+        txHash,
+        executeOnChain
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/payouts/pending"] });
+      setSelectedPayout(null);
+      setManualTxHash("");
+      toast({ 
+        title: "Payout Processed", 
+        description: data.txHash ? `Tokens sent! TX: ${data.txHash.slice(0, 12)}...` : "Payout marked complete."
+      });
+    },
+    onError: (error: any) => {
+      toast({ title: "Process failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Decline payout mutation
+  const declinePayoutMutation = useMutation({
+    mutationFn: async ({ payoutId, reason }: { payoutId: string; reason: string }) => {
+      const response = await apiRequest("POST", `/api/admin/payouts/${payoutId}/decline`, {
+        reason
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/payouts/pending"] });
+      setSelectedPayout(null);
+      setPayoutDeclineReason("");
+      toast({ title: "Payout Declined", description: "Tokens have been refunded to user's balance." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Decline failed", description: error.message, variant: "destructive" });
+    },
+  });
+
   const stats = treasurySummary?.stats || {};
   const tokenPrice = livePrice?.price || stats.currentTokenPrice || 0;
   const blockchainBalance = liveBalance?.balance || 0;
@@ -433,6 +487,13 @@ export default function InGodWeTrustPage() {
             <TabsTrigger value="swaps" className="data-[state=active]:bg-cyan-500/20 data-[state=active]:text-cyan-300" data-testid="tab-swaps">
               <ArrowRightLeft className="h-4 w-4 mr-2" />
               Swaps
+            </TabsTrigger>
+            <TabsTrigger value="payouts" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-300" data-testid="tab-payouts">
+              <Download className="h-4 w-4 mr-2" />
+              Payouts
+              {pendingPayouts?.payouts && pendingPayouts.payouts.length > 0 && (
+                <Badge className="ml-1 bg-amber-500 text-white text-xs px-1.5 py-0.5">{pendingPayouts.payouts.length}</Badge>
+              )}
             </TabsTrigger>
             <TabsTrigger value="deposits" className="data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-300" data-testid="tab-deposits">
               <Upload className="h-4 w-4 mr-2" />
@@ -1529,6 +1590,222 @@ export default function InGodWeTrustPage() {
                     through treasury or external DEX. No automated execution or guaranteed rates.
                   </p>
                 </div>
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* Payouts Tab - Approve Token Withdrawals */}
+          <TabsContent value="payouts" className="space-y-6">
+            <Card className="p-6 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-lg font-bold flex items-center gap-2 text-slate-100">
+                    <div className="p-2 rounded-lg bg-amber-500/20 border border-amber-500/30">
+                      <Download className="h-5 w-5 text-amber-400" />
+                    </div>
+                    Pending Payout Requests
+                  </h3>
+                  <p className="text-sm text-slate-400 mt-1">
+                    Review and approve user token withdrawal requests
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => refetchPayouts()}
+                  className="border-slate-600"
+                  data-testid="button-refresh-payouts"
+                >
+                  <RefreshCw className="h-4 w-4 mr-1" />
+                  Refresh
+                </Button>
+              </div>
+
+              {!pendingPayouts?.payouts || pendingPayouts.payouts.length === 0 ? (
+                <div className="text-center py-12 text-slate-500">
+                  <CheckCircle className="h-12 w-12 mx-auto mb-3 text-green-400/50" />
+                  <p className="font-medium">No pending payout requests</p>
+                  <p className="text-sm">All withdrawals have been processed</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {pendingPayouts.payouts.map((payout: any) => (
+                    <div 
+                      key={payout.id}
+                      className="p-4 bg-slate-900/50 rounded-xl border border-slate-700/50"
+                    >
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <p className="font-bold text-amber-300 text-lg">
+                            {parseFloat(payout.tokenAmount).toLocaleString()} JCMOVES
+                          </p>
+                          <p className="text-sm text-slate-400">{payout.userName}</p>
+                          <p className="text-xs text-slate-500">{payout.userEmail}</p>
+                        </div>
+                        <Badge 
+                          variant="outline" 
+                          className="bg-yellow-500/10 text-yellow-400 border-yellow-500/30"
+                        >
+                          pending
+                        </Badge>
+                      </div>
+
+                      <div className="space-y-2 text-sm text-slate-400 mb-4">
+                        <p><span className="text-slate-500">To:</span> {payout.destinationAddress.slice(0, 12)}...{payout.destinationAddress.slice(-8)}</p>
+                        <p><span className="text-slate-500">Requested:</span> {format(new Date(payout.requestedAt), "MMM d, yyyy h:mm a")}</p>
+                      </div>
+
+                      {selectedPayout !== payout.id ? (
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setSelectedPayout(payout.id);
+                              setPayoutMode('process');
+                              // Default to blockchain if available, otherwise manual
+                              setExecutePayoutOnChain(!!transferStatus?.operational);
+                            }}
+                            className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
+                            data-testid={`button-approve-payout-${payout.id}`}
+                          >
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            Process
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedPayout(payout.id);
+                              setPayoutMode('decline');
+                            }}
+                            className="border-red-500/50 text-red-400 hover:bg-red-500/10"
+                            data-testid={`button-decline-payout-${payout.id}`}
+                          >
+                            <XCircle className="h-4 w-4 mr-1" />
+                            Decline
+                          </Button>
+                        </div>
+                      ) : payoutMode === 'process' ? (
+                        <div className="space-y-3 p-3 bg-green-500/10 rounded-lg border border-green-500/30">
+                          <p className="text-sm text-green-300 font-medium">Process Payout</p>
+                          
+                          <div className="flex items-center justify-between">
+                            <Label className="text-green-200 text-sm">Execute on blockchain</Label>
+                            <Switch
+                              checked={executePayoutOnChain}
+                              onCheckedChange={setExecutePayoutOnChain}
+                              disabled={!transferStatus?.operational}
+                            />
+                          </div>
+
+                          {!executePayoutOnChain && (
+                            <div>
+                              <Label className="text-green-200 text-xs">Manual TX Hash</Label>
+                              <Input
+                                placeholder="Enter transaction hash..."
+                                value={manualTxHash}
+                                onChange={(e) => setManualTxHash(e.target.value)}
+                                className="bg-slate-800/50 border-green-500/50 text-slate-100 mt-1"
+                              />
+                            </div>
+                          )}
+
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() => processPayoutMutation.mutate({ 
+                                payoutId: payout.id, 
+                                txHash: executePayoutOnChain ? undefined : manualTxHash,
+                                executeOnChain: executePayoutOnChain 
+                              })}
+                              disabled={processPayoutMutation.isPending || (!executePayoutOnChain && !manualTxHash)}
+                              className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
+                            >
+                              {processPayoutMutation.isPending ? (
+                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                              ) : (
+                                <CheckCircle className="h-4 w-4 mr-1" />
+                              )}
+                              {executePayoutOnChain ? "Send Tokens" : "Mark Complete"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setSelectedPayout(null);
+                                setManualTxHash("");
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-3 p-3 bg-red-500/10 rounded-lg border border-red-500/30">
+                          <p className="text-sm text-red-300 font-medium">Decline Payout</p>
+                          <Input
+                            placeholder="Reason for declining..."
+                            value={payoutDeclineReason}
+                            onChange={(e) => setPayoutDeclineReason(e.target.value)}
+                            className="bg-slate-800/50 border-red-500/50 text-slate-100"
+                          />
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() => declinePayoutMutation.mutate({ 
+                                payoutId: payout.id, 
+                                reason: payoutDeclineReason 
+                              })}
+                              disabled={declinePayoutMutation.isPending || !payoutDeclineReason}
+                              className="bg-red-500 hover:bg-red-600"
+                            >
+                              Confirm Decline
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setSelectedPayout(null);
+                                setPayoutDeclineReason("");
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                          <p className="text-xs text-red-400/70">
+                            Declining will refund tokens to user's balance
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+
+            {/* Blockchain Status Info */}
+            <Card className={`p-4 border ${transferStatus?.operational ? 'border-green-500/50 bg-green-500/10' : 'border-orange-500/50 bg-orange-500/10'}`}>
+              <div className="flex items-center gap-3">
+                {transferStatus?.operational ? (
+                  <>
+                    <CheckCircle className="h-5 w-5 text-green-400" />
+                    <div>
+                      <p className="font-medium text-green-300">Blockchain Transfers Ready</p>
+                      <p className="text-xs text-green-400/70">
+                        Treasury: {transferStatus?.address?.slice(0, 8)}...{transferStatus?.address?.slice(-6)} | 
+                        Balance: {blockchainBalance.toLocaleString()} JCMOVES
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle className="h-5 w-5 text-orange-400" />
+                    <div>
+                      <p className="font-medium text-orange-300">Manual Processing Only</p>
+                      <p className="text-xs text-orange-400/70">Set TREASURY_WALLET_PRIVATE_KEY to enable automatic blockchain transfers</p>
+                    </div>
+                  </>
+                )}
               </div>
             </Card>
           </TabsContent>
