@@ -1260,3 +1260,88 @@ export const insertBuybackTransactionSchema = createInsertSchema(buybackTransact
 
 export type BuybackTransaction = typeof buybackTransactions.$inferSelect;
 export type InsertBuybackTransaction = z.infer<typeof insertBuybackTransactionSchema>;
+
+// Swap Requests - Manual swap request system (Option A compliant)
+// Users REQUEST swaps, admin reviews and fulfills manually off-platform
+export const swapRequests = pgTable("swap_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(), // User requesting the swap
+  userEmail: text("user_email").notNull(),
+  userName: text("user_name").notNull(),
+  
+  // Request details
+  jcmovesAmount: decimal("jcmoves_amount", { precision: 20, scale: 8 }).notNull(), // Amount of JCMOVES to swap
+  desiredAsset: text("desired_asset").notNull(), // 'SOL', 'USDC', 'USDT'
+  destinationWallet: text("destination_wallet").notNull(), // User's wallet to receive asset
+  
+  // Acknowledgements (compliance)
+  acknowledgedManualProcess: boolean("acknowledged_manual_process").notNull().default(false),
+  acknowledgedNoGuaranteedRate: boolean("acknowledged_no_guaranteed_rate").notNull().default(false),
+  acknowledgedTerms: boolean("acknowledged_terms").notNull().default(false),
+  
+  // Status tracking
+  status: text("status").notNull().default("pending"), // 'pending', 'approved', 'declined', 'processing', 'completed', 'cancelled'
+  
+  // Admin review
+  reviewedBy: text("reviewed_by"), // Admin who reviewed
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNotes: text("review_notes"),
+  declineReason: text("decline_reason"),
+  
+  // Fulfillment (done off-platform)
+  fulfilledAmount: decimal("fulfilled_amount", { precision: 20, scale: 8 }), // Actual amount of desired asset sent
+  fulfillmentTxHash: text("fulfillment_tx_hash"), // Transaction hash of fulfillment
+  fulfilledBy: text("fulfilled_by"), // Admin who fulfilled
+  fulfilledAt: timestamp("fulfilled_at"),
+  fulfillmentMethod: text("fulfillment_method"), // 'dex', 'otc', 'treasury'
+  
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_swap_requests_user").on(table.userId),
+  index("idx_swap_requests_status").on(table.status),
+  index("idx_swap_requests_created").on(table.createdAt),
+]);
+
+export const insertSwapRequestSchema = createInsertSchema(swapRequests).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  reviewedBy: true,
+  reviewedAt: true,
+  reviewNotes: true,
+  declineReason: true,
+  fulfilledAmount: true,
+  fulfillmentTxHash: true,
+  fulfilledBy: true,
+  fulfilledAt: true,
+  fulfillmentMethod: true,
+});
+
+export type SwapRequest = typeof swapRequests.$inferSelect;
+export type InsertSwapRequest = z.infer<typeof insertSwapRequestSchema>;
+
+// Treasury Swap Rules - Admin-configurable limits for compliance
+export const treasurySwapRules = pgTable("treasury_swap_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Monthly limits
+  monthlySwapCapTokens: decimal("monthly_swap_cap_tokens", { precision: 20, scale: 8 }).notNull().default("500000"), // Max tokens swapped per month
+  monthlySwapsUsed: decimal("monthly_swaps_used", { precision: 20, scale: 8 }).notNull().default("0"),
+  monthlyResetDate: timestamp("monthly_reset_date").notNull().default(sql`now()`),
+  
+  // Per-user limits
+  maxPerUserPerMonth: decimal("max_per_user_per_month", { precision: 20, scale: 8 }).notNull().default("10000"), // Max tokens per user per month
+  minSwapAmount: decimal("min_swap_amount", { precision: 20, scale: 8 }).notNull().default("100"), // Minimum swap amount
+  maxSwapAmount: decimal("max_swap_amount", { precision: 20, scale: 8 }).notNull().default("50000"), // Maximum per swap
+  
+  // Approved assets
+  approvedAssets: text("approved_assets").array().notNull().default(sql`ARRAY['SOL', 'USDC']`),
+  
+  // Controls
+  swapsEnabled: boolean("swaps_enabled").notNull().default(true),
+  requireManualReview: boolean("require_manual_review").notNull().default(true), // Always true for Option A
+  
+  lastUpdated: timestamp("last_updated").notNull().default(sql`now()`),
+  updatedBy: text("updated_by"),
+});

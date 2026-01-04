@@ -19,7 +19,7 @@ import { z } from "zod";
 import { EncryptionService } from "./services/encryption";
 import { eq, desc, sql, and, gte } from 'drizzle-orm';
 import { db } from './db';
-import { rewards, walletAccounts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads } from '@shared/schema';
+import { rewards, walletAccounts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules } from '@shared/schema';
 import { getFaucetPayService } from "./services/faucetpay";
 import { getAdvertisingService } from "./services/advertising";
 import { FAUCET_CONFIG } from "./constants";
@@ -3788,6 +3788,309 @@ Thank you for your business!
     } catch (error) {
       console.error("Error getting buyback status:", error);
       res.status(500).json({ error: error instanceof Error ? error.message : "Failed to get buyback status" });
+    }
+  });
+
+  // ====================== COMPLIANT SWAP REQUEST SYSTEM (Option A) ======================
+  // Users REQUEST swaps, admin reviews and fulfills manually off-platform
+  // NO live prices, NO automated execution, NO exchange functionality
+
+  // Get swap rules (public for form validation)
+  app.get("/api/swap-rules", async (req, res) => {
+    try {
+      const rules = await db.query.treasurySwapRules.findFirst();
+      if (!rules) {
+        return res.json({
+          monthlySwapCapTokens: "500000",
+          maxPerUserPerMonth: "10000",
+          minSwapAmount: "100",
+          maxSwapAmount: "50000",
+          approvedAssets: ["SOL", "USDC"],
+          swapsEnabled: true
+        });
+      }
+      res.json(rules);
+    } catch (error) {
+      console.error("Error getting swap rules:", error);
+      res.status(500).json({ error: "Failed to get swap rules" });
+    }
+  });
+
+  // Submit a swap request (user)
+  app.post("/api/swap-requests", isAuthenticated, async (req, res) => {
+    try {
+      const user = req.user as Express.User;
+      const { jcmovesAmount, desiredAsset, destinationWallet, acknowledgedManualProcess, acknowledgedNoGuaranteedRate, acknowledgedTerms } = req.body;
+
+      // Validate required acknowledgements
+      if (!acknowledgedManualProcess || !acknowledgedNoGuaranteedRate || !acknowledgedTerms) {
+        return res.status(400).json({ error: "All acknowledgements must be accepted" });
+      }
+
+      // Get swap rules
+      const rules = await db.query.treasurySwapRules.findFirst();
+      if (!rules?.swapsEnabled) {
+        return res.status(400).json({ error: "Swap requests are currently disabled" });
+      }
+
+      // Validate amount
+      const amount = parseFloat(jcmovesAmount);
+      if (isNaN(amount) || amount <= 0) {
+        return res.status(400).json({ error: "Invalid amount" });
+      }
+      if (amount < parseFloat(rules.minSwapAmount || "100")) {
+        return res.status(400).json({ error: `Minimum swap amount is ${rules.minSwapAmount} JCMOVES` });
+      }
+      if (amount > parseFloat(rules.maxSwapAmount || "50000")) {
+        return res.status(400).json({ error: `Maximum swap amount is ${rules.maxSwapAmount} JCMOVES` });
+      }
+
+      // Validate asset
+      const approvedAssets = rules.approvedAssets || ["SOL", "USDC"];
+      if (!approvedAssets.includes(desiredAsset)) {
+        return res.status(400).json({ error: `Asset not supported. Approved: ${approvedAssets.join(", ")}` });
+      }
+
+      // Validate wallet address
+      const solanaAddressRegex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+      if (!solanaAddressRegex.test(destinationWallet)) {
+        return res.status(400).json({ error: "Invalid Solana wallet address" });
+      }
+
+      // Check user's monthly usage
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0, 0, 0, 0);
+
+      const userMonthlyRequests = await db.query.swapRequests.findMany({
+        where: (sr, { eq, and, gte }) => and(
+          eq(sr.userId, user.id),
+          gte(sr.createdAt, startOfMonth)
+        )
+      });
+
+      const userMonthlyTotal = userMonthlyRequests.reduce((sum, r) => sum + parseFloat(r.jcmovesAmount), 0);
+      const maxPerUser = parseFloat(rules.maxPerUserPerMonth || "10000");
+      
+      if (userMonthlyTotal + amount > maxPerUser) {
+        return res.status(400).json({ 
+          error: `This would exceed your monthly limit. Used: ${userMonthlyTotal.toFixed(2)}, Limit: ${maxPerUser}` 
+        });
+      }
+
+      // Create swap request
+      const [request] = await db.insert(swapRequests).values({
+        userId: user.id,
+        userEmail: user.email,
+        userName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+        jcmovesAmount: amount.toString(),
+        desiredAsset,
+        destinationWallet,
+        acknowledgedManualProcess: true,
+        acknowledgedNoGuaranteedRate: true,
+        acknowledgedTerms: true,
+        status: "pending"
+      }).returning();
+
+      console.log(`[SWAP REQUEST] User ${user.email} submitted request for ${amount} JCMOVES -> ${desiredAsset}`);
+
+      res.json({
+        success: true,
+        message: "Your swap request has been submitted for manual review. You will be notified once processed.",
+        request: {
+          id: request.id,
+          amount: request.jcmovesAmount,
+          desiredAsset: request.desiredAsset,
+          status: request.status,
+          createdAt: request.createdAt
+        }
+      });
+    } catch (error) {
+      console.error("Error submitting swap request:", error);
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to submit request" });
+    }
+  });
+
+  // Get user's own swap requests
+  app.get("/api/swap-requests/my", isAuthenticated, async (req, res) => {
+    try {
+      const user = req.user as Express.User;
+      const requests = await db.query.swapRequests.findMany({
+        where: (sr, { eq }) => eq(sr.userId, user.id),
+        orderBy: (sr, { desc }) => [desc(sr.createdAt)]
+      });
+      res.json({ requests });
+    } catch (error) {
+      console.error("Error getting user swap requests:", error);
+      res.status(500).json({ error: "Failed to get requests" });
+    }
+  });
+
+  // Get all swap requests (admin only)
+  app.get("/api/swap-requests", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const status = req.query.status as string | undefined;
+      
+      let requests;
+      if (status) {
+        requests = await db.query.swapRequests.findMany({
+          where: (sr, { eq }) => eq(sr.status, status),
+          orderBy: (sr, { desc }) => [desc(sr.createdAt)]
+        });
+      } else {
+        requests = await db.query.swapRequests.findMany({
+          orderBy: (sr, { desc }) => [desc(sr.createdAt)]
+        });
+      }
+      res.json({ requests });
+    } catch (error) {
+      console.error("Error getting swap requests:", error);
+      res.status(500).json({ error: "Failed to get requests" });
+    }
+  });
+
+  // Review a swap request (approve/decline) - admin only
+  app.patch("/api/swap-requests/:id/review", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { action, reviewNotes, declineReason } = req.body;
+      const admin = req.user as Express.User;
+
+      if (!["approve", "decline"].includes(action)) {
+        return res.status(400).json({ error: "Action must be 'approve' or 'decline'" });
+      }
+
+      const request = await db.query.swapRequests.findFirst({
+        where: (sr, { eq }) => eq(sr.id, id)
+      });
+
+      if (!request) {
+        return res.status(404).json({ error: "Request not found" });
+      }
+
+      if (request.status !== "pending") {
+        return res.status(400).json({ error: "Request has already been reviewed" });
+      }
+
+      const newStatus = action === "approve" ? "approved" : "declined";
+
+      await db.update(swapRequests)
+        .set({
+          status: newStatus,
+          reviewedBy: admin.email,
+          reviewedAt: new Date(),
+          reviewNotes: reviewNotes || null,
+          declineReason: action === "decline" ? declineReason : null,
+          updatedAt: new Date()
+        })
+        .where(eq(swapRequests.id, id));
+
+      console.log(`[SWAP REQUEST] Admin ${admin.email} ${action}d request ${id}`);
+
+      res.json({
+        success: true,
+        message: `Request ${action}d successfully`,
+        status: newStatus
+      });
+    } catch (error) {
+      console.error("Error reviewing swap request:", error);
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to review request" });
+    }
+  });
+
+  // Mark swap as fulfilled (after manual off-platform execution) - admin only
+  app.patch("/api/swap-requests/:id/fulfill", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { fulfilledAmount, fulfillmentTxHash, fulfillmentMethod } = req.body;
+      const admin = req.user as Express.User;
+
+      const request = await db.query.swapRequests.findFirst({
+        where: (sr, { eq }) => eq(sr.id, id)
+      });
+
+      if (!request) {
+        return res.status(404).json({ error: "Request not found" });
+      }
+
+      if (request.status !== "approved") {
+        return res.status(400).json({ error: "Request must be approved before fulfillment" });
+      }
+
+      await db.update(swapRequests)
+        .set({
+          status: "completed",
+          fulfilledAmount: fulfilledAmount?.toString() || null,
+          fulfillmentTxHash: fulfillmentTxHash || null,
+          fulfilledBy: admin.email,
+          fulfilledAt: new Date(),
+          fulfillmentMethod: fulfillmentMethod || "treasury",
+          updatedAt: new Date()
+        })
+        .where(eq(swapRequests.id, id));
+
+      // Update monthly usage
+      const rules = await db.query.treasurySwapRules.findFirst();
+      if (rules) {
+        const newUsed = parseFloat(rules.monthlySwapsUsed || "0") + parseFloat(request.jcmovesAmount);
+        await db.update(treasurySwapRules)
+          .set({
+            monthlySwapsUsed: newUsed.toString(),
+            lastUpdated: new Date()
+          });
+      }
+
+      console.log(`[SWAP REQUEST] Admin ${admin.email} fulfilled request ${id} with ${fulfilledAmount} ${request.desiredAsset}`);
+
+      res.json({
+        success: true,
+        message: "Request marked as fulfilled",
+        status: "completed"
+      });
+    } catch (error) {
+      console.error("Error fulfilling swap request:", error);
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to fulfill request" });
+    }
+  });
+
+  // Update swap rules (admin only)
+  app.patch("/api/swap-rules", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const admin = req.user as Express.User;
+      const { monthlySwapCapTokens, maxPerUserPerMonth, minSwapAmount, maxSwapAmount, approvedAssets, swapsEnabled } = req.body;
+
+      const existingRules = await db.query.treasurySwapRules.findFirst();
+      
+      if (existingRules) {
+        await db.update(treasurySwapRules)
+          .set({
+            monthlySwapCapTokens: monthlySwapCapTokens?.toString() || existingRules.monthlySwapCapTokens,
+            maxPerUserPerMonth: maxPerUserPerMonth?.toString() || existingRules.maxPerUserPerMonth,
+            minSwapAmount: minSwapAmount?.toString() || existingRules.minSwapAmount,
+            maxSwapAmount: maxSwapAmount?.toString() || existingRules.maxSwapAmount,
+            approvedAssets: approvedAssets || existingRules.approvedAssets,
+            swapsEnabled: swapsEnabled !== undefined ? swapsEnabled : existingRules.swapsEnabled,
+            lastUpdated: new Date(),
+            updatedBy: admin.email
+          });
+      } else {
+        await db.insert(treasurySwapRules).values({
+          monthlySwapCapTokens: monthlySwapCapTokens?.toString() || "500000",
+          maxPerUserPerMonth: maxPerUserPerMonth?.toString() || "10000",
+          minSwapAmount: minSwapAmount?.toString() || "100",
+          maxSwapAmount: maxSwapAmount?.toString() || "50000",
+          approvedAssets: approvedAssets || ["SOL", "USDC"],
+          swapsEnabled: swapsEnabled !== undefined ? swapsEnabled : true,
+          updatedBy: admin.email
+        });
+      }
+
+      console.log(`[SWAP RULES] Admin ${admin.email} updated swap rules`);
+
+      res.json({ success: true, message: "Swap rules updated" });
+    } catch (error) {
+      console.error("Error updating swap rules:", error);
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to update rules" });
     }
   });
 
