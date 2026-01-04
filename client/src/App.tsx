@@ -44,6 +44,7 @@ import ServicesPage from "@/pages/services";
 import GalleryPage from "@/pages/gallery";
 import ReviewsPage from "@/pages/reviews";
 import SwapPage from "@/pages/swap";
+import RequestSwapPage from "@/pages/request-swap";
 
 // Landing page for unauthenticated users
 function LandingPage() {
@@ -123,6 +124,11 @@ function AuthenticatedApp() {
           </Route>
           <Route path="/swap">
             <PageWrapper component={SwapPage} />
+          </Route>
+          <Route path="/request-swap">
+            <RouteGuard allowedRoles={['admin', 'employee']}>
+              <PageWrapper component={RequestSwapPage} />
+            </RouteGuard>
           </Route>
           <Route path="/reviews">
             <PageWrapper component={ReviewsPage} />
