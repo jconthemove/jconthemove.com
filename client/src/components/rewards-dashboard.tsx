@@ -27,7 +27,8 @@ import {
   ArrowDownRight,
   Wallet,
   History,
-  ChevronRight
+  ChevronRight,
+  X
 } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
 import { LineChart, Line, ResponsiveContainer } from 'recharts';
@@ -138,6 +139,20 @@ export default function RewardsDashboard() {
     queryKey: ["/api/wallet/payouts"],
   });
 
+  // Fetch payout status (for pending payout info)
+  const { data: payoutStatus } = useQuery<{
+    hasPendingPayout: boolean;
+    pendingPayout: {
+      id: string;
+      tokenAmount: string;
+      recipientAddress: string;
+      status: string;
+      requestedAt: string;
+    } | null;
+  }>({
+    queryKey: ["/api/wallet/payout/status"],
+  });
+
   // Start mining mutation
   const startMiningMutation = useMutation({
     mutationFn: async () => {
@@ -195,6 +210,7 @@ export default function RewardsDashboard() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/rewards/wallet"] });
       queryClient.invalidateQueries({ queryKey: ["/api/wallet/payouts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet/payout/status"] });
       
       if (data.transactionHash) {
         toast({
@@ -211,6 +227,30 @@ export default function RewardsDashboard() {
     onError: (error: any) => {
       toast({
         title: "Payout Failed",
+        description: error.message || "Please try again",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Cancel payout mutation
+  const cancelPayoutMutation = useMutation({
+    mutationFn: async (payoutId: string) => {
+      const response = await apiRequest("POST", `/api/wallet/payout/${payoutId}/cancel`);
+      return await response.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/rewards/wallet"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet/payouts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet/payout/status"] });
+      toast({
+        title: "Payout Cancelled",
+        description: `${data.refundedAmount?.toFixed(2) || ''} JCMOVES refunded to your balance.`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Cancel Failed",
         description: error.message || "Please try again",
         variant: "destructive",
       });
@@ -443,6 +483,47 @@ export default function RewardsDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Pending Payout Alert */}
+      {payoutStatus?.hasPendingPayout && payoutStatus.pendingPayout && (
+        <Card className="mb-4 border border-yellow-500/50 bg-gradient-to-br from-yellow-900/30 to-orange-900/30" data-testid="card-pending-payout">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-yellow-500/20 border border-yellow-500/30">
+                  <Loader2 className="h-5 w-5 text-yellow-400 animate-spin" />
+                </div>
+                <div>
+                  <p className="font-semibold text-yellow-200">Pending Payout Request</p>
+                  <p className="text-sm text-yellow-300/80">
+                    {parseFloat(payoutStatus.pendingPayout.tokenAmount).toFixed(2)} JCMOVES → {payoutStatus.pendingPayout.recipientAddress.slice(0, 6)}...{payoutStatus.pendingPayout.recipientAddress.slice(-4)}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Requested: {new Date(payoutStatus.pendingPayout.requestedAt).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => cancelPayoutMutation.mutate(payoutStatus.pendingPayout!.id)}
+                disabled={cancelPayoutMutation.isPending}
+                className="border-red-500/50 text-red-300 hover:bg-red-500/20 hover:text-red-200"
+                data-testid="button-cancel-payout"
+              >
+                {cancelPayoutMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    <X className="h-4 w-4 mr-1" />
+                    Cancel
+                  </>
+                )}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Wallet Overview - Condensed to 2 Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">

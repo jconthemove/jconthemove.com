@@ -19,7 +19,7 @@ import { z } from "zod";
 import { EncryptionService } from "./services/encryption";
 import { eq, desc, sql, and, gte } from 'drizzle-orm';
 import { db } from './db';
-import { rewards, walletAccounts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules } from '@shared/schema';
+import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules } from '@shared/schema';
 import { getFaucetPayService } from "./services/faucetpay";
 import { getAdvertisingService } from "./services/advertising";
 import { FAUCET_CONFIG } from "./constants";
@@ -5922,15 +5922,110 @@ Thank you for your business!
       const userId = (req.session as any).userId;
       const hasPending = await storage.hasPendingPayout(userId);
       const payouts = await storage.getWalletPayoutsByUser(userId);
+      const pendingPayout = payouts.find(p => p.status === 'pending') || null;
       const latestPayout = payouts[0] || null;
       
       res.json({
         hasPendingPayout: hasPending,
+        pendingPayout,
         latestPayout
       });
     } catch (error) {
       console.error("Error getting payout status:", error);
       res.status(500).json({ error: "Failed to get payout status" });
+    }
+  });
+
+  // Cancel a pending payout request - uses transaction to prevent race conditions
+  app.post("/api/wallet/payout/:payoutId/cancel", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { payoutId } = req.params;
+
+      // Use transaction with row locking to prevent race conditions
+      const result = await db.transaction(async (tx) => {
+        // Lock the payout row for update to prevent concurrent modifications
+        const [payout] = await tx
+          .select()
+          .from(walletPayouts)
+          .where(and(
+            eq(walletPayouts.id, payoutId),
+            eq(walletPayouts.userId, userId)
+          ))
+          .for('update')
+          .limit(1);
+
+        if (!payout) {
+          return { error: "Payout request not found", status: 404 };
+        }
+
+        if (payout.status !== 'pending') {
+          return { error: "Only pending payouts can be cancelled", status: 400 };
+        }
+
+        const payoutAmount = parseFloat(payout.tokenAmount);
+
+        // Lock wallet account row and get current balance
+        const [walletAccount] = await tx
+          .select()
+          .from(walletAccounts)
+          .where(eq(walletAccounts.userId, userId))
+          .for('update')
+          .limit(1);
+
+        // Enforce wallet account existence - critical for data integrity
+        if (!walletAccount) {
+          return { error: "Wallet account not found. Cannot process refund.", status: 400 };
+        }
+
+        const currentBalance = parseFloat(walletAccount.tokenBalance || "0");
+        const currentRedeemed = parseFloat(walletAccount.totalRedeemed || "0");
+
+        // Validate totalRedeemed has enough to deduct (prevents negative adjustments)
+        if (currentRedeemed < payoutAmount) {
+          console.warn(`[PAYOUT] Refund amount ${payoutAmount} exceeds totalRedeemed ${currentRedeemed} for user ${userId}`);
+        }
+
+        // Calculate new values with underflow protection
+        const newBalance = currentBalance + payoutAmount;
+        const newRedeemed = Math.max(0, currentRedeemed - payoutAmount);
+
+        // Atomic update: refund tokens and update payout status
+        await tx
+          .update(walletAccounts)
+          .set({
+            tokenBalance: newBalance.toFixed(8),
+            totalRedeemed: newRedeemed.toFixed(8),
+            lastActivity: new Date()
+          })
+          .where(eq(walletAccounts.userId, userId));
+
+        await tx
+          .update(walletPayouts)
+          .set({
+            status: 'cancelled',
+            processedAt: new Date()
+          })
+          .where(eq(walletPayouts.id, payoutId));
+
+        console.log(`[PAYOUT] User ${userId} cancelled payout ${payoutId}, refunded ${payoutAmount} tokens`);
+
+        return {
+          success: true,
+          message: "Payout request cancelled and tokens refunded to your balance",
+          refundedAmount: payoutAmount
+        };
+      });
+
+      // Handle transaction result
+      if ('error' in result) {
+        return res.status(result.status || 500).json({ error: result.error });
+      }
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error cancelling payout:", error);
+      res.status(500).json({ error: "Failed to cancel payout request" });
     }
   });
 
