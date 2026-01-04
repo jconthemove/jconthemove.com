@@ -31,8 +31,13 @@ import {
   Coins,
   Plus,
   Edit,
-  Save
+  Save,
+  ArrowRightLeft,
+  XCircle
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { format } from "date-fns";
 
 export default function InGodWeTrustPage() {
   const { toast } = useToast();
@@ -246,6 +251,70 @@ export default function InGodWeTrustPage() {
     },
   });
 
+  // Swap request management state
+  const [selectedRequest, setSelectedRequest] = useState<string | null>(null);
+  const [declineReason, setDeclineReason] = useState("");
+  const [fulfilledAmount, setFulfilledAmount] = useState("");
+  const [fulfillmentTxHash, setFulfillmentTxHash] = useState("");
+
+  // Swap requests query
+  const { data: swapRequests, refetch: refetchSwapRequests } = useQuery<{ requests: any[] }>({
+    queryKey: ["/api/admin/swap-requests"],
+  });
+
+  // Approve swap request mutation
+  const approveSwapMutation = useMutation({
+    mutationFn: async (requestId: string) => {
+      const response = await apiRequest("POST", `/api/admin/swap-requests/${requestId}/approve`, {});
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/swap-requests"] });
+      toast({ title: "Request Approved", description: "Swap request has been approved for fulfillment." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Approval failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Decline swap request mutation
+  const declineSwapMutation = useMutation({
+    mutationFn: async ({ requestId, reason }: { requestId: string; reason: string }) => {
+      const response = await apiRequest("POST", `/api/admin/swap-requests/${requestId}/decline`, { reason });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/swap-requests"] });
+      setSelectedRequest(null);
+      setDeclineReason("");
+      toast({ title: "Request Declined", description: "Swap request has been declined." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Decline failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Complete swap request mutation
+  const completeSwapMutation = useMutation({
+    mutationFn: async ({ requestId, amount, txHash }: { requestId: string; amount: string; txHash: string }) => {
+      const response = await apiRequest("POST", `/api/admin/swap-requests/${requestId}/complete`, {
+        fulfilledAmount: amount,
+        fulfillmentTxHash: txHash,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/swap-requests"] });
+      setSelectedRequest(null);
+      setFulfilledAmount("");
+      setFulfillmentTxHash("");
+      toast({ title: "Swap Completed", description: "The swap has been fulfilled and the user notified." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Completion failed", description: error.message, variant: "destructive" });
+    },
+  });
+
   const stats = treasurySummary?.stats || {};
   const tokenPrice = livePrice?.price || stats.currentTokenPrice || 0;
   const blockchainBalance = liveBalance?.balance || 0;
@@ -338,7 +407,7 @@ export default function InGodWeTrustPage() {
         )}
 
         <Tabs defaultValue="operations" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-7 bg-slate-800/50 border border-slate-700/50 p-1">
+          <TabsList className="grid w-full grid-cols-8 bg-slate-800/50 border border-slate-700/50 p-1">
             <TabsTrigger value="operations" className="data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-300" data-testid="tab-operations">
               <Activity className="h-4 w-4 mr-2" />
               Operations
@@ -354,6 +423,10 @@ export default function InGodWeTrustPage() {
             <TabsTrigger value="transfers" className="data-[state=active]:bg-purple-500/20 data-[state=active]:text-purple-300" data-testid="tab-transfers">
               <Send className="h-4 w-4 mr-2" />
               Transfers
+            </TabsTrigger>
+            <TabsTrigger value="swaps" className="data-[state=active]:bg-cyan-500/20 data-[state=active]:text-cyan-300" data-testid="tab-swaps">
+              <ArrowRightLeft className="h-4 w-4 mr-2" />
+              Swaps
             </TabsTrigger>
             <TabsTrigger value="deposits" className="data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-300" data-testid="tab-deposits">
               <Upload className="h-4 w-4 mr-2" />
@@ -1255,6 +1328,201 @@ export default function InGodWeTrustPage() {
                     This action will send real JCMOVES tokens and cannot be undone
                   </p>
                 )}
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* Swaps Tab - Manual Review Queue */}
+          <TabsContent value="swaps" className="space-y-6">
+            <Card className="p-6 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-lg font-bold flex items-center gap-2 text-slate-100">
+                    <div className="p-2 rounded-lg bg-cyan-500/20 border border-cyan-500/30">
+                      <ArrowRightLeft className="h-5 w-5 text-cyan-400" />
+                    </div>
+                    Swap Request Queue
+                  </h3>
+                  <p className="text-sm text-slate-400 mt-2">
+                    Review and process manual swap requests from users
+                  </p>
+                </div>
+                <Button 
+                  variant="outline" 
+                  onClick={() => refetchSwapRequests()}
+                  className="border-slate-600 text-slate-300 hover:bg-cyan-500/20 hover:border-cyan-500/50"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh
+                </Button>
+              </div>
+
+              {/* Pending Requests */}
+              <div className="space-y-4">
+                {!swapRequests?.requests?.length ? (
+                  <div className="text-center py-8 text-slate-400">
+                    <ArrowRightLeft className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p>No pending swap requests</p>
+                  </div>
+                ) : (
+                  swapRequests.requests.map((request: any) => (
+                    <div key={request.id} className="border border-slate-700/50 rounded-xl p-4 bg-slate-800/50">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-bold text-lg text-cyan-300">
+                              {parseFloat(request.jcmovesAmount).toLocaleString()} JCMOVES
+                            </span>
+                            <span className="text-slate-400">→</span>
+                            <span className="font-medium text-emerald-400">{request.desiredAsset}</span>
+                          </div>
+                          <p className="text-xs text-slate-400">
+                            User: {request.userId} • {format(new Date(request.createdAt), "MMM d, yyyy h:mm a")}
+                          </p>
+                          <p className="text-xs text-slate-500 font-mono mt-1 break-all">
+                            To: {request.destinationWallet}
+                          </p>
+                        </div>
+                        <Badge 
+                          variant="outline" 
+                          className={
+                            request.status === 'pending' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30' :
+                            request.status === 'approved' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' :
+                            request.status === 'completed' ? 'bg-green-500/10 text-green-400 border-green-500/30' :
+                            'bg-red-500/10 text-red-400 border-red-500/30'
+                          }
+                        >
+                          {request.status}
+                        </Badge>
+                      </div>
+
+                      {/* Action buttons based on status */}
+                      {request.status === 'pending' && (
+                        <div className="flex gap-2 mt-4">
+                          <Button
+                            size="sm"
+                            onClick={() => approveSwapMutation.mutate(request.id)}
+                            disabled={approveSwapMutation.isPending}
+                            className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
+                          >
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setSelectedRequest(selectedRequest === request.id ? null : request.id)}
+                            className="border-red-500/50 text-red-400 hover:bg-red-500/20"
+                          >
+                            <XCircle className="h-4 w-4 mr-1" />
+                            Decline
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* Decline reason input */}
+                      {selectedRequest === request.id && request.status === 'pending' && (
+                        <div className="mt-3 space-y-2 p-3 bg-red-500/10 rounded-lg border border-red-500/30">
+                          <Label className="text-red-300">Decline Reason</Label>
+                          <Textarea
+                            value={declineReason}
+                            onChange={(e) => setDeclineReason(e.target.value)}
+                            placeholder="Enter reason for declining..."
+                            className="bg-slate-800/50 border-red-500/50 text-slate-100"
+                          />
+                          <Button
+                            size="sm"
+                            onClick={() => declineSwapMutation.mutate({ requestId: request.id, reason: declineReason })}
+                            disabled={declineSwapMutation.isPending || !declineReason}
+                            className="bg-red-500 hover:bg-red-600"
+                          >
+                            Confirm Decline
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* Complete approved request */}
+                      {request.status === 'approved' && (
+                        <div className="mt-3 space-y-3 p-3 bg-blue-500/10 rounded-lg border border-blue-500/30">
+                          <p className="text-sm text-blue-300">Complete the swap and record fulfillment details:</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <Label className="text-blue-200 text-xs">Amount Sent</Label>
+                              <Input
+                                value={fulfilledAmount}
+                                onChange={(e) => setFulfilledAmount(e.target.value)}
+                                placeholder="e.g., 0.5 SOL"
+                                className="bg-slate-800/50 border-blue-500/50 text-slate-100"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-blue-200 text-xs">Transaction Hash</Label>
+                              <Input
+                                value={fulfillmentTxHash}
+                                onChange={(e) => setFulfillmentTxHash(e.target.value)}
+                                placeholder="Solscan TX hash"
+                                className="bg-slate-800/50 border-blue-500/50 text-slate-100 font-mono text-xs"
+                              />
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={() => completeSwapMutation.mutate({ 
+                              requestId: request.id, 
+                              amount: fulfilledAmount, 
+                              txHash: fulfillmentTxHash 
+                            })}
+                            disabled={completeSwapMutation.isPending || !fulfilledAmount || !fulfillmentTxHash}
+                            className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
+                          >
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            Mark as Completed
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* Show completion details */}
+                      {request.status === 'completed' && (
+                        <div className="mt-3 p-3 bg-green-500/10 rounded-lg border border-green-500/30 text-sm">
+                          <p className="text-green-300">
+                            Fulfilled: {request.fulfilledAmount} {request.desiredAsset}
+                          </p>
+                          {request.fulfillmentTxHash && (
+                            <a
+                              href={`https://solscan.io/tx/${request.fulfillmentTxHash}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-400 hover:underline text-xs"
+                            >
+                              View on Solscan →
+                            </a>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Show decline reason */}
+                      {request.status === 'declined' && request.declineReason && (
+                        <div className="mt-3 p-3 bg-red-500/10 rounded-lg border border-red-500/30">
+                          <p className="text-red-300 text-sm">Reason: {request.declineReason}</p>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </Card>
+
+            {/* Compliance Info */}
+            <Card className="p-4 border border-amber-500/30 bg-amber-500/5">
+              <div className="flex items-start gap-3">
+                <Shield className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="font-bold text-amber-300">Option A Compliance</h4>
+                  <p className="text-sm text-amber-200/80 mt-1">
+                    This system uses manual review to avoid exchange classification. All swaps are fulfilled off-platform
+                    through treasury or external DEX. No automated execution or guaranteed rates.
+                  </p>
+                </div>
               </div>
             </Card>
           </TabsContent>
