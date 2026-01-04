@@ -136,15 +136,15 @@ function GalleryTile({ images, index }: { images: string[]; index: number }) {
 
 export default function GalleryPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
       <Header />
       
       <main className="container mx-auto px-4 py-8">
         <div className="text-center mb-8">
-          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white mb-4">
+          <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
             Our Work Gallery
           </h1>
-          <p className="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+          <p className="text-lg text-slate-300 max-w-2xl mx-auto">
             Take a look at our team in action! From residential moves to commercial relocations, 
             we handle every job with care and professionalism.
           </p>
@@ -157,12 +157,12 @@ export default function GalleryPage() {
         </div>
 
         <div className="mt-12 text-center">
-          <p className="text-gray-500 dark:text-gray-400">
+          <p className="text-slate-400">
             Want to see your move featured here? Book with us today!
           </p>
           <a
             href="/services"
-            className="inline-block mt-4 px-6 py-3 bg-maroon text-white rounded-full font-semibold hover:bg-maroon/90 transition-colors"
+            className="inline-block mt-4 px-6 py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-full font-semibold hover:from-orange-600 hover:to-orange-700 transition-all shadow-lg"
             data-testid="link-get-quote"
           >
             Get a Free Quote

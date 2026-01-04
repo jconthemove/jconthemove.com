@@ -57,32 +57,32 @@ export default function EmployeeLogin() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-orange-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
+      <Card className="w-full max-w-md bg-slate-800/50 border-slate-700">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
             <div className="bg-gradient-to-r from-orange-500 to-red-500 p-3 rounded-full">
               <LogIn className="h-8 w-8 text-white" />
             </div>
           </div>
-          <CardTitle className="text-2xl">Employee Sign In</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-2xl text-white">Employee Sign In</CardTitle>
+          <CardDescription className="text-slate-400">
             Sign in to access your JC ON THE MOVE dashboard
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email Address</Label>
+              <Label htmlFor="email" className="text-slate-300">Email Address</Label>
               <div className="relative">
-                <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                 <Input
                   id="email"
                   type="email"
                   placeholder="john.doe@example.com"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="pl-9"
+                  className="pl-9 bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
                   required
                   data-testid="input-email"
                 />
@@ -90,16 +90,16 @@ export default function EmployeeLogin() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password" className="text-slate-300">Password</Label>
               <div className="relative">
-                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                 <Input
                   id="password"
                   type="password"
                   placeholder="••••••••"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="pl-9"
+                  className="pl-9 bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
                   required
                   data-testid="input-password"
                 />
@@ -126,10 +126,10 @@ export default function EmployeeLogin() {
             </Button>
 
             <div className="text-center text-sm">
-              <span className="text-muted-foreground">Don't have an account? </span>
+              <span className="text-slate-400">Don't have an account? </span>
               <Button
                 variant="link"
-                className="p-0 h-auto text-orange-600 hover:text-orange-700"
+                className="p-0 h-auto text-orange-400 hover:text-orange-300"
                 onClick={() => setLocation("/employee-register")}
                 type="button"
                 data-testid="link-register"

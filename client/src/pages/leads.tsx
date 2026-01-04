@@ -197,14 +197,14 @@ export default function LeadsPage() {
   };
 
   const renderLeadCard = (lead: Lead) => (
-    <Card key={lead.id} className="border hover:shadow-lg transition-shadow bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm" data-testid={`lead-card-${lead.id}`}>
+    <Card key={lead.id} className="border border-slate-700 hover:border-slate-600 hover:shadow-lg transition-all bg-slate-800/80 backdrop-blur-sm" data-testid={`lead-card-${lead.id}`}>
       <CardContent className="p-5">
         <div className="space-y-4">
           {/* Header row with name and status */}
           <div className="flex justify-between items-start flex-wrap gap-3">
             <div className="flex items-center gap-3 flex-wrap">
               {getStatusIcon(lead.status)}
-              <h3 className="font-bold text-lg">
+              <h3 className="font-bold text-lg text-white">
                 {lead.firstName} {lead.lastName}
               </h3>
               <Badge className={getServiceBadgeColor(lead.serviceType)}>
@@ -254,31 +254,31 @@ export default function LeadsPage() {
           </div>
           
           {/* Location and date info */}
-          <div className="space-y-2 text-sm">
+          <div className="space-y-2 text-sm text-slate-300">
             <div className="flex items-start gap-2">
-              <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground flex-shrink-0" />
+              <MapPin className="h-4 w-4 mt-0.5 text-slate-400 flex-shrink-0" />
               <div className="space-y-1">
-                <p className="font-medium">From: {lead.fromAddress}</p>
-                {lead.toAddress && <p className="font-medium">To: {lead.toAddress}</p>}
+                <p className="font-medium text-white">From: {lead.fromAddress}</p>
+                {lead.toAddress && <p className="font-medium text-white">To: {lead.toAddress}</p>}
               </div>
             </div>
             {lead.moveDate && (
               <div className="flex items-center gap-2">
-                <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                <p>Move Date: <span className="font-medium">{lead.moveDate}</span></p>
+                <CalendarIcon className="h-4 w-4 text-slate-400" />
+                <p className="text-slate-300">Move Date: <span className="font-medium text-white">{lead.moveDate}</span></p>
               </div>
             )}
           </div>
           
           {/* Details section */}
           {lead.details && (
-            <div className="bg-muted/50 p-3 rounded-lg">
-              <p className="text-sm">{lead.details}</p>
+            <div className="bg-slate-700/50 p-3 rounded-lg">
+              <p className="text-sm text-slate-300">{lead.details}</p>
             </div>
           )}
           
           {/* Footer with timestamp */}
-          <p className="text-xs text-muted-foreground border-t pt-2">
+          <p className="text-xs text-slate-400 border-t border-slate-700 pt-2">
             Posted: {new Date(lead.createdAt).toLocaleString()}
           </p>
         </div>
@@ -287,21 +287,21 @@ export default function LeadsPage() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-500 to-pink-600 dark:from-purple-900 dark:to-pink-900">
-      <div className="min-h-screen bg-white/10 dark:bg-black/20 backdrop-blur-sm">
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
+      <div className="min-h-screen">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="mb-8">
             <div className="flex items-center justify-between flex-wrap gap-4">
               <div>
-                <h1 className="text-4xl font-bold text-white drop-shadow-lg">Management</h1>
-                <p className="text-white/90 mt-2 text-lg">
+                <h1 className="text-4xl font-bold text-white">Management</h1>
+                <p className="text-slate-300 mt-2 text-lg">
                   View and manage customer leads
                 </p>
               </div>
               <Button
-                variant="outline"
+                variant="ghost"
                 onClick={() => setLocation("/dashboard")}
-                className="flex items-center gap-2 bg-white/90 hover:bg-white"
+                className="flex items-center gap-2 text-white/70 hover:text-white hover:bg-white/10"
                 data-testid="button-back-to-dashboard"
               >
                 <ArrowLeft className="h-4 w-4" />
@@ -311,32 +311,32 @@ export default function LeadsPage() {
           </div>
 
           <Tabs defaultValue="view" className="space-y-6">
-            <TabsList className="bg-white/90 dark:bg-gray-900/90">
+            <TabsList className="bg-slate-800/80 border border-slate-700">
               <TabsTrigger value="view" data-testid="tab-view-leads">View Leads</TabsTrigger>
               <TabsTrigger value="add" data-testid="tab-add-lead">Add a Lead</TabsTrigger>
             </TabsList>
 
             <TabsContent value="view">
               {isLoading ? (
-                <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm">
+                <Card className="bg-slate-800/50 border-slate-700">
                   <CardContent className="text-center py-12">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-                    <p className="mt-4 text-muted-foreground">Loading leads...</p>
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mx-auto"></div>
+                    <p className="mt-4 text-slate-400">Loading leads...</p>
                   </CardContent>
                 </Card>
               ) : leads.length === 0 ? (
-                <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm">
+                <Card className="bg-slate-800/50 border-slate-700">
                   <CardContent className="py-12">
                     <div className="text-center">
-                      <p className="text-muted-foreground">No leads at this time.</p>
+                      <p className="text-slate-400">No leads at this time.</p>
                     </div>
                   </CardContent>
                 </Card>
               ) : (
-                <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm">
+                <Card className="bg-slate-800/50 border-slate-700">
                   <CardHeader>
-                    <CardTitle className="text-2xl">All Leads ({leads.length})</CardTitle>
-                    <CardDescription>All customer leads organized by status</CardDescription>
+                    <CardTitle className="text-2xl text-white">All Leads ({leads.length})</CardTitle>
+                    <CardDescription className="text-slate-400">All customer leads organized by status</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
@@ -358,17 +358,17 @@ export default function LeadsPage() {
             </TabsContent>
 
             <TabsContent value="add">
-              <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm">
+              <Card className="bg-slate-800/50 border-slate-700">
                 <CardHeader>
-                  <CardTitle className="text-2xl">Add a New Lead</CardTitle>
-                  <CardDescription>
+                  <CardTitle className="text-2xl text-white">Add a New Lead</CardTitle>
+                  <CardDescription className="text-slate-400">
                     Submit a lead on behalf of a customer. You'll earn rewards when the job is confirmed and completed.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={onSubmit} className="space-y-6">
                     <div>
-                      <Label className="block text-sm font-medium text-foreground mb-3">Service Type *</Label>
+                      <Label className="block text-sm font-medium text-slate-300 mb-3">Service Type *</Label>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         {serviceOptions.map((service) => {
                           const IconComponent = service.icon;
@@ -382,9 +382,9 @@ export default function LeadsPage() {
                                 onChange={(e) => setSelectedService(e.target.value)}
                                 data-testid={`radio-service-${service.value}`}
                               />
-                              <div className="p-4 border-2 border-border rounded-lg cursor-pointer peer-checked:border-primary peer-checked:bg-primary/5 transition-colors">
-                                <IconComponent className="text-primary text-2xl mb-2 mx-auto h-8 w-8" />
-                                <span className="font-medium block text-center">{service.label}</span>
+                              <div className="p-4 border-2 border-slate-600 rounded-lg cursor-pointer peer-checked:border-orange-500 peer-checked:bg-orange-500/10 transition-colors bg-slate-700/30">
+                                <IconComponent className="text-orange-400 text-2xl mb-2 mx-auto h-8 w-8" />
+                                <span className="font-medium block text-center text-white">{service.label}</span>
                               </div>
                             </label>
                           );
@@ -397,10 +397,11 @@ export default function LeadsPage() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
-                        <Label htmlFor="firstName">Customer First Name *</Label>
+                        <Label htmlFor="firstName" className="text-slate-300">Customer First Name *</Label>
                         <Input
                           id="firstName"
                           placeholder="John"
+                          className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
                           {...form.register("firstName")}
                           data-testid="input-first-name"
                         />
@@ -409,10 +410,11 @@ export default function LeadsPage() {
                         )}
                       </div>
                       <div>
-                        <Label htmlFor="lastName">Customer Last Name *</Label>
+                        <Label htmlFor="lastName" className="text-slate-300">Customer Last Name *</Label>
                         <Input
                           id="lastName"
                           placeholder="Doe"
+                          className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
                           {...form.register("lastName")}
                           data-testid="input-last-name"
                         />
@@ -424,11 +426,12 @@ export default function LeadsPage() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
-                        <Label htmlFor="email">Customer Email *</Label>
+                        <Label htmlFor="email" className="text-slate-300">Customer Email *</Label>
                         <Input
                           id="email"
                           type="email"
                           placeholder="customer@email.com"
+                          className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
                           {...form.register("email")}
                           data-testid="input-email"
                         />
@@ -437,11 +440,12 @@ export default function LeadsPage() {
                         )}
                       </div>
                       <div>
-                        <Label htmlFor="phone">Customer Phone *</Label>
+                        <Label htmlFor="phone" className="text-slate-300">Customer Phone *</Label>
                         <Input
                           id="phone"
                           type="tel"
                           placeholder="(555) 123-4567"
+                          className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
                           {...form.register("phone")}
                           data-testid="input-phone"
                         />
@@ -453,10 +457,11 @@ export default function LeadsPage() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
-                        <Label htmlFor="fromAddress">From Address *</Label>
+                        <Label htmlFor="fromAddress" className="text-slate-300">From Address *</Label>
                         <Input
                           id="fromAddress"
                           placeholder="Current address"
+                          className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
                           {...form.register("fromAddress")}
                           data-testid="input-from-address"
                         />
@@ -465,10 +470,11 @@ export default function LeadsPage() {
                         )}
                       </div>
                       <div>
-                        <Label htmlFor="toAddress">To Address</Label>
+                        <Label htmlFor="toAddress" className="text-slate-300">To Address</Label>
                         <Input
                           id="toAddress"
                           placeholder="Destination address"
+                          className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
                           {...form.register("toAddress")}
                           data-testid="input-to-address"
                         />
@@ -477,19 +483,21 @@ export default function LeadsPage() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
-                        <Label htmlFor="moveDate">Preferred Move Date</Label>
+                        <Label htmlFor="moveDate" className="text-slate-300">Preferred Move Date</Label>
                         <Input
                           id="moveDate"
                           type="date"
+                          className="bg-slate-700/50 border-slate-600 text-white"
                           {...form.register("moveDate")}
                           data-testid="input-move-date"
                         />
                       </div>
                       <div>
-                        <Label htmlFor="propertySize">Property Size</Label>
+                        <Label htmlFor="propertySize" className="text-slate-300">Property Size</Label>
                         <Input
                           id="propertySize"
                           placeholder="e.g., 2 bedroom, 1500 sq ft"
+                          className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
                           {...form.register("propertySize")}
                           data-testid="input-property-size"
                         />
@@ -497,11 +505,12 @@ export default function LeadsPage() {
                     </div>
 
                     <div>
-                      <Label htmlFor="details">Additional Details</Label>
+                      <Label htmlFor="details" className="text-slate-300">Additional Details</Label>
                       <Textarea
                         id="details"
                         placeholder="Any special requirements, items to move, or important notes..."
                         rows={4}
+                        className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
                         {...form.register("details")}
                         data-testid="textarea-details"
                       />

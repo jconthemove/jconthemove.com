@@ -134,40 +134,41 @@ export default function RequestSwapPage() {
   }
 
   return (
-    <div className="container max-w-4xl mx-auto p-6 space-y-6">
-      <div className="flex items-center gap-4">
-        <Link href="/employee-dashboard">
-          <Button variant="ghost" size="sm">
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back
-          </Button>
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold">Request External Swap</h1>
-          <p className="text-muted-foreground">Manual review required</p>
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
+      <div className="container max-w-4xl mx-auto p-6 space-y-6">
+        <div className="flex items-center gap-4">
+          <Link href="/employee-dashboard">
+            <Button variant="ghost" size="sm" className="text-white/70 hover:text-white hover:bg-white/10">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold text-white">Request External Swap</h1>
+            <p className="text-slate-400">Manual review required</p>
+          </div>
         </div>
-      </div>
 
-      <Alert className="border-amber-500/30 bg-amber-500/5">
-        <FileText className="h-4 w-4 text-amber-600" />
-        <AlertDescription className="text-amber-700 dark:text-amber-400">
-          <strong>Important:</strong> This is a request for manual processing. No prices are guaranteed. 
-          Our team will review your request and complete the swap off-platform if approved.
-        </AlertDescription>
-      </Alert>
+        <Alert className="border-amber-500/30 bg-amber-500/10">
+          <FileText className="h-4 w-4 text-amber-400" />
+          <AlertDescription className="text-amber-300">
+            <strong>Important:</strong> This is a request for manual processing. No prices are guaranteed. 
+            Our team will review your request and complete the swap off-platform if approved.
+          </AlertDescription>
+        </Alert>
 
-      <div className="grid md:grid-cols-2 gap-6">
-        {showForm && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Send className="w-5 h-5" />
-                Submit Request
-              </CardTitle>
-              <CardDescription>
-                Request to convert your JCMOVES tokens
-              </CardDescription>
-            </CardHeader>
+        <div className="grid md:grid-cols-2 gap-6">
+          {showForm && (
+            <Card className="bg-slate-800/50 border-slate-700">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-white">
+                  <Send className="w-5 h-5" />
+                  Submit Request
+                </CardTitle>
+                <CardDescription className="text-slate-400">
+                  Request to convert your JCMOVES tokens
+                </CardDescription>
+              </CardHeader>
             <CardContent>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <div className="space-y-2">
@@ -353,21 +354,22 @@ export default function RequestSwapPage() {
               </div>
             )}
           </CardContent>
+          </Card>
+        </div>
+
+        <Card className="bg-slate-800/50 border-slate-700">
+          <CardContent className="pt-6">
+            <h3 className="font-medium mb-2 text-white">How It Works</h3>
+            <ol className="text-sm text-slate-400 space-y-2 list-decimal list-inside">
+              <li>Submit your swap request with the amount and desired asset</li>
+              <li>Our team reviews your request (usually within 24-48 hours)</li>
+              <li>If approved, we complete the swap using our treasury or external services</li>
+              <li>The requested asset is sent to your wallet address</li>
+              <li>You receive notification when complete</li>
+            </ol>
+          </CardContent>
         </Card>
       </div>
-
-      <Card className="bg-muted/50">
-        <CardContent className="pt-6">
-          <h3 className="font-medium mb-2">How It Works</h3>
-          <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
-            <li>Submit your swap request with the amount and desired asset</li>
-            <li>Our team reviews your request (usually within 24-48 hours)</li>
-            <li>If approved, we complete the swap using our treasury or external services</li>
-            <li>The requested asset is sent to your wallet address</li>
-            <li>You receive notification when complete</li>
-          </ol>
-        </CardContent>
-      </Card>
     </div>
   );
 }

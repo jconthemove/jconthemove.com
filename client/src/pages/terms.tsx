@@ -4,18 +4,18 @@ import { ArrowLeft } from "lucide-react";
 
 export default function TermsOfService() {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
       <div className="max-w-4xl mx-auto px-4 py-8">
         <Link href="/">
-          <Button variant="ghost" className="mb-6" data-testid="button-back">
+          <Button variant="ghost" className="mb-6 text-white/70 hover:text-white hover:bg-white/10" data-testid="button-back">
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Home
           </Button>
         </Link>
 
-        <h1 className="text-4xl font-bold mb-8" data-testid="text-title">Terms of Service</h1>
+        <h1 className="text-4xl font-bold mb-8 text-white" data-testid="text-title">Terms of Service</h1>
         
-        <div className="prose prose-gray dark:prose-invert max-w-none">
+        <div className="prose prose-invert max-w-none prose-headings:text-white prose-p:text-slate-300 prose-li:text-slate-300 prose-a:text-blue-400">
           <section className="mb-8">
             <h2 className="text-2xl font-semibold mb-4" data-testid="text-section-age">Age Requirements</h2>
             <p className="mb-4">

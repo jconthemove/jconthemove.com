@@ -74,29 +74,29 @@ export default function EmployeesPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-muted/30 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
-          <p className="mt-4 text-muted-foreground">Loading employees...</p>
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-white"></div>
+          <p className="mt-4 text-slate-400">Loading employees...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-muted/30">
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-3">
-              <Users className="h-8 w-8 text-primary" />
+              <Users className="h-8 w-8 text-purple-400" />
               <div>
-                <h1 className="text-3xl font-bold text-foreground">Employee Management</h1>
-                <p className="text-muted-foreground mt-1">Manage employee roles and permissions</p>
+                <h1 className="text-3xl font-bold text-white">Employee Management</h1>
+                <p className="text-slate-400 mt-1">Manage employee roles and permissions</p>
               </div>
             </div>
             <Link href="/dashboard" data-testid="link-back-to-dashboard">
-              <Button variant="outline" className="flex items-center gap-2">
+              <Button variant="ghost" className="flex items-center gap-2 text-white/70 hover:text-white hover:bg-white/10">
                 <ArrowLeft className="h-4 w-4" />
                 Back to Dashboard
               </Button>
@@ -104,7 +104,7 @@ export default function EmployeesPage() {
           </div>
         </div>
 
-        <Card className="shadow-sm" data-testid="employees-table">
+        <Card className="shadow-sm bg-slate-800/50 border-slate-700" data-testid="employees-table">
           <CardContent className="p-0">
             <div className="p-6 border-b border-border">
               <div className="flex items-center justify-between">

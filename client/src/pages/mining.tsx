@@ -133,8 +133,8 @@ export default function MiningPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
+        <Loader2 className="h-8 w-8 animate-spin text-white" />
       </div>
     );
   }
@@ -142,12 +142,12 @@ export default function MiningPage() {
   const hasActiveSession = !!miningStatus?.currentSession;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-950 dark:to-gray-900 p-4 pb-24 md:pb-4">
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 p-4 pb-24 md:pb-4">
       <div className="max-w-md mx-auto space-y-4">
         {/* Header */}
         <div className="text-center pt-6 pb-2">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Token Mining</h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+          <h1 className="text-2xl font-bold text-white">Token Mining</h1>
+          <p className="text-sm text-slate-400 mt-1">
             Earn 864 JCMOVES every 24 hours
           </p>
         </div>
@@ -168,10 +168,10 @@ export default function MiningPage() {
 
         {!hasActiveSession ? (
           /* Start Mining Button */
-          <Card className="p-8 text-center">
+          <Card className="p-8 text-center bg-slate-800/50 border-slate-700">
             <Zap className="h-16 w-16 mx-auto text-orange-500 mb-4" />
-            <h2 className="text-xl font-bold mb-2">Start Mining JCMOVES</h2>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">
+            <h2 className="text-xl font-bold mb-2 text-white">Start Mining JCMOVES</h2>
+            <p className="text-slate-400 mb-6">
               Begin earning passive tokens automatically. You'll receive 864 JCMOVES every 24 hours!
             </p>
             <Button

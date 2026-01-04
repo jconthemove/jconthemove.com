@@ -744,16 +744,18 @@ export default function FaucetPage() {
 
   if (configLoading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-8">
-            <div className="h-8 bg-muted animate-pulse rounded w-48 mx-auto mb-4" />
-            <div className="h-4 bg-muted animate-pulse rounded w-96 mx-auto" />
-          </div>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="h-96 bg-muted animate-pulse rounded-lg" />
-            ))}
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
+        <div className="container mx-auto px-4 py-8">
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-8">
+              <div className="h-8 bg-slate-700/50 animate-pulse rounded w-48 mx-auto mb-4" />
+              <div className="h-4 bg-slate-700/50 animate-pulse rounded w-96 mx-auto" />
+            </div>
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-96 bg-slate-700/50 animate-pulse rounded-lg" />
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -762,34 +764,37 @@ export default function FaucetPage() {
 
   if (!(configData as any)?.isConfigured) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-2xl mx-auto text-center">
-          <Alert className="border-orange-200 bg-orange-50">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              The faucet system is currently being configured. Please check back later!
-            </AlertDescription>
-          </Alert>
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
+        <div className="container mx-auto px-4 py-8">
+          <div className="max-w-2xl mx-auto text-center">
+            <Alert className="border-orange-500/30 bg-orange-500/10">
+              <AlertCircle className="h-4 w-4 text-orange-400" />
+              <AlertDescription className="text-orange-300">
+                The faucet system is currently being configured. Please check back later!
+              </AlertDescription>
+            </Alert>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold mb-4">Cryptocurrency Faucet</h1>
-          <p className="text-xl text-muted-foreground mb-6">
-            Earn free cryptocurrency regularly! Get Bitcoin (ZBD app), Ethereum, Litecoin, and ROX tokens.
-          </p>
-          <div className="flex justify-center space-x-4 text-sm text-muted-foreground">
-            <span>✨ No deposits required</span>
-            <span>🔒 Secure payments via FaucetPay</span>
-            <span>⚡ Instant payouts</span>
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
+      <div className="container mx-auto px-4 py-8">
+        <div className="max-w-6xl mx-auto">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <h1 className="text-4xl font-bold mb-4 text-white">Cryptocurrency Faucet</h1>
+            <p className="text-xl text-slate-300 mb-6">
+              Earn free cryptocurrency regularly! Get Bitcoin (ZBD app), Ethereum, Litecoin, and ROX tokens.
+            </p>
+            <div className="flex justify-center space-x-4 text-sm text-slate-400">
+              <span>✨ No deposits required</span>
+              <span>🔒 Secure payments via FaucetPay</span>
+              <span>⚡ Instant payouts</span>
+            </div>
           </div>
-        </div>
 
         <Tabs defaultValue="faucets" className="space-y-6">
           <TabsList className="grid w-full grid-cols-2">
@@ -883,7 +888,8 @@ export default function FaucetPage() {
           <TabsContent value="history">
             <ClaimHistory />
           </TabsContent>
-        </Tabs>
+          </Tabs>
+        </div>
       </div>
     </div>
   );

@@ -80,20 +80,20 @@ export default function PendingQuotesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-foreground">Pending Quotes</h1>
-              <p className="text-muted-foreground mt-2">
+              <h1 className="text-3xl font-bold text-white">Pending Quotes</h1>
+              <p className="text-slate-300 mt-2">
                 Manage and review quotes for customer leads
               </p>
             </div>
             <Button
-              variant="outline"
+              variant="ghost"
               onClick={() => setLocation("/dashboard")}
-              className="flex items-center gap-2"
+              className="flex items-center gap-2 text-white/70 hover:text-white hover:bg-white/10"
               data-testid="button-back-to-dashboard"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -104,17 +104,17 @@ export default function PendingQuotesPage() {
 
         {isLoading ? (
           <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-4 text-muted-foreground" data-testid="text-loading">Loading quotes...</p>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
+            <p className="mt-4 text-slate-400" data-testid="text-loading">Loading quotes...</p>
           </div>
         ) : quotedLeads.length === 0 ? (
-          <Card>
+          <Card className="bg-slate-800/50 border-slate-700">
             <CardContent className="py-12 text-center">
-              <p className="text-muted-foreground" data-testid="text-no-quotes">No pending quotes at this time.</p>
+              <p className="text-slate-400" data-testid="text-no-quotes">No pending quotes at this time.</p>
               <Button
-                variant="outline"
+                variant="ghost"
                 onClick={() => setLocation("/leads")}
-                className="mt-4"
+                className="mt-4 text-white/70 hover:text-white hover:bg-white/10"
                 data-testid="button-view-leads"
               >
                 View All Leads
@@ -124,7 +124,7 @@ export default function PendingQuotesPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {quotedLeads.map((lead) => (
-              <Card key={lead.id} className="flex flex-col" data-testid={`quote-card-${lead.id}`}>
+              <Card key={lead.id} className="flex flex-col bg-slate-800/50 border-slate-700" data-testid={`quote-card-${lead.id}`}>
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div className="space-y-1">

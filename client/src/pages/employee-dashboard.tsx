@@ -98,20 +98,20 @@ export default function EmployeeDashboard() {
   const pendingTokens = parseFloat(walletData?.pendingTokens || "0");
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 p-4 md:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-slate-100" data-testid="text-dashboard-title">
+            <h1 className="text-3xl md:text-4xl font-bold text-white" data-testid="text-dashboard-title">
               My Dashboard
             </h1>
-            <p className="text-slate-600 dark:text-slate-400 mt-1">
+            <p className="text-slate-400 mt-1">
               Track your performance and upcoming work
             </p>
           </div>
           <Link href="/employee">
-            <Button variant="outline" data-testid="button-back-home">
+            <Button variant="ghost" className="text-white/70 hover:text-white hover:bg-white/10" data-testid="button-back-home">
               <Calendar className="h-4 w-4 mr-2" />
               Calendar View
             </Button>
@@ -119,9 +119,9 @@ export default function EmployeeDashboard() {
         </div>
 
         {/* Dashboard Settings Toggle */}
-        <Card data-testid="card-dashboard-settings">
+        <Card className="bg-slate-800/50 border-slate-700" data-testid="card-dashboard-settings">
           <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
+            <CardTitle className="text-lg flex items-center gap-2 text-white">
               <Settings className="h-5 w-5" />
               Customize Dashboard
             </CardTitle>

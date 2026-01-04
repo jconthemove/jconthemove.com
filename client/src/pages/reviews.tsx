@@ -180,12 +180,12 @@ export default function ReviewsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 pb-20">
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 pb-20">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <div className="flex items-center gap-4 mb-4">
             <Link href="/">
-              <Button variant="outline" className="flex items-center gap-2" data-testid="button-back">
+              <Button variant="ghost" className="flex items-center gap-2 text-white/70 hover:text-white hover:bg-white/10" data-testid="button-back">
                 <ArrowLeft className="h-4 w-4" />
                 Back to Home
               </Button>
@@ -193,10 +193,10 @@ export default function ReviewsPage() {
           </div>
           
           <div className="text-center max-w-2xl mx-auto">
-            <h1 className="text-4xl font-bold text-foreground mb-4">
+            <h1 className="text-4xl font-bold text-white mb-4">
               Customer Reviews
             </h1>
-            <p className="text-lg text-muted-foreground">
+            <p className="text-lg text-slate-300">
               See what our customers are saying about JC ON THE MOVE
             </p>
             
@@ -204,12 +204,12 @@ export default function ReviewsPage() {
               <div className="flex items-center justify-center gap-6 mt-6">
                 <div className="flex items-center gap-2">
                   <StarRating rating={Math.round(stats.averageRating)} readonly size="md" />
-                  <span className="text-2xl font-bold text-yellow-500">
+                  <span className="text-2xl font-bold text-yellow-400">
                     {stats.averageRating.toFixed(1)}
                   </span>
                 </div>
-                <div className="text-muted-foreground">
-                  <span className="font-semibold text-foreground">{stats.totalCount}</span> reviews
+                <div className="text-slate-400">
+                  <span className="font-semibold text-white">{stats.totalCount}</span> reviews
                 </div>
               </div>
             )}
@@ -233,16 +233,16 @@ export default function ReviewsPage() {
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : testimonials.length === 0 ? (
-          <Card className="max-w-lg mx-auto">
+          <Card className="max-w-lg mx-auto bg-slate-800/50 border-slate-700">
             <CardContent className="py-16 text-center">
-              <MessageSquare className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" />
-              <h3 className="text-xl font-semibold text-foreground mb-2">No Reviews Yet</h3>
-              <p className="text-muted-foreground mb-6">
+              <MessageSquare className="h-16 w-16 text-slate-500 mx-auto mb-4 opacity-50" />
+              <h3 className="text-xl font-semibold text-white mb-2">No Reviews Yet</h3>
+              <p className="text-slate-400 mb-6">
                 Be the first to share your experience with JC ON THE MOVE!
               </p>
               <Button 
                 onClick={() => setIsReviewDialogOpen(true)}
-                className="bg-primary hover:bg-primary/90"
+                className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600"
                 data-testid="button-leave-first-review"
               >
                 <PenLine className="h-4 w-4 mr-2" />
@@ -255,8 +255,8 @@ export default function ReviewsPage() {
             {testimonials.map((testimonial) => (
               <Card 
                 key={testimonial.id} 
-                className={`hover:shadow-lg transition-shadow ${
-                  testimonial.featured ? 'ring-2 ring-yellow-400 dark:ring-yellow-600' : ''
+                className={`bg-slate-800/50 border-slate-700 hover:border-slate-600 hover:shadow-lg transition-all ${
+                  testimonial.featured ? 'ring-2 ring-yellow-400' : ''
                 }`}
                 data-testid={`testimonial-card-${testimonial.id}`}
               >
@@ -264,12 +264,12 @@ export default function ReviewsPage() {
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-2">
                       <PlatformIcon platform={testimonial.sourcePlatform} />
-                      <span className="text-sm text-muted-foreground">
+                      <span className="text-sm text-slate-400">
                         {getPlatformLabel(testimonial.sourcePlatform)}
                       </span>
                     </div>
                     {testimonial.featured && (
-                      <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                      <Badge className="bg-yellow-500/20 text-yellow-300 border-yellow-500/30">
                         Featured
                       </Badge>
                     )}
@@ -279,23 +279,23 @@ export default function ReviewsPage() {
                     <StarRating rating={testimonial.rating} readonly size="sm" />
                   </div>
                   
-                  <Quote className="h-6 w-6 text-muted-foreground/30 mb-2" />
+                  <Quote className="h-6 w-6 text-slate-600 mb-2" />
                   
-                  <p className="text-foreground leading-relaxed mb-4 line-clamp-4">
+                  <p className="text-slate-200 leading-relaxed mb-4 line-clamp-4">
                     {testimonial.content}
                   </p>
                   
-                  <div className="flex items-center justify-between mt-auto pt-4 border-t border-border">
+                  <div className="flex items-center justify-between mt-auto pt-4 border-t border-slate-700">
                     <div>
-                      <p className="font-medium text-foreground">{testimonial.reviewerName}</p>
+                      <p className="font-medium text-white">{testimonial.reviewerName}</p>
                       {testimonial.serviceType && (
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-slate-400">
                           {getServiceLabel(testimonial.serviceType)}
                         </p>
                       )}
                     </div>
                     {testimonial.reviewDate && (
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-slate-500">
                         {new Date(testimonial.reviewDate).toLocaleDateString('en-US', {
                           month: 'short',
                           year: 'numeric'
@@ -309,7 +309,7 @@ export default function ReviewsPage() {
                       href={testimonial.sourceUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-xs text-primary hover:underline mt-3"
+                      className="flex items-center gap-1 text-xs text-blue-400 hover:underline mt-3"
                     >
                       View original <ExternalLink className="h-3 w-3" />
                     </a>
@@ -322,14 +322,14 @@ export default function ReviewsPage() {
 
         {stats && stats.totalCount > 0 && (
           <div className="mt-12 text-center">
-            <p className="text-muted-foreground mb-4">
+            <p className="text-slate-400 mb-4">
               Reviews collected from multiple platforms
             </p>
             <div className="flex justify-center gap-6 flex-wrap">
               {Object.entries(stats.platformCounts).map(([platform, count]) => (
-                <div key={platform} className="flex items-center gap-2 bg-muted/50 px-4 py-2 rounded-full">
+                <div key={platform} className="flex items-center gap-2 bg-slate-800/50 border border-slate-700 px-4 py-2 rounded-full">
                   <PlatformIcon platform={platform === 'customer' ? null : platform} />
-                  <span className="text-sm font-medium">{count}</span>
+                  <span className="text-sm font-medium text-white">{count}</span>
                 </div>
               ))}
             </div>

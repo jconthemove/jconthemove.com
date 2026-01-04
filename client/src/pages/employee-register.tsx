@@ -83,16 +83,16 @@ export default function EmployeeRegister() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-orange-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
+      <Card className="w-full max-w-md bg-slate-800/50 border-slate-700">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
             <div className="bg-gradient-to-r from-orange-500 to-red-500 p-3 rounded-full">
               <UserPlus className="h-8 w-8 text-white" />
             </div>
           </div>
-          <CardTitle className="text-2xl">Join JC ON THE MOVE</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-2xl text-white">Join JC ON THE MOVE</CardTitle>
+          <CardDescription className="text-slate-400">
             Create your employee account to get started
           </CardDescription>
         </CardHeader>
@@ -100,30 +100,30 @@ export default function EmployeeRegister() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="firstName">First Name</Label>
+                <Label htmlFor="firstName" className="text-slate-300">First Name</Label>
                 <div className="relative">
-                  <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <User className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                   <Input
                     id="firstName"
                     placeholder="John"
                     value={formData.firstName}
                     onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                    className="pl-9"
+                    className="pl-9 bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
                     required
                     data-testid="input-first-name"
                   />
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="lastName">Last Name</Label>
+                <Label htmlFor="lastName" className="text-slate-300">Last Name</Label>
                 <div className="relative">
-                  <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <User className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                   <Input
                     id="lastName"
                     placeholder="Doe"
                     value={formData.lastName}
                     onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                    className="pl-9"
+                    className="pl-9 bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
                     required
                     data-testid="input-last-name"
                   />
@@ -132,16 +132,16 @@ export default function EmployeeRegister() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="email">Email Address</Label>
+              <Label htmlFor="email" className="text-slate-300">Email Address</Label>
               <div className="relative">
-                <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                 <Input
                   id="email"
                   type="email"
                   placeholder="john.doe@example.com"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="pl-9"
+                  className="pl-9 bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
                   required
                   data-testid="input-email"
                 />
@@ -149,16 +149,16 @@ export default function EmployeeRegister() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="phoneNumber">Phone Number</Label>
+              <Label htmlFor="phoneNumber" className="text-slate-300">Phone Number</Label>
               <div className="relative">
-                <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Phone className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                 <Input
                   id="phoneNumber"
                   type="tel"
                   placeholder="(517) 202-5454"
                   value={formData.phoneNumber}
                   onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
-                  className="pl-9"
+                  className="pl-9 bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
                   required
                   data-testid="input-phone"
                 />
@@ -166,36 +166,36 @@ export default function EmployeeRegister() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password" className="text-slate-300">Password</Label>
               <div className="relative">
-                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                 <Input
                   id="password"
                   type="password"
                   placeholder="••••••••"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="pl-9"
+                  className="pl-9 bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
                   required
                   data-testid="input-password"
                 />
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-slate-400">
                 Must be at least 8 characters with letters and numbers
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Label htmlFor="confirmPassword" className="text-slate-300">Confirm Password</Label>
               <div className="relative">
-                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                 <Input
                   id="confirmPassword"
                   type="password"
                   placeholder="••••••••"
                   value={formData.confirmPassword}
                   onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                  className="pl-9"
+                  className="pl-9 bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
                   required
                   data-testid="input-confirm-password"
                 />
@@ -222,10 +222,10 @@ export default function EmployeeRegister() {
             </Button>
 
             <div className="text-center text-sm">
-              <span className="text-muted-foreground">Already have an account? </span>
+              <span className="text-slate-400">Already have an account? </span>
               <Button
                 variant="link"
-                className="p-0 h-auto text-orange-600 hover:text-orange-700"
+                className="p-0 h-auto text-orange-400 hover:text-orange-300"
                 onClick={() => setLocation("/employee-login")}
                 type="button"
                 data-testid="link-login"
