@@ -377,10 +377,8 @@ export default function InGodWeTrustPage() {
   });
 
   const stats = treasurySummary?.stats || {};
-  const tokenPrice = livePrice?.price || stats.currentTokenPrice || 0;
   const blockchainBalance = liveBalance?.balance || 0;
   const databaseBalance = stats.tokenReserve || 0;
-  const balanceDiscrepancy = Math.abs(blockchainBalance - databaseBalance);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 pb-20">
@@ -396,18 +394,8 @@ export default function InGodWeTrustPage() {
           </p>
         </div>
 
-        {/* Top Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <Card className="p-6 bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0 shadow-xl shadow-blue-900/30 overflow-hidden relative">
-            <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -mr-10 -mt-10"></div>
-            <div className="flex items-center justify-between mb-2">
-              <Wallet className="h-8 w-8 opacity-90" />
-              <span className="text-sm opacity-80 font-medium">Live Price</span>
-            </div>
-            <div className="text-3xl font-black">${tokenPrice.toFixed(8)}</div>
-            <div className="text-sm opacity-80 mt-1 font-medium">JCMOVES Token</div>
-          </Card>
-
+        {/* Top Stats Grid - Simplified without pricing */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           <Card className="p-6 bg-gradient-to-br from-purple-500 to-purple-600 text-white border-0 shadow-xl shadow-purple-900/30 overflow-hidden relative">
             <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -mr-10 -mt-10"></div>
             <div className="flex items-center justify-between mb-2">
@@ -444,28 +432,6 @@ export default function InGodWeTrustPage() {
             </Card>
           </Link>
         </div>
-
-        {/* Balance Discrepancy Alert */}
-        {balanceDiscrepancy > 100 && (
-          <Card className="p-4 bg-yellow-500/10 border-yellow-500/30 mb-6">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="h-6 w-6 text-yellow-400 flex-shrink-0" />
-              <div className="flex-1">
-                <h3 className="font-bold text-yellow-300">
-                  Balance Discrepancy Detected
-                </h3>
-                <p className="text-sm text-yellow-400/80 mt-1">
-                  Blockchain: {blockchainBalance.toLocaleString()} JCMOVES • Database:{" "}
-                  {databaseBalance.toLocaleString()} JCMOVES • Difference:{" "}
-                  {balanceDiscrepancy.toLocaleString()} JCMOVES
-                </p>
-                <p className="text-xs text-yellow-500/70 mt-2">
-                  The blockchain is the source of truth. Database tracking may be incomplete.
-                </p>
-              </div>
-            </div>
-          </Card>
-        )}
 
         <Tabs defaultValue="wallet" className="space-y-6">
           <TabsList className="flex flex-wrap w-full bg-slate-800/50 border border-slate-700/50 p-1 gap-1">
@@ -559,7 +525,7 @@ export default function InGodWeTrustPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Wallet Address</p>
-                      <p className="font-mono text-amber-300 text-sm">
+                      <p className="font-mono text-amber-300 text-sm break-all">
                         {liveBalance?.walletAddress || '2eouZ3mWGGW1Jettcra6L5ZkaCzqvfpNh9XT7CHva1Ry'}
                       </p>
                     </div>
@@ -577,120 +543,18 @@ export default function InGodWeTrustPage() {
                   </div>
                 </div>
 
-                {/* Quick Stats */}
-                <div className="grid grid-cols-2 gap-4 mt-6">
-                  <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700/50 text-center">
-                    <Activity className="h-5 w-5 text-blue-400 mx-auto mb-2" />
-                    <p className="text-xs text-slate-500 mb-1">DB Tracked</p>
-                    <p className="font-bold text-blue-300">{databaseBalance.toLocaleString()}</p>
-                  </div>
-                  <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700/50 text-center">
-                    <Clock className="h-5 w-5 text-purple-400 mx-auto mb-2" />
-                    <p className="text-xs text-slate-500 mb-1">Status</p>
-                    <p className="font-bold text-purple-300">
-                      {transferStatus?.operational ? 'Active' : 'Manual'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </Card>
-
-            {/* Additional Wallets */}
-            {treasuryWallets?.wallets && treasuryWallets.wallets.length > 0 && (
-              <Card className="p-6 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
-                <h3 className="text-lg font-bold flex items-center gap-2 text-slate-100 mb-4">
-                  <div className="p-2 rounded-lg bg-purple-500/20 border border-purple-500/30">
-                    <Lock className="h-5 w-5 text-purple-400" />
-                  </div>
-                  Additional Treasury Wallets
-                </h3>
-                <div className="space-y-3">
-                  {treasuryWallets.wallets.map((wallet: any, index: number) => (
-                    <div key={index} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg border border-slate-700/50">
-                      <div>
-                        <p className="font-medium text-slate-200">{wallet.name || `Wallet ${index + 1}`}</p>
-                        <p className="font-mono text-xs text-slate-500">{wallet.address?.slice(0, 12)}...{wallet.address?.slice(-8)}</p>
-                      </div>
-                      <Badge variant="outline" className="bg-purple-500/10 text-purple-300 border-purple-500/30">
-                        {wallet.balance?.toLocaleString() || '—'} JCMOVES
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            )}
-
-            {/* Quick Actions */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Card className="p-4 border border-slate-700/50 bg-slate-800/50 hover:bg-slate-800/70 transition-colors cursor-pointer group"
-                onClick={() => {
-                  const tabsElement = document.querySelector('[value="transfers"]') as HTMLElement;
-                  tabsElement?.click();
-                }}>
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-purple-500/20 border border-purple-500/30 group-hover:bg-purple-500/30 transition-colors">
-                    <Send className="h-5 w-5 text-purple-400" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-slate-200">Send Tokens</p>
-                    <p className="text-xs text-slate-500">Transfer to any wallet</p>
-                  </div>
-                </div>
-              </Card>
-              <Card className="p-4 border border-slate-700/50 bg-slate-800/50 hover:bg-slate-800/70 transition-colors cursor-pointer group"
-                onClick={() => {
-                  const tabsElement = document.querySelector('[value="payouts"]') as HTMLElement;
-                  tabsElement?.click();
-                }}>
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-amber-500/20 border border-amber-500/30 group-hover:bg-amber-500/30 transition-colors">
-                    <Download className="h-5 w-5 text-amber-400" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-slate-200">Process Payouts</p>
-                    <p className="text-xs text-slate-500">
-                      {pendingPayouts?.payouts?.length || 0} pending
-                    </p>
-                  </div>
-                </div>
-              </Card>
-              <Card className="p-4 border border-slate-700/50 bg-slate-800/50 hover:bg-slate-800/70 transition-colors cursor-pointer group"
-                onClick={() => {
-                  const tabsElement = document.querySelector('[value="deposits"]') as HTMLElement;
-                  tabsElement?.click();
-                }}>
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-green-500/20 border border-green-500/30 group-hover:bg-green-500/30 transition-colors">
-                    <Upload className="h-5 w-5 text-green-400" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-slate-200">Record Deposit</p>
-                    <p className="text-xs text-slate-500">Track incoming funds</p>
-                  </div>
-                </div>
-              </Card>
-            </div>
-
-            {/* Blockchain Status */}
-            <Card className={`p-4 border ${transferStatus?.operational ? 'border-green-500/50 bg-green-500/10' : 'border-orange-500/50 bg-orange-500/10'}`}>
-              <div className="flex items-center gap-3">
-                {transferStatus?.operational ? (
-                  <>
-                    <CheckCircle className="h-6 w-6 text-green-400" />
-                    <div>
-                      <p className="font-bold text-green-300">Blockchain Transfers Enabled</p>
-                      <p className="text-sm text-green-400/70">Treasury wallet is configured for real token transfers</p>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <AlertTriangle className="h-6 w-6 text-orange-400" />
-                    <div>
-                      <p className="font-bold text-orange-300">Manual Mode Active</p>
-                      <p className="text-sm text-orange-400/70">Set TREASURY_WALLET_PRIVATE_KEY secret to enable automatic blockchain transfers</p>
-                    </div>
-                  </>
-                )}
+                {/* Send Tokens Button */}
+                <Button
+                  className="w-full mt-6 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-bold py-4 text-lg"
+                  onClick={() => {
+                    const tabsElement = document.querySelector('[value="transfers"]') as HTMLElement;
+                    tabsElement?.click();
+                  }}
+                  data-testid="button-send-tokens"
+                >
+                  <Send className="h-5 w-5 mr-2" />
+                  Send Tokens
+                </Button>
               </div>
             </Card>
           </TabsContent>
