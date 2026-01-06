@@ -552,9 +552,6 @@ export default function InGodWeTrustPage() {
                     {blockchainBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                   </div>
                   <div className="text-2xl font-bold text-amber-400/80">JCMOVES</div>
-                  <div className="text-sm text-slate-400 mt-2">
-                    ≈ ${(blockchainBalance * tokenPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
-                  </div>
                 </div>
 
                 {/* Wallet Address */}
@@ -581,12 +578,7 @@ export default function InGodWeTrustPage() {
                 </div>
 
                 {/* Quick Stats */}
-                <div className="grid grid-cols-3 gap-4 mt-6">
-                  <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700/50 text-center">
-                    <TrendingUp className="h-5 w-5 text-green-400 mx-auto mb-2" />
-                    <p className="text-xs text-slate-500 mb-1">Token Price</p>
-                    <p className="font-bold text-green-300">${tokenPrice.toFixed(8)}</p>
-                  </div>
+                <div className="grid grid-cols-2 gap-4 mt-6">
                   <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700/50 text-center">
                     <Activity className="h-5 w-5 text-blue-400 mx-auto mb-2" />
                     <p className="text-xs text-slate-500 mb-1">DB Tracked</p>
