@@ -467,7 +467,7 @@ export default function InGodWeTrustPage() {
         )}
 
         <Tabs defaultValue="operations" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-8 bg-slate-800/50 border border-slate-700/50 p-1">
+          <TabsList className="flex flex-wrap w-full bg-slate-800/50 border border-slate-700/50 p-1 gap-1">
             <TabsTrigger value="operations" className="data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-300" data-testid="tab-operations">
               <Activity className="h-4 w-4 mr-2" />
               Operations
