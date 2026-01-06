@@ -33,7 +33,8 @@ import {
   Edit,
   Save,
   ArrowRightLeft,
-  XCircle
+  XCircle,
+  Copy
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -466,8 +467,12 @@ export default function InGodWeTrustPage() {
           </Card>
         )}
 
-        <Tabs defaultValue="operations" className="space-y-6">
+        <Tabs defaultValue="wallet" className="space-y-6">
           <TabsList className="flex flex-wrap w-full bg-slate-800/50 border border-slate-700/50 p-1 gap-1">
+            <TabsTrigger value="wallet" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500/30 data-[state=active]:to-orange-500/30 data-[state=active]:text-amber-300" data-testid="tab-wallet">
+              <Wallet className="h-4 w-4 mr-2" />
+              Treasury Wallet
+            </TabsTrigger>
             <TabsTrigger value="operations" className="data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-300" data-testid="tab-operations">
               <Activity className="h-4 w-4 mr-2" />
               Operations
@@ -508,6 +513,195 @@ export default function InGodWeTrustPage() {
               Reviews
             </TabsTrigger>
           </TabsList>
+
+          {/* Treasury Wallet Tab - Beautiful Balance Display */}
+          <TabsContent value="wallet" className="space-y-6">
+            {/* Main Balance Card */}
+            <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-amber-900/40 via-orange-900/30 to-yellow-900/40">
+              {/* Decorative background elements */}
+              <div className="absolute inset-0 bg-gradient-to-r from-amber-500/5 via-transparent to-orange-500/5"></div>
+              <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+              <div className="absolute bottom-0 left-0 w-48 h-48 bg-orange-500/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"></div>
+              
+              <div className="relative p-8">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="p-3 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 shadow-lg shadow-amber-500/25">
+                      <Wallet className="h-8 w-8 text-white" />
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-black text-white">Treasury Wallet</h2>
+                      <p className="text-amber-300/70 text-sm">Live Blockchain Balance</p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => refetchBalance()}
+                    className="border-amber-500/50 text-amber-300 hover:bg-amber-500/10"
+                    data-testid="button-refresh-balance"
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Refresh
+                  </Button>
+                </div>
+
+                {/* Large Balance Display */}
+                <div className="text-center py-8">
+                  <div className="text-6xl md:text-7xl font-black bg-gradient-to-r from-amber-300 via-yellow-200 to-orange-300 bg-clip-text text-transparent mb-2">
+                    {blockchainBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                  </div>
+                  <div className="text-2xl font-bold text-amber-400/80">JCMOVES</div>
+                  <div className="text-sm text-slate-400 mt-2">
+                    ≈ ${(blockchainBalance * tokenPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                  </div>
+                </div>
+
+                {/* Wallet Address */}
+                <div className="mt-6 p-4 bg-slate-900/50 rounded-xl border border-amber-500/20">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Wallet Address</p>
+                      <p className="font-mono text-amber-300 text-sm">
+                        {liveBalance?.walletAddress || '2eouZ3mWGGW1Jettcra6L5ZkaCzqvfpNh9XT7CHva1Ry'}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(liveBalance?.walletAddress || '2eouZ3mWGGW1Jettcra6L5ZkaCzqvfpNh9XT7CHva1Ry');
+                        toast({ title: "Copied!", description: "Wallet address copied to clipboard" });
+                      }}
+                      className="text-amber-400 hover:bg-amber-500/10"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Quick Stats */}
+                <div className="grid grid-cols-3 gap-4 mt-6">
+                  <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700/50 text-center">
+                    <TrendingUp className="h-5 w-5 text-green-400 mx-auto mb-2" />
+                    <p className="text-xs text-slate-500 mb-1">Token Price</p>
+                    <p className="font-bold text-green-300">${tokenPrice.toFixed(8)}</p>
+                  </div>
+                  <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700/50 text-center">
+                    <Activity className="h-5 w-5 text-blue-400 mx-auto mb-2" />
+                    <p className="text-xs text-slate-500 mb-1">DB Tracked</p>
+                    <p className="font-bold text-blue-300">{databaseBalance.toLocaleString()}</p>
+                  </div>
+                  <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700/50 text-center">
+                    <Clock className="h-5 w-5 text-purple-400 mx-auto mb-2" />
+                    <p className="text-xs text-slate-500 mb-1">Status</p>
+                    <p className="font-bold text-purple-300">
+                      {transferStatus?.operational ? 'Active' : 'Manual'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </Card>
+
+            {/* Additional Wallets */}
+            {treasuryWallets?.wallets && treasuryWallets.wallets.length > 0 && (
+              <Card className="p-6 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
+                <h3 className="text-lg font-bold flex items-center gap-2 text-slate-100 mb-4">
+                  <div className="p-2 rounded-lg bg-purple-500/20 border border-purple-500/30">
+                    <Lock className="h-5 w-5 text-purple-400" />
+                  </div>
+                  Additional Treasury Wallets
+                </h3>
+                <div className="space-y-3">
+                  {treasuryWallets.wallets.map((wallet: any, index: number) => (
+                    <div key={index} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg border border-slate-700/50">
+                      <div>
+                        <p className="font-medium text-slate-200">{wallet.name || `Wallet ${index + 1}`}</p>
+                        <p className="font-mono text-xs text-slate-500">{wallet.address?.slice(0, 12)}...{wallet.address?.slice(-8)}</p>
+                      </div>
+                      <Badge variant="outline" className="bg-purple-500/10 text-purple-300 border-purple-500/30">
+                        {wallet.balance?.toLocaleString() || '—'} JCMOVES
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+
+            {/* Quick Actions */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Card className="p-4 border border-slate-700/50 bg-slate-800/50 hover:bg-slate-800/70 transition-colors cursor-pointer group"
+                onClick={() => {
+                  const tabsElement = document.querySelector('[value="transfers"]') as HTMLElement;
+                  tabsElement?.click();
+                }}>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-purple-500/20 border border-purple-500/30 group-hover:bg-purple-500/30 transition-colors">
+                    <Send className="h-5 w-5 text-purple-400" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-200">Send Tokens</p>
+                    <p className="text-xs text-slate-500">Transfer to any wallet</p>
+                  </div>
+                </div>
+              </Card>
+              <Card className="p-4 border border-slate-700/50 bg-slate-800/50 hover:bg-slate-800/70 transition-colors cursor-pointer group"
+                onClick={() => {
+                  const tabsElement = document.querySelector('[value="payouts"]') as HTMLElement;
+                  tabsElement?.click();
+                }}>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-amber-500/20 border border-amber-500/30 group-hover:bg-amber-500/30 transition-colors">
+                    <Download className="h-5 w-5 text-amber-400" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-200">Process Payouts</p>
+                    <p className="text-xs text-slate-500">
+                      {pendingPayouts?.payouts?.length || 0} pending
+                    </p>
+                  </div>
+                </div>
+              </Card>
+              <Card className="p-4 border border-slate-700/50 bg-slate-800/50 hover:bg-slate-800/70 transition-colors cursor-pointer group"
+                onClick={() => {
+                  const tabsElement = document.querySelector('[value="deposits"]') as HTMLElement;
+                  tabsElement?.click();
+                }}>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-green-500/20 border border-green-500/30 group-hover:bg-green-500/30 transition-colors">
+                    <Upload className="h-5 w-5 text-green-400" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-200">Record Deposit</p>
+                    <p className="text-xs text-slate-500">Track incoming funds</p>
+                  </div>
+                </div>
+              </Card>
+            </div>
+
+            {/* Blockchain Status */}
+            <Card className={`p-4 border ${transferStatus?.operational ? 'border-green-500/50 bg-green-500/10' : 'border-orange-500/50 bg-orange-500/10'}`}>
+              <div className="flex items-center gap-3">
+                {transferStatus?.operational ? (
+                  <>
+                    <CheckCircle className="h-6 w-6 text-green-400" />
+                    <div>
+                      <p className="font-bold text-green-300">Blockchain Transfers Enabled</p>
+                      <p className="text-sm text-green-400/70">Treasury wallet is configured for real token transfers</p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle className="h-6 w-6 text-orange-400" />
+                    <div>
+                      <p className="font-bold text-orange-300">Manual Mode Active</p>
+                      <p className="text-sm text-orange-400/70">Set TREASURY_WALLET_PRIVATE_KEY secret to enable automatic blockchain transfers</p>
+                    </div>
+                  </>
+                )}
+              </div>
+            </Card>
+          </TabsContent>
 
           {/* Operations Tab */}
           <TabsContent value="operations" className="space-y-6">
