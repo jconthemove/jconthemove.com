@@ -379,6 +379,7 @@ export default function InGodWeTrustPage() {
   const stats = treasurySummary?.stats || {};
   const blockchainBalance = liveBalance?.balance || 0;
   const databaseBalance = stats.tokenReserve || 0;
+  const balanceDiscrepancy = Math.abs(blockchainBalance - databaseBalance);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 pb-20">
