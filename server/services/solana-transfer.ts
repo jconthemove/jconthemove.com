@@ -458,16 +458,25 @@ export class SolanaTransferService {
       if (result.success) {
         console.log(`✅ Fee transferred to IN GOD WE TRUST wallet for buyback: ${result.transactionHash}`);
         
-        // Update buyback fund with JCMOVES tokens instead of SOL
+        // Update buyback fund with JCMOVES tokens - using correct column names from schema
         const existingFund = await db.query.buybackFund.findFirst();
         
         if (existingFund) {
           await db.update(buybackFund)
             .set({
-              totalTokensBought: sql`${buybackFund.totalTokensBought} + ${feeAmount}`,
-              totalCollected: sql`${buybackFund.totalCollected} + ${feeAmount}`,
+              tokenBalance: sql`${buybackFund.tokenBalance} + ${feeAmount}`,
+              totalTokensCollected: sql`${buybackFund.totalTokensCollected} + ${feeAmount}`,
+              feeContributionCount: sql`${buybackFund.feeContributionCount} + 1`,
               lastUpdated: new Date()
             });
+        } else {
+          // Create the buyback fund record if it doesn't exist
+          await db.insert(buybackFund).values({
+            tokenBalance: feeAmount.toString(),
+            totalTokensCollected: feeAmount.toString(),
+            feeContributionCount: 1,
+            lastUpdated: new Date()
+          });
         }
       } else {
         console.warn(`⚠️ Fee transfer to buyback wallet failed: ${result.error}`);
