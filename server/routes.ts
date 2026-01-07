@@ -4710,6 +4710,104 @@ Thank you for your business!
     }
   });
 
+  // Admin Token Ledger - Shows all JCMOVES transactions across customers and employees
+  app.get("/api/admin/token-ledger", isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const { limit = 100, type, role } = req.query;
+      
+      // Get ALL rewards for accurate totals (no limit)
+      const allRewardsForTotals = await db
+        .select({
+          rewardType: rewards.rewardType,
+          tokenAmount: rewards.tokenAmount,
+          userRole: users.role,
+        })
+        .from(rewards)
+        .leftJoin(users, eq(rewards.userId, users.id));
+
+      // Calculate totals from ALL data
+      let totalTokensDispensed = 0;
+      const totalByType: Record<string, number> = {};
+      const totalByRole: Record<string, number> = {};
+      
+      allRewardsForTotals.forEach(r => {
+        const rewardType = r.rewardType || 'unknown';
+        const userRole = r.userRole || 'unknown';
+        const amount = parseFloat(r.tokenAmount || '0');
+        
+        totalTokensDispensed += amount;
+        totalByType[rewardType] = (totalByType[rewardType] || 0) + amount;
+        totalByRole[userRole] = (totalByRole[userRole] || 0) + amount;
+      });
+
+      // Get paginated transactions for display (with limit)
+      const recentTransactions = await db
+        .select({
+          id: rewards.id,
+          userId: rewards.userId,
+          rewardType: rewards.rewardType,
+          tokenAmount: rewards.tokenAmount,
+          cashValue: rewards.cashValue,
+          status: rewards.status,
+          earnedDate: rewards.earnedDate,
+          userEmail: users.email,
+          userFirstName: users.firstName,
+          userLastName: users.lastName,
+          userRole: users.role,
+        })
+        .from(rewards)
+        .leftJoin(users, eq(rewards.userId, users.id))
+        .orderBy(desc(rewards.earnedDate))
+        .limit(Number(limit));
+
+      // Apply optional filters to display list only
+      let filteredTransactions = recentTransactions;
+      if (type && typeof type === 'string') {
+        filteredTransactions = filteredTransactions.filter(r => r.rewardType === type);
+      }
+      if (role && typeof role === 'string') {
+        filteredTransactions = filteredTransactions.filter(r => r.userRole === role);
+      }
+
+      // Get all wallet balances with user info
+      const allWallets = await db
+        .select({
+          userId: walletAccounts.userId,
+          tokenBalance: walletAccounts.tokenBalance,
+          totalEarned: walletAccounts.totalEarned,
+          totalRedeemed: walletAccounts.totalRedeemed,
+          userEmail: users.email,
+          userFirstName: users.firstName,
+          userLastName: users.lastName,
+          userRole: users.role,
+        })
+        .from(walletAccounts)
+        .leftJoin(users, eq(walletAccounts.userId, users.id));
+
+      const totalWalletBalance = allWallets.reduce((sum, w) => sum + parseFloat(w.tokenBalance || '0'), 0);
+      const employeeBalance = allWallets.filter(w => w.userRole === 'employee').reduce((sum, w) => sum + parseFloat(w.tokenBalance || '0'), 0);
+      const customerBalance = allWallets.filter(w => w.userRole === 'customer').reduce((sum, w) => sum + parseFloat(w.tokenBalance || '0'), 0);
+
+      res.json({
+        transactions: filteredTransactions,
+        wallets: allWallets,
+        summary: {
+          totalTokensDispensed,
+          totalByType,
+          totalByRole,
+          totalWalletBalance,
+          employeeBalance,
+          customerBalance,
+          walletCount: allWallets.length,
+          totalTransactionCount: allRewardsForTotals.length,
+        }
+      });
+    } catch (error) {
+      console.error("Error getting token ledger:", error);
+      res.status(500).json({ error: "Failed to get token ledger" });
+    }
+  });
+
   // Test SendGrid email service (admin only)
   app.get("/api/admin/test-email", isAuthenticated, requireAdmin, async (req, res) => {
     try {

@@ -128,6 +128,43 @@ export default function InGodWeTrustPage() {
     queryKey: ["/api/invoices/config/status"],
   });
 
+  // Token Ledger - All JCMOVES transactions across customers and employees
+  const { data: tokenLedger, refetch: refetchLedger } = useQuery<{
+    transactions: Array<{
+      id: string;
+      userId: string;
+      rewardType: string;
+      tokenAmount: string;
+      status: string;
+      earnedDate: string;
+      userEmail: string;
+      userFirstName: string;
+      userLastName: string;
+      userRole: string;
+    }>;
+    wallets: Array<{
+      userId: string;
+      tokenBalance: string;
+      totalEarned: string;
+      userEmail: string;
+      userFirstName: string;
+      userLastName: string;
+      userRole: string;
+    }>;
+    summary: {
+      totalTokensDispensed: number;
+      totalByType: Record<string, number>;
+      totalByRole: Record<string, number>;
+      totalWalletBalance: number;
+      employeeBalance: number;
+      customerBalance: number;
+      walletCount: number;
+    };
+  }>({
+    queryKey: ["/api/admin/token-ledger"],
+    refetchInterval: 30000,
+  });
+
   // Invoices list
   const { data: invoices, refetch: refetchInvoices } = useQuery<any[]>({
     queryKey: ["/api/invoices"],
@@ -500,6 +537,10 @@ export default function InGodWeTrustPage() {
             <TabsTrigger value="reviews" className="data-[state=active]:bg-yellow-500/20 data-[state=active]:text-yellow-300" data-testid="tab-reviews">
               <Star className="h-4 w-4 mr-2" />
               Reviews
+            </TabsTrigger>
+            <TabsTrigger value="ledger" className="data-[state=active]:bg-pink-500/20 data-[state=active]:text-pink-300" data-testid="tab-ledger">
+              <History className="h-4 w-4 mr-2" />
+              Token Ledger
             </TabsTrigger>
           </TabsList>
 
@@ -2167,6 +2208,151 @@ export default function InGodWeTrustPage() {
                   </div>
                 </div>
               </div>
+            </Card>
+          </TabsContent>
+
+          {/* Token Ledger Tab - All JCMOVES Transactions */}
+          <TabsContent value="ledger" className="space-y-6">
+            {/* Summary Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Card className="p-4 border border-slate-700/50 bg-gradient-to-br from-pink-500/10 to-purple-500/10">
+                <div className="text-sm text-slate-400">Total Dispensed</div>
+                <div className="text-2xl font-black text-pink-400">
+                  {tokenLedger?.summary?.totalTokensDispensed?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || 0}
+                </div>
+                <div className="text-xs text-slate-500">JCMOVES</div>
+              </Card>
+              <Card className="p-4 border border-slate-700/50 bg-gradient-to-br from-orange-500/10 to-red-500/10">
+                <div className="text-sm text-slate-400">Employee Balances</div>
+                <div className="text-2xl font-black text-orange-400">
+                  {tokenLedger?.summary?.employeeBalance?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || 0}
+                </div>
+                <div className="text-xs text-slate-500">JCMOVES</div>
+              </Card>
+              <Card className="p-4 border border-slate-700/50 bg-gradient-to-br from-blue-500/10 to-cyan-500/10">
+                <div className="text-sm text-slate-400">Customer Balances</div>
+                <div className="text-2xl font-black text-blue-400">
+                  {tokenLedger?.summary?.customerBalance?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || 0}
+                </div>
+                <div className="text-xs text-slate-500">JCMOVES</div>
+              </Card>
+              <Card className="p-4 border border-slate-700/50 bg-gradient-to-br from-green-500/10 to-emerald-500/10">
+                <div className="text-sm text-slate-400">Total Wallets</div>
+                <div className="text-2xl font-black text-green-400">
+                  {tokenLedger?.summary?.walletCount || 0}
+                </div>
+                <div className="text-xs text-slate-500">Active</div>
+              </Card>
+            </div>
+
+            {/* Breakdown by Type */}
+            <Card className="p-6 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5 text-pink-400" />
+                  Distribution by Type
+                </h3>
+                <Button variant="outline" size="sm" onClick={() => refetchLedger()} className="border-slate-600">
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {tokenLedger?.summary?.totalByType && Object.entries(tokenLedger.summary.totalByType).map(([type, amount]) => (
+                  <div key={type} className="p-3 bg-slate-700/30 rounded-lg">
+                    <div className="text-xs text-slate-400 capitalize">{type.replace(/_/g, ' ')}</div>
+                    <div className="text-lg font-bold text-white">{amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            {/* Recent Transactions */}
+            <Card className="p-6 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-4">
+                <History className="h-5 w-5 text-pink-400" />
+                Recent Token Transactions
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-slate-700">
+                      <th className="text-left py-2 px-3 text-sm text-slate-400">User</th>
+                      <th className="text-left py-2 px-3 text-sm text-slate-400">Role</th>
+                      <th className="text-left py-2 px-3 text-sm text-slate-400">Type</th>
+                      <th className="text-right py-2 px-3 text-sm text-slate-400">Amount</th>
+                      <th className="text-left py-2 px-3 text-sm text-slate-400">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tokenLedger?.transactions?.slice(0, 50).map((tx) => (
+                      <tr key={tx.id} className="border-b border-slate-700/50 hover:bg-slate-700/20">
+                        <td className="py-2 px-3 text-sm text-white">
+                          {tx.userFirstName} {tx.userLastName}
+                          <div className="text-xs text-slate-500">{tx.userEmail}</div>
+                        </td>
+                        <td className="py-2 px-3">
+                          <Badge className={tx.userRole === 'employee' ? 'bg-orange-500/20 text-orange-300' : tx.userRole === 'customer' ? 'bg-blue-500/20 text-blue-300' : 'bg-purple-500/20 text-purple-300'}>
+                            {tx.userRole}
+                          </Badge>
+                        </td>
+                        <td className="py-2 px-3 text-sm text-slate-300 capitalize">{tx.rewardType?.replace(/_/g, ' ')}</td>
+                        <td className="py-2 px-3 text-sm text-right font-bold text-green-400">+{parseFloat(tx.tokenAmount).toFixed(2)}</td>
+                        <td className="py-2 px-3 text-sm text-slate-400">
+                          {tx.earnedDate ? format(new Date(tx.earnedDate), 'MMM d, h:mm a') : '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {(!tokenLedger?.transactions || tokenLedger.transactions.length === 0) && (
+                <div className="text-center py-8 text-slate-400">
+                  No token transactions yet
+                </div>
+              )}
+            </Card>
+
+            {/* All Wallet Balances */}
+            <Card className="p-6 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-4">
+                <Wallet className="h-5 w-5 text-pink-400" />
+                All User Wallet Balances
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-slate-700">
+                      <th className="text-left py-2 px-3 text-sm text-slate-400">User</th>
+                      <th className="text-left py-2 px-3 text-sm text-slate-400">Role</th>
+                      <th className="text-right py-2 px-3 text-sm text-slate-400">Balance</th>
+                      <th className="text-right py-2 px-3 text-sm text-slate-400">Total Earned</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tokenLedger?.wallets?.map((wallet) => (
+                      <tr key={wallet.userId} className="border-b border-slate-700/50 hover:bg-slate-700/20">
+                        <td className="py-2 px-3 text-sm text-white">
+                          {wallet.userFirstName} {wallet.userLastName}
+                          <div className="text-xs text-slate-500">{wallet.userEmail}</div>
+                        </td>
+                        <td className="py-2 px-3">
+                          <Badge className={wallet.userRole === 'employee' ? 'bg-orange-500/20 text-orange-300' : wallet.userRole === 'customer' ? 'bg-blue-500/20 text-blue-300' : 'bg-purple-500/20 text-purple-300'}>
+                            {wallet.userRole}
+                          </Badge>
+                        </td>
+                        <td className="py-2 px-3 text-right font-bold text-green-400">{parseFloat(wallet.tokenBalance).toFixed(2)}</td>
+                        <td className="py-2 px-3 text-right text-slate-300">{parseFloat(wallet.totalEarned).toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {(!tokenLedger?.wallets || tokenLedger.wallets.length === 0) && (
+                <div className="text-center py-8 text-slate-400">
+                  No wallet accounts yet
+                </div>
+              )}
             </Card>
           </TabsContent>
         </Tabs>
