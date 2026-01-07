@@ -21,8 +21,13 @@ export const TREASURY_CONFIG = {
   JOB_COMPLETION_USD: 2.50, // $2.50 worth of JCMOVES per job completed per mover
   
   // Lead creation bonus (fixed JCMOVES amount for approved employees)
-  LEAD_CREATION_BONUS_TOKENS: 100, // 100 JCMOVES per lead created
+  LEAD_CREATION_BONUS_TOKENS: 200, // 200 JCMOVES ($2) per lead created
   LEAD_CREATION_DAILY_CAP: 5, // Max 5 leads per day earn reward (prevents spam)
+  
+  // Customer reward amounts (1 JCMOVES = $0.01)
+  LOYALTY_REWARD_TOKENS: 1500, // $15 worth when customer's job completes
+  REFERRAL_REQUEST_TOKENS: 50, // $0.50 when someone uses your referral code
+  REFERRAL_CONFIRMED_TOKENS: 2500, // $25 when referred user's first job completes
   
   // Volatility management
   MAX_PRICE_VOLATILITY: 25, // Maximum 25% price change before adjusting operations
@@ -58,6 +63,9 @@ export const REWARD_TYPES = {
   DAILY_CHECKIN: 'daily_checkin', 
   JOB_COMPLETION: 'job_completion',
   REFERRAL_BONUS: 'referral_bonus',
+  REFERRAL_REQUEST: 'referral_request', // When someone uses your referral code
+  REFERRAL_CONFIRMED: 'referral_confirmed', // When referred user's first job completes
+  LOYALTY_BOOKING: 'loyalty_booking', // Customer reward for completed job
   LEAD_CREATION: 'lead_creation',
 } as const;
 

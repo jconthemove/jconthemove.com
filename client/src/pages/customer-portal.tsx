@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
-import { Package, Wallet, User, Coins, ShoppingBag } from "lucide-react";
+import { Package, Wallet, User, Coins, ShoppingBag, Gift, Users, CheckCircle } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useState } from "react";
 
@@ -117,15 +117,55 @@ export default function CustomerPortal() {
                   <Coins className="h-5 w-5" />
                   Mining & Rewards
                 </CardTitle>
-                <CardDescription>Earn JCMOVES tokens through daily check-ins</CardDescription>
+                <CardDescription>Earn JCMOVES tokens through daily check-ins and actions</CardDescription>
               </CardHeader>
-              <CardContent className="text-center py-8">
-                <Link href="/rewards">
-                  <Button size="lg" data-testid="button-go-to-mining">
-                    <Coins className="h-5 w-5 mr-2" />
-                    Go to Mining Dashboard
-                  </Button>
-                </Link>
+              <CardContent className="space-y-6">
+                <div className="text-center py-4">
+                  <Link href="/rewards">
+                    <Button size="lg" data-testid="button-go-to-mining">
+                      <Coins className="h-5 w-5 mr-2" />
+                      Go to Mining Dashboard
+                    </Button>
+                  </Link>
+                </div>
+                
+                <div className="border-t pt-6">
+                  <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
+                    <Gift className="h-5 w-5 text-primary" />
+                    Ways to Earn JCMOVES
+                  </h3>
+                  <p className="text-sm text-muted-foreground mb-4">1 JCMOVES = $0.01</p>
+                  
+                  <div className="grid gap-4">
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
+                      <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                      <div>
+                        <p className="font-medium">Daily Mining Check-in</p>
+                        <p className="text-sm text-muted-foreground">Earn tokens daily with streak bonuses</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
+                      <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                      <div>
+                        <p className="font-medium">Book a Service</p>
+                        <p className="text-sm text-muted-foreground">Earn <span className="font-semibold text-primary">1,500 JCMOVES ($15)</span> when your job completes</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
+                      <Users className="h-5 w-5 text-blue-500 mt-0.5" />
+                      <div>
+                        <p className="font-medium">Refer Friends</p>
+                        <p className="text-sm text-muted-foreground">
+                          Earn <span className="font-semibold text-primary">50 JCMOVES ($0.50)</span> when someone uses your code
+                          <br />
+                          Plus <span className="font-semibold text-primary">2,500 JCMOVES ($25)</span> when their first job completes!
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

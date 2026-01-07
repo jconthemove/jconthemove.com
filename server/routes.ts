@@ -2023,40 +2023,40 @@ Thank you for your business!
             await storage.updateLeadQuote(id, { completionRewardedAt: new Date() });
             console.log(`✅ Marked job ${id} as rewarded at ${new Date().toISOString()}`);
 
-            // Customer loyalty reward: Award 50 JCMOVES when their job completes
+            // Customer loyalty reward: Award tokens when their job completes
             try {
               if (updatedLead.customerEmail) {
                 const customer = await storage.getUserByEmail(updatedLead.customerEmail);
                 if (customer) {
-                  const LOYALTY_REWARD = 50;
+                  const LOYALTY_REWARD = TREASURY_CONFIG.LOYALTY_REWARD_TOKENS; // $15 worth
                   await storage.creditWalletTokens(customer.id, LOYALTY_REWARD);
                   await db.insert(rewards).values({
                     recipientId: customer.id,
-                    type: "loyalty_booking",
+                    type: REWARD_TYPES.LOYALTY_BOOKING,
                     tokenAmount: LOYALTY_REWARD.toFixed(8),
                     status: "confirmed",
                     createdAt: new Date(),
                     metadata: { jobId: id, serviceType: updatedLead.serviceType }
                   });
-                  console.log(`🎁 Awarded ${LOYALTY_REWARD} JCMOVES loyalty reward to customer ${customer.email}`);
+                  console.log(`🎁 Awarded ${LOYALTY_REWARD} JCMOVES ($${(LOYALTY_REWARD * 0.01).toFixed(2)}) loyalty reward to customer ${customer.email}`);
 
-                  // Referral bonus: Award 250 JCMOVES to referrer on first completed job
+                  // Referral bonus: Award tokens to referrer on first completed job
                   if (customer.referredByUserId) {
                     const completedJobs = await db.select().from(rewards)
-                      .where(and(eq(rewards.recipientId, customer.id), eq(rewards.type, "loyalty_booking")));
+                      .where(and(eq(rewards.recipientId, customer.id), eq(rewards.type, REWARD_TYPES.LOYALTY_BOOKING)));
                     
                     if (completedJobs.length === 1) { // This is their first completed job
-                      const REFERRAL_BONUS = 250;
+                      const REFERRAL_BONUS = TREASURY_CONFIG.REFERRAL_CONFIRMED_TOKENS; // $25 worth
                       await storage.creditWalletTokens(customer.referredByUserId, REFERRAL_BONUS);
                       await db.insert(rewards).values({
                         recipientId: customer.referredByUserId,
-                        type: "referral_booking",
+                        type: REWARD_TYPES.REFERRAL_CONFIRMED,
                         tokenAmount: REFERRAL_BONUS.toFixed(8),
                         status: "confirmed",
                         createdAt: new Date(),
                         metadata: { referredUserId: customer.id, jobId: id }
                       });
-                      console.log(`🎉 Awarded ${REFERRAL_BONUS} JCMOVES referral bonus to ${customer.referredByUserId}`);
+                      console.log(`🎉 Awarded ${REFERRAL_BONUS} JCMOVES ($${(REFERRAL_BONUS * 0.01).toFixed(2)}) referral bonus to ${customer.referredByUserId}`);
                     }
                   }
                 }
@@ -2788,40 +2788,41 @@ Thank you for your business!
         }
       }
 
-      // Customer loyalty reward: Award 50 JCMOVES when their job completes
+      // Customer loyalty reward: Award tokens when their job completes
       try {
+        const { TREASURY_CONFIG, REWARD_TYPES } = await import('./constants');
         if (updatedLead.customerEmail) {
           const customer = await storage.getUserByEmail(updatedLead.customerEmail);
           if (customer) {
-            const LOYALTY_REWARD = 50;
+            const LOYALTY_REWARD = TREASURY_CONFIG.LOYALTY_REWARD_TOKENS; // $15 worth
             await storage.creditWalletTokens(customer.id, LOYALTY_REWARD);
             await db.insert(rewards).values({
               recipientId: customer.id,
-              type: "loyalty_booking",
+              type: REWARD_TYPES.LOYALTY_BOOKING,
               tokenAmount: LOYALTY_REWARD.toFixed(8),
               status: "confirmed",
               createdAt: new Date(),
               metadata: { jobId: id, serviceType: updatedLead.serviceType }
             });
-            console.log(`🎁 Awarded ${LOYALTY_REWARD} JCMOVES loyalty reward to customer ${customer.email}`);
+            console.log(`🎁 Awarded ${LOYALTY_REWARD} JCMOVES ($${(LOYALTY_REWARD * 0.01).toFixed(2)}) loyalty reward to customer ${customer.email}`);
 
-            // Referral bonus: Award 250 JCMOVES to referrer on first completed job
+            // Referral bonus: Award tokens to referrer on first completed job
             if (customer.referredByUserId) {
               const completedJobs = await db.select().from(rewards)
-                .where(and(eq(rewards.recipientId, customer.id), eq(rewards.type, "loyalty_booking")));
+                .where(and(eq(rewards.recipientId, customer.id), eq(rewards.type, REWARD_TYPES.LOYALTY_BOOKING)));
               
               if (completedJobs.length === 1) { // This is their first completed job
-                const REFERRAL_BONUS = 250;
+                const REFERRAL_BONUS = TREASURY_CONFIG.REFERRAL_CONFIRMED_TOKENS; // $25 worth
                 await storage.creditWalletTokens(customer.referredByUserId, REFERRAL_BONUS);
                 await db.insert(rewards).values({
                   recipientId: customer.referredByUserId,
-                  type: "referral_booking",
+                  type: REWARD_TYPES.REFERRAL_CONFIRMED,
                   tokenAmount: REFERRAL_BONUS.toFixed(8),
                   status: "confirmed",
                   createdAt: new Date(),
                   metadata: { referredUserId: customer.id, jobId: id }
                 });
-                console.log(`🎉 Awarded ${REFERRAL_BONUS} JCMOVES referral bonus to ${customer.referredByUserId}`);
+                console.log(`🎉 Awarded ${REFERRAL_BONUS} JCMOVES ($${(REFERRAL_BONUS * 0.01).toFixed(2)}) referral bonus to ${customer.referredByUserId}`);
               }
             }
           }
@@ -3224,25 +3225,32 @@ Thank you for your business!
     try {
       const userId = (req.session as any).userId;
       const { referralCode } = referralCodeSchema.parse(req.body);
+      const { TREASURY_CONFIG, REWARD_TYPES } = await import('./constants');
       
       const result = await storage.applyReferralCode(userId, referralCode);
       
       if (result.success && result.referrerId) {
-        // Process referral bonus for the referrer
-        const bonusResult = await storage.processReferralBonus(result.referrerId, userId);
-        
-        if (bonusResult.success) {
-          res.json({
-            success: true,
-            message: "Referral code applied successfully! Your referrer has been rewarded."
+        // Award referral request bonus to referrer (50 JCMOVES / $0.50)
+        try {
+          const REFERRAL_REQUEST_REWARD = TREASURY_CONFIG.REFERRAL_REQUEST_TOKENS;
+          await storage.creditWalletTokens(result.referrerId, REFERRAL_REQUEST_REWARD);
+          await db.insert(rewards).values({
+            recipientId: result.referrerId,
+            type: REWARD_TYPES.REFERRAL_REQUEST,
+            tokenAmount: REFERRAL_REQUEST_REWARD.toFixed(8),
+            status: "confirmed",
+            createdAt: new Date(),
+            metadata: { referredUserId: userId }
           });
-        } else {
-          res.json({
-            success: true,
-            message: "Referral code applied successfully, but there was an issue processing the bonus.",
-            warning: bonusResult.error
-          });
+          console.log(`🎁 Awarded ${REFERRAL_REQUEST_REWARD} JCMOVES ($${(REFERRAL_REQUEST_REWARD * 0.01).toFixed(2)}) to referrer ${result.referrerId} for referral request`);
+        } catch (rewardError) {
+          console.error("Error awarding referral request bonus:", rewardError);
         }
+        
+        res.json({
+          success: true,
+          message: "Referral code applied successfully! Your referrer earned a bonus."
+        });
       } else {
         res.status(400).json({
           success: false,
