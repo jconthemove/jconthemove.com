@@ -492,11 +492,15 @@ export default function RewardsDashboard() {
       {/* Wallet Overview - Condensed to 2 Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <Card 
-          className="transition-all border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80 hover:border-blue-500/50 hover:shadow-xl hover:shadow-blue-900/20"
+          className="transition-all border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80 hover:border-blue-500/50 hover:shadow-xl hover:shadow-blue-900/20 cursor-pointer"
           data-testid="card-wallet-balance"
+          onClick={() => setWalletModalOpen(true)}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-slate-300">Balance & Holdings</CardTitle>
+            <CardTitle className="text-sm font-medium text-slate-300 flex items-center gap-2">
+              Balance & Holdings
+              <ChevronRight className="h-4 w-4 text-slate-400" />
+            </CardTitle>
             <div className="p-2 rounded-lg bg-blue-500/20 border border-blue-500/30">
               <Wallet className="h-4 w-4 text-blue-400" />
             </div>
@@ -1151,6 +1155,63 @@ export default function RewardsDashboard() {
                     {parseFloat(wallet?.totalEarned || '0').toFixed(2)} {tokenInfo?.symbol || 'JCMOVES'}
                   </span>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Earnings Breakdown by Category */}
+            <Card className="border border-slate-700/50 bg-slate-800/50">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2 text-slate-200">
+                  <TrendingUp className="h-4 w-4 text-blue-400" />
+                  Earnings Breakdown
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {rewardsHistory && rewardsHistory.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    {(() => {
+                      const breakdown: Record<string, number> = {};
+                      rewardsHistory.forEach(reward => {
+                        const type = reward.rewardType;
+                        breakdown[type] = (breakdown[type] || 0) + parseFloat(reward.tokenAmount);
+                      });
+                      
+                      const categoryConfig: Record<string, { icon: any; label: string; color: string }> = {
+                        mining: { icon: <Zap className="h-4 w-4" />, label: 'Mining', color: 'text-orange-400' },
+                        daily_checkin: { icon: <Calendar className="h-4 w-4" />, label: 'Daily Check-in', color: 'text-orange-400' },
+                        lead_creation: { icon: <Gift className="h-4 w-4" />, label: 'Job Creation', color: 'text-green-400' },
+                        job_completion: { icon: <CheckCircle className="h-4 w-4" />, label: 'Job Completion', color: 'text-green-400' },
+                        loyalty_booking: { icon: <Award className="h-4 w-4" />, label: 'Loyalty Bonus', color: 'text-purple-400' },
+                        referral: { icon: <Users className="h-4 w-4" />, label: 'Referrals', color: 'text-blue-400' },
+                        referral_request: { icon: <Share2 className="h-4 w-4" />, label: 'Referral Signup', color: 'text-blue-400' },
+                        referral_confirmed: { icon: <Users className="h-4 w-4" />, label: 'Referral Confirmed', color: 'text-blue-400' },
+                        manual_adjustment: { icon: <Coins className="h-4 w-4" />, label: 'Adjustments', color: 'text-yellow-400' },
+                        signup_bonus: { icon: <Gift className="h-4 w-4" />, label: 'Signup Bonus', color: 'text-pink-400' },
+                      };
+
+                      return Object.entries(breakdown)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([type, amount]) => {
+                          const config = categoryConfig[type] || { icon: <Coins className="h-4 w-4" />, label: type.replace(/_/g, ' '), color: 'text-slate-400' };
+                          return (
+                            <div key={type} className="flex items-center justify-between p-2.5 bg-slate-900/50 border border-slate-700/50 rounded-lg">
+                              <div className="flex items-center gap-2">
+                                <div className={`${config.color}`}>{config.icon}</div>
+                                <span className="text-xs text-slate-300 capitalize">{config.label}</span>
+                              </div>
+                              <span className={`font-bold text-sm ${config.color}`}>
+                                {amount.toFixed(2)}
+                              </span>
+                            </div>
+                          );
+                        });
+                    })()}
+                  </div>
+                ) : (
+                  <div className="text-center py-4">
+                    <p className="text-sm text-slate-400">No earnings yet. Start mining or refer friends!</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
