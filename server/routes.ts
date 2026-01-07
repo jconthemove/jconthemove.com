@@ -5769,6 +5769,19 @@ Thank you for your business!
         return res.status(400).json({ error: "No tokens available for payout" });
       }
       
+      // Import fee constant and calculate net amount
+      const { TREASURY_CONFIG } = await import('./constants');
+      const feeAmount = TREASURY_CONFIG.PAYOUT_NETWORK_FEE_TOKENS;
+      
+      // Ensure user has enough to cover the fee
+      if (availableBalance <= feeAmount) {
+        return res.status(400).json({ 
+          error: `Minimum payout is ${feeAmount + 1} JCMOVES tokens (includes ${feeAmount} network fee)` 
+        });
+      }
+      
+      const netAmount = availableBalance - feeAmount;
+      
       // Check for pending payouts (soft check - DB constraint is the real guard)
       const hasPending = await storage.hasPendingPayout(userId);
       if (hasPending) {
@@ -5786,13 +5799,15 @@ Thank you for your business!
       const totalRedeemed = parseFloat(walletAccount.totalRedeemed || "0") + availableBalance;
       
       try {
-        // Create payout with 'processing' status and immediately deduct balance
+        // Create payout with fee breakdown and net amount
         payout = await storage.createWalletPayout({
           userId,
           tokenAmount: availableBalance.toFixed(8),
+          feeAmount: feeAmount.toFixed(8),
+          netAmount: netAmount.toFixed(8),
           recipientAddress: payoutInfo.address,
           status: 'pending',
-          metadata: { walletMode: payoutInfo.mode, originalBalance: availableBalance }
+          metadata: { walletMode: payoutInfo.mode, originalBalance: availableBalance, networkFee: feeAmount }
         });
         
         // Deduct balance immediately after creating payout record (prevents double-spend)
@@ -5823,11 +5838,11 @@ Thank you for your business!
           });
         }
         
-        // Check treasury balance BEFORE attempting transfer
+        // Check treasury balance BEFORE attempting transfer (need netAmount for actual transfer)
         const treasuryBalance = await solanaTransferService.getTreasuryBalance();
-        if (treasuryBalance.tokenBalance < availableBalance) {
+        if (treasuryBalance.tokenBalance < netAmount) {
           // Treasury is empty or has insufficient balance - queue as pending
-          console.log(`[PAYOUT] Treasury balance (${treasuryBalance.tokenBalance}) insufficient for payout (${availableBalance}). Queuing as pending.`);
+          console.log(`[PAYOUT] Treasury balance (${treasuryBalance.tokenBalance}) insufficient for payout (${netAmount}). Queuing as pending.`);
           return res.json({
             success: true,
             payout,
@@ -5837,10 +5852,10 @@ Thank you for your business!
           });
         }
         
-        // Execute real blockchain transfer
+        // Execute real blockchain transfer with NET amount (after fee deduction)
         const transferResult = await solanaTransferService.transferTokens({
           recipientAddress: payoutInfo.address,
-          amount: availableBalance,
+          amount: netAmount,
           memo: `JCMOVES payout to ${userId.slice(0, 8)}`
         });
         
@@ -5856,9 +5871,11 @@ Thank you for your business!
           return res.json({
             success: true,
             transactionHash: transferResult.transactionHash,
-            amount: availableBalance,
+            amount: netAmount,
+            fee: feeAmount,
+            grossAmount: availableBalance,
             recipientAddress: payoutInfo.address,
-            message: `Successfully sent ${availableBalance.toLocaleString()} JCMOVES to your wallet!`
+            message: `Successfully sent ${netAmount.toLocaleString()} JCMOVES to your wallet! (${feeAmount} fee deducted)`
           });
         } else {
           // Transfer failed - refund balance and mark payout as failed
@@ -5904,6 +5921,23 @@ Thank you for your business!
     }
   });
   
+  // Get payout configuration (fee info)
+  app.get("/api/wallet/payout-config", async (req, res) => {
+    try {
+      const { TREASURY_CONFIG } = await import('./constants');
+      const networkFee = TREASURY_CONFIG.PAYOUT_NETWORK_FEE_TOKENS;
+      res.json({
+        networkFee,
+        minimumPayout: networkFee + 1,
+        feeCurrency: "JCMOVES",
+        feeDescription: "Flat network fee to cover Solana transaction costs"
+      });
+    } catch (error) {
+      console.error("Error getting payout config:", error);
+      res.status(500).json({ error: "Failed to get payout configuration" });
+    }
+  });
+
   // Get user's payout history
   app.get("/api/wallet/payouts", isAuthenticated, async (req: any, res) => {
     try {

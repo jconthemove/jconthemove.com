@@ -154,6 +154,16 @@ export default function RewardsDashboard() {
     queryKey: ["/api/wallet/payout/status"],
   });
 
+  // Fetch payout config (network fee info)
+  const { data: payoutConfig } = useQuery<{
+    networkFee: number;
+    minimumPayout: number;
+    feeCurrency: string;
+    feeDescription: string;
+  }>({
+    queryKey: ["/api/wallet/payout-config"],
+  });
+
   // Start mining mutation
   const startMiningMutation = useMutation({
     mutationFn: async () => {
@@ -498,12 +508,27 @@ export default function RewardsDashboard() {
             <p className="text-xs text-slate-400 mt-1 flex items-center mb-3">
               Portfolio Value: <span className="font-bold text-orange-400 ml-1">${(tokenBalance * (tokenInfo?.price || 0)).toFixed(2)}</span>
             </p>
+            {/* Fee breakdown info */}
+            {payoutConfig && tokenBalance > 0 && (
+              <div className="text-xs text-slate-400 mb-2 p-2 bg-slate-800/50 rounded-lg border border-slate-700/30">
+                <div className="flex justify-between">
+                  <span>Network Fee:</span>
+                  <span className="text-amber-400">{payoutConfig.networkFee} JCMOVES</span>
+                </div>
+                <div className="flex justify-between mt-1">
+                  <span>You'll Receive:</span>
+                  <span className="text-green-400 font-semibold">
+                    {Math.max(0, tokenBalance - payoutConfig.networkFee).toFixed(2)} JCMOVES
+                  </span>
+                </div>
+              </div>
+            )}
             <Button
               onClick={(e) => {
                 e.stopPropagation();
                 payoutMutation.mutate();
               }}
-              disabled={payoutMutation.isPending || tokenBalance <= 0}
+              disabled={payoutMutation.isPending || tokenBalance <= (payoutConfig?.minimumPayout || 51)}
               className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white shadow-lg shadow-green-500/20"
               size="sm"
               data-testid="button-claim-to-wallet"
@@ -512,6 +537,11 @@ export default function RewardsDashboard() {
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Sending...
+                </>
+              ) : tokenBalance <= (payoutConfig?.minimumPayout || 51) ? (
+                <>
+                  <ArrowUpRight className="mr-2 h-4 w-4" />
+                  Min {payoutConfig?.minimumPayout || 51} JCMOVES
                 </>
               ) : (
                 <>
