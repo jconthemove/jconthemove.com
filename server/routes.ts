@@ -5902,20 +5902,21 @@ Thank you for your business!
             confirmedAt: new Date()
           });
           
-          // Transfer the fee to IN GOD WE TRUST wallet for buyback program (async, non-blocking)
-          // Also record the fee contribution in the database
-          Promise.all([
-            solanaTransferService.transferFeeToBuybackWallet(feeAmount, transferResult.transactionHash),
-            storage.recordBuybackFeeContribution(feeAmount, payout.id)
-          ])
-            .then(([feeResult]) => {
-              if (feeResult.success) {
-                console.log(`[PAYOUT] Fee of ${feeAmount} JCMOVES transferred to buyback wallet and recorded`);
-              } else {
-                console.warn(`[PAYOUT] Fee transfer to buyback wallet failed: ${feeResult.error}`);
-              }
-            })
-            .catch(err => console.error('[PAYOUT] Fee transfer/recording error:', err));
+          // Transfer the fee to burn wallet for buyback program
+          // This is a SECOND blockchain transfer from treasury to burn wallet
+          console.log(`[PAYOUT] Initiating fee transfer: ${feeAmount} JCMOVES to burn wallet...`);
+          
+          try {
+            const feeResult = await solanaTransferService.transferFeeToBuybackWallet(feeAmount, transferResult.transactionHash);
+            if (feeResult.success) {
+              console.log(`[PAYOUT] ✅ Fee of ${feeAmount} JCMOVES burned successfully: ${feeResult.transactionHash}`);
+              await storage.recordBuybackFeeContribution(feeAmount, payout.id);
+            } else {
+              console.warn(`[PAYOUT] ⚠️ Fee transfer to burn wallet failed: ${feeResult.error}`);
+            }
+          } catch (feeError) {
+            console.error('[PAYOUT] Fee transfer error:', feeError);
+          }
           
           return res.json({
             success: true,
