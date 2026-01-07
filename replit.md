@@ -99,6 +99,12 @@ Preferred communication style: Simple, everyday language.
 - **AI Crew Assignment Assistant**: Intelligent algorithm suggests optimal crew assignments based on employee workload, performance ratings, experience, and job requirements. Scoring system considers active jobs (-15 pts each), ratings (+20 max), experience (+30 max), and special items handling (+10).
 - **Percentage-Based Payout Fee**: Token payouts use a 1% fee (minimum 10 JCMOVES) transferred to IN GOD WE TRUST wallet for the buyback program. Fee is calculated as max(balance * 1%, 10).
 - **Token Decimals Fix**: JCMOVES token uses 6 decimals (not 8). Corrected in Solana transfer service to prevent 100x transfer multiplier bug.
+- **Customer Rewards System**: Based on 1 JCMOVES = $0.01 valuation:
+  - **Lead Creation**: Employees earn 200 JCMOVES ($2) per job created (5/day cap)
+  - **Loyalty Booking**: Customers earn 1,500 JCMOVES ($15) when their job completes
+  - **Referral Request**: Referrers earn 50 JCMOVES ($0.50) when someone uses their code
+  - **Referral Confirmed**: Referrers earn 2,500 JCMOVES ($25) when referred user's first job completes
+- **Customer Portal Rewards Display**: Mining tab shows all earning opportunities with dollar values
 
 # External Dependencies
 
