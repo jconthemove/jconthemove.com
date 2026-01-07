@@ -2384,6 +2384,7 @@ export class DatabaseStorage implements IStorage {
       throw new Error(`Limit cannot exceed ${maxLimit.toLocaleString()} JCMOVES`);
     }
     
+    // Try to update first
     const [updated] = await db.update(treasuryLimits)
       .set({ 
         limitValue: limitValue.toString(),
@@ -2393,7 +2394,27 @@ export class DatabaseStorage implements IStorage {
       })
       .where(eq(treasuryLimits.limitType, limitType))
       .returning();
-    return updated || undefined;
+    
+    // If no record found, create it (upsert behavior)
+    if (!updated) {
+      const defaultNotes: Record<string, string> = {
+        'per_transaction': 'Maximum tokens per single transfer - Admin configurable up to 500M',
+        'daily': 'Maximum daily transfer limit - Admin configurable up to 500M',
+        'minimum_reserve': 'Minimum tokens to keep in treasury'
+      };
+      
+      const [created] = await db.insert(treasuryLimits)
+        .values({
+          limitType,
+          limitValue: limitValue.toString(),
+          updatedBy,
+          notes: notes || defaultNotes[limitType] || 'Admin-configured limit'
+        })
+        .returning();
+      return created || undefined;
+    }
+    
+    return updated;
   }
 
   // Token conversions operations (JCMOVES/SOL/ETH swap tracking)
