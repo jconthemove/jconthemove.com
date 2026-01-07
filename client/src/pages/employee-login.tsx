@@ -137,6 +137,19 @@ export default function EmployeeLogin() {
                 Create Account
               </Button>
             </div>
+
+            <div className="text-center text-sm border-t border-slate-700 pt-4 mt-4">
+              <span className="text-slate-400">Returning customer? </span>
+              <Button
+                variant="link"
+                className="p-0 h-auto text-blue-400 hover:text-blue-300"
+                onClick={() => setLocation("/customer")}
+                type="button"
+                data-testid="link-customer-login"
+              >
+                Customer Portal
+              </Button>
+            </div>
           </form>
         </CardContent>
       </Card>
