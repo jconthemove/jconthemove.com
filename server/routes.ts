@@ -264,6 +264,162 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     });
   });
+
+  // Customer Registration
+  const customerRegisterSchema = z.object({
+    email: z.string().email("Invalid email address"),
+    password: z.string().min(8, "Password must be at least 8 characters"),
+    firstName: z.string().min(1, "First name is required"),
+    lastName: z.string().min(1, "Last name is required"),
+    phoneNumber: z.string().optional()
+  });
+
+  app.post("/api/auth/customer/register", async (req, res) => {
+    try {
+      const data = customerRegisterSchema.parse(req.body);
+      
+      // Check if email already exists
+      const existingUser = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, data.email))
+        .limit(1);
+
+      const passwordHash = await bcrypt.hash(data.password, 10);
+      let newUser;
+
+      if (existingUser.length > 0 && !existingUser[0].passwordHash) {
+        // Upgrade existing customer account (from quote submission)
+        const [updatedUser] = await db
+          .update(users)
+          .set({
+            passwordHash,
+            firstName: data.firstName,
+            lastName: data.lastName,
+            phoneNumber: data.phoneNumber || existingUser[0].phoneNumber,
+          })
+          .where(eq(users.id, existingUser[0].id))
+          .returning();
+        newUser = updatedUser;
+      } else if (existingUser.length > 0) {
+        return res.status(400).json({ error: "Email already registered. Please sign in." });
+      } else {
+        // Create new customer account
+        const referralCode = `CUST-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+        
+        const [createdUser] = await db.insert(users).values({
+          email: data.email,
+          passwordHash,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          phoneNumber: data.phoneNumber || '',
+          role: 'customer',
+          status: 'active',
+          referralCode,
+        }).returning();
+        newUser = createdUser;
+
+        // Create wallet account for customer
+        await storage.createWalletAccount(newUser.id);
+      }
+
+      if (!newUser) {
+        return res.status(500).json({ error: "Registration failed" });
+      }
+
+      // Auto-login after registration
+      req.session.regenerate((err) => {
+        if (err) {
+          return res.status(500).json({ error: "Registration successful but login failed" });
+        }
+
+        (req.session as any).userId = newUser.id;
+        (req.session as any).userEmail = newUser.email;
+        (req.session as any).userRole = newUser.role;
+
+        req.session.save((saveErr) => {
+          if (saveErr) {
+            return res.status(500).json({ error: "Registration successful but login failed" });
+          }
+
+          res.json({
+            success: true,
+            user: {
+              id: newUser.id,
+              email: newUser.email,
+              firstName: newUser.firstName,
+              lastName: newUser.lastName,
+              role: newUser.role,
+              status: newUser.status,
+            }
+          });
+        });
+      });
+    } catch (error: any) {
+      console.error("Customer registration error:", error);
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ error: error.issues?.[0]?.message || "Invalid data" });
+      }
+      res.status(500).json({ error: "Registration failed" });
+    }
+  });
+
+  // Customer Login
+  app.post("/api/auth/customer/login", async (req, res) => {
+    try {
+      const data = employeeLoginSchema.parse(req.body);
+
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, data.email))
+        .limit(1);
+
+      if (!user || !user.passwordHash) {
+        return res.status(401).json({ error: "Invalid email or password. If you haven't created an account yet, please sign up first." });
+      }
+
+      const passwordMatch = await bcrypt.compare(data.password, user.passwordHash);
+      
+      if (!passwordMatch) {
+        return res.status(401).json({ error: "Invalid email or password" });
+      }
+
+      req.session.regenerate((err) => {
+        if (err) {
+          return res.status(500).json({ error: "Login failed" });
+        }
+
+        (req.session as any).userId = user.id;
+        (req.session as any).userEmail = user.email;
+        (req.session as any).userRole = user.role;
+
+        req.session.save((saveErr) => {
+          if (saveErr) {
+            return res.status(500).json({ error: "Login failed" });
+          }
+
+          res.json({
+            success: true,
+            user: {
+              id: user.id,
+              email: user.email,
+              firstName: user.firstName,
+              lastName: user.lastName,
+              role: user.role,
+              status: user.status,
+            }
+          });
+        });
+      });
+    } catch (error: any) {
+      console.error("Customer login error:", error);
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ error: error.issues?.[0]?.message || "Invalid data" });
+      }
+      res.status(500).json({ error: "Login failed" });
+    }
+  });
   
   // Validation schemas for rewards endpoints
   // NOTE: checkinSchema removed - daily check-ins replaced by unified mining system

@@ -6,20 +6,27 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, LogIn, Lock, Mail, User } from "lucide-react";
+import { Loader2, LogIn, Lock, Mail, User, UserPlus, Phone } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export default function CustomerLogin() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const [mode, setMode] = useState<'login' | 'register'>('login');
   const [formData, setFormData] = useState({
     email: "",
     password: "",
+    firstName: "",
+    lastName: "",
+    phoneNumber: "",
   });
 
   const loginMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const response = await apiRequest("POST", "/api/auth/employee/login", data);
+      const response = await apiRequest("POST", "/api/auth/customer/login", {
+        email: data.email,
+        password: data.password,
+      });
       return response.json();
     },
     onSuccess: async (data: any) => {
@@ -32,14 +39,7 @@ export default function CustomerLogin() {
       await queryClient.refetchQueries({ queryKey: ["/api/auth/user"] });
       
       await new Promise(resolve => setTimeout(resolve, 100));
-
-      if (data.user.status === "pending") {
-        setLocation("/pending-approval");
-      } else if (data.user.role === "customer") {
-        setLocation("/customer-portal");
-      } else {
-        setLocation("/");
-      }
+      setLocation("/customer-portal");
     },
     onError: (error: any) => {
       toast({
@@ -50,10 +50,48 @@ export default function CustomerLogin() {
     },
   });
 
+  const registerMutation = useMutation({
+    mutationFn: async (data: typeof formData) => {
+      const response = await apiRequest("POST", "/api/auth/customer/register", {
+        email: data.email,
+        password: data.password,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        phoneNumber: data.phoneNumber,
+      });
+      return response.json();
+    },
+    onSuccess: async (data: any) => {
+      toast({
+        title: "Account Created!",
+        description: `Welcome, ${data.user.firstName}!`,
+      });
+
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/auth/user"] });
+      
+      await new Promise(resolve => setTimeout(resolve, 100));
+      setLocation("/customer-portal");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Registration Failed",
+        description: error.message || "Could not create account.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    loginMutation.mutate(formData);
+    if (mode === 'login') {
+      loginMutation.mutate(formData);
+    } else {
+      registerMutation.mutate(formData);
+    }
   };
+
+  const isPending = loginMutation.isPending || registerMutation.isPending;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
@@ -64,13 +102,66 @@ export default function CustomerLogin() {
               <User className="h-8 w-8 text-white" />
             </div>
           </div>
-          <CardTitle className="text-2xl text-white">Customer Sign In</CardTitle>
+          <CardTitle className="text-2xl text-white">
+            {mode === 'login' ? 'Customer Sign In' : 'Create Account'}
+          </CardTitle>
           <CardDescription className="text-slate-400">
-            Sign in to track your quotes and manage your account
+            {mode === 'login' 
+              ? 'Sign in to track your quotes and earn rewards'
+              : 'Create your account to start earning JCMOVES tokens'
+            }
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            {mode === 'register' && (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="firstName" className="text-slate-300">First Name</Label>
+                    <Input
+                      id="firstName"
+                      type="text"
+                      placeholder="John"
+                      value={formData.firstName}
+                      onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                      className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
+                      required
+                      data-testid="input-firstName"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="lastName" className="text-slate-300">Last Name</Label>
+                    <Input
+                      id="lastName"
+                      type="text"
+                      placeholder="Doe"
+                      value={formData.lastName}
+                      onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                      className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
+                      required
+                      data-testid="input-lastName"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phoneNumber" className="text-slate-300">Phone Number (optional)</Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                    <Input
+                      id="phoneNumber"
+                      type="tel"
+                      placeholder="(555) 123-4567"
+                      value={formData.phoneNumber}
+                      onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
+                      className="pl-9 bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
+                      data-testid="input-phoneNumber"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="email" className="text-slate-300">Email Address</Label>
               <div className="relative">
@@ -95,11 +186,12 @@ export default function CustomerLogin() {
                 <Input
                   id="password"
                   type="password"
-                  placeholder="••••••••"
+                  placeholder={mode === 'register' ? 'At least 8 characters' : '••••••••'}
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="pl-9 bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
                   required
+                  minLength={mode === 'register' ? 8 : undefined}
                   data-testid="input-password"
                 />
               </div>
@@ -108,21 +200,56 @@ export default function CustomerLogin() {
             <Button
               type="submit"
               className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600"
-              disabled={loginMutation.isPending}
-              data-testid="button-login"
+              disabled={isPending}
+              data-testid="button-submit"
             >
-              {loginMutation.isPending ? (
+              {isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Signing In...
+                  {mode === 'login' ? 'Signing In...' : 'Creating Account...'}
                 </>
-              ) : (
+              ) : mode === 'login' ? (
                 <>
                   <LogIn className="mr-2 h-4 w-4" />
                   Sign In
                 </>
+              ) : (
+                <>
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  Create Account
+                </>
               )}
             </Button>
+
+            <div className="text-center text-sm border-t border-slate-700 pt-4 mt-4">
+              {mode === 'login' ? (
+                <>
+                  <span className="text-slate-400">Don't have an account? </span>
+                  <Button
+                    variant="link"
+                    className="p-0 h-auto text-green-400 hover:text-green-300 font-semibold"
+                    onClick={() => setMode('register')}
+                    type="button"
+                    data-testid="link-create-account"
+                  >
+                    Create Account
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <span className="text-slate-400">Already have an account? </span>
+                  <Button
+                    variant="link"
+                    className="p-0 h-auto text-blue-400 hover:text-blue-300"
+                    onClick={() => setMode('login')}
+                    type="button"
+                    data-testid="link-sign-in"
+                  >
+                    Sign In
+                  </Button>
+                </>
+              )}
+            </div>
 
             <div className="text-center text-sm">
               <span className="text-slate-400">Need a quote? </span>
