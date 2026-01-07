@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import {
@@ -34,7 +35,8 @@ import {
   Save,
   ArrowRightLeft,
   XCircle,
-  Copy
+  Copy,
+  ChevronDown
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -57,6 +59,7 @@ export default function InGodWeTrustPage() {
     amount: "",
     description: ""
   });
+  const [buybackExpanded, setBuybackExpanded] = useState(false);
 
   // Treasury stats query
   const { data: treasurySummary, refetch: refetchTreasury } = useQuery<{ stats: any }>({
@@ -576,65 +579,90 @@ export default function InGodWeTrustPage() {
 
           {/* Operations Tab */}
           <TabsContent value="operations" className="space-y-6">
-            {/* Buyback Fund Account - Prominent Display */}
-            <Card className="p-6 border-2 border-amber-500/50 bg-gradient-to-br from-amber-900/30 via-slate-800/80 to-slate-900/80">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold flex items-center gap-2 text-amber-400">
-                  <div className="p-2 rounded-lg bg-amber-500/20 border border-amber-500/30">
-                    <Coins className="h-5 w-5 text-amber-400" />
+            {/* Buyback Fund Account - Collapsible with Green Header */}
+            <Collapsible open={buybackExpanded} onOpenChange={setBuybackExpanded}>
+              <Card className="border-2 border-green-500/50 bg-gradient-to-br from-green-900/30 via-slate-800/80 to-slate-900/80 overflow-hidden">
+                <CollapsibleTrigger asChild>
+                  <div className="p-6 cursor-pointer hover:bg-green-500/5 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="p-3 rounded-xl bg-green-500/20 border border-green-500/40">
+                          <Coins className="h-6 w-6 text-green-400" />
+                        </div>
+                        <div>
+                          <h3 className="text-xl font-bold text-green-400">Buyback Fund Account</h3>
+                          <p className="text-sm text-slate-400">Token buyback program treasury</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <div className="text-3xl font-bold text-green-400">
+                            {(buybackFundData?.fund?.totalTokensCollected || 0).toLocaleString()}
+                          </div>
+                          <div className="text-sm text-green-500/80">JCMOVES Collected</div>
+                        </div>
+                        <ChevronDown className={`h-6 w-6 text-green-400 transition-transform duration-200 ${buybackExpanded ? 'rotate-180' : ''}`} />
+                      </div>
+                    </div>
                   </div>
-                  Buyback Fund Account
-                </h3>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => refetchBuybackFund()}
-                  className="text-amber-400 hover:bg-amber-500/10"
-                  data-testid="button-refresh-buyback-fund"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                </Button>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Current Balance */}
-                <div className="p-4 bg-slate-900/60 rounded-xl border border-amber-500/20">
-                  <div className="text-sm text-slate-400 mb-1">Current Balance</div>
-                  <div className="text-2xl font-bold text-amber-400">
-                    {(buybackFundData?.fund?.tokenBalance || 0).toLocaleString()} 
-                    <span className="text-sm ml-1 text-amber-500/80">JCMOVES</span>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="px-6 pb-6 border-t border-green-500/20">
+                    <div className="flex justify-end mt-4 mb-4">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => { e.stopPropagation(); refetchBuybackFund(); }}
+                        className="text-green-400 hover:bg-green-500/10"
+                        data-testid="button-refresh-buyback-fund"
+                      >
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Refresh
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {/* Current Balance */}
+                      <div className="p-4 bg-slate-900/60 rounded-xl border border-amber-500/20">
+                        <div className="text-sm text-slate-400 mb-1">Current Balance</div>
+                        <div className="text-2xl font-bold text-amber-400">
+                          {(buybackFundData?.fund?.tokenBalance || 0).toLocaleString()} 
+                          <span className="text-sm ml-1 text-amber-500/80">JCMOVES</span>
+                        </div>
+                        <div className="text-xs text-slate-500 mt-1">Available for buyback execution</div>
+                      </div>
+                      {/* Lifetime Collected */}
+                      <div className="p-4 bg-slate-900/60 rounded-xl border border-green-500/20">
+                        <div className="text-sm text-slate-400 mb-1">Lifetime Collected</div>
+                        <div className="text-2xl font-bold text-green-400">
+                          {(buybackFundData?.fund?.totalTokensCollected || 0).toLocaleString()}
+                          <span className="text-sm ml-1 text-green-500/80">JCMOVES</span>
+                        </div>
+                        <div className="text-xs text-slate-500 mt-1">Total fees collected all-time</div>
+                      </div>
+                      {/* Contribution Count */}
+                      <div className="p-4 bg-slate-900/60 rounded-xl border border-purple-500/20">
+                        <div className="text-sm text-slate-400 mb-1">Buyback Contributions</div>
+                        <div className="text-2xl font-bold text-purple-400">
+                          {(buybackFundData?.fund?.feeContributionCount || 0).toLocaleString()}
+                          <span className="text-sm ml-1 text-purple-500/80">payouts</span>
+                        </div>
+                        <div className="text-xs text-slate-500 mt-1">
+                          {buybackFundData?.fund?.lastUpdated 
+                            ? `Last: ${format(new Date(buybackFundData.fund.lastUpdated), 'MMM d, h:mm a')}`
+                            : 'No contributions yet'}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-4 p-3 bg-slate-900/40 rounded-lg border border-slate-700/50">
+                      <div className="flex items-center gap-2 text-sm text-slate-400">
+                        <Shield className="h-4 w-4 text-green-400" />
+                        <span>1,000 JCMOVES collected from each payout for token buyback program</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-xs text-slate-500 mt-1">Available for buyback execution</div>
-                </div>
-                {/* Lifetime Collected */}
-                <div className="p-4 bg-slate-900/60 rounded-xl border border-green-500/20">
-                  <div className="text-sm text-slate-400 mb-1">Lifetime Collected</div>
-                  <div className="text-2xl font-bold text-green-400">
-                    {(buybackFundData?.fund?.totalTokensCollected || 0).toLocaleString()}
-                    <span className="text-sm ml-1 text-green-500/80">JCMOVES</span>
-                  </div>
-                  <div className="text-xs text-slate-500 mt-1">Total fees collected all-time</div>
-                </div>
-                {/* Contribution Count */}
-                <div className="p-4 bg-slate-900/60 rounded-xl border border-purple-500/20">
-                  <div className="text-sm text-slate-400 mb-1">Buyback Contributions</div>
-                  <div className="text-2xl font-bold text-purple-400">
-                    {(buybackFundData?.fund?.feeContributionCount || 0).toLocaleString()}
-                    <span className="text-sm ml-1 text-purple-500/80">payouts</span>
-                  </div>
-                  <div className="text-xs text-slate-500 mt-1">
-                    {buybackFundData?.fund?.lastUpdated 
-                      ? `Last: ${format(new Date(buybackFundData.fund.lastUpdated), 'MMM d, h:mm a')}`
-                      : 'No contributions yet'}
-                  </div>
-                </div>
-              </div>
-              <div className="mt-4 p-3 bg-slate-900/40 rounded-lg border border-slate-700/50">
-                <div className="flex items-center gap-2 text-sm text-slate-400">
-                  <Shield className="h-4 w-4 text-amber-400" />
-                  <span>1,000 JCMOVES collected from each payout for token buyback program</span>
-                </div>
-              </div>
-            </Card>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Blockchain Verification */}
