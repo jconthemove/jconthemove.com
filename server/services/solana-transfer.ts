@@ -241,6 +241,43 @@ export class SolanaTransferService {
     }
   }
 
+  /**
+   * Get the burn wallet's live blockchain balance for the buyback fund transparency.
+   * This wallet is the old treasury we lost access to - shows tokens burned/locked.
+   */
+  async getBurnWalletBalance(): Promise<{ solBalance: number; tokenBalance: number; address: string }> {
+    const burnWalletAddress = TREASURY_CONFIG.BURN_WALLET_ADDRESS;
+    
+    if (!burnWalletAddress) {
+      return { solBalance: 0, tokenBalance: 0, address: '' };
+    }
+
+    try {
+      const burnPubkey = new PublicKey(burnWalletAddress);
+      const solBalance = await this.connection.getBalance(burnPubkey);
+      
+      const mintPubkey = new PublicKey(this.tokenMintAddress);
+      const ata = await getAssociatedTokenAddress(mintPubkey, burnPubkey);
+      
+      let tokenBalance = 0;
+      try {
+        const tokenAccountInfo = await this.connection.getTokenAccountBalance(ata);
+        tokenBalance = parseFloat(tokenAccountInfo.value.uiAmountString || '0');
+      } catch (e) {
+        console.log('Burn wallet token account may not exist yet');
+      }
+
+      return {
+        solBalance: solBalance / 1e9,
+        tokenBalance,
+        address: burnWalletAddress
+      };
+    } catch (error) {
+      console.error('Error getting burn wallet balance:', error);
+      return { solBalance: 0, tokenBalance: 0, address: burnWalletAddress };
+    }
+  }
+
   async transferTokens(request: TransferRequest): Promise<TransferResult> {
     const { recipientAddress, amount, memo } = request;
 
@@ -419,44 +456,33 @@ export class SolanaTransferService {
   }
 
   /**
-   * Transfer JCMOVES tokens to the IN GOD WE TRUST wallet for the token buyback program.
+   * Transfer JCMOVES tokens to the burn wallet for the token buyback program.
    * This is called after a successful payout to collect the network fee for buybacks.
+   * The burn wallet is an old treasury we lost access to - tokens sent there are effectively burned.
    */
   async transferFeeToBuybackWallet(feeAmount: number, payoutTransactionHash: string): Promise<TransferResult> {
     try {
-      // Get the IN GOD WE TRUST wallet address for buybacks
-      const buybackWalletAddress = treasuryKeyManager.getAddress('in_god_we_trust');
+      // Use dedicated burn wallet address from constants
+      const burnWalletAddress = TREASURY_CONFIG.BURN_WALLET_ADDRESS;
       
-      if (!buybackWalletAddress) {
-        console.warn('⚠️ IN GOD WE TRUST wallet not configured - fee retained in treasury');
+      if (!burnWalletAddress) {
+        console.warn('⚠️ Burn wallet not configured - fee retained in treasury');
         return {
           success: false,
-          error: 'Buyback wallet not configured'
+          error: 'Burn wallet not configured'
         };
       }
 
-      // Don't transfer to self if IN GOD WE TRUST is the active wallet
-      const activeWalletAddress = treasuryKeyManager.getAddress();
-      if (activeWalletAddress === buybackWalletAddress) {
-        console.log('📌 Active wallet is already IN GOD WE TRUST - fee retained');
-        return {
-          success: true,
-          amount: feeAmount,
-          recipientAddress: buybackWalletAddress,
-          timestamp: new Date()
-        };
-      }
-
-      // Execute the fee transfer to buyback wallet
-      console.log(`💸 Transferring ${feeAmount} JCMOVES fee to buyback wallet...`);
+      // Execute the fee transfer to burn wallet
+      console.log(`🔥 Transferring ${feeAmount} JCMOVES fee to burn wallet (${burnWalletAddress.slice(0, 8)}...)...`);
       const result = await this.transferTokens({
-        recipientAddress: buybackWalletAddress,
+        recipientAddress: burnWalletAddress,
         amount: feeAmount,
         memo: `Payout fee for buyback program (ref: ${payoutTransactionHash.slice(0, 8)})`
       });
 
       if (result.success) {
-        console.log(`✅ Fee transferred to IN GOD WE TRUST wallet for buyback: ${result.transactionHash}`);
+        console.log(`🔥 Fee transferred to burn wallet for buyback: ${result.transactionHash}`);
         
         // Update buyback fund with JCMOVES tokens - using correct column names from schema
         const existingFund = await db.query.buybackFund.findFirst();

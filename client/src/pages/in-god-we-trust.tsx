@@ -105,14 +105,19 @@ export default function InGodWeTrustPage() {
     queryKey: ["/api/treasury/limits"],
   });
 
-  // Buyback fund stats
+  // Buyback fund stats with live burn wallet balance
   const { data: buybackFundData, refetch: refetchBuybackFund } = useQuery<{ 
     fund: { 
       tokenBalance: number; 
       totalTokensCollected: number; 
       feeContributionCount: number;
       lastUpdated: string | null;
-    } 
+    };
+    burnWallet: {
+      address: string;
+      tokenBalance: number;
+      solBalance: number;
+    };
   }>({
     queryKey: ["/api/treasury/buyback-fund"],
     refetchInterval: 30000,
@@ -430,12 +435,12 @@ export default function InGodWeTrustPage() {
             <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -mr-10 -mt-10"></div>
             <div className="flex items-center justify-between mb-2">
               <Coins className="h-8 w-8 opacity-90" />
-              <span className="text-sm opacity-80 font-medium">Buyback Fund</span>
+              <span className="text-sm opacity-80 font-medium">Burn Wallet</span>
             </div>
             <div className="text-3xl font-black">
-              {(buybackFundData?.fund?.tokenBalance || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              {(buybackFundData?.burnWallet?.tokenBalance || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
             </div>
-            <div className="text-sm opacity-80 mt-1 font-medium">JCMOVES for Buybacks</div>
+            <div className="text-sm opacity-80 mt-1 font-medium">JCMOVES Burned (Live)</div>
           </Card>
 
           <Link href="/admin/users" className="block">
@@ -579,7 +584,7 @@ export default function InGodWeTrustPage() {
 
           {/* Operations Tab */}
           <TabsContent value="operations" className="space-y-6">
-            {/* Buyback Fund Account - Collapsible with Green Header */}
+            {/* Burn Wallet - Live Blockchain Balance for Transparency */}
             <Collapsible open={buybackExpanded} onOpenChange={setBuybackExpanded}>
               <Card className="border-2 border-green-500/50 bg-gradient-to-br from-green-900/30 via-slate-800/80 to-slate-900/80 overflow-hidden">
                 <CollapsibleTrigger asChild>
@@ -590,16 +595,16 @@ export default function InGodWeTrustPage() {
                           <Coins className="h-6 w-6 text-green-400" />
                         </div>
                         <div>
-                          <h3 className="text-xl font-bold text-green-400">Buyback Fund Account</h3>
-                          <p className="text-sm text-slate-400">Token buyback program treasury</p>
+                          <h3 className="text-xl font-bold text-green-400">Burn Wallet (Buyback Fund)</h3>
+                          <p className="text-sm text-slate-400">Live blockchain balance - tokens burned for buyback</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-4">
                         <div className="text-right">
                           <div className="text-3xl font-bold text-green-400">
-                            {(buybackFundData?.fund?.totalTokensCollected || 0).toLocaleString()}
+                            {(buybackFundData?.burnWallet?.tokenBalance || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
                           </div>
-                          <div className="text-sm text-green-500/80">JCMOVES Collected</div>
+                          <div className="text-sm text-green-500/80">JCMOVES Burned (Live)</div>
                         </div>
                         <ChevronDown className={`h-6 w-6 text-green-400 transition-transform duration-200 ${buybackExpanded ? 'rotate-180' : ''}`} />
                       </div>
@@ -620,31 +625,67 @@ export default function InGodWeTrustPage() {
                         Refresh
                       </Button>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {/* Current Balance */}
-                      <div className="p-4 bg-slate-900/60 rounded-xl border border-amber-500/20">
-                        <div className="text-sm text-slate-400 mb-1">Current Balance</div>
-                        <div className="text-2xl font-bold text-amber-400">
-                          {(buybackFundData?.fund?.tokenBalance || 0).toLocaleString()} 
-                          <span className="text-sm ml-1 text-amber-500/80">JCMOVES</span>
+                    
+                    {/* Burn Wallet Address */}
+                    <div className="mb-4 p-4 bg-slate-900/60 rounded-xl border border-green-500/20">
+                      <div className="text-sm text-slate-400 mb-2">Burn Wallet Address (Transparent Verification)</div>
+                      <div className="flex items-center gap-2">
+                        <div className="font-mono text-xs bg-slate-900/50 border border-slate-700/50 text-green-300 p-2 rounded-lg flex-1 break-all">
+                          {buybackFundData?.burnWallet?.address || "34e5eAwb6Eh6zgyARSrk7RX1bkK2rVX5bazCHYXKtRM7"}
                         </div>
-                        <div className="text-xs text-slate-500 mt-1">Available for buyback execution</div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            navigator.clipboard.writeText(buybackFundData?.burnWallet?.address || "34e5eAwb6Eh6zgyARSrk7RX1bkK2rVX5bazCHYXKtRM7");
+                            toast({ title: "Copied!", description: "Burn wallet address copied" });
+                          }}
+                          className="text-green-400 hover:bg-green-500/10"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          asChild
+                          className="text-green-400 hover:bg-green-500/10"
+                        >
+                          <a 
+                            href={`https://solscan.io/account/${buybackFundData?.burnWallet?.address || "34e5eAwb6Eh6zgyARSrk7RX1bkK2rVX5bazCHYXKtRM7"}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                        </Button>
                       </div>
-                      {/* Lifetime Collected */}
-                      <div className="p-4 bg-slate-900/60 rounded-xl border border-green-500/20">
-                        <div className="text-sm text-slate-400 mb-1">Lifetime Collected</div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {/* Live Blockchain Balance */}
+                      <div className="p-4 bg-slate-900/60 rounded-xl border border-green-500/30">
+                        <div className="text-sm text-slate-400 mb-1">Live Blockchain Balance</div>
                         <div className="text-2xl font-bold text-green-400">
-                          {(buybackFundData?.fund?.totalTokensCollected || 0).toLocaleString()}
+                          {(buybackFundData?.burnWallet?.tokenBalance || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} 
                           <span className="text-sm ml-1 text-green-500/80">JCMOVES</span>
                         </div>
-                        <div className="text-xs text-slate-500 mt-1">Total fees collected all-time</div>
+                        <div className="text-xs text-slate-500 mt-1">Verified on Solana blockchain</div>
                       </div>
-                      {/* Contribution Count */}
+                      {/* SOL Balance */}
+                      <div className="p-4 bg-slate-900/60 rounded-xl border border-amber-500/20">
+                        <div className="text-sm text-slate-400 mb-1">SOL Balance</div>
+                        <div className="text-2xl font-bold text-amber-400">
+                          {(buybackFundData?.burnWallet?.solBalance || 0).toFixed(6)}
+                          <span className="text-sm ml-1 text-amber-500/80">SOL</span>
+                        </div>
+                        <div className="text-xs text-slate-500 mt-1">Network fees in burn wallet</div>
+                      </div>
+                      {/* Database Tracked */}
                       <div className="p-4 bg-slate-900/60 rounded-xl border border-purple-500/20">
-                        <div className="text-sm text-slate-400 mb-1">Buyback Contributions</div>
+                        <div className="text-sm text-slate-400 mb-1">Database Tracked</div>
                         <div className="text-2xl font-bold text-purple-400">
                           {(buybackFundData?.fund?.feeContributionCount || 0).toLocaleString()}
-                          <span className="text-sm ml-1 text-purple-500/80">payouts</span>
+                          <span className="text-sm ml-1 text-purple-500/80">contributions</span>
                         </div>
                         <div className="text-xs text-slate-500 mt-1">
                           {buybackFundData?.fund?.lastUpdated 
@@ -656,7 +697,7 @@ export default function InGodWeTrustPage() {
                     <div className="mt-4 p-3 bg-slate-900/40 rounded-lg border border-slate-700/50">
                       <div className="flex items-center gap-2 text-sm text-slate-400">
                         <Shield className="h-4 w-4 text-green-400" />
-                        <span>1,000 JCMOVES collected from each payout for token buyback program</span>
+                        <span>1% fee from each payout sent to burn wallet - tokens are permanently locked for transparency</span>
                       </div>
                     </div>
                   </div>

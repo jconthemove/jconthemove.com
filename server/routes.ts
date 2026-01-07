@@ -3442,9 +3442,14 @@ Thank you for your business!
   });
 
   // Buyback fund stats API - Get current buyback fund balances and lifetime stats
+  // Now includes live blockchain balance from burn wallet for full transparency
   app.get("/api/treasury/buyback-fund", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
       const stats = await storage.getBuybackFundStats();
+      
+      // Get live blockchain balance from burn wallet
+      const burnWalletBalance = await solanaTransferService.getBurnWalletBalance();
+      
       res.json({ 
         success: true,
         fund: {
@@ -3452,6 +3457,11 @@ Thank you for your business!
           totalTokensCollected: stats.totalTokensCollected,
           feeContributionCount: stats.feeContributionCount,
           lastUpdated: stats.lastUpdated
+        },
+        burnWallet: {
+          address: burnWalletBalance.address,
+          tokenBalance: burnWalletBalance.tokenBalance,
+          solBalance: burnWalletBalance.solBalance
         }
       });
     } catch (error) {

@@ -34,8 +34,11 @@ export const TREASURY_CONFIG = {
   WITHDRAWAL_FEE_PERCENT: 2, // 2% fee for crypto withdrawals
   
   // Payout network fee (percentage-based for token buyback program)
-  PAYOUT_FEE_PERCENT: 1, // 1% of total payout - transferred to IN GOD WE TRUST wallet for buyback
+  PAYOUT_FEE_PERCENT: 1, // 1% of total payout - transferred to burn wallet for buyback
   PAYOUT_MIN_FEE_TOKENS: 10, // Minimum 10 JCMOVES fee to avoid dust amounts
+  
+  // Burn/Buyback Wallet (old treasury - lost access, effectively burns tokens)
+  BURN_WALLET_ADDRESS: '34e5eAwb6Eh6zgyARSrk7RX1bkK2rVX5bazCHYXKtRM7',
   
   // Treasury safety limits (admin configurable up to 500M)
   MAX_TRANSFER_PER_TX: 500000000, // Maximum tokens per single transfer (500M admin limit)
