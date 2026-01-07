@@ -1702,7 +1702,7 @@ export default function InGodWeTrustPage() {
                       </div>
 
                       <div className="space-y-2 text-sm text-slate-400 mb-4">
-                        <p><span className="text-slate-500">To:</span> {payout.destinationAddress.slice(0, 12)}...{payout.destinationAddress.slice(-8)}</p>
+                        <p><span className="text-slate-500">To:</span> {payout.recipientAddress?.slice(0, 12)}...{payout.recipientAddress?.slice(-8)}</p>
                         <p><span className="text-slate-500">Requested:</span> {format(new Date(payout.requestedAt), "MMM d, yyyy h:mm a")}</p>
                       </div>
 
