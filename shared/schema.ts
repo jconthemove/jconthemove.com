@@ -1137,7 +1137,9 @@ export type InsertTestimonial = z.infer<typeof insertTestimonialSchema>;
 export const walletPayouts = pgTable("wallet_payouts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
-  tokenAmount: decimal("token_amount", { precision: 18, scale: 8 }).notNull(),
+  tokenAmount: decimal("token_amount", { precision: 18, scale: 8 }).notNull(), // Gross amount requested
+  feeAmount: decimal("fee_amount", { precision: 18, scale: 8 }).default("0"), // Network fee deducted
+  netAmount: decimal("net_amount", { precision: 18, scale: 8 }), // Net amount sent (tokenAmount - feeAmount)
   recipientAddress: text("recipient_address").notNull(),
   transactionHash: text("transaction_hash"),
   status: text("status").notNull().default("pending"), // 'pending', 'processing', 'confirmed', 'failed'

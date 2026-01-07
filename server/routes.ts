@@ -6122,10 +6122,11 @@ Thank you for your business!
         }
 
         try {
-          const result = await solanaTransferService.transferTokens(
-            recipientAddr,
-            parseFloat(payout.tokenAmount)
-          );
+          const result = await solanaTransferService.transferTokens({
+            recipientAddress: recipientAddr,
+            amount: parseFloat(payout.tokenAmount),
+            memo: `Payout for user ${payout.userId}`
+          });
 
           if (!result.success) {
             return res.status(500).json({ 
