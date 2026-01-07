@@ -102,6 +102,19 @@ export default function InGodWeTrustPage() {
     queryKey: ["/api/treasury/limits"],
   });
 
+  // Buyback fund stats
+  const { data: buybackFundData, refetch: refetchBuybackFund } = useQuery<{ 
+    fund: { 
+      tokenBalance: number; 
+      totalTokensCollected: number; 
+      feeContributionCount: number;
+      lastUpdated: string | null;
+    } 
+  }>({
+    queryKey: ["/api/treasury/buyback-fund"],
+    refetchInterval: 30000,
+  });
+
   // Square config status
   const { data: squareConfig } = useQuery<{ configured: boolean; environment: string }>({
     queryKey: ["/api/invoices/config/status"],
@@ -563,6 +576,66 @@ export default function InGodWeTrustPage() {
 
           {/* Operations Tab */}
           <TabsContent value="operations" className="space-y-6">
+            {/* Buyback Fund Account - Prominent Display */}
+            <Card className="p-6 border-2 border-amber-500/50 bg-gradient-to-br from-amber-900/30 via-slate-800/80 to-slate-900/80">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold flex items-center gap-2 text-amber-400">
+                  <div className="p-2 rounded-lg bg-amber-500/20 border border-amber-500/30">
+                    <Coins className="h-5 w-5 text-amber-400" />
+                  </div>
+                  Buyback Fund Account
+                </h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => refetchBuybackFund()}
+                  className="text-amber-400 hover:bg-amber-500/10"
+                  data-testid="button-refresh-buyback-fund"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Current Balance */}
+                <div className="p-4 bg-slate-900/60 rounded-xl border border-amber-500/20">
+                  <div className="text-sm text-slate-400 mb-1">Current Balance</div>
+                  <div className="text-2xl font-bold text-amber-400">
+                    {(buybackFundData?.fund?.tokenBalance || 0).toLocaleString()} 
+                    <span className="text-sm ml-1 text-amber-500/80">JCMOVES</span>
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1">Available for buyback execution</div>
+                </div>
+                {/* Lifetime Collected */}
+                <div className="p-4 bg-slate-900/60 rounded-xl border border-green-500/20">
+                  <div className="text-sm text-slate-400 mb-1">Lifetime Collected</div>
+                  <div className="text-2xl font-bold text-green-400">
+                    {(buybackFundData?.fund?.totalTokensCollected || 0).toLocaleString()}
+                    <span className="text-sm ml-1 text-green-500/80">JCMOVES</span>
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1">Total fees collected all-time</div>
+                </div>
+                {/* Contribution Count */}
+                <div className="p-4 bg-slate-900/60 rounded-xl border border-purple-500/20">
+                  <div className="text-sm text-slate-400 mb-1">Buyback Contributions</div>
+                  <div className="text-2xl font-bold text-purple-400">
+                    {(buybackFundData?.fund?.feeContributionCount || 0).toLocaleString()}
+                    <span className="text-sm ml-1 text-purple-500/80">payouts</span>
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1">
+                    {buybackFundData?.fund?.lastUpdated 
+                      ? `Last: ${format(new Date(buybackFundData.fund.lastUpdated), 'MMM d, h:mm a')}`
+                      : 'No contributions yet'}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 p-3 bg-slate-900/40 rounded-lg border border-slate-700/50">
+                <div className="flex items-center gap-2 text-sm text-slate-400">
+                  <Shield className="h-4 w-4 text-amber-400" />
+                  <span>1,000 JCMOVES collected from each payout for token buyback program</span>
+                </div>
+              </div>
+            </Card>
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Blockchain Verification */}
               <Card className="p-6 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">

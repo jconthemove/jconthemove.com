@@ -1235,8 +1235,14 @@ export const buybackFund = pgTable("buyback_fund", {
   totalUsedForBuyback: decimal("total_used_for_buyback", { precision: 20, scale: 9 }).notNull().default("0"), // SOL spent on buybacks
   totalTokensBought: decimal("total_tokens_bought", { precision: 20, scale: 8 }).notNull().default("0"), // Total JCMOVES bought back
   buybackCount: integer("buyback_count").notNull().default(0), // Number of buyback transactions
+  // Token fee tracking (JCMOVES collected from payout fees)
+  tokenBalance: decimal("token_balance", { precision: 20, scale: 8 }).notNull().default("0"), // Current JCMOVES in fund
+  totalTokensCollected: decimal("total_tokens_collected", { precision: 20, scale: 8 }).notNull().default("0"), // Lifetime JCMOVES from fees
+  feeContributionCount: integer("fee_contribution_count").notNull().default(0), // Number of fee contributions
   lastUpdated: timestamp("last_updated").notNull().default(sql`now()`),
 });
+
+export type BuybackFund = typeof buybackFund.$inferSelect;
 
 // Buyback transactions - History of token buybacks
 export const buybackTransactions = pgTable("buyback_transactions", {

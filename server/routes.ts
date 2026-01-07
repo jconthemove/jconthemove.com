@@ -3441,6 +3441,25 @@ Thank you for your business!
     }
   });
 
+  // Buyback fund stats API - Get current buyback fund balances and lifetime stats
+  app.get("/api/treasury/buyback-fund", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const stats = await storage.getBuybackFundStats();
+      res.json({ 
+        success: true,
+        fund: {
+          tokenBalance: stats.tokenBalance,
+          totalTokensCollected: stats.totalTokensCollected,
+          feeContributionCount: stats.feeContributionCount,
+          lastUpdated: stats.lastUpdated
+        }
+      });
+    } catch (error) {
+      console.error("Error getting buyback fund stats:", error);
+      res.status(500).json({ error: "Failed to get buyback fund stats" });
+    }
+  });
+
   // Token conversions API (JCMOVES/SOL/ETH swap tracking)
   app.get("/api/conversions", isAuthenticated, async (req: any, res) => {
     try {
@@ -5869,15 +5888,19 @@ Thank you for your business!
           });
           
           // Transfer the fee to IN GOD WE TRUST wallet for buyback program (async, non-blocking)
-          solanaTransferService.transferFeeToBuybackWallet(feeAmount, transferResult.transactionHash)
-            .then(feeResult => {
+          // Also record the fee contribution in the database
+          Promise.all([
+            solanaTransferService.transferFeeToBuybackWallet(feeAmount, transferResult.transactionHash),
+            storage.recordBuybackFeeContribution(feeAmount, payout.id)
+          ])
+            .then(([feeResult]) => {
               if (feeResult.success) {
-                console.log(`[PAYOUT] Fee of ${feeAmount} JCMOVES transferred to buyback wallet`);
+                console.log(`[PAYOUT] Fee of ${feeAmount} JCMOVES transferred to buyback wallet and recorded`);
               } else {
                 console.warn(`[PAYOUT] Fee transfer to buyback wallet failed: ${feeResult.error}`);
               }
             })
-            .catch(err => console.error('[PAYOUT] Fee transfer error:', err));
+            .catch(err => console.error('[PAYOUT] Fee transfer/recording error:', err));
           
           return res.json({
             success: true,
