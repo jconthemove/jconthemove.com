@@ -132,6 +132,8 @@ export interface IStorage {
   createWalletAccount(wallet: InsertWalletAccount): Promise<WalletAccount>;
   updateWalletAccount(userId: string, updates: Partial<WalletAccount>): Promise<void>;
   awardJobCompletionTokens(userId: string, tokenAmount: number, jobId: string): Promise<void>;
+  creditWalletTokens(userId: string, tokenAmount: number): Promise<void>;
+  getRewardsByUserAndTypeToday(userId: string, rewardType: string): Promise<any[]>;
   
   // Multi-currency wallet operations
   getSupportedCurrencies(): Promise<SupportedCurrency[]>;
@@ -1954,6 +1956,36 @@ export class DatabaseStorage implements IStorage {
       earnedDate: new Date(),
       metadata: { jobId },
     });
+  }
+
+  async creditWalletTokens(userId: string, tokenAmount: number): Promise<void> {
+    let wallet = await this.getWalletAccount(userId);
+    if (!wallet) {
+      wallet = await this.createWalletAccount({ userId });
+    }
+
+    const currentBalance = parseFloat(wallet.tokenBalance || "0");
+    const currentEarned = parseFloat(wallet.totalEarned || "0");
+    const newBalance = currentBalance + tokenAmount;
+    const newTotalEarned = currentEarned + tokenAmount;
+
+    await this.updateWalletAccount(userId, {
+      tokenBalance: newBalance.toFixed(8),
+      totalEarned: newTotalEarned.toFixed(8),
+    });
+  }
+
+  async getRewardsByUserAndTypeToday(userId: string, rewardType: string): Promise<any[]> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    return await db.select()
+      .from(rewards)
+      .where(and(
+        eq(rewards.recipientId, userId),
+        eq(rewards.type, rewardType),
+        gte(rewards.createdAt, today)
+      ));
   }
 
   // Multi-currency wallet operations
