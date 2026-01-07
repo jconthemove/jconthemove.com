@@ -38,6 +38,7 @@ import EmployeesPage from "@/pages/employees";
 import LeadDetailPage from "@/pages/lead-detail";
 import EmployeeRegister from "@/pages/employee-register";
 import EmployeeLogin from "@/pages/employee-login";
+import CustomerLogin from "@/pages/customer-login";
 import QuotePage from "@/pages/quote";
 import SponsorsPage from "@/pages/sponsors";
 import ServicesPage from "@/pages/services";
@@ -215,6 +216,7 @@ function Router() {
       {/* Public Authentication Routes - No Replit account needed! */}
       <Route path="/employee-register" component={EmployeeRegister} />
       <Route path="/employee-login" component={EmployeeLogin} />
+      <Route path="/customer-login" component={CustomerLogin} />
       
       {/* Customer interface - accessible to all users without authentication */}
       <Route path="/customer" component={CustomerMobileInterface} />

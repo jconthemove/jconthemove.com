@@ -6,10 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, LogIn, Lock, Mail } from "lucide-react";
+import { Loader2, LogIn, Lock, Mail, User } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
-export default function EmployeeLogin() {
+export default function CustomerLogin() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [formData, setFormData] = useState({
@@ -25,19 +25,18 @@ export default function EmployeeLogin() {
     onSuccess: async (data: any) => {
       toast({
         title: "Welcome Back!",
-        description: `Logged in as ${data.user.firstName} ${data.user.lastName}`,
+        description: `Logged in as ${data.user.firstName || data.user.email}`,
       });
 
-      // Invalidate and refetch auth query before redirecting
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       await queryClient.refetchQueries({ queryKey: ["/api/auth/user"] });
       
-      // Small delay to ensure state updates
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Redirect based on status
       if (data.user.status === "pending") {
         setLocation("/pending-approval");
+      } else if (data.user.role === "customer") {
+        setLocation("/customer-portal");
       } else {
         setLocation("/");
       }
@@ -61,13 +60,13 @@ export default function EmployeeLogin() {
       <Card className="w-full max-w-md bg-slate-800/50 border-slate-700">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <div className="bg-gradient-to-r from-orange-500 to-red-500 p-3 rounded-full">
-              <LogIn className="h-8 w-8 text-white" />
+            <div className="bg-gradient-to-r from-blue-500 to-cyan-500 p-3 rounded-full">
+              <User className="h-8 w-8 text-white" />
             </div>
           </div>
-          <CardTitle className="text-2xl text-white">Employee Sign In</CardTitle>
+          <CardTitle className="text-2xl text-white">Customer Sign In</CardTitle>
           <CardDescription className="text-slate-400">
-            Sign in to access your JC ON THE MOVE dashboard
+            Sign in to track your quotes and manage your account
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -79,7 +78,7 @@ export default function EmployeeLogin() {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="john.doe@example.com"
+                  placeholder="your.email@example.com"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="pl-9 bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
@@ -108,7 +107,7 @@ export default function EmployeeLogin() {
 
             <Button
               type="submit"
-              className="w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
+              className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600"
               disabled={loginMutation.isPending}
               data-testid="button-login"
             >
@@ -126,28 +125,28 @@ export default function EmployeeLogin() {
             </Button>
 
             <div className="text-center text-sm">
-              <span className="text-slate-400">Don't have an account? </span>
+              <span className="text-slate-400">Need a quote? </span>
               <Button
                 variant="link"
-                className="p-0 h-auto text-orange-400 hover:text-orange-300"
-                onClick={() => setLocation("/employee-register")}
+                className="p-0 h-auto text-blue-400 hover:text-blue-300"
+                onClick={() => setLocation("/customer")}
                 type="button"
-                data-testid="link-register"
+                data-testid="link-get-quote"
               >
-                Create Account
+                Get a Free Quote
               </Button>
             </div>
 
             <div className="text-center text-sm border-t border-slate-700 pt-4 mt-4">
-              <span className="text-slate-400">Returning customer? </span>
+              <span className="text-slate-400">Are you an employee? </span>
               <Button
                 variant="link"
-                className="p-0 h-auto text-blue-400 hover:text-blue-300"
-                onClick={() => setLocation("/customer-login")}
+                className="p-0 h-auto text-orange-400 hover:text-orange-300"
+                onClick={() => setLocation("/employee-login")}
                 type="button"
-                data-testid="link-customer-login"
+                data-testid="link-employee-login"
               >
-                Customer Sign In
+                Employee Sign In
               </Button>
             </div>
           </form>
