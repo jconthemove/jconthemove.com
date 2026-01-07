@@ -15,6 +15,10 @@ export class SolanaMonitor {
   private lastCheckedSignature: string | null = null;
   private treasuryWalletAddress: string | null = null;
   private jcmovesTokenAddress: string;
+  
+  // Balance cache to prevent RPC rate limiting
+  private cachedBalance: { balance: number; timestamp: number; walletAddress: string } | null = null;
+  private readonly CACHE_TTL_MS = 30000; // 30 seconds cache
 
   constructor() {
     // Validate and get RPC URL with proper fallback
@@ -368,7 +372,7 @@ export class SolanaMonitor {
   }
 
   /**
-   * Get live JCMOVES token balance from Solana blockchain
+   * Get live JCMOVES token balance from Solana blockchain (with caching)
    */
   async getLiveTokenBalance(): Promise<{
     success: boolean;
@@ -386,6 +390,19 @@ export class SolanaMonitor {
           balance: 0,
           walletAddress: '',
           error: 'Treasury wallet address not found'
+        };
+      }
+
+      // Check cache first to prevent RPC rate limiting
+      const now = Date.now();
+      if (this.cachedBalance && 
+          this.cachedBalance.walletAddress === this.treasuryWalletAddress &&
+          (now - this.cachedBalance.timestamp) < this.CACHE_TTL_MS) {
+        console.log(`📋 Using cached balance: ${this.cachedBalance.balance.toLocaleString()} JCMOVES (${Math.round((now - this.cachedBalance.timestamp) / 1000)}s old)`);
+        return {
+          success: true,
+          balance: this.cachedBalance.balance,
+          walletAddress: this.treasuryWalletAddress
         };
       }
 
@@ -416,6 +433,8 @@ export class SolanaMonitor {
             if (ataInfo && ataInfo.value && ataInfo.value.uiAmountString) {
               const balance = parseFloat(ataInfo.value.uiAmountString);
               console.log(`💰 Live blockchain balance (via ATA): ${balance.toLocaleString()} JCMOVES`);
+              // Cache the result
+              this.cachedBalance = { balance, timestamp: Date.now(), walletAddress: this.treasuryWalletAddress! };
               return {
                 success: true,
                 balance,
@@ -442,6 +461,9 @@ export class SolanaMonitor {
 
       console.log(`💰 Live blockchain balance: ${balance.toLocaleString()} JCMOVES`);
 
+      // Cache the result
+      this.cachedBalance = { balance, timestamp: Date.now(), walletAddress: this.treasuryWalletAddress! };
+
       return {
         success: true,
         balance,
@@ -449,6 +471,18 @@ export class SolanaMonitor {
       };
     } catch (error) {
       console.error('❌ Error fetching live token balance:', error);
+      
+      // On error, return stale cache if available (better than 0)
+      if (this.cachedBalance && this.cachedBalance.balance > 0) {
+        console.log(`⚠️ RPC error, returning stale cached balance: ${this.cachedBalance.balance.toLocaleString()} JCMOVES`);
+        return {
+          success: true,
+          balance: this.cachedBalance.balance,
+          walletAddress: this.cachedBalance.walletAddress,
+          error: 'Using cached value (RPC temporarily unavailable)'
+        };
+      }
+      
       return {
         success: false,
         balance: 0,
