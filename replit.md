@@ -97,6 +97,7 @@ Preferred communication style: Simple, everyday language.
 - **Streamlined Navigation**: Removed legacy `/treasury`, `/admin`, and `/admin-moonshot` routes in favor of single unified entry point. Removed redundant "Users" navigation tab from header.
 - **Total Earnings Fix**: Admin user details endpoint (`/api/admin/users/:id/details`) now correctly calculates total earnings from ALL rewards instead of only the last 10.
 - **AI Crew Assignment Assistant**: Intelligent algorithm suggests optimal crew assignments based on employee workload, performance ratings, experience, and job requirements. Scoring system considers active jobs (-15 pts each), ratings (+20 max), experience (+30 max), and special items handling (+10).
+- **Percentage-Based Payout Fee**: Token payouts use a 1% fee (minimum 10 JCMOVES) transferred to IN GOD WE TRUST wallet for the buyback program. Fee is calculated as max(balance * 1%, 10).
 
 # External Dependencies
 

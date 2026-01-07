@@ -5788,14 +5788,19 @@ Thank you for your business!
         return res.status(400).json({ error: "No tokens available for payout" });
       }
       
-      // Import fee constant and calculate net amount
+      // Import fee constants and calculate percentage-based fee
       const { TREASURY_CONFIG } = await import('./constants');
-      const feeAmount = TREASURY_CONFIG.PAYOUT_NETWORK_FEE_TOKENS;
+      const feePercent = TREASURY_CONFIG.PAYOUT_FEE_PERCENT;
+      const minFee = TREASURY_CONFIG.PAYOUT_MIN_FEE_TOKENS;
+      
+      // Calculate 1% fee with minimum guard
+      const calculatedFee = Math.ceil(availableBalance * (feePercent / 100));
+      const feeAmount = Math.max(calculatedFee, minFee);
       
       // Ensure user has enough to cover the fee
       if (availableBalance <= feeAmount) {
         return res.status(400).json({ 
-          error: `Minimum payout is ${feeAmount + 1} JCMOVES tokens (includes ${feeAmount} network fee)` 
+          error: `Minimum payout is ${feeAmount + 1} JCMOVES tokens (includes ${feePercent}% network fee)` 
         });
       }
       
@@ -5826,7 +5831,7 @@ Thank you for your business!
           netAmount: netAmount.toFixed(8),
           recipientAddress: payoutInfo.address,
           status: 'pending',
-          metadata: { walletMode: payoutInfo.mode, originalBalance: availableBalance, networkFee: feeAmount }
+          metadata: { walletMode: payoutInfo.mode, originalBalance: availableBalance, feePercent: feePercent, feeAmount: feeAmount }
         });
         
         // Deduct balance immediately after creating payout record (prevents double-spend)
@@ -5959,12 +5964,14 @@ Thank you for your business!
   app.get("/api/wallet/payout-config", async (req, res) => {
     try {
       const { TREASURY_CONFIG } = await import('./constants');
-      const networkFee = TREASURY_CONFIG.PAYOUT_NETWORK_FEE_TOKENS;
+      const feePercent = TREASURY_CONFIG.PAYOUT_FEE_PERCENT;
+      const minFee = TREASURY_CONFIG.PAYOUT_MIN_FEE_TOKENS;
       res.json({
-        networkFee,
-        minimumPayout: networkFee + 1,
+        feePercent,
+        minFee,
+        minimumPayout: minFee + 1,
         feeCurrency: "JCMOVES",
-        feeDescription: "Flat fee contributed to the token buyback program"
+        feeDescription: `${feePercent}% fee contributed to the token buyback program (minimum ${minFee} JCMOVES)`
       });
     } catch (error) {
       console.error("Error getting payout config:", error);
