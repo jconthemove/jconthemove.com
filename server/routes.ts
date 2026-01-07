@@ -6111,7 +6111,7 @@ Thank you for your business!
       if (executeOnChain) {
         try {
           const result = await solanaTransferService.transferTokens(
-            payout.destinationAddress,
+            payout.recipientAddress,
             parseFloat(payout.tokenAmount)
           );
 
@@ -6125,7 +6125,7 @@ Thank you for your business!
           // Update payout with blockchain tx hash
           await storage.updateWalletPayout(payoutId, {
             status: 'completed',
-            txHash: result.signature,
+            transactionHash: result.signature,
             processedAt: new Date()
           });
 
@@ -6136,7 +6136,7 @@ Thank you for your business!
             message: "Payout processed and tokens sent on blockchain",
             txHash: result.signature,
             amount: payout.tokenAmount,
-            destination: payout.destinationAddress
+            destination: payout.recipientAddress
           });
 
         } catch (transferError: any) {
@@ -6155,7 +6155,7 @@ Thank you for your business!
 
       await storage.updateWalletPayout(payoutId, {
         status: 'completed',
-        txHash,
+        transactionHash: txHash,
         processedAt: new Date()
       });
 
@@ -6166,7 +6166,7 @@ Thank you for your business!
         message: "Payout marked as completed",
         txHash,
         amount: payout.tokenAmount,
-        destination: payout.destinationAddress
+        destination: payout.recipientAddress
       });
 
     } catch (error) {
