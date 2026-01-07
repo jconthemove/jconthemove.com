@@ -313,7 +313,8 @@ export class SolanaTransferService {
         };
       }
 
-      const decimals = 8;
+      // JCMOVES token has 6 decimals (verified from on-chain mint data)
+      const decimals = 6;
       const amountInSmallestUnits = BigInt(Math.floor(amount * Math.pow(10, decimals)));
 
       const transferInstruction = createTransferInstruction(
