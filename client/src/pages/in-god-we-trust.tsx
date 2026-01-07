@@ -59,40 +59,41 @@ export default function InGodWeTrustPage() {
   });
 
   // Treasury stats query
-  const { data: treasurySummary, refetch: refetchTreasury } = useQuery({
+  const { data: treasurySummary, refetch: refetchTreasury } = useQuery<{ stats: any }>({
     queryKey: ["/api/treasury/summary"],
   });
 
   // Live blockchain balance
-  const { data: liveBalance, refetch: refetchBalance } = useQuery({
+  const { data: liveBalance, refetch: refetchBalance } = useQuery<{ balance: number; walletAddress: string }>({
     queryKey: ["/api/solana/balance"],
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
-  // Live token price
+  // Live token price (unused - kept for future)
   const { data: livePrice } = useQuery({
     queryKey: ["/api/crypto/live-price"],
     refetchInterval: 5000, // Refresh every 5 seconds
+    enabled: false, // Disabled - no pricing displayed
   });
 
   // Funding deposits
-  const { data: deposits } = useQuery({
+  const { data: deposits } = useQuery<{ deposits: any[] }>({
     queryKey: ["/api/treasury/deposits"],
   });
 
   // Admin stats
-  const { data: adminStats } = useQuery({
+  const { data: adminStats } = useQuery<{ totalLeads: number; activeJobs: number; totalUsers: number }>({
     queryKey: ["/api/admin/stats"],
   });
 
   // Transfer service status query
-  const { data: transferStatus } = useQuery({
+  const { data: transferStatus } = useQuery<{ operational: boolean; address: string }>({
     queryKey: ["/api/treasury/transfer/status"],
     refetchInterval: 60000,
   });
 
   // Treasury wallets configuration
-  const { data: treasuryWallets, refetch: refetchTreasuryWallets } = useQuery({
+  const { data: treasuryWallets, refetch: refetchTreasuryWallets } = useQuery<{ wallets: any[] }>({
     queryKey: ["/api/treasury/wallets"],
   });
 
@@ -107,7 +108,7 @@ export default function InGodWeTrustPage() {
   });
 
   // Invoices list
-  const { data: invoices, refetch: refetchInvoices } = useQuery({
+  const { data: invoices, refetch: refetchInvoices } = useQuery<any[]>({
     queryKey: ["/api/invoices"],
   });
 
@@ -1919,8 +1920,8 @@ export default function InGodWeTrustPage() {
                   Recent Deposits
                 </h3>
                 <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {deposits?.deposits?.length > 0 ? (
-                    deposits.deposits.slice(0, 5).map((deposit: any) => (
+                  {(deposits?.deposits?.length ?? 0) > 0 ? (
+                    deposits?.deposits?.slice(0, 5).map((deposit: any) => (
                       <div
                         key={deposit.id}
                         className="flex justify-between items-center p-3 bg-slate-900/50 border border-slate-700/50 rounded-lg text-sm"
