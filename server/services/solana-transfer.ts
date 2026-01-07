@@ -417,6 +417,71 @@ export class SolanaTransferService {
     }
   }
 
+  /**
+   * Transfer JCMOVES tokens to the IN GOD WE TRUST wallet for the token buyback program.
+   * This is called after a successful payout to collect the network fee for buybacks.
+   */
+  async transferFeeToBuybackWallet(feeAmount: number, payoutTransactionHash: string): Promise<TransferResult> {
+    try {
+      // Get the IN GOD WE TRUST wallet address for buybacks
+      const buybackWalletAddress = treasuryKeyManager.getAddress('in_god_we_trust');
+      
+      if (!buybackWalletAddress) {
+        console.warn('⚠️ IN GOD WE TRUST wallet not configured - fee retained in treasury');
+        return {
+          success: false,
+          error: 'Buyback wallet not configured'
+        };
+      }
+
+      // Don't transfer to self if IN GOD WE TRUST is the active wallet
+      const activeWalletAddress = treasuryKeyManager.getAddress();
+      if (activeWalletAddress === buybackWalletAddress) {
+        console.log('📌 Active wallet is already IN GOD WE TRUST - fee retained');
+        return {
+          success: true,
+          amount: feeAmount,
+          recipientAddress: buybackWalletAddress,
+          timestamp: new Date()
+        };
+      }
+
+      // Execute the fee transfer to buyback wallet
+      console.log(`💸 Transferring ${feeAmount} JCMOVES fee to buyback wallet...`);
+      const result = await this.transferTokens({
+        recipientAddress: buybackWalletAddress,
+        amount: feeAmount,
+        memo: `Payout fee for buyback program (ref: ${payoutTransactionHash.slice(0, 8)})`
+      });
+
+      if (result.success) {
+        console.log(`✅ Fee transferred to IN GOD WE TRUST wallet for buyback: ${result.transactionHash}`);
+        
+        // Update buyback fund with JCMOVES tokens instead of SOL
+        const existingFund = await db.query.buybackFund.findFirst();
+        
+        if (existingFund) {
+          await db.update(buybackFund)
+            .set({
+              totalTokensBought: sql`${buybackFund.totalTokensBought} + ${feeAmount}`,
+              totalCollected: sql`${buybackFund.totalCollected} + ${feeAmount}`,
+              lastUpdated: new Date()
+            });
+        }
+      } else {
+        console.warn(`⚠️ Fee transfer to buyback wallet failed: ${result.error}`);
+      }
+
+      return result;
+    } catch (error) {
+      console.error('Error transferring fee to buyback wallet:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to transfer fee to buyback wallet'
+      };
+    }
+  }
+
   async sendRewardToUser(userId: string, amount: number, rewardType: string): Promise<TransferResult> {
     try {
       const payoutInfo = await storage.getPayoutAddress(userId);

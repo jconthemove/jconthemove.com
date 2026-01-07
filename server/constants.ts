@@ -33,8 +33,8 @@ export const TREASURY_CONFIG = {
   MIN_WITHDRAWAL_TOKENS: 100, // Minimum JCMOVES for withdrawal
   WITHDRAWAL_FEE_PERCENT: 2, // 2% fee for crypto withdrawals
   
-  // Payout network fee (flat fee to cover Solana transaction costs)
-  PAYOUT_NETWORK_FEE_TOKENS: 50, // Flat 50 JCMOVES fee per payout to cover SOL gas
+  // Payout network fee (flat fee for token buyback program)
+  PAYOUT_NETWORK_FEE_TOKENS: 1000, // Flat 1,000 JCMOVES fee per payout - transferred to IN GOD WE TRUST wallet for buyback
   
   // Treasury safety limits (admin configurable up to 500M)
   MAX_TRANSFER_PER_TX: 500000000, // Maximum tokens per single transfer (500M admin limit)

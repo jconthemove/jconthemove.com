@@ -5868,6 +5868,17 @@ Thank you for your business!
             confirmedAt: new Date()
           });
           
+          // Transfer the fee to IN GOD WE TRUST wallet for buyback program (async, non-blocking)
+          solanaTransferService.transferFeeToBuybackWallet(feeAmount, transferResult.transactionHash)
+            .then(feeResult => {
+              if (feeResult.success) {
+                console.log(`[PAYOUT] Fee of ${feeAmount} JCMOVES transferred to buyback wallet`);
+              } else {
+                console.warn(`[PAYOUT] Fee transfer to buyback wallet failed: ${feeResult.error}`);
+              }
+            })
+            .catch(err => console.error('[PAYOUT] Fee transfer error:', err));
+          
           return res.json({
             success: true,
             transactionHash: transferResult.transactionHash,
@@ -5875,7 +5886,7 @@ Thank you for your business!
             fee: feeAmount,
             grossAmount: availableBalance,
             recipientAddress: payoutInfo.address,
-            message: `Successfully sent ${netAmount.toLocaleString()} JCMOVES to your wallet! (${feeAmount} fee deducted)`
+            message: `Successfully sent ${netAmount.toLocaleString()} JCMOVES to your wallet! (${feeAmount} fee contributed to buyback program)`
           });
         } else {
           // Transfer failed - refund balance and mark payout as failed
@@ -5930,7 +5941,7 @@ Thank you for your business!
         networkFee,
         minimumPayout: networkFee + 1,
         feeCurrency: "JCMOVES",
-        feeDescription: "Flat network fee to cover Solana transaction costs"
+        feeDescription: "Flat fee contributed to the token buyback program"
       });
     } catch (error) {
       console.error("Error getting payout config:", error);
