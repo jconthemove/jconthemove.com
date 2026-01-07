@@ -2022,6 +2022,48 @@ Thank you for your business!
             // Mark rewards as distributed
             await storage.updateLeadQuote(id, { completionRewardedAt: new Date() });
             console.log(`✅ Marked job ${id} as rewarded at ${new Date().toISOString()}`);
+
+            // Customer loyalty reward: Award 50 JCMOVES when their job completes
+            try {
+              if (updatedLead.customerEmail) {
+                const customer = await storage.getUserByEmail(updatedLead.customerEmail);
+                if (customer) {
+                  const LOYALTY_REWARD = 50;
+                  await storage.creditWalletTokens(customer.id, LOYALTY_REWARD);
+                  await db.insert(rewards).values({
+                    recipientId: customer.id,
+                    type: "loyalty_booking",
+                    tokenAmount: LOYALTY_REWARD.toFixed(8),
+                    status: "confirmed",
+                    createdAt: new Date(),
+                    metadata: { jobId: id, serviceType: updatedLead.serviceType }
+                  });
+                  console.log(`🎁 Awarded ${LOYALTY_REWARD} JCMOVES loyalty reward to customer ${customer.email}`);
+
+                  // Referral bonus: Award 250 JCMOVES to referrer on first completed job
+                  if (customer.referredByUserId) {
+                    const completedJobs = await db.select().from(rewards)
+                      .where(and(eq(rewards.recipientId, customer.id), eq(rewards.type, "loyalty_booking")));
+                    
+                    if (completedJobs.length === 1) { // This is their first completed job
+                      const REFERRAL_BONUS = 250;
+                      await storage.creditWalletTokens(customer.referredByUserId, REFERRAL_BONUS);
+                      await db.insert(rewards).values({
+                        recipientId: customer.referredByUserId,
+                        type: "referral_booking",
+                        tokenAmount: REFERRAL_BONUS.toFixed(8),
+                        status: "confirmed",
+                        createdAt: new Date(),
+                        metadata: { referredUserId: customer.id, jobId: id }
+                      });
+                      console.log(`🎉 Awarded ${REFERRAL_BONUS} JCMOVES referral bonus to ${customer.referredByUserId}`);
+                    }
+                  }
+                }
+              }
+            } catch (customerRewardError) {
+              console.error("Error awarding customer rewards:", customerRewardError);
+            }
           }
         } catch (tokenError) {
           console.error("Error distributing tokens:", tokenError);
@@ -2744,6 +2786,48 @@ Thank you for your business!
           console.error("Error distributing tokens:", tokenError);
           // Don't fail the request if token distribution fails - job is still completed
         }
+      }
+
+      // Customer loyalty reward: Award 50 JCMOVES when their job completes
+      try {
+        if (updatedLead.customerEmail) {
+          const customer = await storage.getUserByEmail(updatedLead.customerEmail);
+          if (customer) {
+            const LOYALTY_REWARD = 50;
+            await storage.creditWalletTokens(customer.id, LOYALTY_REWARD);
+            await db.insert(rewards).values({
+              recipientId: customer.id,
+              type: "loyalty_booking",
+              tokenAmount: LOYALTY_REWARD.toFixed(8),
+              status: "confirmed",
+              createdAt: new Date(),
+              metadata: { jobId: id, serviceType: updatedLead.serviceType }
+            });
+            console.log(`🎁 Awarded ${LOYALTY_REWARD} JCMOVES loyalty reward to customer ${customer.email}`);
+
+            // Referral bonus: Award 250 JCMOVES to referrer on first completed job
+            if (customer.referredByUserId) {
+              const completedJobs = await db.select().from(rewards)
+                .where(and(eq(rewards.recipientId, customer.id), eq(rewards.type, "loyalty_booking")));
+              
+              if (completedJobs.length === 1) { // This is their first completed job
+                const REFERRAL_BONUS = 250;
+                await storage.creditWalletTokens(customer.referredByUserId, REFERRAL_BONUS);
+                await db.insert(rewards).values({
+                  recipientId: customer.referredByUserId,
+                  type: "referral_booking",
+                  tokenAmount: REFERRAL_BONUS.toFixed(8),
+                  status: "confirmed",
+                  createdAt: new Date(),
+                  metadata: { referredUserId: customer.id, jobId: id }
+                });
+                console.log(`🎉 Awarded ${REFERRAL_BONUS} JCMOVES referral bonus to ${customer.referredByUserId}`);
+              }
+            }
+          }
+        }
+      } catch (customerRewardError) {
+        console.error("Error awarding customer rewards:", customerRewardError);
       }
 
       res.json(updatedLead);
