@@ -1481,7 +1481,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`📵 Customer did not consent to SMS: ${lead.phone}`);
       }
 
-      res.json({ success: true, leadId: lead.id, message: "Job created! You'll earn rewards when it's confirmed and completed." });
+      // Award lead creation bonus (100 JCMOVES per lead, up to 5/day)
+      let rewardMessage = "";
+      try {
+        const { TREASURY_CONFIG, REWARD_TYPES } = await import('./constants');
+        const bonusTokens = TREASURY_CONFIG.LEAD_CREATION_BONUS_TOKENS;
+        const dailyCap = TREASURY_CONFIG.LEAD_CREATION_DAILY_CAP;
+        
+        // Check daily cap - count lead_creation rewards today
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todayRewards = await storage.getRewardsByUserAndTypeToday(employeeId, REWARD_TYPES.LEAD_CREATION);
+        
+        if (todayRewards.length < dailyCap) {
+          // Award the bonus
+          await storage.creditWalletTokens(employeeId, bonusTokens);
+          
+          // Create reward record
+          await storage.createReward({
+            recipientId: employeeId,
+            type: REWARD_TYPES.LEAD_CREATION,
+            amount: "0",
+            tokenAmount: bonusTokens.toFixed(8),
+            status: 'confirmed',
+            metadata: { leadId: lead.id, dailyCount: todayRewards.length + 1, dailyCap }
+          });
+          
+          rewardMessage = ` You earned ${bonusTokens} JCMOVES for creating this job!`;
+          console.log(`🎁 Awarded ${bonusTokens} JCMOVES to ${employeeId} for lead creation (${todayRewards.length + 1}/${dailyCap} today)`);
+        } else {
+          rewardMessage = ` (Daily reward cap reached - ${dailyCap} leads)`;
+          console.log(`⚠️ Employee ${employeeId} hit daily lead creation cap (${dailyCap})`);
+        }
+      } catch (rewardError) {
+        console.error('Lead creation reward error:', rewardError);
+      }
+
+      res.json({ success: true, leadId: lead.id, message: `Job created!${rewardMessage} You'll also earn a bonus when it's completed.` });
     } catch (error: any) {
       console.error("❌ Error creating employee lead:", error);
       

@@ -20,6 +20,10 @@ export const TREASURY_CONFIG = {
   REFERRAL_BONUS_USD: 10.00, // $10.00 worth of JCMOVES per successful referral
   JOB_COMPLETION_USD: 2.50, // $2.50 worth of JCMOVES per job completed per mover
   
+  // Lead creation bonus (fixed JCMOVES amount for approved employees)
+  LEAD_CREATION_BONUS_TOKENS: 100, // 100 JCMOVES per lead created
+  LEAD_CREATION_DAILY_CAP: 5, // Max 5 leads per day earn reward (prevents spam)
+  
   // Volatility management
   MAX_PRICE_VOLATILITY: 25, // Maximum 25% price change before adjusting operations
   PRICE_UPDATE_INTERVAL: 30000, // 30 seconds between price updates
@@ -54,6 +58,7 @@ export const REWARD_TYPES = {
   DAILY_CHECKIN: 'daily_checkin', 
   JOB_COMPLETION: 'job_completion',
   REFERRAL_BONUS: 'referral_bonus',
+  LEAD_CREATION: 'lead_creation',
 } as const;
 
 export const FAUCET_CONFIG = {
