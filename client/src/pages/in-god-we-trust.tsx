@@ -429,13 +429,13 @@ export default function InGodWeTrustPage() {
           <Card className="p-6 bg-gradient-to-br from-green-500 to-green-600 text-white border-0 shadow-xl shadow-green-900/30 overflow-hidden relative">
             <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -mr-10 -mt-10"></div>
             <div className="flex items-center justify-between mb-2">
-              <Activity className="h-8 w-8 opacity-90" />
-              <span className="text-sm opacity-80 font-medium">Database</span>
+              <Coins className="h-8 w-8 opacity-90" />
+              <span className="text-sm opacity-80 font-medium">Buyback Fund</span>
             </div>
             <div className="text-3xl font-black">
-              {databaseBalance?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || "0"}
+              {(buybackFundData?.fund?.tokenBalance || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
             </div>
-            <div className="text-sm opacity-80 mt-1 font-medium">JCMOVES Tracked</div>
+            <div className="text-sm opacity-80 mt-1 font-medium">JCMOVES for Buybacks</div>
           </Card>
 
           <Link href="/admin/users" className="block">
