@@ -265,7 +265,7 @@ export default function ProfilePage() {
           </Link>
 
           {/* Rewards Card */}
-          <Link href="/dashboard/rewards">
+          <Link href="/rewards">
             <Card className="bg-gradient-to-br from-green-600 to-green-800 border-2 border-green-400/30 cursor-pointer hover:scale-[1.02] transition-all h-full" data-testid="card-rewards">
               <CardContent className="p-4 text-center">
                 <div className="bg-white/20 p-3 rounded-full w-fit mx-auto mb-3">
