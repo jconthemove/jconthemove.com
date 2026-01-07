@@ -6109,9 +6109,21 @@ Thank you for your business!
 
       // If executeOnChain is true, attempt real blockchain transfer
       if (executeOnChain) {
+        // Validate recipient address before attempting transfer
+        const recipientAddr = payout.recipientAddress?.trim();
+        const solanaAddressRegex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+        
+        if (!recipientAddr || !solanaAddressRegex.test(recipientAddr)) {
+          console.error(`[PAYOUT] Invalid recipient address for payout ${payoutId}: "${recipientAddr}"`);
+          return res.status(400).json({ 
+            error: "Invalid recipient wallet address", 
+            details: `The wallet address "${recipientAddr || 'empty'}" is not a valid Solana address. The user may need to update their wallet settings.`
+          });
+        }
+
         try {
           const result = await solanaTransferService.transferTokens(
-            payout.recipientAddress,
+            recipientAddr,
             parseFloat(payout.tokenAmount)
           );
 
