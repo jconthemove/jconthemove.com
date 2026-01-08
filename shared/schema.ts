@@ -377,6 +377,8 @@ export const miningSessions = pgTable("mining_sessions", {
   lastClaimTime: timestamp("last_claim_time").notNull().default(sql`now()`),
   lastClaimDate: date("last_claim_date"), // Track the date of last claim for streak calculation
   streakCount: integer("streak_count").default(0), // Consecutive days of claims (for streak bonuses)
+  dailyClaimDate: date("daily_claim_date"), // Track today's date for claim counting
+  dailyClaimCount: integer("daily_claim_count").default(0), // Number of claims made today (max 3)
   accumulatedTokens: decimal("accumulated_tokens", { precision: 18, scale: 8 }).notNull().default("0.00000000"),
   miningSpeed: decimal("mining_speed", { precision: 5, scale: 2 }).notNull().default("1.00"), // Speed multiplier (1X, 2X, etc.)
   status: text("status").notNull().default("active"), // 'active', 'paused', 'completed'

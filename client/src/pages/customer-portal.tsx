@@ -39,6 +39,7 @@ interface MiningStatus {
   miningSpeed: string;
   streakCount: number;
   nextStreakBonus: string;
+  claimsRemainingToday: number;
 }
 
 interface RewardHistory {
@@ -337,21 +338,30 @@ export default function CustomerPortal() {
                     )}
                   </Button>
                 ) : (
-                  <Button
-                    onClick={() => claimMutation.mutate()}
-                    disabled={!canClaim || claimMutation.isPending}
-                    className="w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
-                    size="lg"
-                    data-testid="button-claim-mining"
-                  >
-                    {claimMutation.isPending ? (
-                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Claiming...</>
-                    ) : canClaim ? (
-                      <><Coins className="h-4 w-4 mr-2" /> Claim Tokens</>
-                    ) : (
-                      <><Clock className="h-4 w-4 mr-2" /> Mining Active - Tokens Accumulating</>
-                    )}
-                  </Button>
+                  <div className="space-y-2">
+                    <Button
+                      onClick={() => claimMutation.mutate()}
+                      disabled={!canClaim || claimMutation.isPending || (miningStatus?.claimsRemainingToday || 0) <= 0}
+                      className="w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
+                      size="lg"
+                      data-testid="button-claim-mining"
+                    >
+                      {claimMutation.isPending ? (
+                        <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Claiming...</>
+                      ) : (miningStatus?.claimsRemainingToday || 0) <= 0 ? (
+                        <><Clock className="h-4 w-4 mr-2" /> Max Claims Reached Today</>
+                      ) : canClaim ? (
+                        <><Coins className="h-4 w-4 mr-2" /> Claim Tokens</>
+                      ) : (
+                        <><Clock className="h-4 w-4 mr-2" /> Mining Active - Tokens Accumulating</>
+                      )}
+                    </Button>
+                    <div className="flex justify-center">
+                      <Badge variant="secondary" className="bg-slate-700 text-slate-300">
+                        {miningStatus?.claimsRemainingToday || 0} of 3 claims remaining today
+                      </Badge>
+                    </div>
+                  </div>
                 )}
 
                 <Separator className="bg-slate-700" />
