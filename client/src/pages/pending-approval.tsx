@@ -15,7 +15,7 @@ export default function PendingApprovalPage() {
           </div>
           <CardTitle className="text-2xl text-white" data-testid="text-title">Account Pending Approval</CardTitle>
           <CardDescription className="text-slate-400" data-testid="text-description">
-            Your employee account is awaiting administrator approval
+            Your account is awaiting administrator approval
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

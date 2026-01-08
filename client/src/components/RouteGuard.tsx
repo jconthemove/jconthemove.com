@@ -24,14 +24,17 @@ export function RouteGuard({ children, allowedRoles }: RouteGuardProps) {
       
       // For employee role, check if they're approved
       // Admins always have access
-      if (userRole === 'employee' && !user.isApproved) {
+      // Consider both isApproved flag and status field (active/approved are both valid)
+      const isUserApproved = user.isApproved || user.status === 'active' || user.status === 'approved';
+      
+      if (userRole === 'employee' && !isUserApproved) {
         // Redirect unapproved employees to pending approval page
         setLocation('/pending-approval');
         return;
       }
       
       // For customer role, check if they're approved
-      if (userRole === 'customer' && !user.isApproved) {
+      if (userRole === 'customer' && !isUserApproved) {
         // Redirect unapproved customers to pending approval page
         setLocation('/pending-approval');
       }
@@ -48,13 +51,16 @@ export function RouteGuard({ children, allowedRoles }: RouteGuardProps) {
     return null;
   }
 
+  // Check if user is approved (consider both isApproved and status)
+  const isUserApproved = user.isApproved || user.status === 'active' || user.status === 'approved';
+  
   // For employee role, check if they're approved (admins bypass this check)
-  if (user.role === 'employee' && !user.isApproved) {
+  if (user.role === 'employee' && !isUserApproved) {
     return null;
   }
   
   // For customer role, check if they're approved
-  if (user.role === 'customer' && !user.isApproved) {
+  if (user.role === 'customer' && !isUserApproved) {
     return null;
   }
 
