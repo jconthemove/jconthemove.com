@@ -2,8 +2,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Link } from "wouter";
-import { Package, Wallet, User, Coins, ShoppingBag, Gift, Users, CheckCircle, Zap, Clock, Loader2, Copy, Calendar, TrendingUp, ArrowUpRight } from "lucide-react";
+import { Link, useLocation } from "wouter";
+import { Package, Wallet, User, Coins, ShoppingBag, Gift, Users, CheckCircle, Zap, Clock, Loader2, Copy, Calendar, TrendingUp, ArrowUpRight, Briefcase, MapPin, Phone, Mail, ChevronRight } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { useState, useEffect, useMemo } from "react";
@@ -63,8 +63,25 @@ interface ReferralStats {
   }>;
 }
 
+interface CustomerJob {
+  id: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  moveDate: string;
+  serviceType: string;
+  pickupAddress: string;
+  dropoffAddress: string;
+  status: string;
+  estimatedTotal?: string;
+  createdAt: string;
+}
+
 export default function CustomerPortal() {
-  const [activeTab, setActiveTab] = useState("mining");
+  const [location] = useLocation();
+  const urlParams = new URLSearchParams(location.split('?')[1] || '');
+  const initialTab = urlParams.get('tab') || 'mining';
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [animatedTokens, setAnimatedTokens] = useState(0);
   const { user } = useAuth();
   const { toast } = useToast();
@@ -93,6 +110,10 @@ export default function CustomerPortal() {
 
   const { data: referralStats } = useQuery<ReferralStats>({
     queryKey: ["/api/referrals/stats"],
+  });
+
+  const { data: customerJobs = [], isLoading: jobsLoading } = useQuery<CustomerJob[]>({
+    queryKey: ["/api/leads/my-requests"],
   });
 
   // Real-time animated token counter
@@ -236,21 +257,25 @@ export default function CustomerPortal() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4 bg-slate-800/50 border border-slate-700">
-            <TabsTrigger value="mining" className="data-[state=active]:bg-orange-500/20" data-testid="tab-mining">
-              <Zap className="h-4 w-4 mr-1" />
+          <TabsList className="grid w-full grid-cols-5 bg-slate-800/50 border border-slate-700">
+            <TabsTrigger value="mining" className="data-[state=active]:bg-orange-500/20 px-1" data-testid="tab-mining">
+              <Zap className="h-4 w-4 sm:mr-1" />
               <span className="hidden sm:inline">Mining</span>
             </TabsTrigger>
-            <TabsTrigger value="referrals" className="data-[state=active]:bg-blue-500/20" data-testid="tab-referrals">
-              <Users className="h-4 w-4 mr-1" />
+            <TabsTrigger value="jobs" className="data-[state=active]:bg-amber-500/20 px-1" data-testid="tab-jobs">
+              <Briefcase className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline">Jobs</span>
+            </TabsTrigger>
+            <TabsTrigger value="referrals" className="data-[state=active]:bg-blue-500/20 px-1" data-testid="tab-referrals">
+              <Users className="h-4 w-4 sm:mr-1" />
               <span className="hidden sm:inline">Referrals</span>
             </TabsTrigger>
-            <TabsTrigger value="history" className="data-[state=active]:bg-green-500/20" data-testid="tab-history">
-              <Clock className="h-4 w-4 mr-1" />
+            <TabsTrigger value="history" className="data-[state=active]:bg-green-500/20 px-1" data-testid="tab-history">
+              <Clock className="h-4 w-4 sm:mr-1" />
               <span className="hidden sm:inline">History</span>
             </TabsTrigger>
-            <TabsTrigger value="shop" className="data-[state=active]:bg-purple-500/20" data-testid="tab-shop">
-              <ShoppingBag className="h-4 w-4 mr-1" />
+            <TabsTrigger value="shop" className="data-[state=active]:bg-purple-500/20 px-1" data-testid="tab-shop">
+              <ShoppingBag className="h-4 w-4 sm:mr-1" />
               <span className="hidden sm:inline">Shop</span>
             </TabsTrigger>
           </TabsList>
@@ -386,6 +411,97 @@ export default function CustomerPortal() {
                     </div>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="jobs" className="space-y-4 mt-4">
+            <Card className="border-slate-700 bg-slate-800/50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-white">
+                  <Briefcase className="h-5 w-5 text-amber-400" />
+                  My Service Requests
+                </CardTitle>
+                <CardDescription className="text-slate-400">
+                  Track your moving and junk removal requests
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {jobsLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-amber-400" />
+                  </div>
+                ) : customerJobs.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Briefcase className="h-12 w-12 mx-auto text-slate-600 mb-4" />
+                    <p className="text-slate-400 mb-4">No service requests yet</p>
+                    <Link href="/quote">
+                      <Button className="bg-amber-500 hover:bg-amber-600">
+                        Request a Quote
+                      </Button>
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {customerJobs.map((job) => (
+                      <div key={job.id} className="bg-slate-900/50 rounded-lg p-4 border border-slate-700">
+                        <div className="flex items-start justify-between mb-3">
+                          <div>
+                            <Badge 
+                              variant="outline" 
+                              className={
+                                job.status === 'completed' ? 'border-green-500 text-green-400' :
+                                job.status === 'in_progress' ? 'border-blue-500 text-blue-400' :
+                                job.status === 'confirmed' ? 'border-purple-500 text-purple-400' :
+                                job.status === 'cancelled' ? 'border-red-500 text-red-400' :
+                                'border-amber-500 text-amber-400'
+                              }
+                            >
+                              {job.status.replace('_', ' ').toUpperCase()}
+                            </Badge>
+                            <Badge variant="secondary" className="ml-2 bg-slate-700">
+                              {job.serviceType}
+                            </Badge>
+                          </div>
+                          <span className="text-xs text-slate-500">
+                            {new Date(job.createdAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                        
+                        <div className="space-y-2 text-sm">
+                          <div className="flex items-start gap-2">
+                            <MapPin className="h-4 w-4 text-green-400 mt-0.5 flex-shrink-0" />
+                            <div>
+                              <p className="text-slate-400 text-xs">From</p>
+                              <p className="text-white">{job.pickupAddress || 'Not specified'}</p>
+                            </div>
+                          </div>
+                          {job.dropoffAddress && (
+                            <div className="flex items-start gap-2">
+                              <MapPin className="h-4 w-4 text-red-400 mt-0.5 flex-shrink-0" />
+                              <div>
+                                <p className="text-slate-400 text-xs">To</p>
+                                <p className="text-white">{job.dropoffAddress}</p>
+                              </div>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-2">
+                            <Calendar className="h-4 w-4 text-blue-400" />
+                            <span className="text-white">
+                              {job.moveDate ? new Date(job.moveDate).toLocaleDateString() : 'Date TBD'}
+                            </span>
+                          </div>
+                          {job.estimatedTotal && (
+                            <div className="flex items-center gap-2 pt-2 border-t border-slate-700 mt-2">
+                              <span className="text-slate-400">Estimated:</span>
+                              <span className="text-green-400 font-bold">${job.estimatedTotal}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

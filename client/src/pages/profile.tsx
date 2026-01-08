@@ -251,8 +251,8 @@ export default function ProfilePage() {
             </CardContent>
           </Card>
 
-          {/* Jobs Card */}
-          <Link href="/dashboard">
+          {/* Jobs Card - link to different pages based on role */}
+          <Link href={user?.role === 'customer' ? '/customer-portal?tab=jobs' : '/dashboard'}>
             <Card className="bg-gradient-to-br from-orange-600 to-orange-800 border-2 border-orange-400/30 cursor-pointer hover:scale-[1.02] transition-all h-full" data-testid="card-jobs">
               <CardContent className="p-4 text-center">
                 <div className="bg-white/20 p-3 rounded-full w-fit mx-auto mb-3">
