@@ -36,7 +36,8 @@ import {
   ArrowRightLeft,
   XCircle,
   Copy,
-  ChevronDown
+  ChevronDown,
+  Settings
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -127,6 +128,21 @@ export default function InGodWeTrustPage() {
   const { data: squareConfig } = useQuery<{ configured: boolean; environment: string }>({
     queryKey: ["/api/invoices/config/status"],
   });
+
+  // Reward Settings - Admin configurable token amounts
+  const { data: rewardSettings, refetch: refetchRewardSettings } = useQuery<Array<{
+    id: string;
+    settingKey: string;
+    label: string;
+    description: string | null;
+    tokenAmount: string;
+    isActive: boolean;
+    updatedAt: string;
+  }>>({
+    queryKey: ["/api/admin/reward-settings"],
+  });
+  const [editingRewardKey, setEditingRewardKey] = useState<string | null>(null);
+  const [newRewardAmount, setNewRewardAmount] = useState("");
 
   // Token Ledger - All JCMOVES transactions across customers and employees
   const { data: tokenLedger, refetch: refetchLedger } = useQuery<{
@@ -435,6 +451,25 @@ export default function InGodWeTrustPage() {
     },
   });
 
+  // Update reward setting mutation
+  const updateRewardSettingMutation = useMutation({
+    mutationFn: async ({ key, tokenAmount }: { key: string; tokenAmount: number }) => {
+      const response = await apiRequest("PUT", `/api/admin/reward-settings/${key}`, {
+        tokenAmount
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/reward-settings"] });
+      setEditingRewardKey(null);
+      setNewRewardAmount("");
+      toast({ title: "Reward Updated", description: "Token amount has been updated successfully." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Update failed", description: error.message, variant: "destructive" });
+    },
+  });
+
   const stats = treasurySummary?.stats || {};
   const blockchainBalance = liveBalance?.balance || 0;
   const databaseBalance = stats.tokenReserve || 0;
@@ -541,6 +576,10 @@ export default function InGodWeTrustPage() {
             <TabsTrigger value="ledger" className="data-[state=active]:bg-pink-500/20 data-[state=active]:text-pink-300" data-testid="tab-ledger">
               <History className="h-4 w-4 mr-2" />
               Token Ledger
+            </TabsTrigger>
+            <TabsTrigger value="reward-config" className="data-[state=active]:bg-teal-500/20 data-[state=active]:text-teal-300" data-testid="tab-reward-config">
+              <Settings className="h-4 w-4 mr-2" />
+              Rewards
             </TabsTrigger>
           </TabsList>
 
@@ -2353,6 +2392,133 @@ export default function InGodWeTrustPage() {
                   No wallet accounts yet
                 </div>
               )}
+            </Card>
+          </TabsContent>
+
+          {/* Reward Configuration Tab */}
+          <TabsContent value="reward-config" className="space-y-6">
+            <Card className="p-6 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-xl bg-gradient-to-br from-teal-500 to-cyan-600">
+                    <Settings className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-white">Reward Configuration</h2>
+                    <p className="text-sm text-slate-400">Configure token amounts for customer and employee rewards</p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => refetchRewardSettings()}
+                  className="border-teal-500/50 text-teal-300 hover:bg-teal-500/10"
+                  data-testid="button-refresh-rewards"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh
+                </Button>
+              </div>
+
+              <div className="space-y-4">
+                {rewardSettings?.map((setting) => (
+                  <div key={setting.id} className="flex items-center justify-between p-4 rounded-lg bg-slate-900/50 border border-slate-700/50">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-white font-medium">{setting.label}</span>
+                        <Badge variant="outline" className={setting.isActive ? "border-green-500 text-green-400" : "border-red-500 text-red-400"}>
+                          {setting.isActive ? "Active" : "Inactive"}
+                        </Badge>
+                      </div>
+                      {setting.description && (
+                        <p className="text-sm text-slate-400 mt-1">{setting.description}</p>
+                      )}
+                      <div className="text-xs text-slate-500 mt-1">
+                        Key: {setting.settingKey}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {editingRewardKey === setting.settingKey ? (
+                        <>
+                          <Input
+                            type="number"
+                            value={newRewardAmount}
+                            onChange={(e) => setNewRewardAmount(e.target.value)}
+                            className="w-32 bg-slate-800 border-slate-600"
+                            placeholder="Amount"
+                            data-testid={`input-reward-${setting.settingKey}`}
+                          />
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              const amount = parseFloat(newRewardAmount);
+                              if (!isNaN(amount) && amount >= 0) {
+                                updateRewardSettingMutation.mutate({ key: setting.settingKey, tokenAmount: amount });
+                              }
+                            }}
+                            disabled={updateRewardSettingMutation.isPending}
+                            className="bg-green-600 hover:bg-green-700"
+                            data-testid={`button-save-reward-${setting.settingKey}`}
+                          >
+                            {updateRewardSettingMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setEditingRewardKey(null);
+                              setNewRewardAmount("");
+                            }}
+                            className="border-slate-600"
+                            data-testid={`button-cancel-reward-${setting.settingKey}`}
+                          >
+                            <XCircle className="h-4 w-4" />
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <div className="text-right">
+                            <div className="text-2xl font-bold text-teal-400">
+                              {parseFloat(setting.tokenAmount).toLocaleString()}
+                            </div>
+                            <div className="text-xs text-slate-500">
+                              ${(parseFloat(setting.tokenAmount) * 0.01).toFixed(2)} value
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setEditingRewardKey(setting.settingKey);
+                              setNewRewardAmount(setting.tokenAmount);
+                            }}
+                            className="border-teal-500/50 text-teal-300 hover:bg-teal-500/10"
+                            data-testid={`button-edit-reward-${setting.settingKey}`}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {(!rewardSettings || rewardSettings.length === 0) && (
+                  <div className="text-center py-8 text-slate-400">
+                    <Settings className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    No reward settings configured
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-6 p-4 rounded-lg bg-teal-500/10 border border-teal-500/30">
+                <h4 className="font-medium text-teal-300 mb-2">Reward Value Guide (1 JCMOVES = $0.01)</h4>
+                <ul className="text-sm text-slate-400 space-y-1">
+                  <li>• <strong>200 JCMOVES</strong> = $2.00 (Quote Accepted)</li>
+                  <li>• <strong>1,500 JCMOVES</strong> = $15.00 (Job Completed)</li>
+                  <li>• <strong>2,500 JCMOVES</strong> = $25.00 (Referral Confirmed)</li>
+                </ul>
+              </div>
             </Card>
           </TabsContent>
         </Tabs>

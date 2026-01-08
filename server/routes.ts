@@ -327,6 +327,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ error: "Registration failed" });
       }
 
+      // Award retroactive rewards for previous accepted/completed leads
+      try {
+        const { rewardSettings, rewards: rewardsTable } = await import('@shared/schema');
+        
+        // Get reward amounts from settings
+        const settings = await db.select().from(rewardSettings);
+        const acceptedReward = settings.find(s => s.settingKey === 'customer_quote_accepted');
+        const completedReward = settings.find(s => s.settingKey === 'customer_quote_completed');
+        
+        const acceptedAmount = parseFloat(acceptedReward?.tokenAmount || '200');
+        const completedAmount = parseFloat(completedReward?.tokenAmount || '1500');
+        
+        // Find leads matching this email that are accepted or completed
+        const customerLeads = await db
+          .select()
+          .from(leads)
+          .where(and(
+            eq(leads.email, newUser.email),
+            sql`${leads.status} IN ('accepted', 'confirmed', 'in_progress', 'completed')`
+          ));
+        
+        let totalTokensAwarded = 0;
+        let acceptedCount = 0;
+        let completedCount = 0;
+        
+        for (const lead of customerLeads) {
+          // Check if reward already given for this lead
+          const existingReward = await db
+            .select()
+            .from(rewardsTable)
+            .where(and(
+              eq(rewardsTable.recipientId, newUser.id),
+              sql`${rewardsTable.metadata}->>'leadId' = ${lead.id}`
+            ))
+            .limit(1);
+          
+          if (existingReward.length > 0) continue; // Skip if already rewarded
+          
+          let rewardAmount = 0;
+          let rewardType = '';
+          
+          if (lead.status === 'completed') {
+            rewardAmount = completedAmount;
+            rewardType = 'customer_quote_completed';
+            completedCount++;
+          } else if (['accepted', 'confirmed', 'in_progress'].includes(lead.status || '')) {
+            rewardAmount = acceptedAmount;
+            rewardType = 'customer_quote_accepted';
+            acceptedCount++;
+          }
+          
+          if (rewardAmount > 0) {
+            await storage.creditWalletTokens(newUser.id, rewardAmount);
+            await db.insert(rewardsTable).values({
+              userId: newUser.id,
+              rewardType: rewardType,
+              tokenAmount: rewardAmount.toFixed(8),
+              cashValue: (rewardAmount * 0.01).toFixed(2), // 1 JCMOVES = $0.01
+              status: 'confirmed',
+              earnedDate: new Date(),
+              referenceId: lead.id,
+              metadata: { leadId: lead.id, retroactive: true }
+            });
+            totalTokensAwarded += rewardAmount;
+          }
+        }
+        
+        if (totalTokensAwarded > 0) {
+          console.log(`🎁 Awarded ${totalTokensAwarded} JCMOVES to new customer ${newUser.email} for ${acceptedCount} accepted + ${completedCount} completed retroactive leads`);
+        }
+      } catch (retroError) {
+        console.error('Retroactive rewards error (non-blocking):', retroError);
+      }
+
       // Auto-login after registration
       req.session.regenerate((err) => {
         if (err) {
@@ -3359,6 +3433,55 @@ Thank you for your business!
     } catch (error) {
       console.error("Error getting reward stats:", error);
       res.status(500).json({ error: "Failed to get reward statistics" });
+    }
+  });
+
+  // Admin reward settings management
+  app.get("/api/admin/reward-settings", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const { rewardSettings } = await import('@shared/schema');
+      const settings = await db
+        .select()
+        .from(rewardSettings)
+        .orderBy(rewardSettings.settingKey);
+      res.json(settings);
+    } catch (error) {
+      console.error("Error getting reward settings:", error);
+      res.status(500).json({ error: "Failed to get reward settings" });
+    }
+  });
+
+  app.put("/api/admin/reward-settings/:key", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const { key } = req.params;
+      const { tokenAmount, isActive } = req.body;
+      const userId = (req.session as any).userId;
+      
+      if (typeof tokenAmount !== 'number' || tokenAmount < 0) {
+        return res.status(400).json({ error: "Token amount must be a positive number" });
+      }
+
+      const { rewardSettings } = await import('@shared/schema');
+      const [updated] = await db
+        .update(rewardSettings)
+        .set({
+          tokenAmount: tokenAmount.toFixed(2),
+          isActive: isActive ?? true,
+          updatedBy: userId,
+          updatedAt: new Date(),
+        })
+        .where(eq(rewardSettings.settingKey, key))
+        .returning();
+
+      if (!updated) {
+        return res.status(404).json({ error: "Reward setting not found" });
+      }
+
+      console.log(`📊 Reward setting '${key}' updated to ${tokenAmount} JCMOVES by admin ${userId}`);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating reward setting:", error);
+      res.status(500).json({ error: "Failed to update reward setting" });
     }
   });
 
