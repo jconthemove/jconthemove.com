@@ -245,7 +245,11 @@ export default function CustomerPortal() {
 
                 {!miningStatus?.currentSession ? (
                   <Button
-                    onClick={() => startMiningMutation.mutate()}
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      startMiningMutation.mutate();
+                    }}
                     disabled={startMiningMutation.isPending}
                     className="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600"
                     size="lg"
