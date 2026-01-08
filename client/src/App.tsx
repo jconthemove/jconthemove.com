@@ -46,6 +46,7 @@ import GalleryPage from "@/pages/gallery";
 import ReviewsPage from "@/pages/reviews";
 import SwapPage from "@/pages/swap";
 import RequestSwapPage from "@/pages/request-swap";
+import MiningPage from "@/pages/mining";
 
 // Landing page for unauthenticated users
 function LandingPage() {
@@ -122,6 +123,9 @@ function AuthenticatedApp() {
           </Route>
           <Route path="/rewards">
             <PageWrapper component={RewardsPage} />
+          </Route>
+          <Route path="/mining">
+            <PageWrapper component={MiningPage} />
           </Route>
           <Route path="/swap">
             <PageWrapper component={SwapPage} />
