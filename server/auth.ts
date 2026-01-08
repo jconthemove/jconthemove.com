@@ -13,9 +13,10 @@ export function getSession() {
   });
   
   // Cookie security configuration
-  const useSecureCookies = process.env.NODE_ENV === 'production';
+  const isProduction = process.env.NODE_ENV === 'production';
+  const cookieDomain = process.env.COOKIE_DOMAIN || (isProduction ? '.jconthemove.com' : undefined);
   
-  console.log(`[SESSION] Cookie configuration: secure=${useSecureCookies}, environment=${process.env.NODE_ENV}`);
+  console.log(`[SESSION] Cookie configuration: secure=${isProduction}, domain=${cookieDomain || 'default'}, environment=${process.env.NODE_ENV}`);
   
   return session({
     secret: process.env.SESSION_SECRET!,
@@ -24,9 +25,10 @@ export function getSession() {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: useSecureCookies,
+      secure: isProduction,
       sameSite: 'lax',
       maxAge: sessionTtl,
+      domain: cookieDomain,
     },
   });
 }

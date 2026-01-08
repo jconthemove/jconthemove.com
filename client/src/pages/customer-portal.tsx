@@ -104,6 +104,10 @@ export default function CustomerPortal() {
       });
     },
     onError: (error: any) => {
+      // Don't show error for session expiration - redirect handles it
+      if (error.message?.includes("Session expired")) {
+        return;
+      }
       toast({
         title: "Failed to Start Mining",
         description: error.message || "Please try again",
@@ -266,7 +270,7 @@ export default function CustomerPortal() {
                     ) : canClaim ? (
                       <><Coins className="h-4 w-4 mr-2" /> Claim Tokens</>
                     ) : (
-                      <><Clock className="h-4 w-4 mr-2" /> Accumulating... Check Back Later</>
+                      <><Clock className="h-4 w-4 mr-2" /> Mining Active - Tokens Accumulating</>
                     )}
                   </Button>
                 )}
