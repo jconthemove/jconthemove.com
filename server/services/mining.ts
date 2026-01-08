@@ -27,7 +27,9 @@ export class MiningService {
         return { approved: false, error: "User not found" };
       }
 
-      if (user.status !== 'approved') {
+      // Accept both 'approved' and 'active' as valid statuses
+      const validStatuses = ['approved', 'active'];
+      if (!validStatuses.includes(user.status || '')) {
         return { 
           approved: false, 
           error: user.status === 'pending' 

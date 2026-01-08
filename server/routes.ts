@@ -6097,14 +6097,13 @@ Thank you for your business!
   app.post("/api/mining/start", isAuthenticated, async (req: any, res) => {
     try {
       console.log("[MINING] Start mining request received");
-      console.log("[MINING] User object:", req.user ? "present" : "missing");
       
-      if (!req.user || !req.user.claims?.sub) {
-        console.error("[MINING] No user ID found in request");
+      const userId = (req.session as any).userId;
+      if (!userId) {
+        console.error("[MINING] No user ID found in session");
         return res.status(401).json({ error: "Authentication required" });
       }
       
-      const userId = (req.session as any).userId;
       console.log("[MINING] Starting mining for user:", userId);
       
       const { miningService } = await import('./services/mining');
