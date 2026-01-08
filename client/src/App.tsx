@@ -137,6 +137,11 @@ function AuthenticatedApp() {
           <Route path="/profile">
             <PageWrapper component={ProfilePage} />
           </Route>
+          <Route path="/customer-portal">
+            <RouteGuard allowedRoles={['customer', 'admin']}>
+              <PageWrapper component={CustomerPortal} />
+            </RouteGuard>
+          </Route>
           <Route path="/pending-approval">
             <PendingApprovalPage />
           </Route>
