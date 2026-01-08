@@ -6,8 +6,9 @@ import { Link } from "wouter";
 import { Package, Wallet, User, Coins, ShoppingBag, Gift, Users, CheckCircle, Zap, Clock, Loader2, Copy, Calendar, TrendingUp, ArrowUpRight } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -63,6 +64,7 @@ interface ReferralStats {
 
 export default function CustomerPortal() {
   const [activeTab, setActiveTab] = useState("mining");
+  const [animatedTokens, setAnimatedTokens] = useState(0);
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -91,6 +93,43 @@ export default function CustomerPortal() {
   const { data: referralStats } = useQuery<ReferralStats>({
     queryKey: ["/api/referrals/stats"],
   });
+
+  // Real-time animated token counter
+  useEffect(() => {
+    if (!miningStatus?.currentSession) {
+      setAnimatedTokens(0);
+      return;
+    }
+
+    // Start from server value
+    const serverTokens = parseFloat(miningStatus?.accumulatedTokens || '0');
+    setAnimatedTokens(serverTokens);
+
+    // Update every 100ms for smooth animation (0.02 tokens/second = 0.002 per 100ms)
+    const TOKENS_PER_100MS = 0.002;
+    const miningSpeed = parseFloat(miningStatus?.miningSpeed || '1.00');
+    
+    const interval = setInterval(() => {
+      setAnimatedTokens(prev => prev + (TOKENS_PER_100MS * miningSpeed));
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [miningStatus?.currentSession, miningStatus?.accumulatedTokens, miningStatus?.miningSpeed]);
+
+  // Calculate 24-hour cycle progress
+  const cycleProgress = useMemo(() => {
+    if (!miningStatus?.currentSession || !miningStatus?.timeRemaining) return 0;
+    const CYCLE_MS = 24 * 60 * 60 * 1000; // 24 hours
+    const elapsed = CYCLE_MS - miningStatus.timeRemaining;
+    return Math.min(100, Math.max(0, (elapsed / CYCLE_MS) * 100));
+  }, [miningStatus?.timeRemaining, miningStatus?.currentSession]);
+
+  // Format time remaining
+  const formatTimeRemaining = (ms: number) => {
+    const hours = Math.floor(ms / (1000 * 60 * 60));
+    const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+    return `${hours}h ${minutes}m`;
+  };
 
   const startMiningMutation = useMutation({
     mutationFn: async () => {
@@ -237,11 +276,47 @@ export default function CustomerPortal() {
                   </div>
                   <div className="text-right">
                     <p className="text-sm text-slate-400">Available</p>
-                    <p className="text-xl font-bold text-green-400">
-                      {parseFloat(miningStatus?.accumulatedTokens || '0').toFixed(2)} JCMOVES
+                    <p className="text-xl font-bold text-green-400 tabular-nums" data-testid="text-animated-tokens">
+                      {miningStatus?.currentSession ? animatedTokens.toFixed(4) : '0.0000'} JCMOVES
                     </p>
                   </div>
                 </div>
+
+                {/* Animated Mining Progress Bar */}
+                {miningStatus?.currentSession && (
+                  <div className="space-y-2 p-4 bg-gradient-to-r from-orange-500/10 to-yellow-500/10 rounded-lg border border-orange-500/30">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-300 flex items-center gap-2">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
+                        </span>
+                        Mining in Progress
+                      </span>
+                      <span className="text-orange-400 font-medium">
+                        {formatTimeRemaining(miningStatus?.timeRemaining || 0)} remaining
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <Progress 
+                        value={cycleProgress} 
+                        className="h-3 bg-slate-700"
+                      />
+                      <div 
+                        className="absolute inset-0 h-3 rounded-full overflow-hidden"
+                        style={{
+                          background: `linear-gradient(90deg, transparent ${cycleProgress - 2}%, rgba(251, 146, 60, 0.5) ${cycleProgress}%, transparent ${cycleProgress + 2}%)`,
+                          animation: 'shimmer 2s infinite',
+                        }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-xs text-slate-400">
+                      <span>0h</span>
+                      <span className="text-orange-400 font-medium">+{(0.02 * parseFloat(miningStatus?.miningSpeed || '1')).toFixed(4)}/sec</span>
+                      <span>24h</span>
+                    </div>
+                  </div>
+                )}
 
                 {!miningStatus?.currentSession ? (
                   <Button
