@@ -466,6 +466,19 @@ export const treasuryLimits = pgTable("treasury_limits", {
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
 });
 
+// Admin-configurable reward settings
+export const rewardSettings = pgTable("reward_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  settingKey: text("setting_key").notNull().unique(), // e.g., 'customer_quote_accepted', 'customer_quote_completed'
+  label: text("label").notNull(), // Human-readable label
+  description: text("description"), // Description for admin UI
+  tokenAmount: decimal("token_amount", { precision: 12, scale: 2 }).notNull(), // Amount in JCMOVES
+  isActive: boolean("is_active").notNull().default(true),
+  updatedBy: varchar("updated_by").references(() => users.id),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
 // Shop items for marketplace - photos/videos stored as base64 data URLs
 export const shopMediaSchema = z.string().refine(
   (val) => val.startsWith("data:image/") || val.startsWith("data:video/"),
@@ -652,6 +665,14 @@ export const insertTreasuryLimitSchema = createInsertSchema(treasuryLimits).omit
 });
 export type InsertTreasuryLimit = z.infer<typeof insertTreasuryLimitSchema>;
 export type TreasuryLimit = typeof treasuryLimits.$inferSelect;
+
+export const insertRewardSettingSchema = createInsertSchema(rewardSettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertRewardSetting = z.infer<typeof insertRewardSettingSchema>;
+export type RewardSetting = typeof rewardSettings.$inferSelect;
 
 // Shop system schemas
 export const insertShopItemSchema = createInsertSchema(shopItems).omit({

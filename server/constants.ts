@@ -28,6 +28,7 @@ export const TREASURY_CONFIG = {
   LOYALTY_REWARD_TOKENS: 1500, // $15 worth when customer's job completes
   REFERRAL_REQUEST_TOKENS: 50, // $0.50 when someone uses your referral code
   REFERRAL_CONFIRMED_TOKENS: 2500, // $25 when referred user's first job completes
+  CUSTOMER_QUOTE_REWARD_TOKENS: 200, // $2 worth when verified customer's quote is accepted/completed
   
   // Volatility management
   MAX_PRICE_VOLATILITY: 25, // Maximum 25% price change before adjusting operations
@@ -67,6 +68,7 @@ export const REWARD_TYPES = {
   REFERRAL_CONFIRMED: 'referral_confirmed', // When referred user's first job completes
   LOYALTY_BOOKING: 'loyalty_booking', // Customer reward for completed job
   LEAD_CREATION: 'lead_creation',
+  CUSTOMER_QUOTE_REWARD: 'customer_quote_reward', // 200 JCMOVES for customer's accepted/completed quotes
 } as const;
 
 export const FAUCET_CONFIG = {
