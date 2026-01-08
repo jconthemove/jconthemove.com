@@ -27,6 +27,13 @@ export function RouteGuard({ children, allowedRoles }: RouteGuardProps) {
       if (userRole === 'employee' && !user.isApproved) {
         // Redirect unapproved employees to pending approval page
         setLocation('/pending-approval');
+        return;
+      }
+      
+      // For customer role, check if they're approved
+      if (userRole === 'customer' && !user.isApproved) {
+        // Redirect unapproved customers to pending approval page
+        setLocation('/pending-approval');
       }
     }
   }, [user, isLoading, allowedRoles, setLocation]);
@@ -43,6 +50,11 @@ export function RouteGuard({ children, allowedRoles }: RouteGuardProps) {
 
   // For employee role, check if they're approved (admins bypass this check)
   if (user.role === 'employee' && !user.isApproved) {
+    return null;
+  }
+  
+  // For customer role, check if they're approved
+  if (user.role === 'customer' && !user.isApproved) {
     return null;
   }
 

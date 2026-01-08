@@ -75,8 +75,10 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
       });
     }
 
-    if (dbUser.status !== 'approved') {
-      console.log('[AUTH CHECK] ❌ User status is not approved:', dbUser.status);
+    // Accept both 'approved' and 'active' as valid statuses
+    const validStatuses = ['approved', 'active'];
+    if (!validStatuses.includes(dbUser.status || '')) {
+      console.log('[AUTH CHECK] ❌ User status is not valid:', dbUser.status);
       return res.status(403).json({ 
         message: "Account access restricted", 
         status: dbUser.status 
