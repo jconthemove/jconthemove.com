@@ -92,6 +92,26 @@ export default function CustomerPortal() {
     queryKey: ["/api/referrals/stats"],
   });
 
+  const startMiningMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("POST", "/api/mining/start");
+    },
+    onSuccess: async () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/mining/status"] });
+      toast({
+        title: "Mining Started!",
+        description: "You're now earning tokens. Check back to claim them!",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to Start Mining",
+        description: error.message || "Please try again",
+        variant: "destructive",
+      });
+    },
+  });
+
   const claimMutation = useMutation({
     mutationFn: async () => {
       return await apiRequest("POST", "/api/mining/claim");
@@ -219,21 +239,37 @@ export default function CustomerPortal() {
                   </div>
                 </div>
 
-                <Button
-                  onClick={() => claimMutation.mutate()}
-                  disabled={!canClaim || claimMutation.isPending}
-                  className="w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
-                  size="lg"
-                  data-testid="button-claim-mining"
-                >
-                  {claimMutation.isPending ? (
-                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Claiming...</>
-                  ) : canClaim ? (
-                    <><Coins className="h-4 w-4 mr-2" /> Claim Tokens</>
-                  ) : (
-                    <><Clock className="h-4 w-4 mr-2" /> Check Back Later</>
-                  )}
-                </Button>
+                {!miningStatus?.currentSession ? (
+                  <Button
+                    onClick={() => startMiningMutation.mutate()}
+                    disabled={startMiningMutation.isPending}
+                    className="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600"
+                    size="lg"
+                    data-testid="button-start-mining"
+                  >
+                    {startMiningMutation.isPending ? (
+                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Starting...</>
+                    ) : (
+                      <><Zap className="h-4 w-4 mr-2" /> Start Mining</>
+                    )}
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => claimMutation.mutate()}
+                    disabled={!canClaim || claimMutation.isPending}
+                    className="w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
+                    size="lg"
+                    data-testid="button-claim-mining"
+                  >
+                    {claimMutation.isPending ? (
+                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Claiming...</>
+                    ) : canClaim ? (
+                      <><Coins className="h-4 w-4 mr-2" /> Claim Tokens</>
+                    ) : (
+                      <><Clock className="h-4 w-4 mr-2" /> Accumulating... Check Back Later</>
+                    )}
+                  </Button>
+                )}
 
                 <Separator className="bg-slate-700" />
 
