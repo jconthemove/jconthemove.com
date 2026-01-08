@@ -1191,10 +1191,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "User not found" });
       }
       
-      // Prevent deleting admins and business owners
-      if (user.role === 'admin' || user.role === 'business_owner') {
-        console.log(`❌ Cannot delete user ${id} with role ${user.role}`);
-        return res.status(403).json({ error: `Cannot delete users with ${user.role} role` });
+      // Prevent deleting admins only (allow business_owner deletion by admins)
+      if (user.role === 'admin') {
+        console.log(`❌ Cannot delete user ${id} with admin role`);
+        return res.status(403).json({ error: `Cannot delete users with admin role` });
       }
       
       // Capture token balance outside transaction scope for response

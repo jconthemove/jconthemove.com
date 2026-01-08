@@ -39,7 +39,7 @@ interface User {
   lastName: string;
   username?: string;
   role: string;
-  status: 'pending' | 'approved' | 'removed';
+  status: 'pending' | 'approved' | 'active' | 'removed';
   createdAt: string;
   referralCount: number;
 }
@@ -177,7 +177,7 @@ export default function AdminUsersPage() {
 
   // Update user status mutation
   const updateStatusMutation = useMutation({
-    mutationFn: async ({ userId, status }: { userId: string; status: 'pending' | 'approved' | 'removed' }) => {
+    mutationFn: async ({ userId, status }: { userId: string; status: 'pending' | 'approved' | 'active' | 'removed' }) => {
       const response = await apiRequest(
         "PATCH",
         `/api/admin/users/${userId}/status`,
@@ -186,7 +186,7 @@ export default function AdminUsersPage() {
       return await response.json();
     },
     onSuccess: (data: any, variables) => {
-      const statusLabels = { pending: 'Pending', approved: 'Approved', removed: 'Removed' };
+      const statusLabels: Record<string, string> = { pending: 'Pending', approved: 'Approved', active: 'Active', removed: 'Removed' };
       toast({
         title: "Status Updated",
         description: `User status changed to ${statusLabels[variables.status]}`
@@ -294,10 +294,11 @@ export default function AdminUsersPage() {
     return <Badge variant={config.variant} data-testid={`badge-role-${role}`}>{config.label}</Badge>;
   };
 
-  const getStatusBadge = (status: 'pending' | 'approved' | 'removed') => {
+  const getStatusBadge = (status: 'pending' | 'approved' | 'active' | 'removed') => {
     const variants: Record<string, { variant: "default" | "secondary" | "destructive" | "outline", label: string, className?: string }> = {
       pending: { variant: "outline", label: "Pending", className: "border-yellow-500 text-yellow-600 dark:text-yellow-400" },
       approved: { variant: "outline", label: "Approved", className: "border-green-500 text-green-600 dark:text-green-400" },
+      active: { variant: "outline", label: "Active", className: "border-green-500 text-green-600 dark:text-green-400" },
       removed: { variant: "outline", label: "Removed", className: "border-red-500 text-red-600 dark:text-red-400" }
     };
     const config = variants[status] || variants.pending;
