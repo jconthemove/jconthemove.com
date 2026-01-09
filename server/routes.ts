@@ -1711,11 +1711,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`📵 Customer did not consent to SMS: ${lead.phone}`);
       }
 
-      // Award lead creation bonus (100 JCMOVES per lead, up to 5/day)
+      // Award lead creation bonus (configurable amount, up to 5/day)
       let rewardMessage = "";
       try {
         const { TREASURY_CONFIG, REWARD_TYPES } = await import('./constants');
-        const bonusTokens = TREASURY_CONFIG.LEAD_CREATION_BONUS_TOKENS;
+        const { rewardSettings } = await import('@shared/schema');
+        
+        // Get configurable amount from reward settings, fallback to constant
+        const settings = await db.select().from(rewardSettings).where(eq(rewardSettings.settingKey, 'employee_lead_creation'));
+        const bonusTokens = settings.length > 0 && settings[0].isActive
+          ? parseFloat(settings[0].tokenAmount)
+          : TREASURY_CONFIG.LEAD_CREATION_BONUS_TOKENS;
         const dailyCap = TREASURY_CONFIG.LEAD_CREATION_DAILY_CAP;
         
         // Check daily cap - count lead_creation rewards today
