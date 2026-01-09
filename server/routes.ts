@@ -1878,6 +1878,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Customer endpoint to fetch only their own job requests (MUST be before :id route)
+  app.get("/api/leads/my-requests", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      if (!userId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user || !user.email) {
+        return res.status(404).json({ error: "User not found or email not available" });
+      }
+
+      // Fetch leads created by this customer (matching email)
+      const customerLeads = await storage.getLeadsByEmail(user.email);
+      
+      // Transform to match frontend CustomerJob interface
+      const transformedLeads = customerLeads.map(lead => ({
+        id: lead.id,
+        fullName: `${lead.firstName} ${lead.lastName}`,
+        email: lead.email,
+        phone: lead.phone || '',
+        moveDate: lead.moveDate || '',
+        serviceType: lead.serviceType,
+        pickupAddress: lead.fromAddress || '',
+        dropoffAddress: lead.toAddress || '',
+        status: lead.status,
+        estimatedTotal: lead.totalPrice || '',
+        createdAt: lead.createdAt?.toISOString() || ''
+      }));
+      
+      console.log(`📋 Customer ${user.email} has ${transformedLeads.length} requests`);
+      res.json(transformedLeads);
+    } catch (error) {
+      console.error("Error fetching customer requests:", error);
+      res.status(500).json({ error: "Failed to fetch your requests" });
+    }
+  });
+
   // Get single lead by ID 
   // TEMPORARY: Authentication temporarily disabled for debugging
   app.get("/api/leads/:id", async (req, res) => {
@@ -2925,28 +2964,6 @@ Thank you for your business!
     } catch (error) {
       console.error("Error fetching assigned leads:", error);
       res.status(500).json({ error: "Failed to fetch assigned jobs" });
-    }
-  });
-
-  // Customer endpoint to fetch only their own job requests
-  app.get("/api/leads/my-requests", isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = (req.session as any).userId;
-      if (!userId) {
-        return res.status(401).json({ error: "User not authenticated" });
-      }
-
-      const user = await storage.getUser(userId);
-      if (!user || !user.email) {
-        return res.status(404).json({ error: "User not found or email not available" });
-      }
-
-      // Fetch leads created by this customer (matching email)
-      const customerLeads = await storage.getLeadsByEmail(user.email);
-      res.json(customerLeads);
-    } catch (error) {
-      console.error("Error fetching customer requests:", error);
-      res.status(500).json({ error: "Failed to fetch your requests" });
     }
   });
 
