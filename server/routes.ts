@@ -727,7 +727,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`📵 Customer did not consent to SMS: ${lead.phone}`);
       }
 
-      res.json({ success: true, leadId: lead.id });
+      // Award 200 JCMOVES for booking request (find or create customer account)
+      let rewardMessage = "";
+      try {
+        const { rewardSettings, rewards: rewardsTable } = await import('@shared/schema');
+        
+        // Get configurable amount from reward settings
+        const settings = await db.select().from(rewardSettings).where(eq(rewardSettings.settingKey, 'customer_quote_accepted'));
+        const bonusTokens = settings.length > 0 && settings[0].isActive
+          ? parseFloat(settings[0].tokenAmount)
+          : 200; // Default 200 JCMOVES
+        
+        // Find existing user by email or create placeholder for future registration
+        let existingUser = await db.select().from(users).where(eq(users.email, lead.email)).limit(1);
+        
+        if (existingUser.length > 0) {
+          // Award tokens to existing account
+          await storage.creditWalletTokens(existingUser[0].id, bonusTokens);
+          await db.insert(rewardsTable).values({
+            userId: existingUser[0].id,
+            rewardType: 'booking_request',
+            tokenAmount: bonusTokens.toFixed(8),
+            cashValue: (bonusTokens * 0.01).toFixed(2),
+            status: 'confirmed',
+            earnedDate: new Date(),
+            referenceId: lead.id,
+            metadata: { leadId: lead.id, source: 'public_quote_form' }
+          });
+          rewardMessage = ` Earned ${bonusTokens} JCMOVES!`;
+          console.log(`🎁 Awarded ${bonusTokens} JCMOVES to existing customer ${lead.email} for booking request`);
+        } else {
+          // Store pending reward for when they register
+          console.log(`📋 Customer ${lead.email} not registered - reward will be applied on registration`);
+        }
+      } catch (rewardError) {
+        console.error('Booking request reward error:', rewardError);
+      }
+
+      res.json({ success: true, leadId: lead.id, message: `Quote submitted!${rewardMessage}` });
     } catch (error) {
       console.error("Error creating lead:", error);
       res.status(400).json({ error: "Invalid lead data" });
