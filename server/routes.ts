@@ -43,6 +43,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
+  // DEV-ONLY: Direct test endpoint for notifications (remove in production)
+  if (process.env.NODE_ENV === 'development') {
+    app.post("/api/dev/test-notifications", async (req, res) => {
+      try {
+        const { testEmail, testSMS, targetEmail, targetPhone } = req.body;
+        const results: any = { email: null, sms: null };
+
+        // Test Email via SendGrid
+        if (testEmail && targetEmail) {
+          try {
+            await sendEmail({
+              to: targetEmail,
+              subject: "JC ON THE MOVE - Test Notification",
+              text: "This is a test email notification from JC ON THE MOVE.",
+              html: `<div style="font-family: Arial, sans-serif; padding: 20px;">
+                <h2 style="color: #2563eb;">🚚 JC ON THE MOVE - Test Notification</h2>
+                <p>Email notifications are working correctly!</p>
+                <p style="color: #666; font-size: 12px;">Sent at: ${new Date().toLocaleString()}</p>
+              </div>`
+            });
+            results.email = { success: true, sentTo: targetEmail };
+            console.log(`✅ Test email sent to ${targetEmail}`);
+          } catch (emailError: any) {
+            results.email = { success: false, error: emailError.message };
+            console.error(`❌ Test email failed:`, emailError.message);
+          }
+        }
+
+        // Test SMS via Twilio
+        if (testSMS && targetPhone) {
+          try {
+            const smsResult = await smsService.sendSMS(targetPhone, 
+              "🚚 JC ON THE MOVE Test: SMS notifications are working correctly!"
+            );
+            results.sms = { success: smsResult.success, sentTo: targetPhone, messageSid: smsResult.messageSid, error: smsResult.error };
+            if (smsResult.success) {
+              console.log(`✅ Test SMS sent to ${targetPhone}`);
+            } else {
+              console.error(`❌ Test SMS failed:`, smsResult.error);
+            }
+          } catch (smsError: any) {
+            results.sms = { success: false, error: smsError.message };
+            console.error(`❌ Test SMS failed:`, smsError.message);
+          }
+        }
+
+        res.json({ success: true, results });
+      } catch (error: any) {
+        console.error("Test notification error:", error);
+        res.status(500).json({ error: error.message });
+      }
+    });
+  }
+
   // Public objects serving endpoint (from javascript_object_storage integration)
   // Serves files from object storage public directories
   app.get("/public-objects/:filePath(*)", async (req, res) => {
