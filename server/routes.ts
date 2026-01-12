@@ -68,6 +68,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('⚠️  Server will continue without authentication features');
   }
 
+  // Test notification endpoint for admins
+  app.post("/api/admin/test-notifications", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const user = await storage.getUser(userId);
+      
+      if (!user || (user.role !== 'admin' && user.role !== 'business_owner')) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { testEmail, testSMS, targetEmail, targetPhone } = req.body;
+      const results: any = { email: null, sms: null };
+
+      // Test Email via SendGrid
+      if (testEmail) {
+        try {
+          const emailTo = targetEmail || user.email;
+          const emailResult = await sendEmail({
+            to: emailTo,
+            subject: "JC ON THE MOVE - Test Notification",
+            text: "This is a test email notification from JC ON THE MOVE. If you received this, email notifications are working correctly!",
+            html: `<div style="font-family: Arial, sans-serif; padding: 20px;">
+              <h2 style="color: #2563eb;">🚚 JC ON THE MOVE - Test Notification</h2>
+              <p>This is a test email notification. If you received this, email notifications are working correctly!</p>
+              <p style="color: #666; font-size: 12px;">Sent at: ${new Date().toLocaleString()}</p>
+            </div>`
+          });
+          results.email = { success: true, sentTo: emailTo };
+          console.log(`✅ Test email sent to ${emailTo}`);
+        } catch (emailError: any) {
+          results.email = { success: false, error: emailError.message };
+          console.error(`❌ Test email failed:`, emailError.message);
+        }
+      }
+
+      // Test SMS via Twilio
+      if (testSMS) {
+        try {
+          const phoneTo = targetPhone || user.phoneNumber;
+          if (!phoneTo) {
+            results.sms = { success: false, error: "No phone number provided" };
+          } else {
+            const smsResult = await smsService.sendSMS(phoneTo, 
+              "🚚 JC ON THE MOVE Test: This is a test SMS notification. If you received this, SMS notifications are working correctly!"
+            );
+            results.sms = { success: smsResult.success, sentTo: phoneTo, messageSid: smsResult.messageSid, error: smsResult.error };
+            if (smsResult.success) {
+              console.log(`✅ Test SMS sent to ${phoneTo}`);
+            } else {
+              console.error(`❌ Test SMS failed:`, smsResult.error);
+            }
+          }
+        } catch (smsError: any) {
+          results.sms = { success: false, error: smsError.message };
+          console.error(`❌ Test SMS failed:`, smsError.message);
+        }
+      }
+
+      res.json({ success: true, results });
+    } catch (error: any) {
+      console.error("Test notification error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Employee Email/Password Authentication Endpoints (Public - No auth required)
   
   // Employee Registration
