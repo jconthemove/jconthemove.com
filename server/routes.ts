@@ -53,8 +53,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Test Email via SendGrid
         if (testEmail && targetEmail) {
           try {
+            const companyEmail = process.env.COMPANY_EMAIL || "upmichiganstatemovers@gmail.com";
             await sendEmail({
               to: targetEmail,
+              from: companyEmail,
               subject: "JC ON THE MOVE - Test Notification",
               text: "This is a test email notification from JC ON THE MOVE.",
               html: `<div style="font-family: Arial, sans-serif; padding: 20px;">
