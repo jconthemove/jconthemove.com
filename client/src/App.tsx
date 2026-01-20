@@ -48,6 +48,7 @@ import SwapPage from "@/pages/swap";
 import RequestSwapPage from "@/pages/request-swap";
 import MiningPage from "@/pages/mining";
 import SnowRemovalPage from "@/pages/snow-removal";
+import MobilePreviewPage from "@/pages/mobile-preview";
 
 // Landing page for unauthenticated users
 function LandingPage() {
@@ -168,6 +169,11 @@ function AuthenticatedApp() {
           <Route path="/snow-removal">
             <RouteGuard allowedRoles={['admin', 'employee', 'business_owner']}>
               <PageWrapper component={SnowRemovalPage} />
+            </RouteGuard>
+          </Route>
+          <Route path="/mobile-preview">
+            <RouteGuard allowedRoles={['admin', 'business_owner']}>
+              <MobilePreviewPage />
             </RouteGuard>
           </Route>
           
