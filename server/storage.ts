@@ -1,4 +1,4 @@
-import { type User, type InsertUser, type UpsertUser, type Lead, type InsertLead, type Contact, type InsertContact, type Notification, type InsertNotification, type TreasuryAccount, type InsertTreasuryAccount, type FundingDeposit, type InsertFundingDeposit, type ReserveTransaction, type InsertReserveTransaction, type FaucetConfig, type InsertFaucetConfig, type FaucetClaim, type InsertFaucetClaim, type FaucetWallet, type InsertFaucetWallet, type FaucetRevenue, type InsertFaucetRevenue, type EmployeeStats, type InsertEmployeeStats, type AchievementType, type EmployeeAchievement, type InsertEmployeeAchievement, type PointTransaction, type InsertPointTransaction, type WeeklyLeaderboard, type DailyCheckin, type InsertDailyCheckin, type WalletAccount, type InsertWalletAccount, type SupportedCurrency, type InsertSupportedCurrency, type UserWallet, type InsertUserWallet, type TreasuryWallet, type InsertTreasuryWallet, type WalletTransaction, type InsertWalletTransaction, type ShopItem, type InsertShopItem, type Review, type InsertReview, type Testimonial, type InsertTestimonial, type WalletPayout, type InsertWalletPayout, type TokenConversion, type InsertTokenConversion, type TreasuryLimit, type InsertTreasuryLimit, type SquareInvoice, type InsertSquareInvoice, leads, contacts, users, notifications, walletAccounts, rewards, treasuryAccounts, fundingDeposits, reserveTransactions, priceHistory, faucetConfig, faucetClaims, faucetWallets, faucetRevenue, employeeStats, achievementTypes, employeeAchievements, pointTransactions, weeklyLeaderboards, dailyCheckins, supportedCurrencies, userWallets, treasuryWallets, walletTransactions, shopItems, cashoutRequests, fraudLogs, helpRequests, miningSessions, miningClaims, treasuryWithdrawals, reviews, testimonials, walletPayouts, tokenConversions, treasuryLimits, squareInvoices, buybackFund } from "@shared/schema";
+import { type User, type InsertUser, type UpsertUser, type Lead, type InsertLead, type Contact, type InsertContact, type Notification, type InsertNotification, type TreasuryAccount, type InsertTreasuryAccount, type FundingDeposit, type InsertFundingDeposit, type ReserveTransaction, type InsertReserveTransaction, type FaucetConfig, type InsertFaucetConfig, type FaucetClaim, type InsertFaucetClaim, type FaucetWallet, type InsertFaucetWallet, type FaucetRevenue, type InsertFaucetRevenue, type EmployeeStats, type InsertEmployeeStats, type AchievementType, type EmployeeAchievement, type InsertEmployeeAchievement, type PointTransaction, type InsertPointTransaction, type WeeklyLeaderboard, type DailyCheckin, type InsertDailyCheckin, type WalletAccount, type InsertWalletAccount, type SupportedCurrency, type InsertSupportedCurrency, type UserWallet, type InsertUserWallet, type TreasuryWallet, type InsertTreasuryWallet, type WalletTransaction, type InsertWalletTransaction, type ShopItem, type InsertShopItem, type Review, type InsertReview, type Testimonial, type InsertTestimonial, type WalletPayout, type InsertWalletPayout, type TokenConversion, type InsertTokenConversion, type TreasuryLimit, type InsertTreasuryLimit, type SquareInvoice, type InsertSquareInvoice, type SnowCustomer, type InsertSnowCustomer, type SnowServiceType, type InsertSnowServiceType, type SnowServiceLog, type InsertSnowServiceLog, leads, contacts, users, notifications, walletAccounts, rewards, treasuryAccounts, fundingDeposits, reserveTransactions, priceHistory, faucetConfig, faucetClaims, faucetWallets, faucetRevenue, employeeStats, achievementTypes, employeeAchievements, pointTransactions, weeklyLeaderboards, dailyCheckins, supportedCurrencies, userWallets, treasuryWallets, walletTransactions, shopItems, cashoutRequests, fraudLogs, helpRequests, miningSessions, miningClaims, treasuryWithdrawals, reviews, testimonials, walletPayouts, tokenConversions, treasuryLimits, squareInvoices, buybackFund, snowCustomers, snowServiceTypes, snowServiceLogs } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, isNull, and, isNotNull, sql, gt, gte, inArray } from "drizzle-orm";
 import { TREASURY_CONFIG } from "./constants";
@@ -197,6 +197,25 @@ export interface IStorage {
   // Buyback fund operations (token fees for buyback program)
   getBuybackFundStats(): Promise<{ tokenBalance: number; totalTokensCollected: number; feeContributionCount: number; lastUpdated: Date | null }>;
   recordBuybackFeeContribution(amount: number, sourcePayoutId?: string): Promise<void>;
+  
+  // Snow removal operations
+  getSnowCustomers(activeOnly?: boolean): Promise<SnowCustomer[]>;
+  getSnowCustomer(id: string): Promise<SnowCustomer | undefined>;
+  createSnowCustomer(customer: InsertSnowCustomer): Promise<SnowCustomer>;
+  updateSnowCustomer(id: string, updates: Partial<InsertSnowCustomer>): Promise<SnowCustomer | undefined>;
+  deleteSnowCustomer(id: string): Promise<boolean>;
+  
+  getSnowServiceTypes(activeOnly?: boolean): Promise<SnowServiceType[]>;
+  getSnowServiceType(id: string): Promise<SnowServiceType | undefined>;
+  createSnowServiceType(serviceType: InsertSnowServiceType): Promise<SnowServiceType>;
+  updateSnowServiceType(id: string, updates: Partial<InsertSnowServiceType>): Promise<SnowServiceType | undefined>;
+  
+  getSnowServiceLogs(filters?: { customerId?: string; monthKey?: string; date?: string }): Promise<SnowServiceLog[]>;
+  getSnowServiceLog(id: string): Promise<SnowServiceLog | undefined>;
+  createSnowServiceLog(log: InsertSnowServiceLog): Promise<SnowServiceLog>;
+  updateSnowServiceLog(id: string, updates: Partial<InsertSnowServiceLog>): Promise<SnowServiceLog | undefined>;
+  deleteSnowServiceLog(id: string): Promise<boolean>;
+  getSnowMonthlySummary(monthKey: string): Promise<{ customerId: string; customerName: string; visits: number; totalAmount: number; paidAmount: number }[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2582,6 +2601,127 @@ export class DatabaseStorage implements IStorage {
     }
     
     console.log(`[BUYBACK] Recorded fee contribution: ${amount} JCMOVES${sourcePayoutId ? ` from payout ${sourcePayoutId}` : ''}`);
+  }
+
+  // Snow removal operations
+  async getSnowCustomers(activeOnly: boolean = true): Promise<SnowCustomer[]> {
+    if (activeOnly) {
+      return await db.select().from(snowCustomers).where(eq(snowCustomers.isActive, true)).orderBy(snowCustomers.name);
+    }
+    return await db.select().from(snowCustomers).orderBy(snowCustomers.name);
+  }
+
+  async getSnowCustomer(id: string): Promise<SnowCustomer | undefined> {
+    const [customer] = await db.select().from(snowCustomers).where(eq(snowCustomers.id, id));
+    return customer || undefined;
+  }
+
+  async createSnowCustomer(customer: InsertSnowCustomer): Promise<SnowCustomer> {
+    const [created] = await db.insert(snowCustomers).values(customer).returning();
+    return created;
+  }
+
+  async updateSnowCustomer(id: string, updates: Partial<InsertSnowCustomer>): Promise<SnowCustomer | undefined> {
+    const [updated] = await db.update(snowCustomers)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(snowCustomers.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteSnowCustomer(id: string): Promise<boolean> {
+    const result = await db.update(snowCustomers)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(eq(snowCustomers.id, id));
+    return true;
+  }
+
+  async getSnowServiceTypes(activeOnly: boolean = true): Promise<SnowServiceType[]> {
+    if (activeOnly) {
+      return await db.select().from(snowServiceTypes).where(eq(snowServiceTypes.isActive, true)).orderBy(snowServiceTypes.sortOrder);
+    }
+    return await db.select().from(snowServiceTypes).orderBy(snowServiceTypes.sortOrder);
+  }
+
+  async getSnowServiceType(id: string): Promise<SnowServiceType | undefined> {
+    const [serviceType] = await db.select().from(snowServiceTypes).where(eq(snowServiceTypes.id, id));
+    return serviceType || undefined;
+  }
+
+  async createSnowServiceType(serviceType: InsertSnowServiceType): Promise<SnowServiceType> {
+    const [created] = await db.insert(snowServiceTypes).values(serviceType).returning();
+    return created;
+  }
+
+  async updateSnowServiceType(id: string, updates: Partial<InsertSnowServiceType>): Promise<SnowServiceType | undefined> {
+    const [updated] = await db.update(snowServiceTypes)
+      .set(updates)
+      .where(eq(snowServiceTypes.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async getSnowServiceLogs(filters?: { customerId?: string; monthKey?: string; date?: string }): Promise<SnowServiceLog[]> {
+    let query = db.select().from(snowServiceLogs);
+    
+    const conditions = [];
+    if (filters?.customerId) conditions.push(eq(snowServiceLogs.customerId, filters.customerId));
+    if (filters?.monthKey) conditions.push(eq(snowServiceLogs.monthKey, filters.monthKey));
+    if (filters?.date) conditions.push(eq(snowServiceLogs.serviceDate, filters.date));
+    
+    if (conditions.length > 0) {
+      return await db.select().from(snowServiceLogs).where(and(...conditions)).orderBy(desc(snowServiceLogs.serviceDate));
+    }
+    return await db.select().from(snowServiceLogs).orderBy(desc(snowServiceLogs.serviceDate));
+  }
+
+  async getSnowServiceLog(id: string): Promise<SnowServiceLog | undefined> {
+    const [log] = await db.select().from(snowServiceLogs).where(eq(snowServiceLogs.id, id));
+    return log || undefined;
+  }
+
+  async createSnowServiceLog(log: InsertSnowServiceLog): Promise<SnowServiceLog> {
+    const [created] = await db.insert(snowServiceLogs).values(log).returning();
+    return created;
+  }
+
+  async updateSnowServiceLog(id: string, updates: Partial<InsertSnowServiceLog>): Promise<SnowServiceLog | undefined> {
+    const [updated] = await db.update(snowServiceLogs)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(snowServiceLogs.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteSnowServiceLog(id: string): Promise<boolean> {
+    await db.delete(snowServiceLogs).where(eq(snowServiceLogs.id, id));
+    return true;
+  }
+
+  async getSnowMonthlySummary(monthKey: string): Promise<{ customerId: string; customerName: string; visits: number; totalAmount: number; paidAmount: number }[]> {
+    const logs = await db.select().from(snowServiceLogs).where(eq(snowServiceLogs.monthKey, monthKey));
+    const customers = await this.getSnowCustomers(false);
+    const customerMap = new Map(customers.map(c => [c.id, c.name]));
+    
+    const summaryMap = new Map<string, { visits: number; totalAmount: number; paidAmount: number }>();
+    
+    for (const log of logs) {
+      const existing = summaryMap.get(log.customerId) || { visits: 0, totalAmount: 0, paidAmount: 0 };
+      existing.visits++;
+      existing.totalAmount += parseFloat(log.price || '0');
+      if (log.status === 'paid') {
+        existing.paidAmount += parseFloat(log.price || '0');
+      }
+      summaryMap.set(log.customerId, existing);
+    }
+    
+    return Array.from(summaryMap.entries()).map(([customerId, stats]) => ({
+      customerId,
+      customerName: customerMap.get(customerId) || 'Unknown',
+      visits: stats.visits,
+      totalAmount: stats.totalAmount,
+      paidAmount: stats.paidAmount
+    }));
   }
 }
 

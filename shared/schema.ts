@@ -1376,3 +1376,83 @@ export const treasurySwapRules = pgTable("treasury_swap_rules", {
   lastUpdated: timestamp("last_updated").notNull().default(sql`now()`),
   updatedBy: text("updated_by"),
 });
+
+
+// ===== SNOW REMOVAL SERVICE MANAGEMENT =====
+
+// Snow removal customers - recurring service customers
+export const snowCustomers = pgTable("snow_customers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  address: text("address").notNull(),
+  city: text("city").notNull().default(""),
+  phone: text("phone"),
+  contactMethod: text("contact_method"), // 'phone', 'facebook', 'text'
+  pricePerVisit: decimal("price_per_visit", { precision: 10, scale: 2 }).notNull(),
+  notes: text("notes"), // Service notes like "just end of driveway", "double wide plus back path"
+  defaultServiceTypeId: varchar("default_service_type_id"), // Most common service for this customer
+  isPrepaid: boolean("is_prepaid").default(false), // If customer has prepaid arrangement (like Rita with $0)
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_snow_customers_active").on(table.isActive),
+  index("idx_snow_customers_city").on(table.city),
+]);
+
+export const insertSnowCustomerSchema = createInsertSchema(snowCustomers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type SnowCustomer = typeof snowCustomers.$inferSelect;
+export type InsertSnowCustomer = z.infer<typeof insertSnowCustomerSchema>;
+
+// Snow service types - different levels of service offered
+export const snowServiceTypes = pgTable("snow_service_types", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(), // "End of Driveway Only", "Driveway Only", "The Works", etc.
+  description: text("description"),
+  defaultPrice: decimal("default_price", { precision: 10, scale: 2 }),
+  sortOrder: integer("sort_order").default(0),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const insertSnowServiceTypeSchema = createInsertSchema(snowServiceTypes).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type SnowServiceType = typeof snowServiceTypes.$inferSelect;
+export type InsertSnowServiceType = z.infer<typeof insertSnowServiceTypeSchema>;
+
+// Snow service logs - daily service records
+export const snowServiceLogs = pgTable("snow_service_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  serviceDate: date("service_date").notNull(),
+  customerId: varchar("customer_id").notNull().references(() => snowCustomers.id),
+  serviceTypeId: varchar("service_type_id").references(() => snowServiceTypes.id),
+  status: text("status").notNull().default("done"), // 'done', 'paid', 'skipped', 'scheduled'
+  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
+  notes: text("notes"),
+  monthKey: text("month_key").notNull(), // Format: "YYYY-MM" for easy monthly grouping
+  servicedByUserId: varchar("serviced_by_user_id").references(() => users.id),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_snow_logs_date").on(table.serviceDate),
+  index("idx_snow_logs_customer").on(table.customerId),
+  index("idx_snow_logs_month").on(table.monthKey),
+  index("idx_snow_logs_status").on(table.status),
+]);
+
+export const insertSnowServiceLogSchema = createInsertSchema(snowServiceLogs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type SnowServiceLog = typeof snowServiceLogs.$inferSelect;
+export type InsertSnowServiceLog = z.infer<typeof insertSnowServiceLogSchema>;

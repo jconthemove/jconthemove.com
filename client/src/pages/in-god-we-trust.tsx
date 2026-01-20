@@ -37,7 +37,8 @@ import {
   XCircle,
   Copy,
   ChevronDown,
-  Settings
+  Settings,
+  Snowflake
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -490,7 +491,7 @@ export default function InGodWeTrustPage() {
         </div>
 
         {/* Top Stats Grid - Simplified without pricing */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <Card className="p-6 bg-gradient-to-br from-purple-500 to-purple-600 text-white border-0 shadow-xl shadow-purple-900/30 overflow-hidden relative">
             <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -mr-10 -mt-10"></div>
             <div className="flex items-center justify-between mb-2">
@@ -524,6 +525,18 @@ export default function InGodWeTrustPage() {
               </div>
               <div className="text-3xl font-black">{adminStats?.totalUsers || 0}</div>
               <div className="text-sm opacity-80 mt-1 font-medium">Total Users</div>
+            </Card>
+          </Link>
+
+          <Link href="/snow-removal" className="block">
+            <Card className="p-6 bg-gradient-to-br from-blue-500 to-cyan-600 text-white cursor-pointer hover:from-blue-400 hover:to-cyan-500 transition-all duration-200 transform hover:scale-[1.02] border-0 shadow-xl shadow-blue-900/30 overflow-hidden relative">
+              <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -mr-10 -mt-10"></div>
+              <div className="flex items-center justify-between mb-2">
+                <Snowflake className="h-8 w-8 opacity-90" />
+                <span className="text-sm opacity-80 font-medium">Seasonal</span>
+              </div>
+              <div className="text-3xl font-black">Snow</div>
+              <div className="text-sm opacity-80 mt-1 font-medium">Removal Service</div>
             </Card>
           </Link>
         </div>

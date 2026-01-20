@@ -7209,6 +7209,186 @@ Thank you for your business!
     }
   });
 
+  // ===== SNOW REMOVAL ROUTES =====
+
+  // Get all snow customers
+  app.get("/api/snow/customers", isAuthenticated, async (req: any, res) => {
+    try {
+      const activeOnly = req.query.activeOnly !== 'false';
+      const customers = await storage.getSnowCustomers(activeOnly);
+      res.json(customers);
+    } catch (error: any) {
+      console.error("Error fetching snow customers:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch customers" });
+    }
+  });
+
+  // Get single snow customer
+  app.get("/api/snow/customers/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const customer = await storage.getSnowCustomer(req.params.id);
+      if (!customer) {
+        return res.status(404).json({ error: "Customer not found" });
+      }
+      res.json(customer);
+    } catch (error: any) {
+      console.error("Error fetching snow customer:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch customer" });
+    }
+  });
+
+  // Create snow customer
+  app.post("/api/snow/customers", isAuthenticated, async (req: any, res) => {
+    try {
+      const customer = await storage.createSnowCustomer(req.body);
+      res.status(201).json(customer);
+    } catch (error: any) {
+      console.error("Error creating snow customer:", error);
+      res.status(500).json({ error: error.message || "Failed to create customer" });
+    }
+  });
+
+  // Update snow customer
+  app.put("/api/snow/customers/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const customer = await storage.updateSnowCustomer(req.params.id, req.body);
+      if (!customer) {
+        return res.status(404).json({ error: "Customer not found" });
+      }
+      res.json(customer);
+    } catch (error: any) {
+      console.error("Error updating snow customer:", error);
+      res.status(500).json({ error: error.message || "Failed to update customer" });
+    }
+  });
+
+  // Delete snow customer (soft delete)
+  app.delete("/api/snow/customers/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.deleteSnowCustomer(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error deleting snow customer:", error);
+      res.status(500).json({ error: error.message || "Failed to delete customer" });
+    }
+  });
+
+  // Get snow service types
+  app.get("/api/snow/service-types", isAuthenticated, async (req: any, res) => {
+    try {
+      const activeOnly = req.query.activeOnly !== 'false';
+      const types = await storage.getSnowServiceTypes(activeOnly);
+      res.json(types);
+    } catch (error: any) {
+      console.error("Error fetching service types:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch service types" });
+    }
+  });
+
+  // Create snow service type
+  app.post("/api/snow/service-types", isAuthenticated, async (req: any, res) => {
+    try {
+      const serviceType = await storage.createSnowServiceType(req.body);
+      res.status(201).json(serviceType);
+    } catch (error: any) {
+      console.error("Error creating service type:", error);
+      res.status(500).json({ error: error.message || "Failed to create service type" });
+    }
+  });
+
+  // Update snow service type
+  app.put("/api/snow/service-types/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const serviceType = await storage.updateSnowServiceType(req.params.id, req.body);
+      if (!serviceType) {
+        return res.status(404).json({ error: "Service type not found" });
+      }
+      res.json(serviceType);
+    } catch (error: any) {
+      console.error("Error updating service type:", error);
+      res.status(500).json({ error: error.message || "Failed to update service type" });
+    }
+  });
+
+  // Get snow service logs
+  app.get("/api/snow/logs", isAuthenticated, async (req: any, res) => {
+    try {
+      const { customerId, monthKey, date } = req.query;
+      const logs = await storage.getSnowServiceLogs({ customerId, monthKey, date });
+      res.json(logs);
+    } catch (error: any) {
+      console.error("Error fetching service logs:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch service logs" });
+    }
+  });
+
+  // Get single service log
+  app.get("/api/snow/logs/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const log = await storage.getSnowServiceLog(req.params.id);
+      if (!log) {
+        return res.status(404).json({ error: "Service log not found" });
+      }
+      res.json(log);
+    } catch (error: any) {
+      console.error("Error fetching service log:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch service log" });
+    }
+  });
+
+  // Create snow service log
+  app.post("/api/snow/logs", isAuthenticated, async (req: any, res) => {
+    try {
+      // Auto-generate monthKey from serviceDate if not provided
+      const logData = { ...req.body };
+      if (logData.serviceDate && !logData.monthKey) {
+        const date = new Date(logData.serviceDate);
+        logData.monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      }
+      const log = await storage.createSnowServiceLog(logData);
+      res.status(201).json(log);
+    } catch (error: any) {
+      console.error("Error creating service log:", error);
+      res.status(500).json({ error: error.message || "Failed to create service log" });
+    }
+  });
+
+  // Update snow service log
+  app.put("/api/snow/logs/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const log = await storage.updateSnowServiceLog(req.params.id, req.body);
+      if (!log) {
+        return res.status(404).json({ error: "Service log not found" });
+      }
+      res.json(log);
+    } catch (error: any) {
+      console.error("Error updating service log:", error);
+      res.status(500).json({ error: error.message || "Failed to update service log" });
+    }
+  });
+
+  // Delete snow service log
+  app.delete("/api/snow/logs/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.deleteSnowServiceLog(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error deleting service log:", error);
+      res.status(500).json({ error: error.message || "Failed to delete service log" });
+    }
+  });
+
+  // Get monthly summary
+  app.get("/api/snow/summary/:monthKey", isAuthenticated, async (req: any, res) => {
+    try {
+      const summary = await storage.getSnowMonthlySummary(req.params.monthKey);
+      res.json(summary);
+    } catch (error: any) {
+      console.error("Error fetching monthly summary:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch summary" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
