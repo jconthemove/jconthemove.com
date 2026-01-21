@@ -6,6 +6,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import { Loader2, Zap, Users, Coins } from "lucide-react";
 import { Link } from "wouter";
+import { notificationService } from "@/lib/notifications";
+import { NotificationToggle } from "@/components/notification-prompt";
 
 interface MiningStatus {
   currentSession: any;
@@ -55,10 +57,18 @@ export default function MiningPage() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/mining/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/wallet"] });
+      const tokensClaimed = parseFloat(data.tokensClaimed);
       toast({
         title: "Tokens Claimed!",
-        description: `You've earned ${parseFloat(data.tokensClaimed).toFixed(2)} JCMOVES! New balance: ${parseFloat(data.newBalance).toFixed(2)}`,
+        description: `You've earned ${tokensClaimed.toFixed(2)} JCMOVES! New balance: ${parseFloat(data.newBalance).toFixed(2)}`,
       });
+      // Send notification for claimed tokens
+      if (data.streakCount && data.streakCount > 1) {
+        const streakBonus = Math.min(data.streakCount - 1, 10) * 10;
+        notificationService.notifyStreakBonus(data.streakCount, streakBonus);
+      } else {
+        notificationService.notifyNewReward('mining claim', tokensClaimed);
+      }
     },
     onError: (error: any) => {
       toast({
@@ -150,6 +160,9 @@ export default function MiningPage() {
           <p className="text-sm text-slate-400 mt-1">
             Earn 864 JCMOVES every 24 hours
           </p>
+          <div className="mt-3">
+            <NotificationToggle />
+          </div>
         </div>
 
         {/* Balance Card - Gradient Style */}

@@ -49,6 +49,7 @@ import RequestSwapPage from "@/pages/request-swap";
 import MiningPage from "@/pages/mining";
 import SnowRemovalPage from "@/pages/snow-removal";
 import MobilePreviewPage from "@/pages/mobile-preview";
+import { NotificationPrompt } from "@/components/notification-prompt";
 
 // Landing page for unauthenticated users
 function LandingPage() {
@@ -85,6 +86,7 @@ function AuthenticatedApp() {
   return (
     <ComplianceCheck>
       <div className="min-h-screen bg-background text-foreground font-sans">
+        <NotificationPrompt />
         <Switch>
           {/* Primary routes - accessible on all devices */}
           <Route path="/">
