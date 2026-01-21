@@ -7345,6 +7345,10 @@ Thank you for your business!
         const date = new Date(logData.serviceDate);
         logData.monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       }
+      // Convert empty serviceTypeId to null (foreign key constraint)
+      if (logData.serviceTypeId === "" || logData.serviceTypeId === undefined) {
+        logData.serviceTypeId = null;
+      }
       const log = await storage.createSnowServiceLog(logData);
       res.status(201).json(log);
     } catch (error: any) {
@@ -7356,7 +7360,12 @@ Thank you for your business!
   // Update snow service log
   app.put("/api/snow/logs/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const log = await storage.updateSnowServiceLog(req.params.id, req.body);
+      const updateData = { ...req.body };
+      // Convert empty serviceTypeId to null (foreign key constraint)
+      if (updateData.serviceTypeId === "" || updateData.serviceTypeId === undefined) {
+        updateData.serviceTypeId = null;
+      }
+      const log = await storage.updateSnowServiceLog(req.params.id, updateData);
       if (!log) {
         return res.status(404).json({ error: "Service log not found" });
       }
