@@ -7273,6 +7273,51 @@ Thank you for your business!
     }
   });
 
+  // Seed default snow removal customers (admin only)
+  app.post("/api/snow/seed-customers", isAuthenticated, async (req: any, res) => {
+    try {
+      if (req.user?.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      
+      const existingCustomers = await storage.getSnowCustomers();
+      const existingNames = new Set(existingCustomers.map(c => c.name.toLowerCase()));
+      
+      const defaultCustomers = [
+        { name: 'Paul', pricePerVisit: 30, notes: 'End of Driveway Only', isPrepaid: false },
+        { name: 'Rita', pricePerVisit: 0, notes: 'Prepaid - Driveway', isPrepaid: true },
+        { name: 'Bank Owned', pricePerVisit: 230, notes: 'The Works - Full service', isPrepaid: false },
+        { name: 'Geri + Al', pricePerVisit: 0, notes: 'No visits yet', isPrepaid: false },
+        { name: 'Gina', pricePerVisit: 40, notes: 'Driveway Front Steps', isPrepaid: false },
+        { name: 'Sandy', pricePerVisit: 45, notes: 'Driveway Front + Back Steps', isPrepaid: false },
+        { name: 'Barbara', pricePerVisit: 35, notes: 'Driveway Only', isPrepaid: false },
+        { name: 'Bernard', pricePerVisit: 20, notes: 'End of Driveway Only', isPrepaid: false },
+      ];
+      
+      const added: string[] = [];
+      for (const customer of defaultCustomers) {
+        if (!existingNames.has(customer.name.toLowerCase())) {
+          await storage.createSnowCustomer({
+            name: customer.name,
+            address: '',
+            city: '',
+            phone: '',
+            pricePerVisit: customer.pricePerVisit,
+            notes: customer.notes,
+            isPrepaid: customer.isPrepaid,
+            isActive: true,
+          });
+          added.push(customer.name);
+        }
+      }
+      
+      res.json({ message: `Added ${added.length} customers`, added });
+    } catch (error: any) {
+      console.error("Error seeding customers:", error);
+      res.status(500).json({ error: error.message || "Failed to seed customers" });
+    }
+  });
+
   // Get snow service types
   app.get("/api/snow/service-types", isAuthenticated, async (req: any, res) => {
     try {

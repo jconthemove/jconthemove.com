@@ -26,7 +26,8 @@ import {
   Clock,
   MapPin,
   Phone,
-  ArrowLeft
+  ArrowLeft,
+  Download
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -161,6 +162,22 @@ export default function SnowRemovalPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/snow/logs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/snow/summary"] });
       toast({ title: "Status updated" });
+    },
+  });
+
+  const seedCustomersMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/snow/seed-customers"),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/snow/customers"] });
+      toast({ 
+        title: "Customers Added", 
+        description: data.added?.length > 0 
+          ? `Added: ${data.added.join(", ")}` 
+          : "All customers already exist"
+      });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 
@@ -352,9 +369,21 @@ export default function SnowRemovalPage() {
                   <CardTitle>Snow Removal Customers</CardTitle>
                   <CardDescription>Manage your recurring snow removal customers</CardDescription>
                 </div>
-                <Button onClick={() => openCustomerModal()}>
-                  <Plus className="w-4 h-4 mr-2" /> Add Customer
-                </Button>
+                <div className="flex gap-2">
+                  {user?.role === 'admin' && customers.length < 5 && (
+                    <Button 
+                      variant="outline" 
+                      onClick={() => seedCustomersMutation.mutate()}
+                      disabled={seedCustomersMutation.isPending}
+                    >
+                      <Download className="w-4 h-4 mr-2" /> 
+                      {seedCustomersMutation.isPending ? "Loading..." : "Import Default"}
+                    </Button>
+                  )}
+                  <Button onClick={() => openCustomerModal()}>
+                    <Plus className="w-4 h-4 mr-2" /> Add Customer
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 {customersLoading ? (
