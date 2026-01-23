@@ -295,9 +295,9 @@ export default function SnowRemovalPage() {
       const notesIdx = headers.findIndex(h => h === 'notes' || h === 'note');
       const prepaidIdx = headers.findIndex(h => h === 'prepaid');
 
-      const rows = lines.slice(1).map(line => {
+      const allRows = lines.slice(1).map(line => {
         const cols = parseCsvLine(line);
-        const name = (nameIdx >= 0 ? cols[nameIdx] : '').replace(/['"]/g, '').slice(0, 100);
+        const name = (nameIdx >= 0 ? cols[nameIdx] : '').replace(/['"]/g, '').trim().slice(0, 100);
         return {
           name,
           address: (addressIdx >= 0 ? cols[addressIdx] : '').replace(/['"]/g, '').slice(0, 200),
@@ -308,6 +308,15 @@ export default function SnowRemovalPage() {
           prepaid: prepaidIdx >= 0 ? cols[prepaidIdx] : 'false',
         };
       }).filter(row => row.name);
+
+      // Deduplicate by name - keep first occurrence only
+      const seen = new Set<string>();
+      const rows = allRows.filter(row => {
+        const key = row.name.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
 
       setCsvPreview(rows);
     };
