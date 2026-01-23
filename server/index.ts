@@ -1,9 +1,37 @@
 import express, { type Request, Response, NextFunction } from "express";
 import path from "path";
+import cors from "cors";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
+
+// CORS configuration for mobile app
+const allowedOrigins = [
+  'https://jconthemove.com',
+  'https://www.jconthemove.com',
+  'https://jconthemove.replit.app',
+  'https://jc-on-the-move-mobile.replit.app',
+  'capacitor://localhost',
+  'http://localhost',
+  'http://localhost:5000',
+  'http://localhost:8100',
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.some(allowed => origin.startsWith(allowed) || origin.includes('replit'))) {
+      return callback(null, true);
+    }
+    return callback(null, true); // Allow all for now to debug
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
+  exposedHeaders: ['Set-Cookie'],
+}));
 
 // CRITICAL SECURITY: Handle webhook routes BEFORE global JSON parser
 // This preserves raw body bytes needed for HMAC signature validation
