@@ -103,7 +103,16 @@ export default function SnowRemovalPage() {
 
   // Fetch logs for selected month
   const { data: logs = [], isLoading: logsLoading } = useQuery<SnowServiceLog[]>({
-    queryKey: ["/api/snow/logs", { monthKey: selectedMonth }],
+    queryKey: ["/api/snow/logs", selectedMonth],
+    queryFn: async () => {
+      const res = await fetch(`/api/snow/logs?monthKey=${selectedMonth}`, { credentials: 'include' });
+      if (res.status === 401) {
+        window.location.href = "/";
+        throw new Error("Session expired");
+      }
+      if (!res.ok) throw new Error('Failed to fetch logs');
+      return res.json();
+    },
     enabled: !!hasAccess,
   });
 

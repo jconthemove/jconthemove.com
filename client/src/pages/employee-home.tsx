@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Calendar as CalendarIcon, BookOpen, Store, Star, Camera, MapPin, Phone, Mail, Plus, Settings, Award, User } from "lucide-react";
+import { Calendar as CalendarIcon, BookOpen, Store, Star, Camera, MapPin, Phone, Mail, Plus, Settings, Award, User, Snowflake } from "lucide-react";
 import { Link } from "wouter";
 import { useState, useEffect } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -78,6 +78,33 @@ export default function EmployeeHomePage() {
     queryKey: ["/api/users"],
     staleTime: 60000, // Cache for 1 minute
   });
+
+  // Fetch snow service logs to show snow days on calendar
+  const calendarMonthKey = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}`;
+  const { data: snowLogs = [] } = useQuery<{ id: number; serviceDate: string }[]>({
+    queryKey: ["/api/snow/logs", calendarMonthKey],
+    queryFn: async () => {
+      const res = await fetch(`/api/snow/logs?monthKey=${calendarMonthKey}`, { credentials: 'include' });
+      if (res.status === 401) {
+        window.location.href = "/";
+        throw new Error("Session expired");
+      }
+      if (!res.ok) return []; // Gracefully handle if user doesn't have snow access
+      return res.json();
+    },
+    staleTime: 60000,
+  });
+
+  // Get dates that have snow service
+  const snowDays = new Set(
+    snowLogs.map(log => {
+      const dateParts = log.serviceDate.split('T')[0].split('-');
+      const year = parseInt(dateParts[0]);
+      const month = parseInt(dateParts[1]) - 1;
+      const day = parseInt(dateParts[2]);
+      return new Date(year, month, day).toDateString();
+    })
+  );
 
   // Filter to get only employees for crew selection
   const employees = allUsers.filter(u => u.role === 'employee' || u.role === 'admin');
@@ -274,25 +301,54 @@ export default function EmployeeHomePage() {
           data-testid={`calendar-day-${day}`}
           onClick={() => handleDateClick(date)}
         >
-          <div className={`text-sm font-bold ${isToday(day) ? 'text-orange-400' : 'text-slate-300'}`}>{day}</div>
-          <div className="space-y-0.5 mt-1">
-            {jobsOnDate.slice(0, 2).map(job => (
-              <div
-                key={job.id}
-                className={`text-[10px] px-1.5 py-0.5 rounded-md truncate font-medium ${
-                  job.status === 'completed'
-                    ? 'bg-green-500/20 text-green-300 border border-green-500/30'
-                    : job.confirmedDate
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30 border-dashed'
-                }`}
-                title={job.confirmedDate ? 'Confirmed' : 'Tentative'}
-              >
-                {job.firstName}
+          <div className="flex items-center justify-between">
+            <div className={`text-sm font-bold ${isToday(day) ? 'text-orange-400' : 'text-slate-300'}`}>{day}</div>
+            {snowDays.has(dateStr) && (
+              <Link href="/snow-removal" onClick={(e) => e.stopPropagation()}>
+                <div className="p-0.5 rounded bg-sky-500/30 hover:bg-sky-500/50 transition-colors" title="Snow Service">
+                  <Snowflake className="h-3 w-3 text-sky-300" />
+                </div>
+              </Link>
+            )}
+          </div>
+          <div className="space-y-0.5 mt-1 relative">
+            {jobsOnDate.length <= 2 ? (
+              jobsOnDate.map(job => (
+                <div
+                  key={job.id}
+                  className={`text-[10px] px-1.5 py-0.5 rounded-md truncate font-medium ${
+                    job.status === 'completed'
+                      ? 'bg-green-500/20 text-green-300 border border-green-500/30'
+                      : job.confirmedDate
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                        : 'bg-amber-500/20 text-amber-300 border border-amber-500/30 border-dashed'
+                  }`}
+                  title={job.confirmedDate ? 'Confirmed' : 'Tentative'}
+                >
+                  {job.firstName}
+                </div>
+              ))
+            ) : (
+              <div className="flex flex-col gap-0.5">
+                <div
+                  className={`text-[10px] px-1.5 py-0.5 rounded-md truncate font-medium ${
+                    jobsOnDate[0].status === 'completed'
+                      ? 'bg-green-500/20 text-green-300 border border-green-500/30'
+                      : jobsOnDate[0].confirmedDate
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                        : 'bg-amber-500/20 text-amber-300 border border-amber-500/30 border-dashed'
+                  }`}
+                  title={`${jobsOnDate[0].firstName} - ${jobsOnDate[0].confirmedDate ? 'Confirmed' : 'Tentative'}`}
+                >
+                  {jobsOnDate[0].firstName}
+                </div>
+                <div 
+                  className="text-[9px] px-1.5 py-0.5 rounded-md font-bold bg-blue-500/30 text-blue-300 border border-blue-500/40 text-center"
+                  title={jobsOnDate.slice(1).map(j => j.firstName).join(', ')}
+                >
+                  +{jobsOnDate.length - 1} more
+                </div>
               </div>
-            ))}
-            {jobsOnDate.length > 2 && (
-              <div className="text-[10px] text-slate-400 font-medium">+{jobsOnDate.length - 2} more</div>
             )}
           </div>
         </div>
