@@ -7405,8 +7405,9 @@ Thank you for your business!
   // Seed default snow removal customers (admin only)
   app.post("/api/snow/seed-customers", isAuthenticated, async (req: any, res) => {
     try {
-      if (req.user?.role !== 'admin') {
-        return res.status(403).json({ error: "Admin access required" });
+      // Allow both admins and employees to seed default customers
+      if (req.user?.role !== 'admin' && req.user?.role !== 'employee') {
+        return res.status(403).json({ error: "Employee or admin access required" });
       }
       
       const existingCustomers = await storage.getSnowCustomers();
