@@ -744,6 +744,138 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Registration failed" });
     }
   });
+
+  // ========== Mobile App API Endpoints ==========
+  
+  // GET /api/user - Get current logged in user
+  app.get("/api/user", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+      res.json({
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        status: user.status,
+        phone: user.phone,
+        tokenBalance: user.tokenBalance,
+        profileImage: user.profileImage,
+        referralCode: user.referralCode,
+        solanaWalletAddress: user.solanaWalletAddress,
+        createdAt: user.createdAt,
+      });
+    } catch (error: any) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ error: "Failed to fetch user" });
+    }
+  });
+
+  // GET /api/rewards/balance - Get user's JCMOVES token balance
+  app.get("/api/rewards/balance", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      res.json({
+        balance: user.tokenBalance || "0",
+        solanaWalletAddress: user.solanaWalletAddress,
+      });
+    } catch (error: any) {
+      console.error("Error fetching balance:", error);
+      res.status(500).json({ error: "Failed to fetch balance" });
+    }
+  });
+
+  // GET /api/rewards/mining - Get mining status and streak (delegates to mining service)
+  app.get("/api/rewards/mining", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+      
+      const { miningService } = await import('./services/mining');
+      const stats = await miningService.getMiningStats(userId);
+      res.json(stats);
+    } catch (error: any) {
+      console.error("Error fetching mining status:", error);
+      res.status(500).json({ error: "Failed to fetch mining status" });
+    }
+  });
+
+  // POST /api/rewards/claim - Claim mined tokens (delegates to mining service)
+  app.post("/api/rewards/claim", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+      
+      const { miningService } = await import('./services/mining');
+      const result = await miningService.claimTokens(userId, 'manual');
+      
+      if (!result.success) {
+        return res.status(400).json({ error: result.error || "Failed to claim tokens" });
+      }
+      
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error claiming reward:", error);
+      res.status(500).json({ error: "Failed to claim reward" });
+    }
+  });
+
+  // GET /api/jobs - Get jobs for calendar (employee jobs)
+  app.get("/api/jobs", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id;
+      const userRole = req.user?.role;
+      
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+      
+      let jobs;
+      if (userRole === 'admin' || userRole === 'business_owner') {
+        // Admins see all jobs
+        jobs = await storage.getLeads();
+      } else if (userRole === 'employee') {
+        // Employees see their assigned jobs
+        jobs = await storage.getEmployeeJobs(userId);
+      } else {
+        // Customers see their own requests
+        jobs = await storage.getLeadsByCustomer(userId);
+      }
+      
+      // Format for calendar display
+      const calendarJobs = jobs.map((job: any) => ({
+        id: job.id,
+        title: job.name || `${job.serviceType} - ${job.firstName} ${job.lastName}`,
+        date: job.confirmedDate || job.moveDate,
+        serviceType: job.serviceType,
+        status: job.status,
+        address: job.fromAddress || job.address,
+        customerName: `${job.firstName || ''} ${job.lastName || ''}`.trim(),
+        phone: job.phone,
+        email: job.email,
+        notes: job.notes,
+      }));
+      
+      res.json(calendarJobs);
+    } catch (error: any) {
+      console.error("Error fetching jobs:", error);
+      res.status(500).json({ error: "Failed to fetch jobs" });
+    }
+  });
   
   // Validation schemas for rewards endpoints
   // NOTE: checkinSchema removed - daily check-ins replaced by unified mining system
