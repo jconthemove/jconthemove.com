@@ -615,6 +615,135 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Login failed" });
     }
   });
+
+  // Unified login endpoint for mobile app (works for all user types)
+  app.post("/api/login", async (req, res) => {
+    try {
+      const data = employeeLoginSchema.parse(req.body);
+
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, data.email))
+        .limit(1);
+
+      if (!user || !user.passwordHash) {
+        return res.status(401).json({ error: "Invalid email or password. If you haven't created an account yet, please sign up first." });
+      }
+
+      const passwordMatch = await bcrypt.compare(data.password, user.passwordHash);
+      
+      if (!passwordMatch) {
+        return res.status(401).json({ error: "Invalid email or password" });
+      }
+
+      req.session.regenerate((err) => {
+        if (err) {
+          return res.status(500).json({ error: "Login failed" });
+        }
+
+        (req.session as any).userId = user.id;
+        (req.session as any).userEmail = user.email;
+        (req.session as any).userRole = user.role;
+
+        req.session.save((saveErr) => {
+          if (saveErr) {
+            return res.status(500).json({ error: "Login failed" });
+          }
+
+          res.json({
+            success: true,
+            user: {
+              id: user.id,
+              email: user.email,
+              firstName: user.firstName,
+              lastName: user.lastName,
+              role: user.role,
+              status: user.status,
+              phone: user.phone,
+              tokenBalance: user.tokenBalance,
+            }
+          });
+        });
+      });
+    } catch (error: any) {
+      console.error("Unified login error:", error);
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ error: error.issues?.[0]?.message || "Invalid data" });
+      }
+      res.status(500).json({ error: "Login failed" });
+    }
+  });
+
+  // Unified register endpoint for mobile app
+  app.post("/api/register", async (req, res) => {
+    try {
+      const data = employeeRegisterSchema.parse(req.body);
+
+      // Check if user already exists
+      const [existingUser] = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, data.email))
+        .limit(1);
+
+      if (existingUser) {
+        return res.status(400).json({ error: "An account with this email already exists" });
+      }
+
+      // Hash password
+      const passwordHash = await bcrypt.hash(data.password, 10);
+
+      // Create user as customer by default
+      const [newUser] = await db
+        .insert(users)
+        .values({
+          email: data.email,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          passwordHash,
+          role: 'customer',
+          status: 'active',
+          tokenBalance: "0",
+        })
+        .returning();
+
+      // Auto-login after registration
+      req.session.regenerate((err) => {
+        if (err) {
+          return res.status(500).json({ error: "Registration successful but login failed" });
+        }
+
+        (req.session as any).userId = newUser.id;
+        (req.session as any).userEmail = newUser.email;
+        (req.session as any).userRole = newUser.role;
+
+        req.session.save((saveErr) => {
+          if (saveErr) {
+            return res.status(500).json({ error: "Registration successful but login failed" });
+          }
+
+          res.json({
+            success: true,
+            user: {
+              id: newUser.id,
+              email: newUser.email,
+              firstName: newUser.firstName,
+              lastName: newUser.lastName,
+              role: newUser.role,
+              status: newUser.status,
+            }
+          });
+        });
+      });
+    } catch (error: any) {
+      console.error("Registration error:", error);
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ error: error.issues?.[0]?.message || "Invalid data" });
+      }
+      res.status(500).json({ error: "Registration failed" });
+    }
+  });
   
   // Validation schemas for rewards endpoints
   // NOTE: checkinSchema removed - daily check-ins replaced by unified mining system
