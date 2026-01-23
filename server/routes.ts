@@ -7512,6 +7512,89 @@ Thank you for your business!
     }
   });
 
+  // Import snow service logs from CSV
+  app.post("/api/snow/import-logs-csv", isAuthenticated, async (req: any, res) => {
+    try {
+      const allowedRoles = ['admin', 'employee', 'business_owner'];
+      if (!allowedRoles.includes(req.user?.role)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const { rows } = req.body;
+      if (!Array.isArray(rows) || rows.length === 0) {
+        return res.status(400).json({ error: "No data provided" });
+      }
+
+      if (rows.length > 500) {
+        return res.status(400).json({ error: "Too many rows (max 500)" });
+      }
+
+      // Validate row structure
+      for (const row of rows) {
+        if (typeof row !== 'object' || !row.date || !row.customer) {
+          return res.status(400).json({ error: "Invalid row data - date and customer required" });
+        }
+      }
+
+      // Get existing customers to map names to IDs
+      const customers = await storage.getSnowCustomers();
+      const customerMap = new Map(customers.map(c => [c.name.toLowerCase().trim(), c.id]));
+
+      const added: string[] = [];
+      const skipped: string[] = [];
+      const errors: string[] = [];
+
+      for (const row of rows) {
+        const customerName = row.customer?.trim();
+        const customerId = customerMap.get(customerName.toLowerCase());
+        
+        if (!customerId) {
+          skipped.push(`${row.date} - ${customerName} (customer not found)`);
+          continue;
+        }
+
+        // Parse date (MM/DD/YYYY format)
+        const dateParts = row.date.split('/');
+        let serviceDate: Date;
+        if (dateParts.length === 3) {
+          serviceDate = new Date(parseInt(dateParts[2]), parseInt(dateParts[0]) - 1, parseInt(dateParts[1]));
+        } else {
+          serviceDate = new Date(row.date);
+        }
+        
+        if (isNaN(serviceDate.getTime())) {
+          errors.push(`Invalid date: ${row.date}`);
+          continue;
+        }
+
+        try {
+          await storage.createSnowServiceLog({
+            customerId,
+            serviceDate,
+            serviceType: row.serviceType?.trim() || 'Snow Removal',
+            notes: row.notes?.trim() || '',
+            price: parseFloat(row.price) || 0,
+            isPaid: row.notes?.toLowerCase().includes('paid') || false,
+            monthKey: serviceDate.toISOString().slice(0, 7).replace('-', '/') + '/01',
+          });
+          added.push(`${row.date} - ${customerName}`);
+        } catch (err: any) {
+          errors.push(`Failed to add ${row.date} - ${customerName}: ${err.message}`);
+        }
+      }
+
+      res.json({ 
+        message: `Imported ${added.length} logs, skipped ${skipped.length}, errors ${errors.length}`,
+        added: added.length,
+        skipped,
+        errors
+      });
+    } catch (error: any) {
+      console.error("Error importing logs CSV:", error);
+      res.status(500).json({ error: error.message || "Failed to import logs" });
+    }
+  });
+
   // Get snow service types
   app.get("/api/snow/service-types", isAuthenticated, async (req: any, res) => {
     try {

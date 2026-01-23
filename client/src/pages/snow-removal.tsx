@@ -211,6 +211,27 @@ export default function SnowRemovalPage() {
     },
   });
 
+  // Import logs from CSV
+  const [importLogsModalOpen, setImportLogsModalOpen] = useState(false);
+  const [logsPreview, setLogsPreview] = useState<any[]>([]);
+
+  const importLogsCsvMutation = useMutation({
+    mutationFn: (rows: any[]) => apiRequest("POST", "/api/snow/import-logs-csv", { rows }),
+    onSuccess: async (response: Response) => {
+      const data = await response.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/snow/logs"] });
+      setImportLogsModalOpen(false);
+      setLogsPreview([]);
+      toast({ 
+        title: "Import Complete", 
+        description: `Added ${data.added} logs. ${data.skipped?.length || 0} skipped.`
+      });
+    },
+    onError: (error: any) => {
+      toast({ title: "Import Error", description: error.message, variant: "destructive" });
+    },
+  });
+
   const parseCsvLine = (line: string): string[] => {
     const result: string[] = [];
     let current = '';
@@ -289,6 +310,58 @@ export default function SnowRemovalPage() {
       }).filter(row => row.name);
 
       setCsvPreview(rows);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleLogsCsvFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 1024 * 1024) {
+      toast({ title: "Error", description: "File too large (max 1MB)", variant: "destructive" });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      const lines = text.split(/\r?\n/).filter(line => line.trim());
+      if (lines.length < 2) {
+        toast({ title: "Error", description: "CSV file appears empty", variant: "destructive" });
+        return;
+      }
+
+      if (lines.length > 501) {
+        toast({ title: "Error", description: "Too many rows (max 500 logs)", variant: "destructive" });
+        return;
+      }
+
+      const headers = parseCsvLine(lines[0]).map(h => h.toLowerCase().replace(/['"]/g, ''));
+      const dateIdx = headers.findIndex(h => h === 'date');
+      const customerIdx = headers.findIndex(h => h === 'customer' || h === 'name');
+      
+      if (dateIdx < 0 || customerIdx < 0) {
+        toast({ title: "Error", description: "CSV must have 'date' and 'customer' columns", variant: "destructive" });
+        return;
+      }
+
+      const serviceTypeIdx = headers.findIndex(h => h === 'service type' || h === 'servicetype' || h === 'service');
+      const notesIdx = headers.findIndex(h => h === 'notes' || h === 'note');
+      const priceIdx = headers.findIndex(h => h === 'price' || h === 'amount');
+
+      const rows = lines.slice(1).map(line => {
+        const cols = parseCsvLine(line);
+        return {
+          date: (dateIdx >= 0 ? cols[dateIdx] : '').replace(/['"]/g, ''),
+          customer: (customerIdx >= 0 ? cols[customerIdx] : '').replace(/['"]/g, '').trim(),
+          serviceType: (serviceTypeIdx >= 0 ? cols[serviceTypeIdx] : 'Snow Removal').replace(/['"]/g, ''),
+          notes: (notesIdx >= 0 ? cols[notesIdx] : '').replace(/['"]/g, ''),
+          price: String(parseFloat((priceIdx >= 0 ? cols[priceIdx] : '0').replace(/['"$]/g, '')) || 0),
+        };
+      }).filter(row => row.date && row.customer);
+
+      setLogsPreview(rows);
     };
     reader.readAsText(file);
   };
@@ -562,6 +635,12 @@ export default function SnowRemovalPage() {
                     onChange={(e) => setSelectedMonth(e.target.value)}
                     className="w-40"
                   />
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setImportLogsModalOpen(true)}
+                  >
+                    <Upload className="w-4 h-4 mr-2" /> Import Logs
+                  </Button>
                   <Button onClick={() => openLogModal()}>
                     <Plus className="w-4 h-4 mr-2" /> Log Service
                   </Button>
@@ -896,6 +975,86 @@ export default function SnowRemovalPage() {
                 disabled={csvPreview.length === 0 || importCsvMutation.isPending}
               >
                 {importCsvMutation.isPending ? "Importing..." : `Import ${csvPreview.length} Customers`}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Import Logs CSV Modal */}
+        <Dialog open={importLogsModalOpen} onOpenChange={(open) => {
+          setImportLogsModalOpen(open);
+          if (!open) setLogsPreview([]);
+        }}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <FileSpreadsheet className="w-5 h-5" />
+                Import Service Logs from CSV
+              </DialogTitle>
+              <DialogDescription>
+                Upload a CSV file with service logs. Required columns: "date" and "customer". Optional: service type, price, notes.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div>
+                <Label>Select CSV File</Label>
+                <Input 
+                  type="file" 
+                  accept=".csv" 
+                  onChange={handleLogsCsvFile}
+                  className="mt-2"
+                />
+              </div>
+
+              {logsPreview.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Preview ({logsPreview.length} logs found)</Label>
+                  <div className="border rounded-lg max-h-60 overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted sticky top-0">
+                        <tr>
+                          <th className="p-2 text-left">Date</th>
+                          <th className="p-2 text-left">Customer</th>
+                          <th className="p-2 text-left">Service</th>
+                          <th className="p-2 text-right">Price</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {logsPreview.slice(0, 20).map((row, idx) => (
+                          <tr key={idx} className="border-t">
+                            <td className="p-2">{row.date}</td>
+                            <td className="p-2 font-medium">{row.customer}</td>
+                            <td className="p-2 text-muted-foreground truncate max-w-[150px]">{row.serviceType}</td>
+                            <td className="p-2 text-right">${row.price}</td>
+                          </tr>
+                        ))}
+                        {logsPreview.length > 20 && (
+                          <tr className="border-t">
+                            <td colSpan={4} className="p-2 text-center text-muted-foreground">
+                              ...and {logsPreview.length - 20} more rows
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => {
+                setImportLogsModalOpen(false);
+                setLogsPreview([]);
+              }}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={() => importLogsCsvMutation.mutate(logsPreview)}
+                disabled={logsPreview.length === 0 || importLogsCsvMutation.isPending}
+              >
+                {importLogsCsvMutation.isPending ? "Importing..." : `Import ${logsPreview.length} Logs`}
               </Button>
             </DialogFooter>
           </DialogContent>
