@@ -20,6 +20,7 @@ interface Lead {
   serviceType: string;
   status: string;
   moveDate?: string;
+  confirmedDate?: string;
   createdAt: string;
   phone?: string;
   email?: string;
@@ -86,11 +87,19 @@ export default function EmployeeHomePage() {
   const monthEnd = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
   monthEnd.setHours(23, 59, 59, 999); // Set to end of day to include all jobs on last day
 
+  // Helper function to get the display date for a job (confirmed date takes priority)
+  const getJobDisplayDate = (job: Lead): string | null => {
+    const dateStr = job.confirmedDate || job.moveDate;
+    if (!dateStr) return null;
+    return dateStr;
+  };
+
   const jobsByDate = allJobs
     .filter(job => {
-      if (!job.moveDate) return false;
+      const dateStr = getJobDisplayDate(job);
+      if (!dateStr) return false;
       // Parse the ISO date string to avoid timezone issues
-      const dateParts = job.moveDate.split('T')[0].split('-');
+      const dateParts = dateStr.split('T')[0].split('-');
       const year = parseInt(dateParts[0]);
       const month = parseInt(dateParts[1]) - 1; // JS months are 0-indexed
       const day = parseInt(dateParts[2]);
@@ -99,8 +108,8 @@ export default function EmployeeHomePage() {
     })
     .reduce((acc, job) => {
       // Parse the ISO date string and extract year, month, day to avoid timezone issues
-      const moveDate = job.moveDate!;
-      const dateParts = moveDate.split('T')[0].split('-');
+      const dateStr = getJobDisplayDate(job)!;
+      const dateParts = dateStr.split('T')[0].split('-');
       const year = parseInt(dateParts[0]);
       const month = parseInt(dateParts[1]) - 1; // JS months are 0-indexed
       const day = parseInt(dateParts[2]);
@@ -273,8 +282,11 @@ export default function EmployeeHomePage() {
                 className={`text-[10px] px-1.5 py-0.5 rounded-md truncate font-medium ${
                   job.status === 'completed'
                     ? 'bg-green-500/20 text-green-300 border border-green-500/30'
-                    : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                    : job.confirmedDate
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30 border-dashed'
                 }`}
+                title={job.confirmedDate ? 'Confirmed' : 'Tentative'}
               >
                 {job.firstName}
               </div>
@@ -589,12 +601,23 @@ export default function EmployeeHomePage() {
                           <h3 className="font-semibold text-lg">
                             {job.firstName} {job.lastName}
                           </h3>
-                          <Badge
-                            variant={job.status === 'completed' ? 'default' : 'secondary'}
-                            className={job.status === 'completed' ? 'bg-green-600' : ''}
-                          >
-                            {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
-                          </Badge>
+                          <div className="flex gap-1">
+                            {job.confirmedDate ? (
+                              <Badge className="bg-green-600 text-white">
+                                Confirmed
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="border-amber-500 text-amber-600">
+                                Tentative
+                              </Badge>
+                            )}
+                            <Badge
+                              variant={job.status === 'completed' ? 'default' : 'secondary'}
+                              className={job.status === 'completed' ? 'bg-green-600' : ''}
+                            >
+                              {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
+                            </Badge>
+                          </div>
                         </div>
                         <div className="space-y-1 text-sm text-muted-foreground">
                           <div className="flex items-center gap-2">
