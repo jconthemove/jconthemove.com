@@ -27,7 +27,9 @@ import {
   MapPin,
   Phone,
   ArrowLeft,
-  Download
+  Download,
+  Upload,
+  FileSpreadsheet
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -80,6 +82,8 @@ export default function SnowRemovalPage() {
   const [activeTab, setActiveTab] = useState("customers");
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
   const [logModalOpen, setLogModalOpen] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [csvPreview, setCsvPreview] = useState<any[]>([]);
   const [editingCustomer, setEditingCustomer] = useState<SnowCustomer | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
@@ -189,6 +193,105 @@ export default function SnowRemovalPage() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
+
+  const importCsvMutation = useMutation({
+    mutationFn: (rows: any[]) => apiRequest("POST", "/api/snow/import-csv", { rows }),
+    onSuccess: async (response: Response) => {
+      const data = await response.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/snow/customers"] });
+      setImportModalOpen(false);
+      setCsvPreview([]);
+      toast({ 
+        title: "Import Complete", 
+        description: data.message
+      });
+    },
+    onError: (error: any) => {
+      toast({ title: "Import Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const parseCsvLine = (line: string): string[] => {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        result.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    result.push(current.trim());
+    return result;
+  };
+
+  const handleCsvFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 1024 * 1024) {
+      toast({ title: "Error", description: "File too large (max 1MB)", variant: "destructive" });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      const lines = text.split(/\r?\n/).filter(line => line.trim());
+      if (lines.length < 2) {
+        toast({ title: "Error", description: "CSV file appears empty", variant: "destructive" });
+        return;
+      }
+
+      if (lines.length > 101) {
+        toast({ title: "Error", description: "Too many rows (max 100 customers)", variant: "destructive" });
+        return;
+      }
+
+      const headers = parseCsvLine(lines[0]).map(h => h.toLowerCase().replace(/['"]/g, ''));
+      const nameIdx = headers.findIndex(h => h === 'name' || h === 'customer');
+      
+      if (nameIdx < 0) {
+        toast({ title: "Error", description: "CSV must have a 'name' or 'customer' column", variant: "destructive" });
+        return;
+      }
+
+      const addressIdx = headers.findIndex(h => h === 'address');
+      const cityIdx = headers.findIndex(h => h === 'city');
+      const phoneIdx = headers.findIndex(h => h === 'phone');
+      const priceIdx = headers.findIndex(h => h === 'price' || h === 'pricepervisit' || h === 'rate');
+      const notesIdx = headers.findIndex(h => h === 'notes' || h === 'note');
+      const prepaidIdx = headers.findIndex(h => h === 'prepaid');
+
+      const rows = lines.slice(1).map(line => {
+        const cols = parseCsvLine(line);
+        const name = (nameIdx >= 0 ? cols[nameIdx] : '').replace(/['"]/g, '').slice(0, 100);
+        return {
+          name,
+          address: (addressIdx >= 0 ? cols[addressIdx] : '').replace(/['"]/g, '').slice(0, 200),
+          city: (cityIdx >= 0 ? cols[cityIdx] : '').replace(/['"]/g, '').slice(0, 100),
+          phone: (phoneIdx >= 0 ? cols[phoneIdx] : '').replace(/['"]/g, '').slice(0, 20),
+          price: String(parseFloat((priceIdx >= 0 ? cols[priceIdx] : '0').replace(/['"$]/g, '')) || 0),
+          notes: (notesIdx >= 0 ? cols[notesIdx] : '').replace(/['"]/g, '').slice(0, 500),
+          prepaid: prepaidIdx >= 0 ? cols[prepaidIdx] : 'false',
+        };
+      }).filter(row => row.name);
+
+      setCsvPreview(rows);
+    };
+    reader.readAsText(file);
+  };
 
   // Customer form state
   const [customerForm, setCustomerForm] = useState({
@@ -379,7 +482,13 @@ export default function SnowRemovalPage() {
                   <CardDescription>Manage your recurring snow removal customers</CardDescription>
                 </div>
                 <div className="flex gap-2">
-                  {user?.role === 'admin' && customers.length < 5 && (
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setImportModalOpen(true)}
+                  >
+                    <Upload className="w-4 h-4 mr-2" /> Import CSV
+                  </Button>
+                  {customers.length < 5 && (
                     <Button 
                       variant="outline" 
                       onClick={() => seedCustomersMutation.mutate()}
@@ -714,6 +823,79 @@ export default function SnowRemovalPage() {
               <Button variant="outline" onClick={() => setLogModalOpen(false)}>Cancel</Button>
               <Button onClick={handleSaveLog} disabled={createLogMutation.isPending || !logForm.customerId}>
                 Log Service
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Import CSV Modal */}
+        <Dialog open={importModalOpen} onOpenChange={(open) => {
+          setImportModalOpen(open);
+          if (!open) setCsvPreview([]);
+        }}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <FileSpreadsheet className="w-5 h-5" />
+                Import Customers from CSV
+              </DialogTitle>
+              <DialogDescription>
+                Upload a CSV file exported from Google Sheets. Required column: "name". Optional: address, city, phone, price, notes, prepaid.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div>
+                <Label>Select CSV File</Label>
+                <Input 
+                  type="file" 
+                  accept=".csv" 
+                  onChange={handleCsvFile}
+                  className="mt-2"
+                />
+              </div>
+
+              {csvPreview.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Preview ({csvPreview.length} customers found)</Label>
+                  <div className="border rounded-lg max-h-60 overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted sticky top-0">
+                        <tr>
+                          <th className="p-2 text-left">Name</th>
+                          <th className="p-2 text-left">Address</th>
+                          <th className="p-2 text-right">Price</th>
+                          <th className="p-2 text-left">Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {csvPreview.map((row, idx) => (
+                          <tr key={idx} className="border-t">
+                            <td className="p-2 font-medium">{row.name}</td>
+                            <td className="p-2 text-muted-foreground">{row.address || '-'}</td>
+                            <td className="p-2 text-right">${row.price || '0'}</td>
+                            <td className="p-2 text-muted-foreground truncate max-w-[150px]">{row.notes || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => {
+                setImportModalOpen(false);
+                setCsvPreview([]);
+              }}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={() => importCsvMutation.mutate(csvPreview)}
+                disabled={csvPreview.length === 0 || importCsvMutation.isPending}
+              >
+                {importCsvMutation.isPending ? "Importing..." : `Import ${csvPreview.length} Customers`}
               </Button>
             </DialogFooter>
           </DialogContent>

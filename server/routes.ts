@@ -7448,6 +7448,70 @@ Thank you for your business!
     }
   });
 
+  // Import snow customers from CSV
+  app.post("/api/snow/import-csv", isAuthenticated, async (req: any, res) => {
+    try {
+      const allowedRoles = ['admin', 'employee', 'business_owner'];
+      if (!allowedRoles.includes(req.user?.role)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const { rows } = req.body;
+      if (!Array.isArray(rows) || rows.length === 0) {
+        return res.status(400).json({ error: "No data provided" });
+      }
+
+      if (rows.length > 100) {
+        return res.status(400).json({ error: "Too many rows (max 100)" });
+      }
+
+      // Validate row structure
+      for (const row of rows) {
+        if (typeof row !== 'object' || !row.name || typeof row.name !== 'string') {
+          return res.status(400).json({ error: "Invalid row data" });
+        }
+      }
+
+      const existingCustomers = await storage.getSnowCustomers();
+      const existingNames = new Set(existingCustomers.map(c => c.name.toLowerCase()));
+
+      const added: string[] = [];
+      const skipped: string[] = [];
+
+      for (const row of rows) {
+        const name = row.name?.trim();
+        if (!name) continue;
+
+        if (existingNames.has(name.toLowerCase())) {
+          skipped.push(name);
+          continue;
+        }
+
+        await storage.createSnowCustomer({
+          name,
+          address: row.address?.trim() || '',
+          city: row.city?.trim() || '',
+          phone: row.phone?.trim() || '',
+          pricePerVisit: parseFloat(row.price) || 0,
+          notes: row.notes?.trim() || '',
+          isPrepaid: row.prepaid === 'true' || row.prepaid === 'yes' || row.prepaid === '1',
+          isActive: true,
+        });
+        added.push(name);
+        existingNames.add(name.toLowerCase());
+      }
+
+      res.json({ 
+        message: `Imported ${added.length} customers, skipped ${skipped.length} duplicates`,
+        added,
+        skipped
+      });
+    } catch (error: any) {
+      console.error("Error importing CSV:", error);
+      res.status(500).json({ error: error.message || "Failed to import CSV" });
+    }
+  });
+
   // Get snow service types
   app.get("/api/snow/service-types", isAuthenticated, async (req: any, res) => {
     try {
