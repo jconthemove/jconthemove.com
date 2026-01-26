@@ -49,6 +49,7 @@ import RequestSwapPage from "@/pages/request-swap";
 import MiningPage from "@/pages/mining";
 import SnowRemovalPage from "@/pages/snow-removal";
 import MobilePreviewPage from "@/pages/mobile-preview";
+import PiJackpotPage from "@/pages/pi-jackpot";
 import { NotificationPrompt } from "@/components/notification-prompt";
 
 // Landing page for unauthenticated users
@@ -261,6 +262,9 @@ function Router() {
       
       {/* Reviews page - accessible to all */}
       <Route path="/reviews" component={ReviewsPage} />
+      
+      {/* Pi Jackpot - Pi Network lottery app landing page */}
+      <Route path="/pi-jackpot" component={PiJackpotPage} />
       
       {/* Lead detail - accessible without authentication (temporary for debugging) */}
       <Route path="/lead/:id">
