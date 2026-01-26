@@ -50,6 +50,7 @@ import MiningPage from "@/pages/mining";
 import SnowRemovalPage from "@/pages/snow-removal";
 import MobilePreviewPage from "@/pages/mobile-preview";
 import PiJackpotPage from "@/pages/pi-jackpot";
+import PrivacyPolicy from "@/pages/privacy";
 import { NotificationPrompt } from "@/components/notification-prompt";
 
 // Landing page for unauthenticated users
@@ -247,6 +248,9 @@ function Router() {
       
       {/* Terms of Service - accessible to all */}
       <Route path="/terms" component={TermsOfService} />
+      
+      {/* Privacy Policy - accessible to all */}
+      <Route path="/privacy" component={PrivacyPolicy} />
       
       {/* Quote page - accessible to all */}
       <Route path="/quote" component={QuotePage} />

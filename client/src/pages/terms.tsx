@@ -16,6 +16,38 @@ export default function TermsOfService() {
         <h1 className="text-4xl font-bold mb-8 text-white" data-testid="text-title">Terms of Service</h1>
         
         <div className="prose prose-invert max-w-none prose-headings:text-white prose-p:text-slate-300 prose-li:text-slate-300 prose-a:text-blue-400">
+          
+          <section className="mb-10 p-6 bg-purple-900/30 border border-purple-500/30 rounded-lg">
+            <h2 className="text-2xl font-semibold mb-4 text-purple-300">TERMS OF SERVICE (for Pi Jackpot)</h2>
+            <h3 className="text-xl font-medium mb-4 text-white">Terms of Service — JC's Pi Jackpot</h3>
+            
+            <p className="mb-4">
+              By using this application, you agree to the following terms:
+            </p>
+            
+            <ol className="list-decimal pl-6 mb-4 space-y-3">
+              <li>All transactions are denominated in Pi and processed through the official Pi SDK.</li>
+              <li>JC's Pi Jackpot does not guarantee winnings; all results are based on randomized drawing systems.</li>
+              <li>Entry fees are non-refundable once submitted.</li>
+              <li>Users must have an active Pi account to participate.</li>
+              <li>The app does not provide financial, gambling, or investment advice. It is for entertainment and community participation.</li>
+              <li>The app may update features, payouts, or rules at any time.</li>
+            </ol>
+            
+            <p className="mb-4 font-medium text-white">
+              If you do not agree to these terms, do not use the application.
+            </p>
+            
+            <div className="mt-6 pt-4 border-t border-purple-500/30">
+              <p className="mb-2">
+                Contact: <a href="mailto:upmichiganstatemovers@gmail.com" className="text-purple-400 hover:underline">upmichiganstatemovers@gmail.com</a>
+              </p>
+              <p className="text-slate-400">
+                <strong>Effective Date:</strong> Jan 2026
+              </p>
+            </div>
+          </section>
+          
           <section className="mb-8">
             <h2 className="text-2xl font-semibold mb-4" data-testid="text-section-age">Age Requirements</h2>
             <p className="mb-4">
@@ -110,7 +142,7 @@ export default function TermsOfService() {
           </section>
 
           <p className="text-sm text-muted-foreground mt-8">
-            Last updated: October 6, 2025
+            Last updated: January 2026
           </p>
         </div>
       </div>
