@@ -87,7 +87,10 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
       });
     }
 
-    console.log('[AUTH CHECK] ✅ User authenticated and approved');
+    // Attach user to request for use in route handlers
+    (req as any).user = dbUser;
+    
+    console.log('[AUTH CHECK] ✅ User authenticated and approved:', dbUser.role);
     return next();
   } catch (error) {
     console.error('[AUTH CHECK] Database error:', error);
