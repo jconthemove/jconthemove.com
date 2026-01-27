@@ -23,6 +23,7 @@ interface QuoteFormProps {
   variant?: "customer" | "employee";
   prefilledDate?: string;
   prefilledService?: string;
+  prefilledPromoCode?: string;
   onSuccess?: () => void;
   showRewardsInfo?: boolean;
 }
@@ -42,6 +43,7 @@ export default function QuoteForm({
   variant = "customer", 
   prefilledDate = "", 
   prefilledService = "",
+  prefilledPromoCode = "",
   onSuccess,
   showRewardsInfo = false
 }: QuoteFormProps) {
@@ -66,6 +68,7 @@ export default function QuoteForm({
       moveDate: prefilledDate,
       propertySize: "",
       details: "",
+      promoCode: prefilledPromoCode,
     },
   });
 
@@ -81,6 +84,12 @@ export default function QuoteForm({
       form.setValue('serviceType', prefilledService);
     }
   }, [prefilledService, form]);
+
+  useEffect(() => {
+    if (prefilledPromoCode) {
+      form.setValue('promoCode', prefilledPromoCode);
+    }
+  }, [prefilledPromoCode, form]);
 
   const handlePhotoUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -391,6 +400,17 @@ export default function QuoteForm({
               className={inputClasses}
               {...form.register("details")}
               data-testid="textarea-details"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="promoCode" className={labelClasses}>Promo Code (optional)</Label>
+            <Input
+              id="promoCode"
+              placeholder="Enter promo code for savings"
+              className={inputClasses}
+              {...form.register("promoCode")}
+              data-testid="input-promo-code"
             />
           </div>
 

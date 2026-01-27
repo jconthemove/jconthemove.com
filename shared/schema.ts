@@ -76,6 +76,9 @@ export const leads = pgTable("leads", {
   // Token distribution tracking
   completionRewardedAt: timestamp("completion_rewarded_at"), // Timestamp when job completion tokens were distributed (idempotency flag)
   
+  // Promo code for discounts
+  promoCode: text("promo_code"), // Customer-entered promo code for discounts
+  
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
 

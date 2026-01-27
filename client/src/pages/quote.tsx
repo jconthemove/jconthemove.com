@@ -9,16 +9,21 @@ export default function QuotePage() {
   const [location] = useLocation();
   const [prefilledService, setPrefilledService] = useState<string>("");
   const [prefilledDate, setPrefilledDate] = useState<string>("");
+  const [prefilledPromoCode, setPrefilledPromoCode] = useState<string>("");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const service = params.get('service');
     const date = params.get('date');
+    const promo = params.get('promo');
     if (service) {
       setPrefilledService(service);
     }
     if (date) {
       setPrefilledDate(date);
+    }
+    if (promo) {
+      setPrefilledPromoCode(promo);
     }
   }, [location]);
 
@@ -30,6 +35,7 @@ export default function QuotePage() {
   const handleSuccess = () => {
     setPrefilledService("");
     setPrefilledDate("");
+    setPrefilledPromoCode("");
   };
 
   return (
@@ -55,6 +61,7 @@ export default function QuotePage() {
           variant="customer"
           prefilledDate={prefilledDate}
           prefilledService={prefilledService}
+          prefilledPromoCode={prefilledPromoCode}
           onSuccess={handleSuccess}
         />
 
