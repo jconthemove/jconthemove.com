@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Truck, Trash2, Snowflake, Sparkles, Gift, ShoppingBag, Star, Users, Volume2, VolumeX } from "lucide-react";
+import { Truck, Trash2, Snowflake, Sparkles, Gift, ShoppingBag, Star, Users, Volume2, VolumeX, Gem } from "lucide-react";
 import { Link } from "wouter";
 
 export default function HomePage() {
@@ -167,6 +167,34 @@ export default function HomePage() {
               </Card>
             </Link>
           </div>
+        </div>
+      </section>
+
+      {/* Nature Made Jewls - Featured */}
+      <section className="py-6 px-4">
+        <div className="max-w-4xl mx-auto">
+          <Link href="/nature-made-jewls">
+            <Card className="group cursor-pointer overflow-hidden bg-gradient-to-r from-emerald-800 via-amber-700 to-emerald-800 border-2 border-amber-400/50 hover:border-amber-300 hover:shadow-2xl hover:shadow-amber-500/30 transition-all duration-500 hover:scale-[1.01]">
+              <CardContent className="p-6 md:p-8 flex items-center justify-between relative">
+                <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxjaXJjbGUgY3g9IjIwIiBjeT0iMjAiIHI9IjIiIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSIvPjwvZz48L3N2Zz4=')] opacity-50" />
+                <div className="flex items-center gap-4 relative z-10">
+                  <div className="bg-white/20 p-3 md:p-4 rounded-full backdrop-blur-sm group-hover:scale-110 transition-transform duration-300">
+                    <Gem className="h-8 w-8 md:h-10 md:w-10 text-amber-200" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl md:text-2xl font-serif font-bold text-white tracking-wide">Nature Made Jewls</h3>
+                    <p className="text-amber-100/90 text-sm md:text-base">Handcrafted jewelry from Michigan's UP</p>
+                  </div>
+                </div>
+                <div className="hidden md:flex items-center gap-2 text-amber-200 relative z-10">
+                  <span className="text-sm font-medium">Shop Now</span>
+                  <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                  </svg>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
         </div>
       </section>
 
