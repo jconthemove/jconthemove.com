@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
-import { ArrowLeft, Gem, Leaf, Search, Plus, X, Mail, Phone } from "lucide-react";
+import { ArrowLeft, Gem, Leaf, Search, Plus, ChevronLeft, ChevronRight, Mail, Phone, ShoppingCart, ImagePlus, X, Heart } from "lucide-react";
 
 interface JewelryItem {
   id: string;
@@ -30,7 +30,7 @@ interface JewelryItem {
 }
 
 const categories = [
-  { value: "all", label: "All Items" },
+  { value: "all", label: "All" },
   { value: "earrings", label: "Earrings" },
   { value: "necklaces", label: "Necklaces" },
   { value: "bracelets", label: "Bracelets" },
@@ -45,7 +45,10 @@ export default function NatureMadeJewls() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedItem, setSelectedItem] = useState<JewelryItem | null>(null);
+  const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
+  const [newPhotoUrl, setNewPhotoUrl] = useState("");
   const [newItem, setNewItem] = useState({
     title: "",
     shortDescription: "",
@@ -71,12 +74,13 @@ export default function NatureMadeJewls() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (item: typeof newItem) => apiRequest("POST", "/api/jewelry", item),
+    mutationFn: (item: any) => apiRequest("POST", "/api/jewelry", item),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/jewelry"] });
       setIsCreateOpen(false);
       setNewItem({ title: "", shortDescription: "", description: "", price: "", category: "", materials: "", imageUrl: "" });
-      toast({ title: "Item created successfully" });
+      setPhotoUrls([]);
+      toast({ title: "Item added!" });
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -88,269 +92,390 @@ export default function NatureMadeJewls() {
       toast({ title: "Title is required", variant: "destructive" });
       return;
     }
-    createMutation.mutate(newItem);
+    const itemData = {
+      ...newItem,
+      imageUrl: photoUrls[0] || newItem.imageUrl,
+      photos: photoUrls,
+    };
+    createMutation.mutate(itemData);
+  };
+
+  const addPhotoUrl = () => {
+    if (newPhotoUrl.trim() && photoUrls.length < 10) {
+      setPhotoUrls([...photoUrls, newPhotoUrl.trim()]);
+      setNewPhotoUrl("");
+    }
+  };
+
+  const removePhotoUrl = (index: number) => {
+    setPhotoUrls(photoUrls.filter((_, i) => i !== index));
+  };
+
+  const getItemPhotos = (item: JewelryItem) => {
+    const photos: string[] = [];
+    if (item.imageUrl) photos.push(item.imageUrl);
+    if (item.photos && Array.isArray(item.photos)) {
+      photos.push(...item.photos.filter((p: string) => p && !photos.includes(p)));
+    }
+    return photos.length > 0 ? photos : [];
+  };
+
+  const nextPhoto = () => {
+    if (selectedItem) {
+      const photos = getItemPhotos(selectedItem);
+      setCurrentPhotoIndex((prev) => (prev + 1) % photos.length);
+    }
+  };
+
+  const prevPhoto = () => {
+    if (selectedItem) {
+      const photos = getItemPhotos(selectedItem);
+      setCurrentPhotoIndex((prev) => (prev - 1 + photos.length) % photos.length);
+    }
+  };
+
+  const openItem = (item: JewelryItem) => {
+    setSelectedItem(item);
+    setCurrentPhotoIndex(0);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-emerald-950 via-emerald-900 to-stone-900">
-      <header className="p-6 flex items-center justify-between">
-        <Link href="/">
-          <Button variant="ghost" className="text-white/70 hover:text-white hover:bg-white/10">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back
-          </Button>
-        </Link>
-        <div className="flex items-center gap-2">
-          <a href="mailto:upmichiganstatemovers@gmail.com">
-            <Button variant="ghost" size="sm" className="text-emerald-300 hover:text-white">
-              <Mail className="h-4 w-4" />
+    <div className="min-h-screen bg-stone-100">
+      <header className="sticky top-0 z-50 bg-white/95 backdrop-blur border-b shadow-sm">
+        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
+          <Link href="/">
+            <Button variant="ghost" size="sm" className="text-stone-600">
+              <ArrowLeft className="h-4 w-4" />
             </Button>
-          </a>
-          <a href="tel:906-285-9312">
-            <Button variant="ghost" size="sm" className="text-emerald-300 hover:text-white">
-              <Phone className="h-4 w-4" />
-            </Button>
-          </a>
+          </Link>
+          <div className="flex items-center gap-2">
+            <Leaf className="w-5 h-5 text-emerald-600" />
+            <h1 className="font-serif text-xl font-bold text-stone-800">Nature Made Jewls</h1>
+            <Gem className="w-5 h-5 text-amber-500" />
+          </div>
+          <div className="flex items-center gap-2">
+            <a href="mailto:upmichiganstatemovers@gmail.com">
+              <Button variant="ghost" size="sm"><Mail className="h-4 w-4 text-stone-600" /></Button>
+            </a>
+            <a href="tel:906-285-9312">
+              <Button variant="ghost" size="sm"><Phone className="h-4 w-4 text-stone-600" /></Button>
+            </a>
+          </div>
         </div>
       </header>
 
-      <main className="container mx-auto px-4 pb-16">
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-2 mb-4">
-            <Leaf className="w-8 h-8 text-emerald-400" />
-            <Gem className="w-10 h-10 text-amber-400" />
-            <Leaf className="w-8 h-8 text-emerald-400 transform scale-x-[-1]" />
-          </div>
-          <h1 className="text-4xl md:text-5xl font-serif font-bold text-white mb-2">
-            Nature Made Jewls
-          </h1>
-          <p className="text-emerald-200">Handcrafted jewelry inspired by nature</p>
-        </div>
-
-        <div className="flex flex-col md:flex-row gap-4 mb-8 max-w-3xl mx-auto">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-emerald-400" />
-            <Input
-              placeholder="Search jewelry..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 bg-white/10 border-emerald-500/30 text-white placeholder:text-emerald-300/50"
-            />
-          </div>
-          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-            <SelectTrigger className="w-full md:w-48 bg-white/10 border-emerald-500/30 text-white">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
+      <div className="sticky top-14 z-40 bg-white border-b">
+        <div className="container mx-auto px-4 py-3">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-stone-400" />
+              <Input
+                placeholder="Search handcrafted jewelry..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 bg-stone-50 border-stone-200"
+              />
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1">
               {categories.map((cat) => (
-                <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {isAdmin && (
-            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-              <DialogTrigger asChild>
-                <Button className="bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-600 hover:to-emerald-700">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Item
+                <Button
+                  key={cat.value}
+                  variant={selectedCategory === cat.value ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedCategory(cat.value)}
+                  className={selectedCategory === cat.value 
+                    ? "bg-emerald-600 hover:bg-emerald-700 whitespace-nowrap" 
+                    : "border-stone-300 whitespace-nowrap"}
+                >
+                  {cat.label}
                 </Button>
-              </DialogTrigger>
-              <DialogContent className="bg-emerald-950 border-emerald-500/30 text-white max-w-md">
-                <DialogHeader>
-                  <DialogTitle className="text-white">Add New Item</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <Label className="text-emerald-200">Title *</Label>
-                    <Input
-                      value={newItem.title}
-                      onChange={(e) => setNewItem({ ...newItem, title: e.target.value })}
-                      className="bg-white/10 border-emerald-500/30 text-white"
-                      placeholder="Item name"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-emerald-200">Short Description</Label>
-                    <Input
-                      value={newItem.shortDescription}
-                      onChange={(e) => setNewItem({ ...newItem, shortDescription: e.target.value })}
-                      className="bg-white/10 border-emerald-500/30 text-white"
-                      placeholder="One line description"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-emerald-200">Category</Label>
-                    <Select value={newItem.category} onValueChange={(v) => setNewItem({ ...newItem, category: v })}>
-                      <SelectTrigger className="bg-white/10 border-emerald-500/30 text-white">
-                        <SelectValue placeholder="Select category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {categories.filter(c => c.value !== "all").map((cat) => (
-                          <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className="text-emerald-200">Price</Label>
-                    <Input
-                      value={newItem.price}
-                      onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
-                      className="bg-white/10 border-emerald-500/30 text-white"
-                      placeholder="$25.00"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-emerald-200">Materials</Label>
-                    <Input
-                      value={newItem.materials}
-                      onChange={(e) => setNewItem({ ...newItem, materials: e.target.value })}
-                      className="bg-white/10 border-emerald-500/30 text-white"
-                      placeholder="e.g., Sterling silver, turquoise"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-emerald-200">Image URL</Label>
-                    <Input
-                      value={newItem.imageUrl}
-                      onChange={(e) => setNewItem({ ...newItem, imageUrl: e.target.value })}
-                      className="bg-white/10 border-emerald-500/30 text-white"
-                      placeholder="https://..."
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-emerald-200">Full Description</Label>
-                    <Textarea
-                      value={newItem.description}
-                      onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
-                      className="bg-white/10 border-emerald-500/30 text-white"
-                      placeholder="Detailed description..."
-                      rows={3}
-                    />
-                  </div>
-                  <Button 
-                    onClick={handleCreate} 
-                    disabled={createMutation.isPending}
-                    className="w-full bg-gradient-to-r from-amber-500 to-emerald-600"
-                  >
-                    {createMutation.isPending ? "Creating..." : "Create Item"}
+              ))}
+            </div>
+            {isAdmin && (
+              <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+                <DialogTrigger asChild>
+                  <Button className="bg-gradient-to-r from-amber-500 to-emerald-600 whitespace-nowrap">
+                    <Plus className="h-4 w-4 mr-1" /> Add
                   </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-          )}
-        </div>
+                </DialogTrigger>
+                <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Add New Piece</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label>Title *</Label>
+                      <Input
+                        value={newItem.title}
+                        onChange={(e) => setNewItem({ ...newItem, title: e.target.value })}
+                        placeholder="e.g., Turquoise Drop Earrings"
+                      />
+                    </div>
+                    
+                    <div>
+                      <Label>Photos</Label>
+                      <div className="space-y-2">
+                        {photoUrls.map((url, index) => (
+                          <div key={index} className="flex gap-2 items-center">
+                            <img src={url} alt="" className="w-12 h-12 object-cover rounded" />
+                            <span className="text-sm text-stone-600 truncate flex-1">{url}</span>
+                            <Button variant="ghost" size="sm" onClick={() => removePhotoUrl(index)}>
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                        <div className="flex gap-2">
+                          <Input
+                            value={newPhotoUrl}
+                            onChange={(e) => setNewPhotoUrl(e.target.value)}
+                            placeholder="Paste image URL..."
+                            className="flex-1"
+                          />
+                          <Button variant="outline" onClick={addPhotoUrl} disabled={photoUrls.length >= 10}>
+                            <ImagePlus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <p className="text-xs text-stone-500">{photoUrls.length}/10 photos</p>
+                      </div>
+                    </div>
 
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label>Price</Label>
+                        <Input
+                          value={newItem.price}
+                          onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
+                          placeholder="25.00"
+                        />
+                      </div>
+                      <div>
+                        <Label>Category</Label>
+                        <Select value={newItem.category} onValueChange={(v) => setNewItem({ ...newItem, category: v })}>
+                          <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                          <SelectContent>
+                            {categories.filter(c => c.value !== "all").map((cat) => (
+                              <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label>Short Description</Label>
+                      <Input
+                        value={newItem.shortDescription}
+                        onChange={(e) => setNewItem({ ...newItem, shortDescription: e.target.value })}
+                        placeholder="One line for thumbnail"
+                      />
+                    </div>
+
+                    <div>
+                      <Label>Materials</Label>
+                      <Input
+                        value={newItem.materials}
+                        onChange={(e) => setNewItem({ ...newItem, materials: e.target.value })}
+                        placeholder="Sterling silver, turquoise..."
+                      />
+                    </div>
+
+                    <div>
+                      <Label>Full Description</Label>
+                      <Textarea
+                        value={newItem.description}
+                        onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
+                        placeholder="Tell the story of this piece..."
+                        rows={3}
+                      />
+                    </div>
+
+                    <Button onClick={handleCreate} disabled={createMutation.isPending} className="w-full bg-emerald-600 hover:bg-emerald-700">
+                      {createMutation.isPending ? "Adding..." : "Add Item"}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <main className="container mx-auto px-2 py-6">
         {isLoading ? (
-          <div className="text-center text-emerald-300 py-12">Loading...</div>
+          <div className="text-center text-stone-500 py-16">Loading beautiful pieces...</div>
         ) : items.length === 0 ? (
           <div className="text-center py-16">
-            <Gem className="w-16 h-16 mx-auto text-emerald-500/50 mb-4" />
-            <p className="text-emerald-300 text-lg">No items found</p>
-            <p className="text-emerald-400/60 text-sm mt-2">
-              {searchQuery ? "Try a different search term" : "Check back soon for new pieces"}
+            <Gem className="w-16 h-16 mx-auto text-stone-300 mb-4" />
+            <p className="text-stone-500 text-lg">No items found</p>
+            <p className="text-stone-400 text-sm mt-2">
+              {searchQuery ? "Try a different search" : "New pieces coming soon!"}
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {items.map((item) => (
-              <Card 
-                key={item.id}
-                className="bg-white/5 border-emerald-500/20 hover:border-amber-400/50 transition-all cursor-pointer overflow-hidden group"
-                onClick={() => setSelectedItem(item)}
-              >
-                <div className="aspect-square bg-gradient-to-br from-emerald-800/50 to-stone-800/50 relative overflow-hidden">
-                  {item.imageUrl ? (
-                    <img 
-                      src={item.imageUrl} 
-                      alt={item.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Gem className="w-12 h-12 text-emerald-500/50" />
-                    </div>
-                  )}
-                  {item.featured && (
-                    <span className="absolute top-2 left-2 bg-amber-500 text-white text-xs px-2 py-1 rounded">Featured</span>
-                  )}
-                  {!item.inStock && (
-                    <span className="absolute top-2 right-2 bg-red-500 text-white text-xs px-2 py-1 rounded">Sold</span>
-                  )}
-                </div>
-                <CardContent className="p-3">
-                  <h3 className="font-medium text-white truncate">{item.title}</h3>
-                  <p className="text-emerald-300/80 text-sm truncate">{item.shortDescription || item.category || "Handcrafted piece"}</p>
-                  {item.price && (
-                    <p className="text-amber-400 font-semibold mt-1">${item.price}</p>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
+          <div className="columns-2 md:columns-3 lg:columns-4 xl:columns-5 gap-3 space-y-3">
+            {items.map((item) => {
+              const photos = getItemPhotos(item);
+              const randomHeight = Math.random() > 0.5 ? 'aspect-[3/4]' : 'aspect-square';
+              
+              return (
+                <Card
+                  key={item.id}
+                  className="break-inside-avoid mb-3 overflow-hidden cursor-pointer group hover:shadow-xl transition-all border-0 bg-white"
+                  onClick={() => openItem(item)}
+                >
+                  <div className={`${randomHeight} relative overflow-hidden bg-stone-100`}>
+                    {photos.length > 0 ? (
+                      <img
+                        src={photos[0]}
+                        alt={item.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Gem className="w-12 h-12 text-stone-300" />
+                      </div>
+                    )}
+                    {photos.length > 1 && (
+                      <span className="absolute top-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded-full">
+                        +{photos.length - 1}
+                      </span>
+                    )}
+                    {item.featured && (
+                      <Heart className="absolute top-2 left-2 w-5 h-5 text-rose-500 fill-rose-500" />
+                    )}
+                    {!item.inStock && (
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                        <span className="bg-white text-stone-800 px-3 py-1 rounded-full text-sm font-medium">Sold</span>
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                  <div className="p-3">
+                    <h3 className="font-medium text-stone-800 line-clamp-1">{item.title}</h3>
+                    <p className="text-stone-500 text-sm line-clamp-1">{item.shortDescription || item.category || "Handcrafted"}</p>
+                    {item.price && (
+                      <p className="text-emerald-600 font-semibold mt-1">${item.price}</p>
+                    )}
+                  </div>
+                </Card>
+              );
+            })}
           </div>
         )}
+      </main>
 
-        <Dialog open={!!selectedItem} onOpenChange={() => setSelectedItem(null)}>
-          <DialogContent className="bg-emerald-950 border-emerald-500/30 text-white max-w-lg">
-            {selectedItem && (
-              <>
-                <DialogHeader>
-                  <DialogTitle className="text-white text-xl">{selectedItem.title}</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  {selectedItem.imageUrl && (
-                    <div className="aspect-square rounded-lg overflow-hidden bg-stone-800">
-                      <img 
-                        src={selectedItem.imageUrl} 
-                        alt={selectedItem.title}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  )}
+      <Dialog open={!!selectedItem} onOpenChange={() => setSelectedItem(null)}>
+        <DialogContent className="max-w-2xl max-h-[95vh] overflow-y-auto p-0">
+          {selectedItem && (
+            <>
+              <div className="relative">
+                {getItemPhotos(selectedItem).length > 0 ? (
+                  <div className="relative aspect-square bg-stone-100">
+                    <img
+                      src={getItemPhotos(selectedItem)[currentPhotoIndex]}
+                      alt={selectedItem.title}
+                      className="w-full h-full object-contain"
+                    />
+                    {getItemPhotos(selectedItem).length > 1 && (
+                      <>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); prevPhoto(); }}
+                          className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white rounded-full p-2 shadow-lg"
+                        >
+                          <ChevronLeft className="h-5 w-5" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); nextPhoto(); }}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white rounded-full p-2 shadow-lg"
+                        >
+                          <ChevronRight className="h-5 w-5" />
+                        </button>
+                        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
+                          {getItemPhotos(selectedItem).map((_, i) => (
+                            <button
+                              key={i}
+                              onClick={(e) => { e.stopPropagation(); setCurrentPhotoIndex(i); }}
+                              className={`w-2 h-2 rounded-full transition-colors ${i === currentPhotoIndex ? 'bg-emerald-500' : 'bg-white/60'}`}
+                            />
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div className="aspect-video bg-stone-100 flex items-center justify-center">
+                    <Gem className="w-20 h-20 text-stone-300" />
+                  </div>
+                )}
+              </div>
+              
+              <div className="p-6 space-y-4">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h2 className="text-2xl font-serif font-bold text-stone-800">{selectedItem.title}</h2>
+                    {selectedItem.category && (
+                      <p className="text-emerald-600 capitalize">{selectedItem.category}</p>
+                    )}
+                  </div>
                   {selectedItem.price && (
-                    <p className="text-2xl font-bold text-amber-400">${selectedItem.price}</p>
+                    <p className="text-2xl font-bold text-emerald-600">${selectedItem.price}</p>
                   )}
-                  {selectedItem.category && (
-                    <p className="text-emerald-300 capitalize">{selectedItem.category}</p>
+                </div>
+                
+                {selectedItem.materials && (
+                  <div>
+                    <p className="text-sm text-stone-500">Materials</p>
+                    <p className="text-stone-700">{selectedItem.materials}</p>
+                  </div>
+                )}
+                
+                {selectedItem.description && (
+                  <div>
+                    <p className="text-sm text-stone-500">About this piece</p>
+                    <p className="text-stone-700 whitespace-pre-wrap">{selectedItem.description}</p>
+                  </div>
+                )}
+                
+                <div className="pt-4 border-t space-y-3">
+                  {selectedItem.price && selectedItem.inStock !== false && (
+                    <Button className="w-full bg-emerald-600 hover:bg-emerald-700 py-6 text-lg" disabled>
+                      <ShoppingCart className="h-5 w-5 mr-2" />
+                      Buy Now - Coming Soon!
+                    </Button>
                   )}
-                  {selectedItem.materials && (
-                    <div>
-                      <p className="text-emerald-400 text-sm">Materials:</p>
-                      <p className="text-white">{selectedItem.materials}</p>
-                    </div>
-                  )}
-                  {selectedItem.description && (
-                    <div>
-                      <p className="text-emerald-400 text-sm">Description:</p>
-                      <p className="text-emerald-100">{selectedItem.description}</p>
-                    </div>
-                  )}
-                  <div className="pt-4 border-t border-emerald-500/30">
-                    <p className="text-emerald-300 text-sm mb-3">Interested in this piece?</p>
-                    <div className="flex gap-2">
-                      <a href={`mailto:upmichiganstatemovers@gmail.com?subject=Inquiry: ${selectedItem.title}`} className="flex-1">
-                        <Button className="w-full bg-gradient-to-r from-amber-500 to-emerald-600">
-                          <Mail className="h-4 w-4 mr-2" />
-                          Contact Us
-                        </Button>
-                      </a>
-                      <a href="tel:906-285-9312">
-                        <Button variant="outline" className="border-emerald-500 text-emerald-300">
-                          <Phone className="h-4 w-4" />
-                        </Button>
-                      </a>
-                    </div>
+                  <div className="flex gap-2">
+                    <a href={`mailto:upmichiganstatemovers@gmail.com?subject=Inquiry: ${selectedItem.title}`} className="flex-1">
+                      <Button variant="outline" className="w-full border-emerald-600 text-emerald-600 hover:bg-emerald-50">
+                        <Mail className="h-4 w-4 mr-2" />
+                        Contact to Purchase
+                      </Button>
+                    </a>
+                    <a href="tel:906-285-9312">
+                      <Button variant="outline" className="border-stone-300">
+                        <Phone className="h-4 w-4" />
+                      </Button>
+                    </a>
                   </div>
                 </div>
-              </>
-            )}
-          </DialogContent>
-        </Dialog>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
-        <footer className="text-center mt-16 pt-8 border-t border-emerald-500/20">
-          <p className="text-emerald-300 text-sm">Upper Peninsula, Michigan</p>
-        </footer>
-      </main>
+      <footer className="bg-white border-t py-8 mt-8">
+        <div className="container mx-auto px-4 text-center">
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <Leaf className="w-5 h-5 text-emerald-600" />
+            <span className="font-serif font-bold text-stone-800">Nature Made Jewls</span>
+            <Gem className="w-5 h-5 text-amber-500" />
+          </div>
+          <p className="text-stone-500 text-sm">Handcrafted in Michigan's Upper Peninsula</p>
+          <p className="text-stone-400 text-xs mt-2">
+            Part of the <Link href="/"><span className="text-emerald-600 hover:underline">JC ON THE MOVE</span></Link> family
+          </p>
+        </div>
+      </footer>
     </div>
   );
 }
