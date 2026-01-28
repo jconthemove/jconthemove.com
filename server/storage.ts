@@ -216,6 +216,13 @@ export interface IStorage {
   updateSnowServiceLog(id: string, updates: Partial<InsertSnowServiceLog>): Promise<SnowServiceLog | undefined>;
   deleteSnowServiceLog(id: string): Promise<boolean>;
   getSnowMonthlySummary(monthKey: string): Promise<{ customerId: string; customerName: string; visits: number; totalAmount: number; paidAmount: number }[]>;
+  
+  // Jewelry items
+  getJewelryItems(status?: string, category?: string): Promise<any[]>;
+  getJewelryItem(id: string): Promise<any | undefined>;
+  createJewelryItem(item: any): Promise<any>;
+  updateJewelryItem(id: string, updates: any): Promise<any | undefined>;
+  deleteJewelryItem(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2722,6 +2729,49 @@ export class DatabaseStorage implements IStorage {
       totalAmount: stats.totalAmount,
       paidAmount: stats.paidAmount
     }));
+  }
+  
+  // Jewelry items
+  async getJewelryItems(status?: string, category?: string): Promise<any[]> {
+    const { jewelryItems } = await import("@shared/schema");
+    let query = db.select().from(jewelryItems);
+    
+    const conditions = [];
+    if (status) {
+      conditions.push(eq(jewelryItems.status, status));
+    }
+    if (category) {
+      conditions.push(eq(jewelryItems.category, category));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    return query.orderBy(desc(jewelryItems.createdAt));
+  }
+  
+  async getJewelryItem(id: string): Promise<any | undefined> {
+    const { jewelryItems } = await import("@shared/schema");
+    const [item] = await db.select().from(jewelryItems).where(eq(jewelryItems.id, id));
+    return item;
+  }
+  
+  async createJewelryItem(item: any): Promise<any> {
+    const { jewelryItems } = await import("@shared/schema");
+    const [created] = await db.insert(jewelryItems).values(item).returning();
+    return created;
+  }
+  
+  async updateJewelryItem(id: string, updates: any): Promise<any | undefined> {
+    const { jewelryItems } = await import("@shared/schema");
+    const [updated] = await db.update(jewelryItems).set(updates).where(eq(jewelryItems.id, id)).returning();
+    return updated;
+  }
+  
+  async deleteJewelryItem(id: string): Promise<void> {
+    const { jewelryItems } = await import("@shared/schema");
+    await db.delete(jewelryItems).where(eq(jewelryItems.id, id));
   }
 }
 

@@ -7852,6 +7852,103 @@ Thank you for your business!
     }
   });
 
+  // ==================== JEWELRY ITEMS API ====================
+  
+  // Get all jewelry items (public)
+  app.get("/api/jewelry", async (req: any, res) => {
+    try {
+      const { status, category, search } = req.query;
+      let items = await storage.getJewelryItems(status || 'active', category || undefined);
+      
+      // Filter by search term if provided
+      if (search) {
+        const searchLower = search.toLowerCase();
+        items = items.filter((item: any) => 
+          item.title?.toLowerCase().includes(searchLower) ||
+          item.description?.toLowerCase().includes(searchLower) ||
+          item.shortDescription?.toLowerCase().includes(searchLower) ||
+          item.materials?.toLowerCase().includes(searchLower) ||
+          item.category?.toLowerCase().includes(searchLower)
+        );
+      }
+      
+      res.json(items);
+    } catch (error: any) {
+      console.error("Error fetching jewelry items:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch jewelry items" });
+    }
+  });
+  
+  // Get single jewelry item (public)
+  app.get("/api/jewelry/:id", async (req: any, res) => {
+    try {
+      const item = await storage.getJewelryItem(req.params.id);
+      if (!item) {
+        return res.status(404).json({ error: "Item not found" });
+      }
+      res.json(item);
+    } catch (error: any) {
+      console.error("Error fetching jewelry item:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch jewelry item" });
+    }
+  });
+  
+  // Create jewelry item (requires auth - admin/business_owner only)
+  app.post("/api/jewelry", isAuthenticated, async (req: any, res) => {
+    try {
+      const allowedRoles = ['admin', 'business_owner'];
+      if (!allowedRoles.includes(req.user?.role)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      const { title } = req.body;
+      if (!title) {
+        return res.status(400).json({ error: "Title is required" });
+      }
+      
+      const item = await storage.createJewelryItem(req.body);
+      res.status(201).json(item);
+    } catch (error: any) {
+      console.error("Error creating jewelry item:", error);
+      res.status(500).json({ error: error.message || "Failed to create jewelry item" });
+    }
+  });
+  
+  // Update jewelry item
+  app.patch("/api/jewelry/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const allowedRoles = ['admin', 'business_owner'];
+      if (!allowedRoles.includes(req.user?.role)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      const item = await storage.updateJewelryItem(req.params.id, req.body);
+      if (!item) {
+        return res.status(404).json({ error: "Item not found" });
+      }
+      res.json(item);
+    } catch (error: any) {
+      console.error("Error updating jewelry item:", error);
+      res.status(500).json({ error: error.message || "Failed to update jewelry item" });
+    }
+  });
+  
+  // Delete jewelry item
+  app.delete("/api/jewelry/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const allowedRoles = ['admin', 'business_owner'];
+      if (!allowedRoles.includes(req.user?.role)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      await storage.deleteJewelryItem(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error deleting jewelry item:", error);
+      res.status(500).json({ error: error.message || "Failed to delete jewelry item" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
