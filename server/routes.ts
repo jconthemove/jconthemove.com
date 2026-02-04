@@ -7917,7 +7917,7 @@ Thank you for your business!
   // Update jewelry item
   app.patch("/api/jewelry/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const allowedRoles = ['admin', 'business_owner'];
+      const allowedRoles = ['admin', 'business_owner', 'employee'];
       if (!allowedRoles.includes(req.user?.role)) {
         return res.status(403).json({ error: "Access denied" });
       }
@@ -7936,7 +7936,7 @@ Thank you for your business!
   // Delete jewelry item
   app.delete("/api/jewelry/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const allowedRoles = ['admin', 'business_owner'];
+      const allowedRoles = ['admin', 'business_owner', 'employee'];
       if (!allowedRoles.includes(req.user?.role)) {
         return res.status(403).json({ error: "Access denied" });
       }
