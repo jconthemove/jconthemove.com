@@ -1,0 +1,124 @@
+2026-02-04 16:10:03.18
+b7e41d3d
+User
+[AUTH CHECK] Path: /api/auth/user
+2026-02-04 16:10:03.19
+b7e41d3d
+User
+10:10:03 PM [express] GET /api/auth/user 401 in 6ms :: {"message":"Unauthorized"}
+2026-02-04 16:10:21.48
+b7e41d3d
+User
+[AUTH CHECK] Session ID: 6LmZGJu4ekJ2CQLJt0Z6p7wmGko1w9Ff
+2026-02-04 16:10:21.48
+b7e41d3d
+User
+[AUTH CHECK] Path: /api/auth/user
+2026-02-04 16:10:21.48
+b7e41d3d
+User
+[AUTH CHECK] ❌ No session user ID found
+2026-02-04 16:10:21.48
+b7e41d3d
+User
+10:10:21 PM [express] GET /api/auth/user 401 in 2ms :: {"message":"Unauthorized"}
+2026-02-04 16:10:23.06
+b7e41d3d
+User
+10:10:23 PM [express] GET /api/jewelry 304 in 685ms :: []
+2026-02-04 16:10:32.68
+b7e41d3d
+User
+10:10:32 PM [express] POST /api/auth/employee/login 200 in 1253ms :: {"success":true,"user":{"id":"47…
+2026-02-04 16:10:32.68
+b7e41d3d
+User
+[COOKIE] Set-Cookie header sent: [
+2026-02-04 16:10:32.68
+b7e41d3d
+User
+'connect.sid=s%3AR2LKnCqOFb93T65tNOoMaYN2g_ecFHrP.FWL0HqMjX60LESmVtUsoumut%2FIxm2O3rk0Swn1qxkoc; Domain=.jconthemove.com; Path=/; Expires=Tue, 05 May 2026 22:10:32 GMT; HttpOnly; Secure; SameSite=Lax'
+2026-02-04 16:10:32.68
+b7e41d3d
+User
+]
+2026-02-04 16:10:33.07
+b7e41d3d
+User
+[AUTH CHECK] ❌ No session user ID found
+2026-02-04 16:10:33.07
+b7e41d3d
+User
+[AUTH CHECK] Path: /api/auth/user
+2026-02-04 16:10:33.07
+b7e41d3d
+User
+[AUTH CHECK] Session ID: 6wyy_-BdOPTJ8YtiDC4QLXszfIRESEc4
+2026-02-04 16:10:33.07
+b7e41d3d
+User
+10:10:33 PM [express] GET /api/auth/user 401 in 2ms :: {"message":"Unauthorized"}
+2026-02-04 16:10:33.16
+b7e41d3d
+User
+[AUTH CHECK] Session ID: QYn0CD4jixifdNLi79dr8c5PyCxoYYIY
+2026-02-04 16:10:33.16
+b7e41d3d
+User
+[AUTH CHECK] Path: /api/auth/user
+2026-02-04 16:10:33.16
+b7e41d3d
+User
+[AUTH CHECK] ❌ No session user ID found
+2026-02-04 16:10:33.16
+b7e41d3d
+User
+10:10:33 PM [express] GET /api/auth/user 401 in 2ms :: {"message":"Unauthorized"}
+2026-02-04 16:10:57.03
+b7e41d3d
+User
+10:10:57 PM [express] POST /api/auth/employee/login 200 in 1110ms :: {"success":true,"user":{"id":"47…
+2026-02-04 16:10:57.03
+b7e41d3d
+User
+]
+2026-02-04 16:10:57.03
+b7e41d3d
+User
+[COOKIE] Set-Cookie header sent: [
+2026-02-04 16:10:57.03
+b7e41d3d
+User
+'connect.sid=s%3ApwiEWBTGfXnwSaxcRZckNQooFm8kv3sc.1Bc%2FY8efoM%2BNBzj7VaFLXVCEaW7PTtbJoguNA8ds8l0; Domain=.jconthemove.com; Path=/; Expires=Tue, 05 May 2026 22:10:56 GMT; HttpOnly; Secure; SameSite=Lax'
+2026-02-04 16:10:57.22
+b7e41d3d
+User
+[AUTH CHECK] ❌ No session user ID found
+2026-02-04 16:10:57.22
+b7e41d3d
+User
+[AUTH CHECK] Session ID: pX7qjWHU50OCc7iL6wcXfRf8gkWNSl3z
+2026-02-04 16:10:57.22
+b7e41d3d
+User
+[AUTH CHECK] Path: /api/auth/user
+2026-02-04 16:10:57.23
+b7e41d3d
+User
+10:10:57 PM [express] GET /api/auth/user 401 in 1ms :: {"message":"Unauthorized"}
+2026-02-04 16:10:57.33
+b7e41d3d
+User
+[AUTH CHECK] ❌ No session user ID found
+2026-02-04 16:10:57.33
+b7e41d3d
+User
+[AUTH CHECK] Path: /api/auth/user
+2026-02-04 16:10:57.33
+b7e41d3d
+User
+[AUTH CHECK] Session ID: PiWmIggzBZTe5-oiYjEjjmeZ-fX44AdW
+2026-02-04 16:10:57.33
+b7e41d3d
+User
+10:10:57 PM [express] GET /api/auth/user 401 in 1ms :: {"message":"Unauthorized"}

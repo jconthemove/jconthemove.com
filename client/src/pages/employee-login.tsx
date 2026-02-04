@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useLocation } from "wouter";
+import { useState, useMemo } from "react";
+import { useLocation, useSearch } from "wouter";
 import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,11 +11,17 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export default function EmployeeLogin() {
   const [, setLocation] = useLocation();
+  const searchString = useSearch();
   const { toast } = useToast();
   const [formData, setFormData] = useState({
     email: "",
     password: "",
   });
+  
+  const redirectUrl = useMemo(() => {
+    const params = new URLSearchParams(searchString);
+    return params.get('redirect') || '/';
+  }, [searchString]);
 
   const loginMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
@@ -39,7 +45,7 @@ export default function EmployeeLogin() {
       if (data.user.status === "pending") {
         setLocation("/pending-approval");
       } else {
-        setLocation("/");
+        setLocation(redirectUrl);
       }
     },
     onError: (error: any) => {

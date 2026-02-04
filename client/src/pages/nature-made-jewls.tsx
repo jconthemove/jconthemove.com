@@ -321,7 +321,7 @@ export default function NatureMadeJewls() {
             )}
             {!user && (
               <div className="mt-6">
-                <Link href="/employee-login">
+                <Link href="/employee-login?redirect=/nature-made-jewls">
                   <Button variant="outline" className="border-emerald-600 text-emerald-600">
                     Login to Add Items
                   </Button>
