@@ -60,6 +60,7 @@ export default function NatureMadeJewls() {
   });
 
   const isAdmin = user?.role === 'admin' || user?.role === 'business_owner';
+  const canAdd = isAdmin || user?.role === 'employee';
 
   const { data: items = [], isLoading } = useQuery<JewelryItem[]>({
     queryKey: ["/api/jewelry", { category: selectedCategory !== "all" ? selectedCategory : undefined, search: searchQuery }],
@@ -191,7 +192,7 @@ export default function NatureMadeJewls() {
                 </Button>
               ))}
             </div>
-            {isAdmin && (
+            {canAdd && (
               <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
                 <DialogTrigger asChild>
                   <Button className="bg-gradient-to-r from-amber-500 to-emerald-600 whitespace-nowrap">
@@ -310,6 +311,23 @@ export default function NatureMadeJewls() {
             <p className="text-stone-400 text-sm mt-2">
               {searchQuery ? "Try a different search" : "New pieces coming soon!"}
             </p>
+            {canAdd && (
+              <Button 
+                onClick={() => setIsCreateOpen(true)}
+                className="mt-6 bg-gradient-to-r from-amber-500 to-emerald-600"
+              >
+                <Plus className="h-4 w-4 mr-2" /> Add Your First Item
+              </Button>
+            )}
+            {!user && (
+              <div className="mt-6">
+                <Link href="/employee-login">
+                  <Button variant="outline" className="border-emerald-600 text-emerald-600">
+                    Login to Add Items
+                  </Button>
+                </Link>
+              </div>
+            )}
           </div>
         ) : (
           <div className="columns-2 md:columns-3 lg:columns-4 xl:columns-5 gap-3 space-y-3">
