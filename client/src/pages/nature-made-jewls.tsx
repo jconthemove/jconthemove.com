@@ -220,7 +220,7 @@ export default function NatureMadeJewls() {
                           <div key={index} className="flex gap-2 items-center">
                             <img src={url} alt="" className="w-12 h-12 object-cover rounded" />
                             <span className="text-sm text-stone-600 truncate flex-1">{url}</span>
-                            <Button variant="ghost" size="sm" onClick={() => removePhotoUrl(index)}>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => removePhotoUrl(index)}>
                               <X className="h-4 w-4" />
                             </Button>
                           </div>
@@ -232,7 +232,7 @@ export default function NatureMadeJewls() {
                             placeholder="Paste image URL..."
                             className="flex-1"
                           />
-                          <Button variant="outline" onClick={addPhotoUrl} disabled={photoUrls.length >= 10}>
+                          <Button type="button" variant="outline" onClick={addPhotoUrl} disabled={photoUrls.length >= 10}>
                             <ImagePlus className="h-4 w-4" />
                           </Button>
                         </div>
