@@ -34,12 +34,12 @@ export default function EmployeeLogin() {
         description: `Logged in as ${data.user.firstName} ${data.user.lastName}`,
       });
 
-      // Invalidate and refetch auth query before redirecting
-      await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      await queryClient.refetchQueries({ queryKey: ["/api/auth/user"] });
+      // Set user data directly in cache instead of refetching
+      // This avoids race condition where cookie isn't set yet
+      queryClient.setQueryData(["/api/auth/user"], data.user);
       
-      // Small delay to ensure state updates
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Wait for cookie to be set before any potential refetches
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       // Redirect based on status
       if (data.user.status === "pending") {
