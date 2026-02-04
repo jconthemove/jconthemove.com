@@ -14,9 +14,11 @@ export function getSession() {
   
   // Cookie security configuration
   const isProduction = process.env.NODE_ENV === 'production';
-  const cookieDomain = process.env.COOKIE_DOMAIN || (isProduction ? '.jconthemove.com' : undefined);
+  // Don't set a specific domain - let the cookie default to the current host
+  // This allows it to work on both jconthemove.com and jconthemove.replit.app
+  const cookieDomain = process.env.COOKIE_DOMAIN || undefined;
   
-  console.log(`[SESSION] Cookie configuration: secure=${isProduction}, domain=${cookieDomain || 'default'}, environment=${process.env.NODE_ENV}`);
+  console.log(`[SESSION] Cookie configuration: secure=${isProduction}, domain=${cookieDomain || 'auto'}, environment=${process.env.NODE_ENV}`);
   
   return session({
     secret: process.env.SESSION_SECRET!,
