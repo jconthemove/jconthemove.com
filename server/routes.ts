@@ -7893,10 +7893,10 @@ Thank you for your business!
     }
   });
   
-  // Create jewelry item (requires auth - admin/business_owner only)
+  // Create jewelry item (requires auth - admin/business_owner/employee)
   app.post("/api/jewelry", isAuthenticated, async (req: any, res) => {
     try {
-      const allowedRoles = ['admin', 'business_owner'];
+      const allowedRoles = ['admin', 'business_owner', 'employee'];
       if (!allowedRoles.includes(req.user?.role)) {
         return res.status(403).json({ error: "Access denied" });
       }
