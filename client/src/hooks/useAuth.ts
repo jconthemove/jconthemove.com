@@ -10,6 +10,7 @@ export function useAuth() {
       try {
         const response = await fetch("/api/auth/user", { 
           cache: 'no-store',
+          credentials: 'include',
           headers: {
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Pragma': 'no-cache'

@@ -73,6 +73,13 @@ export default function Header() {
                           Shop
                         </Link>
                         <Link
+                          href="/nature-made-jewls"
+                          className="bg-gradient-to-r from-emerald-600 to-amber-500 bg-clip-text text-transparent px-3 py-2 rounded-md text-sm font-bold transition-colors"
+                          data-testid="button-jewls"
+                        >
+                          Jewls
+                        </Link>
+                        <Link
                           href="/rewards"
                           className="text-muted-foreground hover:text-primary px-3 py-2 rounded-md text-sm font-medium transition-colors"
                           data-testid="button-rewards"
@@ -105,6 +112,13 @@ export default function Header() {
                           data-testid="button-shop"
                         >
                           Shop
+                        </Link>
+                        <Link
+                          href="/nature-made-jewls"
+                          className="bg-gradient-to-r from-emerald-600 to-amber-500 bg-clip-text text-transparent px-3 py-2 rounded-md text-sm font-bold transition-colors"
+                          data-testid="button-jewls"
+                        >
+                          Jewls
                         </Link>
                       </>
                     )}
@@ -279,6 +293,14 @@ export default function Header() {
                         onClick={() => setMobileMenuOpen(false)}
                       >
                         Shop
+                      </Link>
+                      <Link
+                        href="/nature-made-jewls"
+                        className="bg-gradient-to-r from-emerald-600 to-amber-500 bg-clip-text text-transparent px-3 py-2 rounded-md text-sm font-bold transition-colors text-left"
+                        data-testid="button-mobile-jewls"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        Jewls
                       </Link>
                     </>
                   )}

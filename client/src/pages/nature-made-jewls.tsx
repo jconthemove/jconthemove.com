@@ -68,7 +68,7 @@ export default function NatureMadeJewls() {
       const params = new URLSearchParams();
       if (selectedCategory !== "all") params.append("category", selectedCategory);
       if (searchQuery) params.append("search", searchQuery);
-      const res = await fetch(`/api/jewelry?${params.toString()}`);
+      const res = await fetch(`/api/jewelry?${params.toString()}`, { credentials: 'include' });
       if (!res.ok) throw new Error("Failed to fetch items");
       return res.json();
     },
@@ -155,6 +155,13 @@ export default function NatureMadeJewls() {
             <Gem className="w-5 h-5 text-amber-500" />
           </div>
           <div className="flex items-center gap-2">
+            {!user && (
+              <Link href="/employee-login?redirect=/nature-made-jewls">
+                <Button variant="ghost" size="sm" className="text-emerald-600 font-semibold">
+                  Login
+                </Button>
+              </Link>
+            )}
             <a href="mailto:upmichiganstatemovers@gmail.com">
               <Button variant="ghost" size="sm"><Mail className="h-4 w-4 text-stone-600" /></Button>
             </a>
@@ -192,7 +199,7 @@ export default function NatureMadeJewls() {
                 </Button>
               ))}
             </div>
-            {canAdd && (
+            {canAdd ? (
               <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
                 <DialogTrigger asChild>
                   <Button className="bg-gradient-to-r from-amber-500 to-emerald-600 whitespace-nowrap">
@@ -296,6 +303,12 @@ export default function NatureMadeJewls() {
                   </div>
                 </DialogContent>
               </Dialog>
+            ) : (
+              <Link href="/employee-login?redirect=/nature-made-jewls">
+                <Button className="bg-gradient-to-r from-amber-500 to-emerald-600 whitespace-nowrap">
+                  <Plus className="h-4 w-4 mr-1" /> Add
+                </Button>
+              </Link>
             )}
           </div>
         </div>
