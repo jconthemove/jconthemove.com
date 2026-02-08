@@ -253,36 +253,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         newUser = createdUser;
       }
 
-      // Regenerate session to prevent session fixation attacks
-      req.session.regenerate((err) => {
-        if (err) {
-          console.error('Session regeneration error:', err);
+      (req.session as any).userId = newUser.id;
+      (req.session as any).userEmail = newUser.email;
+      (req.session as any).userRole = newUser.role;
+
+      req.session.save((saveErr) => {
+        if (saveErr) {
+          console.error('Session save error:', saveErr);
           return res.status(500).json({ error: "Registration failed. Please try again." });
         }
 
-        // Create session for auto-login after registration
-        (req.session as any).userId = newUser.id;
-        (req.session as any).userEmail = newUser.email;
-        (req.session as any).userRole = newUser.role;
-
-        req.session.save((saveErr) => {
-          if (saveErr) {
-            console.error('Session save error:', saveErr);
-            return res.status(500).json({ error: "Registration failed. Please try again." });
-          }
-
-          res.json({
-            success: true,
-            user: {
-              id: newUser.id,
-              email: newUser.email,
-              firstName: newUser.firstName,
-              lastName: newUser.lastName,
-              role: newUser.role,
-              status: newUser.status,
-            },
-            message: "Registration successful! Your account is pending admin approval."
-          });
+        res.json({
+          success: true,
+          user: {
+            id: newUser.id,
+            email: newUser.email,
+            firstName: newUser.firstName,
+            lastName: newUser.lastName,
+            role: newUser.role,
+            status: newUser.status,
+          },
+          message: "Registration successful! Your account is pending admin approval."
         });
       });
     } catch (error: any) {
@@ -322,35 +313,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: "Invalid email or password" });
       }
 
-      // Regenerate session to prevent session fixation attacks
-      req.session.regenerate((err) => {
-        if (err) {
-          console.error('Session regeneration error:', err);
+      // Set session data directly (avoid regenerate which can cause cookie issues behind proxies)
+      (req.session as any).userId = user.id;
+      (req.session as any).userEmail = user.email;
+      (req.session as any).userRole = user.role;
+
+      req.session.save((saveErr) => {
+        if (saveErr) {
+          console.error('Session save error:', saveErr);
           return res.status(500).json({ error: "Login failed. Please try again." });
         }
 
-        // Create session
-        (req.session as any).userId = user.id;
-        (req.session as any).userEmail = user.email;
-        (req.session as any).userRole = user.role;
+        console.log(`[LOGIN] Session saved successfully. Session ID: ${req.sessionID}, userId: ${user.id}`);
 
-        req.session.save((saveErr) => {
-          if (saveErr) {
-            console.error('Session save error:', saveErr);
-            return res.status(500).json({ error: "Login failed. Please try again." });
+        res.json({
+          success: true,
+          user: {
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            role: user.role,
+            status: user.status,
           }
-
-          res.json({
-            success: true,
-            user: {
-              id: user.id,
-              email: user.email,
-              firstName: user.firstName,
-              lastName: user.lastName,
-              role: user.role,
-              status: user.status,
-            }
-          });
         });
       });
     } catch (error: any) {
@@ -522,32 +507,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error('Retroactive rewards error (non-blocking):', retroError);
       }
 
-      // Auto-login after registration
-      req.session.regenerate((err) => {
-        if (err) {
+      (req.session as any).userId = newUser.id;
+      (req.session as any).userEmail = newUser.email;
+      (req.session as any).userRole = newUser.role;
+
+      req.session.save((saveErr) => {
+        if (saveErr) {
           return res.status(500).json({ error: "Registration successful but login failed" });
         }
 
-        (req.session as any).userId = newUser.id;
-        (req.session as any).userEmail = newUser.email;
-        (req.session as any).userRole = newUser.role;
-
-        req.session.save((saveErr) => {
-          if (saveErr) {
-            return res.status(500).json({ error: "Registration successful but login failed" });
+        res.json({
+          success: true,
+          user: {
+            id: newUser.id,
+            email: newUser.email,
+            firstName: newUser.firstName,
+            lastName: newUser.lastName,
+            role: newUser.role,
+            status: newUser.status,
           }
-
-          res.json({
-            success: true,
-            user: {
-              id: newUser.id,
-              email: newUser.email,
-              firstName: newUser.firstName,
-              lastName: newUser.lastName,
-              role: newUser.role,
-              status: newUser.status,
-            }
-          });
         });
       });
     } catch (error: any) {
@@ -580,31 +558,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: "Invalid email or password" });
       }
 
-      req.session.regenerate((err) => {
-        if (err) {
+      (req.session as any).userId = user.id;
+      (req.session as any).userEmail = user.email;
+      (req.session as any).userRole = user.role;
+
+      req.session.save((saveErr) => {
+        if (saveErr) {
           return res.status(500).json({ error: "Login failed" });
         }
 
-        (req.session as any).userId = user.id;
-        (req.session as any).userEmail = user.email;
-        (req.session as any).userRole = user.role;
-
-        req.session.save((saveErr) => {
-          if (saveErr) {
-            return res.status(500).json({ error: "Login failed" });
+        res.json({
+          success: true,
+          user: {
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            role: user.role,
+            status: user.status,
           }
-
-          res.json({
-            success: true,
-            user: {
-              id: user.id,
-              email: user.email,
-              firstName: user.firstName,
-              lastName: user.lastName,
-              role: user.role,
-              status: user.status,
-            }
-          });
         });
       });
     } catch (error: any) {
@@ -637,33 +609,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: "Invalid email or password" });
       }
 
-      req.session.regenerate((err) => {
-        if (err) {
+      (req.session as any).userId = user.id;
+      (req.session as any).userEmail = user.email;
+      (req.session as any).userRole = user.role;
+
+      req.session.save((saveErr) => {
+        if (saveErr) {
           return res.status(500).json({ error: "Login failed" });
         }
 
-        (req.session as any).userId = user.id;
-        (req.session as any).userEmail = user.email;
-        (req.session as any).userRole = user.role;
-
-        req.session.save((saveErr) => {
-          if (saveErr) {
-            return res.status(500).json({ error: "Login failed" });
+        res.json({
+          success: true,
+          user: {
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            role: user.role,
+            status: user.status,
+            phone: user.phone,
+            tokenBalance: user.tokenBalance,
           }
-
-          res.json({
-            success: true,
-            user: {
-              id: user.id,
-              email: user.email,
-              firstName: user.firstName,
-              lastName: user.lastName,
-              role: user.role,
-              status: user.status,
-              phone: user.phone,
-              tokenBalance: user.tokenBalance,
-            }
-          });
         });
       });
     } catch (error: any) {
@@ -708,32 +674,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .returning();
 
-      // Auto-login after registration
-      req.session.regenerate((err) => {
-        if (err) {
+      (req.session as any).userId = newUser.id;
+      (req.session as any).userEmail = newUser.email;
+      (req.session as any).userRole = newUser.role;
+
+      req.session.save((saveErr) => {
+        if (saveErr) {
           return res.status(500).json({ error: "Registration successful but login failed" });
         }
 
-        (req.session as any).userId = newUser.id;
-        (req.session as any).userEmail = newUser.email;
-        (req.session as any).userRole = newUser.role;
-
-        req.session.save((saveErr) => {
-          if (saveErr) {
-            return res.status(500).json({ error: "Registration successful but login failed" });
+        res.json({
+          success: true,
+          user: {
+            id: newUser.id,
+            email: newUser.email,
+            firstName: newUser.firstName,
+            lastName: newUser.lastName,
+            role: newUser.role,
+            status: newUser.status,
           }
-
-          res.json({
-            success: true,
-            user: {
-              id: newUser.id,
-              email: newUser.email,
-              firstName: newUser.firstName,
-              lastName: newUser.lastName,
-              role: newUser.role,
-              status: newUser.status,
-            }
-          });
         });
       });
     } catch (error: any) {

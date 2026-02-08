@@ -6,6 +6,8 @@ import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
 
+app.set("trust proxy", 1);
+
 // CORS configuration for mobile app
 const allowedOrigins = [
   'https://jconthemove.com',
