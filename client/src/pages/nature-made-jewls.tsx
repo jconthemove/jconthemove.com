@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -49,6 +49,8 @@ export default function NatureMadeJewls() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
   const [newPhotoUrl, setNewPhotoUrl] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [newItem, setNewItem] = useState({
     title: "",
     shortDescription: "",
@@ -110,6 +112,44 @@ export default function NatureMadeJewls() {
 
   const removePhotoUrl = (index: number) => {
     setPhotoUrls(photoUrls.filter((_, i) => i !== index));
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    
+    const remaining = 10 - photoUrls.length;
+    const filesToUpload = Array.from(files).slice(0, remaining);
+    
+    setIsUploading(true);
+    try {
+      for (const file of filesToUpload) {
+        const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+        const reader = new FileReader();
+        const base64 = await new Promise<string>((resolve, reject) => {
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        
+        const res = await fetch('/api/jewelry/upload-photo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ image: base64, extension: ext }),
+        });
+        
+        if (!res.ok) throw new Error('Upload failed');
+        const { url } = await res.json();
+        setPhotoUrls(prev => [...prev, url]);
+      }
+      toast({ title: `${filesToUpload.length} photo(s) uploaded` });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const getItemPhotos = (item: JewelryItem) => {
@@ -226,21 +266,33 @@ export default function NatureMadeJewls() {
                         {photoUrls.map((url, index) => (
                           <div key={index} className="flex gap-2 items-center">
                             <img src={url} alt="" className="w-12 h-12 object-cover rounded" />
-                            <span className="text-sm text-stone-600 truncate flex-1">{url}</span>
+                            <span className="text-sm text-stone-600 truncate flex-1">{url.split('/').pop()}</span>
                             <Button type="button" variant="ghost" size="sm" onClick={() => removePhotoUrl(index)}>
                               <X className="h-4 w-4" />
                             </Button>
                           </div>
                         ))}
+                        <input
+                          type="file"
+                          ref={fileInputRef}
+                          onChange={handleFileUpload}
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                        />
                         <div className="flex gap-2">
                           <Input
                             value={newPhotoUrl}
                             onChange={(e) => setNewPhotoUrl(e.target.value)}
                             placeholder="Paste image URL..."
+                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPhotoUrl(); } }}
                             className="flex-1"
                           />
-                          <Button type="button" variant="outline" onClick={addPhotoUrl} disabled={photoUrls.length >= 10}>
-                            <ImagePlus className="h-4 w-4" />
+                          <Button type="button" variant="outline" onClick={addPhotoUrl} disabled={!newPhotoUrl.trim() || photoUrls.length >= 10} title="Add URL">
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                          <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={photoUrls.length >= 10 || isUploading} title="Upload from device">
+                            {isUploading ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <ImagePlus className="h-4 w-4" />}
                           </Button>
                         </div>
                         <p className="text-xs text-stone-500">{photoUrls.length}/10 photos</p>
