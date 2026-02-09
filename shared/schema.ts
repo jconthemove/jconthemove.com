@@ -513,17 +513,18 @@ export const shopItems = pgTable("shop_items", {
 // Nature Made Jewls marketplace items
 export const jewelryItems = pgTable("jewelry_items", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  postedBy: varchar("posted_by").references(() => users.id),
   title: text("title").notNull(),
-  description: text("description"), // Optional longer description
-  shortDescription: text("short_description"), // One-line description for thumbnail
-  price: decimal("price", { precision: 10, scale: 2 }), // Optional price
-  category: text("category"), // earrings, necklaces, bracelets, rings, custom
-  materials: text("materials"), // Optional materials used
-  imageUrl: text("image_url"), // Main thumbnail image
-  photos: jsonb("photos").default("[]"), // Additional photos for detail view
+  description: text("description"),
+  shortDescription: text("short_description"),
+  price: decimal("price", { precision: 10, scale: 2 }),
+  category: text("category"),
+  materials: text("materials"),
+  imageUrl: text("image_url"),
+  photos: jsonb("photos").default("[]"),
   inStock: boolean("in_stock").default(true),
   featured: boolean("featured").default(false),
-  status: text("status").notNull().default("active"), // active, sold, archived
+  status: text("status").notNull().default("active"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
 

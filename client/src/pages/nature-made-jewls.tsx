@@ -11,10 +11,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
-import { ArrowLeft, Gem, Leaf, Search, Plus, ChevronLeft, ChevronRight, Mail, Phone, ShoppingCart, ImagePlus, X, Heart } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { ArrowLeft, Gem, Leaf, Search, Plus, ChevronLeft, ChevronRight, Mail, Phone, ShoppingCart, ImagePlus, X, Heart, Pencil, Trash2 } from "lucide-react";
 
 interface JewelryItem {
   id: string;
+  postedBy?: string;
   title: string;
   description?: string;
   shortDescription?: string;
@@ -71,8 +73,23 @@ export default function NatureMadeJewls() {
     imageUrl: "",
   });
 
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editItem, setEditItem] = useState<JewelryItem | null>(null);
+  const [editPhotoUrls, setEditPhotoUrls] = useState<string[]>([]);
+  const [editPhotoUrl, setEditPhotoUrl] = useState("");
+  const [isEditUploading, setIsEditUploading] = useState(false);
+  const editFileInputRef = useRef<HTMLInputElement>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<JewelryItem | null>(null);
+
   const isAdmin = user?.role === 'admin' || user?.role === 'business_owner';
   const canAdd = isAdmin || user?.role === 'employee';
+
+  const canEditItem = (item: JewelryItem) => {
+    if (!user) return false;
+    if (isAdmin) return true;
+    return item.postedBy === user.id;
+  };
 
   const { data: items = [], isLoading } = useQuery<JewelryItem[]>({
     queryKey: ["/api/jewelry", { category: selectedCategory !== "all" ? selectedCategory : undefined, search: searchQuery }],
@@ -99,6 +116,90 @@ export default function NatureMadeJewls() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => apiRequest("PATCH", `/api/jewelry/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jewelry"] });
+      setIsEditOpen(false);
+      setEditItem(null);
+      setSelectedItem(null);
+      toast({ title: "Item updated!" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/jewelry/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jewelry"] });
+      setSelectedItem(null);
+      setDeleteConfirmOpen(false);
+      setItemToDelete(null);
+      toast({ title: "Item deleted" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const startEdit = (item: JewelryItem) => {
+    setEditItem({ ...item });
+    setEditPhotoUrls(getItemPhotos(item));
+    setSelectedItem(null);
+    setIsEditOpen(true);
+  };
+
+  const handleUpdate = () => {
+    if (!editItem) return;
+    const updateData = {
+      title: editItem.title,
+      shortDescription: editItem.shortDescription,
+      description: editItem.description,
+      price: editItem.price && editItem.price !== '' ? editItem.price : '0.00',
+      category: editItem.category,
+      materials: editItem.materials,
+      imageUrl: editPhotoUrls[0] || editItem.imageUrl,
+      photos: editPhotoUrls,
+    };
+    updateMutation.mutate({ id: editItem.id, data: updateData });
+  };
+
+  const handleEditFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const remaining = 10 - editPhotoUrls.length;
+    const filesToUpload = Array.from(files).slice(0, remaining);
+    setIsEditUploading(true);
+    try {
+      for (const file of filesToUpload) {
+        const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+        const reader = new FileReader();
+        const base64 = await new Promise<string>((resolve, reject) => {
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        const res = await fetch('/api/jewelry/upload-photo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ image: base64, extension: ext }),
+        });
+        if (!res.ok) throw new Error('Upload failed');
+        const { url } = await res.json();
+        setEditPhotoUrls(prev => [...prev, url]);
+      }
+      toast({ title: `${filesToUpload.length} photo(s) uploaded` });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsEditUploading(false);
+      if (editFileInputRef.current) editFileInputRef.current.value = '';
+    }
+  };
 
   const handleCreate = () => {
     if (!newItem.title.trim()) {
@@ -606,12 +707,163 @@ export default function NatureMadeJewls() {
                       </Button>
                     </a>
                   </div>
+                  {canEditItem(selectedItem) && (
+                    <div className="flex gap-2 pt-2 border-t border-stone-200">
+                      <Button
+                        variant="outline"
+                        className="flex-1 border-purple-400 text-purple-600 hover:bg-purple-50"
+                        onClick={() => startEdit(selectedItem)}
+                      >
+                        <Pencil className="h-4 w-4 mr-2" />
+                        Edit
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="flex-1 border-red-300 text-red-600 hover:bg-red-50"
+                        onClick={() => { setItemToDelete(selectedItem); setDeleteConfirmOpen(true); }}
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
             </>
           )}
         </DialogContent>
       </Dialog>
+
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Item</DialogTitle>
+          </DialogHeader>
+          {editItem && (
+            <div className="space-y-4">
+              <div>
+                <Label>Title *</Label>
+                <Input
+                  value={editItem.title}
+                  onChange={(e) => setEditItem({ ...editItem, title: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <Label>Photos</Label>
+                <div className="space-y-2">
+                  {editPhotoUrls.map((url, index) => (
+                    <div key={index} className="flex gap-2 items-center">
+                      <img src={url} alt="" className="w-12 h-12 object-cover rounded" />
+                      <span className="text-sm text-stone-600 truncate flex-1">{url.split('/').pop()}</span>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setEditPhotoUrls(editPhotoUrls.filter((_, i) => i !== index))}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  <div className="flex gap-2">
+                    <Input
+                      value={editPhotoUrl}
+                      onChange={(e) => setEditPhotoUrl(e.target.value)}
+                      placeholder="Paste image URL..."
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (editPhotoUrl.trim() && editPhotoUrls.length < 10) { setEditPhotoUrls([...editPhotoUrls, editPhotoUrl.trim()]); setEditPhotoUrl(""); } } }}
+                      className="flex-1"
+                    />
+                    <Button type="button" variant="outline" onClick={() => { if (editPhotoUrl.trim() && editPhotoUrls.length < 10) { setEditPhotoUrls([...editPhotoUrls, editPhotoUrl.trim()]); setEditPhotoUrl(""); } }} disabled={!editPhotoUrl.trim() || editPhotoUrls.length >= 10}>
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                    <label
+                      className={`inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 cursor-pointer ${editPhotoUrls.length >= 10 || isEditUploading ? 'opacity-50 pointer-events-none' : ''}`}
+                    >
+                      <input
+                        type="file"
+                        ref={editFileInputRef}
+                        onChange={handleEditFileUpload}
+                        accept="image/*"
+                        multiple
+                        className="sr-only"
+                      />
+                      {isEditUploading ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <ImagePlus className="h-4 w-4" />}
+                    </label>
+                  </div>
+                  <p className="text-xs text-stone-500">{editPhotoUrls.length}/10 photos</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Price</Label>
+                  <Input
+                    value={editItem.price || ""}
+                    onChange={(e) => setEditItem({ ...editItem, price: e.target.value })}
+                    placeholder="25.00"
+                  />
+                </div>
+                <div>
+                  <Label>Category</Label>
+                  <Select value={editItem.category || ""} onValueChange={(v) => setEditItem({ ...editItem, category: v })}>
+                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectContent>
+                      {categories.filter(c => c.value !== "all").map((cat) => (
+                        <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div>
+                <Label>Short Description</Label>
+                <Input
+                  value={editItem.shortDescription || ""}
+                  onChange={(e) => setEditItem({ ...editItem, shortDescription: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <Label>Materials</Label>
+                <Input
+                  value={editItem.materials || ""}
+                  onChange={(e) => setEditItem({ ...editItem, materials: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <Label>Full Description</Label>
+                <Textarea
+                  value={editItem.description || ""}
+                  onChange={(e) => setEditItem({ ...editItem, description: e.target.value })}
+                  rows={3}
+                />
+              </div>
+
+              <Button onClick={handleUpdate} disabled={updateMutation.isPending} className="w-full bg-purple-600 hover:bg-purple-700">
+                {updateMutation.isPending ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this item?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove "{itemToDelete?.title}" from the shop. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => itemToDelete && deleteMutation.mutate(itemToDelete.id)}
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <footer className="bg-gradient-to-r from-slate-800 via-purple-900 to-slate-800 border-t border-purple-700/50 py-8 mt-8">
         <div className="container mx-auto px-4 text-center">

@@ -7893,6 +7893,7 @@ Thank you for your business!
         ...rest,
         title,
         price: price && price !== '' ? price : '0.00',
+        postedBy: req.user.id,
       };
       
       const item = await storage.createJewelryItem(cleanedData);
@@ -7903,18 +7904,20 @@ Thank you for your business!
     }
   });
   
-  // Update jewelry item
   app.patch("/api/jewelry/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const allowedRoles = ['admin', 'business_owner', 'employee'];
-      if (!allowedRoles.includes(req.user?.role)) {
-        return res.status(403).json({ error: "Access denied" });
+      const existing = await storage.getJewelryItem(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ error: "Item not found" });
+      }
+      
+      const isOwner = existing.postedBy === req.user.id;
+      const isAdmin = req.user.role === 'admin' || req.user.role === 'business_owner';
+      if (!isOwner && !isAdmin) {
+        return res.status(403).json({ error: "Only the item owner or admin can edit this item" });
       }
       
       const item = await storage.updateJewelryItem(req.params.id, req.body);
-      if (!item) {
-        return res.status(404).json({ error: "Item not found" });
-      }
       res.json(item);
     } catch (error: any) {
       console.error("Error updating jewelry item:", error);
@@ -7922,12 +7925,17 @@ Thank you for your business!
     }
   });
   
-  // Delete jewelry item
   app.delete("/api/jewelry/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const allowedRoles = ['admin', 'business_owner', 'employee'];
-      if (!allowedRoles.includes(req.user?.role)) {
-        return res.status(403).json({ error: "Access denied" });
+      const existing = await storage.getJewelryItem(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ error: "Item not found" });
+      }
+      
+      const isOwner = existing.postedBy === req.user.id;
+      const isAdmin = req.user.role === 'admin' || req.user.role === 'business_owner';
+      if (!isOwner && !isAdmin) {
+        return res.status(403).json({ error: "Only the item owner or admin can delete this item" });
       }
       
       await storage.deleteJewelryItem(req.params.id);

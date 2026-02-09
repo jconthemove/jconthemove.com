@@ -15,8 +15,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
-import { ChevronLeft, ChevronRight, ArrowLeft, Eye, MessageCircle, DollarSign, X, Phone, Trash2, CheckCircle2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { ChevronLeft, ChevronRight, ArrowLeft, Eye, MessageCircle, DollarSign, X, Phone, Trash2, CheckCircle2, Pencil } from "lucide-react";
 import { type ShopItem } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -30,6 +33,11 @@ export function ShopItemDetailPage() {
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [isZoomOpen, setIsZoomOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editPrice, setEditPrice] = useState("");
+  const [editCategory, setEditCategory] = useState("");
 
   // Fetch shop item details
   const { data: item, isLoading } = useQuery<ShopItem>({
@@ -80,6 +88,39 @@ export function ShopItemDetailPage() {
       });
     },
   });
+
+  const updateMutation = useMutation({
+    mutationFn: async (data: any) => {
+      return await apiRequest("PATCH", `/api/shop/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/shop", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/shop"] });
+      setIsEditOpen(false);
+      toast({ title: "Item Updated", description: "Your changes have been saved." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to update item", variant: "destructive" });
+    },
+  });
+
+  const startEdit = () => {
+    if (!item) return;
+    setEditTitle(item.title);
+    setEditDescription(item.description);
+    setEditPrice(item.price);
+    setEditCategory(item.category || "");
+    setIsEditOpen(true);
+  };
+
+  const handleUpdate = () => {
+    updateMutation.mutate({
+      title: editTitle,
+      description: editDescription,
+      price: editPrice,
+      category: editCategory || undefined,
+    });
+  };
 
   // Check if user can manage this item (creator or admin)
   const canManageItem = item && user && (item.postedBy === user.id || user.role === 'admin');
@@ -325,20 +366,31 @@ export function ShopItemDetailPage() {
 
             {/* Item Management Buttons (Creator & Admin Only) */}
             {canManageItem && (
-              <div className="grid grid-cols-2 gap-2 pt-4 border-t">
-                {item.status !== "sold" && (
+              <div className="space-y-2 pt-4 border-t">
+                <div className="grid grid-cols-2 gap-2">
                   <Button
                     variant="outline"
                     size="sm"
                     className="w-full"
-                    onClick={() => markAsSoldMutation.mutate()}
-                    disabled={markAsSoldMutation.isPending}
-                    data-testid="button-mark-as-sold"
+                    onClick={startEdit}
                   >
-                    <CheckCircle2 className="h-4 w-4 mr-2" />
-                    Mark as Sold
+                    <Pencil className="h-4 w-4 mr-2" />
+                    Edit Item
                   </Button>
-                )}
+                  {item.status !== "sold" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => markAsSoldMutation.mutate()}
+                      disabled={markAsSoldMutation.isPending}
+                      data-testid="button-mark-as-sold"
+                    >
+                      <CheckCircle2 className="h-4 w-4 mr-2" />
+                      Mark as Sold
+                    </Button>
+                  )}
+                </div>
                 <Button
                   variant="destructive"
                   size="sm"
@@ -398,6 +450,36 @@ export function ShopItemDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Edit Dialog */}
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Item</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Title</Label>
+              <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+            </div>
+            <div>
+              <Label>Price</Label>
+              <Input value={editPrice} onChange={(e) => setEditPrice(e.target.value)} placeholder="0.00" />
+            </div>
+            <div>
+              <Label>Category</Label>
+              <Input value={editCategory} onChange={(e) => setEditCategory(e.target.value)} placeholder="Optional category" />
+            </div>
+            <div>
+              <Label>Description</Label>
+              <Textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={4} />
+            </div>
+            <Button onClick={handleUpdate} disabled={updateMutation.isPending} className="w-full">
+              {updateMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
