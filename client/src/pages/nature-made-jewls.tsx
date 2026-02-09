@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -51,6 +51,16 @@ export default function NatureMadeJewls() {
   const [newPhotoUrl, setNewPhotoUrl] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [hoveredItem, setHoveredItem] = useState<JewelryItem | null>(null);
+  const [hoverPos, setHoverPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+    };
+  }, []);
+
   const [newItem, setNewItem] = useState({
     title: "",
     shortDescription: "",
@@ -181,7 +191,7 @@ export default function NatureMadeJewls() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-200 via-purple-100 to-slate-300">
+    <div className="min-h-screen bg-gradient-to-br from-gray-400 via-purple-300 to-gray-500">
       <header className="sticky top-0 z-50 bg-gradient-to-r from-slate-100/95 via-purple-50/95 to-slate-200/95 backdrop-blur border-b border-purple-200/50 shadow-sm">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <Link href="/">
@@ -398,6 +408,7 @@ export default function NatureMadeJewls() {
             )}
           </div>
         ) : (
+          <>
           <div className="columns-2 md:columns-3 lg:columns-4 xl:columns-5 gap-3 space-y-3">
             {items.map((item) => {
               const photos = getItemPhotos(item);
@@ -408,6 +419,24 @@ export default function NatureMadeJewls() {
                   key={item.id}
                   className="break-inside-avoid mb-3 overflow-hidden cursor-pointer group hover:shadow-xl transition-all border-0 bg-white/90 backdrop-blur-sm shadow-md shadow-purple-100/50"
                   onClick={() => openItem(item)}
+                  onMouseEnter={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const viewportW = window.innerWidth;
+                    const popupW = 320;
+                    let x = rect.right + 12;
+                    if (x + popupW > viewportW) x = rect.left - popupW - 12;
+                    if (x < 8) x = rect.left + rect.width / 2 - popupW / 2;
+                    let y = rect.top;
+                    if (y + 400 > window.innerHeight) y = window.innerHeight - 410;
+                    if (y < 8) y = 8;
+                    setHoverPos({ x, y });
+                    if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+                    hoverTimeout.current = setTimeout(() => setHoveredItem(item), 400);
+                  }}
+                  onMouseLeave={() => {
+                    if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+                    setHoveredItem(null);
+                  }}
                 >
                   <div className={`${randomHeight} relative overflow-hidden bg-stone-100`}>
                     {photos.length > 0 ? (
@@ -447,6 +476,41 @@ export default function NatureMadeJewls() {
               );
             })}
           </div>
+
+          {hoveredItem && (
+            <div
+              className="fixed z-[100] pointer-events-none animate-in fade-in zoom-in-95 duration-200"
+              style={{ left: hoverPos.x, top: hoverPos.y }}
+            >
+              <div className="w-80 bg-white rounded-xl shadow-2xl shadow-purple-200/60 border border-purple-100 overflow-hidden">
+                {getItemPhotos(hoveredItem).length > 0 ? (
+                  <img
+                    src={getItemPhotos(hoveredItem)[0]}
+                    alt={hoveredItem.title}
+                    className="w-full aspect-square object-cover"
+                  />
+                ) : (
+                  <div className="w-full aspect-square bg-stone-100 flex items-center justify-center">
+                    <Gem className="w-16 h-16 text-stone-300" />
+                  </div>
+                )}
+                <div className="p-4">
+                  <h3 className="font-serif font-bold text-stone-800 text-lg">{hoveredItem.title}</h3>
+                  {hoveredItem.category && (
+                    <p className="text-purple-600 text-sm capitalize">{hoveredItem.category}</p>
+                  )}
+                  {hoveredItem.price && (
+                    <p className="text-purple-700 font-bold text-xl mt-1">${hoveredItem.price}</p>
+                  )}
+                  {hoveredItem.shortDescription && (
+                    <p className="text-stone-500 text-sm mt-2 line-clamp-2">{hoveredItem.shortDescription}</p>
+                  )}
+                  <p className="text-purple-400 text-xs mt-3 italic">Click to view full details</p>
+                </div>
+              </div>
+            </div>
+          )}
+          </>
         )}
       </main>
 
