@@ -7884,12 +7884,18 @@ Thank you for your business!
         return res.status(403).json({ error: "Access denied" });
       }
       
-      const { title } = req.body;
+      const { title, price, ...rest } = req.body;
       if (!title) {
         return res.status(400).json({ error: "Title is required" });
       }
       
-      const item = await storage.createJewelryItem(req.body);
+      const cleanedData = {
+        ...rest,
+        title,
+        price: price && price !== '' ? price : '0.00',
+      };
+      
+      const item = await storage.createJewelryItem(cleanedData);
       res.status(201).json(item);
     } catch (error: any) {
       console.error("Error creating jewelry item:", error);

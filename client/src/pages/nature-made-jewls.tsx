@@ -272,14 +272,6 @@ export default function NatureMadeJewls() {
                             </Button>
                           </div>
                         ))}
-                        <input
-                          type="file"
-                          ref={fileInputRef}
-                          onChange={handleFileUpload}
-                          accept="image/*"
-                          multiple
-                          className="hidden"
-                        />
                         <div className="flex gap-2">
                           <Input
                             value={newPhotoUrl}
@@ -291,9 +283,20 @@ export default function NatureMadeJewls() {
                           <Button type="button" variant="outline" onClick={addPhotoUrl} disabled={!newPhotoUrl.trim() || photoUrls.length >= 10} title="Add URL">
                             <Plus className="h-4 w-4" />
                           </Button>
-                          <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={photoUrls.length >= 10 || isUploading} title="Upload from device">
+                          <label
+                            className={`inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 cursor-pointer ${photoUrls.length >= 10 || isUploading ? 'opacity-50 pointer-events-none' : ''}`}
+                            title="Upload from device"
+                          >
+                            <input
+                              type="file"
+                              ref={fileInputRef}
+                              onChange={handleFileUpload}
+                              accept="image/*"
+                              multiple
+                              className="sr-only"
+                            />
                             {isUploading ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <ImagePlus className="h-4 w-4" />}
-                          </Button>
+                          </label>
                         </div>
                         <p className="text-xs text-stone-500">{photoUrls.length}/10 photos</p>
                       </div>
