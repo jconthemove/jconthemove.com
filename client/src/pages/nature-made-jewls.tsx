@@ -181,8 +181,8 @@ export default function NatureMadeJewls() {
   };
 
   return (
-    <div className="min-h-screen bg-stone-100">
-      <header className="sticky top-0 z-50 bg-white/95 backdrop-blur border-b shadow-sm">
+    <div className="min-h-screen bg-gradient-to-br from-slate-200 via-purple-100 to-slate-300">
+      <header className="sticky top-0 z-50 bg-gradient-to-r from-slate-100/95 via-purple-50/95 to-slate-200/95 backdrop-blur border-b border-purple-200/50 shadow-sm">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <Link href="/">
             <Button variant="ghost" size="sm" className="text-stone-600">
@@ -190,14 +190,14 @@ export default function NatureMadeJewls() {
             </Button>
           </Link>
           <div className="flex items-center gap-2">
-            <Leaf className="w-5 h-5 text-emerald-600" />
-            <h1 className="font-serif text-xl font-bold text-stone-800">Nature Made Jewls</h1>
-            <Gem className="w-5 h-5 text-amber-500" />
+            <Leaf className="w-5 h-5 text-purple-600" />
+            <h1 className="font-serif text-xl font-bold bg-gradient-to-r from-slate-700 via-purple-700 to-slate-600 bg-clip-text text-transparent">Nature Made Jewls</h1>
+            <Gem className="w-5 h-5 text-slate-400" />
           </div>
           <div className="flex items-center gap-2">
             {!user && (
               <Link href="/employee-login?redirect=/nature-made-jewls">
-                <Button variant="ghost" size="sm" className="text-emerald-600 font-semibold">
+                <Button variant="ghost" size="sm" className="text-purple-600 font-semibold">
                   Login
                 </Button>
               </Link>
@@ -212,7 +212,7 @@ export default function NatureMadeJewls() {
         </div>
       </header>
 
-      <div className="sticky top-14 z-40 bg-white border-b">
+      <div className="sticky top-14 z-40 bg-gradient-to-r from-slate-100/95 via-purple-50/95 to-slate-200/95 backdrop-blur border-b border-purple-200/50">
         <div className="container mx-auto px-4 py-3">
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
@@ -221,7 +221,7 @@ export default function NatureMadeJewls() {
                 placeholder="Search handcrafted jewelry..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 bg-stone-50 border-stone-200"
+                className="pl-10 bg-white/70 border-purple-200"
               />
             </div>
             <div className="flex gap-2 overflow-x-auto pb-1">
@@ -232,8 +232,8 @@ export default function NatureMadeJewls() {
                   size="sm"
                   onClick={() => setSelectedCategory(cat.value)}
                   className={selectedCategory === cat.value 
-                    ? "bg-emerald-600 hover:bg-emerald-700 whitespace-nowrap" 
-                    : "border-stone-300 whitespace-nowrap"}
+                    ? "bg-gradient-to-r from-purple-600 to-slate-600 hover:from-purple-700 hover:to-slate-700 whitespace-nowrap" 
+                    : "border-purple-300 text-purple-800 hover:bg-purple-50 whitespace-nowrap"}
                 >
                   {cat.label}
                 </Button>
@@ -242,7 +242,7 @@ export default function NatureMadeJewls() {
             {canAdd ? (
               <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
                 <DialogTrigger asChild>
-                  <Button className="bg-gradient-to-r from-amber-500 to-emerald-600 whitespace-nowrap">
+                  <Button className="bg-gradient-to-r from-purple-500 to-slate-600 hover:from-purple-600 hover:to-slate-700 whitespace-nowrap">
                     <Plus className="h-4 w-4 mr-1" /> Add
                   </Button>
                 </DialogTrigger>
@@ -352,7 +352,7 @@ export default function NatureMadeJewls() {
                       />
                     </div>
 
-                    <Button onClick={handleCreate} disabled={createMutation.isPending} className="w-full bg-emerald-600 hover:bg-emerald-700">
+                    <Button onClick={handleCreate} disabled={createMutation.isPending} className="w-full bg-purple-600 hover:bg-purple-700">
                       {createMutation.isPending ? "Adding..." : "Add Item"}
                     </Button>
                   </div>
@@ -360,7 +360,7 @@ export default function NatureMadeJewls() {
               </Dialog>
             ) : (
               <Link href="/employee-login?redirect=/nature-made-jewls">
-                <Button className="bg-gradient-to-r from-amber-500 to-emerald-600 whitespace-nowrap">
+                <Button className="bg-gradient-to-r from-purple-500 to-slate-600 hover:from-purple-600 hover:to-slate-700 whitespace-nowrap">
                   <Plus className="h-4 w-4 mr-1" /> Add
                 </Button>
               </Link>
@@ -382,7 +382,7 @@ export default function NatureMadeJewls() {
             {canAdd && (
               <Button 
                 onClick={() => setIsCreateOpen(true)}
-                className="mt-6 bg-gradient-to-r from-amber-500 to-emerald-600"
+                className="mt-6 bg-gradient-to-r from-purple-500 to-slate-600 hover:from-purple-600 hover:to-slate-700"
               >
                 <Plus className="h-4 w-4 mr-2" /> Add Your First Item
               </Button>
@@ -390,7 +390,7 @@ export default function NatureMadeJewls() {
             {!user && (
               <div className="mt-6">
                 <Link href="/employee-login?redirect=/nature-made-jewls">
-                  <Button variant="outline" className="border-emerald-600 text-emerald-600">
+                  <Button variant="outline" className="border-purple-600 text-purple-600">
                     Login to Add Items
                   </Button>
                 </Link>
@@ -406,7 +406,7 @@ export default function NatureMadeJewls() {
               return (
                 <Card
                   key={item.id}
-                  className="break-inside-avoid mb-3 overflow-hidden cursor-pointer group hover:shadow-xl transition-all border-0 bg-white"
+                  className="break-inside-avoid mb-3 overflow-hidden cursor-pointer group hover:shadow-xl transition-all border-0 bg-white/90 backdrop-blur-sm shadow-md shadow-purple-100/50"
                   onClick={() => openItem(item)}
                 >
                   <div className={`${randomHeight} relative overflow-hidden bg-stone-100`}>
@@ -440,7 +440,7 @@ export default function NatureMadeJewls() {
                     <h3 className="font-medium text-stone-800 line-clamp-1">{item.title}</h3>
                     <p className="text-stone-500 text-sm line-clamp-1">{item.shortDescription || item.category || "Handcrafted"}</p>
                     {item.price && (
-                      <p className="text-emerald-600 font-semibold mt-1">${item.price}</p>
+                      <p className="text-purple-600 font-semibold mt-1">${item.price}</p>
                     )}
                   </div>
                 </Card>
@@ -481,7 +481,7 @@ export default function NatureMadeJewls() {
                             <button
                               key={i}
                               onClick={(e) => { e.stopPropagation(); setCurrentPhotoIndex(i); }}
-                              className={`w-2 h-2 rounded-full transition-colors ${i === currentPhotoIndex ? 'bg-emerald-500' : 'bg-white/60'}`}
+                              className={`w-2 h-2 rounded-full transition-colors ${i === currentPhotoIndex ? 'bg-purple-500' : 'bg-white/60'}`}
                             />
                           ))}
                         </div>
@@ -500,11 +500,11 @@ export default function NatureMadeJewls() {
                   <div>
                     <h2 className="text-2xl font-serif font-bold text-stone-800">{selectedItem.title}</h2>
                     {selectedItem.category && (
-                      <p className="text-emerald-600 capitalize">{selectedItem.category}</p>
+                      <p className="text-purple-600 capitalize">{selectedItem.category}</p>
                     )}
                   </div>
                   {selectedItem.price && (
-                    <p className="text-2xl font-bold text-emerald-600">${selectedItem.price}</p>
+                    <p className="text-2xl font-bold text-purple-600">${selectedItem.price}</p>
                   )}
                 </div>
                 
@@ -524,14 +524,14 @@ export default function NatureMadeJewls() {
                 
                 <div className="pt-4 border-t space-y-3">
                   {selectedItem.price && selectedItem.inStock !== false && (
-                    <Button className="w-full bg-emerald-600 hover:bg-emerald-700 py-6 text-lg" disabled>
+                    <Button className="w-full bg-purple-600 hover:bg-purple-700 py-6 text-lg" disabled>
                       <ShoppingCart className="h-5 w-5 mr-2" />
                       Buy Now - Coming Soon!
                     </Button>
                   )}
                   <div className="flex gap-2">
                     <a href={`mailto:upmichiganstatemovers@gmail.com?subject=Inquiry: ${selectedItem.title}`} className="flex-1">
-                      <Button variant="outline" className="w-full border-emerald-600 text-emerald-600 hover:bg-emerald-50">
+                      <Button variant="outline" className="w-full border-purple-600 text-purple-600 hover:bg-purple-50">
                         <Mail className="h-4 w-4 mr-2" />
                         Contact to Purchase
                       </Button>
@@ -549,16 +549,16 @@ export default function NatureMadeJewls() {
         </DialogContent>
       </Dialog>
 
-      <footer className="bg-white border-t py-8 mt-8">
+      <footer className="bg-gradient-to-r from-slate-800 via-purple-900 to-slate-800 border-t border-purple-700/50 py-8 mt-8">
         <div className="container mx-auto px-4 text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
-            <Leaf className="w-5 h-5 text-emerald-600" />
-            <span className="font-serif font-bold text-stone-800">Nature Made Jewls</span>
-            <Gem className="w-5 h-5 text-amber-500" />
+            <Leaf className="w-5 h-5 text-purple-300" />
+            <span className="font-serif font-bold text-white">Nature Made Jewls</span>
+            <Gem className="w-5 h-5 text-purple-300" />
           </div>
-          <p className="text-stone-500 text-sm">Handcrafted in Michigan's Upper Peninsula</p>
-          <p className="text-stone-400 text-xs mt-2">
-            Part of the <Link href="/"><span className="text-emerald-600 hover:underline">JC ON THE MOVE</span></Link> family
+          <p className="text-slate-300 text-sm">Handcrafted in Michigan's Upper Peninsula</p>
+          <p className="text-slate-400 text-xs mt-2">
+            Part of the <Link href="/"><span className="text-purple-300 hover:underline">JC ON THE MOVE</span></Link> family
           </p>
         </div>
       </footer>
