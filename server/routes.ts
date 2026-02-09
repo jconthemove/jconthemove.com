@@ -354,6 +354,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error('Session destruction error:', err);
         return res.status(500).json({ error: "Logout failed" });
       }
+      res.clearCookie('jc.sid');
       res.clearCookie('connect.sid');
       res.json({ success: true });
     });
@@ -366,6 +367,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error('Session destruction error:', err);
         return res.status(500).json({ error: "Logout failed" });
       }
+      res.clearCookie('jc.sid');
       res.clearCookie('connect.sid');
       res.json({ success: true });
     });

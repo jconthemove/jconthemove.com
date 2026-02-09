@@ -5,32 +5,22 @@ export function useAuth() {
   const { data: user, isLoading, error } = useQuery<User>({
     queryKey: ["/api/auth/user"],
     retry: false,
-    refetchInterval: 30000, // Refetch every 30 seconds instead of constant polling
+    staleTime: 60000,
+    refetchInterval: 60000,
+    refetchOnWindowFocus: true,
     queryFn: async () => {
       try {
         const response = await fetch("/api/auth/user", { 
-          cache: 'no-store',
           credentials: 'include',
-          headers: {
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache'
-          }
         });
         if (response.status === 401) {
-          // 401 is expected for unauthenticated users - return null instead of throwing
           return null;
         }
         if (!response.ok) {
-          console.error(`Authentication check failed: ${response.status}`);
-          // Treat any error as unauthenticated instead of getting stuck loading
           return null;
         }
-        const userData = await response.json();
-        console.log('Authentication successful, user:', userData?.email);
-        return userData;
+        return await response.json();
       } catch (error) {
-        console.error('Auth fetch error:', error);
-        // Network errors or other issues - treat as unauthenticated
         return null;
       }
     },

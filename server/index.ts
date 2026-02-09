@@ -68,10 +68,12 @@ app.use((req, res, next) => {
 
       log(logLine);
       
-      // Log cookie headers for debugging
       const setCookie = res.getHeader('Set-Cookie');
       if (setCookie) {
-        console.log('[COOKIE] Set-Cookie header sent:', setCookie);
+        const cookieStr = Array.isArray(setCookie) ? setCookie.join('; ') : String(setCookie);
+        if (cookieStr.includes('jc.sid')) {
+          console.log('[COOKIE] jc.sid Set-Cookie sent for', req.method, req.path);
+        }
       }
     }
   });

@@ -34,14 +34,8 @@ export default function EmployeeLogin() {
         description: `Logged in as ${data.user.firstName} ${data.user.lastName}`,
       });
 
-      // Set user data directly in cache instead of refetching
-      // This avoids race condition where cookie isn't set yet
       queryClient.setQueryData(["/api/auth/user"], data.user);
-      
-      // Wait for cookie to be set before any potential refetches
-      await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Redirect based on status
       if (data.user.status === "pending") {
         setLocation("/pending-approval");
       } else {

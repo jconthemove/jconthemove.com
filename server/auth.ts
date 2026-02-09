@@ -12,15 +12,10 @@ export function getSession() {
     tableName: "sessions",
   });
   
-  // Cookie security configuration
-  const isProduction = process.env.NODE_ENV === 'production';
-  // Don't set a specific domain - let the cookie default to the current host
-  // This allows it to work on both jconthemove.com and jconthemove.replit.app
-  const cookieDomain = process.env.COOKIE_DOMAIN || undefined;
-  
-  console.log(`[SESSION] Cookie configuration: secure=${isProduction}, domain=${cookieDomain || 'auto'}, environment=${process.env.NODE_ENV}`);
+  console.log(`[SESSION] Cookie configuration: name=jc.sid, secure=auto, sameSite=lax, environment=${process.env.NODE_ENV}`);
   
   return session({
+    name: 'jc.sid',
     secret: process.env.SESSION_SECRET!,
     store: sessionStore,
     resave: false,
@@ -28,10 +23,10 @@ export function getSession() {
     proxy: true,
     cookie: {
       httpOnly: true,
-      secure: isProduction,
+      secure: 'auto' as any,
       sameSite: 'lax',
       maxAge: sessionTtl,
-      domain: cookieDomain,
+      path: '/',
     },
   });
 }
@@ -44,10 +39,9 @@ export function setupAuth(app: Express) {
 }
 
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
-  console.log('[AUTH CHECK] Path:', req.path);
-  console.log('[AUTH CHECK] Session ID:', req.sessionID || 'No session ID');
+  const hasCookie = !!(req.cookies?.['jc.sid'] || req.headers.cookie?.includes('jc.sid'));
+  console.log('[AUTH CHECK] Path:', req.path, '| Session ID:', req.sessionID?.slice(0, 8) || 'none', '| Has cookie:', hasCookie);
   
-  // Check for email/password session
   const sessionUserId = (req.session as any).userId;
   
   if (!sessionUserId) {

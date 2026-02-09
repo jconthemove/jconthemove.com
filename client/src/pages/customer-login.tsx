@@ -35,10 +35,7 @@ export default function CustomerLogin() {
         description: `Logged in as ${data.user.firstName || data.user.email}`,
       });
 
-      await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      await queryClient.refetchQueries({ queryKey: ["/api/auth/user"] });
-      
-      await new Promise(resolve => setTimeout(resolve, 100));
+      queryClient.setQueryData(["/api/auth/user"], data.user);
       setLocation("/customer-portal");
     },
     onError: (error: any) => {
@@ -67,10 +64,7 @@ export default function CustomerLogin() {
         description: `Welcome, ${data.user.firstName}!`,
       });
 
-      await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      await queryClient.refetchQueries({ queryKey: ["/api/auth/user"] });
-      
-      await new Promise(resolve => setTimeout(resolve, 100));
+      queryClient.setQueryData(["/api/auth/user"], data.user);
       setLocation("/customer-portal");
     },
     onError: (error: any) => {
