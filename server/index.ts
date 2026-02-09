@@ -48,6 +48,13 @@ app.use((req, res, next) => {
   const path = req.path;
   let capturedJsonResponse: Record<string, any> | undefined = undefined;
 
+  if (path.startsWith("/api/auth") || path === "/api/snow/logs" || path === "/api/users" || path === "/api/jewelry") {
+    const rawCookie = req.headers.cookie || '(none)';
+    const hasJcSid = rawCookie.includes('jc.sid');
+    const hasConnectSid = rawCookie.includes('connect.sid');
+    console.log(`[COOKIE-IN] ${req.method} ${path} | proto=${req.protocol} secure=${req.secure} | jc.sid=${hasJcSid} connect.sid=${hasConnectSid} | raw="${rawCookie.slice(0, 120)}"`);
+  }
+
   const originalResJson = res.json;
   res.json = function (bodyJson, ...args) {
     capturedJsonResponse = bodyJson;
@@ -70,10 +77,8 @@ app.use((req, res, next) => {
       
       const setCookie = res.getHeader('Set-Cookie');
       if (setCookie) {
-        const cookieStr = Array.isArray(setCookie) ? setCookie.join('; ') : String(setCookie);
-        if (cookieStr.includes('jc.sid')) {
-          console.log('[COOKIE] jc.sid Set-Cookie sent for', req.method, req.path);
-        }
+        const cookieArr = Array.isArray(setCookie) ? setCookie : [String(setCookie)];
+        console.log(`[COOKIE-OUT] ${req.method} ${path} | Set-Cookie:`, cookieArr.map(c => String(c).slice(0, 100)));
       }
     }
   });

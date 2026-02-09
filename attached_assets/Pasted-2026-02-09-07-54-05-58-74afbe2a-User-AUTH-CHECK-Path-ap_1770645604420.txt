@@ -1,0 +1,122 @@
+2026-02-09 07:54:05.58
+74afbe2a
+User
+[AUTH CHECK] Path: /api/auth/user
+2026-02-09 07:54:05.58
+74afbe2a
+User
+[AUTH CHECK] ❌ No session user ID found
+2026-02-09 07:54:05.58
+74afbe2a
+User
+[AUTH CHECK] Session ID: 69gkp1sdGj4SErLK6dlFuCtyJvLeKDFv
+2026-02-09 07:54:05.58
+74afbe2a
+User
+1:54:05 PM [express] GET /api/auth/user 401 in 310ms :: {"message":"Unauthorized"}
+2026-02-09 07:54:36.71
+74afbe2a
+User
+[AUTH CHECK] ❌ No session user ID found
+2026-02-09 07:54:36.71
+74afbe2a
+User
+[AUTH CHECK] Session ID: I5yZ95h5d8ZLw7VRFvhw-OTKF9_3ueIx
+2026-02-09 07:54:36.71
+74afbe2a
+User
+[AUTH CHECK] Path: /api/auth/user
+2026-02-09 07:54:36.71
+74afbe2a
+User
+1:54:36 PM [express] GET /api/auth/user 401 in 375ms :: {"message":"Unauthorized"}
+2026-02-09 07:55:03.92
+74afbe2a
+User
+[LOGIN] Session saved successfully. Session ID: LqWUTTJ3w0YrO-lox-9HqhKJqgLPSAqg, userId: 47798367
+2026-02-09 07:55:03.92
+74afbe2a
+User
+1:55:03 PM [express] POST /api/auth/employee/login 200 in 973ms :: {"success":true,"user":{"id":"477…
+2026-02-09 07:55:03.93
+74afbe2a
+User
+]
+2026-02-09 07:55:03.93
+74afbe2a
+User
+[COOKIE] Set-Cookie header sent: [
+2026-02-09 07:55:03.93
+74afbe2a
+User
+'connect.sid=s%3ALqWUTTJ3w0YrO-lox-9HqhKJqgLPSAqg.Y%2BY73hWOPqtilQdeuYb9NSmlPhI23Z3qiyBXtZiKSrw; Path=/; Expires=Sun, 10 May 2026 13:55:03 GMT; HttpOnly; Secure; SameSite=Lax'
+2026-02-09 07:55:34.48
+74afbe2a
+User
+[AUTH CHECK] Path: /api/auth/user
+2026-02-09 07:55:34.48
+74afbe2a
+User
+[AUTH CHECK] ❌ No session user ID found
+2026-02-09 07:55:34.48
+74afbe2a
+User
+[AUTH CHECK] Session ID: 2F1fsLg6sj-YfcgSf0LzS13WGQ1dGCt9
+2026-02-09 07:55:34.48
+74afbe2a
+User
+1:55:34 PM [express] GET /api/auth/user 401 in 321ms :: {"message":"Unauthorized"}
+2026-02-09 07:56:05.44
+74afbe2a
+User
+[AUTH CHECK] ❌ No session user ID found
+2026-02-09 07:56:05.44
+74afbe2a
+User
+[AUTH CHECK] Session ID: uQlvTrZplNL5iNl3y6Je-0kpyj-Eb740
+2026-02-09 07:56:05.44
+74afbe2a
+User
+[AUTH CHECK] Path: /api/auth/user
+2026-02-09 07:56:05.44
+74afbe2a
+User
+1:56:05 PM [express] GET /api/auth/user 401 in 360ms :: {"message":"Unauthorized"}
+2026-02-09 07:56:29.93
+74afbe2a
+User
+[LOGIN] Session saved successfully. Session ID: vC0ONaUJSxRGgzo3_sd-UHamjxWwmlNm, userId: 47798367
+2026-02-09 07:56:29.93
+74afbe2a
+User
+1:56:29 PM [express] POST /api/auth/employee/login 200 in 748ms :: {"success":true,"user":{"id":"477…
+2026-02-09 07:56:29.93
+74afbe2a
+User
+]
+2026-02-09 07:56:29.93
+74afbe2a
+User
+[COOKIE] Set-Cookie header sent: [
+2026-02-09 07:56:29.93
+74afbe2a
+User
+'connect.sid=s%3AvC0ONaUJSxRGgzo3_sd-UHamjxWwmlNm.%2B5%2FSwoSEd%2BtJ0geb7ZXCXGjzl7rbaEvtLcX4fl02kTI; Path=/; Expires=Sun, 10 May 2026 13:56:29 GMT; HttpOnly; Secure; SameSite=Lax'
+2026-02-09 07:56:48.43
+74afbe2a
+User
+[AUTH CHECK] Session ID: MqMLlaEJiQbrYIYq4o5Oh4FroQgkyq7o
+2026-02-09 07:56:48.43
+74afbe2a
+User
+[AUTH CHECK] Path: /api/jewelry
+2026-02-09 07:56:48.43
+74afbe2a
+User
+[AUTH CHECK] ❌ No session user ID found
+2026-02-09 07:56:48.43
+74afbe2a
+User
+1:56:48 PM [express] POST /api/jewelry 401 in 330ms :: {"message":"Unauthorized"}
+Wrap
+Colors
