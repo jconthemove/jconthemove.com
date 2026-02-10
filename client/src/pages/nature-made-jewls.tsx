@@ -616,12 +616,12 @@ export default function NatureMadeJewls() {
       </main>
 
       <Dialog open={!!selectedItem} onOpenChange={() => setSelectedItem(null)}>
-        <DialogContent className="max-w-2xl max-h-[95vh] overflow-y-auto p-0">
+        <DialogContent className="w-[95vw] max-w-5xl h-[90vh] overflow-hidden p-0 rounded-xl">
           {selectedItem && (
-            <>
-              <div className="relative">
+            <div className="flex flex-col md:flex-row h-full">
+              <div className="relative md:w-3/5 w-full h-[45vh] md:h-full bg-stone-100 flex-shrink-0">
                 {getItemPhotos(selectedItem).length > 0 ? (
-                  <div className="relative aspect-square bg-stone-100">
+                  <>
                     <img
                       src={getItemPhotos(selectedItem)[currentPhotoIndex]}
                       alt={selectedItem.title}
@@ -631,62 +631,61 @@ export default function NatureMadeJewls() {
                       <>
                         <button
                           onClick={(e) => { e.stopPropagation(); prevPhoto(); }}
-                          className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white rounded-full p-2 shadow-lg"
+                          className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white rounded-full p-2.5 shadow-lg"
                         >
-                          <ChevronLeft className="h-5 w-5" />
+                          <ChevronLeft className="h-6 w-6" />
                         </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); nextPhoto(); }}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white rounded-full p-2 shadow-lg"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white rounded-full p-2.5 shadow-lg"
                         >
-                          <ChevronRight className="h-5 w-5" />
+                          <ChevronRight className="h-6 w-6" />
                         </button>
-                        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
+                        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
                           {getItemPhotos(selectedItem).map((_, i) => (
                             <button
                               key={i}
                               onClick={(e) => { e.stopPropagation(); setCurrentPhotoIndex(i); }}
-                              className={`w-2 h-2 rounded-full transition-colors ${i === currentPhotoIndex ? 'bg-purple-500' : 'bg-white/60'}`}
+                              className={`w-2.5 h-2.5 rounded-full transition-colors ${i === currentPhotoIndex ? 'bg-purple-500' : 'bg-white/60'}`}
                             />
                           ))}
                         </div>
                       </>
                     )}
-                  </div>
+                  </>
                 ) : (
-                  <div className="aspect-video bg-stone-100 flex items-center justify-center">
-                    <Gem className="w-20 h-20 text-stone-300" />
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Gem className="w-24 h-24 text-stone-300" />
                   </div>
                 )}
               </div>
-              
-              <div className="p-6 space-y-4">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h2 className="text-2xl font-serif font-bold text-stone-800">{selectedItem.title}</h2>
-                    {selectedItem.category && (
-                      <p className="text-purple-600 capitalize">{selectedItem.category}</p>
-                    )}
-                  </div>
-                  {selectedItem.price && (
-                    <p className="text-2xl font-bold text-purple-600">${selectedItem.price}</p>
+
+              <div className="md:w-2/5 w-full overflow-y-auto p-6 md:p-8 space-y-5">
+                <div>
+                  <h2 className="text-3xl font-serif font-bold text-stone-800">{selectedItem.title}</h2>
+                  {selectedItem.category && (
+                    <p className="text-purple-600 capitalize text-lg mt-1">{selectedItem.category}</p>
                   )}
                 </div>
-                
+
+                {selectedItem.price && (
+                  <p className="text-3xl font-bold text-purple-600">${selectedItem.price}</p>
+                )}
+
                 {selectedItem.materials && (
                   <div>
-                    <p className="text-sm text-stone-500">Materials</p>
-                    <p className="text-stone-700">{selectedItem.materials}</p>
+                    <p className="text-sm font-medium text-stone-500 uppercase tracking-wide">Materials</p>
+                    <p className="text-stone-700 mt-1">{selectedItem.materials}</p>
                   </div>
                 )}
-                
+
                 {selectedItem.description && (
                   <div>
-                    <p className="text-sm text-stone-500">About this piece</p>
-                    <p className="text-stone-700 whitespace-pre-wrap">{selectedItem.description}</p>
+                    <p className="text-sm font-medium text-stone-500 uppercase tracking-wide">About this piece</p>
+                    <p className="text-stone-700 whitespace-pre-wrap mt-1">{selectedItem.description}</p>
                   </div>
                 )}
-                
+
                 <div className="pt-4 border-t space-y-3">
                   {selectedItem.price && selectedItem.inStock !== false && (
                     <Button className="w-full bg-purple-600 hover:bg-purple-700 py-6 text-lg" disabled>
@@ -729,7 +728,7 @@ export default function NatureMadeJewls() {
                   )}
                 </div>
               </div>
-            </>
+            </div>
           )}
         </DialogContent>
       </Dialog>
