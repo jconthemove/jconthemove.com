@@ -7876,6 +7876,28 @@ Thank you for your business!
     }
   });
 
+  app.post("/api/jewelry/upload-video", isAuthenticated, async (req: any, res) => {
+    try {
+      const allowedRoles = ['admin', 'business_owner', 'employee'];
+      if (!allowedRoles.includes(req.user?.role)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const { video, extension } = req.body;
+      if (!video) {
+        return res.status(400).json({ error: "Video data is required" });
+      }
+
+      const { ObjectStorageService } = await import("./objectStorage");
+      const objectStorage = new ObjectStorageService();
+      const url = await objectStorage.saveBase64Video(video, extension || 'mp4');
+      res.json({ url });
+    } catch (error: any) {
+      console.error("Error uploading jewelry video:", error);
+      res.status(500).json({ error: "Failed to upload video" });
+    }
+  });
+
   // Create jewelry item (requires auth - admin/business_owner/employee)
   app.post("/api/jewelry", isAuthenticated, async (req: any, res) => {
     try {

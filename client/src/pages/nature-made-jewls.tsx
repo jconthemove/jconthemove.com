@@ -12,7 +12,40 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Gem, Leaf, Search, Plus, ChevronLeft, ChevronRight, Mail, Phone, ShoppingCart, ImagePlus, X, Heart, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, Gem, Leaf, Search, Plus, ChevronLeft, ChevronRight, Mail, Phone, ShoppingCart, ImagePlus, X, Heart, Pencil, Trash2, Video } from "lucide-react";
+
+const isVideoUrl = (url: string) => /\.(mp4|webm|ogg|mov)$/i.test(url);
+
+function MediaItem({ src, alt, className }: { src: string; alt: string; className?: string }) {
+  if (isVideoUrl(src)) {
+    return (
+      <video
+        src={src}
+        className={className}
+        controls
+        playsInline
+        muted
+        loop
+      />
+    );
+  }
+  return <img src={src} alt={alt} className={className} />;
+}
+
+function MediaThumb({ src, alt, className }: { src: string; alt: string; className?: string }) {
+  if (isVideoUrl(src)) {
+    return (
+      <video
+        src={src}
+        className={className}
+        muted
+        playsInline
+        preload="metadata"
+      />
+    );
+  }
+  return <img src={src} alt={alt} className={className} />;
+}
 
 interface JewelryItem {
   id: string;
@@ -176,23 +209,26 @@ export default function NatureMadeJewls() {
     try {
       for (const file of filesToUpload) {
         const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+        const isVideo = videoExts.includes(ext) || file.type.startsWith('video/');
         const reader = new FileReader();
         const base64 = await new Promise<string>((resolve, reject) => {
           reader.onload = () => resolve(reader.result as string);
           reader.onerror = reject;
           reader.readAsDataURL(file);
         });
-        const res = await fetch('/api/jewelry/upload-photo', {
+        const endpoint = isVideo ? '/api/jewelry/upload-video' : '/api/jewelry/upload-photo';
+        const bodyKey = isVideo ? 'video' : 'image';
+        const res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ image: base64, extension: ext }),
+          body: JSON.stringify({ [bodyKey]: base64, extension: ext }),
         });
         if (!res.ok) throw new Error('Upload failed');
         const { url } = await res.json();
         setEditPhotoUrls(prev => [...prev, url]);
       }
-      toast({ title: `${filesToUpload.length} photo(s) uploaded` });
+      toast({ title: `${filesToUpload.length} file(s) uploaded` });
     } catch (err: any) {
       toast({ title: "Upload failed", description: err.message, variant: "destructive" });
     } finally {
@@ -225,6 +261,8 @@ export default function NatureMadeJewls() {
     setPhotoUrls(photoUrls.filter((_, i) => i !== index));
   };
 
+  const videoExts = ['mp4', 'webm', 'ogg', 'mov'];
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -236,6 +274,7 @@ export default function NatureMadeJewls() {
     try {
       for (const file of filesToUpload) {
         const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+        const isVideo = videoExts.includes(ext) || file.type.startsWith('video/');
         const reader = new FileReader();
         const base64 = await new Promise<string>((resolve, reject) => {
           reader.onload = () => resolve(reader.result as string);
@@ -243,18 +282,20 @@ export default function NatureMadeJewls() {
           reader.readAsDataURL(file);
         });
         
-        const res = await fetch('/api/jewelry/upload-photo', {
+        const endpoint = isVideo ? '/api/jewelry/upload-video' : '/api/jewelry/upload-photo';
+        const bodyKey = isVideo ? 'video' : 'image';
+        const res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ image: base64, extension: ext }),
+          body: JSON.stringify({ [bodyKey]: base64, extension: ext }),
         });
         
         if (!res.ok) throw new Error('Upload failed');
         const { url } = await res.json();
         setPhotoUrls(prev => [...prev, url]);
       }
-      toast({ title: `${filesToUpload.length} photo(s) uploaded` });
+      toast({ title: `${filesToUpload.length} file(s) uploaded` });
     } catch (err: any) {
       toast({ title: "Upload failed", description: err.message, variant: "destructive" });
     } finally {
@@ -372,11 +413,15 @@ export default function NatureMadeJewls() {
                     </div>
                     
                     <div>
-                      <Label>Photos</Label>
+                      <Label>Photos & Videos</Label>
                       <div className="space-y-2">
                         {photoUrls.map((url, index) => (
                           <div key={index} className="flex gap-2 items-center">
-                            <img src={url} alt="" className="w-12 h-12 object-cover rounded" />
+                            {isVideoUrl(url) ? (
+                              <div className="w-12 h-12 rounded bg-stone-200 flex items-center justify-center"><Video className="h-5 w-5 text-purple-600" /></div>
+                            ) : (
+                              <img src={url} alt="" className="w-12 h-12 object-cover rounded" />
+                            )}
                             <span className="text-sm text-stone-600 truncate flex-1">{url.split('/').pop()}</span>
                             <Button type="button" variant="ghost" size="sm" onClick={() => removePhotoUrl(index)}>
                               <X className="h-4 w-4" />
@@ -402,14 +447,14 @@ export default function NatureMadeJewls() {
                               type="file"
                               ref={fileInputRef}
                               onChange={handleFileUpload}
-                              accept="image/*"
+                              accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime"
                               multiple
                               className="sr-only"
                             />
                             {isUploading ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <ImagePlus className="h-4 w-4" />}
                           </label>
                         </div>
-                        <p className="text-xs text-stone-500">{photoUrls.length}/10 photos</p>
+                        <p className="text-xs text-stone-500">{photoUrls.length}/10 photos & videos</p>
                       </div>
                     </div>
 
@@ -541,7 +586,7 @@ export default function NatureMadeJewls() {
                 >
                   <div className={`${randomHeight} relative overflow-hidden bg-stone-100`}>
                     {photos.length > 0 ? (
-                      <img
+                      <MediaThumb
                         src={photos[0]}
                         alt={item.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
@@ -550,6 +595,11 @@ export default function NatureMadeJewls() {
                       <div className="w-full h-full flex items-center justify-center">
                         <Gem className="w-12 h-12 text-stone-300" />
                       </div>
+                    )}
+                    {photos.some(p => isVideoUrl(p)) && (
+                      <span className="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                        <Video className="h-3 w-3" /> Video
+                      </span>
                     )}
                     {photos.length > 1 && (
                       <span className="absolute top-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded-full">
@@ -585,7 +635,7 @@ export default function NatureMadeJewls() {
             >
               <div className="w-80 bg-white rounded-xl shadow-2xl shadow-purple-200/60 border border-purple-100 overflow-hidden">
                 {getItemPhotos(hoveredItem).length > 0 ? (
-                  <img
+                  <MediaThumb
                     src={getItemPhotos(hoveredItem)[0]}
                     alt={hoveredItem.title}
                     className="w-full aspect-square object-cover"
@@ -622,7 +672,7 @@ export default function NatureMadeJewls() {
               <div className="relative md:w-3/5 w-full h-[45vh] md:h-full bg-stone-100 flex-shrink-0">
                 {getItemPhotos(selectedItem).length > 0 ? (
                   <>
-                    <img
+                    <MediaItem
                       src={getItemPhotos(selectedItem)[currentPhotoIndex]}
                       alt={selectedItem.title}
                       className="w-full h-full object-contain"
@@ -749,11 +799,15 @@ export default function NatureMadeJewls() {
               </div>
 
               <div>
-                <Label>Photos</Label>
+                <Label>Photos & Videos</Label>
                 <div className="space-y-2">
                   {editPhotoUrls.map((url, index) => (
                     <div key={index} className="flex gap-2 items-center">
-                      <img src={url} alt="" className="w-12 h-12 object-cover rounded" />
+                      {isVideoUrl(url) ? (
+                        <div className="w-12 h-12 rounded bg-stone-200 flex items-center justify-center"><Video className="h-5 w-5 text-purple-600" /></div>
+                      ) : (
+                        <img src={url} alt="" className="w-12 h-12 object-cover rounded" />
+                      )}
                       <span className="text-sm text-stone-600 truncate flex-1">{url.split('/').pop()}</span>
                       <Button type="button" variant="ghost" size="sm" onClick={() => setEditPhotoUrls(editPhotoUrls.filter((_, i) => i !== index))}>
                         <X className="h-4 w-4" />
@@ -778,14 +832,14 @@ export default function NatureMadeJewls() {
                         type="file"
                         ref={editFileInputRef}
                         onChange={handleEditFileUpload}
-                        accept="image/*"
+                        accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime"
                         multiple
                         className="sr-only"
                       />
                       {isEditUploading ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <ImagePlus className="h-4 w-4" />}
                     </label>
                   </div>
-                  <p className="text-xs text-stone-500">{editPhotoUrls.length}/10 photos</p>
+                  <p className="text-xs text-stone-500">{editPhotoUrls.length}/10 photos & videos</p>
                 </div>
               </div>
 
