@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -125,7 +125,11 @@ export default function NatureMadeJewls() {
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<JewelryItem | null>(null);
+  const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
+  const [invoiceEmail, setInvoiceEmail] = useState("");
+  const [invoiceName, setInvoiceName] = useState("");
 
+  const [, navigate] = useLocation();
   const isAdmin = user?.role === 'admin' || user?.role === 'business_owner';
   const canAdd = isAdmin || user?.role === 'employee';
 
@@ -188,6 +192,36 @@ export default function NatureMadeJewls() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
+
+  const invoiceMutation = useMutation({
+    mutationFn: async (data: { itemId: string; itemTitle: string; amount: string; customerEmail: string; customerName: string }) => {
+      return await apiRequest("POST", "/api/square/create-invoice", data);
+    },
+    onSuccess: () => {
+      setIsInvoiceOpen(false);
+      setInvoiceEmail("");
+      setInvoiceName("");
+      toast({ title: "Invoice Sent!", description: "Check your email for the Square invoice to complete your purchase." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Invoice Error", description: error.message || "Failed to create invoice. Please contact us directly.", variant: "destructive" });
+    },
+  });
+
+  const handleRequestInvoice = () => {
+    if (!invoiceEmail.trim() || !invoiceName.trim()) {
+      toast({ title: "Please fill in your name and email", variant: "destructive" });
+      return;
+    }
+    if (!selectedItem) return;
+    invoiceMutation.mutate({
+      itemId: selectedItem.id,
+      itemTitle: selectedItem.title,
+      amount: selectedItem.price || "0",
+      customerEmail: invoiceEmail.trim(),
+      customerName: invoiceName.trim(),
+    });
+  };
 
   const startEdit = (item: JewelryItem) => {
     setEditItem({ ...item });
@@ -338,9 +372,15 @@ export default function NatureMadeJewls() {
     }
   };
 
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+
   const openItem = (item: JewelryItem) => {
-    setSelectedItem(item);
-    setCurrentPhotoIndex(0);
+    if (isMobile) {
+      navigate(`/nature-made-jewls/${item.id}`);
+    } else {
+      setSelectedItem(item);
+      setCurrentPhotoIndex(0);
+    }
   };
 
   return (
@@ -758,12 +798,13 @@ export default function NatureMadeJewls() {
 
                 <div className="pt-3 border-t space-y-2.5">
                   {selectedItem.price && selectedItem.inStock !== false && (
-                    <a href={`mailto:upmichiganstatemovers@gmail.com?subject=Purchase Request: ${selectedItem.title} ($${selectedItem.price})&body=Hi! I'd like to purchase "${selectedItem.title}" for $${selectedItem.price}. Please send me a Square invoice.%0A%0AThank you!`}>
-                      <Button className="w-full bg-purple-600 hover:bg-purple-700 py-5 text-base font-semibold">
-                        <FileText className="h-5 w-5 mr-2" />
-                        Request Invoice - ${selectedItem.price}
-                      </Button>
-                    </a>
+                    <Button
+                      className="w-full bg-purple-600 hover:bg-purple-700 py-5 text-base font-semibold"
+                      onClick={() => setIsInvoiceOpen(true)}
+                    >
+                      <FileText className="h-5 w-5 mr-2" />
+                      Purchase - ${selectedItem.price}
+                    </Button>
                   )}
                   <div className="flex gap-2">
                     <a href={`mailto:upmichiganstatemovers@gmail.com?subject=Inquiry: ${selectedItem.title}`} className="flex-1">
@@ -806,6 +847,36 @@ export default function NatureMadeJewls() {
           </div>
         </div>
       )}
+
+      <Dialog open={isInvoiceOpen} onOpenChange={setIsInvoiceOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-center">Purchase {selectedItem?.title}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-purple-50 rounded-lg p-4 text-center">
+              <p className="text-2xl font-bold text-purple-600">${selectedItem?.price}</p>
+              <p className="text-xs text-stone-500 mt-1">A Square invoice will be sent to your email</p>
+            </div>
+            <div>
+              <Label>Your Name</Label>
+              <Input value={invoiceName} onChange={(e) => setInvoiceName(e.target.value)} placeholder="Full name" />
+            </div>
+            <div>
+              <Label>Your Email</Label>
+              <Input type="email" value={invoiceEmail} onChange={(e) => setInvoiceEmail(e.target.value)} placeholder="email@example.com" />
+            </div>
+            <Button
+              className="w-full bg-purple-600 hover:bg-purple-700 py-5 font-semibold"
+              onClick={handleRequestInvoice}
+              disabled={invoiceMutation.isPending}
+            >
+              {invoiceMutation.isPending ? "Sending Invoice..." : "Send Invoice to My Email"}
+            </Button>
+            <p className="text-xs text-stone-400 text-center">Powered by Square. Secure payment processing.</p>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
