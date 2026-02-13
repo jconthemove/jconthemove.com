@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Gem, Leaf, Search, Plus, ChevronLeft, ChevronRight, Mail, Phone, ShoppingCart, ImagePlus, X, Heart, Pencil, Trash2, Video } from "lucide-react";
+import { ArrowLeft, Gem, Leaf, Search, Plus, ChevronLeft, ChevronRight, Mail, Phone, ShoppingCart, ImagePlus, X, Heart, Pencil, Trash2, Video, CreditCard, FileText } from "lucide-react";
 
 const isVideoUrl = (url: string) => /\.(mp4|webm|ogg|mov)$/i.test(url);
 
@@ -95,6 +95,17 @@ export default function NatureMadeJewls() {
       if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (selectedItem) {
+      document.body.style.overflow = 'hidden';
+      const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelectedItem(null); };
+      window.addEventListener('keydown', handleEsc);
+      return () => { document.body.style.overflow = ''; window.removeEventListener('keydown', handleEsc); };
+    } else {
+      document.body.style.overflow = '';
+    }
+  }, [selectedItem]);
 
   const [newItem, setNewItem] = useState({
     title: "",
@@ -365,18 +376,18 @@ export default function NatureMadeJewls() {
       </header>
 
       <div className="sticky top-14 z-40 bg-gradient-to-r from-slate-100/95 via-purple-50/95 to-slate-200/95 backdrop-blur border-b border-purple-200/50">
-        <div className="container mx-auto px-4 py-3">
-          <div className="flex flex-col sm:flex-row gap-3">
+        <div className="container mx-auto px-3 sm:px-4 py-2 sm:py-3">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-stone-400" />
               <Input
-                placeholder="Search handcrafted jewelry..."
+                placeholder="Search jewelry..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 bg-white/70 border-purple-200"
+                className="pl-10 bg-white/70 border-purple-200 h-9 sm:h-10 text-sm"
               />
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-1">
+            <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-1 -mx-1 px-1">
               {categories.map((cat) => (
                 <Button
                   key={cat.value}
@@ -525,7 +536,7 @@ export default function NatureMadeJewls() {
         </div>
       </div>
 
-      <main className="container mx-auto px-2 py-6">
+      <main className="container mx-auto px-2 sm:px-3 py-3 sm:py-6">
         {isLoading ? (
           <div className="text-center text-stone-500 py-16">Loading beautiful pieces...</div>
         ) : items.length === 0 ? (
@@ -555,7 +566,7 @@ export default function NatureMadeJewls() {
           </div>
         ) : (
           <>
-          <div className="columns-2 md:columns-3 lg:columns-4 xl:columns-5 gap-3 space-y-3">
+          <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 xl:columns-5 gap-3 space-y-3">
             {items.map((item) => {
               const photos = getItemPhotos(item);
               const randomHeight = Math.random() > 0.5 ? 'aspect-[3/4]' : 'aspect-square';
@@ -665,93 +676,104 @@ export default function NatureMadeJewls() {
         )}
       </main>
 
-      <Dialog open={!!selectedItem} onOpenChange={() => setSelectedItem(null)}>
-        <DialogContent className="w-[95vw] max-w-5xl h-[90vh] overflow-hidden p-0 rounded-xl">
-          {selectedItem && (
-            <div className="flex flex-col md:flex-row h-full">
-              <div className="relative md:w-3/5 w-full h-[45vh] md:h-full bg-stone-100 flex-shrink-0">
-                {getItemPhotos(selectedItem).length > 0 ? (
-                  <>
-                    <MediaItem
-                      src={getItemPhotos(selectedItem)[currentPhotoIndex]}
-                      alt={selectedItem.title}
-                      className="w-full h-full object-contain"
-                    />
-                    {getItemPhotos(selectedItem).length > 1 && (
-                      <>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); prevPhoto(); }}
-                          className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white rounded-full p-2.5 shadow-lg"
-                        >
-                          <ChevronLeft className="h-6 w-6" />
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); nextPhoto(); }}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white rounded-full p-2.5 shadow-lg"
-                        >
-                          <ChevronRight className="h-6 w-6" />
-                        </button>
-                        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
-                          {getItemPhotos(selectedItem).map((_, i) => (
-                            <button
-                              key={i}
-                              onClick={(e) => { e.stopPropagation(); setCurrentPhotoIndex(i); }}
-                              className={`w-2.5 h-2.5 rounded-full transition-colors ${i === currentPhotoIndex ? 'bg-purple-500' : 'bg-white/60'}`}
-                            />
-                          ))}
-                        </div>
-                      </>
-                    )}
-                  </>
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <Gem className="w-24 h-24 text-stone-300" />
-                  </div>
-                )}
-              </div>
+      {selectedItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedItem(null)} />
+          <div className="relative z-50 w-full h-full md:w-[95vw] md:max-w-5xl md:h-[90vh] md:rounded-xl bg-white overflow-hidden flex flex-col md:flex-row">
+            <button
+              onClick={() => setSelectedItem(null)}
+              className="absolute top-3 right-3 z-10 bg-black/50 hover:bg-black/70 text-white rounded-full p-2"
+            >
+              <X className="h-5 w-5" />
+            </button>
 
-              <div className="md:w-2/5 w-full overflow-y-auto p-6 md:p-8 space-y-5">
-                <div>
-                  <h2 className="text-3xl font-serif font-bold text-stone-800">{selectedItem.title}</h2>
-                  {selectedItem.category && (
-                    <p className="text-purple-600 capitalize text-lg mt-1">{selectedItem.category}</p>
+            <div className="relative w-full md:w-3/5 h-[55vh] md:h-full bg-stone-100 flex-shrink-0">
+              {getItemPhotos(selectedItem).length > 0 ? (
+                <>
+                  <MediaItem
+                    src={getItemPhotos(selectedItem)[currentPhotoIndex]}
+                    alt={selectedItem.title}
+                    className="w-full h-full object-contain"
+                  />
+                  {getItemPhotos(selectedItem).length > 1 && (
+                    <>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); prevPhoto(); }}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white rounded-full p-2.5 shadow-lg"
+                      >
+                        <ChevronLeft className="h-6 w-6" />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); nextPhoto(); }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white rounded-full p-2.5 shadow-lg"
+                      >
+                        <ChevronRight className="h-6 w-6" />
+                      </button>
+                      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+                        {getItemPhotos(selectedItem).map((_, i) => (
+                          <button
+                            key={i}
+                            onClick={(e) => { e.stopPropagation(); setCurrentPhotoIndex(i); }}
+                            className={`w-3 h-3 rounded-full transition-colors shadow ${i === currentPhotoIndex ? 'bg-purple-500 scale-110' : 'bg-white/70'}`}
+                          />
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </>
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <Gem className="w-24 h-24 text-stone-300" />
+                </div>
+              )}
+            </div>
+
+            <div className="w-full md:w-2/5 flex-1 overflow-y-auto">
+              <div className="p-5 md:p-8 space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-2xl md:text-3xl font-serif font-bold text-stone-800">{selectedItem.title}</h2>
+                    {selectedItem.category && (
+                      <p className="text-purple-600 capitalize text-sm md:text-lg mt-0.5">{selectedItem.category}</p>
+                    )}
+                  </div>
+                  {selectedItem.price && (
+                    <p className="text-2xl md:text-3xl font-bold text-purple-600 whitespace-nowrap">${selectedItem.price}</p>
                   )}
                 </div>
 
-                {selectedItem.price && (
-                  <p className="text-3xl font-bold text-purple-600">${selectedItem.price}</p>
-                )}
-
                 {selectedItem.materials && (
-                  <div>
-                    <p className="text-sm font-medium text-stone-500 uppercase tracking-wide">Materials</p>
-                    <p className="text-stone-700 mt-1">{selectedItem.materials}</p>
+                  <div className="bg-purple-50 rounded-lg p-3">
+                    <p className="text-xs font-medium text-purple-500 uppercase tracking-wide">Materials</p>
+                    <p className="text-stone-700 text-sm mt-0.5">{selectedItem.materials}</p>
                   </div>
                 )}
 
                 {selectedItem.description && (
                   <div>
-                    <p className="text-sm font-medium text-stone-500 uppercase tracking-wide">About this piece</p>
-                    <p className="text-stone-700 whitespace-pre-wrap mt-1">{selectedItem.description}</p>
+                    <p className="text-xs font-medium text-stone-400 uppercase tracking-wide">About this piece</p>
+                    <p className="text-stone-600 text-sm whitespace-pre-wrap mt-1">{selectedItem.description}</p>
                   </div>
                 )}
 
-                <div className="pt-4 border-t space-y-3">
+                <div className="pt-3 border-t space-y-2.5">
                   {selectedItem.price && selectedItem.inStock !== false && (
-                    <Button className="w-full bg-purple-600 hover:bg-purple-700 py-6 text-lg" disabled>
-                      <ShoppingCart className="h-5 w-5 mr-2" />
-                      Buy Now - Coming Soon!
-                    </Button>
+                    <a href={`mailto:upmichiganstatemovers@gmail.com?subject=Purchase Request: ${selectedItem.title} ($${selectedItem.price})&body=Hi! I'd like to purchase "${selectedItem.title}" for $${selectedItem.price}. Please send me a Square invoice.%0A%0AThank you!`}>
+                      <Button className="w-full bg-purple-600 hover:bg-purple-700 py-5 text-base font-semibold">
+                        <FileText className="h-5 w-5 mr-2" />
+                        Request Invoice - ${selectedItem.price}
+                      </Button>
+                    </a>
                   )}
                   <div className="flex gap-2">
                     <a href={`mailto:upmichiganstatemovers@gmail.com?subject=Inquiry: ${selectedItem.title}`} className="flex-1">
-                      <Button variant="outline" className="w-full border-purple-600 text-purple-600 hover:bg-purple-50">
+                      <Button variant="outline" className="w-full border-purple-600 text-purple-600 hover:bg-purple-50 text-sm py-4">
                         <Mail className="h-4 w-4 mr-2" />
-                        Contact to Purchase
+                        Ask a Question
                       </Button>
                     </a>
                     <a href="tel:906-285-9312">
-                      <Button variant="outline" className="border-stone-300">
+                      <Button variant="outline" className="border-stone-300 py-4">
                         <Phone className="h-4 w-4" />
                       </Button>
                     </a>
@@ -760,18 +782,20 @@ export default function NatureMadeJewls() {
                     <div className="flex gap-2 pt-2 border-t border-stone-200">
                       <Button
                         variant="outline"
+                        size="sm"
                         className="flex-1 border-purple-400 text-purple-600 hover:bg-purple-50"
                         onClick={() => startEdit(selectedItem)}
                       >
-                        <Pencil className="h-4 w-4 mr-2" />
+                        <Pencil className="h-3.5 w-3.5 mr-1.5" />
                         Edit
                       </Button>
                       <Button
                         variant="outline"
+                        size="sm"
                         className="flex-1 border-red-300 text-red-600 hover:bg-red-50"
                         onClick={() => { setItemToDelete(selectedItem); setDeleteConfirmOpen(true); }}
                       >
-                        <Trash2 className="h-4 w-4 mr-2" />
+                        <Trash2 className="h-3.5 w-3.5 mr-1.5" />
                         Delete
                       </Button>
                     </div>
@@ -779,9 +803,9 @@ export default function NatureMadeJewls() {
                 </div>
               </div>
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
+          </div>
+        </div>
+      )}
 
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
