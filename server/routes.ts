@@ -7819,9 +7819,25 @@ Thank you for your business!
   app.get("/api/jewelry", async (req: any, res) => {
     try {
       const { status, category, search } = req.query;
-      let items = await storage.getJewelryItems(status || 'active', category || undefined);
+      let items: any[];
+      if (status) {
+        items = await storage.getJewelryItems(status, category || undefined);
+      } else {
+        const activeItems = await storage.getJewelryItems('active', category || undefined);
+        const soldItems = await storage.getJewelryItems('sold', category || undefined);
+        items = [...activeItems, ...soldItems];
+        items.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      }
       
-      // Filter by search term if provided
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      items = items.filter((item: any) => {
+        if (item.soldAt) {
+          return new Date(item.soldAt) > thirtyDaysAgo;
+        }
+        return true;
+      });
+
       if (search) {
         const searchLower = search.toLowerCase();
         items = items.filter((item: any) => 
@@ -7965,6 +7981,37 @@ Thank you for your business!
     } catch (error: any) {
       console.error("Error deleting jewelry item:", error);
       res.status(500).json({ error: error.message || "Failed to delete jewelry item" });
+    }
+  });
+
+  app.patch("/api/jewelry/:id/sold", isAuthenticated, async (req: any, res) => {
+    try {
+      const existing = await storage.getJewelryItem(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ error: "Item not found" });
+      }
+
+      const isOwner = existing.postedBy === req.user.id;
+      const isAdmin = req.user.role === 'admin' || req.user.role === 'business_owner';
+      if (!isOwner && !isAdmin) {
+        return res.status(403).json({ error: "Only the item owner or admin can update this item" });
+      }
+
+      const { sold } = req.body;
+      if (typeof sold !== 'boolean') {
+        return res.status(400).json({ error: "sold must be a boolean" });
+      }
+      const updates: any = {
+        inStock: !sold,
+        soldAt: sold ? new Date() : null,
+        status: sold ? 'sold' : 'active',
+      };
+
+      const updated = await storage.updateJewelryItem(req.params.id, updates);
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error marking jewelry item sold:", error);
+      res.status(500).json({ error: error.message || "Failed to update item" });
     }
   });
 

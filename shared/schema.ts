@@ -525,12 +525,14 @@ export const jewelryItems = pgTable("jewelry_items", {
   inStock: boolean("in_stock").default(true),
   featured: boolean("featured").default(false),
   status: text("status").notNull().default("active"),
+  soldAt: timestamp("sold_at"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
 
 export const insertJewelryItemSchema = createInsertSchema(jewelryItems).omit({
   id: true,
   createdAt: true,
+  soldAt: true,
 });
 
 export type InsertJewelryItem = z.infer<typeof insertJewelryItemSchema>;

@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Gem, Leaf, Search, Plus, ChevronLeft, ChevronRight, Mail, Phone, ShoppingCart, ImagePlus, X, Heart, Pencil, Trash2, Video, CreditCard, FileText } from "lucide-react";
+import { ArrowLeft, Gem, Leaf, Search, Plus, ChevronLeft, ChevronRight, Mail, Phone, ShoppingCart, ImagePlus, X, Heart, Pencil, Trash2, Video, CreditCard, FileText, Tag, RotateCcw } from "lucide-react";
 
 const isVideoUrl = (url: string) => /\.(mp4|webm|ogg|mov)$/i.test(url);
 
@@ -187,6 +187,22 @@ export default function NatureMadeJewls() {
       setDeleteConfirmOpen(false);
       setItemToDelete(null);
       toast({ title: "Item deleted" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const soldMutation = useMutation({
+    mutationFn: async ({ id, sold }: { id: string; sold: boolean }) => {
+      return await apiRequest("PATCH", `/api/jewelry/${id}/sold`, { sold });
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jewelry"] });
+      if (selectedItem && selectedItem.id === variables.id) {
+        setSelectedItem({ ...selectedItem, inStock: !variables.sold, soldAt: variables.sold ? new Date().toISOString() : null, status: variables.sold ? 'sold' : 'active' } as any);
+      }
+      toast({ title: variables.sold ? "Item marked as sold" : "Item marked as available" });
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -728,6 +744,13 @@ export default function NatureMadeJewls() {
             </button>
 
             <div className="relative w-full md:w-3/5 h-[55vh] md:h-full bg-stone-100 flex-shrink-0">
+              {selectedItem.inStock === false && (
+                <div className="absolute top-4 left-4 z-20">
+                  <span className="bg-red-500 text-white font-bold text-sm px-4 py-1.5 rounded-full shadow-lg uppercase tracking-wider">
+                    Sold
+                  </span>
+                </div>
+              )}
               {getItemPhotos(selectedItem).length > 0 ? (
                 <>
                   <MediaItem
@@ -820,25 +843,42 @@ export default function NatureMadeJewls() {
                     </a>
                   </div>
                   {canEditItem(selectedItem) && (
-                    <div className="flex gap-2 pt-2 border-t border-stone-200">
+                    <div className="space-y-2 pt-2 border-t border-stone-200">
                       <Button
-                        variant="outline"
+                        variant={selectedItem.inStock === false ? "outline" : "default"}
                         size="sm"
-                        className="flex-1 border-purple-400 text-purple-600 hover:bg-purple-50"
-                        onClick={() => startEdit(selectedItem)}
+                        className={selectedItem.inStock === false
+                          ? "w-full border-green-400 text-green-600 hover:bg-green-50"
+                          : "w-full bg-amber-500 hover:bg-amber-600 text-white"}
+                        onClick={() => soldMutation.mutate({ id: selectedItem.id, sold: selectedItem.inStock !== false })}
+                        disabled={soldMutation.isPending}
                       >
-                        <Pencil className="h-3.5 w-3.5 mr-1.5" />
-                        Edit
+                        {selectedItem.inStock === false ? (
+                          <><RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Mark Available</>
+                        ) : (
+                          <><Tag className="h-3.5 w-3.5 mr-1.5" /> Mark as Sold</>
+                        )}
                       </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1 border-red-300 text-red-600 hover:bg-red-50"
-                        onClick={() => { setItemToDelete(selectedItem); setDeleteConfirmOpen(true); }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                        Delete
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 border-purple-400 text-purple-600 hover:bg-purple-50"
+                          onClick={() => startEdit(selectedItem)}
+                        >
+                          <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                          Edit
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 border-red-300 text-red-600 hover:bg-red-50"
+                          onClick={() => { setItemToDelete(selectedItem); setDeleteConfirmOpen(true); }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                          Delete
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </div>

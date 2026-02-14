@@ -11,7 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
-import { ArrowLeft, Gem, ChevronLeft, ChevronRight, Mail, Phone, FileText, Pencil, Trash2, Video, Loader2 } from "lucide-react";
+import { ArrowLeft, Gem, ChevronLeft, ChevronRight, Mail, Phone, FileText, Pencil, Trash2, Video, Loader2, Tag, RotateCcw } from "lucide-react";
 
 const isVideoUrl = (url: string) => /\.(mp4|webm|ogg|mov)$/i.test(url);
 
@@ -90,6 +90,20 @@ export default function JewelryDetailPage() {
       qc.invalidateQueries({ queryKey: ["/api/jewelry"] });
       setIsEditOpen(false);
       toast({ title: "Item Updated" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const soldMutation = useMutation({
+    mutationFn: async ({ id, sold }: { id: string; sold: boolean }) => {
+      return await apiRequest("PATCH", `/api/jewelry/${id}/sold`, { sold });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/jewelry", id] });
+      qc.invalidateQueries({ queryKey: ["/api/jewelry"] });
+      toast({ title: "Item updated" });
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -179,6 +193,13 @@ export default function JewelryDetailPage() {
       </div>
 
       <div className="relative w-full bg-stone-100" style={{ height: '60vh' }}>
+        {item.inStock === false && (
+          <div className="absolute top-4 left-4 z-20">
+            <span className="bg-red-500 text-white font-bold text-sm px-4 py-1.5 rounded-full shadow-lg uppercase tracking-wider">
+              Sold
+            </span>
+          </div>
+        )}
         {photos.length > 0 ? (
           <>
             <MediaItem
@@ -273,13 +294,30 @@ export default function JewelryDetailPage() {
             </div>
 
             {canEditItem(item) && (
-              <div className="flex gap-2 pt-2 border-t border-stone-200">
-                <Button variant="outline" size="sm" className="flex-1 border-purple-400 text-purple-600" onClick={startEdit}>
-                  <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit
+              <div className="space-y-2 pt-2 border-t border-stone-200">
+                <Button
+                  variant={item.inStock === false ? "outline" : "default"}
+                  size="sm"
+                  className={item.inStock === false
+                    ? "w-full border-green-400 text-green-600 hover:bg-green-50"
+                    : "w-full bg-amber-500 hover:bg-amber-600 text-white"}
+                  onClick={() => soldMutation.mutate({ id: item.id, sold: item.inStock !== false })}
+                  disabled={soldMutation.isPending}
+                >
+                  {item.inStock === false ? (
+                    <><RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Mark Available</>
+                  ) : (
+                    <><Tag className="h-3.5 w-3.5 mr-1.5" /> Mark as Sold</>
+                  )}
                 </Button>
-                <Button variant="outline" size="sm" className="flex-1 border-red-300 text-red-600" onClick={() => setDeleteConfirmOpen(true)}>
-                  <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete
-                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" className="flex-1 border-purple-400 text-purple-600" onClick={startEdit}>
+                    <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit
+                  </Button>
+                  <Button variant="outline" size="sm" className="flex-1 border-red-300 text-red-600" onClick={() => setDeleteConfirmOpen(true)}>
+                    <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete
+                  </Button>
+                </div>
               </div>
             )}
           </div>
