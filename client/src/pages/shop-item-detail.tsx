@@ -180,7 +180,7 @@ export function ShopItemDetailPage() {
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-2">Item Not Found</h1>
           <p className="text-muted-foreground mb-4">The item you're looking for doesn't exist.</p>
-          <Button onClick={() => setLocation("/")}>
+          <Button onClick={() => setLocation("/shop")}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Shop
           </Button>
@@ -223,7 +223,7 @@ export function ShopItemDetailPage() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => setLocation("/")}
+          onClick={() => setLocation("/shop")}
           data-testid="button-back"
         >
           <ArrowLeft className="h-5 w-5" />
