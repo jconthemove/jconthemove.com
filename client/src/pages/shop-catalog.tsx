@@ -148,7 +148,7 @@ function FeaturedJewelryBanner() {
   const imageUrl = photos && photos.length > 0 ? photos[0] : featured.imageUrl;
 
   return (
-    <Link href={`/jewelry/${featured.id}`}>
+    <Link href={`/nature-made-jewls/${featured.id}`}>
       <div className="mb-6 rounded-xl overflow-hidden border border-purple-500/30 bg-gradient-to-r from-purple-900/40 via-slate-800/60 to-purple-900/40 hover:border-purple-400/50 hover:shadow-lg hover:shadow-purple-500/10 transition-all cursor-pointer group">
         <div className="flex items-center gap-4 p-4">
           {imageUrl && (
