@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Truck, Trash2, Snowflake, Sparkles, Gift, ShoppingBag, Star, Users, Volume2, VolumeX, Gem } from "lucide-react";
+import { Truck, Trash2, Snowflake, Sparkles, Gift, ShoppingBag, Star, Users, Volume2, VolumeX, Gem, Clock, BadgeDollarSign } from "lucide-react";
+import promoImage from "@assets/file_00000000839871fd8e13378301744f2e_(1)_1771260918919.png";
 import { Link } from "wouter";
 
 export default function HomePage() {
@@ -95,6 +96,35 @@ export default function HomePage() {
               </button>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Monthly Special Promo - #1 Slot */}
+      <section className="py-6 px-4">
+        <div className="max-w-4xl mx-auto">
+          <Link href="/promo/half-day">
+            <div className="relative group cursor-pointer rounded-2xl overflow-hidden shadow-2xl border-2 border-yellow-400/60 hover:border-yellow-300 transition-all duration-300 hover:scale-[1.01]">
+              <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-r from-yellow-500 via-amber-500 to-yellow-500 text-black text-center py-2 font-extrabold text-sm md:text-base tracking-wider uppercase">
+                <span className="animate-pulse">&#9733;</span> Monthly Special — Best Value <span className="animate-pulse">&#9733;</span>
+              </div>
+              <img
+                src={promoImage}
+                alt="Half Day Loading/Unloading - 3 movers, 4 hours, travel time included - $600"
+                className="w-full object-cover max-h-[420px] md:max-h-[480px]"
+              />
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-4 md:p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-yellow-400 font-bold text-lg md:text-xl">Half Day Loading/Unloading</p>
+                    <p className="text-white/80 text-sm">3 Movers &bull; 4 Hours &bull; Travel Included</p>
+                  </div>
+                  <div className="bg-yellow-500 text-black font-extrabold text-xl md:text-2xl px-4 py-2 rounded-xl shadow-lg group-hover:scale-110 transition-transform">
+                    $600
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Link>
         </div>
       </section>
 

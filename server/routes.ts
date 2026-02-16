@@ -8103,6 +8103,153 @@ Thank you for your business!
     }
   });
 
+  // Promo Half Day Package - Creates lead + Square Checkout
+  app.post("/api/promo/half-day-checkout", async (req: any, res) => {
+    try {
+      const { firstName, lastName, email, phone, fromAddress, toAddress, moveDate, details } = req.body;
+
+      if (!firstName || !lastName || !email || !phone || !fromAddress || !moveDate) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      const squareToken = process.env.SQUARE_ACCESS_TOKEN;
+      if (!squareToken) {
+        return res.status(500).json({ error: "Payment processing is not configured. Please call us at 906-285-9312 to book." });
+      }
+
+      const lead = await storage.createLead({
+        firstName,
+        lastName,
+        email,
+        phone,
+        serviceType: "residential",
+        fromAddress,
+        toAddress: toAddress || "",
+        moveDate,
+        details: `[HALF DAY PROMO - $600] 3 Movers, 4 Hours, Travel Included. ${details || ""}`.trim(),
+        propertySize: "half-day-promo",
+        crewSize: 3,
+        truckConfig: "company_truck",
+        basePrice: "600.00",
+        totalPrice: "600.00",
+      });
+
+      const { SquareClient, SquareEnvironment } = await import("square");
+      const { randomUUID } = await import("crypto");
+
+      const client = new SquareClient({
+        token: squareToken,
+        environment: SquareEnvironment.Production,
+      });
+
+      const locationsResponse = await client.locations.list();
+      const locations = locationsResponse.locations;
+      if (!locations || locations.length === 0) {
+        return res.status(500).json({ error: "Payment setup incomplete. Please call us at 906-285-9312." });
+      }
+      const locationId = locations[0].id!;
+
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+      const host = req.headers['x-forwarded-host'] || req.headers.host;
+      const baseUrl = `${protocol}://${host}`;
+
+      const paymentLinkResponse = await client.checkout.paymentLinks.create({
+        idempotencyKey: randomUUID(),
+        quickPay: {
+          name: "Half Day Loading/Unloading - 3 Movers, 4 Hours",
+          priceMoney: {
+            amount: BigInt(60000),
+            currency: "USD",
+          },
+          locationId,
+        },
+        checkoutOptions: {
+          redirectUrl: `${baseUrl}/payment-success?type=promo&leadId=${lead.id}`,
+          allowTipping: false,
+          merchantSupportEmail: "upmichiganstatemovers@gmail.com",
+        },
+        paymentNote: `Half Day Promo - ${firstName} ${lastName} - ${moveDate} - Lead ID: ${lead.id}`,
+      });
+
+      const paymentLink = paymentLinkResponse.result?.paymentLink || paymentLinkResponse.paymentLink;
+      if (!paymentLink?.url) {
+        return res.status(500).json({ error: "Failed to create payment link" });
+      }
+
+      // Send confirmation email to customer
+      try {
+        await sendEmail({
+          to: email,
+          from: process.env.COMPANY_EMAIL || "upmichiganstatemovers@gmail.com",
+          subject: "JC ON THE MOVE - Half Day Move Booking Confirmation",
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #1e293b; color: #e2e8f0; padding: 30px; border-radius: 12px;">
+              <h1 style="color: #facc15; text-align: center; margin-bottom: 20px;">JC ON THE MOVE LLC</h1>
+              <h2 style="color: white; text-align: center;">Half Day Move — Booking Confirmed</h2>
+              
+              <div style="background: #334155; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <h3 style="color: #facc15; margin-top: 0;">Package Details</h3>
+                <p><strong>Service:</strong> Half Day Loading/Unloading</p>
+                <p><strong>Crew:</strong> 3 Professional Movers</p>
+                <p><strong>Duration:</strong> 4 Hours (travel time included)</p>
+                <p><strong>Price:</strong> $600.00</p>
+              </div>
+              
+              <div style="background: #334155; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <h3 style="color: #60a5fa; margin-top: 0;">Your Move Info</h3>
+                <p><strong>Name:</strong> ${firstName} ${lastName}</p>
+                <p><strong>Date:</strong> ${moveDate}</p>
+                <p><strong>Pickup:</strong> ${fromAddress}</p>
+                ${toAddress ? `<p><strong>Drop-off:</strong> ${toAddress}</p>` : ""}
+                ${details ? `<p><strong>Notes:</strong> ${details}</p>` : ""}
+              </div>
+              
+              <div style="background: #7f1d1d40; border: 1px solid #ef444480; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <h3 style="color: #fca5a5; margin-top: 0; font-size: 14px;">Cancellation Policy</h3>
+                <p style="font-size: 13px; margin: 5px 0;">• More than 48 hours: $10 processing fee or $100, whichever is greater</p>
+                <p style="font-size: 13px; margin: 5px 0;">• Within 48 hours: 25% fee ($150)</p>
+                <p style="font-size: 13px; margin: 5px 0;">• Within 24 hours: 50% fee ($300)</p>
+              </div>
+              
+              <p style="text-align: center; color: #94a3b8; font-size: 13px; margin-top: 25px;">
+                Questions? Call us at <a href="tel:906-285-9312" style="color: #60a5fa;">906-285-9312</a> or email 
+                <a href="mailto:upmichiganstatemovers@gmail.com" style="color: #60a5fa;">upmichiganstatemovers@gmail.com</a>
+              </p>
+            </div>
+          `,
+          text: `JC ON THE MOVE - Half Day Move Booking\n\nHi ${firstName},\n\nYour Half Day Loading/Unloading booking is confirmed!\n\nPackage: 3 Movers, 4 Hours, Travel Included\nPrice: $600.00\nDate: ${moveDate}\nPickup: ${fromAddress}\n${toAddress ? `Drop-off: ${toAddress}\n` : ""}${details ? `Notes: ${details}\n` : ""}\nCancellation Policy:\n- More than 48 hours: $10 or $100 fee (whichever is greater)\n- Within 48 hours: 25% ($150)\n- Within 24 hours: 50% ($300)\n\nCall 906-285-9312 with questions.`,
+        });
+      } catch (emailErr) {
+        console.error("Failed to send promo booking email:", emailErr);
+      }
+
+      // Notify business
+      try {
+        await sendEmail({
+          to: process.env.COMPANY_EMAIL || "upmichiganstatemovers@gmail.com",
+          from: process.env.COMPANY_EMAIL || "upmichiganstatemovers@gmail.com",
+          subject: `New Half Day Promo Booking - ${firstName} ${lastName} - ${moveDate}`,
+          html: `<h2>New Half Day Promo Booking</h2><p><strong>${firstName} ${lastName}</strong></p><p>Phone: ${phone}</p><p>Email: ${email}</p><p>Date: ${moveDate}</p><p>From: ${fromAddress}</p>${toAddress ? `<p>To: ${toAddress}</p>` : ""}<p>Price: $600</p>${details ? `<p>Notes: ${details}</p>` : ""}<p>Lead ID: ${lead.id}</p>`,
+          text: `New Half Day Promo Booking\n${firstName} ${lastName}\nPhone: ${phone}\nEmail: ${email}\nDate: ${moveDate}\nFrom: ${fromAddress}\n${toAddress ? `To: ${toAddress}\n` : ""}Price: $600\nLead ID: ${lead.id}`,
+        });
+      } catch (emailErr) {
+        console.error("Failed to send business notification:", emailErr);
+      }
+
+      console.log(`Half Day Promo checkout created for ${firstName} ${lastName} (${moveDate}) - Lead: ${lead.id} - ${paymentLink.url}`);
+
+      res.json({
+        success: true,
+        checkoutUrl: paymentLink.url,
+        leadId: lead.id,
+      });
+    } catch (error: any) {
+      console.error("Error creating promo checkout:", error);
+      const errorMsg = error?.errors?.[0]?.detail || error.message || "Failed to create checkout";
+      res.status(500).json({ error: errorMsg });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

@@ -119,6 +119,46 @@ export default function TermsOfService() {
             </div>
           </section>
 
+          <section className="mb-10 p-6 bg-amber-900/30 border border-amber-500/30 rounded-lg">
+            <h2 className="text-2xl font-semibold mb-4 text-amber-300">Cancellation & Refund Policy</h2>
+            <p className="mb-4">
+              The following cancellation fees apply to all prepaid service bookings, including promotional packages 
+              (such as the Half Day Loading/Unloading package):
+            </p>
+            
+            <div className="space-y-3 mb-4">
+              <div className="bg-green-900/30 border border-green-500/30 rounded-lg p-4">
+                <p className="font-semibold text-green-300">More than 48 hours before scheduled service:</p>
+                <p>A processing fee of <strong className="text-white">$10 or $100</strong> will be deducted from the refund, 
+                <strong className="text-white"> whichever amount is greater</strong>. The remainder will be refunded to the original payment method.</p>
+              </div>
+              
+              <div className="bg-yellow-900/30 border border-yellow-500/30 rounded-lg p-4">
+                <p className="font-semibold text-yellow-300">Within 48 hours of scheduled service:</p>
+                <p>A <strong className="text-white">25% cancellation fee</strong> will be deducted from the refund. 
+                For a $600 booking, this equals $150.</p>
+              </div>
+              
+              <div className="bg-red-900/30 border border-red-500/30 rounded-lg p-4">
+                <p className="font-semibold text-red-300">Within 24 hours of scheduled service:</p>
+                <p>A <strong className="text-white">50% cancellation fee</strong> will be deducted from the refund. 
+                For a $600 booking, this equals $300.</p>
+              </div>
+            </div>
+            
+            <p className="mb-2">
+              <strong className="text-white">No-shows:</strong> If the customer is not present at the scheduled time and location 
+              and has not communicated a cancellation, no refund will be issued.
+            </p>
+            <p className="mb-2">
+              <strong className="text-white">Refund method:</strong> All refunds are processed through the original payment method 
+              (Square) and may take 5-10 business days to appear.
+            </p>
+            <p className="text-sm text-slate-400 mt-4">
+              By purchasing any prepaid service package, you acknowledge and agree to this cancellation and refund policy.
+            </p>
+          </section>
+
           <section className="mb-8">
             <h2 className="text-2xl font-semibold mb-4" data-testid="text-section-changes">Changes to Terms</h2>
             <p className="mb-4">
