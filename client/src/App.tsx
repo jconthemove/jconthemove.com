@@ -53,6 +53,7 @@ import PiJackpotPage from "@/pages/pi-jackpot";
 import PrivacyPolicy from "@/pages/privacy";
 import NatureMadeJewls from "@/pages/nature-made-jewls";
 import JewelryDetailPage from "@/pages/jewelry-detail";
+import PaymentSuccessPage from "@/pages/payment-success";
 import { NotificationPrompt } from "@/components/notification-prompt";
 
 // Landing page for unauthenticated users
@@ -275,6 +276,7 @@ function Router() {
       {/* Nature Made Jewls - Jewelry business page */}
       <Route path="/nature-made-jewls" component={NatureMadeJewls} />
       <Route path="/nature-made-jewls/:id" component={JewelryDetailPage} />
+      <Route path="/payment-success" component={PaymentSuccessPage} />
       
       {/* Lead detail - accessible without authentication (temporary for debugging) */}
       <Route path="/lead/:id">

@@ -11,7 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
-import { ArrowLeft, Gem, ChevronLeft, ChevronRight, Mail, Phone, FileText, Pencil, Trash2, Video, Loader2, Tag, RotateCcw } from "lucide-react";
+import { ArrowLeft, Gem, ChevronLeft, ChevronRight, Mail, Phone, CreditCard, Pencil, Trash2, Video, Loader2, Tag, RotateCcw } from "lucide-react";
 
 const isVideoUrl = (url: string) => /\.(mp4|webm|ogg|mov)$/i.test(url);
 
@@ -49,9 +49,7 @@ export default function JewelryDetailPage() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editItem, setEditItem] = useState<JewelryItem | null>(null);
-  const [invoiceEmail, setInvoiceEmail] = useState("");
-  const [invoiceName, setInvoiceName] = useState("");
-  const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
 
   const isAdmin = user?.role === 'admin' || user?.role === 'business_owner';
 
@@ -110,20 +108,23 @@ export default function JewelryDetailPage() {
     },
   });
 
-  const invoiceMutation = useMutation({
-    mutationFn: async (data: { itemId: string; itemTitle: string; amount: string; customerEmail: string; customerName: string }) => {
-      return await apiRequest("POST", "/api/square/create-invoice", data);
-    },
-    onSuccess: () => {
-      setIsInvoiceOpen(false);
-      setInvoiceEmail("");
-      setInvoiceName("");
-      toast({ title: "Invoice Sent!", description: "Check your email for the Square invoice to complete your purchase." });
-    },
-    onError: (error: any) => {
-      toast({ title: "Invoice Error", description: error.message || "Failed to create invoice. Please contact us directly.", variant: "destructive" });
-    },
-  });
+  const handleCheckout = async () => {
+    if (!item) return;
+    setCheckoutLoading(true);
+    try {
+      const res = await apiRequest("POST", "/api/square/create-checkout", { itemId: item.id });
+      const data = await res.json();
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      } else {
+        toast({ title: "Error", description: "Could not create checkout link", variant: "destructive" });
+      }
+    } catch (error: any) {
+      toast({ title: "Payment Error", description: error.message || "Failed to start checkout. Please try again.", variant: "destructive" });
+    } finally {
+      setCheckoutLoading(false);
+    }
+  };
 
   const getPhotos = (item: JewelryItem) => {
     const photos: string[] = [];
@@ -164,19 +165,6 @@ export default function JewelryDetailPage() {
     setIsEditOpen(true);
   };
 
-  const handleRequestInvoice = () => {
-    if (!invoiceEmail.trim() || !invoiceName.trim()) {
-      toast({ title: "Please fill in your name and email", variant: "destructive" });
-      return;
-    }
-    invoiceMutation.mutate({
-      itemId: item.id,
-      itemTitle: item.title,
-      amount: item.price || "0",
-      customerEmail: invoiceEmail.trim(),
-      customerName: invoiceName.trim(),
-    });
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-400 via-purple-300 to-gray-500">
@@ -266,10 +254,14 @@ export default function JewelryDetailPage() {
             {item.price && item.inStock !== false && (
               <Button
                 className="w-full bg-purple-600 hover:bg-purple-700 py-5 text-base font-semibold"
-                onClick={() => setIsInvoiceOpen(true)}
+                onClick={handleCheckout}
+                disabled={checkoutLoading}
               >
-                <FileText className="h-5 w-5 mr-2" />
-                Purchase - ${item.price}
+                {checkoutLoading ? (
+                  <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Processing...</>
+                ) : (
+                  <><CreditCard className="h-5 w-5 mr-2" /> Buy Now - ${item.price}</>
+                )}
               </Button>
             )}
 
@@ -323,49 +315,6 @@ export default function JewelryDetailPage() {
           </div>
         </div>
       </div>
-
-      <Dialog open={isInvoiceOpen} onOpenChange={setIsInvoiceOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-center">Purchase {item.title}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="bg-purple-50 rounded-lg p-4 text-center">
-              <p className="text-2xl font-bold text-purple-600">${item.price}</p>
-              <p className="text-xs text-stone-500 mt-1">A Square invoice will be sent to your email</p>
-            </div>
-            <div>
-              <Label>Your Name</Label>
-              <Input
-                value={invoiceName}
-                onChange={(e) => setInvoiceName(e.target.value)}
-                placeholder="Full name"
-              />
-            </div>
-            <div>
-              <Label>Your Email</Label>
-              <Input
-                type="email"
-                value={invoiceEmail}
-                onChange={(e) => setInvoiceEmail(e.target.value)}
-                placeholder="email@example.com"
-              />
-            </div>
-            <Button
-              className="w-full bg-purple-600 hover:bg-purple-700 py-5 font-semibold"
-              onClick={handleRequestInvoice}
-              disabled={invoiceMutation.isPending}
-            >
-              {invoiceMutation.isPending ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sending Invoice...</>
-              ) : (
-                <><FileText className="h-4 w-4 mr-2" /> Send Invoice to My Email</>
-              )}
-            </Button>
-            <p className="text-xs text-stone-400 text-center">Powered by Square. Secure payment processing.</p>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">

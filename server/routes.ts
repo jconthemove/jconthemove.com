@@ -8015,40 +8015,27 @@ Thank you for your business!
     }
   });
 
-  // Square Invoice API - Create and send invoice for jewelry purchases
-  app.post("/api/square/create-invoice", async (req: any, res) => {
+  // Square Checkout API - Create payment link for jewelry purchases
+  app.post("/api/square/create-checkout", async (req: any, res) => {
     try {
-      const { itemId, itemTitle, amount, customerEmail, customerName } = req.body;
+      const { itemId } = req.body;
 
-      if (!customerEmail || !customerName) {
-        return res.status(400).json({ error: "Missing required fields: customerEmail, customerName" });
+      if (!itemId) {
+        return res.status(400).json({ error: "Missing required field: itemId" });
       }
 
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(customerEmail)) {
-        return res.status(400).json({ error: "Invalid email address" });
+      const dbItem = await storage.getJewelryItem(itemId);
+      if (!dbItem) {
+        return res.status(404).json({ error: "Item not found" });
+      }
+      if (!dbItem.inStock) {
+        return res.status(400).json({ error: "This item is no longer available" });
+      }
+      if (!dbItem.price) {
+        return res.status(400).json({ error: "This item does not have a price set" });
       }
 
-      // If itemId provided, validate price from database
-      let verifiedTitle = itemTitle;
-      let verifiedAmount = amount;
-      if (itemId) {
-        const dbItem = await storage.getJewelryItem(itemId);
-        if (!dbItem) {
-          return res.status(404).json({ error: "Item not found" });
-        }
-        if (!dbItem.inStock) {
-          return res.status(400).json({ error: "This item is no longer available" });
-        }
-        verifiedTitle = dbItem.title;
-        verifiedAmount = dbItem.price;
-      }
-
-      if (!verifiedTitle || !verifiedAmount) {
-        return res.status(400).json({ error: "Missing item title or price" });
-      }
-
-      const parsedAmount = parseFloat(verifiedAmount);
+      const parsedAmount = parseFloat(dbItem.price);
       if (isNaN(parsedAmount) || parsedAmount <= 0) {
         return res.status(400).json({ error: "Invalid price amount" });
       }
@@ -8066,7 +8053,6 @@ Thank you for your business!
         environment: (process.env.SQUARE_ENVIRONMENT as any) || "production",
       });
 
-      // Get the first location
       const locationsResponse = await client.locations.list();
       const locations = locationsResponse.locations;
       if (!locations || locations.length === 0) {
@@ -8074,107 +8060,45 @@ Thank you for your business!
       }
       const locationId = locations[0].id!;
 
-      // Search for existing customer by email, or create new one
-      let customerId: string;
-      try {
-        const searchResult = await client.customers.search({
-          query: {
-            filter: {
-              emailAddress: { exact: customerEmail },
-            },
+      const amountCents = BigInt(Math.round(parsedAmount * 100));
+
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+      const host = req.headers['x-forwarded-host'] || req.headers.host;
+      const baseUrl = `${protocol}://${host}`;
+
+      const paymentLinkResponse = await client.checkout.createPaymentLink({
+        idempotencyKey: randomUUID(),
+        quickPay: {
+          name: `Nature Made Jewls - ${dbItem.title}`,
+          priceMoney: {
+            amount: amountCents,
+            currency: "USD",
           },
-        });
-        if (searchResult.customers && searchResult.customers.length > 0) {
-          customerId = searchResult.customers[0].id!;
-        } else {
-          const nameParts = customerName.trim().split(' ');
-          const givenName = nameParts[0];
-          const familyName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
-          const createResult = await client.customers.create({
-            idempotencyKey: randomUUID(),
-            givenName,
-            familyName: familyName || undefined,
-            emailAddress: customerEmail,
-          });
-          customerId = createResult.customer!.id!;
-        }
-      } catch (custError: any) {
-        console.error("Error with Square customer:", custError);
-        return res.status(500).json({ error: "Failed to set up customer for invoicing." });
+          locationId,
+        },
+        checkoutOptions: {
+          redirectUrl: `${baseUrl}/payment-success?itemId=${itemId}`,
+          allowTipping: false,
+          merchantSupportEmail: "upmichiganstatemovers@gmail.com",
+        },
+        paymentNote: `Jewelry purchase: ${dbItem.title} (ID: ${itemId})`,
+      });
+
+      const paymentLink = paymentLinkResponse.paymentLink;
+      if (!paymentLink?.url) {
+        return res.status(500).json({ error: "Failed to create payment link" });
       }
 
-      // Create an order
-      const amountCents = BigInt(Math.round(parsedAmount * 100));
-      const orderResponse = await client.orders.create({
-        order: {
-          locationId,
-          lineItems: [
-            {
-              name: `Nature Made Jewls - ${verifiedTitle}`,
-              quantity: "1",
-              basePriceMoney: {
-                amount: amountCents,
-                currency: "USD",
-              },
-            },
-          ],
-        },
-        idempotencyKey: randomUUID(),
-      });
-
-      const orderId = orderResponse.order!.id!;
-
-      // Create the invoice
-      const dueDate = new Date();
-      dueDate.setDate(dueDate.getDate() + 7);
-      const dueDateStr = dueDate.toISOString().split('T')[0];
-
-      const invoiceResponse = await client.invoices.create({
-        idempotencyKey: randomUUID(),
-        invoice: {
-          locationId,
-          orderId,
-          primaryRecipient: {
-            customerId,
-          },
-          deliveryMethod: "EMAIL",
-          paymentRequests: [
-            {
-              requestType: "BALANCE",
-              dueDate: dueDateStr,
-              tippingEnabled: false,
-              automaticPaymentSource: "NONE",
-            },
-          ],
-          title: `Nature Made Jewls - ${verifiedTitle}`,
-          description: `Handcrafted jewelry purchase from Nature Made Jewls. Thank you for your order!`,
-          acceptedPaymentMethods: {
-            card: true,
-            squareGiftCard: false,
-            bankAccount: false,
-            buyNowPayLater: false,
-            cashAppPay: true,
-          },
-        },
-      });
-
-      // Publish the invoice to send it
-      const publishResponse = await client.invoices.publish({
-        invoiceId: invoiceResponse.invoice!.id!,
-        version: invoiceResponse.invoice!.version!,
-        idempotencyKey: randomUUID(),
-      });
-
-      console.log(`Square invoice created and sent to ${customerEmail} for ${verifiedTitle} ($${verifiedAmount})`);
+      console.log(`Square checkout link created for ${dbItem.title} ($${dbItem.price}) - ${paymentLink.url}`);
 
       res.json({
         success: true,
-        invoiceId: publishResponse.invoice!.id,
-        publicUrl: publishResponse.invoice!.publicUrl,
+        checkoutUrl: paymentLink.url,
+        linkId: paymentLink.id,
       });
     } catch (error: any) {
-      console.error("Error creating Square invoice:", error);
-      const errorMsg = error?.errors?.[0]?.detail || error.message || "Failed to create invoice";
+      console.error("Error creating Square checkout:", error);
+      const errorMsg = error?.errors?.[0]?.detail || error.message || "Failed to create checkout link";
       res.status(500).json({ error: errorMsg });
     }
   });

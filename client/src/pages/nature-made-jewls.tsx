@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Gem, Leaf, Search, Plus, ChevronLeft, ChevronRight, Mail, Phone, ShoppingCart, ImagePlus, X, Heart, Pencil, Trash2, Video, CreditCard, FileText, Tag, RotateCcw } from "lucide-react";
+import { ArrowLeft, Gem, Leaf, Search, Plus, ChevronLeft, ChevronRight, Mail, Phone, ImagePlus, X, Heart, Pencil, Trash2, Video, CreditCard, Tag, RotateCcw } from "lucide-react";
 
 const isVideoUrl = (url: string) => /\.(mp4|webm|ogg|mov)$/i.test(url);
 
@@ -125,9 +125,7 @@ export default function NatureMadeJewls() {
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<JewelryItem | null>(null);
-  const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
-  const [invoiceEmail, setInvoiceEmail] = useState("");
-  const [invoiceName, setInvoiceName] = useState("");
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
 
   const [, navigate] = useLocation();
   const isAdmin = user?.role === 'admin' || user?.role === 'business_owner';
@@ -209,35 +207,23 @@ export default function NatureMadeJewls() {
     },
   });
 
-  const invoiceMutation = useMutation({
-    mutationFn: async (data: { itemId: string; itemTitle: string; amount: string; customerEmail: string; customerName: string }) => {
-      return await apiRequest("POST", "/api/square/create-invoice", data);
-    },
-    onSuccess: () => {
-      setIsInvoiceOpen(false);
-      setInvoiceEmail("");
-      setInvoiceName("");
-      toast({ title: "Invoice Sent!", description: "Check your email for the Square invoice to complete your purchase." });
-    },
-    onError: (error: any) => {
-      toast({ title: "Invoice Error", description: error.message || "Failed to create invoice. Please contact us directly.", variant: "destructive" });
-    },
-  });
-
-  const handleRequestInvoice = () => {
-    if (!invoiceEmail.trim() || !invoiceName.trim()) {
-      toast({ title: "Please fill in your name and email", variant: "destructive" });
-      return;
+  const handleCheckout = async (item: JewelryItem) => {
+    setCheckoutLoading(true);
+    try {
+      const res = await apiRequest("POST", "/api/square/create-checkout", { itemId: item.id });
+      const data = await res.json();
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      } else {
+        toast({ title: "Error", description: "Could not create checkout link", variant: "destructive" });
+      }
+    } catch (error: any) {
+      toast({ title: "Payment Error", description: error.message || "Failed to start checkout. Please try again.", variant: "destructive" });
+    } finally {
+      setCheckoutLoading(false);
     }
-    if (!selectedItem) return;
-    invoiceMutation.mutate({
-      itemId: selectedItem.id,
-      itemTitle: selectedItem.title,
-      amount: selectedItem.price || "0",
-      customerEmail: invoiceEmail.trim(),
-      customerName: invoiceName.trim(),
-    });
   };
+
 
   const startEdit = (item: JewelryItem) => {
     setEditItem({ ...item });
@@ -823,10 +809,14 @@ export default function NatureMadeJewls() {
                   {selectedItem.price && selectedItem.inStock !== false && (
                     <Button
                       className="w-full bg-purple-600 hover:bg-purple-700 py-5 text-base font-semibold"
-                      onClick={() => setIsInvoiceOpen(true)}
+                      onClick={() => handleCheckout(selectedItem)}
+                      disabled={checkoutLoading}
                     >
-                      <FileText className="h-5 w-5 mr-2" />
-                      Purchase - ${selectedItem.price}
+                      {checkoutLoading ? (
+                        <><span className="animate-spin mr-2">⏳</span> Processing...</>
+                      ) : (
+                        <><CreditCard className="h-5 w-5 mr-2" /> Buy Now - ${selectedItem.price}</>
+                      )}
                     </Button>
                   )}
                   <div className="flex gap-2">
@@ -887,36 +877,6 @@ export default function NatureMadeJewls() {
           </div>
         </div>
       )}
-
-      <Dialog open={isInvoiceOpen} onOpenChange={setIsInvoiceOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-center">Purchase {selectedItem?.title}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="bg-purple-50 rounded-lg p-4 text-center">
-              <p className="text-2xl font-bold text-purple-600">${selectedItem?.price}</p>
-              <p className="text-xs text-stone-500 mt-1">A Square invoice will be sent to your email</p>
-            </div>
-            <div>
-              <Label>Your Name</Label>
-              <Input value={invoiceName} onChange={(e) => setInvoiceName(e.target.value)} placeholder="Full name" />
-            </div>
-            <div>
-              <Label>Your Email</Label>
-              <Input type="email" value={invoiceEmail} onChange={(e) => setInvoiceEmail(e.target.value)} placeholder="email@example.com" />
-            </div>
-            <Button
-              className="w-full bg-purple-600 hover:bg-purple-700 py-5 font-semibold"
-              onClick={handleRequestInvoice}
-              disabled={invoiceMutation.isPending}
-            >
-              {invoiceMutation.isPending ? "Sending Invoice..." : "Send Invoice to My Email"}
-            </Button>
-            <p className="text-xs text-stone-400 text-center">Powered by Square. Secure payment processing.</p>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
