@@ -8,14 +8,16 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { useCart } from "@/hooks/useCart";
 import { Link } from "wouter";
-import { ArrowLeft, Trash2, ShoppingCart, Percent, Shield, Loader2, CreditCard, Gem, Truck, Plus, MapPin, CalendarDays } from "lucide-react";
+import { ArrowLeft, Trash2, ShoppingCart, Percent, Shield, Loader2, CreditCard, Gem, Truck, Plus, MapPin, CalendarDays, Heart, Building2, Trophy, Check } from "lucide-react";
 
 export default function CartPage() {
   const { toast } = useToast();
-  const { items, removeItem, clearCart, subtotal, discount, total, hasMultipleItems } = useCart();
+  const { items, addItem, removeItem, clearCart, subtotal, discount, total, hasMultipleItems, isInCart, itemCount } = useCart();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const hasServiceItems = items.some((i) => i.type === "service" || i.type === "promo");
+  const hasSponsorItems = items.some((i) => i.type === "sponsor");
+  const needsMoveInfo = hasServiceItems;
 
   const [form, setForm] = useState({
     firstName: "",
@@ -38,20 +40,13 @@ export default function CartPage() {
       return;
     }
 
-    if (hasServiceItems) {
-      if (!form.firstName || !form.lastName || !form.email || !form.phone) {
-        toast({ title: "Please fill in your contact info", variant: "destructive" });
-        return;
-      }
-      if (!form.fromAddress || !form.moveDate) {
-        toast({ title: "Please fill in your address and preferred date", variant: "destructive" });
-        return;
-      }
-    } else {
-      if (!form.firstName || !form.lastName || !form.email || !form.phone) {
-        toast({ title: "Please fill in your contact info", variant: "destructive" });
-        return;
-      }
+    if (!form.firstName || !form.lastName || !form.email || !form.phone) {
+      toast({ title: "Please fill in your contact info", variant: "destructive" });
+      return;
+    }
+    if (needsMoveInfo && (!form.fromAddress || !form.moveDate)) {
+      toast({ title: "Please fill in your address and preferred date", variant: "destructive" });
+      return;
     }
 
     if (!agreedToTerms) {
@@ -141,12 +136,12 @@ export default function CartPage() {
                   <img src={item.image} alt={item.name} className="w-16 h-16 rounded-lg object-cover shrink-0" />
                 ) : (
                   <div className="w-16 h-16 rounded-lg bg-slate-600 flex items-center justify-center shrink-0">
-                    {item.type === "jewelry" ? <Gem className="h-6 w-6 text-purple-400" /> : <Truck className="h-6 w-6 text-blue-400" />}
+                    {item.type === "jewelry" ? <Gem className="h-6 w-6 text-purple-400" /> : item.type === "sponsor" ? <Trophy className="h-6 w-6 text-yellow-400" /> : <Truck className="h-6 w-6 text-blue-400" />}
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="text-white font-medium text-sm truncate">{item.name}</p>
-                  <p className="text-slate-400 text-xs capitalize">{item.type === "promo" ? "Moving Service" : item.type}</p>
+                  <p className="text-slate-400 text-xs capitalize">{item.type === "promo" ? "Moving Service" : item.type === "sponsor" ? "Monthly Sponsorship" : item.type}</p>
                   <p className="text-yellow-400 font-bold">${item.price.toFixed(2)}</p>
                 </div>
                 <button onClick={() => removeItem(item.id)} className="text-red-400 hover:text-red-300 p-2">
@@ -180,23 +175,65 @@ export default function CartPage() {
           </CardContent>
         </Card>
 
+        {/* Sponsorship Upsell */}
+        {!isInCart("sponsor-bronze") && !isInCart("sponsor-silver") && !isInCart("sponsor-gold") && (
+          <Card className="bg-gradient-to-r from-yellow-900/30 to-amber-900/20 border-yellow-500/30 mb-4">
+            <CardContent className="py-4">
+              <p className="text-yellow-200 font-semibold text-sm text-center mb-3 flex items-center justify-center gap-2">
+                <Trophy className="h-4 w-4" />
+                Become a Sponsor — Support JC ON THE MOVE!
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { id: "sponsor-bronze", name: "Bronze", price: 100, icon: Heart, color: "text-amber-300" },
+                  { id: "sponsor-silver", name: "Silver", price: 250, icon: Building2, color: "text-slate-200" },
+                  { id: "sponsor-gold", name: "Gold", price: 500, icon: Trophy, color: "text-yellow-300" },
+                ].map((tier) => {
+                  const Icon = tier.icon;
+                  return (
+                    <button
+                      key={tier.id}
+                      onClick={() => {
+                        addItem({ id: tier.id, name: `${tier.name} Sponsor (Monthly)`, price: tier.price, image: "", type: "sponsor" });
+                        toast({ title: `${tier.name} Sponsorship added!`, description: "Bundle discount applied!" });
+                      }}
+                      className="bg-slate-800/60 hover:bg-slate-700/60 border border-slate-600/50 rounded-lg p-3 text-center transition-colors"
+                    >
+                      <Icon className={`h-5 w-5 ${tier.color} mx-auto mb-1`} />
+                      <p className={`text-xs font-semibold ${tier.color}`}>{tier.name}</p>
+                      <p className="text-white font-bold text-sm">${tier.price}<span className="text-slate-400 text-[10px]">/mo</span></p>
+                      <p className="text-emerald-400 text-[10px] mt-0.5">+ Add</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Add More Items */}
         <Card className="bg-emerald-900/20 border-emerald-500/30 border-dashed mb-6">
           <CardContent className="py-4">
             <p className="text-emerald-200 text-sm text-center mb-3">
               {hasMultipleItems ? "Keep adding items — your 10% discount applies automatically!" : "Add another item to unlock 10% bundle discount!"}
             </p>
-            <div className="flex gap-2 justify-center">
+            <div className="flex gap-2 justify-center flex-wrap">
               <Link href="/nature-made-jewls">
                 <Button size="sm" variant="outline" className="border-emerald-500/50 text-emerald-200 hover:bg-emerald-900/30">
                   <Gem className="h-4 w-4 mr-1" />
-                  Browse Jewelry
+                  Jewelry
                 </Button>
               </Link>
               <Link href="/promo/half-day">
                 <Button size="sm" variant="outline" className="border-emerald-500/50 text-emerald-200 hover:bg-emerald-900/30">
                   <Truck className="h-4 w-4 mr-1" />
-                  Moving Services
+                  Moving
+                </Button>
+              </Link>
+              <Link href="/sponsors">
+                <Button size="sm" variant="outline" className="border-yellow-500/50 text-yellow-200 hover:bg-yellow-900/30">
+                  <Trophy className="h-4 w-4 mr-1" />
+                  Sponsor Us
                 </Button>
               </Link>
             </div>
@@ -231,7 +268,7 @@ export default function CartPage() {
                 </div>
               </div>
 
-              {hasServiceItems && (
+              {needsMoveInfo && (
                 <>
                   <div>
                     <Label className="text-white flex items-center gap-2">
@@ -262,7 +299,7 @@ export default function CartPage() {
                 <Textarea value={form.details} onChange={(e) => updateField("details", e.target.value)} placeholder="Any special instructions..." className="bg-slate-700 border-slate-600 text-white min-h-[60px]" />
               </div>
 
-              {hasServiceItems && (
+              {needsMoveInfo && (
                 <Card className="bg-red-950/40 border-red-500/30">
                   <CardContent className="pt-4 pb-3">
                     <div className="flex items-start gap-3">
@@ -286,7 +323,7 @@ export default function CartPage() {
                   className="mt-1 border-slate-500"
                 />
                 <label htmlFor="cart-terms" className="text-sm text-slate-300 cursor-pointer leading-relaxed">
-                  I agree to the <Link href="/terms" className="text-blue-400 underline hover:text-blue-300">Terms of Service</Link>{hasServiceItems ? " and cancellation policy" : ""}.
+                  I agree to the <Link href="/terms" className="text-blue-400 underline hover:text-blue-300">Terms of Service</Link>{needsMoveInfo ? " and cancellation policy" : ""}.
                 </label>
               </div>
 

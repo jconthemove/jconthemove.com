@@ -8271,9 +8271,21 @@ Thank you for your business!
         return res.status(400).json({ error: "Address and date required for service items" });
       }
 
+      const sponsorPrices: Record<string, number> = {
+        "sponsor-bronze": 100,
+        "sponsor-silver": 250,
+        "sponsor-gold": 500,
+      };
+
       const validatedItems = items.map((item: any) => {
         const price = parseFloat(item.price);
         if (isNaN(price) || price <= 0) throw new Error(`Invalid price for ${item.name}`);
+        if (item.type === "sponsor") {
+          const expectedPrice = sponsorPrices[item.id];
+          if (!expectedPrice || expectedPrice !== price) {
+            throw new Error(`Invalid sponsor tier: ${item.id}`);
+          }
+        }
         return { id: item.id, name: item.name, price, type: item.type };
       });
 
@@ -8402,6 +8414,105 @@ Thank you for your business!
       });
     } catch (error: any) {
       console.error("Error creating cart checkout:", error);
+      const errorMsg = error?.errors?.[0]?.detail || error.message || "Failed to create checkout";
+      res.status(500).json({ error: errorMsg });
+    }
+  });
+
+  app.post("/api/sponsor/checkout", async (req: any, res) => {
+    try {
+      const { businessName, contactName, email, phone, tierId, tierName, tierPrice } = req.body;
+
+      if (!businessName || !contactName || !email || !phone || !tierName || !tierPrice) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      const validTiers: Record<string, number> = {
+        "sponsor-bronze": 100,
+        "sponsor-silver": 250,
+        "sponsor-gold": 500,
+      };
+      const expectedPrice = validTiers[tierId];
+      if (!expectedPrice || expectedPrice !== tierPrice) {
+        return res.status(400).json({ error: "Invalid sponsorship tier" });
+      }
+
+      const squareToken = process.env.SQUARE_ACCESS_TOKEN;
+      if (!squareToken) {
+        return res.status(500).json({ error: "Payment processing is not configured. Please call us at 906-285-9312." });
+      }
+
+      const { SquareClient, SquareEnvironment } = await import("square");
+      const { randomUUID } = await import("crypto");
+
+      const client = new SquareClient({
+        token: squareToken,
+        environment: SquareEnvironment.Production,
+      });
+
+      const locationsResponse = await client.locations.list();
+      const locations = locationsResponse.locations;
+      if (!locations || locations.length === 0) {
+        return res.status(500).json({ error: "Payment setup incomplete. Please call us at 906-285-9312." });
+      }
+      const locationId = locations[0].id!;
+
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+      const host = req.headers['x-forwarded-host'] || req.headers.host;
+      const baseUrl = `${protocol}://${host}`;
+
+      const paymentLinkResponse = await client.checkout.paymentLinks.create({
+        idempotencyKey: randomUUID(),
+        quickPay: {
+          name: `${tierName} - Monthly Sponsorship`,
+          priceMoney: {
+            amount: BigInt(tierPrice * 100),
+            currency: "USD",
+          },
+          locationId,
+        },
+        checkoutOptions: {
+          redirectUrl: `${baseUrl}/payment-success?type=sponsor&tier=${tierId}`,
+          allowTipping: false,
+          merchantSupportEmail: "upmichiganstatemovers@gmail.com",
+        },
+        paymentNote: `Sponsorship: ${tierName} - ${businessName} (${contactName}) - ${email}`,
+      });
+
+      const paymentLink = paymentLinkResponse.result?.paymentLink || paymentLinkResponse.paymentLink;
+      if (!paymentLink?.url) {
+        return res.status(500).json({ error: "Failed to create payment link" });
+      }
+
+      try {
+        await sendEmail({
+          to: email,
+          from: process.env.COMPANY_EMAIL || "upmichiganstatemovers@gmail.com",
+          subject: `JC ON THE MOVE - ${tierName} Sponsorship Confirmation`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #1e293b; color: #e2e8f0; padding: 30px; border-radius: 12px;">
+              <h1 style="color: #facc15; text-align: center;">JC ON THE MOVE LLC</h1>
+              <h2 style="color: white; text-align: center;">Sponsorship Confirmed!</h2>
+              <div style="background: #334155; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <h3 style="color: #facc15; margin-top: 0;">${tierName}</h3>
+                <p><strong>Business:</strong> ${businessName}</p>
+                <p><strong>Contact:</strong> ${contactName}</p>
+                <p><strong>Monthly Rate:</strong> $${tierPrice}</p>
+              </div>
+              <p style="text-align: center; color: #94a3b8; font-size: 12px;">Thank you for supporting JC ON THE MOVE! Questions? Call (906) 285-9312</p>
+            </div>
+          `,
+        });
+      } catch (emailErr) {
+        console.log("Sponsor email failed (non-critical):", emailErr);
+      }
+
+      res.json({
+        success: true,
+        checkoutUrl: paymentLink.url,
+      });
+    } catch (error: any) {
+      console.error("Error creating sponsor checkout:", error);
       const errorMsg = error?.errors?.[0]?.detail || error.message || "Failed to create checkout";
       res.status(500).json({ error: errorMsg });
     }

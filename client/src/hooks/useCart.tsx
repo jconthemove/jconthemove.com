@@ -5,7 +5,7 @@ export interface CartItem {
   name: string;
   price: number;
   image: string;
-  type: "service" | "jewelry" | "promo";
+  type: "service" | "jewelry" | "promo" | "sponsor";
   quantity: number;
 }
 
