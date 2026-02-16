@@ -8045,12 +8045,12 @@ Thank you for your business!
         return res.status(500).json({ error: "Square payment is not configured yet. Please contact us to purchase this item." });
       }
 
-      const { SquareClient } = await import("square");
+      const { SquareClient, SquareEnvironment } = await import("square");
       const { randomUUID } = await import("crypto");
 
       const client = new SquareClient({
         token: squareToken,
-        environment: (process.env.SQUARE_ENVIRONMENT as any) || "production",
+        environment: SquareEnvironment.Production,
       });
 
       const locationsResponse = await client.locations.list();
