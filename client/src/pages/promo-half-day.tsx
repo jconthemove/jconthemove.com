@@ -165,17 +165,17 @@ export default function PromoHalfDayPage() {
         </div>
 
         {/* Add-On Items Section */}
-        <Card className="bg-gradient-to-br from-emerald-900/40 to-green-900/30 border-emerald-500/40 shadow-xl mb-6">
+        <Card className="bg-gradient-to-br from-purple-950/80 to-indigo-950/70 border-purple-500/40 shadow-xl mb-6">
           <CardHeader className="pb-3">
             <CardTitle className="text-xl text-white flex items-center gap-3">
-              <div className="bg-emerald-500/20 p-2 rounded-full">
-                <Plus className="h-5 w-5 text-emerald-400" />
+              <div className="bg-purple-500/20 p-2 rounded-full">
+                <Plus className="h-5 w-5 text-purple-300" />
               </div>
               Add an Item & Save 10%
             </CardTitle>
             <div className="flex items-center gap-2 mt-1">
-              <Percent className="h-4 w-4 text-emerald-400" />
-              <p className="text-emerald-200 text-sm font-medium">
+              <Percent className="h-4 w-4 text-purple-300" />
+              <p className="text-purple-200 text-sm font-medium">
                 Bundle any add-on with your move and get 10% off the add-on price!
               </p>
             </div>
@@ -186,8 +186,8 @@ export default function PromoHalfDayPage() {
               onClick={() => toggleAddOn(truckRental)}
               className={`flex items-center gap-4 p-3 rounded-xl cursor-pointer transition-all duration-200 ${
                 isAddOnSelected("truck-rental")
-                  ? "bg-emerald-600/30 border-2 border-emerald-400 shadow-lg"
-                  : "bg-slate-800/60 border-2 border-slate-600/50 hover:border-emerald-500/50"
+                  ? "bg-purple-600/30 border-2 border-purple-400 shadow-lg"
+                  : "bg-slate-800/60 border-2 border-slate-600/50 hover:border-purple-500/50"
               }`}
             >
               <img
@@ -201,13 +201,13 @@ export default function PromoHalfDayPage() {
                 <div className="flex items-center gap-2 mt-1">
                   <span className="text-yellow-400 font-bold text-lg">$200</span>
                   {isAddOnSelected("truck-rental") && (
-                    <span className="text-emerald-400 text-sm font-medium">-10% = $180</span>
+                    <span className="text-purple-300 text-sm font-medium">-10% = $180</span>
                   )}
                 </div>
               </div>
               <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
                 isAddOnSelected("truck-rental")
-                  ? "bg-emerald-500 text-white"
+                  ? "bg-purple-500 text-white"
                   : "bg-slate-700 text-slate-400"
               }`}>
                 {isAddOnSelected("truck-rental") ? <Check className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
@@ -248,8 +248,8 @@ export default function PromoHalfDayPage() {
                       }
                       className={`relative rounded-xl overflow-hidden cursor-pointer transition-all duration-200 ${
                         selected
-                          ? "ring-2 ring-emerald-400 shadow-lg shadow-emerald-500/20"
-                          : "hover:ring-1 hover:ring-emerald-500/50"
+                          ? "ring-2 ring-purple-400 shadow-lg shadow-purple-500/20"
+                          : "hover:ring-1 hover:ring-purple-500/50"
                       }`}
                     >
                       <div className="aspect-square bg-slate-800">
@@ -264,12 +264,12 @@ export default function PromoHalfDayPage() {
                         <div className="flex items-center gap-1">
                           <span className="text-yellow-400 font-bold text-sm">${itemPrice.toFixed(2)}</span>
                           {selected && (
-                            <span className="text-emerald-400 text-xs">-10%</span>
+                            <span className="text-purple-300 text-xs">-10%</span>
                           )}
                         </div>
                       </div>
                       {selected && (
-                        <div className="absolute top-2 right-2 bg-emerald-500 rounded-full p-1">
+                        <div className="absolute top-2 right-2 bg-purple-500 rounded-full p-1">
                           <Check className="h-3 w-3 text-white" />
                         </div>
                       )}
@@ -281,11 +281,11 @@ export default function PromoHalfDayPage() {
 
             {/* Cart Summary */}
             {addOns.length > 0 && (
-              <Card className="bg-slate-900/80 border-emerald-500/30">
+              <Card className="bg-slate-900/80 border-purple-500/30">
                 <CardContent className="pt-4 pb-3">
                   <div className="flex items-center gap-2 mb-3">
-                    <ShoppingCart className="h-4 w-4 text-emerald-400" />
-                    <p className="text-emerald-200 font-semibold text-sm">Your Bundle</p>
+                    <ShoppingCart className="h-4 w-4 text-purple-300" />
+                    <p className="text-purple-200 font-semibold text-sm">Your Bundle</p>
                   </div>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between text-slate-300">
@@ -310,7 +310,7 @@ export default function PromoHalfDayPage() {
                         <span className="text-white font-medium shrink-0">${item.price.toFixed(2)}</span>
                       </div>
                     ))}
-                    <div className="border-t border-emerald-500/30 pt-2 flex justify-between text-emerald-300">
+                    <div className="border-t border-purple-500/30 pt-2 flex justify-between text-purple-300">
                       <span className="flex items-center gap-1">
                         <Percent className="h-3 w-3" />
                         10% Bundle Discount
