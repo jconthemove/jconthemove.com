@@ -106,10 +106,9 @@ export default function JewelryDetailPage() {
 
   const isAdmin = user?.role === 'admin' || user?.role === 'business_owner';
 
-  const canEditItem = (item: JewelryItem) => {
+  const canEditItem = (_item: JewelryItem) => {
     if (!user) return false;
-    if (isAdmin) return true;
-    return item.postedBy === user.id;
+    return isAdmin;
   };
 
   const { data: item, isLoading } = useQuery<JewelryItem>({
