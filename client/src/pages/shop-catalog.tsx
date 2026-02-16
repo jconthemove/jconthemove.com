@@ -1,13 +1,13 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { type ShopItem } from "@shared/schema";
+import { type ShopItem, type JewelryItem } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, ChevronLeft, ChevronRight, Eye } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, Eye, Gem, ArrowRight } from "lucide-react";
 
 function ShopItemCard({ item }: { item: ShopItem }) {
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
@@ -128,6 +128,58 @@ function ShopItemCard({ item }: { item: ShopItem }) {
   );
 }
 
+function FeaturedJewelryBanner() {
+  const { data: jewelryItems } = useQuery<JewelryItem[]>({
+    queryKey: ["/api/jewelry"],
+  });
+
+  const featured = useMemo(() => {
+    if (!jewelryItems || jewelryItems.length === 0) return null;
+    const available = jewelryItems.filter((j) => j.status === "active" && j.inStock);
+    if (available.length === 0) return null;
+    const markedFeatured = available.filter((j) => j.featured);
+    const pool = markedFeatured.length > 0 ? markedFeatured : available;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }, [jewelryItems]);
+
+  if (!featured) return null;
+
+  const photos = featured.photos as string[];
+  const imageUrl = photos && photos.length > 0 ? photos[0] : featured.imageUrl;
+
+  return (
+    <Link href={`/jewelry/${featured.id}`}>
+      <div className="mb-6 rounded-xl overflow-hidden border border-purple-500/30 bg-gradient-to-r from-purple-900/40 via-slate-800/60 to-purple-900/40 hover:border-purple-400/50 hover:shadow-lg hover:shadow-purple-500/10 transition-all cursor-pointer group">
+        <div className="flex items-center gap-4 p-4">
+          {imageUrl && (
+            <div className="flex-shrink-0 w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden border border-purple-500/30">
+              <img src={imageUrl} alt={featured.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <Gem className="h-4 w-4 text-purple-400 flex-shrink-0" />
+              <span className="text-xs font-semibold uppercase tracking-wider text-purple-400">Featured from Nature Made Jewls</span>
+            </div>
+            <h3 className="text-lg font-bold text-white truncate">{featured.title}</h3>
+            {featured.shortDescription && (
+              <p className="text-sm text-slate-400 line-clamp-1">{featured.shortDescription}</p>
+            )}
+            {featured.price && (
+              <span className="text-lg font-bold text-purple-300 mt-1 inline-block">${parseFloat(featured.price).toFixed(2)}</span>
+            )}
+          </div>
+          <div className="flex-shrink-0 hidden sm:flex items-center">
+            <Button variant="outline" size="sm" className="border-purple-500/50 text-purple-300 hover:bg-purple-500/20 hover:text-purple-200 gap-1">
+              Shop Jewls <ArrowRight className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
 export function ShopCatalogPage() {
   const [statusFilter, setStatusFilter] = useState<string>("active");
   
@@ -188,6 +240,9 @@ export function ShopCatalogPage() {
             </Select>
           </div>
         </div>
+
+        {/* Featured Jewelry Banner */}
+        <FeaturedJewelryBanner />
 
         {/* Items Grid */}
         {isLoading ? (
