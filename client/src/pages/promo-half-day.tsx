@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -7,13 +8,35 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
-import { ArrowLeft, Truck, Clock, Users, MapPin, CalendarDays, Shield, Loader2 } from "lucide-react";
+import { ArrowLeft, Truck, Clock, Users, MapPin, CalendarDays, Shield, Loader2, Plus, X, Percent, Gem, ShoppingCart, Check } from "lucide-react";
 import promoImage from "@assets/file_00000000839871fd8e13378301744f2e_(1)_1771260918919.png";
+import truckImage from "@assets/file_00000000219471fdb0d2dab84a32d060_1771261914341.png";
+import { useCart } from "@/hooks/useCart";
+import { FloatingCartButton } from "@/components/cart-button";
+
+interface AddOnItem {
+  id: string;
+  name: string;
+  price: number;
+  image: string;
+  type: "service" | "jewelry";
+}
 
 export default function PromoHalfDayPage() {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [addOns, setAddOns] = useState<AddOnItem[]>([]);
+  const [showJewelry, setShowJewelry] = useState(false);
+  const { addItem: addToCart, isInCart, removeItem: removeFromCart, itemCount: cartCount } = useCart();
+  const promoCartId = "promo-half-day";
+  const promoInCart = isInCart(promoCartId);
+
+  const { data: jewelryItems } = useQuery<any[]>({
+    queryKey: ["/api/jewelry"],
+  });
+
+  const availableJewelry = jewelryItems?.filter((j: any) => j.inStock && !j.soldAt && j.price) || [];
 
   const [form, setForm] = useState({
     firstName: "",
@@ -28,6 +51,31 @@ export default function PromoHalfDayPage() {
 
   const updateField = (field: string, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const basePrice = 600;
+  const addOnsSubtotal = addOns.reduce((sum, item) => sum + item.price, 0);
+  const discount = addOns.length > 0 ? Math.round(addOnsSubtotal * 0.1 * 100) / 100 : 0;
+  const totalPrice = basePrice + addOnsSubtotal - discount;
+
+  const toggleAddOn = (item: AddOnItem) => {
+    setAddOns((prev) => {
+      const exists = prev.find((a) => a.id === item.id);
+      if (exists) {
+        return prev.filter((a) => a.id !== item.id);
+      }
+      return [...prev, item];
+    });
+  };
+
+  const isAddOnSelected = (id: string) => addOns.some((a) => a.id === id);
+
+  const truckRental: AddOnItem = {
+    id: "truck-rental",
+    name: "U-Haul Truck Rental (Local)",
+    price: 200,
+    image: truckImage,
+    type: "service",
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -48,7 +96,10 @@ export default function PromoHalfDayPage() {
       const res = await fetch("/api/promo/half-day-checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          addOns: addOns.map((a) => ({ id: a.id, name: a.name, price: a.price, type: a.type })),
+        }),
       });
 
       const data = await res.json();
@@ -112,6 +163,170 @@ export default function PromoHalfDayPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Add-On Items Section */}
+        <Card className="bg-gradient-to-br from-emerald-900/40 to-green-900/30 border-emerald-500/40 shadow-xl mb-6">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-xl text-white flex items-center gap-3">
+              <div className="bg-emerald-500/20 p-2 rounded-full">
+                <Plus className="h-5 w-5 text-emerald-400" />
+              </div>
+              Add an Item & Save 10%
+            </CardTitle>
+            <div className="flex items-center gap-2 mt-1">
+              <Percent className="h-4 w-4 text-emerald-400" />
+              <p className="text-emerald-200 text-sm font-medium">
+                Bundle any add-on with your move and get 10% off the add-on price!
+              </p>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Truck Rental Add-on */}
+            <div
+              onClick={() => toggleAddOn(truckRental)}
+              className={`flex items-center gap-4 p-3 rounded-xl cursor-pointer transition-all duration-200 ${
+                isAddOnSelected("truck-rental")
+                  ? "bg-emerald-600/30 border-2 border-emerald-400 shadow-lg"
+                  : "bg-slate-800/60 border-2 border-slate-600/50 hover:border-emerald-500/50"
+              }`}
+            >
+              <img
+                src={truckImage}
+                alt="U-Haul Truck Rental"
+                className="w-20 h-20 rounded-lg object-cover shrink-0"
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-white font-bold">U-Haul Truck Rental</p>
+                <p className="text-slate-300 text-sm">Local jobs only</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-yellow-400 font-bold text-lg">$200</span>
+                  {isAddOnSelected("truck-rental") && (
+                    <span className="text-emerald-400 text-sm font-medium">-10% = $180</span>
+                  )}
+                </div>
+              </div>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                isAddOnSelected("truck-rental")
+                  ? "bg-emerald-500 text-white"
+                  : "bg-slate-700 text-slate-400"
+              }`}>
+                {isAddOnSelected("truck-rental") ? <Check className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
+              </div>
+            </div>
+
+            {/* Browse Jewelry Toggle */}
+            <div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowJewelry(!showJewelry)}
+                className="w-full bg-slate-800/60 border-amber-500/40 text-amber-200 hover:bg-amber-900/30 hover:text-amber-100"
+              >
+                <Gem className="h-4 w-4 mr-2" />
+                {showJewelry ? "Hide" : "Browse"} Nature Made Jewls
+                <span className="ml-2 text-xs text-amber-400">({availableJewelry.length} items)</span>
+              </Button>
+            </div>
+
+            {/* Jewelry Items Grid */}
+            {showJewelry && availableJewelry.length > 0 && (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {availableJewelry.map((item: any) => {
+                  const selected = isAddOnSelected(`jewelry-${item.id}`);
+                  const itemPrice = parseFloat(item.price);
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() =>
+                        toggleAddOn({
+                          id: `jewelry-${item.id}`,
+                          name: item.title,
+                          price: itemPrice,
+                          image: item.imageUrl || "",
+                          type: "jewelry",
+                        })
+                      }
+                      className={`relative rounded-xl overflow-hidden cursor-pointer transition-all duration-200 ${
+                        selected
+                          ? "ring-2 ring-emerald-400 shadow-lg shadow-emerald-500/20"
+                          : "hover:ring-1 hover:ring-emerald-500/50"
+                      }`}
+                    >
+                      <div className="aspect-square bg-slate-800">
+                        <img
+                          src={item.imageUrl}
+                          alt={item.title}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="p-2 bg-slate-800/90">
+                        <p className="text-white text-xs font-medium truncate">{item.title}</p>
+                        <div className="flex items-center gap-1">
+                          <span className="text-yellow-400 font-bold text-sm">${itemPrice.toFixed(2)}</span>
+                          {selected && (
+                            <span className="text-emerald-400 text-xs">-10%</span>
+                          )}
+                        </div>
+                      </div>
+                      {selected && (
+                        <div className="absolute top-2 right-2 bg-emerald-500 rounded-full p-1">
+                          <Check className="h-3 w-3 text-white" />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Cart Summary */}
+            {addOns.length > 0 && (
+              <Card className="bg-slate-900/80 border-emerald-500/30">
+                <CardContent className="pt-4 pb-3">
+                  <div className="flex items-center gap-2 mb-3">
+                    <ShoppingCart className="h-4 w-4 text-emerald-400" />
+                    <p className="text-emerald-200 font-semibold text-sm">Your Bundle</p>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between text-slate-300">
+                      <span>Half Day Move</span>
+                      <span className="text-white font-medium">${basePrice.toFixed(2)}</span>
+                    </div>
+                    {addOns.map((item) => (
+                      <div key={item.id} className="flex justify-between items-center text-slate-300">
+                        <span className="flex items-center gap-2 truncate pr-2">
+                          {item.name}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleAddOn(item);
+                            }}
+                            className="text-red-400 hover:text-red-300 shrink-0"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                        <span className="text-white font-medium shrink-0">${item.price.toFixed(2)}</span>
+                      </div>
+                    ))}
+                    <div className="border-t border-emerald-500/30 pt-2 flex justify-between text-emerald-300">
+                      <span className="flex items-center gap-1">
+                        <Percent className="h-3 w-3" />
+                        10% Bundle Discount
+                      </span>
+                      <span className="font-medium">-${discount.toFixed(2)}</span>
+                    </div>
+                    <div className="border-t border-slate-600 pt-2 flex justify-between text-white font-bold text-base">
+                      <span>Total</span>
+                      <span className="text-yellow-400">${totalPrice.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </CardContent>
+        </Card>
 
         <Card className="bg-slate-800/80 border-slate-600 shadow-xl">
           <CardHeader>
@@ -232,8 +447,8 @@ export default function PromoHalfDayPage() {
                     <div className="text-sm text-red-200 space-y-1">
                       <p className="font-semibold text-red-100">Cancellation Policy</p>
                       <p>More than 48 hours before: $10 processing fee or $100, whichever is greater</p>
-                      <p>Within 48 hours: 25% cancellation fee ($150)</p>
-                      <p>Within 24 hours: 50% cancellation fee ($300)</p>
+                      <p>Within 48 hours: 25% cancellation fee</p>
+                      <p>Within 24 hours: 50% cancellation fee</p>
                       <p className="text-xs text-red-300 mt-1">
                         Full policy in our <Link href="/terms" className="underline hover:text-white">Terms of Service</Link>
                       </p>
@@ -267,8 +482,50 @@ export default function PromoHalfDayPage() {
                 ) : (
                   <>
                     <Truck className="h-5 w-5 mr-2" />
-                    Pay $600 & Book Now
+                    Pay ${totalPrice.toFixed(2)} & Book Now
+                    {addOns.length > 0 && (
+                      <span className="ml-2 text-xs bg-black/20 px-2 py-0.5 rounded-full">
+                        Save ${discount.toFixed(2)}
+                      </span>
+                    )}
                   </>
+                )}
+              </Button>
+
+              <div className="relative flex items-center gap-3 py-1">
+                <div className="flex-1 border-t border-slate-600" />
+                <span className="text-xs text-slate-400">or</span>
+                <div className="flex-1 border-t border-slate-600" />
+              </div>
+
+              <Button
+                type="button"
+                variant={promoInCart ? "default" : "outline"}
+                className={`w-full py-5 text-sm font-semibold ${
+                  promoInCart
+                    ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                    : "border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/30"
+                }`}
+                onClick={() => {
+                  if (promoInCart) {
+                    removeFromCart(promoCartId);
+                    toast({ title: "Removed from cart" });
+                  } else {
+                    addToCart({
+                      id: promoCartId,
+                      name: "Half Day Loading/Unloading - 3 Movers, 4 Hours",
+                      price: 600,
+                      image: promoImage,
+                      type: "promo",
+                    });
+                    toast({ title: "Added to cart!", description: cartCount > 0 ? "Bundle discount applied at checkout!" : "Browse more items to unlock 10% bundle discount" });
+                  }
+                }}
+              >
+                {promoInCart ? (
+                  <><Check className="h-4 w-4 mr-2" /> In Cart{cartCount > 1 ? " — 10% Bundle!" : ""}</>
+                ) : (
+                  <><ShoppingCart className="h-4 w-4 mr-2" /> Add to Cart{cartCount > 0 ? " — Save 10%" : " Instead"}</>
                 )}
               </Button>
 
@@ -279,6 +536,7 @@ export default function PromoHalfDayPage() {
           </CardContent>
         </Card>
       </div>
+      <FloatingCartButton />
     </div>
   );
 }

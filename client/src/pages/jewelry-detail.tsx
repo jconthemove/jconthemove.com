@@ -11,7 +11,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
-import { ArrowLeft, Gem, ChevronLeft, ChevronRight, Mail, Phone, CreditCard, Pencil, Trash2, Video, Loader2, Tag, RotateCcw } from "lucide-react";
+import { ArrowLeft, Gem, ChevronLeft, ChevronRight, Mail, Phone, CreditCard, Pencil, Trash2, Video, Loader2, Tag, RotateCcw, ShoppingCart, Check } from "lucide-react";
+import { useCart } from "@/hooks/useCart";
+import { FloatingCartButton } from "@/components/cart-button";
 
 const isVideoUrl = (url: string) => /\.(mp4|webm|ogg|mov)$/i.test(url);
 
@@ -37,6 +39,57 @@ interface JewelryItem {
   featured?: boolean;
   status: string;
   createdAt: string;
+}
+
+function DetailCartButtons({ item, onCheckout, checkoutLoading }: { item: JewelryItem; onCheckout: () => void; checkoutLoading: boolean }) {
+  const { addItem, removeItem, isInCart, itemCount } = useCart();
+  const cartId = `jewelry-${item.id}`;
+  const inCart = isInCart(cartId);
+
+  if (!item.price || item.inStock === false) return null;
+
+  return (
+    <div className="pt-3 border-t space-y-2.5">
+      <Button
+        className="w-full bg-purple-600 hover:bg-purple-700 py-5 text-base font-semibold"
+        onClick={onCheckout}
+        disabled={checkoutLoading}
+      >
+        {checkoutLoading ? (
+          <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Processing...</>
+        ) : (
+          <><CreditCard className="h-5 w-5 mr-2" /> Buy Now - ${item.price}</>
+        )}
+      </Button>
+      <Button
+        variant={inCart ? "default" : "outline"}
+        className={`w-full py-4 text-sm font-medium ${
+          inCart
+            ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+            : "border-emerald-500 text-emerald-600 hover:bg-emerald-50"
+        }`}
+        onClick={() => {
+          if (inCart) {
+            removeItem(cartId);
+          } else {
+            addItem({
+              id: cartId,
+              name: item.title,
+              price: parseFloat(item.price!),
+              image: item.imageUrl || "",
+              type: "jewelry",
+            });
+          }
+        }}
+      >
+        {inCart ? (
+          <><Check className="h-4 w-4 mr-2" /> In Cart{itemCount > 1 ? " — 10% Bundle!" : ""}</>
+        ) : (
+          <><ShoppingCart className="h-4 w-4 mr-2" /> Add to Cart{itemCount > 0 ? " — Save 10%" : ""}</>
+        )}
+      </Button>
+    </div>
+  );
 }
 
 export default function JewelryDetailPage() {
@@ -250,20 +303,7 @@ export default function JewelryDetailPage() {
             </div>
           )}
 
-          <div className="pt-3 border-t space-y-2.5">
-            {item.price && item.inStock !== false && (
-              <Button
-                className="w-full bg-purple-600 hover:bg-purple-700 py-5 text-base font-semibold"
-                onClick={handleCheckout}
-                disabled={checkoutLoading}
-              >
-                {checkoutLoading ? (
-                  <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Processing...</>
-                ) : (
-                  <><CreditCard className="h-5 w-5 mr-2" /> Buy Now - ${item.price}</>
-                )}
-              </Button>
-            )}
+          <DetailCartButtons item={item} onCheckout={handleCheckout} checkoutLoading={checkoutLoading} />
 
             {!item.inStock && (
               <div className="bg-stone-100 rounded-lg p-3 text-center">
@@ -312,7 +352,6 @@ export default function JewelryDetailPage() {
                 </div>
               </div>
             )}
-          </div>
         </div>
       </div>
 
@@ -367,6 +406,7 @@ export default function JewelryDetailPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <FloatingCartButton />
     </div>
   );
 }

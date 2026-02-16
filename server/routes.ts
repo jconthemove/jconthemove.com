@@ -8250,6 +8250,163 @@ Thank you for your business!
     }
   });
 
+  app.post("/api/cart/checkout", async (req: any, res) => {
+    try {
+      const { firstName, lastName, email, phone, fromAddress, toAddress, moveDate, details, items } = req.body;
+
+      if (!firstName || !lastName || !email || !phone) {
+        return res.status(400).json({ error: "Missing required contact fields" });
+      }
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ error: "Cart is empty" });
+      }
+
+      const squareToken = process.env.SQUARE_ACCESS_TOKEN;
+      if (!squareToken) {
+        return res.status(500).json({ error: "Payment processing is not configured. Please call us at 906-285-9312." });
+      }
+
+      const hasServiceItems = items.some((i: any) => i.type === "service" || i.type === "promo");
+      if (hasServiceItems && (!fromAddress || !moveDate)) {
+        return res.status(400).json({ error: "Address and date required for service items" });
+      }
+
+      const validatedItems = items.map((item: any) => {
+        const price = parseFloat(item.price);
+        if (isNaN(price) || price <= 0) throw new Error(`Invalid price for ${item.name}`);
+        return { id: item.id, name: item.name, price, type: item.type };
+      });
+
+      const subtotal = validatedItems.reduce((sum: number, i: any) => sum + i.price, 0);
+      const hasMultiple = validatedItems.length > 1;
+      const nonPromoSubtotal = validatedItems.filter((i: any) => i.type !== "promo").reduce((sum: number, i: any) => sum + i.price, 0);
+      const discountAmount = hasMultiple ? Math.round(nonPromoSubtotal * 0.1 * 100) / 100 : 0;
+      const totalPrice = Math.round((subtotal - discountAmount) * 100) / 100;
+
+      let leadId: number | null = null;
+      if (hasServiceItems) {
+        const serviceItems = validatedItems.filter((i: any) => i.type === "service" || i.type === "promo");
+        const itemNames = serviceItems.map((i: any) => i.name).join(", ");
+        const lead = await storage.createLead({
+          firstName,
+          lastName,
+          email,
+          phone,
+          serviceType: "residential",
+          fromAddress: fromAddress || "",
+          toAddress: toAddress || "",
+          moveDate: moveDate || "",
+          details: `[CART ORDER] ${itemNames}. ${details || ""}`.trim(),
+          propertySize: "cart-bundle",
+          crewSize: 3,
+          truckConfig: "company_truck",
+          basePrice: totalPrice.toFixed(2),
+          totalPrice: totalPrice.toFixed(2),
+        });
+        leadId = lead.id;
+      }
+
+      const { SquareClient, SquareEnvironment } = await import("square");
+      const { randomUUID } = await import("crypto");
+
+      const client = new SquareClient({
+        token: squareToken,
+        environment: SquareEnvironment.Production,
+      });
+
+      const locationsResponse = await client.locations.list();
+      const locations = locationsResponse.locations;
+      if (!locations || locations.length === 0) {
+        return res.status(500).json({ error: "Payment setup incomplete. Please call us at 906-285-9312." });
+      }
+      const locationId = locations[0].id!;
+
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+      const host = req.headers['x-forwarded-host'] || req.headers.host;
+      const baseUrl = `${protocol}://${host}`;
+
+      const lineItems = validatedItems.map((item: any) => {
+        let itemPrice = item.price;
+        if (hasMultiple && item.type !== "promo") {
+          itemPrice = Math.round(item.price * 0.9 * 100) / 100;
+        }
+        return {
+          name: item.name,
+          quantity: "1",
+          basePriceMoney: {
+            amount: BigInt(Math.round(itemPrice * 100)),
+            currency: "USD",
+          },
+        };
+      });
+
+      const redirectParams = leadId ? `?type=cart&leadId=${leadId}` : `?type=cart`;
+
+      const orderResponse = await client.checkout.paymentLinks.create({
+        idempotencyKey: randomUUID(),
+        order: {
+          order: {
+            locationId,
+            lineItems,
+          },
+        },
+        checkoutOptions: {
+          redirectUrl: `${baseUrl}/payment-success${redirectParams}`,
+          allowTipping: false,
+          merchantSupportEmail: "upmichiganstatemovers@gmail.com",
+        },
+        paymentNote: `Cart Order - ${firstName} ${lastName}${leadId ? ` - Lead ${leadId}` : ""}`,
+      });
+
+      const paymentLink = orderResponse.result?.paymentLink || orderResponse.paymentLink;
+      if (!paymentLink?.url) {
+        return res.status(500).json({ error: "Failed to create payment link" });
+      }
+
+      try {
+        const itemList = validatedItems.map((i: any) => `• ${i.name}: $${i.price.toFixed(2)}`).join("\n");
+        await sendEmail({
+          to: email,
+          from: process.env.COMPANY_EMAIL || "upmichiganstatemovers@gmail.com",
+          subject: "JC ON THE MOVE - Order Confirmation",
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #1e293b; color: #e2e8f0; padding: 30px; border-radius: 12px;">
+              <h1 style="color: #facc15; text-align: center;">JC ON THE MOVE LLC</h1>
+              <h2 style="color: white; text-align: center;">Order Confirmed</h2>
+              <div style="background: #334155; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <h3 style="color: #facc15; margin-top: 0;">Your Items</h3>
+                ${validatedItems.map((i: any) => `<p>• ${i.name}: <strong>$${i.price.toFixed(2)}</strong></p>`).join("")}
+                ${hasMultiple ? `<p style="color: #4ade80;"><strong>Bundle Discount (10%): -$${discountAmount.toFixed(2)}</strong></p>` : ""}
+                <p style="font-size: 18px; color: #facc15;"><strong>Total: $${totalPrice.toFixed(2)}</strong></p>
+              </div>
+              <div style="background: #334155; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <p><strong>Name:</strong> ${firstName} ${lastName}</p>
+                <p><strong>Email:</strong> ${email}</p>
+                <p><strong>Phone:</strong> ${phone}</p>
+                ${fromAddress ? `<p><strong>Pickup:</strong> ${fromAddress}</p>` : ""}
+                ${toAddress ? `<p><strong>Drop-off:</strong> ${toAddress}</p>` : ""}
+                ${moveDate ? `<p><strong>Date:</strong> ${moveDate}</p>` : ""}
+              </div>
+              <p style="text-align: center; color: #94a3b8; font-size: 12px;">Questions? Call (906) 285-9312</p>
+            </div>
+          `,
+        });
+      } catch (emailErr) {
+        console.log("Cart checkout email failed (non-critical):", emailErr);
+      }
+
+      res.json({
+        success: true,
+        checkoutUrl: paymentLink.url,
+        leadId,
+      });
+    } catch (error: any) {
+      console.error("Error creating cart checkout:", error);
+      const errorMsg = error?.errors?.[0]?.detail || error.message || "Failed to create checkout";
+      res.status(500).json({ error: errorMsg });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

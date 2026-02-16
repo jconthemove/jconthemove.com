@@ -12,7 +12,9 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Gem, Leaf, Search, Plus, ChevronLeft, ChevronRight, Mail, Phone, ImagePlus, X, Heart, Pencil, Trash2, Video, CreditCard, Tag, RotateCcw } from "lucide-react";
+import { ArrowLeft, Gem, Leaf, Search, Plus, ChevronLeft, ChevronRight, Mail, Phone, ImagePlus, X, Heart, Pencil, Trash2, Video, CreditCard, Tag, RotateCcw, ShoppingCart, Check } from "lucide-react";
+import { useCart } from "@/hooks/useCart";
+import { FloatingCartButton } from "@/components/cart-button";
 
 const isVideoUrl = (url: string) => /\.(mp4|webm|ogg|mov)$/i.test(url);
 
@@ -72,6 +74,59 @@ const categories = [
   { value: "rings", label: "Rings" },
   { value: "custom", label: "Custom" },
 ];
+
+function CartButtons({ item, onCheckout, checkoutLoading }: { item: JewelryItem; onCheckout: () => void; checkoutLoading: boolean }) {
+  const { addItem, removeItem, isInCart, itemCount } = useCart();
+  const cartId = `jewelry-${item.id}`;
+  const inCart = isInCart(cartId);
+
+  if (!item.price || item.inStock === false) return null;
+
+  return (
+    <div className="pt-3 border-t space-y-2.5">
+      <div className="flex gap-2">
+        <Button
+          className="flex-1 bg-purple-600 hover:bg-purple-700 py-5 text-base font-semibold"
+          onClick={onCheckout}
+          disabled={checkoutLoading}
+        >
+          {checkoutLoading ? (
+            <><span className="animate-spin mr-2">⏳</span> Processing...</>
+          ) : (
+            <><CreditCard className="h-5 w-5 mr-2" /> Buy Now - ${item.price}</>
+          )}
+        </Button>
+      </div>
+      <Button
+        variant={inCart ? "default" : "outline"}
+        className={`w-full py-4 text-sm font-medium ${
+          inCart
+            ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+            : "border-emerald-500 text-emerald-600 hover:bg-emerald-50"
+        }`}
+        onClick={() => {
+          if (inCart) {
+            removeItem(cartId);
+          } else {
+            addItem({
+              id: cartId,
+              name: item.title,
+              price: parseFloat(item.price!),
+              image: item.imageUrl || "",
+              type: "jewelry",
+            });
+          }
+        }}
+      >
+        {inCart ? (
+          <><Check className="h-4 w-4 mr-2" /> In Cart{itemCount > 1 ? " — 10% Bundle!" : ""}</>
+        ) : (
+          <><ShoppingCart className="h-4 w-4 mr-2" /> Add to Cart{itemCount > 0 ? " — Save 10%" : ""}</>
+        )}
+      </Button>
+    </div>
+  );
+}
 
 export default function NatureMadeJewls() {
   const { user } = useAuth();
@@ -805,34 +860,21 @@ export default function NatureMadeJewls() {
                   </div>
                 )}
 
-                <div className="pt-3 border-t space-y-2.5">
-                  {selectedItem.price && selectedItem.inStock !== false && (
-                    <Button
-                      className="w-full bg-purple-600 hover:bg-purple-700 py-5 text-base font-semibold"
-                      onClick={() => handleCheckout(selectedItem)}
-                      disabled={checkoutLoading}
-                    >
-                      {checkoutLoading ? (
-                        <><span className="animate-spin mr-2">⏳</span> Processing...</>
-                      ) : (
-                        <><CreditCard className="h-5 w-5 mr-2" /> Buy Now - ${selectedItem.price}</>
-                      )}
+                <CartButtons item={selectedItem} onCheckout={() => handleCheckout(selectedItem)} checkoutLoading={checkoutLoading} />
+                <div className="flex gap-2">
+                  <a href={`mailto:upmichiganstatemovers@gmail.com?subject=Inquiry: ${selectedItem.title}`} className="flex-1">
+                    <Button variant="outline" className="w-full border-purple-600 text-purple-600 hover:bg-purple-50 text-sm py-4">
+                      <Mail className="h-4 w-4 mr-2" />
+                      Ask a Question
                     </Button>
-                  )}
-                  <div className="flex gap-2">
-                    <a href={`mailto:upmichiganstatemovers@gmail.com?subject=Inquiry: ${selectedItem.title}`} className="flex-1">
-                      <Button variant="outline" className="w-full border-purple-600 text-purple-600 hover:bg-purple-50 text-sm py-4">
-                        <Mail className="h-4 w-4 mr-2" />
-                        Ask a Question
-                      </Button>
-                    </a>
-                    <a href="tel:906-285-9312">
-                      <Button variant="outline" className="border-stone-300 py-4">
-                        <Phone className="h-4 w-4" />
-                      </Button>
-                    </a>
-                  </div>
-                  {canEditItem(selectedItem) && (
+                  </a>
+                  <a href="tel:906-285-9312">
+                    <Button variant="outline" className="border-stone-300 py-4">
+                      <Phone className="h-4 w-4" />
+                    </Button>
+                  </a>
+                </div>
+                {canEditItem(selectedItem) && (
                     <div className="space-y-2 pt-2 border-t border-stone-200">
                       <Button
                         variant={selectedItem.inStock === false ? "outline" : "default"}
@@ -871,7 +913,6 @@ export default function NatureMadeJewls() {
                       </div>
                     </div>
                   )}
-                </div>
               </div>
             </div>
           </div>
@@ -1026,6 +1067,7 @@ export default function NatureMadeJewls() {
           </p>
         </div>
       </footer>
+      <FloatingCartButton />
     </div>
   );
 }

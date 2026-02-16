@@ -55,6 +55,8 @@ import NatureMadeJewls from "@/pages/nature-made-jewls";
 import JewelryDetailPage from "@/pages/jewelry-detail";
 import PaymentSuccessPage from "@/pages/payment-success";
 import PromoHalfDayPage from "@/pages/promo-half-day";
+import CartPage from "@/pages/cart";
+import { CartProvider } from "@/hooks/useCart";
 import { NotificationPrompt } from "@/components/notification-prompt";
 
 // Landing page for unauthenticated users
@@ -279,6 +281,7 @@ function Router() {
       <Route path="/nature-made-jewls/:id" component={JewelryDetailPage} />
       <Route path="/payment-success" component={PaymentSuccessPage} />
       <Route path="/promo/half-day" component={PromoHalfDayPage} />
+      <Route path="/cart" component={CartPage} />
       
       {/* Lead detail - accessible without authentication (temporary for debugging) */}
       <Route path="/lead/:id">
@@ -302,10 +305,12 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <WalletProviderWrapper>
-        <TooltipProvider>
-          <Router />
-          <Toaster />
-        </TooltipProvider>
+        <CartProvider>
+          <TooltipProvider>
+            <Router />
+            <Toaster />
+          </TooltipProvider>
+        </CartProvider>
       </WalletProviderWrapper>
     </QueryClientProvider>
   );
