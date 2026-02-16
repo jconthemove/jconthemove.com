@@ -446,7 +446,7 @@ export default function PromoHalfDayPage() {
                     <Shield className="h-5 w-5 text-red-400 mt-0.5 shrink-0" />
                     <div className="text-sm text-red-200 space-y-1">
                       <p className="font-semibold text-red-100">Cancellation Policy</p>
-                      <p>More than 48 hours before: $10 processing fee or $100, whichever is greater</p>
+                      <p>More than 48 hours before: 10% processing fee or $100, whichever is greater</p>
                       <p>Within 48 hours: 25% cancellation fee</p>
                       <p>Within 24 hours: 50% cancellation fee</p>
                       <p className="text-xs text-red-300 mt-1">

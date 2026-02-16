@@ -8206,7 +8206,7 @@ Thank you for your business!
               
               <div style="background: #7f1d1d40; border: 1px solid #ef444480; padding: 15px; border-radius: 8px; margin: 20px 0;">
                 <h3 style="color: #fca5a5; margin-top: 0; font-size: 14px;">Cancellation Policy</h3>
-                <p style="font-size: 13px; margin: 5px 0;">• More than 48 hours: $10 processing fee or $100, whichever is greater</p>
+                <p style="font-size: 13px; margin: 5px 0;">• More than 48 hours: 10% processing fee or $100, whichever is greater</p>
                 <p style="font-size: 13px; margin: 5px 0;">• Within 48 hours: 25% fee ($150)</p>
                 <p style="font-size: 13px; margin: 5px 0;">• Within 24 hours: 50% fee ($300)</p>
               </div>
