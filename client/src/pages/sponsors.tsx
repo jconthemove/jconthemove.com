@@ -219,7 +219,7 @@ export default function SponsorsPage() {
                       className={`w-full text-sm ${
                         inCart
                           ? "bg-emerald-600 hover:bg-emerald-700 text-white border-transparent"
-                          : "border-white/30 text-white/80 hover:bg-white/10"
+                          : "bg-slate-800 hover:bg-slate-700 text-white border-slate-600"
                       }`}
                       onClick={() => handleAddToCart(tier)}
                     >
