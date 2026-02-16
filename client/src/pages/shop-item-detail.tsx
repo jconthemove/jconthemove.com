@@ -19,7 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ChevronLeft, ChevronRight, ArrowLeft, Eye, MessageCircle, DollarSign, X, Phone, Trash2, CheckCircle2, Pencil, ShoppingCart, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, ArrowLeft, Eye, MessageCircle, DollarSign, X, Phone, Trash2, CheckCircle2, Pencil, ShoppingCart, Plus, Upload, ImageIcon } from "lucide-react";
 import { type ShopItem } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -41,6 +41,8 @@ export function ShopItemDetailPage() {
   const [editDescription, setEditDescription] = useState("");
   const [editPrice, setEditPrice] = useState("");
   const [editCategory, setEditCategory] = useState("");
+  const [editPhotos, setEditPhotos] = useState<string[]>([]);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   // Fetch shop item details
   const { data: item, isLoading } = useQuery<ShopItem>({
@@ -113,7 +115,40 @@ export function ShopItemDetailPage() {
     setEditDescription(item.description);
     setEditPrice(item.price);
     setEditCategory(item.category || "");
+    setEditPhotos(Array.isArray(item.photos) ? [...item.photos as string[]] : []);
     setIsEditOpen(true);
+  };
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setUploadingPhoto(true);
+    try {
+      const newPhotos: string[] = [];
+      for (const file of Array.from(files)) {
+        if (file.size > 10 * 1024 * 1024) {
+          toast({ title: `${file.name} is too large (max 10MB)`, variant: "destructive" });
+          continue;
+        }
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (ev) => resolve(ev.target?.result as string);
+          reader.onerror = () => reject(new Error("Failed to read file"));
+          reader.readAsDataURL(file);
+        });
+        newPhotos.push(base64);
+      }
+      setEditPhotos((prev) => [...prev, ...newPhotos]);
+    } catch {
+      toast({ title: "Failed to upload photo", variant: "destructive" });
+    } finally {
+      setUploadingPhoto(false);
+      e.target.value = "";
+    }
+  };
+
+  const removeEditPhoto = (index: number) => {
+    setEditPhotos((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleUpdate = () => {
@@ -122,6 +157,7 @@ export function ShopItemDetailPage() {
       description: editDescription,
       price: editPrice,
       category: editCategory || undefined,
+      photos: editPhotos,
     });
   };
 
@@ -552,6 +588,43 @@ export function ShopItemDetailPage() {
             <div>
               <Label>Description</Label>
               <Textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={4} />
+            </div>
+            <div>
+              <Label className="mb-2 block">Photos</Label>
+              {editPhotos.length > 0 && (
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                  {editPhotos.map((photo, index) => (
+                    <div key={index} className="relative group">
+                      <img src={photo} alt={`Photo ${index + 1}`} className="w-full aspect-square object-cover rounded-lg border" />
+                      <button
+                        type="button"
+                        onClick={() => removeEditPhoto(index)}
+                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <label className="flex items-center justify-center gap-2 border-2 border-dashed rounded-lg p-3 cursor-pointer hover:bg-muted/50 transition-colors">
+                {uploadingPhoto ? (
+                  <span className="text-sm text-muted-foreground">Uploading...</span>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Add or replace photos</span>
+                  </>
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                  disabled={uploadingPhoto}
+                />
+              </label>
             </div>
             <Button onClick={handleUpdate} disabled={updateMutation.isPending} className="w-full">
               {updateMutation.isPending ? "Saving..." : "Save Changes"}
