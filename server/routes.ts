@@ -8066,7 +8066,7 @@ Thank you for your business!
       const host = req.headers['x-forwarded-host'] || req.headers.host;
       const baseUrl = `${protocol}://${host}`;
 
-      const paymentLinkResponse = await client.checkout.createPaymentLink({
+      const paymentLinkResponse = await client.checkout.paymentLinks.create({
         idempotencyKey: randomUUID(),
         quickPay: {
           name: `Nature Made Jewls - ${dbItem.title}`,
@@ -8084,7 +8084,7 @@ Thank you for your business!
         paymentNote: `Jewelry purchase: ${dbItem.title} (ID: ${itemId})`,
       });
 
-      const paymentLink = paymentLinkResponse.paymentLink;
+      const paymentLink = paymentLinkResponse.result?.paymentLink || paymentLinkResponse.paymentLink;
       if (!paymentLink?.url) {
         return res.status(500).json({ error: "Failed to create payment link" });
       }
