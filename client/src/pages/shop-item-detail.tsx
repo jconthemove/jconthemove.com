@@ -19,17 +19,20 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ChevronLeft, ChevronRight, ArrowLeft, Eye, MessageCircle, DollarSign, X, Phone, Trash2, CheckCircle2, Pencil } from "lucide-react";
+import { ChevronLeft, ChevronRight, ArrowLeft, Eye, MessageCircle, DollarSign, X, Phone, Trash2, CheckCircle2, Pencil, ShoppingCart, Plus } from "lucide-react";
 import { type ShopItem } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useCart } from "@/hooks/useCart";
+import { FloatingCartButton } from "@/components/cart-button";
 
 export function ShopItemDetailPage() {
   const { id } = useParams();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user } = useAuth();
+  const { addItem, isInCart, removeItem, itemCount } = useCart();
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [isZoomOpen, setIsZoomOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -342,26 +345,102 @@ export function ShopItemDetailPage() {
             )}
 
             {/* Action Buttons */}
-            <div className="grid grid-cols-2 gap-2 mb-4">
-              <Button
-                size="lg"
-                className="w-full"
-                onClick={handleMakeOffer}
-                data-testid="button-make-offer"
-              >
-                <DollarSign className="h-5 w-5 mr-2" />
-                Buy Now
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                className="w-full"
-                onClick={handleContactSeller}
-                data-testid="button-contact-seller"
-              >
-                <MessageCircle className="h-5 w-5 mr-2" />
-                Contact
-              </Button>
+            <div className="space-y-2 mb-4">
+              {item.status === "active" && (
+                <>
+                  {isInCart(`shop-${item.id}`) ? (
+                    <Button
+                      size="lg"
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                      onClick={() => {
+                        removeItem(`shop-${item.id}`);
+                        toast({ title: "Removed from cart" });
+                      }}
+                    >
+                      <ShoppingCart className="h-5 w-5 mr-2" />
+                      In Cart — Remove
+                    </Button>
+                  ) : (
+                    <Button
+                      size="lg"
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                      onClick={() => {
+                        const photos = Array.isArray(item.photos) ? item.photos : [];
+                        addItem({
+                          id: `shop-${item.id}`,
+                          name: item.title,
+                          price: parseFloat(item.price),
+                          image: photos[0] || "",
+                          type: "service",
+                        });
+                        toast({
+                          title: "Added to cart!",
+                          description: itemCount > 0 ? "Bundle discount: 10% off when you add more items!" : undefined,
+                        });
+                      }}
+                      data-testid="button-add-to-cart"
+                    >
+                      <ShoppingCart className="h-5 w-5 mr-2" />
+                      Add to Cart{itemCount > 0 ? " — Save 10%" : ""}
+                    </Button>
+                  )}
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => setLocation("/shop")}
+                    >
+                      <Plus className="h-5 w-5 mr-2" />
+                      Browse More Items
+                    </Button>
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      className="w-full"
+                      onClick={handleContactSeller}
+                      data-testid="button-contact-seller"
+                    >
+                      <MessageCircle className="h-5 w-5 mr-2" />
+                      Contact
+                    </Button>
+                  </div>
+                  {itemCount > 0 && (
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      className="w-full border-yellow-500/50 text-yellow-300 hover:bg-yellow-900/30"
+                      onClick={() => setLocation("/cart")}
+                    >
+                      <ShoppingCart className="h-5 w-5 mr-2" />
+                      View Cart ({itemCount} item{itemCount > 1 ? "s" : ""})
+                    </Button>
+                  )}
+                </>
+              )}
+              {item.status !== "active" && (
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setLocation("/shop")}
+                  >
+                    <Plus className="h-5 w-5 mr-2" />
+                    Browse More Items
+                  </Button>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="w-full"
+                    onClick={handleContactSeller}
+                    data-testid="button-contact-seller"
+                  >
+                    <MessageCircle className="h-5 w-5 mr-2" />
+                    Contact
+                  </Button>
+                </div>
+              )}
             </div>
 
             {/* Item Management Buttons (Creator & Admin Only) */}
@@ -505,6 +584,8 @@ export function ShopItemDetailPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <FloatingCartButton />
     </div>
   );
 }

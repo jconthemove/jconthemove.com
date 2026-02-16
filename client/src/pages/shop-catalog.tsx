@@ -119,7 +119,7 @@ function ShopItemCard({ item }: { item: ShopItem }) {
       </CardContent>
       
       <CardFooter className="p-4 pt-0">
-        <Button variant="outline" className="w-full border-slate-600 text-slate-300 hover:bg-blue-500/20 hover:border-blue-500/50 hover:text-blue-300" data-testid={`button-view-details-${item.id}`}>
+        <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold" data-testid={`button-view-details-${item.id}`}>
           View Details
         </Button>
       </CardFooter>
