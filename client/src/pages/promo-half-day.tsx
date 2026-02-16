@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
-import { ArrowLeft, Truck, Clock, Users, MapPin, CalendarDays, Shield, Loader2, Plus, X, Percent, Gem, ShoppingCart, Check } from "lucide-react";
+import { ArrowLeft, Truck, Clock, Users, MapPin, CalendarDays, Shield, Loader2, Plus, X, Percent, Gem, ShoppingCart, Check, UserPlus, Timer } from "lucide-react";
 import promoImage from "@assets/file_00000000839871fd8e13378301744f2e_(1)_1771260918919.png";
 import truckImage from "@assets/file_00000000219471fdb0d2dab84a32d060_1771261914341.png";
 import { useCart } from "@/hooks/useCart";
@@ -77,6 +77,12 @@ export default function PromoHalfDayPage() {
     image: truckImage,
     type: "service",
   };
+
+  const serviceAddOns: (AddOnItem & { icon: any; description: string })[] = [
+    { ...truckRental, icon: Truck, description: "Local jobs only" },
+    { id: "extra-mover", name: "Extra Mover", price: 75, image: "", type: "service", icon: UserPlus, description: "Add a 4th crew member" },
+    { id: "extra-hour", name: "Extra Hour of Help", price: 100, image: "", type: "service", icon: Timer, description: "Extend to 5 hours total" },
+  ];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -180,39 +186,52 @@ export default function PromoHalfDayPage() {
               </p>
             </div>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Truck Rental Add-on */}
-            <div
-              onClick={() => toggleAddOn(truckRental)}
-              className={`flex items-center gap-4 p-3 rounded-xl cursor-pointer transition-all duration-200 ${
-                isAddOnSelected("truck-rental")
-                  ? "bg-purple-600/30 border-2 border-purple-400 shadow-lg"
-                  : "bg-slate-800/60 border-2 border-slate-600/50 hover:border-purple-500/50"
-              }`}
-            >
-              <img
-                src={truckImage}
-                alt="U-Haul Truck Rental"
-                className="w-20 h-20 rounded-lg object-cover shrink-0"
-              />
-              <div className="flex-1 min-w-0">
-                <p className="text-white font-bold">U-Haul Truck Rental</p>
-                <p className="text-slate-300 text-sm">Local jobs only</p>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-yellow-400 font-bold text-lg">$200</span>
-                  {isAddOnSelected("truck-rental") && (
-                    <span className="text-purple-300 text-sm font-medium">-10% = $180</span>
+          <CardContent className="space-y-3">
+            {serviceAddOns.map((addon) => {
+              const selected = isAddOnSelected(addon.id);
+              const discountedPrice = Math.round(addon.price * 0.9 * 100) / 100;
+              const Icon = addon.icon;
+              return (
+                <div
+                  key={addon.id}
+                  onClick={() => toggleAddOn(addon)}
+                  className={`flex items-center gap-4 p-3 rounded-xl cursor-pointer transition-all duration-200 ${
+                    selected
+                      ? "bg-purple-600/30 border-2 border-purple-400 shadow-lg"
+                      : "bg-slate-800/60 border-2 border-slate-600/50 hover:border-purple-500/50"
+                  }`}
+                >
+                  {addon.image ? (
+                    <img
+                      src={addon.image}
+                      alt={addon.name}
+                      className="w-16 h-16 rounded-lg object-cover shrink-0"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 rounded-lg bg-purple-900/50 flex items-center justify-center shrink-0">
+                      <Icon className="h-7 w-7 text-purple-300" />
+                    </div>
                   )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white font-bold text-sm">{addon.name}</p>
+                    <p className="text-slate-400 text-xs">{addon.description}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-yellow-400 font-bold">${addon.price}</span>
+                      {selected && (
+                        <span className="text-purple-300 text-sm font-medium">-10% = ${discountedPrice}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                    selected
+                      ? "bg-purple-500 text-white"
+                      : "bg-slate-700 text-slate-400"
+                  }`}>
+                    {selected ? <Check className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
+                  </div>
                 </div>
-              </div>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-                isAddOnSelected("truck-rental")
-                  ? "bg-purple-500 text-white"
-                  : "bg-slate-700 text-slate-400"
-              }`}>
-                {isAddOnSelected("truck-rental") ? <Check className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
-              </div>
-            </div>
+              );
+            })}
 
             {/* Browse Jewelry Toggle */}
             <div>

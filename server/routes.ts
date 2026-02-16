@@ -8106,7 +8106,7 @@ Thank you for your business!
   // Promo Half Day Package - Creates lead + Square Checkout
   app.post("/api/promo/half-day-checkout", async (req: any, res) => {
     try {
-      const { firstName, lastName, email, phone, fromAddress, toAddress, moveDate, details } = req.body;
+      const { firstName, lastName, email, phone, fromAddress, toAddress, moveDate, details, addOns } = req.body;
 
       if (!firstName || !lastName || !email || !phone || !fromAddress || !moveDate) {
         return res.status(400).json({ error: "Missing required fields" });
@@ -8117,6 +8117,38 @@ Thank you for your business!
         return res.status(500).json({ error: "Payment processing is not configured. Please call us at 906-285-9312 to book." });
       }
 
+      const validAddOnPrices: Record<string, number> = {
+        "truck-rental": 200,
+        "extra-mover": 75,
+        "extra-hour": 100,
+      };
+
+      const validatedAddOns: { id: string; name: string; price: number; type: string }[] = [];
+      if (addOns && Array.isArray(addOns)) {
+        for (const addon of addOns) {
+          if (addon.type === "service") {
+            const expected = validAddOnPrices[addon.id];
+            if (expected && expected === parseFloat(addon.price)) {
+              validatedAddOns.push({ id: addon.id, name: addon.name, price: expected, type: addon.type });
+            }
+          } else if (addon.type === "jewelry") {
+            const price = parseFloat(addon.price);
+            if (!isNaN(price) && price > 0) {
+              validatedAddOns.push({ id: addon.id, name: addon.name, price, type: addon.type });
+            }
+          }
+        }
+      }
+
+      const basePrice = 600;
+      const addOnsSubtotal = validatedAddOns.reduce((sum, a) => sum + a.price, 0);
+      const addOnsDiscount = validatedAddOns.length > 0 ? Math.round(addOnsSubtotal * 0.1 * 100) / 100 : 0;
+      const totalPrice = basePrice + addOnsSubtotal - addOnsDiscount;
+      const totalCents = Math.round(totalPrice * 100);
+
+      const addOnNames = validatedAddOns.map(a => a.name).join(", ");
+      const detailText = `[HALF DAY PROMO - $${totalPrice}] 3 Movers, 4 Hours, Travel Included.${addOnNames ? ` Add-ons: ${addOnNames}.` : ""} ${details || ""}`.trim();
+
       const lead = await storage.createLead({
         firstName,
         lastName,
@@ -8126,12 +8158,12 @@ Thank you for your business!
         fromAddress,
         toAddress: toAddress || "",
         moveDate,
-        details: `[HALF DAY PROMO - $600] 3 Movers, 4 Hours, Travel Included. ${details || ""}`.trim(),
+        details: detailText,
         propertySize: "half-day-promo",
         crewSize: 3,
         truckConfig: "company_truck",
         basePrice: "600.00",
-        totalPrice: "600.00",
+        totalPrice: totalPrice.toFixed(2),
       });
 
       const { SquareClient, SquareEnvironment } = await import("square");
@@ -8153,12 +8185,16 @@ Thank you for your business!
       const host = req.headers['x-forwarded-host'] || req.headers.host;
       const baseUrl = `${protocol}://${host}`;
 
+      const checkoutName = validatedAddOns.length > 0
+        ? `Half Day Move + ${validatedAddOns.length} add-on${validatedAddOns.length > 1 ? "s" : ""} (10% bundle discount)`
+        : "Half Day Loading/Unloading - 3 Movers, 4 Hours";
+
       const paymentLinkResponse = await client.checkout.paymentLinks.create({
         idempotencyKey: randomUUID(),
         quickPay: {
-          name: "Half Day Loading/Unloading - 3 Movers, 4 Hours",
+          name: checkoutName,
           priceMoney: {
-            amount: BigInt(60000),
+            amount: BigInt(totalCents),
             currency: "USD",
           },
           locationId,
@@ -8168,7 +8204,7 @@ Thank you for your business!
           allowTipping: false,
           merchantSupportEmail: "upmichiganstatemovers@gmail.com",
         },
-        paymentNote: `Half Day Promo - ${firstName} ${lastName} - ${moveDate} - Lead ID: ${lead.id}`,
+        paymentNote: `Half Day Promo - ${firstName} ${lastName} - ${moveDate} - Lead ID: ${lead.id}${addOnNames ? ` | Add-ons: ${addOnNames}` : ""}`,
       });
 
       const paymentLink = paymentLinkResponse.result?.paymentLink || paymentLinkResponse.paymentLink;
