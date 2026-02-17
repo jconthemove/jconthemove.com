@@ -1,20 +1,19 @@
 import { MailService } from '@sendgrid/mail';
+import { sendGmailEmail, isGmailAvailable } from './gmail';
 
-// Validate SendGrid API key format and availability
 let isEmailServiceAvailable = false;
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
 
 if (!SENDGRID_API_KEY) {
-  console.warn("SENDGRID_API_KEY environment variable not set. Email notifications will be disabled.");
+  console.warn("SENDGRID_API_KEY environment variable not set. SendGrid fallback will be disabled.");
 } else if (!SENDGRID_API_KEY.startsWith('SG.')) {
-  console.warn("Invalid SENDGRID_API_KEY format - API key does not start with 'SG.' as required by SendGrid. Email notifications will be disabled.");
+  console.warn("Invalid SENDGRID_API_KEY format - SendGrid fallback will be disabled.");
 } else {
   isEmailServiceAvailable = true;
 }
 
 const mailService = new MailService();
 
-// Only initialize SendGrid if we have a valid API key
 if (isEmailServiceAvailable && SENDGRID_API_KEY) {
   try {
     mailService.setApiKey(SENDGRID_API_KEY);
@@ -25,6 +24,14 @@ if (isEmailServiceAvailable && SENDGRID_API_KEY) {
   }
 }
 
+isGmailAvailable().then(available => {
+  if (available) {
+    console.log("Gmail email service available (primary)");
+  } else {
+    console.log("Gmail not available, will use SendGrid as primary");
+  }
+}).catch(() => {});
+
 interface EmailParams {
   to: string;
   from: string;
@@ -34,6 +41,19 @@ interface EmailParams {
 }
 
 export async function sendEmail(params: EmailParams): Promise<boolean> {
+  // Try Gmail first (primary)
+  try {
+    const gmailAvailable = await isGmailAvailable();
+    if (gmailAvailable) {
+      const sent = await sendGmailEmail(params);
+      if (sent) return true;
+      console.log("Gmail send failed, falling back to SendGrid...");
+    }
+  } catch (err) {
+    console.log("Gmail unavailable, falling back to SendGrid...");
+  }
+
+  // Fall back to SendGrid
   if (!isEmailServiceAvailable) {
     console.log('Email service not available. Email would be sent:', {
       to: params.to,
@@ -42,7 +62,7 @@ export async function sendEmail(params: EmailParams): Promise<boolean> {
       hasText: !!params.text,
       hasHtml: !!params.html
     });
-    return true; // Return true for development/deployment when email service is not available
+    return true;
   }
 
   try {

@@ -53,7 +53,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Test Email via SendGrid
         if (testEmail && targetEmail) {
           try {
-            const companyEmail = process.env.COMPANY_EMAIL || "upmichiganstatemovers@gmail.com";
+            const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
             await sendEmail({
               to: targetEmail,
               from: companyEmail,
@@ -1033,7 +1033,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Send email notification
       const emailContent = generateLeadNotificationEmail(lead);
-      const companyEmail = process.env.COMPANY_EMAIL || "upmichiganstatemovers@gmail.com";
+      const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
       
       await sendEmail({
         to: companyEmail,
@@ -2050,7 +2050,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Send email notification
       const emailContent = generateLeadNotificationEmail(lead);
-      const companyEmail = process.env.COMPANY_EMAIL || "upmichiganstatemovers@gmail.com";
+      const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
       
       await sendEmail({
         to: companyEmail,
@@ -2418,7 +2418,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const reviewLink = `${process.env.APP_URL || 'https://jconthemove.com'}/leave-review?jobId=${lead.id}`;
       
       // Send review request email to customer
-      const companyEmail = process.env.COMPANY_EMAIL || "upmichiganstatemovers@gmail.com";
+      const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
       
       const emailHtml = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -2953,7 +2953,7 @@ Thank you for your business!
       
       // Send email notification
       const emailContent = generateContactNotificationEmail(contact);
-      const companyEmail = process.env.COMPANY_EMAIL || "upmichiganstatemovers@gmail.com";
+      const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
       
       await sendEmail({
         to: companyEmail,
@@ -5413,7 +5413,7 @@ Thank you for your business!
   // Test SendGrid email service (admin only)
   app.get("/api/admin/test-email", isAuthenticated, requireAdmin, async (req, res) => {
     try {
-      const companyEmail = process.env.COMPANY_EMAIL || "upmichiganstatemovers@gmail.com";
+      const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
       
       const emailSuccess = await sendEmail({
         to: companyEmail,
@@ -8292,7 +8292,7 @@ Thank you for your business!
       try {
         await sendEmail({
           to: email,
-          from: process.env.COMPANY_EMAIL || "upmichiganstatemovers@gmail.com",
+          from: process.env.COMPANY_EMAIL || "michigankid906@gmail.com",
           subject: "JC ON THE MOVE - Half Day Move Booking Confirmation",
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #1e293b; color: #e2e8f0; padding: 30px; border-radius: 12px;">
@@ -8338,8 +8338,8 @@ Thank you for your business!
       // Notify business
       try {
         await sendEmail({
-          to: process.env.COMPANY_EMAIL || "upmichiganstatemovers@gmail.com",
-          from: process.env.COMPANY_EMAIL || "upmichiganstatemovers@gmail.com",
+          to: process.env.COMPANY_EMAIL || "michigankid906@gmail.com",
+          from: process.env.COMPANY_EMAIL || "michigankid906@gmail.com",
           subject: `New Half Day Promo Booking - ${firstName} ${lastName} - ${moveDate}`,
           html: `<h2>New Half Day Promo Booking</h2><p><strong>${firstName} ${lastName}</strong></p><p>Phone: ${phone}</p><p>Email: ${email}</p><p>Date: ${moveDate}</p><p>From: ${fromAddress}</p>${toAddress ? `<p>To: ${toAddress}</p>` : ""}<p>Price: $600</p>${details ? `<p>Notes: ${details}</p>` : ""}<p>Lead ID: ${lead.id}</p>`,
           text: `New Half Day Promo Booking\n${firstName} ${lastName}\nPhone: ${phone}\nEmail: ${email}\nDate: ${moveDate}\nFrom: ${fromAddress}\n${toAddress ? `To: ${toAddress}\n` : ""}Price: $600\nLead ID: ${lead.id}`,
@@ -8491,7 +8491,7 @@ Thank you for your business!
         const itemList = validatedItems.map((i: any) => `• ${i.name}: $${i.price.toFixed(2)}`).join("\n");
         await sendEmail({
           to: email,
-          from: process.env.COMPANY_EMAIL || "upmichiganstatemovers@gmail.com",
+          from: process.env.COMPANY_EMAIL || "michigankid906@gmail.com",
           subject: "JC ON THE MOVE - Order Confirmation",
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #1e293b; color: #e2e8f0; padding: 30px; border-radius: 12px;">
@@ -8599,7 +8599,7 @@ Thank you for your business!
       try {
         await sendEmail({
           to: email,
-          from: process.env.COMPANY_EMAIL || "upmichiganstatemovers@gmail.com",
+          from: process.env.COMPANY_EMAIL || "michigankid906@gmail.com",
           subject: `JC ON THE MOVE - ${tierName} Sponsorship Confirmation`,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #1e293b; color: #e2e8f0; padding: 30px; border-radius: 12px;">
