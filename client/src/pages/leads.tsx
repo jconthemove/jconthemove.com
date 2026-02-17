@@ -312,7 +312,10 @@ export default function LeadsPage() {
 
           <Tabs defaultValue="view" className="space-y-6">
             <TabsList className="bg-slate-800/80 border border-slate-700">
-              <TabsTrigger value="view" data-testid="tab-view-leads">View Leads</TabsTrigger>
+              <TabsTrigger value="view" data-testid="tab-view-leads">Active Leads</TabsTrigger>
+              <TabsTrigger value="completed" data-testid="tab-completed-leads" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
+                Completed ({leads.filter(l => l.status === 'completed').length})
+              </TabsTrigger>
               <TabsTrigger value="add" data-testid="tab-add-lead">Add a Lead</TabsTrigger>
             </TabsList>
 
@@ -324,32 +327,69 @@ export default function LeadsPage() {
                     <p className="mt-4 text-slate-400">Loading leads...</p>
                   </CardContent>
                 </Card>
-              ) : leads.length === 0 ? (
+              ) : leads.filter(l => l.status !== 'completed').length === 0 ? (
                 <Card className="bg-slate-800/50 border-slate-700">
                   <CardContent className="py-12">
                     <div className="text-center">
-                      <p className="text-slate-400">No leads at this time.</p>
+                      <p className="text-slate-400">No active leads at this time.</p>
                     </div>
                   </CardContent>
                 </Card>
               ) : (
                 <Card className="bg-slate-800/50 border-slate-700">
                   <CardHeader>
-                    <CardTitle className="text-2xl text-white">All Leads ({leads.length})</CardTitle>
-                    <CardDescription className="text-slate-400">All customer leads organized by status</CardDescription>
+                    <CardTitle className="text-2xl text-white">Active Leads ({leads.filter(l => l.status !== 'completed').length})</CardTitle>
+                    <CardDescription className="text-slate-400">Customer leads in progress</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
                       {[...leads]
+                        .filter(l => l.status !== 'completed')
                         .sort((a, b) => {
-                          // Sort by status priority (new → contacted → quoted → confirmed → available → accepted → in_progress → completed)
-                          // Then by newest date first
-                          const statusOrder = ["new", "contacted", "quoted", "confirmed", "available", "accepted", "in_progress", "completed"];
+                          const statusOrder = ["new", "contacted", "quoted", "confirmed", "available", "accepted", "in_progress"];
                           const aIndex = statusOrder.indexOf(a.status);
                           const bIndex = statusOrder.indexOf(b.status);
                           if (aIndex !== bIndex) return aIndex - bIndex;
                           return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
                         })
+                        .map(renderLeadCard)}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+
+            <TabsContent value="completed">
+              {isLoading ? (
+                <Card className="bg-slate-800/50 border-slate-700">
+                  <CardContent className="text-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mx-auto"></div>
+                    <p className="mt-4 text-slate-400">Loading completed jobs...</p>
+                  </CardContent>
+                </Card>
+              ) : leads.filter(l => l.status === 'completed').length === 0 ? (
+                <Card className="bg-slate-800/50 border-slate-700">
+                  <CardContent className="py-12">
+                    <div className="text-center">
+                      <CheckCheck className="h-12 w-12 text-slate-600 mx-auto mb-3" />
+                      <p className="text-slate-400">No completed jobs yet.</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card className="bg-slate-800/50 border-emerald-800/30">
+                  <CardHeader>
+                    <CardTitle className="text-2xl text-white flex items-center gap-2">
+                      <CheckCheck className="h-6 w-6 text-emerald-500" />
+                      Completed Jobs ({leads.filter(l => l.status === 'completed').length})
+                    </CardTitle>
+                    <CardDescription className="text-slate-400">Jobs that have been finished</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {[...leads]
+                        .filter(l => l.status === 'completed')
+                        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
                         .map(renderLeadCard)}
                     </div>
                   </CardContent>

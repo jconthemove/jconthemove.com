@@ -2828,8 +2828,84 @@ Thank you for your business!
           } catch (e) { console.error('SMS to JC Crew failed:', e); }
         }
         
-        // Notify admin when job is completed
+        // Distribute token rewards and notify when job is completed
         if (newStatus === 'completed') {
+          // Token reward distribution - only if status is actually changing to completed
+          const isStatusChangingToCompleted = previousStatus !== 'completed';
+          const isRewardsAlreadyDistributed = currentLead?.completionRewardedAt !== null && currentLead?.completionRewardedAt !== undefined;
+          
+          if (isStatusChangingToCompleted && !isRewardsAlreadyDistributed && updatedLead.tokenAllocation && updatedLead.crewMembers && updatedLead.crewMembers.length > 0) {
+            try {
+              const totalTokens = parseFloat(updatedLead.tokenAllocation);
+              
+              if (isNaN(totalTokens) || totalTokens <= 0) {
+                console.log(`⚠️ Invalid token allocation for job ${id}: ${updatedLead.tokenAllocation}`);
+              } else {
+                const tokensPerWorker = totalTokens / updatedLead.crewMembers.length;
+                
+                console.log(`💰 Quote completion: Distributing ${totalTokens} tokens to ${updatedLead.crewMembers.length} crew members (${tokensPerWorker} each)`);
+                
+                for (const crewMemberId of updatedLead.crewMembers) {
+                  await gamificationService.awardJobCompletion(crewMemberId, id, tokensPerWorker.toFixed(8), {
+                    onTime: true,
+                    customerRating: 5
+                  });
+                  console.log(`✅ Awarded ${tokensPerWorker} tokens to crew member ${crewMemberId}`);
+                }
+                
+                await storage.updateLeadQuote(id, { completionRewardedAt: new Date() });
+                console.log(`✅ Marked job ${id} as rewarded at ${new Date().toISOString()}`);
+
+                // Customer loyalty reward
+                try {
+                  if (updatedLead.customerEmail) {
+                    const customer = await storage.getUserByEmail(updatedLead.customerEmail);
+                    if (customer) {
+                      const LOYALTY_REWARD = TREASURY_CONFIG.LOYALTY_REWARD_TOKENS;
+                      await storage.creditWalletTokens(customer.id, LOYALTY_REWARD);
+                      await db.insert(rewards).values({
+                        recipientId: customer.id,
+                        type: REWARD_TYPES.LOYALTY_BOOKING,
+                        tokenAmount: LOYALTY_REWARD.toFixed(8),
+                        status: "confirmed",
+                        createdAt: new Date(),
+                        metadata: { jobId: id, serviceType: updatedLead.serviceType }
+                      });
+                      console.log(`🎁 Awarded ${LOYALTY_REWARD} JCMOVES loyalty reward to customer ${customer.email}`);
+
+                      // Referral bonus on first completed job
+                      if (customer.referredByUserId) {
+                        const completedJobs = await db.select().from(rewards)
+                          .where(and(eq(rewards.recipientId, customer.id), eq(rewards.type, REWARD_TYPES.LOYALTY_BOOKING)));
+                        
+                        if (completedJobs.length === 1) {
+                          const REFERRAL_BONUS = TREASURY_CONFIG.REFERRAL_CONFIRMED_TOKENS;
+                          await storage.creditWalletTokens(customer.referredByUserId, REFERRAL_BONUS);
+                          await db.insert(rewards).values({
+                            recipientId: customer.referredByUserId,
+                            type: REWARD_TYPES.REFERRAL_CONFIRMED,
+                            tokenAmount: REFERRAL_BONUS.toFixed(8),
+                            status: "confirmed",
+                            createdAt: new Date(),
+                            metadata: { referredUserId: customer.id, jobId: id }
+                          });
+                          console.log(`🎉 Awarded ${REFERRAL_BONUS} JCMOVES referral bonus to ${customer.referredByUserId}`);
+                        }
+                      }
+                    }
+                  }
+                } catch (customerRewardError) {
+                  console.error("Error awarding customer rewards:", customerRewardError);
+                }
+              }
+            } catch (tokenError) {
+              console.error("Error distributing tokens via quote endpoint:", tokenError);
+            }
+          } else if (isRewardsAlreadyDistributed) {
+            console.log(`ℹ️ Job ${id} rewards already distributed - skipping`);
+          }
+
+          // SMS notifications
           try {
             const assignedUser = updatedLead.assignedToUserId 
               ? await storage.getUser(updatedLead.assignedToUserId)
