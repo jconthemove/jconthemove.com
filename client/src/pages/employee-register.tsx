@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, UserPlus, Lock, Mail, User, Phone } from "lucide-react";
+import { Loader2, UserPlus, Lock, Mail, User, Phone, Coins } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { apiRequest } from "@/lib/queryClient";
 
 export default function EmployeeRegister() {
@@ -19,6 +20,7 @@ export default function EmployeeRegister() {
     firstName: "",
     lastName: "",
     phoneNumber: "",
+    rewardsEnrolled: true,
   });
 
   const registerMutation = useMutation({
@@ -29,6 +31,7 @@ export default function EmployeeRegister() {
         firstName: data.firstName,
         lastName: data.lastName,
         phoneNumber: data.phoneNumber,
+        rewardsEnrolled: data.rewardsEnrolled,
       });
       return response.json();
     },
@@ -199,6 +202,24 @@ export default function EmployeeRegister() {
                   required
                   data-testid="input-confirm-password"
                 />
+              </div>
+            </div>
+
+            <div className="flex items-start space-x-3 p-3 rounded-lg bg-gradient-to-r from-orange-500/10 to-yellow-500/10 border border-orange-500/30">
+              <Checkbox
+                id="rewardsEnrolled"
+                checked={formData.rewardsEnrolled}
+                onCheckedChange={(checked) => setFormData({ ...formData, rewardsEnrolled: checked === true })}
+                className="mt-0.5 border-orange-400 data-[state=checked]:bg-orange-500 data-[state=checked]:border-orange-500"
+              />
+              <div className="grid gap-1 leading-none">
+                <label htmlFor="rewardsEnrolled" className="text-sm font-medium text-white cursor-pointer flex items-center gap-1.5">
+                  <Coins className="h-4 w-4 text-orange-400" />
+                  Enroll in JCMOVES Rewards Program
+                </label>
+                <p className="text-xs text-slate-400">
+                  Earn JCMOVES tokens for completing jobs, referrals, and daily check-ins. Redeem tokens for future services and in-app perks.
+                </p>
               </div>
             </div>
 

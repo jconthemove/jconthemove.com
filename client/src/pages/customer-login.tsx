@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, LogIn, Lock, Mail, User, UserPlus, Phone } from "lucide-react";
+import { Loader2, LogIn, Lock, Mail, User, UserPlus, Phone, Coins } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export default function CustomerLogin() {
@@ -19,6 +20,7 @@ export default function CustomerLogin() {
     firstName: "",
     lastName: "",
     phoneNumber: "",
+    rewardsEnrolled: true,
   });
 
   const loginMutation = useMutation({
@@ -55,6 +57,7 @@ export default function CustomerLogin() {
         firstName: data.firstName,
         lastName: data.lastName,
         phoneNumber: data.phoneNumber,
+        rewardsEnrolled: data.rewardsEnrolled,
       });
       return response.json();
     },
@@ -190,6 +193,26 @@ export default function CustomerLogin() {
                 />
               </div>
             </div>
+
+            {mode === 'register' && (
+              <div className="flex items-start space-x-3 p-3 rounded-lg bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border border-blue-500/30">
+                <Checkbox
+                  id="rewardsEnrolled"
+                  checked={formData.rewardsEnrolled}
+                  onCheckedChange={(checked) => setFormData({ ...formData, rewardsEnrolled: checked === true })}
+                  className="mt-0.5 border-blue-400 data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
+                />
+                <div className="grid gap-1 leading-none">
+                  <label htmlFor="rewardsEnrolled" className="text-sm font-medium text-white cursor-pointer flex items-center gap-1.5">
+                    <Coins className="h-4 w-4 text-blue-400" />
+                    Enroll in JCMOVES Rewards Program
+                  </label>
+                  <p className="text-xs text-slate-400">
+                    Earn JCMOVES tokens when your moves are completed, for referrals, and more. Redeem tokens for discounts on future services and in-app perks.
+                  </p>
+                </div>
+              </div>
+            )}
 
             <Button
               type="submit"

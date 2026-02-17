@@ -197,7 +197,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     password: z.string().min(8, "Password must be at least 8 characters").regex(/^(?=.*[A-Za-z])(?=.*\d)/, "Password must contain letters and numbers"),
     firstName: z.string().min(1, "First name is required"),
     lastName: z.string().min(1, "Last name is required"),
-    phoneNumber: z.string().min(10, "Phone number is required")
+    phoneNumber: z.string().min(10, "Phone number is required"),
+    rewardsEnrolled: z.boolean().optional().default(false),
   });
 
   app.post("/api/auth/employee/register", async (req, res) => {
@@ -246,11 +247,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           lastName: data.lastName,
           phoneNumber: data.phoneNumber,
           role: "employee",
-          status: "pending", // Requires admin approval
+          status: "pending",
           referralCode,
+          rewardsEnrolled: data.rewardsEnrolled ?? false,
         }).returning();
         
         newUser = createdUser;
+      }
+
+      if (data.rewardsEnrolled && newUser && !newUser.rewardsEnrolled) {
+        await db.update(users).set({ rewardsEnrolled: true }).where(eq(users.id, newUser.id));
+        newUser.rewardsEnrolled = true;
       }
 
       (req.session as any).userId = newUser.id;
@@ -272,6 +279,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             lastName: newUser.lastName,
             role: newUser.role,
             status: newUser.status,
+            rewardsEnrolled: newUser.rewardsEnrolled,
           },
           message: "Registration successful! Your account is pending admin approval."
         });
@@ -379,7 +387,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     password: z.string().min(8, "Password must be at least 8 characters"),
     firstName: z.string().min(1, "First name is required"),
     lastName: z.string().min(1, "Last name is required"),
-    phoneNumber: z.string().optional()
+    phoneNumber: z.string().optional(),
+    rewardsEnrolled: z.boolean().optional().default(false),
   });
 
   app.post("/api/auth/customer/register", async (req, res) => {
@@ -424,6 +433,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           role: 'customer',
           status: 'active',
           referralCode,
+          rewardsEnrolled: data.rewardsEnrolled ?? false,
         }).returning();
         newUser = createdUser;
 
@@ -433,6 +443,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!newUser) {
         return res.status(500).json({ error: "Registration failed" });
+      }
+
+      if (data.rewardsEnrolled && !newUser.rewardsEnrolled) {
+        await db.update(users).set({ rewardsEnrolled: true }).where(eq(users.id, newUser.id));
+        newUser.rewardsEnrolled = true;
       }
 
       // Award retroactive rewards for previous accepted/completed leads
