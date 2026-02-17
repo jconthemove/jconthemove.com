@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
+import { ThemeProvider } from "@/hooks/useTheme";
 import { WalletProviderWrapper } from "@/components/WalletProviderWrapper";
 import { RouteGuard } from "@/components/RouteGuard";
 import { ComplianceCheck } from "@/components/compliance-check";
@@ -303,16 +304,18 @@ function Router() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <WalletProviderWrapper>
-        <CartProvider>
-          <TooltipProvider>
-            <Router />
-            <Toaster />
-          </TooltipProvider>
-        </CartProvider>
-      </WalletProviderWrapper>
-    </QueryClientProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <WalletProviderWrapper>
+          <CartProvider>
+            <TooltipProvider>
+              <Router />
+              <Toaster />
+            </TooltipProvider>
+          </CartProvider>
+        </WalletProviderWrapper>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 }
 

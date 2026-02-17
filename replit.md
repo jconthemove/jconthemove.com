@@ -73,6 +73,7 @@ Preferred communication style: Simple, everyday language.
 - **NODE_ENV**: Set to `production` for deployment builds.
 
 ## UI/UX Decisions
+- **Dark Mode Toggle**: ThemeProvider (`client/src/hooks/useTheme.tsx`) with localStorage persistence. Default is dark mode. Toggle in header (sun/moon icon) for both desktop and mobile. CSS variables in `:root` (light) and `.dark` (dark) handle theming. Tailwind `darkMode: ["class"]` config.
 - Modern, responsive design.
 - Live price cards with gradient backgrounds and trend indicators.
 - Unified mining dashboard displaying streak count and bonus previews.

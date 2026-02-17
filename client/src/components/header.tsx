@@ -2,8 +2,9 @@ import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/hooks/useAuth";
+import { useTheme } from "@/hooks/useTheme";
 import { useState } from "react";
-import { Menu, X, User, LogOut } from "lucide-react";
+import { Menu, X, User, LogOut, Sun, Moon } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
 export default function Header() {
@@ -11,6 +12,7 @@ export default function Header() {
   const isMobile = useIsMobile();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { user, isAuthenticated, hasAdminAccess, isLoading } = useAuth();
+  const { theme, toggleTheme } = useTheme();
 
   const handleLogout = async () => {
     try {
@@ -174,6 +176,14 @@ export default function Header() {
                 
                 {isAuthenticated ? (
                   <div className="flex items-center space-x-4">
+                    <button
+                      onClick={toggleTheme}
+                      className="p-2 rounded-full hover:bg-muted transition-colors"
+                      data-testid="button-theme-toggle"
+                      title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+                    >
+                      {theme === "dark" ? <Sun className="h-4 w-4 text-yellow-400" /> : <Moon className="h-4 w-4 text-slate-600" />}
+                    </button>
                     <Link
                       href="/profile"
                       className="flex items-center space-x-2 text-sm hover:text-primary transition-colors cursor-pointer"
@@ -203,7 +213,15 @@ export default function Header() {
                     </button>
                   </div>
                 ) : (
-                  <div className="flex items-center ml-3">
+                  <div className="flex items-center ml-3 gap-2">
+                    <button
+                      onClick={toggleTheme}
+                      className="p-2 rounded-full hover:bg-muted transition-colors"
+                      data-testid="button-theme-toggle-public"
+                      title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+                    >
+                      {theme === "dark" ? <Sun className="h-4 w-4 text-yellow-400" /> : <Moon className="h-4 w-4 text-slate-600" />}
+                    </button>
                     <Link 
                       href="/employee-login" 
                       className="text-white hover:opacity-90 px-6 py-2.5 rounded-full text-sm font-medium transition-all"
@@ -358,6 +376,17 @@ export default function Header() {
                 </div>
               )}
               
+              <div className="border-t border-border my-2 pt-2">
+                <button
+                  onClick={toggleTheme}
+                  className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors text-left w-full hover:bg-muted"
+                  data-testid="button-mobile-theme-toggle"
+                >
+                  {theme === "dark" ? <Sun className="h-4 w-4 text-yellow-400" /> : <Moon className="h-4 w-4 text-slate-600" />}
+                  <span className="text-muted-foreground">{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
+                </button>
+              </div>
+
               {isAuthenticated ? (
                 <>
                   <Link
