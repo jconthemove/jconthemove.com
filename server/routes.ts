@@ -8426,23 +8426,42 @@ Thank you for your business!
       if (hasServiceItems) {
         const serviceItems = validatedItems.filter((i: any) => i.type === "service" || i.type === "promo");
         const itemNames = serviceItems.map((i: any) => i.name).join(", ");
-        const lead = await storage.createLead({
-          firstName,
-          lastName,
-          email,
-          phone,
-          serviceType: "residential",
-          fromAddress: fromAddress || "",
-          toAddress: toAddress || "",
-          moveDate: moveDate || "",
-          details: `[CART ORDER] ${itemNames}. ${details || ""}`.trim(),
-          propertySize: "cart-bundle",
-          crewSize: 3,
-          truckConfig: "company_truck",
-          basePrice: totalPrice.toFixed(2),
-          totalPrice: totalPrice.toFixed(2),
-        });
-        leadId = lead.id;
+        const cartDetails = `[CART ORDER] ${itemNames}. ${details || ""}`.trim();
+
+        const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+        const existingLeads = await db
+          .select()
+          .from(leads)
+          .where(
+            and(
+              eq(leads.email, email),
+              eq(leads.details, cartDetails),
+              sql`${leads.createdAt} > ${fiveMinAgo}`
+            )
+          )
+          .limit(1);
+
+        if (existingLeads.length > 0) {
+          leadId = existingLeads[0].id;
+        } else {
+          const lead = await storage.createLead({
+            firstName,
+            lastName,
+            email,
+            phone,
+            serviceType: "residential",
+            fromAddress: fromAddress || "",
+            toAddress: toAddress || "",
+            moveDate: moveDate || "",
+            details: cartDetails,
+            propertySize: "cart-bundle",
+            crewSize: 3,
+            truckConfig: "company_truck",
+            basePrice: totalPrice.toFixed(2),
+            totalPrice: totalPrice.toFixed(2),
+          });
+          leadId = lead.id;
+        }
       }
 
       const { SquareClient, SquareEnvironment } = await import("square");
