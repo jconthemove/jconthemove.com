@@ -1487,3 +1487,33 @@ export const insertSnowServiceLogSchema = createInsertSchema(snowServiceLogs).om
 
 export type SnowServiceLog = typeof snowServiceLogs.$inferSelect;
 export type InsertSnowServiceLog = z.infer<typeof insertSnowServiceLogSchema>;
+
+export const bitcoinPayments = pgTable("bitcoin_payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  referenceId: varchar("reference_id"),
+  referenceType: text("reference_type").notNull(),
+  customerName: text("customer_name").notNull(),
+  customerEmail: text("customer_email").notNull(),
+  customerPhone: text("customer_phone"),
+  usdAmount: decimal("usd_amount", { precision: 10, scale: 2 }).notNull(),
+  btcAmount: decimal("btc_amount", { precision: 18, scale: 8 }).notNull(),
+  btcPrice: decimal("btc_price", { precision: 12, scale: 2 }).notNull(),
+  discountPercent: decimal("discount_percent", { precision: 5, scale: 2 }).default("10.00"),
+  originalUsdAmount: decimal("original_usd_amount", { precision: 10, scale: 2 }).notNull(),
+  btcAddress: text("btc_address").notNull(),
+  status: text("status").notNull().default("pending"),
+  items: jsonb("items"),
+  notes: text("notes"),
+  verifiedByUserId: varchar("verified_by_user_id"),
+  verifiedAt: timestamp("verified_at"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  expiresAt: timestamp("expires_at"),
+});
+
+export const insertBitcoinPaymentSchema = createInsertSchema(bitcoinPayments).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type BitcoinPayment = typeof bitcoinPayments.$inferSelect;
+export type InsertBitcoinPayment = z.infer<typeof insertBitcoinPaymentSchema>;
