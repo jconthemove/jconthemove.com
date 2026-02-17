@@ -19,7 +19,7 @@ import { z } from "zod";
 import { EncryptionService } from "./services/encryption";
 import { eq, desc, sql, and, gte } from 'drizzle-orm';
 import { db } from './db';
-import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules } from '@shared/schema';
+import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules, bitcoinPayments } from '@shared/schema';
 import { getFaucetPayService } from "./services/faucetpay";
 import { getAdvertisingService } from "./services/advertising";
 import { FAUCET_CONFIG } from "./constants";
@@ -8625,6 +8625,172 @@ Thank you for your business!
       console.error("Error creating sponsor checkout:", error);
       const errorMsg = error?.errors?.[0]?.detail || error.message || "Failed to create checkout";
       res.status(500).json({ error: errorMsg });
+    }
+  });
+
+  app.get("/api/btc/price", async (_req, res) => {
+    try {
+      const response = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd");
+      if (!response.ok) throw new Error("Failed to fetch BTC price");
+      const data = await response.json();
+      const btcPrice = data.bitcoin?.usd;
+      if (!btcPrice) throw new Error("Invalid price data");
+      res.json({ price: btcPrice, timestamp: Date.now() });
+    } catch (error) {
+      try {
+        const fallback = await fetch("https://api.coinbase.com/v2/prices/BTC-USD/spot");
+        const data = await fallback.json();
+        const btcPrice = parseFloat(data.data?.amount);
+        if (!btcPrice || isNaN(btcPrice)) throw new Error("Fallback failed");
+        res.json({ price: btcPrice, timestamp: Date.now() });
+      } catch {
+        res.status(500).json({ error: "Unable to fetch BTC price" });
+      }
+    }
+  });
+
+  app.post("/api/btc/create-payment", async (req: any, res) => {
+    try {
+      const { customerName, customerEmail, customerPhone, usdAmount, items, referenceType, referenceId, notes } = req.body;
+
+      if (!customerName || !customerEmail || !usdAmount || !referenceType) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      const btcAddress = process.env.BTC_WALLET_ADDRESS;
+      if (!btcAddress) {
+        return res.status(500).json({ error: "Bitcoin payments not configured. Please call (906) 285-9312." });
+      }
+
+      const priceRes = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd");
+      let btcPrice: number;
+      if (priceRes.ok) {
+        const priceData = await priceRes.json();
+        btcPrice = priceData.bitcoin?.usd;
+      } else {
+        const fallback = await fetch("https://api.coinbase.com/v2/prices/BTC-USD/spot");
+        const fallbackData = await fallback.json();
+        btcPrice = parseFloat(fallbackData.data?.amount);
+      }
+
+      if (!btcPrice || isNaN(btcPrice)) {
+        return res.status(500).json({ error: "Unable to get BTC price" });
+      }
+
+      const originalUsd = parseFloat(usdAmount);
+      if (isNaN(originalUsd) || originalUsd <= 0) {
+        return res.status(400).json({ error: "Invalid amount" });
+      }
+
+      const discountedUsd = Math.round(originalUsd * 0.9 * 100) / 100;
+      const btcAmount = parseFloat((discountedUsd / btcPrice).toFixed(8));
+
+      const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+
+      const [payment] = await db.insert(bitcoinPayments).values({
+        referenceId: referenceId || null,
+        referenceType,
+        customerName,
+        customerEmail,
+        customerPhone: customerPhone || null,
+        usdAmount: discountedUsd.toFixed(2),
+        btcAmount: btcAmount.toFixed(8),
+        btcPrice: btcPrice.toFixed(2),
+        discountPercent: "10.00",
+        originalUsdAmount: originalUsd.toFixed(2),
+        btcAddress,
+        status: "pending",
+        items: items || null,
+        notes: notes || null,
+        expiresAt,
+      }).returning();
+
+      try {
+        const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
+        await sendEmail({
+          to: companyEmail,
+          from: companyEmail,
+          subject: `₿ New Bitcoin Payment - ${customerName} - $${discountedUsd.toFixed(2)}`,
+          html: `
+            <div style="font-family: Arial; max-width: 600px; margin: 0 auto; background: #1e293b; color: #e2e8f0; padding: 30px; border-radius: 12px;">
+              <h1 style="color: #f7931a; text-align: center;">₿ Bitcoin Payment Request</h1>
+              <div style="background: #334155; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <p><strong>Customer:</strong> ${customerName}</p>
+                <p><strong>Email:</strong> ${customerEmail}</p>
+                ${customerPhone ? `<p><strong>Phone:</strong> ${customerPhone}</p>` : ""}
+                <p><strong>Original Amount:</strong> $${originalUsd.toFixed(2)}</p>
+                <p style="color: #4ade80;"><strong>BTC Discount (10%):</strong> -$${(originalUsd - discountedUsd).toFixed(2)}</p>
+                <p><strong>Amount Due:</strong> $${discountedUsd.toFixed(2)}</p>
+                <p style="color: #f7931a;"><strong>BTC Amount:</strong> ${btcAmount.toFixed(8)} BTC</p>
+                <p><strong>BTC Price:</strong> $${btcPrice.toLocaleString()}</p>
+                <p><strong>Type:</strong> ${referenceType}</p>
+              </div>
+              <p style="text-align: center; color: #94a3b8; font-size: 12px;">Verify payment on blockchain and update status in admin dashboard.</p>
+            </div>
+          `,
+        });
+      } catch (emailErr) {
+        console.log("BTC payment email failed (non-critical):", emailErr);
+      }
+
+      res.json({
+        success: true,
+        payment: {
+          id: payment.id,
+          btcAddress,
+          btcAmount,
+          usdAmount: discountedUsd,
+          originalUsdAmount: originalUsd,
+          btcPrice,
+          discountPercent: 10,
+          expiresAt: expiresAt.toISOString(),
+        },
+      });
+    } catch (error: any) {
+      console.error("Error creating BTC payment:", error);
+      res.status(500).json({ error: error.message || "Failed to create Bitcoin payment" });
+    }
+  });
+
+  app.get("/api/btc/payment/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const [payment] = await db.select().from(bitcoinPayments).where(eq(bitcoinPayments.id, id));
+      if (!payment) return res.status(404).json({ error: "Payment not found" });
+      res.json(payment);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/admin/btc-payments", isAuthenticated, requireAdmin, async (_req, res) => {
+    try {
+      const payments = await db.select().from(bitcoinPayments).orderBy(sql`created_at DESC`);
+      res.json(payments);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/admin/btc-payments/:id/verify", isAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+      if (!["verified", "expired", "cancelled"].includes(status)) {
+        return res.status(400).json({ error: "Invalid status" });
+      }
+      const [updated] = await db.update(bitcoinPayments)
+        .set({
+          status,
+          verifiedByUserId: req.session?.userId,
+          verifiedAt: status === "verified" ? new Date() : null,
+        })
+        .where(eq(bitcoinPayments.id, id))
+        .returning();
+      if (!updated) return res.status(404).json({ error: "Payment not found" });
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
     }
   });
 

@@ -57,6 +57,7 @@ import JewelryDetailPage from "@/pages/jewelry-detail";
 import PaymentSuccessPage from "@/pages/payment-success";
 import PromoHalfDayPage from "@/pages/promo-half-day";
 import CartPage from "@/pages/cart";
+import BitcoinPaymentPage from "@/pages/bitcoin-payment";
 import { CartProvider } from "@/hooks/useCart";
 import { NotificationPrompt } from "@/components/notification-prompt";
 
@@ -283,6 +284,7 @@ function Router() {
       <Route path="/payment-success" component={PaymentSuccessPage} />
       <Route path="/promo/half-day" component={PromoHalfDayPage} />
       <Route path="/cart" component={CartPage} />
+      <Route path="/bitcoin-payment" component={BitcoinPaymentPage} />
       
       {/* Lead detail - accessible without authentication (temporary for debugging) */}
       <Route path="/lead/:id">

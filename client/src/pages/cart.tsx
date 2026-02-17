@@ -7,13 +7,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { useCart } from "@/hooks/useCart";
-import { Link } from "wouter";
-import { ArrowLeft, Trash2, ShoppingCart, Percent, Shield, Loader2, CreditCard, Gem, Truck, Plus, MapPin, CalendarDays, Heart, Building2, Trophy, Check } from "lucide-react";
+import { Link, useLocation } from "wouter";
+import { ArrowLeft, Trash2, ShoppingCart, Percent, Shield, Loader2, CreditCard, Gem, Truck, Plus, MapPin, CalendarDays, Heart, Building2, Trophy, Check, Bitcoin } from "lucide-react";
 
 export default function CartPage() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const { items, addItem, removeItem, clearCart, subtotal, discount, total, hasMultipleItems, isInCart, itemCount } = useCart();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isBtcSubmitting, setIsBtcSubmitting] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const hasServiceItems = items.some((i) => i.type === "service" || i.type === "promo");
   const hasSponsorItems = items.some((i) => i.type === "sponsor");
@@ -76,6 +78,50 @@ export default function CartPage() {
       toast({ title: error.message || "Something went wrong", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleBtcCheckout = async () => {
+    if (items.length === 0) {
+      toast({ title: "Your cart is empty", variant: "destructive" });
+      return;
+    }
+    if (!form.firstName || !form.lastName || !form.email || !form.phone) {
+      toast({ title: "Please fill in your contact info", variant: "destructive" });
+      return;
+    }
+    if (needsMoveInfo && (!form.fromAddress || !form.moveDate)) {
+      toast({ title: "Please fill in your address and preferred date", variant: "destructive" });
+      return;
+    }
+    if (!agreedToTerms) {
+      toast({ title: "Please agree to the terms", variant: "destructive" });
+      return;
+    }
+
+    setIsBtcSubmitting(true);
+    try {
+      const res = await fetch("/api/btc/create-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerName: `${form.firstName} ${form.lastName}`,
+          customerEmail: form.email,
+          customerPhone: form.phone,
+          usdAmount: total,
+          referenceType: "cart",
+          items: items.map((i) => ({ id: i.id, name: i.name, price: i.price, type: i.type })),
+          notes: `${form.fromAddress ? `From: ${form.fromAddress}` : ""} ${form.toAddress ? `To: ${form.toAddress}` : ""} ${form.moveDate ? `Date: ${form.moveDate}` : ""} ${form.details || ""}`.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to create payment");
+      clearCart();
+      navigate(`/bitcoin-payment?id=${data.payment.id}`);
+    } catch (error: any) {
+      toast({ title: error.message || "Something went wrong", variant: "destructive" });
+    } finally {
+      setIsBtcSubmitting(false);
     }
   };
 
@@ -350,8 +396,35 @@ export default function CartPage() {
                 )}
               </Button>
 
+              <div className="relative flex items-center my-2">
+                <div className="flex-1 border-t border-slate-600"></div>
+                <span className="px-3 text-xs text-slate-500">or</span>
+                <div className="flex-1 border-t border-slate-600"></div>
+              </div>
+
+              <Button
+                onClick={handleBtcCheckout}
+                disabled={isBtcSubmitting || !agreedToTerms}
+                className="w-full py-6 text-lg font-bold bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-400 hover:to-amber-500 text-white shadow-lg"
+              >
+                {isBtcSubmitting ? (
+                  <>
+                    <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                    Creating BTC Payment...
+                  </>
+                ) : (
+                  <>
+                    <Bitcoin className="h-5 w-5 mr-2" />
+                    Pay with Bitcoin
+                    <span className="ml-2 text-xs bg-white/20 px-2 py-0.5 rounded-full">
+                      Save 10%
+                    </span>
+                  </>
+                )}
+              </Button>
+
               <p className="text-center text-xs text-slate-400">
-                Secure payment processed by Square
+                Secure payment processed by Square or Bitcoin
               </p>
             </div>
           </CardContent>

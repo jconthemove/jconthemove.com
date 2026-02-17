@@ -11,7 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
-import { ArrowLeft, Gem, ChevronLeft, ChevronRight, Mail, Phone, CreditCard, Pencil, Trash2, Video, Loader2, Tag, RotateCcw, ShoppingCart, Check } from "lucide-react";
+import { ArrowLeft, Gem, ChevronLeft, ChevronRight, Mail, Phone, CreditCard, Pencil, Trash2, Video, Loader2, Tag, RotateCcw, ShoppingCart, Check, Bitcoin } from "lucide-react";
 import { useCart } from "@/hooks/useCart";
 import { FloatingCartButton } from "@/components/cart-button";
 
@@ -41,7 +41,7 @@ interface JewelryItem {
   createdAt: string;
 }
 
-function DetailCartButtons({ item, onCheckout, checkoutLoading }: { item: JewelryItem; onCheckout: () => void; checkoutLoading: boolean }) {
+function DetailCartButtons({ item, onCheckout, checkoutLoading, onBtcCheckout, btcLoading }: { item: JewelryItem; onCheckout: () => void; checkoutLoading: boolean; onBtcCheckout?: () => void; btcLoading?: boolean }) {
   const { addItem, removeItem, isInCart, itemCount } = useCart();
   const cartId = `jewelry-${item.id}`;
   const inCart = isInCart(cartId);
@@ -61,6 +61,19 @@ function DetailCartButtons({ item, onCheckout, checkoutLoading }: { item: Jewelr
           <><CreditCard className="h-5 w-5 mr-2" /> Buy Now - ${item.price}</>
         )}
       </Button>
+      {onBtcCheckout && (
+        <Button
+          className="w-full bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-400 hover:to-amber-500 text-white py-4 text-sm font-semibold"
+          onClick={onBtcCheckout}
+          disabled={btcLoading}
+        >
+          {btcLoading ? (
+            <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Creating BTC Payment...</>
+          ) : (
+            <><Bitcoin className="h-4 w-4 mr-2" /> Pay with Bitcoin <span className="ml-1 text-xs bg-white/20 px-2 py-0.5 rounded-full">Save 10%</span></>
+          )}
+        </Button>
+      )}
       <Button
         variant={inCart ? "default" : "outline"}
         className={`w-full py-4 text-sm font-medium ${
@@ -103,6 +116,7 @@ export default function JewelryDetailPage() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editItem, setEditItem] = useState<JewelryItem | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [btcCheckoutLoading, setBtcCheckoutLoading] = useState(false);
 
   const isAdmin = user?.role === 'admin' || user?.role === 'business_owner';
 
@@ -175,6 +189,32 @@ export default function JewelryDetailPage() {
       toast({ title: "Payment Error", description: error.message || "Failed to start checkout. Please try again.", variant: "destructive" });
     } finally {
       setCheckoutLoading(false);
+    }
+  };
+
+  const handleBtcCheckout = async () => {
+    if (!item || !item.price) return;
+    setBtcCheckoutLoading(true);
+    try {
+      const res = await fetch("/api/btc/create-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerName: user?.email || "Guest",
+          customerEmail: user?.email || "",
+          usdAmount: parseFloat(item.price),
+          referenceType: "jewelry",
+          referenceId: item.id,
+          items: [{ id: item.id, name: item.title, price: parseFloat(item.price) }],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to create BTC payment");
+      navigate(`/bitcoin-payment?id=${data.payment.id}`);
+    } catch (error: any) {
+      toast({ title: "Bitcoin Payment Error", description: error.message, variant: "destructive" });
+    } finally {
+      setBtcCheckoutLoading(false);
     }
   };
 
@@ -302,7 +342,7 @@ export default function JewelryDetailPage() {
             </div>
           )}
 
-          <DetailCartButtons item={item} onCheckout={handleCheckout} checkoutLoading={checkoutLoading} />
+          <DetailCartButtons item={item} onCheckout={handleCheckout} checkoutLoading={checkoutLoading} onBtcCheckout={handleBtcCheckout} btcLoading={btcCheckoutLoading} />
 
             {!item.inStock && (
               <div className="bg-stone-100 rounded-lg p-3 text-center">
