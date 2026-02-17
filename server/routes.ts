@@ -8469,10 +8469,8 @@ Thank you for your business!
       const orderResponse = await client.checkout.paymentLinks.create({
         idempotencyKey: randomUUID(),
         order: {
-          order: {
-            locationId,
-            lineItems,
-          },
+          locationId,
+          lineItems,
         },
         checkoutOptions: {
           redirectUrl: `${baseUrl}/payment-success${redirectParams}`,
