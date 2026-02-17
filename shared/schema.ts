@@ -128,6 +128,7 @@ export const users = pgTable("users", {
   walletMode: text("wallet_mode"), // 'personal' | 'company' - how user wants to receive JCMOVES tokens
   personalWalletAddress: text("personal_wallet_address"), // User's personal Phantom wallet address (if walletMode = 'personal')
   companyWalletId: varchar("company_wallet_id"), // Foreign key to userWallets for company-assigned wallet (if walletMode = 'company')
+  rewardsEnrolled: boolean("rewards_enrolled").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
