@@ -143,7 +143,7 @@ export default function SponsorsPage() {
       });
       toast({
         title: `${tier.name} added to cart!`,
-        description: itemCount > 0 ? "Bundle discount applies at checkout!" : "Add more items for 10% bundle discount",
+        description: itemCount > 0 ? "10% stacking discount on additional items!" : "Add more items for 10% stacking discount",
       });
     }
   };

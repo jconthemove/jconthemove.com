@@ -45,8 +45,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const subtotal = items.reduce((sum, item) => sum + item.price, 0);
   const hasMultipleItems = items.length > 1;
-  const nonPromoSubtotal = items.filter(i => i.type !== "promo").reduce((sum, item) => sum + item.price, 0);
-  const discount = hasMultipleItems ? Math.round(nonPromoSubtotal * 0.1 * 100) / 100 : 0;
+  const nonPromoItems = items.filter(i => i.type !== "promo");
+  const discountableItems = nonPromoItems.slice(1);
+  const discountableSubtotal = discountableItems.reduce((sum, item) => sum + item.price, 0);
+  const discount = hasMultipleItems ? Math.round(discountableSubtotal * 0.1 * 100) / 100 : 0;
   const total = subtotal - discount;
 
   return (

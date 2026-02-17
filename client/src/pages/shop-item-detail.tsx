@@ -411,7 +411,7 @@ export function ShopItemDetailPage() {
                         });
                         toast({
                           title: "Added to cart!",
-                          description: itemCount > 0 ? "Bundle discount: 10% off when you add more items!" : undefined,
+                          description: itemCount > 0 ? "10% stacking discount on additional items!" : undefined,
                         });
                       }}
                       data-testid="button-add-to-cart"

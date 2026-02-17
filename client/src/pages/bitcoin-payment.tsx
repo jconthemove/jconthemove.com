@@ -263,6 +263,14 @@ export default function BitcoinPaymentPage() {
           </CardContent>
         </Card>
 
+        <Card className="bg-orange-900/20 border-orange-500/30 mb-4">
+          <CardContent className="py-3">
+            <p className="text-orange-200 text-xs text-center font-medium">
+              Bitcoin payments are non-refundable. Unused payments can be applied as credit toward future moves for up to 1 year from the payment date.
+            </p>
+          </CardContent>
+        </Card>
+
         <p className="text-center text-xs text-slate-500 mt-4">
           Payment ID: {payment.id?.slice(0, 8)}... | Questions? Call (906) 285-9312
         </p>

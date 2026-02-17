@@ -8418,8 +8418,10 @@ Thank you for your business!
 
       const subtotal = validatedItems.reduce((sum: number, i: any) => sum + i.price, 0);
       const hasMultiple = validatedItems.length > 1;
-      const nonPromoSubtotal = validatedItems.filter((i: any) => i.type !== "promo").reduce((sum: number, i: any) => sum + i.price, 0);
-      const discountAmount = hasMultiple ? Math.round(nonPromoSubtotal * 0.1 * 100) / 100 : 0;
+      const nonPromoItems = validatedItems.filter((i: any) => i.type !== "promo");
+      const discountableItems = nonPromoItems.slice(1);
+      const discountableSubtotal = discountableItems.reduce((sum: number, i: any) => sum + i.price, 0);
+      const discountAmount = hasMultiple ? Math.round(discountableSubtotal * 0.1 * 100) / 100 : 0;
       const totalPrice = Math.round((subtotal - discountAmount) * 100) / 100;
 
       let leadId: number | null = null;
@@ -8483,10 +8485,15 @@ Thank you for your business!
       const host = req.headers['x-forwarded-host'] || req.headers.host;
       const baseUrl = `${protocol}://${host}`;
 
+      let nonPromoIndex = 0;
       const lineItems = validatedItems.map((item: any) => {
         let itemPrice = item.price;
-        if (hasMultiple && item.type !== "promo") {
-          itemPrice = Math.round(item.price * 0.9 * 100) / 100;
+        const isNonPromo = item.type !== "promo";
+        if (isNonPromo) {
+          nonPromoIndex++;
+          if (hasMultiple && nonPromoIndex > 1) {
+            itemPrice = Math.round(item.price * 0.9 * 100) / 100;
+          }
         }
         return {
           name: item.name,

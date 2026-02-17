@@ -332,7 +332,7 @@ export default function PromoHalfDayPage() {
                     <div className="border-t border-purple-500/30 pt-2 flex justify-between text-purple-300">
                       <span className="flex items-center gap-1">
                         <Percent className="h-3 w-3" />
-                        10% Bundle Discount
+                        10% Stacking Discount (items #2+)
                       </span>
                       <span className="font-medium">-${discount.toFixed(2)}</span>
                     </div>
@@ -537,7 +537,7 @@ export default function PromoHalfDayPage() {
                       image: promoImage,
                       type: "promo",
                     });
-                    toast({ title: "Added to cart!", description: cartCount > 0 ? "Bundle discount applied at checkout!" : "Browse more items to unlock 10% bundle discount" });
+                    toast({ title: "Added to cart!", description: cartCount > 0 ? "Stacking discount applied at checkout!" : "Add more items for 10% stacking discount" });
                   }
                 }}
               >

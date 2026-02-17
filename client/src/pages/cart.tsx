@@ -168,7 +168,7 @@ export default function CartPage() {
           Your Cart
           {hasMultipleItems && (
             <span className="text-sm bg-emerald-600/30 text-emerald-300 px-3 py-1 rounded-full font-medium">
-              10% Bundle Discount!
+              10% Stacking Discount!
             </span>
           )}
         </h1>
@@ -209,7 +209,7 @@ export default function CartPage() {
               <div className="flex justify-between text-emerald-400 font-medium">
                 <span className="flex items-center gap-1">
                   <Percent className="h-3 w-3" />
-                  10% Bundle Discount
+                  10% Stacking Discount (items #2+)
                 </span>
                 <span>-${discount.toFixed(2)}</span>
               </div>
@@ -241,7 +241,7 @@ export default function CartPage() {
                       key={tier.id}
                       onClick={() => {
                         addItem({ id: tier.id, name: `${tier.name} Sponsor (Monthly)`, price: tier.price, image: "", type: "sponsor" });
-                        toast({ title: `${tier.name} Sponsorship added!`, description: "Bundle discount applied!" });
+                        toast({ title: `${tier.name} Sponsorship added!`, description: "Stacking discount applied!" });
                       }}
                       className="bg-slate-800/60 hover:bg-slate-700/60 border border-slate-600/50 rounded-lg p-3 text-center transition-colors"
                     >
@@ -261,7 +261,7 @@ export default function CartPage() {
         <Card className="bg-emerald-900/20 border-emerald-500/30 border-dashed mb-6">
           <CardContent className="py-4">
             <p className="text-emerald-200 text-sm text-center mb-3">
-              {hasMultipleItems ? "Keep adding items — your 10% discount applies automatically!" : "Add another item to unlock 10% bundle discount!"}
+              {hasMultipleItems ? "10% stacking discount applied to items #2 and beyond!" : "Add another item to unlock 10% stacking discount on additional items!"}
             </p>
             <div className="flex gap-2 justify-center flex-wrap">
               <Link href="/nature-made-jewls">
@@ -425,6 +425,9 @@ export default function CartPage() {
 
               <p className="text-center text-xs text-slate-400">
                 Secure payment processed by Square or Bitcoin
+              </p>
+              <p className="text-center text-xs text-orange-400/70 mt-1">
+                Bitcoin payments are non-refundable but can be used as credit toward future moves for up to 1 year.
               </p>
             </div>
           </CardContent>
