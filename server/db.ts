@@ -12,4 +12,18 @@ if (!process.env.DATABASE_URL) {
 }
 
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+pool.on('error', (err) => {
+  console.error('Database pool error (connection will be replaced):', err.message);
+});
+
+process.on('uncaughtException', (err) => {
+  if (err.message?.includes('terminating connection') || (err as any).code === '57P01') {
+    console.error('Database connection terminated, pool will reconnect automatically');
+    return;
+  }
+  console.error('Uncaught exception:', err);
+  process.exit(1);
+});
+
 export const db = drizzle({ client: pool, schema });
