@@ -52,15 +52,16 @@ export default function MiningPage() {
   // Claim tokens mutation
   const claimMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest("POST", "/api/mining/claim");
+      const res = await apiRequest("POST", "/api/mining/claim");
+      return await res.json();
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/mining/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/wallet"] });
-      const tokensClaimed = parseFloat(data.tokensClaimed);
+      const tokensClaimed = parseFloat(data.tokensClaimed || 0);
       toast({
         title: "Tokens Claimed!",
-        description: `You've earned ${tokensClaimed.toFixed(2)} JCMOVES! New balance: ${parseFloat(data.newBalance).toFixed(2)}`,
+        description: `You've earned ${tokensClaimed.toFixed(2)} JCMOVES! New balance: ${parseFloat(data.newBalance || 0).toFixed(2)}`,
       });
       // Send notification for claimed tokens
       if (data.streakCount && data.streakCount > 1) {

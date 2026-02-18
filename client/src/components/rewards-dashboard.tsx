@@ -188,7 +188,8 @@ export default function RewardsDashboard() {
   // Claim tokens mutation
   const claimMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest("POST", "/api/mining/claim");
+      const res = await apiRequest("POST", "/api/mining/claim");
+      return await res.json();
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/mining/status"] });
@@ -200,7 +201,7 @@ export default function RewardsDashboard() {
       
       toast({
         title: "Tokens Claimed!",
-        description: `You've earned ${parseFloat(data.tokensClaimed).toFixed(2)} JCMOVES${streakInfo}! New balance: ${parseFloat(data.newBalance).toFixed(2)}`,
+        description: `You've earned ${parseFloat(data.tokensClaimed || 0).toFixed(2)} JCMOVES${streakInfo}! New balance: ${parseFloat(data.newBalance || 0).toFixed(2)}`,
       });
     },
     onError: (error: any) => {
