@@ -124,7 +124,7 @@ export default function StakingPage() {
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 p-4 md:p-8">
       <div className="max-w-6xl mx-auto space-y-6">
         <div className="flex items-center gap-3">
-          <Link href="/employee-home">
+          <Link href="/">
             <Button variant="ghost" size="icon"><ArrowLeft className="h-5 w-5" /></Button>
           </Link>
           <div>
@@ -175,38 +175,40 @@ export default function StakingPage() {
             <CardDescription>Choose a tier to stake your JCMOVES tokens. Higher tiers earn better annual returns. Unstake anytime.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {tiers.length === 0 && <p className="text-center text-muted-foreground py-8">Loading tiers...</p>}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {tiers.map(tier => {
                 const dailyRate = parseFloat(tier.annualRatePercent) / 365;
                 const isSelected = selectedTier === tier.id;
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={tier.id}
                     onClick={() => setSelectedTier(isSelected ? null : tier.id)}
-                    className={`cursor-pointer rounded-xl border-2 p-5 transition-all hover:shadow-lg ${
+                    className={`w-full text-left rounded-xl border-2 p-4 transition-all active:scale-95 ${
                       isSelected
-                        ? "border-yellow-500 bg-yellow-500/10 shadow-yellow-500/20"
-                        : "border-border hover:border-yellow-500/50"
+                        ? "border-yellow-500 bg-yellow-500/15 shadow-lg shadow-yellow-500/20"
+                        : "border-muted-foreground/30 bg-card hover:border-yellow-500/50"
                     }`}
                   >
-                    <div className="text-center space-y-2">
-                      <Badge variant={isSelected ? "default" : "secondary"} className="text-sm">
+                    <div className="text-center space-y-1.5">
+                      <Badge variant={isSelected ? "default" : "secondary"} className="text-xs">
                         {tier.name}
                       </Badge>
-                      <div className="text-3xl font-bold text-yellow-500">{tier.annualRatePercent}%</div>
-                      <p className="text-xs text-muted-foreground">Annual Return</p>
-                      <div className="text-sm font-medium text-green-500">~{dailyRate.toFixed(4)}% / day</div>
-                      <div className="text-xs text-muted-foreground space-y-1">
+                      <div className="text-2xl font-bold text-yellow-500">{tier.annualRatePercent}%</div>
+                      <p className="text-[10px] text-muted-foreground">Annual Return</p>
+                      <div className="text-xs font-medium text-green-500">~{dailyRate.toFixed(4)}%/day</div>
+                      <div className="text-[10px] text-muted-foreground space-y-0.5">
                         <p className="flex items-center justify-center gap-1">
-                          <Clock className="h-3 w-3" /> {tier.durationDays} day term
+                          <Clock className="h-3 w-3" /> {tier.durationDays}d term
                         </p>
-                        <p>Min: {parseFloat(tier.minStake).toLocaleString()} JCMOVES</p>
+                        <p>Min: {parseFloat(tier.minStake).toLocaleString()}</p>
                         <p className="flex items-center justify-center gap-1 text-green-500">
                           <Unlock className="h-3 w-3" /> Unstake anytime
                         </p>
                       </div>
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
