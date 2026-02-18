@@ -492,8 +492,8 @@ export default function NatureMadeJewls() {
                   size="sm"
                   onClick={() => setSelectedCategory(cat.value)}
                   className={selectedCategory === cat.value 
-                    ? "bg-gradient-to-r from-purple-600 to-slate-600 hover:from-purple-700 hover:to-slate-700 whitespace-nowrap" 
-                    : "border-purple-300 text-purple-800 hover:bg-purple-50 whitespace-nowrap"}
+                    ? "bg-gradient-to-r from-purple-600 to-slate-600 hover:from-purple-700 hover:to-slate-700 text-white whitespace-nowrap" 
+                    : "border-border text-white bg-background hover:bg-muted whitespace-nowrap"}
                 >
                   {cat.label}
                 </Button>
