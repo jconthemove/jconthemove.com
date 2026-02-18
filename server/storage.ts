@@ -1,4 +1,4 @@
-import { type User, type InsertUser, type UpsertUser, type Lead, type InsertLead, type Contact, type InsertContact, type Notification, type InsertNotification, type TreasuryAccount, type InsertTreasuryAccount, type FundingDeposit, type InsertFundingDeposit, type ReserveTransaction, type InsertReserveTransaction, type FaucetConfig, type InsertFaucetConfig, type FaucetClaim, type InsertFaucetClaim, type FaucetWallet, type InsertFaucetWallet, type FaucetRevenue, type InsertFaucetRevenue, type EmployeeStats, type InsertEmployeeStats, type AchievementType, type EmployeeAchievement, type InsertEmployeeAchievement, type PointTransaction, type InsertPointTransaction, type WeeklyLeaderboard, type DailyCheckin, type InsertDailyCheckin, type WalletAccount, type InsertWalletAccount, type SupportedCurrency, type InsertSupportedCurrency, type UserWallet, type InsertUserWallet, type TreasuryWallet, type InsertTreasuryWallet, type WalletTransaction, type InsertWalletTransaction, type ShopItem, type InsertShopItem, type Review, type InsertReview, type Testimonial, type InsertTestimonial, type WalletPayout, type InsertWalletPayout, type TokenConversion, type InsertTokenConversion, type TreasuryLimit, type InsertTreasuryLimit, type SquareInvoice, type InsertSquareInvoice, type SnowCustomer, type InsertSnowCustomer, type SnowServiceType, type InsertSnowServiceType, type SnowServiceLog, type InsertSnowServiceLog, leads, contacts, users, notifications, walletAccounts, rewards, treasuryAccounts, fundingDeposits, reserveTransactions, priceHistory, faucetConfig, faucetClaims, faucetWallets, faucetRevenue, employeeStats, achievementTypes, employeeAchievements, pointTransactions, weeklyLeaderboards, dailyCheckins, supportedCurrencies, userWallets, treasuryWallets, walletTransactions, shopItems, cashoutRequests, fraudLogs, helpRequests, miningSessions, miningClaims, treasuryWithdrawals, reviews, testimonials, walletPayouts, tokenConversions, treasuryLimits, squareInvoices, buybackFund, snowCustomers, snowServiceTypes, snowServiceLogs } from "@shared/schema";
+import { type User, type InsertUser, type UpsertUser, type Lead, type InsertLead, type Contact, type InsertContact, type Notification, type InsertNotification, type TreasuryAccount, type InsertTreasuryAccount, type FundingDeposit, type InsertFundingDeposit, type ReserveTransaction, type InsertReserveTransaction, type FaucetConfig, type InsertFaucetConfig, type FaucetClaim, type InsertFaucetClaim, type FaucetWallet, type InsertFaucetWallet, type FaucetRevenue, type InsertFaucetRevenue, type EmployeeStats, type InsertEmployeeStats, type AchievementType, type EmployeeAchievement, type InsertEmployeeAchievement, type PointTransaction, type InsertPointTransaction, type WeeklyLeaderboard, type DailyCheckin, type InsertDailyCheckin, type WalletAccount, type InsertWalletAccount, type SupportedCurrency, type InsertSupportedCurrency, type UserWallet, type InsertUserWallet, type TreasuryWallet, type InsertTreasuryWallet, type WalletTransaction, type InsertWalletTransaction, type ShopItem, type InsertShopItem, type Review, type InsertReview, type Testimonial, type InsertTestimonial, type WalletPayout, type InsertWalletPayout, type TokenConversion, type InsertTokenConversion, type TreasuryLimit, type InsertTreasuryLimit, type SquareInvoice, type InsertSquareInvoice, type SnowCustomer, type InsertSnowCustomer, type SnowServiceType, type InsertSnowServiceType, type SnowServiceLog, type InsertSnowServiceLog, type StakingTier, type Stake, type InsertStake, stakingTiers, stakes, leads, contacts, users, notifications, walletAccounts, rewards, treasuryAccounts, fundingDeposits, reserveTransactions, priceHistory, faucetConfig, faucetClaims, faucetWallets, faucetRevenue, employeeStats, achievementTypes, employeeAchievements, pointTransactions, weeklyLeaderboards, dailyCheckins, supportedCurrencies, userWallets, treasuryWallets, walletTransactions, shopItems, cashoutRequests, fraudLogs, helpRequests, miningSessions, miningClaims, treasuryWithdrawals, reviews, testimonials, walletPayouts, tokenConversions, treasuryLimits, squareInvoices, buybackFund, snowCustomers, snowServiceTypes, snowServiceLogs } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, isNull, and, isNotNull, sql, gt, gte, inArray } from "drizzle-orm";
 import { TREASURY_CONFIG } from "./constants";
@@ -223,6 +223,13 @@ export interface IStorage {
   createJewelryItem(item: any): Promise<any>;
   updateJewelryItem(id: string, updates: any): Promise<any | undefined>;
   deleteJewelryItem(id: string): Promise<void>;
+
+  // Staking operations
+  getStakingTiers(): Promise<StakingTier[]>;
+  getUserStakes(userId: string): Promise<(Stake & { tier: StakingTier })[]>;
+  createStake(userId: string, tierId: string, amount: number): Promise<Stake>;
+  claimStakingRewards(stakeId: string, userId: string): Promise<{ earned: number }>;
+  unstake(stakeId: string, userId: string): Promise<{ returned: number; penalty: number; earned: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2772,6 +2779,107 @@ export class DatabaseStorage implements IStorage {
   async deleteJewelryItem(id: string): Promise<void> {
     const { jewelryItems } = await import("@shared/schema");
     await db.delete(jewelryItems).where(eq(jewelryItems.id, id));
+  }
+
+  async getStakingTiers(): Promise<StakingTier[]> {
+    return db.select().from(stakingTiers).where(eq(stakingTiers.isActive, true)).orderBy(stakingTiers.durationDays);
+  }
+
+  async getUserStakes(userId: string): Promise<(Stake & { tier: StakingTier })[]> {
+    const results = await db
+      .select()
+      .from(stakes)
+      .innerJoin(stakingTiers, eq(stakes.tierId, stakingTiers.id))
+      .where(eq(stakes.userId, userId))
+      .orderBy(desc(stakes.createdAt));
+    return results.map(r => ({ ...r.stakes, tier: r.staking_tiers }));
+  }
+
+  async createStake(userId: string, tierId: string, amount: number): Promise<Stake> {
+    const [tier] = await db.select().from(stakingTiers).where(eq(stakingTiers.id, tierId));
+    if (!tier) throw new Error("Invalid staking tier");
+    if (!tier.isActive) throw new Error("This staking tier is not active");
+    if (amount < parseFloat(tier.minStake)) throw new Error(`Minimum stake is ${tier.minStake} JCMOVES`);
+    if (tier.maxStake && amount > parseFloat(tier.maxStake)) throw new Error(`Maximum stake is ${tier.maxStake} JCMOVES`);
+
+    let wallet = await this.getWalletAccount(userId);
+    if (!wallet) throw new Error("Wallet not found");
+    const balance = parseFloat(wallet.tokenBalance || "0");
+    if (balance < amount) throw new Error("Insufficient balance");
+
+    const dailyRate = parseFloat(tier.annualRatePercent) / 365 / 100;
+    const endsAt = new Date();
+    endsAt.setDate(endsAt.getDate() + tier.durationDays);
+
+    await this.updateWalletAccount(userId, {
+      tokenBalance: (balance - amount).toFixed(8),
+    });
+
+    const [stake] = await db.insert(stakes).values({
+      userId,
+      tierId,
+      amount: amount.toFixed(8),
+      dailyRate: dailyRate.toFixed(8),
+      endsAt,
+      startedAt: new Date(),
+    }).returning();
+
+    return stake;
+  }
+
+  async claimStakingRewards(stakeId: string, userId: string): Promise<{ earned: number }> {
+    const [stake] = await db.select().from(stakes).where(and(eq(stakes.id, stakeId), eq(stakes.userId, userId)));
+    if (!stake) throw new Error("Stake not found");
+    if (stake.status !== "active") throw new Error("Stake is not active");
+
+    const now = new Date();
+    const lastPayout = new Date(stake.lastPayoutAt);
+    const daysSinceLastPayout = (now.getTime() - lastPayout.getTime()) / (1000 * 60 * 60 * 24);
+    if (daysSinceLastPayout < 0.01) throw new Error("No rewards to claim yet");
+
+    const stakeAmount = parseFloat(stake.amount);
+    const dailyRate = parseFloat(stake.dailyRate);
+    const earned = stakeAmount * dailyRate * daysSinceLastPayout;
+
+    await db.update(stakes).set({
+      totalEarned: (parseFloat(stake.totalEarned || "0") + earned).toFixed(8),
+      lastPayoutAt: now,
+    }).where(eq(stakes.id, stakeId));
+
+    await this.creditWalletTokens(userId, earned);
+
+    return { earned };
+  }
+
+  async unstake(stakeId: string, userId: string): Promise<{ returned: number; penalty: number; earned: number }> {
+    const results = await db.select().from(stakes)
+      .innerJoin(stakingTiers, eq(stakes.tierId, stakingTiers.id))
+      .where(and(eq(stakes.id, stakeId), eq(stakes.userId, userId)));
+    if (results.length === 0) throw new Error("Stake not found");
+    const stake = results[0].stakes;
+    const tier = results[0].staking_tiers;
+    if (stake.status !== "active") throw new Error("Stake is already unstaked");
+
+    const now = new Date();
+    const lastPayout = new Date(stake.lastPayoutAt);
+    const daysSinceLastPayout = (now.getTime() - lastPayout.getTime()) / (1000 * 60 * 60 * 24);
+    const stakeAmount = parseFloat(stake.amount);
+    const dailyRate = parseFloat(stake.dailyRate);
+    const pendingEarned = stakeAmount * dailyRate * daysSinceLastPayout;
+
+    const penalty = 0;
+    const returned = stakeAmount + pendingEarned;
+
+    await db.update(stakes).set({
+      status: "unstaked",
+      unstakedAt: now,
+      totalEarned: (parseFloat(stake.totalEarned || "0") + pendingEarned).toFixed(8),
+      lastPayoutAt: now,
+    }).where(eq(stakes.id, stakeId));
+
+    await this.creditWalletTokens(userId, returned);
+
+    return { returned, penalty, earned: pendingEarned };
   }
 }
 

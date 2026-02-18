@@ -106,6 +106,7 @@ Preferred communication style: Simple, everyday language.
   - **Referral Request**: Referrers earn 50 JCMOVES ($0.50) when someone uses their code
   - **Referral Confirmed**: Referrers earn 2,500 JCMOVES ($25) when referred user's first job completes
 - **Customer Portal Rewards Display**: Mining tab shows all earning opportunities with dollar values
+- **Staking Treasury System**: Users stake JCMOVES tokens across 4 tiers (Flexible 30d/10%, Standard 90d/12%, Premium 180d/15%, Diamond 365d/20% APR). Rewards accrue continuously and are claimable anytime. Unstake anytime with no penalty - full principal always returned. Daily rate = annual rate / 365. Page at `/staking` with navigation from employee home.
 
 # External Dependencies
 

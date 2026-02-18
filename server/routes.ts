@@ -8835,6 +8835,74 @@ Thank you for your business!
     }
   });
 
+  app.get("/api/wallet/balance", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id || req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const wallet = await storage.getWalletAccount(userId);
+      res.json({ tokenBalance: wallet?.tokenBalance || "0.00000000" });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ==================== STAKING TREASURY ROUTES ====================
+
+  app.get("/api/staking/tiers", async (_req, res) => {
+    try {
+      const tiers = await storage.getStakingTiers();
+      res.json(tiers);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/staking/my-stakes", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id || req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const userStakes = await storage.getUserStakes(userId);
+      res.json(userStakes);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/staking/stake", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id || req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const { tierId, amount } = req.body;
+      if (!tierId || !amount || amount <= 0) return res.status(400).json({ error: "Invalid stake parameters" });
+      const stake = await storage.createStake(userId, tierId, parseFloat(amount));
+      res.json(stake);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/staking/:stakeId/claim", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id || req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const result = await storage.claimStakingRewards(req.params.stakeId, userId);
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/staking/:stakeId/unstake", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id || req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const result = await storage.unstake(req.params.stakeId, userId);
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

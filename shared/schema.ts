@@ -1518,3 +1518,38 @@ export const insertBitcoinPaymentSchema = createInsertSchema(bitcoinPayments).om
 
 export type BitcoinPayment = typeof bitcoinPayments.$inferSelect;
 export type InsertBitcoinPayment = z.infer<typeof insertBitcoinPaymentSchema>;
+
+export const stakingTiers = pgTable("staking_tiers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  durationDays: integer("duration_days").notNull(),
+  annualRatePercent: decimal("annual_rate_percent", { precision: 5, scale: 2 }).notNull(),
+  minStake: decimal("min_stake", { precision: 18, scale: 8 }).notNull().default("100.00000000"),
+  maxStake: decimal("max_stake", { precision: 18, scale: 8 }),
+  earlyUnstakePenaltyPercent: decimal("early_unstake_penalty_percent", { precision: 5, scale: 2 }).notNull().default("50.00"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const stakes = pgTable("stakes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  tierId: varchar("tier_id").notNull().references(() => stakingTiers.id),
+  amount: decimal("amount", { precision: 18, scale: 8 }).notNull(),
+  dailyRate: decimal("daily_rate", { precision: 10, scale: 8 }).notNull(),
+  totalEarned: decimal("total_earned", { precision: 18, scale: 8 }).notNull().default("0.00000000"),
+  lastPayoutAt: timestamp("last_payout_at").notNull().default(sql`now()`),
+  status: text("status").notNull().default("active"),
+  startedAt: timestamp("started_at").notNull().default(sql`now()`),
+  endsAt: timestamp("ends_at").notNull(),
+  unstakedAt: timestamp("unstaked_at"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const insertStakingTierSchema = createInsertSchema(stakingTiers).omit({ id: true, createdAt: true });
+export const insertStakeSchema = createInsertSchema(stakes).omit({ id: true, totalEarned: true, lastPayoutAt: true, status: true, unstakedAt: true, createdAt: true });
+
+export type StakingTier = typeof stakingTiers.$inferSelect;
+export type InsertStakingTier = z.infer<typeof insertStakingTierSchema>;
+export type Stake = typeof stakes.$inferSelect;
+export type InsertStake = z.infer<typeof insertStakeSchema>;
