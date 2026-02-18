@@ -19,10 +19,19 @@ export function ComplianceCheck({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    // Show modal if user is missing either DOB or TOS acceptance
-    if (user && (!user.tosAccepted || !user.dateOfBirth)) {
-      setShowComplianceModal(true);
+    if (!user) return;
+    const storageKey = `compliance_verified_${user.id}`;
+
+    if (user.tosAccepted && user.dateOfBirth) {
+      localStorage.setItem(storageKey, "true");
+      setShowComplianceModal(false);
+      return;
     }
+
+    const alreadyVerified = localStorage.getItem(storageKey);
+    if (alreadyVerified) return;
+
+    setShowComplianceModal(true);
   }, [user]);
 
   const complianceMutation = useMutation({
@@ -31,6 +40,9 @@ export function ComplianceCheck({ children }: { children: React.ReactNode }) {
       return res.json();
     },
     onSuccess: () => {
+      if (user) {
+        localStorage.setItem(`compliance_verified_${user.id}`, "true");
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       setShowComplianceModal(false);
       toast({

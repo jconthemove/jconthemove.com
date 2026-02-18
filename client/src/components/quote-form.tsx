@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Home, Building, Trash2, Send } from "lucide-react";
+import { Home, Building, Trash2, Send, Snowflake, Sparkles, Wrench, HardHat, Layers, PaintBucket } from "lucide-react";
 
 export default function QuoteForm() {
   const { toast } = useToast();
@@ -70,6 +70,12 @@ export default function QuoteForm() {
     { value: "residential", label: "Residential Moving", icon: Home },
     { value: "commercial", label: "Commercial Moving", icon: Building },
     { value: "junk", label: "Junk Removal", icon: Trash2 },
+    { value: "snow", label: "Snow Removal", icon: Snowflake },
+    { value: "cleaning", label: "Move In/Out Cleaning", icon: Sparkles },
+    { value: "handyman", label: "Handyman", icon: Wrench },
+    { value: "demolition", label: "Light Demolition", icon: HardHat },
+    { value: "flooring", label: "Flooring", icon: Layers },
+    { value: "painting", label: "Painting", icon: PaintBucket },
   ];
 
   return (
@@ -88,7 +94,7 @@ export default function QuoteForm() {
               {/* Service Selection */}
               <div>
                 <Label className="block text-sm font-medium text-foreground mb-3">Service Type *</Label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {serviceOptions.map((service) => {
                     const IconComponent = service.icon;
                     return (
