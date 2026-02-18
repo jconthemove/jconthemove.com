@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { X, Users, Award } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { X, Users, Award, Pencil, Check } from "lucide-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -45,9 +47,29 @@ interface LeadQuoteDialogProps {
 }
 
 export function LeadQuoteDialog({ open, onOpenChange, lead, employees, onSave }: LeadQuoteDialogProps) {
+  const { toast } = useToast();
   const [selectedCrewMembers, setSelectedCrewMembers] = useState<string[]>([]);
-
   const [selectedStatus, setSelectedStatus] = useState<string>("");
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [editFirstName, setEditFirstName] = useState("");
+  const [editLastName, setEditLastName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+
+  const saveFieldMutation = useMutation({
+    mutationFn: async (updates: Record<string, string>) => {
+      if (!lead) return;
+      const res = await apiRequest("PATCH", `/api/leads/${lead.id}/contact`, updates);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Updated successfully" });
+      setEditingField(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Update failed", description: err.message, variant: "destructive" });
+    },
+  });
 
   const quoteForm = useForm<QuoteFormData>({
     resolver: zodResolver(quoteFormSchema),
@@ -179,9 +201,46 @@ export function LeadQuoteDialog({ open, onOpenChange, lead, employees, onSave }:
               <div className="space-y-4">
                 <div>
                   <Label className="text-sm text-muted-foreground">Name</Label>
-                  <p className="text-base font-normal" data-testid="text-customer-name">
-                    {lead.firstName} {lead.lastName}
-                  </p>
+                  {editingField === "name" ? (
+                    <div className="flex items-center gap-2 mt-1">
+                      <Input
+                        value={editFirstName}
+                        onChange={e => setEditFirstName(e.target.value)}
+                        placeholder="First"
+                        className="h-8 text-sm"
+                      />
+                      <Input
+                        value={editLastName}
+                        onChange={e => setEditLastName(e.target.value)}
+                        placeholder="Last"
+                        className="h-8 text-sm"
+                      />
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 shrink-0 text-green-500"
+                        disabled={saveFieldMutation.isPending}
+                        onClick={() => saveFieldMutation.mutate({ firstName: editFirstName, lastName: editLastName })}
+                      >
+                        <Check className="h-4 w-4" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={() => setEditingField(null)}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <p className="text-base font-normal" data-testid="text-customer-name">
+                        {lead.firstName} {lead.lastName}
+                      </p>
+                      <button
+                        onClick={() => { setEditFirstName(lead.firstName); setEditLastName(lead.lastName); setEditingField("name"); }}
+                        className="text-muted-foreground hover:text-foreground transition-colors p-1"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <Label className="text-sm text-muted-foreground">Email</Label>
@@ -189,7 +248,38 @@ export function LeadQuoteDialog({ open, onOpenChange, lead, employees, onSave }:
                 </div>
                 <div>
                   <Label className="text-sm text-muted-foreground">Phone</Label>
-                  <p className="text-base font-normal" data-testid="text-customer-phone">{lead.phone}</p>
+                  {editingField === "phone" ? (
+                    <div className="flex items-center gap-2 mt-1">
+                      <Input
+                        value={editPhone}
+                        onChange={e => setEditPhone(e.target.value)}
+                        placeholder="Phone number"
+                        className="h-8 text-sm flex-1"
+                      />
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 shrink-0 text-green-500"
+                        disabled={saveFieldMutation.isPending}
+                        onClick={() => saveFieldMutation.mutate({ phone: editPhone })}
+                      >
+                        <Check className="h-4 w-4" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={() => setEditingField(null)}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <p className="text-base font-normal" data-testid="text-customer-phone">{lead.phone}</p>
+                      <button
+                        onClick={() => { setEditPhone(lead.phone); setEditingField("phone"); }}
+                        className="text-muted-foreground hover:text-foreground transition-colors p-1"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <Label className="text-sm text-muted-foreground">Service Type</Label>

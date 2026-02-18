@@ -2775,6 +2775,23 @@ Thank you for your business!
     }
   });
 
+  app.patch("/api/leads/:id/contact", isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { firstName, lastName, phone } = req.body;
+      const updates: Record<string, string> = {};
+      if (firstName !== undefined) updates.firstName = firstName;
+      if (lastName !== undefined) updates.lastName = lastName;
+      if (phone !== undefined) updates.phone = phone;
+      if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No fields to update" });
+      const updatedLead = await storage.updateLeadQuote(id, updates);
+      if (!updatedLead) return res.status(404).json({ error: "Lead not found" });
+      res.json(updatedLead);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Update lead quote and confirmation (business owner only)
   app.patch("/api/leads/:id/quote", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
