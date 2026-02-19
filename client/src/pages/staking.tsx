@@ -37,13 +37,19 @@ export default function StakingPage() {
   const [selectedTier, setSelectedTier] = useState<string | null>(null);
   const [stakeAmount, setStakeAmount] = useState("");
 
-  const { data: tiers = [], isLoading: tiersLoading } = useQuery<StakingTier[]>({
+  const { data: tiers = [], isLoading: tiersLoading, isError: tiersError, refetch: refetchTiers } = useQuery<StakingTier[]>({
     queryKey: ["/api/staking/tiers"],
+    staleTime: 0,
+    retry: 2,
+    refetchOnMount: true,
   });
 
-  const { data: myStakes = [], isLoading: stakesLoading } = useQuery<(Stake & { tier: StakingTier })[]>({
+  const { data: myStakes = [] } = useQuery<(Stake & { tier: StakingTier })[]>({
     queryKey: ["/api/staking/my-stakes"],
     enabled: isAuthenticated,
+    staleTime: 0,
+    retry: 2,
+    refetchOnMount: true,
   });
 
   const { data: wallet } = useQuery<{ tokenBalance: string }>({
@@ -110,7 +116,7 @@ export default function StakingPage() {
     return () => clearInterval(interval);
   }, []);
 
-  if (authLoading || tiersLoading) {
+  if (authLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -185,7 +191,15 @@ export default function StakingPage() {
             <CardDescription>Choose a tier to stake your JCMOVES tokens. Higher tiers earn better annual returns. Unstake anytime.</CardDescription>
           </CardHeader>
           <CardContent>
-            {tiers.length === 0 && <p className="text-center text-muted-foreground py-8">Loading tiers...</p>}
+            {tiersLoading && <div className="flex items-center justify-center py-8 gap-2"><Loader2 className="h-5 w-5 animate-spin" /><span className="text-muted-foreground">Loading tiers...</span></div>}
+            {!tiersLoading && (tiersError || tiers.length === 0) && (
+              <div className="text-center py-8 space-y-3">
+                <p className="text-muted-foreground">Couldn't load staking tiers.</p>
+                <Button variant="outline" onClick={() => refetchTiers()}>
+                  Try Again
+                </Button>
+              </div>
+            )}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {tiers.map(tier => {
                 const dailyRate = parseFloat(tier.annualRatePercent) / 365;
@@ -223,6 +237,16 @@ export default function StakingPage() {
               })}
             </div>
 
+            {selectedTier && selectedTierData && !isAuthenticated && (
+              <div className="mt-6 p-4 rounded-lg border border-yellow-500/30 bg-yellow-500/5 text-center">
+                <p className="text-muted-foreground mb-3">Log in to start staking your JCMOVES tokens.</p>
+                <Link href="/employee-login">
+                  <Button className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white">
+                    Log In to Stake
+                  </Button>
+                </Link>
+              </div>
+            )}
             {selectedTier && selectedTierData && isAuthenticated && (
               <div className="mt-6 p-4 rounded-lg border border-yellow-500/30 bg-yellow-500/5">
                 <h3 className="font-semibold mb-3">Stake in {selectedTierData.name} Tier</h3>
