@@ -2550,14 +2550,14 @@ Thank you for your business!
         sourcePlatform: null,
         sourceUrl: null,
         reviewDate: new Date().toISOString().split('T')[0],
-        status: 'pending', // Customer reviews need approval
+        status: 'published',
         featured: false,
-        verified: false,
+        verified: true,
       });
       
       console.log(`📝 New customer testimonial submitted by ${reviewerName}`);
       
-      res.json({ success: true, message: "Thank you for your review! It will be published after approval." });
+      res.json({ success: true, message: "Thank you for your review! It's now live on our page." });
     } catch (error) {
       console.error("Error creating testimonial:", error);
       res.status(500).json({ error: "Failed to submit review" });

@@ -143,12 +143,13 @@ export default function ReviewsPage() {
     onSuccess: () => {
       toast({
         title: "Thank you for your review!",
-        description: "Your review has been submitted and will be published after approval.",
+        description: "Your review is now live on our page!",
       });
       setIsReviewDialogOpen(false);
       form.reset();
       setSelectedRating(5);
-      queryClient.invalidateQueries({ queryKey: ["/api/testimonials"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/testimonials?status=published"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/testimonials/stats"] });
     },
     onError: (error: Error) => {
       toast({

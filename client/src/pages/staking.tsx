@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, TrendingUp, Lock, Unlock, Coins, Clock, ArrowLeft } from "lucide-react";
+import { Loader2, TrendingUp, Lock, Unlock, Coins, Clock, ArrowLeft, Sparkles } from "lucide-react";
 import { Link } from "wouter";
 import type { StakingTier, Stake } from "@shared/schema";
 
@@ -103,6 +103,13 @@ export default function StakingPage() {
     },
   });
 
+  const [liveTime, setLiveTime] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setLiveTime(Date.now()), 3000);
+    return () => clearInterval(interval);
+  }, []);
+
   if (authLoading || tiersLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -160,8 +167,11 @@ export default function StakingPage() {
           <Card className="border-purple-500/30 bg-gradient-to-br from-purple-500/10 to-pink-500/10">
             <CardContent className="p-4 text-center">
               <p className="text-sm text-muted-foreground">Pending Rewards</p>
-              <p className="text-2xl font-bold">{formatNumber(totalPending)}</p>
-              <p className="text-xs text-muted-foreground">JCMOVES</p>
+              <p className="text-2xl font-bold flex items-center justify-center gap-1">
+                {formatNumber(totalPending)}
+                {totalPending > 0 && <Sparkles className="h-4 w-4 text-purple-400 animate-pulse" />}
+              </p>
+              <p className="text-xs text-muted-foreground">JCMOVES {totalPending > 0 && "(growing live)"}</p>
             </CardContent>
           </Card>
         </div>
