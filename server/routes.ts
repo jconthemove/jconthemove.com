@@ -8867,9 +8867,12 @@ Thank you for your business!
 
   app.get("/api/staking/tiers", async (_req, res) => {
     try {
+      res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+      res.set("Pragma", "no-cache");
       const tiers = await storage.getStakingTiers();
       res.json(tiers);
     } catch (error: any) {
+      console.error("Error fetching staking tiers:", error);
       res.status(500).json({ error: error.message });
     }
   });

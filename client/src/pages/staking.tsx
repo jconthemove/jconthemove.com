@@ -200,31 +200,43 @@ export default function StakingPage() {
                 </Button>
               </div>
             )}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               {tiers.map(tier => {
                 const dailyRate = parseFloat(tier.annualRatePercent) / 365;
                 const isSelected = selectedTier === tier.id;
+                const isFlexible = tier.durationDays === 0;
+                const tierColors: Record<string, string> = {
+                  "Flexible": "from-gray-500/20 to-slate-500/20",
+                  "Bronze": "from-orange-800/20 to-amber-700/20",
+                  "Silver": "from-gray-300/20 to-slate-300/20",
+                  "Gold": "from-yellow-500/20 to-amber-400/20",
+                  "Diamond": "from-cyan-400/20 to-blue-500/20",
+                };
                 return (
                   <button
                     type="button"
                     key={tier.id}
                     onClick={() => setSelectedTier(isSelected ? null : tier.id)}
-                    className={`w-full text-left rounded-xl border-2 p-4 transition-all active:scale-95 ${
+                    className={`w-full text-left rounded-xl border-2 p-3 transition-all active:scale-95 bg-gradient-to-br ${tierColors[tier.name] || ""} ${
                       isSelected
-                        ? "border-yellow-500 bg-yellow-500/15 shadow-lg shadow-yellow-500/20"
-                        : "border-muted-foreground/30 bg-card hover:border-yellow-500/50"
+                        ? "border-yellow-500 shadow-lg shadow-yellow-500/20 scale-[1.02]"
+                        : "border-muted-foreground/20 hover:border-yellow-500/50"
                     }`}
                   >
-                    <div className="text-center space-y-1.5">
-                      <Badge variant={isSelected ? "default" : "secondary"} className="text-xs">
+                    <div className="text-center space-y-1">
+                      <Badge variant={isSelected ? "default" : "secondary"} className="text-[10px]">
                         {tier.name}
                       </Badge>
-                      <div className="text-2xl font-bold text-yellow-500">{tier.annualRatePercent}%</div>
-                      <p className="text-[10px] text-muted-foreground">Annual Return</p>
-                      <div className="text-xs font-medium text-green-500">~{dailyRate.toFixed(4)}%/day</div>
+                      <div className="text-xl font-bold text-yellow-500">{tier.annualRatePercent}%</div>
+                      <p className="text-[10px] text-muted-foreground">APR</p>
+                      <div className="text-[10px] font-medium text-green-500">~{dailyRate.toFixed(4)}%/day</div>
                       <div className="text-[10px] text-muted-foreground space-y-0.5">
                         <p className="flex items-center justify-center gap-1">
-                          <Clock className="h-3 w-3" /> {tier.durationDays}d term
+                          {isFlexible ? (
+                            <><Unlock className="h-3 w-3 text-green-500" /> No lockup</>
+                          ) : (
+                            <><Lock className="h-3 w-3" /> {tier.durationDays}d lockup</>
+                          )}
                         </p>
                         <p>Min: {parseFloat(tier.minStake).toLocaleString()}</p>
                         <p className="flex items-center justify-center gap-1 text-green-500">
@@ -311,10 +323,13 @@ export default function StakingPage() {
               <div className="space-y-4">
                 {activeStakes.map(stake => {
                   const pending = pendingRewards(stake);
-                  const remaining = daysRemaining(stake.endsAt);
+                  const isFlexible = stake.tier.durationDays === 0;
+                  const remaining = isFlexible ? 0 : daysRemaining(stake.endsAt);
                   const totalDays = stake.tier.durationDays;
-                  const elapsed = totalDays - remaining;
-                  const progress = Math.min(100, (elapsed / totalDays) * 100);
+                  const startDate = new Date(stake.startedAt);
+                  const daysSinceStart = Math.floor((Date.now() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+                  const elapsed = isFlexible ? daysSinceStart : totalDays - remaining;
+                  const progress = isFlexible ? 100 : Math.min(100, totalDays > 0 ? (elapsed / totalDays) * 100 : 100);
 
                   return (
                     <div key={stake.id} className="border rounded-lg p-4 space-y-3">
@@ -326,16 +341,25 @@ export default function StakingPage() {
                         <Badge className="bg-green-500/20 text-green-500">{stake.tier.annualRatePercent}% APR</Badge>
                       </div>
 
-                      <div className="w-full bg-muted rounded-full h-2">
-                        <div
-                          className="bg-gradient-to-r from-yellow-500 to-green-500 h-2 rounded-full transition-all"
-                          style={{ width: `${progress}%` }}
-                        />
-                      </div>
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Day {elapsed} of {totalDays}</span>
-                        <span>{remaining} days remaining</span>
-                      </div>
+                      {!isFlexible && (
+                        <>
+                          <div className="w-full bg-muted rounded-full h-2">
+                            <div
+                              className="bg-gradient-to-r from-yellow-500 to-green-500 h-2 rounded-full transition-all"
+                              style={{ width: `${progress}%` }}
+                            />
+                          </div>
+                          <div className="flex justify-between text-xs text-muted-foreground">
+                            <span>Day {elapsed} of {totalDays}</span>
+                            <span>{remaining} days remaining</span>
+                          </div>
+                        </>
+                      )}
+                      {isFlexible && (
+                        <div className="text-xs text-green-500 flex items-center gap-1">
+                          <Unlock className="h-3 w-3" /> No lockup - earning for {daysSinceStart} day{daysSinceStart !== 1 ? "s" : ""}
+                        </div>
+                      )}
 
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
                         <div>
@@ -408,11 +432,11 @@ export default function StakingPage() {
           <CardContent className="p-4">
             <h3 className="font-semibold mb-2">How Staking Works</h3>
             <ul className="text-sm text-muted-foreground space-y-1">
-              <li>1. Choose a staking tier - higher tiers earn better annual returns</li>
-              <li>2. Stake your JCMOVES tokens to start earning</li>
-              <li>3. Rewards accumulate every day based on your daily rate</li>
+              <li>1. Choose from 5 tiers - Flexible (no lockup), Bronze (30d), Silver (90d), Gold (6mo), or Diamond (1yr)</li>
+              <li>2. Higher lockup periods earn better annual returns (5% to 20% APR)</li>
+              <li>3. Stake your JCMOVES tokens to start earning daily rewards</li>
               <li>4. Claim your rewards anytime to add them to your wallet</li>
-              <li>5. Unstake anytime - your full principal is always returned</li>
+              <li>5. Unstake anytime with no penalty - your full deposit is always returned</li>
             </ul>
           </CardContent>
         </Card>
