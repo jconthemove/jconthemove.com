@@ -101,10 +101,45 @@ export default function RewardsDashboard() {
     queryKey: ['/api/rewards/wallet'],
   });
 
-  // Fetch rewards history
-  const { data: rewardsHistory } = useQuery<RewardHistory[]>({
+  const PAGE_SIZE = 50;
+  const [allLoadedRewards, setAllLoadedRewards] = useState<RewardHistory[]>([]);
+  const [historyOffset, setHistoryOffset] = useState(0);
+  const [hasMoreHistory, setHasMoreHistory] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  // Fetch first page of rewards history
+  const { data: rewardsData } = useQuery<{ rewards: RewardHistory[]; total: number; totalTokensEarned: string; totalCashEarned: string }>({
     queryKey: ['/api/rewards/history'],
+    queryFn: async () => {
+      const res = await fetch(`/api/rewards/history?limit=${PAGE_SIZE}&offset=0`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to fetch');
+      const data = await res.json();
+      setAllLoadedRewards(data.rewards);
+      setHistoryOffset(data.rewards.length);
+      setHasMoreHistory(data.rewards.length < data.total);
+      return data;
+    },
   });
+
+  const loadMoreHistory = async () => {
+    setLoadingMore(true);
+    try {
+      const res = await fetch(`/api/rewards/history?limit=${PAGE_SIZE}&offset=${historyOffset}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to fetch');
+      const data = await res.json();
+      setAllLoadedRewards(prev => [...prev, ...data.rewards]);
+      setHistoryOffset(prev => prev + data.rewards.length);
+      setHasMoreHistory(historyOffset + data.rewards.length < data.total);
+    } catch (err) {
+      console.error('Failed to load more history:', err);
+    }
+    setLoadingMore(false);
+  };
+
+  const rewardsHistory = allLoadedRewards.length > 0 ? allLoadedRewards : rewardsData?.rewards;
+  const totalRewards = rewardsData?.total || 0;
+  const allTimeTokensEarned = parseFloat(rewardsData?.totalTokensEarned || "0");
+  const allTimeCashEarned = parseFloat(rewardsData?.totalCashEarned || "0");
 
   // Fetch token info
   const { data: tokenInfo } = useQuery<TokenInfo>({
@@ -392,22 +427,34 @@ export default function RewardsDashboard() {
 
   const getRewardTypeIcon = (type: string) => {
     switch (type) {
-      case 'daily_checkin': return <Calendar className="h-4 w-4" />;
-      case 'booking': return <Award className="h-4 w-4" />;
-      case 'referral': return <Gift className="h-4 w-4" />;
-      case 'job_completion': return <CheckCircle className="h-4 w-4" />;
-      default: return <Coins className="h-4 w-4" />;
+      case 'daily_checkin': return <Calendar className="h-4 w-4 text-blue-400" />;
+      case 'mining_claim': return <Coins className="h-4 w-4 text-yellow-400" />;
+      case 'booking': case 'booking_request': return <Award className="h-4 w-4 text-purple-400" />;
+      case 'referral': case 'referral_request': return <Gift className="h-4 w-4 text-pink-400" />;
+      case 'referral_confirmed': return <Gift className="h-4 w-4 text-green-400" />;
+      case 'job_completion': case 'loyalty_booking': return <CheckCircle className="h-4 w-4 text-green-400" />;
+      case 'job_creation_bonus': case 'lead_creation': return <TrendingUp className="h-4 w-4 text-cyan-400" />;
+      case 'staking_claim': return <TrendingUp className="h-4 w-4 text-yellow-400" />;
+      default: return <Coins className="h-4 w-4 text-slate-400" />;
     }
   };
 
   const getRewardTypeLabel = (type: string) => {
-    switch (type) {
-      case 'daily_checkin': return 'Daily Check-in';
-      case 'booking': return 'Booking Reward';
-      case 'referral': return 'Referral Bonus';
-      case 'job_completion': return 'Job Completion';
-      default: return type;
-    }
+    const labels: Record<string, string> = {
+      'daily_checkin': 'Daily Check-in',
+      'mining_claim': 'Mining Claim',
+      'booking': 'Booking Reward',
+      'booking_request': 'Booking Request',
+      'referral': 'Referral Bonus',
+      'referral_request': 'Referral Submitted',
+      'referral_confirmed': 'Referral Confirmed',
+      'job_completion': 'Job Completed',
+      'loyalty_booking': 'Loyalty Booking',
+      'job_creation_bonus': 'Job Creation Bonus',
+      'lead_creation': 'Lead Created',
+      'staking_claim': 'Staking Reward',
+    };
+    return labels[type] || type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   };
 
   const getStatusColor = (status: string) => {
@@ -1032,47 +1079,90 @@ export default function RewardsDashboard() {
           </div>
         </TabsContent>
 
-        {/* Rewards History Tab */}
+        {/* Full Earnings History Tab */}
         <TabsContent value="history" className="space-y-4">
+          {rewardsHistory && rewardsHistory.length > 0 && (
+            <Card className="border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
+              <CardContent className="p-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20 text-center">
+                    <p className="text-xs text-slate-400">Total Earned (All Time)</p>
+                    <p className="text-lg font-bold text-green-400">
+                      {allTimeTokensEarned.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-xs text-slate-500">JCMOVES</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-center">
+                    <p className="text-xs text-slate-400">Total Transactions</p>
+                    <p className="text-lg font-bold text-blue-400">{totalRewards}</p>
+                    <p className="text-xs text-slate-500">records</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-purple-500/10 border border-purple-500/20 text-center col-span-2 md:col-span-1">
+                    <p className="text-xs text-slate-400">Cash Value</p>
+                    <p className="text-lg font-bold text-purple-400">
+                      ${allTimeCashEarned.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-xs text-slate-500">USD equivalent</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card className="border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-slate-100">
                 <div className="p-2 rounded-lg bg-green-500/20 border border-green-500/30">
                   <Clock className="h-5 w-5 text-green-400" />
                 </div>
-                Recent Rewards
+                Earnings Statement
               </CardTitle>
-              <CardDescription className="text-slate-400">Your earning history and reward activities</CardDescription>
+              <CardDescription className="text-slate-400">
+                Complete history of all JCMOVES earned — jobs, mining, referrals, staking, and more
+                {totalRewards > 0 && ` (showing ${rewardsHistory?.length || 0} of ${totalRewards})`}
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {rewardsHistory && rewardsHistory.length > 0 ? (
-                <div className="space-y-4">
-                  {rewardsHistory.slice(0, 10).map((reward) => (
-                    <div key={reward.id} className="flex items-center justify-between p-4 border border-slate-700/50 rounded-lg bg-slate-900/50">
+                <div className="space-y-3">
+                  {rewardsHistory.map((reward) => (
+                    <div key={reward.id} className="flex items-center justify-between p-3 md:p-4 border border-slate-700/50 rounded-lg bg-slate-900/50">
                       <div className="flex items-center gap-3">
                         <div className="p-2 rounded-lg bg-slate-800 border border-slate-700">
                           {getRewardTypeIcon(reward.rewardType)}
                         </div>
                         <div>
-                          <p className="font-medium text-slate-200">{getRewardTypeLabel(reward.rewardType)}</p>
-                          <p className="text-sm text-slate-500">
-                            {new Date(reward.earnedDate).toLocaleDateString()}
+                          <p className="font-medium text-sm md:text-base text-slate-200">{getRewardTypeLabel(reward.rewardType)}</p>
+                          <p className="text-xs text-slate-500">
+                            {new Date(reward.earnedDate).toLocaleDateString()} {new Date(reward.earnedDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </p>
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="font-bold text-green-400">
-                          +{parseFloat(reward.tokenAmount).toFixed(8)} {tokenInfo?.symbol || 'tokens'}
+                        <p className="font-bold text-green-400 text-sm md:text-base">
+                          +{parseFloat(reward.tokenAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })} JCMOVES
                         </p>
-                        <p className="text-sm text-slate-500">
-                          ${parseFloat(reward.cashValue).toFixed(4)}
-                        </p>
-                        <Badge className={getStatusColor(reward.status)}>
+                        <Badge className={`text-[10px] ${getStatusColor(reward.status)}`}>
                           {reward.status}
                         </Badge>
                       </div>
                     </div>
                   ))}
+
+                  {hasMoreHistory && rewardsHistory.length < totalRewards && (
+                    <Button
+                      variant="outline"
+                      className="w-full border-slate-600 text-slate-300 hover:bg-slate-700"
+                      onClick={loadMoreHistory}
+                      disabled={loadingMore}
+                    >
+                      {loadingMore ? (
+                        <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading...</>
+                      ) : (
+                        <>Load More ({totalRewards - rewardsHistory.length} remaining)</>
+                      )}
+                    </Button>
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-8">

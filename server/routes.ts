@@ -3786,11 +3786,12 @@ Thank you for your business!
     }
   });
 
-  // Get rewards history
+  // Get rewards history with pagination and server-side totals
   app.get("/api/rewards/history", isAuthenticated, async (req: any, res) => {
     try {
       const userId = (req.session as any).userId;
       const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
       
       const rewardsHistory = await db
         .select({
@@ -3806,9 +3807,24 @@ Thank you for your business!
         .from(rewards)
         .where(eq(rewards.userId, userId))
         .orderBy(desc(rewards.earnedDate))
-        .limit(limit);
+        .limit(limit)
+        .offset(offset);
 
-      res.json(rewardsHistory);
+      const [aggregates] = await db
+        .select({
+          count: sql<number>`count(*)::int`,
+          totalTokens: sql<string>`COALESCE(sum(token_amount::numeric), 0)::text`,
+          totalCash: sql<string>`COALESCE(sum(cash_value::numeric), 0)::text`,
+        })
+        .from(rewards)
+        .where(eq(rewards.userId, userId));
+
+      res.json({
+        rewards: rewardsHistory,
+        total: aggregates?.count || 0,
+        totalTokensEarned: aggregates?.totalTokens || "0",
+        totalCashEarned: aggregates?.totalCash || "0",
+      });
     } catch (error) {
       console.error("Error getting rewards history:", error);
       res.status(500).json({ error: "Failed to get rewards history" });
