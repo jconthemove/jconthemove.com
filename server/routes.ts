@@ -31,7 +31,30 @@ import { solanaTransferService } from "./services/solana-transfer";
 import { jupiterSwapService, SUPPORTED_TOKENS } from "./services/jupiter-swap";
 import { smsService } from "./services/sms";
 
+async function ensureStakingTiersSeeded() {
+  try {
+    const existing = await db.select().from(stakingTiers);
+    if (existing.length === 0) {
+      console.log("Seeding staking tiers...");
+      const tiers = [
+        { name: "Flexible", durationDays: 0, annualRatePercent: "5.00", minStake: "50.00000000", maxStake: null, earlyUnstakePenaltyPercent: "0.00", isActive: true },
+        { name: "Bronze", durationDays: 30, annualRatePercent: "10.00", minStake: "100.00000000", maxStake: null, earlyUnstakePenaltyPercent: "0.00", isActive: true },
+        { name: "Silver", durationDays: 90, annualRatePercent: "12.00", minStake: "250.00000000", maxStake: null, earlyUnstakePenaltyPercent: "0.00", isActive: true },
+        { name: "Gold", durationDays: 180, annualRatePercent: "15.00", minStake: "500.00000000", maxStake: null, earlyUnstakePenaltyPercent: "0.00", isActive: true },
+        { name: "Diamond", durationDays: 365, annualRatePercent: "20.00", minStake: "1000.00000000", maxStake: null, earlyUnstakePenaltyPercent: "0.00", isActive: true },
+      ];
+      await db.insert(stakingTiers).values(tiers);
+      console.log("✅ Staking tiers seeded successfully");
+    }
+  } catch (error) {
+    console.error("Failed to seed staking tiers:", error);
+  }
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Seed staking tiers on startup (ensures production has them)
+  await ensureStakingTiersSeeded();
+
   // Public health check endpoint for deployment monitoring (MUST be before auth setup)
   // This endpoint is used by Replit Autoscale Deployments to verify the service is healthy
   app.get("/health", (req, res) => {
