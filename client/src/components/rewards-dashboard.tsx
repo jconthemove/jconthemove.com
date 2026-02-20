@@ -38,17 +38,14 @@ interface WalletAccount {
   id: string;
   userId: string;
   tokenBalance: string;
-  cashBalance: string;
   totalEarned: string;
   totalRedeemed: string;
-  totalCashedOut: string;
 }
 
 interface RewardHistory {
   id: string;
   rewardType: string;
   tokenAmount: string;
-  cashValue: string;
   status: string;
   earnedDate: string;
   metadata?: any;
@@ -108,7 +105,7 @@ export default function RewardsDashboard() {
   const [loadingMore, setLoadingMore] = useState(false);
 
   // Fetch first page of rewards history
-  const { data: rewardsData } = useQuery<{ rewards: RewardHistory[]; total: number; totalTokensEarned: string; totalCashEarned: string }>({
+  const { data: rewardsData } = useQuery<{ rewards: RewardHistory[]; total: number; totalTokensEarned: string }>({
     queryKey: ['/api/rewards/history'],
     queryFn: async () => {
       const res = await fetch(`/api/rewards/history?limit=${PAGE_SIZE}&offset=0`, { credentials: 'include' });
@@ -139,7 +136,6 @@ export default function RewardsDashboard() {
   const rewardsHistory = allLoadedRewards.length > 0 ? allLoadedRewards : rewardsData?.rewards;
   const totalRewards = rewardsData?.total || 0;
   const allTimeTokensEarned = parseFloat(rewardsData?.totalTokensEarned || "0");
-  const allTimeCashEarned = parseFloat(rewardsData?.totalCashEarned || "0");
 
   // Fetch token info
   const { data: tokenInfo } = useQuery<TokenInfo>({
@@ -468,7 +464,6 @@ export default function RewardsDashboard() {
   };
 
   const tokenBalance = parseFloat(wallet?.tokenBalance || '0');
-  const cashValue = parseFloat(wallet?.cashBalance || '0');
   const hasActiveSession = !!miningStatus?.currentSession;
 
   // Generate simple mock chart data for holdings visualization
@@ -962,7 +957,7 @@ export default function RewardsDashboard() {
                   Your Referral Code
                 </CardTitle>
                 <CardDescription className="text-slate-400">
-                  Share your code and earn $10.00 worth of {tokenInfo?.symbol || 'tokens'} for each friend who signs up!
+                  Share your code and earn bonus {tokenInfo?.symbol || 'JCMOVES'} credits for each friend who signs up!
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -1037,8 +1032,8 @@ export default function RewardsDashboard() {
                         <p className="text-sm text-slate-400">Friends Referred</p>
                       </div>
                       <div className="text-center p-4 bg-green-500/10 border border-green-500/30 rounded-xl">
-                        <p className="text-3xl font-black text-green-400">${referralStats.totalEarned.toFixed(2)}</p>
-                        <p className="text-sm text-slate-400">Total Earned</p>
+                        <p className="text-3xl font-black text-green-400">{referralStats.totalEarned.toFixed(0)}</p>
+                        <p className="text-sm text-slate-400">Credits Earned</p>
                       </div>
                     </div>
 
@@ -1060,7 +1055,7 @@ export default function RewardsDashboard() {
                               </div>
                               <Badge className="bg-green-500/20 text-green-300 border border-green-500/30">
                                 <Award className="h-3 w-3 mr-1" />
-                                $10.00
+                                Credits Earned
                               </Badge>
                             </div>
                           ))}
@@ -1098,11 +1093,11 @@ export default function RewardsDashboard() {
                     <p className="text-xs text-slate-500">records</p>
                   </div>
                   <div className="p-3 rounded-lg bg-purple-500/10 border border-purple-500/20 text-center col-span-2 md:col-span-1">
-                    <p className="text-xs text-slate-400">Cash Value</p>
+                    <p className="text-xs text-slate-400">Total Credits</p>
                     <p className="text-lg font-bold text-purple-400">
-                      ${allTimeCashEarned.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {allTimeTokensEarned.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                     </p>
-                    <p className="text-xs text-slate-500">USD equivalent</p>
+                    <p className="text-xs text-slate-500">JCMOVES credits</p>
                   </div>
                 </div>
               </CardContent>
@@ -1277,13 +1272,6 @@ export default function RewardsDashboard() {
                 </div>
                 <Separator className="bg-slate-700" />
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-400">USD Value</span>
-                  <span className="text-xl font-black text-green-400">
-                    ${cashValue.toFixed(2)}
-                  </span>
-                </div>
-                <Separator className="bg-slate-700" />
-                <div className="flex justify-between items-center">
                   <span className="text-slate-400">Total Earned</span>
                   <span className="font-bold text-orange-400">
                     {parseFloat(wallet?.totalEarned || '0').toFixed(2)} {tokenInfo?.symbol || 'JCMOVES'}
@@ -1377,9 +1365,6 @@ export default function RewardsDashboard() {
                           <div className="text-right">
                             <p className="font-bold text-sm text-green-400">
                               +{parseFloat(reward.tokenAmount).toFixed(4)}
-                            </p>
-                            <p className="text-xs text-slate-500">
-                              ${parseFloat(reward.cashValue).toFixed(4)}
                             </p>
                             <Badge variant="outline" className={`mt-1 text-xs ${getStatusColor(reward.status)}`}>
                               {reward.status}

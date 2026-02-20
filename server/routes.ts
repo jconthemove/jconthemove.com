@@ -1641,7 +1641,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           id: reward.id,
           rewardType: reward.rewardType,
           tokenAmount: reward.tokenAmount,
-          cashValue: reward.cashValue,
           status: reward.status,
           earnedDate: reward.earnedDate,
           referenceId: reward.referenceId
@@ -1651,7 +1650,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           cashoutDetails: pendingCashouts.map(cashout => ({
             id: cashout.id,
             tokenAmount: cashout.tokenAmount,
-            usdValue: cashout.cashAmount,
             status: cashout.status,
             createdAt: cashout.createdAt
           }))
@@ -1901,7 +1899,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         id: reward.id,
         type: reward.rewardType,
         tokenAmount: reward.tokenAmount,
-        cashValue: reward.cashValue,
         status: reward.status,
         date: reward.earnedDate,
         referenceId: reward.referenceId,
@@ -3798,7 +3795,6 @@ Thank you for your business!
           id: rewards.id,
           rewardType: rewards.rewardType,
           tokenAmount: rewards.tokenAmount,
-          cashValue: rewards.cashValue,
           status: rewards.status,
           earnedDate: rewards.earnedDate,
           redeemedDate: rewards.redeemedDate,
@@ -3814,7 +3810,6 @@ Thank you for your business!
         .select({
           count: sql<number>`count(*)::int`,
           totalTokens: sql<string>`COALESCE(sum(token_amount::numeric), 0)::text`,
-          totalCash: sql<string>`COALESCE(sum(cash_value::numeric), 0)::text`,
         })
         .from(rewards)
         .where(eq(rewards.userId, userId));
@@ -3823,7 +3818,6 @@ Thank you for your business!
         rewards: rewardsHistory,
         total: aggregates?.count || 0,
         totalTokensEarned: aggregates?.totalTokens || "0",
-        totalCashEarned: aggregates?.totalCash || "0",
       });
     } catch (error) {
       console.error("Error getting rewards history:", error);
@@ -5823,9 +5817,8 @@ Thank you for your business!
           success: true,
           currency: result.currency,
           amount: result.amount,
-          cashValue: result.cashValue,
           nextClaimTime: result.nextClaimTime,
-          message: `Successfully claimed ${result.amount} ${result.currency}! (≈$${result.cashValue?.toFixed(4)})`
+          message: `Successfully claimed ${result.amount} ${result.currency} credits!`
         });
       } else {
         res.status(400).json({

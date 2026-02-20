@@ -804,8 +804,7 @@ export default function LeadDetailPage() {
                             <Badge variant="outline">Pending</Badge>
                           </div>
                           <div className="mt-2 text-sm">
-                            <p className="font-semibold">{parseFloat(reward.tokenAmount).toFixed(2)} JCMOVES</p>
-                            <p className="text-muted-foreground">${parseFloat(reward.cashValue).toFixed(2)}</p>
+                            <p className="font-semibold">{parseFloat(reward.tokenAmount).toFixed(2)} JCMOVES credits</p>
                           </div>
                         </div>
                       ))
@@ -830,8 +829,7 @@ export default function LeadDetailPage() {
                             <Badge className="bg-green-600">Credited</Badge>
                           </div>
                           <div className="mt-2 text-sm">
-                            <p className="font-semibold">{parseFloat(reward.tokenAmount).toFixed(2)} JCMOVES</p>
-                            <p className="text-muted-foreground">${parseFloat(reward.cashValue).toFixed(2)}</p>
+                            <p className="font-semibold">{parseFloat(reward.tokenAmount).toFixed(2)} JCMOVES credits</p>
                           </div>
                         </div>
                       ))

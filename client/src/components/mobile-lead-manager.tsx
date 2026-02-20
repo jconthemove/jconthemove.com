@@ -855,12 +855,12 @@ export default function MobileLeadManager() {
                       
                       <div className="grid grid-cols-2 gap-4 pt-2 border-t">
                         <div className="text-center">
-                          <p className="text-xs text-muted-foreground">Current Market Value</p>
+                          <p className="text-xs text-muted-foreground">Treasury Balance</p>
                           <p className="text-lg font-bold text-green-600">
-                            ${(treasuryStatus.stats?.currentMarketValueUsd || 0).toFixed(2)}
+                            {(treasuryStatus.stats?.currentMarketValueUsd || 0).toFixed(0)} credits
                           </p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            @ ${(treasuryStatus.stats?.currentTokenPrice || 0).toFixed(8)}
+                            JCMOVES treasury
                           </p>
                         </div>
                         <div className="text-center">
@@ -921,7 +921,7 @@ export default function MobileLeadManager() {
             <div className="text-center mb-6">
               <h2 className="text-xl font-bold mb-2">Rewards (4x Daily)</h2>
               <p className="text-sm text-muted-foreground">
-                Check in every 6 hours to earn $0.25 worth of JCMOVES tokens
+                Check in every 6 hours to earn JCMOVES credits
               </p>
             </div>
 
@@ -942,7 +942,7 @@ export default function MobileLeadManager() {
                       <h3 className="text-lg font-semibold mb-2">Check-In (Every 6 Hours)</h3>
                       <p className="text-sm text-muted-foreground mb-4">
                         {gamificationData.data.canCheckIn 
-                          ? "Ready for your next $0.25 check-in!" 
+                          ? "Ready for your next check-in reward!" 
                           : gamificationData.data.nextCheckInAt 
                             ? `Next check-in: ${new Date(gamificationData.data.nextCheckInAt).toLocaleTimeString()}`
                             : `Last check-in: ${gamificationData.data.lastCheckIn ? new Date(gamificationData.data.lastCheckIn).toLocaleDateString() : 'Never'}`
@@ -959,7 +959,7 @@ export default function MobileLeadManager() {
                         ) : (
                           <Calendar className="h-4 w-4 mr-2" />
                         )}
-                        {gamificationData.data.canCheckIn ? "Claim $0.25 Reward" : "Next Available Soon"}
+                        {gamificationData.data.canCheckIn ? "Claim Credits" : "Next Available Soon"}
                       </Button>
                     </div>
                   </CardContent>
@@ -997,11 +997,11 @@ export default function MobileLeadManager() {
                           {(gamificationData?.data?.tokenBalance || 0).toFixed(1)} Tokens
                         </p>
                         <p className="text-sm text-green-600">
-                          ≈ ${((gamificationData?.data?.tokenBalance || 0) * (tokenInfo?.price || 0)).toFixed(4)} USD
+                          credits available
                         </p>
                       </div>
                       <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                        <DollarSign className="h-6 w-6 text-blue-600" />
+                        <Coins className="h-6 w-6 text-blue-600" />
                       </div>
                     </div>
                   </CardContent>
@@ -1599,7 +1599,7 @@ function WalletSection({ userId }: { userId?: string }) {
                     {parseFloat(wallet.balance).toFixed(8)} {wallet.currency.symbol}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {wallet.currency.symbol === 'JCMOVES' ? '$0.00' : 'Balance'}
+                    {wallet.currency.symbol === 'JCMOVES' ? 'Credits' : 'Balance'}
                   </p>
                 </div>
               </div>

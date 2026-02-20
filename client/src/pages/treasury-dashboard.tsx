@@ -384,10 +384,10 @@ export default function TreasuryDashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold text-green-600">
-                    ${treasurySummary.stats.currentMarketValueUsd.toFixed(2)}
+                    {treasurySummary.stats.currentMarketValueUsd.toFixed(0)} credits
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    JCMOVES @ ${treasurySummary.stats.currentTokenPrice.toFixed(8)}
+                    JCMOVES treasury balance
                   </p>
                 </CardContent>
               </Card>
@@ -751,7 +751,7 @@ export default function TreasuryDashboard() {
                             {new Date(transaction.createdAt).toLocaleDateString()} • {transaction.relatedEntityType}
                           </div>
                           <div className="text-sm">
-                            {parseFloat(transaction.tokenAmount).toFixed(8)} tokens • ${parseFloat(transaction.cashValue).toFixed(2)}
+                            {parseFloat(transaction.tokenAmount).toFixed(8)} credits
                           </div>
                         </div>
                         <Badge variant={transaction.transactionType === 'distribution' ? 'destructive' : 'secondary'}>
@@ -807,7 +807,7 @@ export default function TreasuryDashboard() {
                               <span className="text-sm text-muted-foreground">{stat.count} rewards</span>
                             </div>
                             <div className="text-sm text-muted-foreground">
-                              {Number(stat.totalTokens || 0).toFixed(2)} tokens • ${Number(stat.totalCash || 0).toFixed(2)}
+                              {Number(stat.totalTokens || 0).toFixed(2)} credits
                             </div>
                           </div>
                         ))}

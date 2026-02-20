@@ -257,7 +257,7 @@ export default function AdminMoonshotPage() {
                     <div data-testid="text-current-market-value">
                       <p className="text-sm text-muted-foreground">Treasury Value</p>
                       <p className="text-xl font-bold text-green-600">
-                        ${parseFloat((treasuryStatus as any).stats?.currentMarketValueUsd || '0').toFixed(2)}
+                        {parseFloat((treasuryStatus as any).stats?.currentMarketValueUsd || '0').toFixed(0)} credits
                       </p>
                     </div>
                     <div data-testid="text-token-reserve">

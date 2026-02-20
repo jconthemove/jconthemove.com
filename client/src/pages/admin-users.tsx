@@ -779,9 +779,9 @@ export default function AdminUsersPage() {
                             {userDetails.pendingRequests.cashoutDetails.map(cashout => (
                               <div key={cashout.id} className="flex justify-between items-center p-2 bg-muted rounded">
                                 <div>
-                                  <p className="font-medium">Cashout Request</p>
+                                  <p className="font-medium">Redemption Request</p>
                                   <p className="text-sm text-muted-foreground">
-                                    {cashout.tokenAmount} JCMOVES ≈ ${cashout.usdValue}
+                                    {cashout.tokenAmount} JCMOVES credits
                                   </p>
                                 </div>
                                 <Badge>{cashout.status}</Badge>
@@ -819,9 +819,6 @@ export default function AdminUsersPage() {
                                 <div className="text-right">
                                   <p className="font-bold text-sm">
                                     +{parseFloat(reward.tokenAmount).toLocaleString()} JCMOVES
-                                  </p>
-                                  <p className="text-xs text-green-600 dark:text-green-400">
-                                    ${parseFloat(reward.cashValue).toFixed(4)}
                                   </p>
                                   <Badge variant="outline" className="mt-1">{reward.status}</Badge>
                                 </div>
@@ -1035,9 +1032,6 @@ export default function AdminUsersPage() {
                             <div className="text-right">
                               <p className="font-bold text-sm">
                                 +{parseFloat(tx.tokenAmount).toLocaleString()} JCMOVES
-                              </p>
-                              <p className="text-xs text-green-600 dark:text-green-400">
-                                ${parseFloat(tx.cashValue).toFixed(4)}
                               </p>
                               <Badge variant="outline" className="mt-1">{tx.status}</Badge>
                             </div>

@@ -25,10 +25,8 @@ interface WalletAccount {
   id: string;
   userId: string;
   tokenBalance: string;
-  cashBalance: string;
   totalEarned: string;
   totalRedeemed: string;
-  totalCashedOut: string;
 }
 
 interface MiningStatus {
@@ -46,7 +44,6 @@ interface RewardHistory {
   id: string;
   rewardType: string;
   tokenAmount: string;
-  cashValue: string;
   status: string;
   earnedDate: string;
 }
@@ -242,7 +239,7 @@ export default function CustomerPortal() {
               <p className="text-2xl font-black text-orange-400" data-testid="text-token-balance">
                 {tokenBalance.toFixed(2)} JCMOVES
               </p>
-              <p className="text-xs text-slate-400">${(tokenBalance * 0.01).toFixed(2)} value</p>
+              <p className="text-xs text-slate-400">{tokenBalance.toFixed(0)} credits</p>
             </CardContent>
           </Card>
           <Card className="bg-gradient-to-br from-green-500/20 to-emerald-500/20 border-green-500/30">

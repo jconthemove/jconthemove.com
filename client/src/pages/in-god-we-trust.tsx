@@ -2541,11 +2541,11 @@ export default function InGodWeTrustPage() {
               </div>
 
               <div className="mt-6 p-4 rounded-lg bg-teal-500/10 border border-teal-500/30">
-                <h4 className="font-medium text-teal-300 mb-2">Reward Value Guide (1 JCMOVES = $0.01)</h4>
+                <h4 className="font-medium text-teal-300 mb-2">Reward Credits Guide</h4>
                 <ul className="text-sm text-slate-400 space-y-1">
-                  <li>• <strong>200 JCMOVES</strong> = $2.00 (Quote Accepted)</li>
-                  <li>• <strong>1,500 JCMOVES</strong> = $15.00 (Job Completed)</li>
-                  <li>• <strong>2,500 JCMOVES</strong> = $25.00 (Referral Confirmed)</li>
+                  <li>• <strong>200 JCMOVES</strong> credits (Quote Accepted)</li>
+                  <li>• <strong>1,500 JCMOVES</strong> credits (Job Completed)</li>
+                  <li>• <strong>2,500 JCMOVES</strong> credits (Referral Confirmed)</li>
                 </ul>
               </div>
             </Card>
