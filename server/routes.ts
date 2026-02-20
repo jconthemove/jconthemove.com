@@ -51,9 +51,57 @@ async function ensureStakingTiersSeeded() {
   }
 }
 
+const STAKING_TREASURY_USER_ID = "staking-treasury-system";
+
+async function ensureStakingTreasuryUser() {
+  try {
+    const [existing] = await db.select().from(users).where(eq(users.id, STAKING_TREASURY_USER_ID));
+    if (!existing) {
+      console.log("Creating staking treasury system user...");
+      const randomHash = await bcrypt.hash(crypto.randomUUID() + Date.now(), 10);
+      await db.insert(users).values({
+        id: STAKING_TREASURY_USER_ID,
+        email: "staking-treasury@system.internal",
+        passwordHash: randomHash,
+        firstName: "Staking",
+        lastName: "Treasury",
+        role: "employee",
+        status: "pending",
+      });
+      await db.insert(walletAccounts).values({
+        userId: STAKING_TREASURY_USER_ID,
+        tokenBalance: "1000000.00000000",
+        cashBalance: "0.00",
+        totalEarned: "0.00000000",
+        totalRedeemed: "0.00000000",
+        totalCashedOut: "0.00",
+        lastActivity: new Date(),
+      });
+      console.log("✅ Staking treasury system user and wallet created (1M JCMOVES)");
+    } else {
+      const wallet = await db.select().from(walletAccounts).where(eq(walletAccounts.userId, STAKING_TREASURY_USER_ID));
+      if (wallet.length === 0) {
+        await db.insert(walletAccounts).values({
+          userId: STAKING_TREASURY_USER_ID,
+          tokenBalance: "1000000.00000000",
+          cashBalance: "0.00",
+          totalEarned: "0.00000000",
+          totalRedeemed: "0.00000000",
+          totalCashedOut: "0.00",
+          lastActivity: new Date(),
+        });
+        console.log("✅ Staking treasury wallet created (1M JCMOVES)");
+      }
+    }
+  } catch (error) {
+    console.error("Failed to create staking treasury user:", error);
+  }
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Seed staking tiers on startup (ensures production has them)
+  // Seed staking tiers and treasury user on startup (ensures production has them)
   await ensureStakingTiersSeeded();
+  await ensureStakingTreasuryUser();
 
   // Public health check endpoint for deployment monitoring (MUST be before auth setup)
   // This endpoint is used by Replit Autoscale Deployments to verify the service is healthy
