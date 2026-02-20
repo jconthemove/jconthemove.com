@@ -19,7 +19,7 @@ import { z } from "zod";
 import { EncryptionService } from "./services/encryption";
 import { eq, desc, sql, and, gte } from 'drizzle-orm';
 import { db } from './db';
-import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules, bitcoinPayments } from '@shared/schema';
+import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers } from '@shared/schema';
 import { getFaucetPayService } from "./services/faucetpay";
 import { getAdvertisingService } from "./services/advertising";
 import { FAUCET_CONFIG } from "./constants";
@@ -8920,6 +8920,47 @@ Thank you for your business!
       res.json(result);
     } catch (error: any) {
       res.status(400).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/staking/treasury", isAuthenticated, requireAdmin, async (_req: any, res) => {
+    try {
+      const treasuryBalance = await storage.getStakingTreasuryBalance();
+      const tiers = await storage.getStakingTiers();
+      const allStakes = await db.select({
+        status: stakes.status,
+        amount: stakes.amount,
+        totalEarned: stakes.totalEarned,
+        tierName: stakingTiers.name,
+      }).from(stakes).innerJoin(stakingTiers, eq(stakes.tierId, stakingTiers.id));
+
+      const activeStakes = allStakes.filter(s => s.status === "active");
+      const totalActiveStaked = activeStakes.reduce((sum, s) => sum + parseFloat(s.amount), 0);
+      const totalRewardsPaid = allStakes.reduce((sum, s) => sum + parseFloat(s.totalEarned || "0"), 0);
+      const tierBreakdown = tiers.map(tier => {
+        const tierStakes = activeStakes.filter(s => s.tierName === tier.name);
+        return {
+          name: tier.name,
+          durationDays: tier.durationDays,
+          apr: tier.annualRatePercent,
+          activeStakes: tierStakes.length,
+          totalStaked: tierStakes.reduce((sum, s) => sum + parseFloat(s.amount), 0).toFixed(2),
+        };
+      });
+
+      res.json({
+        balance: treasuryBalance.tokenBalance,
+        totalDeposited: treasuryBalance.totalDeposited,
+        totalPaidOut: treasuryBalance.totalPaidOut,
+        totalActiveStaked: totalActiveStaked.toFixed(2),
+        totalRewardsPaid: totalRewardsPaid.toFixed(2),
+        activeStakeCount: activeStakes.length,
+        totalStakeCount: allStakes.length,
+        tierBreakdown,
+      });
+    } catch (error: any) {
+      console.error("Error fetching staking treasury:", error);
+      res.status(500).json({ error: error.message });
     }
   });
 

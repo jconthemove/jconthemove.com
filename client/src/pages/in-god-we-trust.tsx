@@ -38,7 +38,8 @@ import {
   Copy,
   ChevronDown,
   Settings,
-  Snowflake
+  Snowflake,
+  Layers
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -334,6 +335,17 @@ export default function InGodWeTrustPage() {
   const [fulfilledAmount, setFulfilledAmount] = useState("");
   const [fulfillmentTxHash, setFulfillmentTxHash] = useState("");
 
+  const { data: stakingTreasury, refetch: refetchStakingTreasury } = useQuery<{
+    balance: string;
+    totalActiveStaked: string;
+    totalRewardsPaid: string;
+    activeStakeCount: number;
+    totalStakeCount: number;
+    tierBreakdown: Array<{ name: string; durationDays: number; apr: string; activeStakes: number; totalStaked: string }>;
+  }>({
+    queryKey: ["/api/staking/treasury"],
+  });
+
   // Swap requests query (admin only - uses requireBusinessOwner middleware)
   const { data: swapRequests, refetch: refetchSwapRequests } = useQuery<{ requests: any[] }>({
     queryKey: ["/api/swap-requests"],
@@ -593,6 +605,10 @@ export default function InGodWeTrustPage() {
             <TabsTrigger value="reward-config" className="data-[state=active]:bg-teal-500/20 data-[state=active]:text-teal-300" data-testid="tab-reward-config">
               <Settings className="h-4 w-4 mr-2" />
               Rewards
+            </TabsTrigger>
+            <TabsTrigger value="staking-treasury" className="data-[state=active]:bg-indigo-500/20 data-[state=active]:text-indigo-300" data-testid="tab-staking-treasury">
+              <Layers className="h-4 w-4 mr-2" />
+              Staking
             </TabsTrigger>
           </TabsList>
 
@@ -2532,6 +2548,96 @@ export default function InGodWeTrustPage() {
                   <li>• <strong>2,500 JCMOVES</strong> = $25.00 (Referral Confirmed)</li>
                 </ul>
               </div>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="staking-treasury" className="space-y-6">
+            <Card className="p-6 bg-gradient-to-br from-indigo-900/40 to-purple-900/40 border-indigo-500/30">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-indigo-300 flex items-center gap-2">
+                  <Layers className="h-5 w-5" />
+                  Staking Treasury
+                </h3>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => refetchStakingTreasury()}
+                  className="border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/20"
+                >
+                  <RefreshCw className="h-4 w-4 mr-1" />
+                  Refresh
+                </Button>
+              </div>
+
+              {stakingTreasury ? (
+                <>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <div className="p-4 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
+                      <p className="text-xs text-slate-400 mb-1">Treasury Balance</p>
+                      <p className="text-2xl font-bold text-indigo-300">{parseFloat(stakingTreasury.balance).toLocaleString()}</p>
+                      <p className="text-xs text-slate-500">JCMOVES</p>
+                    </div>
+                    <div className="p-4 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                      <p className="text-xs text-slate-400 mb-1">Total Active Staked</p>
+                      <p className="text-2xl font-bold text-purple-300">{parseFloat(stakingTreasury.totalActiveStaked).toLocaleString()}</p>
+                      <p className="text-xs text-slate-500">JCMOVES</p>
+                    </div>
+                    <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                      <p className="text-xs text-slate-400 mb-1">Total Rewards Paid</p>
+                      <p className="text-2xl font-bold text-amber-300">{parseFloat(stakingTreasury.totalRewardsPaid).toLocaleString()}</p>
+                      <p className="text-xs text-slate-500">JCMOVES</p>
+                    </div>
+                    <div className="p-4 rounded-lg bg-cyan-500/10 border border-cyan-500/20">
+                      <p className="text-xs text-slate-400 mb-1">Active Stakes</p>
+                      <p className="text-2xl font-bold text-cyan-300">{stakingTreasury.activeStakeCount}</p>
+                      <p className="text-xs text-slate-500">of {stakingTreasury.totalStakeCount} total</p>
+                    </div>
+                  </div>
+
+                  <h4 className="text-lg font-semibold text-slate-300 mb-3">Tier Breakdown</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                    {stakingTreasury.tierBreakdown.map((tier) => {
+                      const tierColors: Record<string, string> = {
+                        "Flexible": "from-gray-700/40 to-gray-600/40 border-gray-500/30",
+                        "Bronze": "from-orange-900/40 to-orange-800/40 border-orange-500/30",
+                        "Silver": "from-gray-500/20 to-gray-400/20 border-gray-400/30",
+                        "Gold": "from-yellow-900/40 to-yellow-800/40 border-yellow-500/30",
+                        "Diamond": "from-cyan-900/40 to-cyan-800/40 border-cyan-400/30",
+                      };
+                      const colorClass = tierColors[tier.name] || "from-slate-700/40 to-slate-600/40 border-slate-500/30";
+                      return (
+                        <div key={tier.name} className={`p-4 rounded-lg bg-gradient-to-br ${colorClass} border`}>
+                          <p className="font-semibold text-white mb-2">{tier.name}</p>
+                          <p className="text-xs text-slate-400">{tier.durationDays === 0 ? "No lockup" : `${tier.durationDays}d lock`} • {tier.apr}% APR</p>
+                          <p className="text-lg font-bold text-white mt-2">{parseFloat(tier.totalStaked).toLocaleString()}</p>
+                          <p className="text-xs text-slate-400">{tier.activeStakes} active stake{tier.activeStakes !== 1 ? "s" : ""}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-6 p-4 rounded-lg bg-indigo-500/10 border border-indigo-500/30">
+                    <h4 className="font-medium text-indigo-300 mb-2">Treasury Health</h4>
+                    <div className="flex items-center gap-2">
+                      {parseFloat(stakingTreasury.balance) > parseFloat(stakingTreasury.totalActiveStaked) ? (
+                        <>
+                          <CheckCircle className="h-4 w-4 text-green-400" />
+                          <span className="text-green-400 text-sm">Treasury is fully backed — balance exceeds total staked amount</span>
+                        </>
+                      ) : (
+                        <>
+                          <AlertTriangle className="h-4 w-4 text-amber-400" />
+                          <span className="text-amber-400 text-sm">Treasury balance is below total staked — monitor closely</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-indigo-400" />
+                </div>
+              )}
             </Card>
           </TabsContent>
         </Tabs>

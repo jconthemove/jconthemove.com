@@ -230,6 +230,7 @@ export interface IStorage {
   createStake(userId: string, tierId: string, amount: number): Promise<Stake>;
   claimStakingRewards(stakeId: string, userId: string): Promise<{ earned: number }>;
   unstake(stakeId: string, userId: string): Promise<{ returned: number; penalty: number; earned: number }>;
+  getStakingTreasuryBalance(): Promise<{ tokenBalance: string; totalDeposited: string; totalPaidOut: string }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2795,6 +2796,16 @@ export class DatabaseStorage implements IStorage {
     return results.map(r => ({ ...r.stakes, tier: r.staking_tiers }));
   }
 
+  private STAKING_TREASURY_USER_ID = "staking-treasury-system";
+
+  async getStakingTreasuryBalance(): Promise<{ tokenBalance: string; totalDeposited: string; totalPaidOut: string }> {
+    const wallet = await this.getWalletAccount(this.STAKING_TREASURY_USER_ID);
+    const balance = wallet?.tokenBalance || "0.00000000";
+    const totalDeposited = wallet?.totalEarned || "0.00000000";
+    const totalPaidOut = wallet?.totalRedeemed || "0.00000000";
+    return { tokenBalance: balance, totalDeposited, totalPaidOut };
+  }
+
   async createStake(userId: string, tierId: string, amount: number): Promise<Stake> {
     const [tier] = await db.select().from(stakingTiers).where(eq(stakingTiers.id, tierId));
     if (!tier) throw new Error("Invalid staking tier");
@@ -2809,10 +2820,21 @@ export class DatabaseStorage implements IStorage {
 
     const dailyRate = parseFloat(tier.annualRatePercent) / 365 / 100;
     const endsAt = new Date();
-    endsAt.setDate(endsAt.getDate() + tier.durationDays);
+    endsAt.setDate(endsAt.getDate() + (tier.durationDays || 36500));
 
     await this.updateWalletAccount(userId, {
       tokenBalance: (balance - amount).toFixed(8),
+    });
+
+    let treasuryWallet = await this.getWalletAccount(this.STAKING_TREASURY_USER_ID);
+    if (!treasuryWallet) {
+      treasuryWallet = await this.createWalletAccount({ userId: this.STAKING_TREASURY_USER_ID });
+    }
+    const treasuryBalance = parseFloat(treasuryWallet.tokenBalance || "0");
+    const treasuryDeposited = parseFloat(treasuryWallet.totalEarned || "0");
+    await this.updateWalletAccount(this.STAKING_TREASURY_USER_ID, {
+      tokenBalance: (treasuryBalance + amount).toFixed(8),
+      totalEarned: (treasuryDeposited + amount).toFixed(8),
     });
 
     const [stake] = await db.insert(stakes).values({
@@ -2840,6 +2862,18 @@ export class DatabaseStorage implements IStorage {
     const stakeAmount = parseFloat(stake.amount);
     const dailyRate = parseFloat(stake.dailyRate);
     const earned = stakeAmount * dailyRate * daysSinceLastPayout;
+
+    let treasuryWallet = await this.getWalletAccount(this.STAKING_TREASURY_USER_ID);
+    if (!treasuryWallet) {
+      treasuryWallet = await this.createWalletAccount({ userId: this.STAKING_TREASURY_USER_ID });
+    }
+    const treasuryBalance = parseFloat(treasuryWallet.tokenBalance || "0");
+    if (treasuryBalance < earned) throw new Error("Staking treasury has insufficient funds for this claim. Contact admin.");
+    const treasuryPaidOut = parseFloat(treasuryWallet.totalRedeemed || "0");
+    await this.updateWalletAccount(this.STAKING_TREASURY_USER_ID, {
+      tokenBalance: (treasuryBalance - earned).toFixed(8),
+      totalRedeemed: (treasuryPaidOut + earned).toFixed(8),
+    });
 
     await db.update(stakes).set({
       totalEarned: (parseFloat(stake.totalEarned || "0") + earned).toFixed(8),
@@ -2869,6 +2903,18 @@ export class DatabaseStorage implements IStorage {
 
     const penalty = 0;
     const returned = stakeAmount + pendingEarned;
+
+    let treasuryWallet = await this.getWalletAccount(this.STAKING_TREASURY_USER_ID);
+    if (!treasuryWallet) {
+      treasuryWallet = await this.createWalletAccount({ userId: this.STAKING_TREASURY_USER_ID });
+    }
+    const treasuryBalance = parseFloat(treasuryWallet.tokenBalance || "0");
+    if (treasuryBalance < returned) throw new Error("Staking treasury has insufficient funds for unstaking. Contact admin.");
+    const treasuryPaidOut = parseFloat(treasuryWallet.totalRedeemed || "0");
+    await this.updateWalletAccount(this.STAKING_TREASURY_USER_ID, {
+      tokenBalance: (treasuryBalance - returned).toFixed(8),
+      totalRedeemed: (treasuryPaidOut + returned).toFixed(8),
+    });
 
     await db.update(stakes).set({
       status: "unstaked",
