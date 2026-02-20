@@ -188,7 +188,7 @@ export default function StakingPage() {
               <Coins className="h-5 w-5 text-yellow-500" />
               Staking Tiers
             </CardTitle>
-            <CardDescription>Choose a tier to stake your JCMOVES tokens. Higher tiers earn better annual returns. Unstake anytime.</CardDescription>
+            <CardDescription>Tap a tier below to select it, then enter the amount you want to stake. Higher tiers earn better annual returns. Unstake anytime.</CardDescription>
           </CardHeader>
           <CardContent>
             {tiersLoading && <div className="flex items-center justify-center py-8 gap-2"><Loader2 className="h-5 w-5 animate-spin" /><span className="text-muted-foreground">Loading tiers...</span></div>}
@@ -219,7 +219,7 @@ export default function StakingPage() {
                     onClick={() => setSelectedTier(isSelected ? null : tier.id)}
                     className={`w-full text-left rounded-xl border-2 p-3 transition-all active:scale-95 bg-gradient-to-br ${tierColors[tier.name] || ""} ${
                       isSelected
-                        ? "border-yellow-500 shadow-lg shadow-yellow-500/20 scale-[1.02]"
+                        ? "border-yellow-500 shadow-lg shadow-yellow-500/20 scale-[1.02] ring-2 ring-yellow-500/30"
                         : "border-muted-foreground/20 hover:border-yellow-500/50"
                     }`}
                   >
@@ -239,9 +239,9 @@ export default function StakingPage() {
                           )}
                         </p>
                         <p>Min: {parseFloat(tier.minStake).toLocaleString()}</p>
-                        <p className="flex items-center justify-center gap-1 text-green-500">
-                          <Unlock className="h-3 w-3" /> Unstake anytime
-                        </p>
+                      </div>
+                      <div className={`text-[10px] font-semibold mt-1 py-1 rounded ${isSelected ? "text-yellow-500" : "text-yellow-500/70"}`}>
+                        {isSelected ? "Selected" : "Tap to Select"}
                       </div>
                     </div>
                   </button>
@@ -249,6 +249,14 @@ export default function StakingPage() {
               })}
             </div>
 
+            {!selectedTier && tiers.length > 0 && isAuthenticated && (
+              <div className="mt-4 p-4 rounded-lg border-2 border-dashed border-yellow-500/30 bg-yellow-500/5 text-center">
+                <p className="text-muted-foreground flex items-center justify-center gap-2">
+                  <Sparkles className="h-4 w-4 text-yellow-500" />
+                  Tap one of the tiers above to start staking your JCMOVES tokens
+                </p>
+              </div>
+            )}
             {selectedTier && selectedTierData && !isAuthenticated && (
               <div className="mt-6 p-4 rounded-lg border border-yellow-500/30 bg-yellow-500/5 text-center">
                 <p className="text-muted-foreground mb-3">Log in to start staking your JCMOVES tokens.</p>
@@ -260,40 +268,50 @@ export default function StakingPage() {
               </div>
             )}
             {selectedTier && selectedTierData && isAuthenticated && (
-              <div className="mt-6 p-4 rounded-lg border border-yellow-500/30 bg-yellow-500/5">
-                <h3 className="font-semibold mb-3">Stake in {selectedTierData.name} Tier</h3>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="flex-1">
-                    <Input
-                      type="number"
-                      placeholder={`Min ${parseFloat(selectedTierData.minStake).toLocaleString()} JCMOVES`}
-                      value={stakeAmount}
-                      onChange={e => setStakeAmount(e.target.value)}
-                      min={parseFloat(selectedTierData.minStake)}
-                      step="1"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Available: {formatNumber(walletBalance)} JCMOVES
-                      {stakeAmount && parseFloat(stakeAmount) > 0 && (
-                        <span className="text-green-500">
-                          {" "}| Daily earnings: ~{formatNumber(parseFloat(stakeAmount) * parseFloat(selectedTierData.annualRatePercent) / 365 / 100)} JCMOVES
-                        </span>
-                      )}
-                    </p>
+              <div className="mt-6 p-5 rounded-xl border-2 border-yellow-500/50 bg-gradient-to-br from-yellow-500/10 to-orange-500/5 shadow-lg shadow-yellow-500/10 animate-in fade-in slide-in-from-bottom-2">
+                <h3 className="font-bold text-lg mb-1 flex items-center gap-2">
+                  <Coins className="h-5 w-5 text-yellow-500" />
+                  Deposit into {selectedTierData.name} Tier
+                </h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Enter how many JCMOVES you want to stake at {selectedTierData.annualRatePercent}% APR
+                  {selectedTierData.durationDays > 0 ? ` (${selectedTierData.durationDays}-day lockup)` : " (no lockup - withdraw anytime)"}
+                </p>
+                <div className="flex flex-col gap-3">
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <Input
+                        type="number"
+                        placeholder={`Min ${parseFloat(selectedTierData.minStake).toLocaleString()} JCMOVES`}
+                        value={stakeAmount}
+                        onChange={e => setStakeAmount(e.target.value)}
+                        min={parseFloat(selectedTierData.minStake)}
+                        step="1"
+                        className="text-lg h-12"
+                      />
+                    </div>
+                    <Button
+                      onClick={() => setStakeAmount(walletBalance.toFixed(2))}
+                      variant="outline"
+                      className="h-12 px-4"
+                    >
+                      Max
+                    </Button>
                   </div>
-                  <Button
-                    onClick={() => setStakeAmount(walletBalance.toFixed(2))}
-                    variant="outline"
-                    size="sm"
-                  >
-                    Max
-                  </Button>
+                  <div className="text-sm text-muted-foreground">
+                    <p>Available: <span className="font-semibold text-foreground">{formatNumber(walletBalance)} JCMOVES</span></p>
+                    {stakeAmount && parseFloat(stakeAmount) > 0 && (
+                      <p className="text-green-500 font-medium mt-1">
+                        Estimated daily earnings: ~{formatNumber(parseFloat(stakeAmount) * parseFloat(selectedTierData.annualRatePercent) / 365 / 100)} JCMOVES/day
+                      </p>
+                    )}
+                  </div>
                   <Button
                     onClick={() => stakeMutation.mutate({ tierId: selectedTier, amount: parseFloat(stakeAmount) })}
                     disabled={!stakeAmount || parseFloat(stakeAmount) <= 0 || stakeMutation.isPending}
-                    className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white"
+                    className="w-full h-12 text-lg font-bold bg-gradient-to-r from-yellow-500 to-orange-500 text-white hover:from-yellow-600 hover:to-orange-600"
                   >
-                    {stakeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Lock className="h-4 w-4 mr-2" />}
+                    {stakeMutation.isPending ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <Lock className="h-5 w-5 mr-2" />}
                     Stake Tokens
                   </Button>
                 </div>
