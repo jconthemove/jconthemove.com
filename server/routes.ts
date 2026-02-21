@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import crypto from "crypto";
 import { storage } from "./storage";
 import { insertLeadSchema, insertContactSchema, insertCashoutRequestSchema, insertShopItemSchema, insertReviewSchema } from "@shared/schema";
 import { sendEmail, generateLeadNotificationEmail, generateContactNotificationEmail } from "./services/email";
@@ -107,6 +108,18 @@ async function ensureStakingTreasuryUser() {
   }
 }
 
+const approvalTokens = new Map<string, { userId: string; action: string; expiresAt: Date }>();
+
+function generateApprovalToken(userId: string, action: string): string {
+  const token = crypto.randomBytes(32).toString("hex");
+  approvalTokens.set(token, {
+    userId,
+    action,
+    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+  });
+  return token;
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Seed staking tiers and treasury user on startup (ensures production has them)
   await ensureStakingTiersSeeded();
@@ -122,6 +135,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
       service: "jc-on-the-move"
     });
   });
+
+  app.get("/api/approve-user", async (req, res) => {
+    try {
+      const token = req.query.token as string;
+      const action = req.query.action as string;
+      if (!token || !action) {
+        return res.status(400).send(renderApprovalPage("Invalid Link", "This approval link is missing required information.", "error"));
+      }
+      const tokenData = approvalTokens.get(token);
+      if (!tokenData) {
+        return res.status(400).send(renderApprovalPage("Link Expired", "This approval link has already been used or has expired.", "error"));
+      }
+      if (new Date() > tokenData.expiresAt) {
+        approvalTokens.delete(token);
+        return res.status(400).send(renderApprovalPage("Link Expired", "This approval link has expired. Please approve the user from the admin dashboard instead.", "error"));
+      }
+
+      const user = await storage.getUser(tokenData.userId);
+      if (!user) {
+        approvalTokens.delete(token);
+        return res.status(404).send(renderApprovalPage("User Not Found", "The user associated with this link no longer exists.", "error"));
+      }
+
+      if (action === "approve") {
+        await db.update(users).set({ status: "active" }).where(eq(users.id, tokenData.userId));
+        approvalTokens.delete(token);
+
+        try {
+          await sendEmail({
+            to: user.email,
+            from: process.env.COMPANY_EMAIL || "michigankid906@gmail.com",
+            subject: "Welcome to JC ON THE MOVE - Account Approved!",
+            text: `Hi ${user.firstName},\n\nYour account has been approved! You can now log in and start using JC ON THE MOVE.\n\nWelcome aboard!`,
+            html: `<div style="font-family: Arial, sans-serif; padding: 20px; max-width: 500px;">
+              <h2 style="color: #10b981;">Welcome to JC ON THE MOVE!</h2>
+              <p>Hi ${user.firstName},</p>
+              <p>Your account has been <strong style="color: #10b981;">approved</strong>! You can now log in and start using JC ON THE MOVE.</p>
+              <p>Welcome aboard!</p>
+            </div>`,
+          });
+        } catch (e) {}
+
+        return res.send(renderApprovalPage("Account Approved", `${user.firstName} ${user.lastName} (${user.email}) has been approved and can now access the platform.`, "success"));
+      } else if (action === "reject") {
+        await db.update(users).set({ status: "rejected" }).where(eq(users.id, tokenData.userId));
+        approvalTokens.delete(token);
+        return res.send(renderApprovalPage("Account Rejected", `${user.firstName} ${user.lastName} (${user.email}) has been rejected.`, "rejected"));
+      } else {
+        return res.status(400).send(renderApprovalPage("Invalid Action", "Unknown approval action.", "error"));
+      }
+    } catch (error) {
+      console.error("Approval endpoint error:", error);
+      return res.status(500).send(renderApprovalPage("Error", "Something went wrong processing this request. Please try again from the admin dashboard.", "error"));
+    }
+  });
+
+  function renderApprovalPage(title: string, message: string, type: "success" | "rejected" | "error"): string {
+    const color = type === "success" ? "#10b981" : type === "rejected" ? "#f59e0b" : "#ef4444";
+    const icon = type === "success" ? "&#10003;" : type === "rejected" ? "&#10007;" : "&#9888;";
+    return `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title} - JC ON THE MOVE</title></head>
+    <body style="font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #0f172a; color: white;">
+      <div style="text-align: center; padding: 40px; max-width: 450px; background: #1e293b; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+        <div style="font-size: 60px; margin-bottom: 16px; color: ${color};">${icon}</div>
+        <h1 style="color: ${color}; margin-bottom: 12px;">${title}</h1>
+        <p style="color: #94a3b8; line-height: 1.6;">${message}</p>
+        <a href="/" style="display: inline-block; margin-top: 20px; padding: 10px 24px; background: #2563eb; color: white; border-radius: 8px; text-decoration: none;">Go to Dashboard</a>
+      </div>
+    </body></html>`;
+  }
 
   // DEV-ONLY: Direct test endpoint for notifications (remove in production)
   if (process.env.NODE_ENV === 'development') {
@@ -346,11 +428,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       try {
         const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
+        const baseUrl = process.env.APP_URL || 'https://jconthemove.com';
+        const approveToken = generateApprovalToken(newUser.id, "approve");
+        const rejectToken = generateApprovalToken(newUser.id, "reject");
+        const approveUrl = `${baseUrl}/api/approve-user?token=${approveToken}&action=approve`;
+        const rejectUrl = `${baseUrl}/api/approve-user?token=${rejectToken}&action=reject`;
         await sendEmail({
           to: companyEmail,
           from: companyEmail,
           subject: `🆕 New Employee Registration: ${newUser.firstName} ${newUser.lastName}`,
-          text: `New employee account created and needs approval.\n\nName: ${newUser.firstName} ${newUser.lastName}\nEmail: ${newUser.email}\nPhone: ${newUser.phoneNumber || 'N/A'}\nStatus: ${newUser.status}\n\nLog in to the admin dashboard to approve this account.`,
+          text: `New employee account created and needs approval.\n\nName: ${newUser.firstName} ${newUser.lastName}\nEmail: ${newUser.email}\nPhone: ${newUser.phoneNumber || 'N/A'}\nStatus: ${newUser.status}\n\nApprove: ${approveUrl}\nReject: ${rejectUrl}`,
           html: `<div style="font-family: Arial, sans-serif; padding: 20px; max-width: 500px;">
             <h2 style="color: #2563eb;">🆕 New Employee Registration</h2>
             <p>A new employee account has been created and needs your approval.</p>
@@ -360,7 +447,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               <tr><td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #eee;">Phone</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${newUser.phoneNumber || 'N/A'}</td></tr>
               <tr><td style="padding: 8px; font-weight: bold;">Status</td><td style="padding: 8px; color: #f59e0b; font-weight: bold;">⏳ Pending Approval</td></tr>
             </table>
-            <p style="color: #666; font-size: 14px;">Log in to the admin dashboard to approve this account.</p>
+            <div style="margin: 24px 0; text-align: center;">
+              <a href="${approveUrl}" style="display: inline-block; padding: 12px 32px; background: #10b981; color: white; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px; margin-right: 12px;">✅ Approve</a>
+              <a href="${rejectUrl}" style="display: inline-block; padding: 12px 32px; background: #ef4444; color: white; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">❌ Reject</a>
+            </div>
+            <p style="color: #999; font-size: 12px; text-align: center;">These links expire in 7 days. You can also approve from the admin dashboard.</p>
           </div>`,
         });
         console.log(`📧 New employee registration notification sent for ${newUser.email}`);
@@ -634,11 +725,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       try {
         const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
+        const baseUrl = process.env.APP_URL || 'https://jconthemove.com';
+        const approveToken = generateApprovalToken(newUser.id, "approve");
+        const rejectToken = generateApprovalToken(newUser.id, "reject");
+        const approveUrl = `${baseUrl}/api/approve-user?token=${approveToken}&action=approve`;
+        const rejectUrl = `${baseUrl}/api/approve-user?token=${rejectToken}&action=reject`;
         await sendEmail({
           to: companyEmail,
           from: companyEmail,
           subject: `🆕 New Customer Registration: ${newUser.firstName} ${newUser.lastName}`,
-          text: `New customer account created.\n\nName: ${newUser.firstName} ${newUser.lastName}\nEmail: ${newUser.email}\nPhone: ${newUser.phoneNumber || 'N/A'}\nStatus: ${newUser.status}\n\nView in the admin dashboard.`,
+          text: `New customer account created.\n\nName: ${newUser.firstName} ${newUser.lastName}\nEmail: ${newUser.email}\nPhone: ${newUser.phoneNumber || 'N/A'}\nStatus: ${newUser.status}\n\nApprove: ${approveUrl}\nReject: ${rejectUrl}`,
           html: `<div style="font-family: Arial, sans-serif; padding: 20px; max-width: 500px;">
             <h2 style="color: #10b981;">🆕 New Customer Registration</h2>
             <p>A new customer account has been created.</p>
@@ -648,7 +744,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               <tr><td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #eee;">Phone</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${newUser.phoneNumber || 'N/A'}</td></tr>
               <tr><td style="padding: 8px; font-weight: bold;">Status</td><td style="padding: 8px; color: #10b981; font-weight: bold;">✅ Active</td></tr>
             </table>
-            <p style="color: #666; font-size: 14px;">View this customer in the admin dashboard.</p>
+            <div style="margin: 24px 0; text-align: center;">
+              <a href="${approveUrl}" style="display: inline-block; padding: 12px 32px; background: #10b981; color: white; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px; margin-right: 12px;">✅ Approve</a>
+              <a href="${rejectUrl}" style="display: inline-block; padding: 12px 32px; background: #ef4444; color: white; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">❌ Reject</a>
+            </div>
+            <p style="color: #999; font-size: 12px; text-align: center;">These links expire in 7 days. You can also manage from the admin dashboard.</p>
           </div>`,
         });
         console.log(`📧 New customer registration notification sent for ${newUser.email}`);
@@ -825,11 +925,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       try {
         const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
+        const baseUrl = process.env.APP_URL || 'https://jconthemove.com';
+        const approveToken = generateApprovalToken(newUser.id, "approve");
+        const rejectToken = generateApprovalToken(newUser.id, "reject");
+        const approveUrl = `${baseUrl}/api/approve-user?token=${approveToken}&action=approve`;
+        const rejectUrl = `${baseUrl}/api/approve-user?token=${rejectToken}&action=reject`;
         await sendEmail({
           to: companyEmail,
           from: companyEmail,
           subject: `🆕 New Account Registration: ${newUser.firstName} ${newUser.lastName}`,
-          text: `New account created.\n\nName: ${newUser.firstName} ${newUser.lastName}\nEmail: ${newUser.email}\nRole: ${newUser.role}\nStatus: ${newUser.status}\n\nView in the admin dashboard.`,
+          text: `New account created.\n\nName: ${newUser.firstName} ${newUser.lastName}\nEmail: ${newUser.email}\nRole: ${newUser.role}\nStatus: ${newUser.status}\n\nApprove: ${approveUrl}\nReject: ${rejectUrl}`,
           html: `<div style="font-family: Arial, sans-serif; padding: 20px; max-width: 500px;">
             <h2 style="color: #2563eb;">🆕 New Account Registration</h2>
             <p>A new account has been created.</p>
@@ -839,7 +944,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               <tr><td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #eee;">Role</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${newUser.role}</td></tr>
               <tr><td style="padding: 8px; font-weight: bold;">Status</td><td style="padding: 8px; color: #10b981; font-weight: bold;">✅ ${newUser.status}</td></tr>
             </table>
-            <p style="color: #666; font-size: 14px;">View this account in the admin dashboard.</p>
+            <div style="margin: 24px 0; text-align: center;">
+              <a href="${approveUrl}" style="display: inline-block; padding: 12px 32px; background: #10b981; color: white; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px; margin-right: 12px;">✅ Approve</a>
+              <a href="${rejectUrl}" style="display: inline-block; padding: 12px 32px; background: #ef4444; color: white; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">❌ Reject</a>
+            </div>
+            <p style="color: #999; font-size: 12px; text-align: center;">These links expire in 7 days. You can also manage from the admin dashboard.</p>
           </div>`,
         });
         console.log(`📧 New registration notification sent for ${newUser.email}`);
