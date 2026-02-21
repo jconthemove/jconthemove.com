@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, TrendingUp, Lock, Unlock, Coins, Clock, ArrowLeft, Sparkles, Diamond, PartyPopper } from "lucide-react";
+import { Loader2, TrendingUp, Lock, Unlock, Coins, Clock, ArrowLeft, Sparkles, Diamond, PartyPopper, Shield, AlertTriangle, Activity, Gauge } from "lucide-react";
 import { Link } from "wouter";
 import type { StakingTier, Stake } from "@shared/schema";
 
@@ -15,6 +15,16 @@ interface DiamondCelebration {
   active: boolean;
   daysLeft: number;
   bonusPercent: number;
+}
+
+interface HealthData {
+  healthScore: number;
+  healthStatus: "critical" | "warning" | "healthy" | "strong";
+  runwayDays: number;
+  aprMultiplier: number;
+  treasuryBalance: number;
+  totalStaked: number;
+  dailyObligations: number;
 }
 
 type EnrichedStake = Stake & { tier: StakingTier; diamondCelebration?: DiamondCelebration };
@@ -68,6 +78,12 @@ export default function StakingPage() {
       if (!res.ok) return { tokenBalance: "0" };
       return res.json();
     },
+  });
+
+  const { data: healthData } = useQuery<HealthData>({
+    queryKey: ["/api/staking/health"],
+    enabled: isAuthenticated,
+    refetchInterval: 30000,
   });
 
   const stakeMutation = useMutation({
@@ -190,6 +206,133 @@ export default function StakingPage() {
           </Card>
         </div>
 
+        {healthData && (
+          <Card className={`border-2 ${
+            healthData.healthStatus === "strong" ? "border-green-500/40 bg-gradient-to-br from-green-950/30 to-emerald-950/20" :
+            healthData.healthStatus === "healthy" ? "border-blue-500/40 bg-gradient-to-br from-blue-950/30 to-cyan-950/20" :
+            healthData.healthStatus === "warning" ? "border-yellow-500/40 bg-gradient-to-br from-yellow-950/30 to-amber-950/20" :
+            "border-red-500/40 bg-gradient-to-br from-red-950/30 to-rose-950/20"
+          }`}>
+            <CardContent className="p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-lg flex items-center gap-2">
+                  <Activity className="h-5 w-5" />
+                  Treasury Health
+                </h3>
+                <Badge className={`text-xs font-bold ${
+                  healthData.healthStatus === "strong" ? "bg-green-500/20 text-green-400 border-green-500/30" :
+                  healthData.healthStatus === "healthy" ? "bg-blue-500/20 text-blue-400 border-blue-500/30" :
+                  healthData.healthStatus === "warning" ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" :
+                  "bg-red-500/20 text-red-400 border-red-500/30"
+                }`}>
+                  {healthData.healthStatus === "strong" && <Shield className="h-3 w-3 mr-1" />}
+                  {healthData.healthStatus === "warning" && <AlertTriangle className="h-3 w-3 mr-1" />}
+                  {healthData.healthStatus === "critical" && <AlertTriangle className="h-3 w-3 mr-1" />}
+                  {healthData.healthStatus.toUpperCase()}
+                </Badge>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="rounded-lg bg-black/20 dark:bg-black/30 p-3 text-center">
+                  <div className="flex items-center justify-center gap-1 mb-1">
+                    <Gauge className="h-3.5 w-3.5 text-muted-foreground" />
+                    <p className="text-[11px] text-muted-foreground">Health Score</p>
+                  </div>
+                  <p className={`text-2xl font-bold ${
+                    healthData.healthScore >= 2 ? "text-green-400" :
+                    healthData.healthScore >= 1.5 ? "text-blue-400" :
+                    healthData.healthScore >= 1 ? "text-yellow-400" :
+                    "text-red-400"
+                  }`}>
+                    {healthData.healthScore >= 999 ? "---" : `${healthData.healthScore.toFixed(1)}x`}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">Reserve / Staked</p>
+                </div>
+
+                <div className="rounded-lg bg-black/20 dark:bg-black/30 p-3 text-center">
+                  <div className="flex items-center justify-center gap-1 mb-1">
+                    <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                    <p className="text-[11px] text-muted-foreground">Runway</p>
+                  </div>
+                  <p className={`text-2xl font-bold ${
+                    healthData.runwayDays > 365 ? "text-green-400" :
+                    healthData.runwayDays > 180 ? "text-blue-400" :
+                    healthData.runwayDays > 90 ? "text-yellow-400" :
+                    "text-red-400"
+                  }`}>
+                    {healthData.runwayDays >= 99999 ? "---" :
+                     healthData.runwayDays > 999 ? `${Math.floor(healthData.runwayDays / 365)}y+` :
+                     `${healthData.runwayDays}d`}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">Days of payouts</p>
+                </div>
+
+                <div className="rounded-lg bg-black/20 dark:bg-black/30 p-3 text-center">
+                  <div className="flex items-center justify-center gap-1 mb-1">
+                    <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
+                    <p className="text-[11px] text-muted-foreground">APR Status</p>
+                  </div>
+                  <p className={`text-2xl font-bold ${
+                    healthData.aprMultiplier >= 1 ? "text-green-400" :
+                    healthData.aprMultiplier >= 0.75 ? "text-yellow-400" :
+                    "text-red-400"
+                  }`}>
+                    {(healthData.aprMultiplier * 100).toFixed(0)}%
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {healthData.aprMultiplier >= 1 ? "Full rates active" : "Rates adjusted"}
+                  </p>
+                </div>
+
+                <div className="rounded-lg bg-black/20 dark:bg-black/30 p-3 text-center">
+                  <div className="flex items-center justify-center gap-1 mb-1">
+                    <Coins className="h-3.5 w-3.5 text-muted-foreground" />
+                    <p className="text-[11px] text-muted-foreground">Daily Payouts</p>
+                  </div>
+                  <p className="text-2xl font-bold text-white">
+                    {healthData.dailyObligations > 0 ? formatNumber(healthData.dailyObligations) : "---"}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">JCMOVES/day</p>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Treasury Reserve</span>
+                  <span className="font-medium">{formatNumber(healthData.treasuryBalance)} JCMOVES</span>
+                </div>
+                <div className="w-full bg-black/30 rounded-full h-2.5 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      healthData.healthScore >= 2 ? "bg-gradient-to-r from-green-500 to-emerald-400" :
+                      healthData.healthScore >= 1.5 ? "bg-gradient-to-r from-blue-500 to-cyan-400" :
+                      healthData.healthScore >= 1 ? "bg-gradient-to-r from-yellow-500 to-amber-400" :
+                      "bg-gradient-to-r from-red-500 to-rose-400"
+                    }`}
+                    style={{ width: `${Math.min(100, healthData.healthScore >= 999 ? 100 : (healthData.healthScore / 3) * 100)}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <span>0x</span>
+                  <span className="text-yellow-500">1.5x</span>
+                  <span className="text-green-500">2.0x</span>
+                  <span>3.0x+</span>
+                </div>
+              </div>
+
+              {healthData.aprMultiplier < 1 && (
+                <div className="rounded-lg bg-yellow-500/10 border border-yellow-500/30 p-2.5 text-xs text-yellow-400 flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>
+                    APR rates are currently adjusted to {(healthData.aprMultiplier * 100).toFixed(0)}% of base rates due to treasury health.
+                    Rates will return to full when the health score reaches 2.0x or above.
+                  </span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -210,10 +353,13 @@ export default function StakingPage() {
             )}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               {tiers.map(tier => {
-                const dailyRate = parseFloat(tier.annualRatePercent) / 365;
+                const aprMultiplier = healthData?.aprMultiplier ?? 1;
+                const effectiveApr = parseFloat(tier.annualRatePercent) * aprMultiplier;
+                const dailyRate = effectiveApr / 365;
                 const isSelected = selectedTier === tier.id;
                 const isFlexible = tier.durationDays === 0;
                 const isDiamondTier = tier.name === "Diamond";
+                const isAdjusted = aprMultiplier < 1;
                 const tierColors: Record<string, string> = {
                   "Flexible": "from-gray-500/20 to-slate-500/20",
                   "Bronze": "from-orange-800/20 to-amber-700/20",
@@ -242,8 +388,14 @@ export default function StakingPage() {
                           {tier.name}
                         </Badge>
                       )}
-                      <div className="text-xl font-bold text-yellow-500">{tier.annualRatePercent}%</div>
-                      <p className="text-[10px] text-muted-foreground">APR</p>
+                      <div className="text-xl font-bold text-yellow-500">
+                        {isAdjusted ? `${effectiveApr.toFixed(1)}%` : `${tier.annualRatePercent}%`}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        {isAdjusted ? (
+                          <span className="line-through opacity-50">{tier.annualRatePercent}%</span>
+                        ) : "APR"}
+                      </p>
                       {isDiamondTier && (
                         <div className="text-[9px] font-bold text-cyan-400 bg-cyan-500/10 rounded-full px-2 py-0.5 flex items-center justify-center gap-1">
                           <PartyPopper className="h-3 w-3" /> +10% Bonus (90 days)
@@ -333,7 +485,10 @@ export default function StakingPage() {
                     <p>Available: <span className="font-semibold text-foreground">{formatNumber(walletBalance)} JCMOVES</span></p>
                     {stakeAmount && parseFloat(stakeAmount) > 0 && (
                       <p className="text-green-500 font-medium mt-1">
-                        Estimated daily earnings: ~{formatNumber(parseFloat(stakeAmount) * parseFloat(selectedTierData.annualRatePercent) / 365 / 100)} JCMOVES/day
+                        Estimated daily earnings: ~{formatNumber(parseFloat(stakeAmount) * (parseFloat(selectedTierData.annualRatePercent) * (healthData?.aprMultiplier ?? 1)) / 365 / 100)} JCMOVES/day
+                        {healthData && healthData.aprMultiplier < 1 && (
+                          <span className="text-yellow-500 text-xs ml-1">(adjusted rate)</span>
+                        )}
                       </p>
                     )}
                   </div>
@@ -546,6 +701,7 @@ export default function StakingPage() {
               <li>3. Stake your JCMOVES tokens to start earning daily rewards</li>
               <li>4. Claim your rewards anytime to add them to your wallet</li>
               <li>5. Unstake anytime with no penalty - your full deposit is always returned</li>
+              <li>6. APR rates adjust dynamically based on treasury health - ensuring long-term sustainability</li>
               <li className="text-cyan-500 font-medium">New Diamond tier celebration: earn 40% APR (30% + 10% bonus) for the first 90 days!</li>
             </ul>
           </CardContent>

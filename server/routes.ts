@@ -9029,19 +9029,47 @@ Thank you for your business!
         amount: stakes.amount,
         totalEarned: stakes.totalEarned,
         tierName: stakingTiers.name,
+        dailyRate: stakes.dailyRate,
       }).from(stakes).innerJoin(stakingTiers, eq(stakes.tierId, stakingTiers.id));
 
       const activeStakes = allStakes.filter(s => s.status === "active");
       const totalActiveStaked = activeStakes.reduce((sum, s) => sum + parseFloat(s.amount), 0);
       const totalRewardsPaid = allStakes.reduce((sum, s) => sum + parseFloat(s.totalEarned || "0"), 0);
+
+      const dailyObligations = activeStakes.reduce((sum, s) => {
+        return sum + parseFloat(s.amount) * parseFloat(s.dailyRate);
+      }, 0);
+      const monthlyObligations = dailyObligations * 30;
+      const yearlyObligations = dailyObligations * 365;
+
+      const treasuryBal = parseFloat(treasuryBalance.tokenBalance);
+      const healthScore = totalActiveStaked > 0 ? treasuryBal / totalActiveStaked : 999;
+      const coverageRatio = monthlyObligations > 0 ? treasuryBal / monthlyObligations : 999;
+      const runwayDays = dailyObligations > 0 ? Math.floor(treasuryBal / dailyObligations) : 99999;
+
+      let healthStatus: "critical" | "warning" | "healthy" | "strong" = "strong";
+      if (healthScore < 1.0) healthStatus = "critical";
+      else if (healthScore < 1.5) healthStatus = "warning";
+      else if (healthScore < 2.0) healthStatus = "healthy";
+
+      let aprMultiplier = 1.0;
+      if (healthScore < 0.5) aprMultiplier = 0.25;
+      else if (healthScore < 1.0) aprMultiplier = 0.5;
+      else if (healthScore < 1.5) aprMultiplier = 0.75;
+      else if (healthScore < 2.0) aprMultiplier = 0.9;
+
       const tierBreakdown = tiers.map(tier => {
         const tierStakes = activeStakes.filter(s => s.tierName === tier.name);
+        const tierStaked = tierStakes.reduce((sum, s) => sum + parseFloat(s.amount), 0);
+        const tierDailyObligation = tierStakes.reduce((sum, s) => sum + parseFloat(s.amount) * parseFloat(s.dailyRate), 0);
         return {
           name: tier.name,
           durationDays: tier.durationDays,
-          apr: tier.annualRatePercent,
+          baseApr: tier.annualRatePercent,
+          effectiveApr: (parseFloat(tier.annualRatePercent) * aprMultiplier).toFixed(2),
           activeStakes: tierStakes.length,
-          totalStaked: tierStakes.reduce((sum, s) => sum + parseFloat(s.amount), 0).toFixed(2),
+          totalStaked: tierStaked.toFixed(2),
+          dailyObligation: tierDailyObligation.toFixed(4),
         };
       });
 
@@ -9054,9 +9082,67 @@ Thank you for your business!
         activeStakeCount: activeStakes.length,
         totalStakeCount: allStakes.length,
         tierBreakdown,
+        healthMetrics: {
+          healthScore: parseFloat(healthScore.toFixed(2)),
+          healthStatus,
+          coverageRatio: parseFloat(coverageRatio.toFixed(2)),
+          runwayDays,
+          dailyObligations: parseFloat(dailyObligations.toFixed(4)),
+          monthlyObligations: parseFloat(monthlyObligations.toFixed(2)),
+          yearlyObligations: parseFloat(yearlyObligations.toFixed(2)),
+          aprMultiplier,
+          thresholds: {
+            critical: "< 1.0x (APR reduced 50-75%)",
+            warning: "1.0x - 1.5x (APR reduced 10-25%)",
+            healthy: "1.5x - 2.0x (APR reduced up to 10%)",
+            strong: "> 2.0x (Full APR rates)",
+          },
+        },
       });
     } catch (error: any) {
       console.error("Error fetching staking treasury:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/staking/health", isAuthenticated, async (_req: any, res) => {
+    try {
+      const treasuryBalance = await storage.getStakingTreasuryBalance();
+      const allStakes = await db.select({
+        status: stakes.status,
+        amount: stakes.amount,
+        dailyRate: stakes.dailyRate,
+      }).from(stakes).innerJoin(stakingTiers, eq(stakes.tierId, stakingTiers.id));
+
+      const activeStakes = allStakes.filter(s => s.status === "active");
+      const totalActiveStaked = activeStakes.reduce((sum, s) => sum + parseFloat(s.amount), 0);
+      const dailyObligations = activeStakes.reduce((sum, s) => sum + parseFloat(s.amount) * parseFloat(s.dailyRate), 0);
+
+      const treasuryBal = parseFloat(treasuryBalance.tokenBalance);
+      const healthScore = totalActiveStaked > 0 ? treasuryBal / totalActiveStaked : 999;
+      const runwayDays = dailyObligations > 0 ? Math.floor(treasuryBal / dailyObligations) : 99999;
+
+      let healthStatus: "critical" | "warning" | "healthy" | "strong" = "strong";
+      if (healthScore < 1.0) healthStatus = "critical";
+      else if (healthScore < 1.5) healthStatus = "warning";
+      else if (healthScore < 2.0) healthStatus = "healthy";
+
+      let aprMultiplier = 1.0;
+      if (healthScore < 0.5) aprMultiplier = 0.25;
+      else if (healthScore < 1.0) aprMultiplier = 0.5;
+      else if (healthScore < 1.5) aprMultiplier = 0.75;
+      else if (healthScore < 2.0) aprMultiplier = 0.9;
+
+      res.json({
+        healthScore: parseFloat(healthScore.toFixed(2)),
+        healthStatus,
+        runwayDays: Math.min(runwayDays, 99999),
+        aprMultiplier,
+        treasuryBalance: parseFloat(treasuryBal.toFixed(2)),
+        totalStaked: parseFloat(totalActiveStaked.toFixed(2)),
+        dailyObligations: parseFloat(dailyObligations.toFixed(4)),
+      });
+    } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
