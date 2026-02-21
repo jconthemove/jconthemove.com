@@ -2929,6 +2929,14 @@ export class DatabaseStorage implements IStorage {
     if (stake.status !== "active") throw new Error("Stake is already unstaked");
 
     const now = new Date();
+
+    if (tier.durationDays > 0) {
+      const endsAt = new Date(stake.endsAt);
+      if (now < endsAt) {
+        const remaining = Math.ceil((endsAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        throw new Error(`This ${tier.name} stake is locked for ${remaining} more day${remaining !== 1 ? "s" : ""}. You can unstake after the lockup period ends.`);
+      }
+    }
     const lastPayout = new Date(stake.lastPayoutAt);
     const daysSinceLastPayout = (now.getTime() - lastPayout.getTime()) / (1000 * 60 * 60 * 24);
     const stakeAmount = parseFloat(stake.amount);

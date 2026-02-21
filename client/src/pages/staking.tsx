@@ -339,7 +339,7 @@ export default function StakingPage() {
               <Coins className="h-5 w-5 text-yellow-500" />
               Staking Tiers
             </CardTitle>
-            <CardDescription>Tap a tier below to select it, then enter the amount you want to stake. Higher tiers earn better annual returns. Unstake anytime.</CardDescription>
+            <CardDescription>Tap a tier below to select it, then enter the amount you want to stake. Higher tiers earn better annual returns. Lockup tiers are locked until their timer expires.</CardDescription>
           </CardHeader>
           <CardContent>
             {tiersLoading && <div className="flex items-center justify-center py-8 gap-2"><Loader2 className="h-5 w-5 animate-spin" /><span className="text-muted-foreground">Loading tiers...</span></div>}
@@ -447,7 +447,7 @@ export default function StakingPage() {
                 </h3>
                 <p className="text-sm text-muted-foreground mb-4">
                   Enter how many JCMOVES you want to stake at {selectedTierData.annualRatePercent}% APR
-                  {selectedTierData.durationDays > 0 ? ` (${selectedTierData.durationDays}-day lockup)` : " (no lockup - withdraw anytime)"}
+                  {selectedTierData.durationDays > 0 ? ` (locked for ${selectedTierData.durationDays} days - cannot withdraw early)` : " (no lockup - withdraw anytime)"}
                 </p>
                 {selectedTierData.name === "Diamond" && (
                   <div className="mb-4 p-3 rounded-lg bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/30">
@@ -645,16 +645,24 @@ export default function StakingPage() {
                         {claimMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Coins className="h-3 w-3 mr-1" />}
                         Claim {formatNumber(pending)}
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => unstakeMutation.mutate(stake.id)}
-                        disabled={unstakeMutation.isPending}
-                        className="border-gray-600 text-gray-300 hover:bg-gray-800 hover:text-white"
-                      >
-                        {unstakeMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Unlock className="h-3 w-3 mr-1" />}
-                        Unstake
-                      </Button>
+                      {(() => {
+                        const isLocked = !isFlexible && remaining > 0;
+                        return (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => unstakeMutation.mutate(stake.id)}
+                            disabled={unstakeMutation.isPending || isLocked}
+                            className={isLocked 
+                              ? "border-red-800/50 text-red-400/70 cursor-not-allowed opacity-60" 
+                              : "border-gray-600 text-gray-300 hover:bg-gray-800 hover:text-white"}
+                            title={isLocked ? `Locked for ${remaining} more days` : "Withdraw your staked tokens"}
+                          >
+                            {unstakeMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : isLocked ? <Lock className="h-3 w-3 mr-1" /> : <Unlock className="h-3 w-3 mr-1" />}
+                            {isLocked ? `Locked (${remaining}d)` : "Unstake"}
+                          </Button>
+                        );
+                      })()}
                     </div>
                   </div>
                 );
@@ -700,7 +708,7 @@ export default function StakingPage() {
               <li>2. Higher lockup periods earn better annual returns (5% to 30% APR)</li>
               <li>3. Stake your JCMOVES tokens to start earning daily rewards</li>
               <li>4. Claim your rewards anytime to add them to your wallet</li>
-              <li>5. Unstake anytime with no penalty - your full deposit is always returned</li>
+              <li>5. Lockup tiers (Bronze, Silver, Gold, Diamond) are locked until the timer expires. Flexible tier can be withdrawn anytime.</li>
               <li>6. APR rates adjust dynamically based on treasury health - ensuring long-term sustainability</li>
               <li className="text-cyan-500 font-medium">New Diamond tier celebration: earn 40% APR (30% + 10% bonus) for the first 90 days!</li>
             </ul>
