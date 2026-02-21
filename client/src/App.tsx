@@ -89,10 +89,34 @@ function PageWrapper({ component: Component }: { component: any }) {
 
 // Main app for authenticated users - Unified routing for all devices
 function AuthenticatedApp() {
-  const { user } = useAuth();
+  const { user, isPending } = useAuth();
+  const [, setLocation] = useLocation();
   
   // Determine home page based on user role
   const HomePage = user?.role === 'customer' ? CustomerPortal : EmployeeHomePage;
+  
+  // Redirect pending users to pending-approval page
+  if (isPending) {
+    return (
+      <ComplianceCheck>
+        <div className="min-h-screen bg-background text-foreground font-sans">
+          <Switch>
+            <Route path="/pending-approval">
+              <PendingApprovalPage />
+            </Route>
+            <Route path="/customer-portal">
+              <RouteGuard allowedRoles={['customer', 'admin']} allowPending={true}>
+                <PageWrapper component={CustomerPortal} />
+              </RouteGuard>
+            </Route>
+            <Route>
+              <Redirect to="/pending-approval" />
+            </Route>
+          </Switch>
+        </div>
+      </ComplianceCheck>
+    );
+  }
   
   return (
     <ComplianceCheck>
@@ -157,7 +181,7 @@ function AuthenticatedApp() {
             <PageWrapper component={ProfilePage} />
           </Route>
           <Route path="/customer-portal">
-            <RouteGuard allowedRoles={['customer', 'admin']}>
+            <RouteGuard allowedRoles={['customer', 'admin']} allowPending={true}>
               <PageWrapper component={CustomerPortal} />
             </RouteGuard>
           </Route>

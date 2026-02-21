@@ -26,24 +26,24 @@ export function useAuth() {
     },
   });
 
-  // Helper function to check if user has admin level permissions
   const hasAdminAccess = user?.role === 'admin' || user?.role === 'business_owner';
-  
-  // Business owner access for Treasury functionality
   const isKnownBusinessOwner = user?.email === 'upmichiganstatemovers@gmail.com' || user?.role === 'business_owner';
+  const isPending = user?.status === 'pending';
+  const isApproved = user?.status === 'active' || user?.status === 'approved';
   
   return {
     user,
     isLoading,
     isAuthenticated: !!user,
+    isPending,
+    isApproved,
     isEmployee: user?.role === 'employee',
     isAdmin: user?.role === 'admin',
     isCustomer: user?.role === 'customer',
-    // Treasury access for both admin and business_owner roles
     hasAdminAccess,
     hasManagementAccess: hasAdminAccess,
     canManageInvitations: hasAdminAccess,
-    canAccessTreasury: hasAdminAccess || isKnownBusinessOwner, // Both admin and business_owner can access treasury
+    canAccessTreasury: hasAdminAccess || isKnownBusinessOwner,
     canViewAllLeads: hasAdminAccess,
   };
 }

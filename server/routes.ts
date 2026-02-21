@@ -4,7 +4,7 @@ import crypto from "crypto";
 import { storage } from "./storage";
 import { insertLeadSchema, insertContactSchema, insertCashoutRequestSchema, insertShopItemSchema, insertReviewSchema } from "@shared/schema";
 import { sendEmail, generateLeadNotificationEmail, generateContactNotificationEmail } from "./services/email";
-import { setupAuth, isAuthenticated } from "./auth";
+import { setupAuth, isAuthenticated, isAuthenticatedAllowPending } from "./auth";
 import bcrypt from "bcrypt";
 // REMOVED: Daily check-in service replaced by unified mining system with streaks
 // import { dailyCheckinService } from "./services/daily-checkin";
@@ -1515,7 +1515,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   };
 
   // Auth routes
-  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+  app.get('/api/auth/user', isAuthenticatedAllowPending, async (req: any, res) => {
     try {
       const userId = (req.session as any).userId;
       console.log(`✅ Authentication successful - Fetching user data for userId: ${userId}`);
@@ -1538,7 +1538,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update user compliance (age verification and TOS)
-  app.post('/api/auth/user/compliance', isAuthenticated, async (req: any, res) => {
+  app.post('/api/auth/user/compliance', isAuthenticatedAllowPending, async (req: any, res) => {
     try {
       const userId = (req.session as any).userId;
       const { dateOfBirth, tosAccepted } = req.body;
@@ -2495,7 +2495,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Customer endpoint to fetch only their own job requests (MUST be before :id route)
-  app.get("/api/leads/my-requests", isAuthenticated, async (req: any, res) => {
+  app.get("/api/leads/my-requests", isAuthenticatedAllowPending, async (req: any, res) => {
     try {
       const userId = (req.session as any).userId;
       if (!userId) {

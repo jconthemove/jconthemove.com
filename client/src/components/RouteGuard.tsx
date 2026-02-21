@@ -5,62 +5,60 @@ import { useAuth } from '@/hooks/useAuth';
 interface RouteGuardProps {
   children: React.ReactNode;
   allowedRoles: string[];
+  allowPending?: boolean;
 }
 
-export function RouteGuard({ children, allowedRoles }: RouteGuardProps) {
-  const { user, isLoading } = useAuth();
+export function RouteGuard({ children, allowedRoles, allowPending = false }: RouteGuardProps) {
+  const { user, isLoading, isPending } = useAuth();
   const [, setLocation] = useLocation();
 
   useEffect(() => {
     if (!isLoading && user) {
-      // Treat missing or unknown roles as unauthorized
       const userRole = user.role;
       
       if (!userRole || !allowedRoles.includes(userRole)) {
-        // Redirect unauthorized users back to home
         setLocation('/');
         return;
       }
       
-      // For employee role, check if they're approved
-      // Admins always have access
-      // Consider both isApproved flag and status field (active/approved are both valid)
+      if (isPending && !allowPending) {
+        setLocation('/pending-approval');
+        return;
+      }
+
       const isUserApproved = user.isApproved || user.status === 'active' || user.status === 'approved';
       
-      if (userRole === 'employee' && !isUserApproved) {
-        // Redirect unapproved employees to pending approval page
+      if (userRole === 'employee' && !isUserApproved && !isPending) {
         setLocation('/pending-approval');
         return;
       }
       
-      // For customer role, check if they're approved
-      if (userRole === 'customer' && !isUserApproved) {
-        // Redirect unapproved customers to pending approval page
+      if (userRole === 'customer' && !isUserApproved && !isPending) {
         setLocation('/pending-approval');
+        return;
       }
     }
-  }, [user, isLoading, allowedRoles, setLocation]);
+  }, [user, isLoading, allowedRoles, allowPending, isPending, setLocation]);
 
-  // Show nothing while checking authorization
   if (isLoading) {
     return null;
   }
 
-  // If user doesn't have a valid role or the right role, don't render the component
   if (!user || !user.role || !allowedRoles.includes(user.role)) {
     return null;
   }
 
-  // Check if user is approved (consider both isApproved and status)
+  if (isPending && !allowPending) {
+    return null;
+  }
+
   const isUserApproved = user.isApproved || user.status === 'active' || user.status === 'approved';
   
-  // For employee role, check if they're approved (admins bypass this check)
-  if (user.role === 'employee' && !isUserApproved) {
+  if (user.role === 'employee' && !isUserApproved && !isPending) {
     return null;
   }
   
-  // For customer role, check if they're approved
-  if (user.role === 'customer' && !isUserApproved) {
+  if (user.role === 'customer' && !isUserApproved && !isPending) {
     return null;
   }
 
