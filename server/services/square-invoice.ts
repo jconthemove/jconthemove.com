@@ -31,6 +31,10 @@ export class SquareInvoiceService {
       return this.locationId;
     } catch (error: any) {
       console.error("Error fetching Square locations:", error);
+      const env = process.env.SQUARE_ENVIRONMENT || 'sandbox';
+      if (error.message?.includes('401') || error.message?.includes('UNAUTHORIZED') || error.message?.includes('AUTHENTICATION_ERROR')) {
+        throw new Error(`Square authentication failed. Your access token may be invalid or expired. Make sure SQUARE_ACCESS_TOKEN matches your ${env} environment. Get a new token from developer.squareup.com.`);
+      }
       throw new Error(`Failed to get Square location: ${error.message}`);
     }
   }

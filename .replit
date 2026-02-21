@@ -48,3 +48,4 @@ defaultBucketID = "replit-objstore-a9baa404-581c-4bac-9fcf-ce0cab96dc69"
 [userenv]
 
 [userenv.shared]
+SQUARE_ENVIRONMENT = "production"

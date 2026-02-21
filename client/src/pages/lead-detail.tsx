@@ -8,12 +8,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Mail, Phone, MapPin, Calendar, Truck, Users, DollarSign, Award, TrendingUp, CheckCircle, Circle, Clock, Star, ExternalLink, Sparkles } from "lucide-react";
+import { ArrowLeft, Mail, Phone, MapPin, Calendar, Truck, Users, DollarSign, Award, TrendingUp, CheckCircle, Circle, Clock, Star, ExternalLink, Sparkles, Send, FileText, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { CrewSuggestionsDialog } from "@/components/crew-suggestions-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 interface Lead {
   id: string;
@@ -79,6 +81,10 @@ export default function LeadDetailPage() {
   const [tokenAllocation, setTokenAllocation] = useState("");
   const [isCheckingIn, setIsCheckingIn] = useState(false);
   const [showCrewSuggestions, setShowCrewSuggestions] = useState(false);
+  const [showInvoiceDialog, setShowInvoiceDialog] = useState(false);
+  const [invoiceAmount, setInvoiceAmount] = useState("");
+  const [invoiceDescription, setInvoiceDescription] = useState("");
+  const { hasAdminAccess } = useAuth();
 
   const { data: lead, isLoading, isError, error } = useQuery<Lead>({
     queryKey: ["/api/leads", params?.id],
@@ -140,6 +146,41 @@ export default function LeadDetailPage() {
       toast({
         title: "Error",
         description: "Failed to update lead",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const createInvoiceMutation = useMutation({
+    mutationFn: async () => {
+      const amount = parseFloat(invoiceAmount);
+      if (!amount || amount <= 0) throw new Error("Please enter a valid amount");
+      return await apiRequest("POST", `/api/invoices/lead/${params?.id}`, {
+        amount,
+        description: invoiceDescription || `${lead?.serviceType} - ${lead?.firstName} ${lead?.lastName}`,
+      });
+    },
+    onSuccess: async (response) => {
+      const data = await response.json();
+      toast({
+        title: "Invoice Sent!",
+        description: data.invoiceUrl 
+          ? "Invoice has been created and sent to the customer via Square." 
+          : "Invoice created successfully.",
+      });
+      setShowInvoiceDialog(false);
+      setInvoiceAmount("");
+      setInvoiceDescription("");
+      queryClient.invalidateQueries({ queryKey: ["/api/leads", params?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      if (data.invoiceUrl) {
+        window.open(data.invoiceUrl, '_blank');
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to create invoice",
+        description: error.message || "Something went wrong",
         variant: "destructive",
       });
     },
@@ -717,6 +758,55 @@ export default function LeadDetailPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Send Invoice - Admin Only */}
+            {hasAdminAccess && (
+              <Card className="border-emerald-500/30 bg-gradient-to-br from-emerald-50/50 to-white dark:from-emerald-950/20 dark:to-background">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                    Invoice
+                  </CardTitle>
+                  <CardDescription>Send a Square invoice to the customer for payment</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="p-3 bg-muted/50 rounded-lg space-y-1">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Customer</span>
+                      <span className="font-medium">{lead.firstName} {lead.lastName}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Email</span>
+                      <span className="font-medium">{lead.email}</span>
+                    </div>
+                    {lead.totalPrice && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Quote Total</span>
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400">${parseFloat(lead.totalPrice).toFixed(2)}</span>
+                      </div>
+                    )}
+                    {!lead.totalPrice && lead.basePrice && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Base Price</span>
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400">${parseFloat(lead.basePrice).toFixed(2)}</span>
+                      </div>
+                    )}
+                  </div>
+                  <Button
+                    onClick={() => {
+                      const price = lead.totalPrice || lead.basePrice || "";
+                      setInvoiceAmount(price ? parseFloat(price).toString() : "");
+                      setInvoiceDescription(`${lead.serviceType} - ${lead.firstName} ${lead.lastName}`);
+                      setShowInvoiceDialog(true);
+                    }}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                  >
+                    <Send className="h-4 w-4 mr-2" />
+                    Send Invoice via Square
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           {/* Sidebar - Potential Earnings & Rewards */}
@@ -849,6 +939,67 @@ export default function LeadDetailPage() {
         open={showCrewSuggestions}
         onOpenChange={setShowCrewSuggestions}
       />
+
+      {/* Send Invoice Dialog */}
+      <Dialog open={showInvoiceDialog} onOpenChange={setShowInvoiceDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-emerald-500" />
+              Send Invoice via Square
+            </DialogTitle>
+            <DialogDescription>
+              This will create a Square invoice and email it to {lead.firstName} {lead.lastName} ({lead.email}) for payment.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>Amount ($)</Label>
+              <div className="relative">
+                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  className="pl-9"
+                  value={invoiceAmount}
+                  onChange={(e) => setInvoiceAmount(e.target.value)}
+                  placeholder="Enter invoice amount"
+                />
+              </div>
+            </div>
+            <div>
+              <Label>Description</Label>
+              <Input
+                value={invoiceDescription}
+                onChange={(e) => setInvoiceDescription(e.target.value)}
+                placeholder="Service description"
+              />
+            </div>
+            <div className="p-3 bg-muted rounded-lg text-sm space-y-1">
+              <p className="font-medium">Payment methods accepted:</p>
+              <p className="text-muted-foreground">Credit/Debit Card, Bank Transfer, Cash App Pay</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowInvoiceDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => createInvoiceMutation.mutate()}
+              disabled={createInvoiceMutation.isPending || !invoiceAmount || parseFloat(invoiceAmount) <= 0}
+              className="bg-emerald-600 hover:bg-emerald-700"
+            >
+              {createInvoiceMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4 mr-2" />
+              )}
+              {createInvoiceMutation.isPending ? "Sending..." : "Send Invoice"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
