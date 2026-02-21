@@ -205,6 +205,111 @@ export async function registerRoutes(app: Express): Promise<Server> {
     </body></html>`;
   }
 
+  // Admin: Resend approval email for a user
+  app.post("/api/admin/resend-approval-email", isAuthenticated, async (req: any, res) => {
+    try {
+      const adminUser = (req as any).user;
+      if (adminUser.role !== 'admin' && adminUser.role !== 'business_owner') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { userId } = req.body;
+      if (!userId) {
+        return res.status(400).json({ error: "userId is required" });
+      }
+
+      const targetUser = await storage.getUser(userId);
+      if (!targetUser) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
+      const baseUrl = process.env.APP_URL || 'https://jconthemove.com';
+      const approveToken = generateApprovalToken(targetUser.id, "approve");
+      const rejectToken = generateApprovalToken(targetUser.id, "reject");
+      const approveUrl = `${baseUrl}/api/approve-user?token=${approveToken}&action=approve`;
+      const rejectUrl = `${baseUrl}/api/approve-user?token=${rejectToken}&action=reject`;
+
+      await sendEmail({
+        to: companyEmail,
+        from: companyEmail,
+        subject: `🔄 Resent: Approval Needed for ${targetUser.firstName} ${targetUser.lastName}`,
+        text: `Approval reminder for user account.\n\nName: ${targetUser.firstName} ${targetUser.lastName}\nEmail: ${targetUser.email}\nRole: ${targetUser.role}\nStatus: ${targetUser.status}\n\nApprove: ${approveUrl}\nReject: ${rejectUrl}`,
+        html: `<div style="font-family: Arial, sans-serif; padding: 20px; max-width: 500px;">
+          <h2 style="color: #2563eb;">🔄 Approval Reminder</h2>
+          <p>This is a resent approval request for the following user:</p>
+          <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+            <tr><td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #eee;">Name</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${targetUser.firstName} ${targetUser.lastName}</td></tr>
+            <tr><td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #eee;">Email</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${targetUser.email}</td></tr>
+            <tr><td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #eee;">Role</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${targetUser.role}</td></tr>
+            <tr><td style="padding: 8px; font-weight: bold;">Status</td><td style="padding: 8px; color: #f59e0b; font-weight: bold;">⏳ ${targetUser.status}</td></tr>
+          </table>
+          <div style="margin: 24px 0; text-align: center;">
+            <a href="${approveUrl}" style="display: inline-block; padding: 12px 32px; background: #10b981; color: white; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px; margin-right: 12px;">✅ Approve</a>
+            <a href="${rejectUrl}" style="display: inline-block; padding: 12px 32px; background: #ef4444; color: white; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">❌ Reject</a>
+          </div>
+          <p style="color: #999; font-size: 12px; text-align: center;">These links expire in 7 days.</p>
+        </div>`,
+      });
+
+      console.log(`📧 Approval email resent for ${targetUser.email} by admin ${adminUser.email}`);
+      res.json({ success: true, message: `Approval email resent for ${targetUser.firstName} ${targetUser.lastName}` });
+    } catch (error: any) {
+      console.error("Failed to resend approval email:", error);
+      res.status(500).json({ error: "Failed to resend approval email: " + error.message });
+    }
+  });
+
+  // Admin: Directly approve or reject a user
+  app.post("/api/admin/approve-user", isAuthenticated, async (req: any, res) => {
+    try {
+      const adminUser = (req as any).user;
+      if (adminUser.role !== 'admin' && adminUser.role !== 'business_owner') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { userId, action } = req.body;
+      if (!userId || !action) {
+        return res.status(400).json({ error: "userId and action are required" });
+      }
+
+      if (!['approve', 'reject'].includes(action)) {
+        return res.status(400).json({ error: "action must be 'approve' or 'reject'" });
+      }
+
+      const targetUser = await storage.getUser(userId);
+      if (!targetUser) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const newStatus = action === 'approve' ? 'approved' : 'rejected';
+      await db.update(users).set({ status: newStatus }).where(eq(users.id, userId));
+
+      if (action === 'approve') {
+        try {
+          await sendEmail({
+            to: targetUser.email,
+            from: process.env.COMPANY_EMAIL || "michigankid906@gmail.com",
+            subject: "Welcome to JC ON THE MOVE - Account Approved!",
+            text: `Hi ${targetUser.firstName},\n\nYour account has been approved! You can now log in and start using JC ON THE MOVE.\n\nWelcome aboard!`,
+            html: `<div style="font-family: Arial, sans-serif; padding: 20px; max-width: 500px;">
+              <h2 style="color: #10b981;">Welcome to JC ON THE MOVE!</h2>
+              <p>Hi ${targetUser.firstName},</p>
+              <p>Your account has been <strong style="color: #10b981;">approved</strong>! You can now log in and start using JC ON THE MOVE.</p>
+              <p>Welcome aboard!</p>
+            </div>`,
+          });
+        } catch (e) {}
+      }
+
+      console.log(`👤 User ${targetUser.email} ${action}d by admin ${adminUser.email}`);
+      res.json({ success: true, message: `User ${targetUser.firstName} ${targetUser.lastName} has been ${action}d`, status: newStatus });
+    } catch (error: any) {
+      console.error("Admin approve user error:", error);
+      res.status(500).json({ error: "Failed to update user status" });
+    }
+  });
+
   // DEV-ONLY: Direct test endpoint for notifications (remove in production)
   if (process.env.NODE_ENV === 'development') {
     app.post("/api/dev/test-notifications", async (req, res) => {

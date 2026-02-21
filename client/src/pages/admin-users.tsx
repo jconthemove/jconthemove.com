@@ -204,6 +204,31 @@ export default function AdminUsersPage() {
     }
   });
 
+  // Resend approval email mutation
+  const resendApprovalMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const response = await apiRequest(
+        "POST",
+        "/api/admin/resend-approval-email",
+        { userId }
+      );
+      return await response.json();
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "Email Sent",
+        description: data.message || "Approval email has been resent"
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Email Failed",
+        description: error.message || "Failed to resend approval email",
+        variant: "destructive"
+      });
+    }
+  });
+
   // Delete user mutation
   const deleteUserMutation = useMutation({
     mutationFn: async (userId: string) => {
@@ -410,7 +435,8 @@ export default function AdminUsersPage() {
                       {/* Status Actions */}
                       <div className="flex gap-2 mt-3">
                         {user.status === 'pending' && (
-                          <Button 
+                          <>
+                            <Button 
                               variant="default" 
                               size="sm" 
                               className="flex-1 bg-green-600 hover:bg-green-700"
@@ -422,6 +448,19 @@ export default function AdminUsersPage() {
                             >
                               Approve
                             </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                resendApprovalMutation.mutate(user.id);
+                              }}
+                              disabled={resendApprovalMutation.isPending}
+                            >
+                              {resendApprovalMutation.isPending ? 'Sending...' : 'Resend Email'}
+                            </Button>
+                          </>
                           )}
                           {user.status === 'approved' && (
                             <Button 
@@ -548,18 +587,32 @@ export default function AdminUsersPage() {
                       {/* Status Actions */}
                       <div className="flex gap-2 mt-3">
                         {user.status === 'pending' && (
-                          <Button 
-                            variant="default" 
-                            size="sm" 
-                            className="flex-1 bg-green-600 hover:bg-green-700"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              updateStatusMutation.mutate({ userId: user.id, status: 'approved' });
-                            }}
-                            data-testid={`button-approve-${user.id}`}
-                          >
-                            Approve
-                          </Button>
+                          <>
+                            <Button 
+                              variant="default" 
+                              size="sm" 
+                              className="flex-1 bg-green-600 hover:bg-green-700"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateStatusMutation.mutate({ userId: user.id, status: 'approved' });
+                              }}
+                              data-testid={`button-approve-${user.id}`}
+                            >
+                              Approve
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                resendApprovalMutation.mutate(user.id);
+                              }}
+                              disabled={resendApprovalMutation.isPending}
+                            >
+                              {resendApprovalMutation.isPending ? 'Sending...' : 'Resend Email'}
+                            </Button>
+                          </>
                         )}
                         {user.status === 'approved' && (
                           <Button 
