@@ -344,6 +344,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       (req.session as any).userEmail = newUser.email;
       (req.session as any).userRole = newUser.role;
 
+      try {
+        const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
+        await sendEmail({
+          to: companyEmail,
+          from: companyEmail,
+          subject: `🆕 New Employee Registration: ${newUser.firstName} ${newUser.lastName}`,
+          text: `New employee account created and needs approval.\n\nName: ${newUser.firstName} ${newUser.lastName}\nEmail: ${newUser.email}\nPhone: ${newUser.phoneNumber || 'N/A'}\nStatus: ${newUser.status}\n\nLog in to the admin dashboard to approve this account.`,
+          html: `<div style="font-family: Arial, sans-serif; padding: 20px; max-width: 500px;">
+            <h2 style="color: #2563eb;">🆕 New Employee Registration</h2>
+            <p>A new employee account has been created and needs your approval.</p>
+            <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+              <tr><td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #eee;">Name</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${newUser.firstName} ${newUser.lastName}</td></tr>
+              <tr><td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #eee;">Email</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${newUser.email}</td></tr>
+              <tr><td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #eee;">Phone</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${newUser.phoneNumber || 'N/A'}</td></tr>
+              <tr><td style="padding: 8px; font-weight: bold;">Status</td><td style="padding: 8px; color: #f59e0b; font-weight: bold;">⏳ Pending Approval</td></tr>
+            </table>
+            <p style="color: #666; font-size: 14px;">Log in to the admin dashboard to approve this account.</p>
+          </div>`,
+        });
+        console.log(`📧 New employee registration notification sent for ${newUser.email}`);
+      } catch (emailErr) {
+        console.error("Failed to send employee registration notification email:", emailErr);
+      }
+
       req.session.save((saveErr) => {
         if (saveErr) {
           console.error('Session save error:', saveErr);
@@ -608,6 +632,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       (req.session as any).userEmail = newUser.email;
       (req.session as any).userRole = newUser.role;
 
+      try {
+        const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
+        await sendEmail({
+          to: companyEmail,
+          from: companyEmail,
+          subject: `🆕 New Customer Registration: ${newUser.firstName} ${newUser.lastName}`,
+          text: `New customer account created.\n\nName: ${newUser.firstName} ${newUser.lastName}\nEmail: ${newUser.email}\nPhone: ${newUser.phoneNumber || 'N/A'}\nStatus: ${newUser.status}\n\nView in the admin dashboard.`,
+          html: `<div style="font-family: Arial, sans-serif; padding: 20px; max-width: 500px;">
+            <h2 style="color: #10b981;">🆕 New Customer Registration</h2>
+            <p>A new customer account has been created.</p>
+            <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+              <tr><td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #eee;">Name</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${newUser.firstName} ${newUser.lastName}</td></tr>
+              <tr><td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #eee;">Email</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${newUser.email}</td></tr>
+              <tr><td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #eee;">Phone</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${newUser.phoneNumber || 'N/A'}</td></tr>
+              <tr><td style="padding: 8px; font-weight: bold;">Status</td><td style="padding: 8px; color: #10b981; font-weight: bold;">✅ Active</td></tr>
+            </table>
+            <p style="color: #666; font-size: 14px;">View this customer in the admin dashboard.</p>
+          </div>`,
+        });
+        console.log(`📧 New customer registration notification sent for ${newUser.email}`);
+      } catch (emailErr) {
+        console.error("Failed to send customer registration notification email:", emailErr);
+      }
+
       req.session.save((saveErr) => {
         if (saveErr) {
           return res.status(500).json({ error: "Registration successful but login failed" });
@@ -774,6 +822,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       (req.session as any).userId = newUser.id;
       (req.session as any).userEmail = newUser.email;
       (req.session as any).userRole = newUser.role;
+
+      try {
+        const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
+        await sendEmail({
+          to: companyEmail,
+          from: companyEmail,
+          subject: `🆕 New Account Registration: ${newUser.firstName} ${newUser.lastName}`,
+          text: `New account created.\n\nName: ${newUser.firstName} ${newUser.lastName}\nEmail: ${newUser.email}\nRole: ${newUser.role}\nStatus: ${newUser.status}\n\nView in the admin dashboard.`,
+          html: `<div style="font-family: Arial, sans-serif; padding: 20px; max-width: 500px;">
+            <h2 style="color: #2563eb;">🆕 New Account Registration</h2>
+            <p>A new account has been created.</p>
+            <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+              <tr><td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #eee;">Name</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${newUser.firstName} ${newUser.lastName}</td></tr>
+              <tr><td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #eee;">Email</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${newUser.email}</td></tr>
+              <tr><td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #eee;">Role</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${newUser.role}</td></tr>
+              <tr><td style="padding: 8px; font-weight: bold;">Status</td><td style="padding: 8px; color: #10b981; font-weight: bold;">✅ ${newUser.status}</td></tr>
+            </table>
+            <p style="color: #666; font-size: 14px;">View this account in the admin dashboard.</p>
+          </div>`,
+        });
+        console.log(`📧 New registration notification sent for ${newUser.email}`);
+      } catch (emailErr) {
+        console.error("Failed to send registration notification email:", emailErr);
+      }
 
       req.session.save((saveErr) => {
         if (saveErr) {
