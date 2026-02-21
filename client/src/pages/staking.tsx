@@ -7,9 +7,17 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, TrendingUp, Lock, Unlock, Coins, Clock, ArrowLeft, Sparkles } from "lucide-react";
+import { Loader2, TrendingUp, Lock, Unlock, Coins, Clock, ArrowLeft, Sparkles, Diamond, PartyPopper } from "lucide-react";
 import { Link } from "wouter";
 import type { StakingTier, Stake } from "@shared/schema";
+
+interface DiamondCelebration {
+  active: boolean;
+  daysLeft: number;
+  bonusPercent: number;
+}
+
+type EnrichedStake = Stake & { tier: StakingTier; diamondCelebration?: DiamondCelebration };
 
 function formatNumber(n: number) {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
@@ -44,7 +52,7 @@ export default function StakingPage() {
     refetchOnMount: true,
   });
 
-  const { data: myStakes = [] } = useQuery<(Stake & { tier: StakingTier })[]>({
+  const { data: myStakes = [] } = useQuery<EnrichedStake[]>({
     queryKey: ["/api/staking/my-stakes"],
     enabled: isAuthenticated,
     staleTime: 0,
@@ -144,7 +152,7 @@ export default function StakingPage() {
             <h1 className="text-3xl font-bold bg-gradient-to-r from-yellow-500 to-orange-500 bg-clip-text text-transparent">
               JCMOVES Staking Treasury
             </h1>
-            <p className="text-muted-foreground">Stake your tokens and earn 10%+ annual returns paid daily</p>
+            <p className="text-muted-foreground">Stake your tokens and earn 5%-30% annual returns paid daily</p>
           </div>
         </div>
 
@@ -205,6 +213,7 @@ export default function StakingPage() {
                 const dailyRate = parseFloat(tier.annualRatePercent) / 365;
                 const isSelected = selectedTier === tier.id;
                 const isFlexible = tier.durationDays === 0;
+                const isDiamondTier = tier.name === "Diamond";
                 const tierColors: Record<string, string> = {
                   "Flexible": "from-gray-500/20 to-slate-500/20",
                   "Bronze": "from-orange-800/20 to-amber-700/20",
@@ -220,15 +229,26 @@ export default function StakingPage() {
                     className={`w-full text-left rounded-xl border-2 p-3 transition-all active:scale-95 bg-gradient-to-br ${tierColors[tier.name] || ""} ${
                       isSelected
                         ? "border-yellow-500 shadow-lg shadow-yellow-500/20 scale-[1.02] ring-2 ring-yellow-500/30"
-                        : "border-muted-foreground/20 hover:border-yellow-500/50"
+                        : isDiamondTier ? "border-cyan-400/50 hover:border-cyan-400 hover:shadow-cyan-400/20 hover:shadow-md" : "border-muted-foreground/20 hover:border-yellow-500/50"
                     }`}
                   >
                     <div className="text-center space-y-1">
-                      <Badge variant={isSelected ? "default" : "secondary"} className="text-[10px]">
-                        {tier.name}
-                      </Badge>
+                      {isDiamondTier ? (
+                        <Badge className="text-[10px] bg-gradient-to-r from-cyan-500 to-blue-600 text-white border-0">
+                          <Diamond className="h-3 w-3 mr-0.5" /> {tier.name}
+                        </Badge>
+                      ) : (
+                        <Badge variant={isSelected ? "default" : "secondary"} className="text-[10px]">
+                          {tier.name}
+                        </Badge>
+                      )}
                       <div className="text-xl font-bold text-yellow-500">{tier.annualRatePercent}%</div>
                       <p className="text-[10px] text-muted-foreground">APR</p>
+                      {isDiamondTier && (
+                        <div className="text-[9px] font-bold text-cyan-400 bg-cyan-500/10 rounded-full px-2 py-0.5 flex items-center justify-center gap-1">
+                          <PartyPopper className="h-3 w-3" /> +10% Bonus (90 days)
+                        </div>
+                      )}
                       <div className="text-[10px] font-medium text-green-500">~{dailyRate.toFixed(4)}%/day</div>
                       <div className="text-[10px] text-muted-foreground space-y-0.5">
                         <p className="flex items-center justify-center gap-1">
@@ -277,6 +297,17 @@ export default function StakingPage() {
                   Enter how many JCMOVES you want to stake at {selectedTierData.annualRatePercent}% APR
                   {selectedTierData.durationDays > 0 ? ` (${selectedTierData.durationDays}-day lockup)` : " (no lockup - withdraw anytime)"}
                 </p>
+                {selectedTierData.name === "Diamond" && (
+                  <div className="mb-4 p-3 rounded-lg bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/30">
+                    <div className="flex items-center gap-2 text-cyan-400 font-bold text-sm">
+                      <PartyPopper className="h-4 w-4" />
+                      Diamond Celebration Bonus
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      New Diamond stakers earn an extra +10% APR (40% total) for the first 90 days! After 90 days, your rate returns to the base 30% APR.
+                    </p>
+                  </div>
+                )}
                 <div className="flex flex-col gap-3">
                   <div className="flex gap-2">
                     <div className="flex-1">
@@ -353,10 +384,27 @@ export default function StakingPage() {
                     <div key={stake.id} className="border rounded-lg p-4 space-y-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
-                          <Badge variant="secondary">{stake.tier.name}</Badge>
+                          {stake.tier.name === "Diamond" ? (
+                            <Badge className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white border-0">
+                              <Diamond className="h-3 w-3 mr-0.5" /> Diamond
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary">{stake.tier.name}</Badge>
+                          )}
                           <span className="font-bold text-lg">{formatNumber(parseFloat(stake.amount))} JCMOVES</span>
                         </div>
-                        <Badge className="bg-green-500/20 text-green-500">{stake.tier.annualRatePercent}% APR</Badge>
+                        <div className="flex items-center gap-2">
+                          {stake.diamondCelebration?.active && (
+                            <Badge className="bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-[10px]">
+                              <PartyPopper className="h-3 w-3 mr-0.5" /> +10% Bonus ({stake.diamondCelebration.daysLeft}d left)
+                            </Badge>
+                          )}
+                          <Badge className="bg-green-500/20 text-green-500">
+                            {stake.diamondCelebration?.active 
+                              ? `${parseFloat(stake.tier.annualRatePercent) + 10}%` 
+                              : `${stake.tier.annualRatePercent}%`} APR
+                          </Badge>
+                        </div>
                       </div>
 
                       {!isFlexible && (
@@ -450,11 +498,12 @@ export default function StakingPage() {
           <CardContent className="p-4">
             <h3 className="font-semibold mb-2">How Staking Works</h3>
             <ul className="text-sm text-muted-foreground space-y-1">
-              <li>1. Choose from 5 tiers - Flexible (no lockup), Bronze (30d), Silver (90d), Gold (6mo), or Diamond (1yr)</li>
-              <li>2. Higher lockup periods earn better annual returns (5% to 20% APR)</li>
+              <li>1. Choose from 5 tiers - Flexible (5%), Bronze (10%), Silver (15%), Gold (20%), or Diamond (30%)</li>
+              <li>2. Higher lockup periods earn better annual returns (5% to 30% APR)</li>
               <li>3. Stake your JCMOVES tokens to start earning daily rewards</li>
               <li>4. Claim your rewards anytime to add them to your wallet</li>
               <li>5. Unstake anytime with no penalty - your full deposit is always returned</li>
+              <li className="text-cyan-500 font-medium">New Diamond tier celebration: earn 40% APR (30% + 10% bonus) for the first 90 days!</li>
             </ul>
           </CardContent>
         </Card>

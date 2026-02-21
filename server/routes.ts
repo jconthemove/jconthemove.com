@@ -39,12 +39,21 @@ async function ensureStakingTiersSeeded() {
       const tiers = [
         { name: "Flexible", durationDays: 0, annualRatePercent: "5.00", minStake: "50.00000000", maxStake: null, earlyUnstakePenaltyPercent: "0.00", isActive: true },
         { name: "Bronze", durationDays: 30, annualRatePercent: "10.00", minStake: "100.00000000", maxStake: null, earlyUnstakePenaltyPercent: "0.00", isActive: true },
-        { name: "Silver", durationDays: 90, annualRatePercent: "12.00", minStake: "250.00000000", maxStake: null, earlyUnstakePenaltyPercent: "0.00", isActive: true },
-        { name: "Gold", durationDays: 180, annualRatePercent: "15.00", minStake: "500.00000000", maxStake: null, earlyUnstakePenaltyPercent: "0.00", isActive: true },
-        { name: "Diamond", durationDays: 365, annualRatePercent: "20.00", minStake: "1000.00000000", maxStake: null, earlyUnstakePenaltyPercent: "0.00", isActive: true },
+        { name: "Silver", durationDays: 90, annualRatePercent: "15.00", minStake: "250.00000000", maxStake: null, earlyUnstakePenaltyPercent: "0.00", isActive: true },
+        { name: "Gold", durationDays: 180, annualRatePercent: "20.00", minStake: "500.00000000", maxStake: null, earlyUnstakePenaltyPercent: "0.00", isActive: true },
+        { name: "Diamond", durationDays: 365, annualRatePercent: "30.00", minStake: "1000.00000000", maxStake: null, earlyUnstakePenaltyPercent: "0.00", isActive: true },
       ];
       await db.insert(stakingTiers).values(tiers);
       console.log("✅ Staking tiers seeded successfully");
+    } else {
+      const rateMap: Record<string, string> = { "Flexible": "5.00", "Bronze": "10.00", "Silver": "15.00", "Gold": "20.00", "Diamond": "30.00" };
+      for (const tier of existing) {
+        const expectedRate = rateMap[tier.name];
+        if (expectedRate && tier.annualRatePercent !== expectedRate) {
+          await db.update(stakingTiers).set({ annualRatePercent: expectedRate }).where(eq(stakingTiers.id, tier.id));
+          console.log(`Updated ${tier.name} tier APR: ${tier.annualRatePercent}% → ${expectedRate}%`);
+        }
+      }
     }
   } catch (error) {
     console.error("Failed to seed staking tiers:", error);
@@ -8962,7 +8971,15 @@ Thank you for your business!
       const userId = req.user?.id || req.session?.userId;
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
       const userStakes = await storage.getUserStakes(userId);
-      res.json(userStakes);
+      const enriched = userStakes.map((s: any) => {
+        if (s.tier?.name === "Diamond") {
+          const daysSinceStart = (Date.now() - new Date(s.startedAt).getTime()) / (1000 * 60 * 60 * 24);
+          const celebrationDaysLeft = Math.max(0, Math.ceil(90 - daysSinceStart));
+          return { ...s, diamondCelebration: { active: celebrationDaysLeft > 0, daysLeft: celebrationDaysLeft, bonusPercent: 10 } };
+        }
+        return s;
+      });
+      res.json(enriched);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

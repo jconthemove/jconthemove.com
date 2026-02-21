@@ -2818,7 +2818,12 @@ export class DatabaseStorage implements IStorage {
     const balance = parseFloat(wallet.tokenBalance || "0");
     if (balance < amount) throw new Error("Insufficient balance");
 
-    const dailyRate = parseFloat(tier.annualRatePercent) / 365 / 100;
+    let effectiveAnnualRate = parseFloat(tier.annualRatePercent);
+    const isDiamond = tier.name === "Diamond";
+    if (isDiamond) {
+      effectiveAnnualRate += 10;
+    }
+    const dailyRate = effectiveAnnualRate / 365 / 100;
     const endsAt = new Date();
     endsAt.setDate(endsAt.getDate() + (tier.durationDays || 36500));
 
@@ -2860,8 +2865,37 @@ export class DatabaseStorage implements IStorage {
     if (daysSinceLastPayout < 0.01) throw new Error("No rewards to claim yet");
 
     const stakeAmount = parseFloat(stake.amount);
-    const dailyRate = parseFloat(stake.dailyRate);
-    const earned = stakeAmount * dailyRate * daysSinceLastPayout;
+    let dailyRate = parseFloat(stake.dailyRate);
+    let earned = 0;
+
+    const [tier] = await db.select().from(stakingTiers).where(eq(stakingTiers.id, stake.tierId));
+    if (tier && tier.name === "Diamond") {
+      const celebrationBonusDays = 90;
+      const baseRate = parseFloat(tier.annualRatePercent) / 365 / 100;
+      const bonusRate = (parseFloat(tier.annualRatePercent) + 10) / 365 / 100;
+      const stakeStartTime = new Date(stake.startedAt).getTime();
+      const celebrationEndTime = stakeStartTime + celebrationBonusDays * 24 * 60 * 60 * 1000;
+      const lastPayoutTime = lastPayout.getTime();
+      const nowTime = now.getTime();
+
+      if (nowTime <= celebrationEndTime) {
+        earned = stakeAmount * bonusRate * daysSinceLastPayout;
+      } else if (lastPayoutTime >= celebrationEndTime) {
+        earned = stakeAmount * baseRate * daysSinceLastPayout;
+        if (dailyRate > baseRate * 1.05) {
+          dailyRate = baseRate;
+          await db.update(stakes).set({ dailyRate: baseRate.toFixed(8) }).where(eq(stakes.id, stakeId));
+        }
+      } else {
+        const bonusDays = (celebrationEndTime - lastPayoutTime) / (1000 * 60 * 60 * 24);
+        const baseDays = (nowTime - celebrationEndTime) / (1000 * 60 * 60 * 24);
+        earned = stakeAmount * bonusRate * bonusDays + stakeAmount * baseRate * baseDays;
+        dailyRate = baseRate;
+        await db.update(stakes).set({ dailyRate: baseRate.toFixed(8) }).where(eq(stakes.id, stakeId));
+      }
+    } else {
+      earned = stakeAmount * dailyRate * daysSinceLastPayout;
+    }
 
     let treasuryWallet = await this.getWalletAccount(this.STAKING_TREASURY_USER_ID);
     if (!treasuryWallet) {

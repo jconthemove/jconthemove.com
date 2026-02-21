@@ -106,7 +106,8 @@ Preferred communication style: Simple, everyday language.
   - **Referral Request**: Referrers earn 50 JCMOVES credits when someone uses their code
   - **Referral Confirmed**: Referrers earn 2,500 JCMOVES credits when referred user's first job completes
 - **Customer Portal Rewards Display**: Mining tab shows all earning opportunities as credits (no dollar values)
-- **Staking Treasury System**: Users stake JCMOVES tokens across 5 tiers: Flexible (no lockup/5% APR, min 50), Bronze (30d/10% APR, min 100), Silver (90d/12% APR, min 250), Gold (180d/15% APR, min 500), Diamond (365d/20% APR, min 1000). Rewards accrue continuously and are claimable anytime. Unstake anytime with no penalty - full principal always returned. Daily rate = annual rate / 365. Page at `/staking` with navigation from employee home.
+- **Staking Treasury System**: Users stake JCMOVES tokens across 5 tiers: Flexible (no lockup/5% APR, min 50), Bronze (30d/10% APR, min 100), Silver (90d/15% APR, min 250), Gold (180d/20% APR, min 500), Diamond (365d/30% APR, min 1000). Rewards accrue continuously and are claimable anytime. Unstake anytime with no penalty - full principal always returned. Daily rate = annual rate / 365. Page at `/staking` with navigation from employee home.
+- **Diamond Celebration Bonus**: Limited-time 90-day +10% APR bonus for new Diamond tier stakers (40% total APR for first 90 days). After 90 days, rate reverts to base 30% APR. Diamond badge with special cyan gradient styling and PartyPopper icon. Backend auto-detects celebration period expiry during claims and adjusts rate.
 
 # External Dependencies
 
