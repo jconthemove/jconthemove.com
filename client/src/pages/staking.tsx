@@ -361,137 +361,180 @@ export default function StakingPage() {
         </Card>
 
         {activeStakes.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-green-500" />
-                Active Stakes ({activeStakes.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {activeStakes.map(stake => {
-                  const pending = pendingRewards(stake);
-                  const isFlexible = stake.tier.durationDays === 0;
-                  const remaining = isFlexible ? 0 : daysRemaining(stake.endsAt);
-                  const totalDays = stake.tier.durationDays;
-                  const startDate = new Date(stake.startedAt);
-                  const daysSinceStart = Math.floor((Date.now() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-                  const elapsed = isFlexible ? daysSinceStart : totalDays - remaining;
-                  const progress = isFlexible ? 100 : Math.min(100, totalDays > 0 ? (elapsed / totalDays) * 100 : 100);
+          <div>
+            <h2 className="text-xl font-bold flex items-center gap-2 mb-4">
+              <TrendingUp className="h-5 w-5 text-green-500" />
+              Active Stakes ({activeStakes.length})
+            </h2>
+            <div className="space-y-4">
+              {activeStakes.map(stake => {
+                const pending = pendingRewards(stake);
+                const isFlexible = stake.tier.durationDays === 0;
+                const remaining = isFlexible ? 0 : daysRemaining(stake.endsAt);
+                const totalDays = stake.tier.durationDays;
+                const startDate = new Date(stake.startedAt);
+                const daysSinceStart = Math.floor((Date.now() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+                const elapsed = isFlexible ? daysSinceStart : totalDays - remaining;
+                const progress = isFlexible ? 100 : Math.min(100, totalDays > 0 ? (elapsed / totalDays) * 100 : 100);
 
-                  return (
-                    <div key={stake.id} className="border rounded-lg p-4 space-y-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          {stake.tier.name === "Diamond" ? (
-                            <Badge className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white border-0">
-                              <Diamond className="h-3 w-3 mr-0.5" /> Diamond
-                            </Badge>
-                          ) : (
-                            <Badge variant="secondary">{stake.tier.name}</Badge>
-                          )}
-                          <span className="font-bold text-lg">{formatNumber(parseFloat(stake.amount))} JCMOVES</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {stake.diamondCelebration?.active && (
-                            <Badge className="bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-[10px]">
-                              <PartyPopper className="h-3 w-3 mr-0.5" /> +10% Bonus ({stake.diamondCelebration.daysLeft}d left)
-                            </Badge>
-                          )}
-                          <Badge className="bg-green-500/20 text-green-500">
-                            {stake.diamondCelebration?.active 
-                              ? `${parseFloat(stake.tier.annualRatePercent) + 10}%` 
-                              : `${stake.tier.annualRatePercent}%`} APR
+                const tierStyle: Record<string, { bg: string; border: string; accent: string; progressBar: string; badge: string; badgeText: string }> = {
+                  "Diamond": {
+                    bg: "bg-gradient-to-br from-cyan-950/80 via-blue-950/60 to-slate-950/80 dark:from-cyan-950/80 dark:via-blue-950/60 dark:to-slate-950/80",
+                    border: "border-cyan-500/50",
+                    accent: "text-cyan-300",
+                    progressBar: "from-cyan-400 to-blue-500",
+                    badge: "bg-gradient-to-r from-cyan-500 to-blue-600 text-white border-0",
+                    badgeText: "Diamond",
+                  },
+                  "Gold": {
+                    bg: "bg-gradient-to-br from-yellow-950/80 via-amber-950/60 to-slate-950/80 dark:from-yellow-950/80 dark:via-amber-950/60 dark:to-slate-950/80",
+                    border: "border-yellow-500/50",
+                    accent: "text-yellow-300",
+                    progressBar: "from-yellow-400 to-amber-500",
+                    badge: "bg-gradient-to-r from-yellow-500 to-amber-600 text-white border-0",
+                    badgeText: "Gold",
+                  },
+                  "Silver": {
+                    bg: "bg-gradient-to-br from-slate-800/80 via-gray-800/60 to-slate-950/80 dark:from-slate-800/80 dark:via-gray-800/60 dark:to-slate-950/80",
+                    border: "border-gray-400/50",
+                    accent: "text-gray-200",
+                    progressBar: "from-gray-300 to-slate-400",
+                    badge: "bg-gradient-to-r from-gray-400 to-slate-500 text-white border-0",
+                    badgeText: "Silver",
+                  },
+                  "Bronze": {
+                    bg: "bg-gradient-to-br from-orange-950/80 via-amber-950/60 to-slate-950/80 dark:from-orange-950/80 dark:via-amber-950/60 dark:to-slate-950/80",
+                    border: "border-orange-600/50",
+                    accent: "text-orange-300",
+                    progressBar: "from-orange-500 to-amber-700",
+                    badge: "bg-gradient-to-r from-orange-700 to-amber-800 text-white border-0",
+                    badgeText: "Bronze",
+                  },
+                  "Flexible": {
+                    bg: "bg-gradient-to-br from-emerald-950/80 via-green-950/60 to-slate-950/80 dark:from-emerald-950/80 dark:via-green-950/60 dark:to-slate-950/80",
+                    border: "border-emerald-500/50",
+                    accent: "text-emerald-300",
+                    progressBar: "from-emerald-400 to-green-500",
+                    badge: "bg-gradient-to-r from-emerald-600 to-green-700 text-white border-0",
+                    badgeText: "Flexible",
+                  },
+                };
+
+                const style = tierStyle[stake.tier.name] || tierStyle["Flexible"];
+                const effectiveApr = stake.diamondCelebration?.active 
+                  ? parseFloat(stake.tier.annualRatePercent) + 10 
+                  : parseFloat(stake.tier.annualRatePercent);
+
+                return (
+                  <div key={stake.id} className={`rounded-xl border-2 ${style.border} ${style.bg} p-4 space-y-3 shadow-lg`}>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Badge className={style.badge}>
+                          {stake.tier.name === "Diamond" && <Diamond className="h-3 w-3 mr-0.5" />}
+                          {style.badgeText}
+                        </Badge>
+                        <span className="font-bold text-lg text-white">{formatNumber(parseFloat(stake.amount))} JCMOVES</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                        {stake.diamondCelebration?.active && (
+                          <Badge className="bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 text-[10px]">
+                            <PartyPopper className="h-3 w-3 mr-0.5" /> +10% Bonus ({stake.diamondCelebration.daysLeft}d)
                           </Badge>
-                        </div>
-                      </div>
-
-                      {!isFlexible && (
-                        <>
-                          <div className="w-full bg-muted rounded-full h-2">
-                            <div
-                              className="bg-gradient-to-r from-yellow-500 to-green-500 h-2 rounded-full transition-all"
-                              style={{ width: `${progress}%` }}
-                            />
-                          </div>
-                          <div className="flex justify-between text-xs text-muted-foreground">
-                            <span>Day {elapsed} of {totalDays}</span>
-                            <span>{remaining} days remaining</span>
-                          </div>
-                        </>
-                      )}
-                      {isFlexible && (
-                        <div className="text-xs text-green-500 flex items-center gap-1">
-                          <Unlock className="h-3 w-3" /> No lockup - earning for {daysSinceStart} day{daysSinceStart !== 1 ? "s" : ""}
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
-                        <div>
-                          <p className="text-muted-foreground">Total Earned</p>
-                          <p className="font-semibold text-green-500">{formatNumber(parseFloat(stake.totalEarned || "0"))}</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Pending</p>
-                          <p className="font-semibold text-yellow-500">{formatNumber(pending)}</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Daily Rate</p>
-                          <p className="font-semibold">{(parseFloat(stake.dailyRate) * 100).toFixed(4)}%</p>
-                        </div>
-                      </div>
-
-                      <div className="flex gap-2 pt-1">
-                        <Button
-                          size="sm"
-                          onClick={() => claimMutation.mutate(stake.id)}
-                          disabled={pending < 0.01 || claimMutation.isPending}
-                          className="bg-green-600 hover:bg-green-700 text-white"
-                        >
-                          {claimMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Coins className="h-3 w-3 mr-1" />}
-                          Claim {formatNumber(pending)}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => unstakeMutation.mutate(stake.id)}
-                          disabled={unstakeMutation.isPending}
-                        >
-                          {unstakeMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Unlock className="h-3 w-3 mr-1" />}
-                          Unstake
-                        </Button>
+                        )}
+                        <span className={`font-bold text-sm ${style.accent}`}>{effectiveApr.toFixed(0)}% APR</span>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
+
+                    {!isFlexible && (
+                      <>
+                        <div className="w-full bg-black/30 rounded-full h-1.5">
+                          <div
+                            className={`bg-gradient-to-r ${style.progressBar} h-1.5 rounded-full transition-all`}
+                            style={{ width: `${progress}%` }}
+                          />
+                        </div>
+                        <div className="flex justify-between text-xs text-gray-400">
+                          <span>Day {elapsed} of {totalDays}</span>
+                          <span>{remaining} days remaining</span>
+                        </div>
+                      </>
+                    )}
+                    {isFlexible && (
+                      <div className="text-xs text-emerald-400 flex items-center gap-1">
+                        <Unlock className="h-3 w-3" /> No lockup - earning for {daysSinceStart} day{daysSinceStart !== 1 ? "s" : ""}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-3 gap-3 text-sm">
+                      <div>
+                        <p className="text-gray-400 text-xs">Total Earned</p>
+                        <p className="font-semibold text-green-400">{formatNumber(parseFloat(stake.totalEarned || "0"))}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400 text-xs">Pending</p>
+                        <p className="font-semibold text-yellow-400">{formatNumber(pending)}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400 text-xs">Daily Rate</p>
+                        <p className="font-semibold text-white">{(parseFloat(stake.dailyRate) * 100).toFixed(4)}%</p>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 pt-1">
+                      <Button
+                        size="sm"
+                        onClick={() => claimMutation.mutate(stake.id)}
+                        disabled={pending < 0.01 || claimMutation.isPending}
+                        className="bg-green-600 hover:bg-green-700 text-white shadow-md"
+                      >
+                        {claimMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Coins className="h-3 w-3 mr-1" />}
+                        Claim {formatNumber(pending)}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => unstakeMutation.mutate(stake.id)}
+                        disabled={unstakeMutation.isPending}
+                        className="border-gray-600 text-gray-300 hover:bg-gray-800 hover:text-white"
+                      >
+                        {unstakeMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Unlock className="h-3 w-3 mr-1" />}
+                        Unstake
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         )}
 
         {completedStakes.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Completed Stakes</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {completedStakes.map(stake => (
-                  <div key={stake.id} className="flex flex-wrap items-center justify-between border rounded-lg p-3 opacity-70 gap-2">
+          <div>
+            <h2 className="text-lg font-bold mb-3 text-muted-foreground">Completed Stakes</h2>
+            <div className="space-y-2">
+              {completedStakes.map(stake => {
+                const completedTierBorder: Record<string, string> = {
+                  "Diamond": "border-cyan-800/30",
+                  "Gold": "border-yellow-800/30",
+                  "Silver": "border-gray-600/30",
+                  "Bronze": "border-orange-800/30",
+                  "Flexible": "border-emerald-800/30",
+                };
+                return (
+                  <div key={stake.id} className={`flex flex-wrap items-center justify-between border ${completedTierBorder[stake.tier.name] || "border-muted"} rounded-lg p-3 opacity-60 gap-2 bg-muted/20`}>
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline">{stake.tier.name}</Badge>
-                      <span>{formatNumber(parseFloat(stake.amount))} JCMOVES</span>
+                      <Badge variant="outline" className="text-xs">{stake.tier.name}</Badge>
+                      <span className="text-sm">{formatNumber(parseFloat(stake.amount))} JCMOVES</span>
                     </div>
                     <div className="text-sm text-muted-foreground">
                       Earned: <span className="text-green-500 font-medium">{formatNumber(parseFloat(stake.totalEarned || "0"))}</span>
                     </div>
-                    <Badge variant="outline">Unstaked</Badge>
+                    <Badge variant="outline" className="text-xs">Unstaked</Badge>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                );
+              })}
+            </div>
+          </div>
         )}
 
         <Card className="border-dashed">
