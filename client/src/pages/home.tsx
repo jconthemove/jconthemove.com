@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Truck, Trash2, Snowflake, Sparkles, Gift, ShoppingBag, Star, Users, Volume2, VolumeX, Gem, Clock, BadgeDollarSign } from "lucide-react";
+import { Truck, Trash2, Snowflake, Sparkles, Gift, ShoppingBag, Star, Users, Volume2, VolumeX, Gem, Clock, BadgeDollarSign, CheckCircle2 } from "lucide-react";
 import promoImage from "@assets/file_00000000839871fd8e13378301744f2e_(1)_1771260918919.png";
+import businessCardImg from "@assets/20260225_172830_0000_1772063302969.png";
 import { Link } from "wouter";
 
 export default function HomePage() {
@@ -200,30 +201,50 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Nature Made Jewls - Featured */}
+      {/* Nature Made Jewls - Featured Business Card Style */}
       <section className="py-6 px-4">
         <div className="max-w-4xl mx-auto">
           <Link href="/nature-made-jewls">
-            <Card className="group cursor-pointer overflow-hidden bg-gradient-to-r from-emerald-800 via-amber-700 to-emerald-800 border-2 border-amber-400/50 hover:border-amber-300 hover:shadow-2xl hover:shadow-amber-500/30 transition-all duration-500 hover:scale-[1.01]">
-              <CardContent className="p-6 md:p-8 flex items-center justify-between relative">
-                <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxjaXJjbGUgY3g9IjIwIiBjeT0iMjAiIHI9IjIiIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSIvPjwvZz48L3N2Zz4=')] opacity-50" />
-                <div className="flex items-center gap-4 relative z-10">
-                  <div className="bg-white/20 p-3 md:p-4 rounded-full backdrop-blur-sm group-hover:scale-110 transition-transform duration-300">
-                    <Gem className="h-8 w-8 md:h-10 md:w-10 text-amber-200" />
+            <div className="group cursor-pointer relative overflow-hidden rounded-2xl shadow-2xl border-2 border-amber-700/50 hover:border-amber-400/80 hover:shadow-amber-800/40 transition-all duration-500 hover:scale-[1.01]"
+              style={{ background: "linear-gradient(135deg, #1a0e08 0%, #2d1a0f 30%, #1e1208 60%, #120a05 100%)" }}>
+              <div className="absolute inset-0 opacity-10"
+                style={{ backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(139,90,43,0.15) 2px, rgba(139,90,43,0.15) 4px)" }} />
+              <div className="relative flex items-center gap-0 overflow-hidden">
+                <div className="flex-shrink-0 w-32 md:w-48 h-28 md:h-36 overflow-hidden">
+                  <img
+                    src={businessCardImg}
+                    alt="Nature Made Jewls"
+                    className="w-full h-full object-cover object-left group-hover:scale-105 transition-transform duration-500"
+                  />
+                  <div className="absolute inset-y-0 left-32 md:left-48 w-8 bg-gradient-to-r from-[#1a0e08] to-transparent" />
+                </div>
+                <div className="flex-1 px-4 md:px-6 py-4">
+                  <p className="text-amber-500/70 text-[10px] uppercase tracking-widest mb-1 font-medium">Handmade Jewelry &amp; Custom Creations</p>
+                  <h3 className="font-serif text-xl md:text-2xl font-bold text-amber-100 tracking-wide mb-2"
+                    style={{ fontFamily: "'Georgia', serif" }}>
+                    Nature Made Jewls
+                  </h3>
+                  <div className="space-y-1 mb-3">
+                    {["Copper Wire Jewelry", "Natural Stone Pieces", "Custom Designs"].map(f => (
+                      <div key={f} className="flex items-center gap-1.5">
+                        <CheckCircle2 className="h-3 w-3 text-amber-500 flex-shrink-0" />
+                        <span className="text-amber-100/80 text-xs">{f}</span>
+                      </div>
+                    ))}
                   </div>
-                  <div>
-                    <h3 className="text-xl md:text-2xl font-serif font-bold text-white tracking-wide">Nature Made Jewls</h3>
-                    <p className="text-amber-100/90 text-sm md:text-base">Handcrafted jewelry from Michigan's UP</p>
+                  <div className="flex items-center gap-2 text-amber-400 text-sm font-semibold">
+                    <span>Shop Collection</span>
+                    <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                    </svg>
                   </div>
                 </div>
-                <div className="hidden md:flex items-center gap-2 text-amber-200 relative z-10">
-                  <span className="text-sm font-medium">Shop Now</span>
-                  <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                  </svg>
+                <div className="hidden md:block flex-shrink-0 pr-5 text-right">
+                  <p className="text-amber-100/50 text-[10px] mb-1">Visit</p>
+                  <p className="text-amber-300/70 text-xs font-semibold">www.JCONTHEMOVE.com</p>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </Link>
         </div>
       </section>

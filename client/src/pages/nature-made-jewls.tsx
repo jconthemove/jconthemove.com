@@ -12,7 +12,8 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Gem, Leaf, Search, Plus, ChevronLeft, ChevronRight, Mail, Phone, ImagePlus, X, Heart, Pencil, Trash2, Video, CreditCard, Tag, RotateCcw, ShoppingCart, Check } from "lucide-react";
+import { ArrowLeft, Gem, Leaf, Search, Plus, ChevronLeft, ChevronRight, Mail, Phone, ImagePlus, X, Heart, Pencil, Trash2, Video, CreditCard, Tag, RotateCcw, ShoppingCart, Check, CheckCircle2, Sparkles, Star } from "lucide-react";
+import businessCardImg from "@assets/20260225_172830_0000_1772063302969.png";
 import { useCart } from "@/hooks/useCart";
 import { FloatingCartButton } from "@/components/cart-button";
 
@@ -632,6 +633,79 @@ export default function NatureMadeJewls() {
           </div>
         </div>
       </div>
+
+      {/* Business Card Style Banner */}
+      <section className="px-3 sm:px-4 pt-4 pb-2 max-w-4xl mx-auto">
+        <div className="relative overflow-hidden rounded-2xl shadow-2xl border border-amber-800/40"
+          style={{ background: "linear-gradient(135deg, #1a0e08 0%, #2d1a0f 30%, #1e1208 60%, #120a05 100%)" }}>
+          <div className="absolute inset-0 opacity-20"
+            style={{ backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(139,90,43,0.1) 2px, rgba(139,90,43,0.1) 4px)" }} />
+          <div className="relative flex flex-col sm:flex-row items-center gap-4 sm:gap-6 p-4 sm:p-6">
+            <div className="flex-shrink-0 w-36 h-36 sm:w-44 sm:h-44 rounded-xl overflow-hidden shadow-lg border border-amber-700/30">
+              <img src={businessCardImg} alt="Nature Made Jewls - Handmade Jewelry" className="w-full h-full object-cover object-left" />
+            </div>
+            <div className="flex-1 text-center sm:text-left">
+              <div className="mb-1">
+                <span className="text-amber-400/70 text-xs uppercase tracking-widest font-medium">Nature Made Jewls</span>
+              </div>
+              <h2 className="font-serif text-2xl sm:text-3xl font-bold text-amber-100 mb-3 leading-tight"
+                style={{ fontFamily: "'Georgia', serif", textShadow: "0 2px 8px rgba(0,0,0,0.6)" }}>
+                Handmade Jewelry<br />&amp; Custom Creations
+              </h2>
+              <div className="space-y-1.5 mb-4">
+                {[
+                  "Copper Wire Jewelry",
+                  "Natural Stone Pieces",
+                  "Custom Designs Available",
+                ].map((feature) => (
+                  <div key={feature} className="flex items-center gap-2 justify-center sm:justify-start">
+                    <CheckCircle2 className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                    <span className="text-amber-100/90 text-sm font-medium">{feature}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="border-t border-amber-700/40 pt-3 flex flex-wrap items-center gap-3 justify-center sm:justify-start">
+                <a href="mailto:upmichiganstatemovers@gmail.com"
+                  className="flex items-center gap-1.5 text-amber-300/80 hover:text-amber-200 text-xs transition-colors">
+                  <Mail className="h-3.5 w-3.5" /> upmichiganstatemovers@gmail.com
+                </a>
+                <a href="tel:906-285-9312"
+                  className="flex items-center gap-1.5 text-amber-300/80 hover:text-amber-200 text-xs transition-colors">
+                  <Phone className="h-3.5 w-3.5" /> 906-285-9312
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Sponsored Item Banner */}
+      <section className="px-3 sm:px-4 pt-3 pb-1 max-w-4xl mx-auto">
+        <div className="relative overflow-hidden rounded-xl border border-amber-500/40 bg-gradient-to-r from-amber-950/80 via-stone-900/90 to-amber-950/80 shadow-lg">
+          <div className="absolute top-2 left-3 z-10">
+            <span className="inline-flex items-center gap-1 bg-amber-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">
+              <Star className="h-2.5 w-2.5" /> Sponsored
+            </span>
+          </div>
+          <div className="flex items-center gap-4 p-4 pt-7 sm:pt-4 sm:pl-28">
+            <div className="hidden sm:block absolute left-4 top-1/2 -translate-y-1/2">
+              <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-amber-500/60 shadow-lg flex items-center justify-center bg-amber-950">
+                <Sparkles className="h-9 w-9 text-amber-400" />
+              </div>
+            </div>
+            <div className="flex-1">
+              <p className="text-amber-200 font-serif font-semibold text-base sm:text-lg">Tree of Life — Copper &amp; Jade</p>
+              <p className="text-amber-100/70 text-xs sm:text-sm mt-0.5">Our signature piece — hand-wrapped copper wire with natural jade stones. Each one unique.</p>
+            </div>
+            <a href="mailto:upmichiganstatemovers@gmail.com?subject=Custom Order - Tree of Life"
+              className="flex-shrink-0">
+              <button className="bg-amber-500 hover:bg-amber-400 text-black text-xs sm:text-sm font-bold px-3 sm:px-4 py-2 rounded-lg transition-colors shadow whitespace-nowrap">
+                Inquire
+              </button>
+            </a>
+          </div>
+        </div>
+      </section>
 
       <main className="container mx-auto px-2 sm:px-3 py-3 sm:py-6">
         {isLoading ? (
