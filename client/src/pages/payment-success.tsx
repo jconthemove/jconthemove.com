@@ -1,12 +1,37 @@
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Link } from "wouter";
-import { CheckCircle, ShoppingBag, ArrowLeft, Truck, CalendarDays } from "lucide-react";
+import { CheckCircle, ShoppingBag, ArrowLeft, Truck, Coins } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export default function PaymentSuccessPage() {
   const params = new URLSearchParams(window.location.search);
   const type = params.get("type");
   const isPromo = type === "promo";
+  const shopItemsParam = params.get("shopItems");
+  const shopItemIds = shopItemsParam ? shopItemsParam.split(",").filter(Boolean) : [];
+
+  const [shopRewardTotal, setShopRewardTotal] = useState(0);
+  const rewardCalled = useRef(false);
+
+  useEffect(() => {
+    if (shopItemIds.length > 0 && !rewardCalled.current) {
+      rewardCalled.current = true;
+      apiRequest("POST", "/api/shop/payment-complete", { shopItemIds })
+        .then((res) => res.json())
+        .then((data: any) => {
+          if (data?.results) {
+            const total = data.results.reduce((sum: number, r: any) => sum + (r.buyerReward || 0), 0);
+            if (total > 0) {
+              setShopRewardTotal(total);
+              queryClient.invalidateQueries({ queryKey: ["/api/wallet"] });
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
 
   if (isPromo) {
     return (
@@ -65,23 +90,46 @@ export default function PaymentSuccessPage() {
           <div>
             <h1 className="text-2xl font-serif font-bold text-stone-800">Payment Successful!</h1>
             <p className="text-stone-500 mt-2">
-              Thank you for your purchase from Nature Made Jewls. You'll receive a confirmation from Square shortly.
+              {shopItemIds.length > 0
+                ? "Your purchase is complete. Sellers have been notified."
+                : "Thank you for your purchase from Nature Made Jewls. You'll receive a confirmation from Square shortly."}
             </p>
           </div>
 
-          <div className="bg-purple-50 rounded-lg p-4">
-            <p className="text-sm text-purple-700 font-medium">
-              Your handcrafted jewelry will be prepared with care. We'll reach out about shipping details.
-            </p>
-          </div>
+          {shopItemIds.length > 0 && shopRewardTotal > 0 && (
+            <div className="bg-gradient-to-r from-yellow-50 to-amber-50 border border-yellow-300 rounded-lg p-4 flex items-center gap-3">
+              <Coins className="h-6 w-6 text-yellow-500 flex-shrink-0" />
+              <div className="text-left">
+                <p className="text-sm font-bold text-yellow-800">+{shopRewardTotal} JCMOVES Earned!</p>
+                <p className="text-xs text-yellow-700">Tokens credited to your wallet for your purchase.</p>
+              </div>
+            </div>
+          )}
+
+          {shopItemIds.length === 0 && (
+            <div className="bg-purple-50 rounded-lg p-4">
+              <p className="text-sm text-purple-700 font-medium">
+                Your handcrafted jewelry will be prepared with care. We'll reach out about shipping details.
+              </p>
+            </div>
+          )}
 
           <div className="space-y-3 pt-2">
-            <Link href="/nature-made-jewls">
-              <Button className="w-full bg-purple-600 hover:bg-purple-700 py-5">
-                <ShoppingBag className="h-5 w-5 mr-2" />
-                Continue Shopping
-              </Button>
-            </Link>
+            {shopItemIds.length > 0 ? (
+              <Link href="/shop">
+                <Button className="w-full bg-blue-600 hover:bg-blue-700 py-5">
+                  <ShoppingBag className="h-5 w-5 mr-2" />
+                  Back to Shop
+                </Button>
+              </Link>
+            ) : (
+              <Link href="/nature-made-jewls">
+                <Button className="w-full bg-purple-600 hover:bg-purple-700 py-5">
+                  <ShoppingBag className="h-5 w-5 mr-2" />
+                  Continue Shopping
+                </Button>
+              </Link>
+            )}
             <Link href="/">
               <Button variant="outline" className="w-full py-5">
                 <ArrowLeft className="h-5 w-5 mr-2" />

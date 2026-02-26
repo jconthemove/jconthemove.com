@@ -3650,6 +3650,92 @@ Thank you for your business!
     }
   });
 
+  // Auto-reward on payment completion — called from payment-success page
+  // Marks shop items as sold, credits buyer 150 JCMOVES, seller 300 + 200 JCMOVES
+  app.post("/api/shop/payment-complete", isAuthenticated, async (req: any, res) => {
+    try {
+      const buyerId = (req.session as any).userId;
+      if (!buyerId) return res.status(401).json({ error: "Unauthorized" });
+
+      const { shopItemIds } = req.body;
+      if (!Array.isArray(shopItemIds) || shopItemIds.length === 0) {
+        return res.status(400).json({ error: "No shop item IDs provided" });
+      }
+
+      const results: any[] = [];
+      const BUYER_REWARD = 150;
+      const SALE_REWARD = 300;
+      const SELLER_BONUS = 200;
+
+      for (const itemId of shopItemIds) {
+        try {
+          const item = await storage.getShopItem(itemId);
+          if (!item) { results.push({ itemId, error: "Not found" }); continue; }
+          if (item.postedBy === buyerId) { results.push({ itemId, skipped: "Own item" }); continue; }
+
+          // Idempotency: skip if buyer already rewarded for this item
+          const alreadyClaimed = await db.select().from(rewards)
+            .where(and(
+              eq(rewards.userId, buyerId),
+              eq(rewards.rewardType, 'shop_purchase'),
+              sql`${rewards.referenceId} = ${itemId}`
+            ));
+          if (alreadyClaimed.length > 0) { results.push({ itemId, skipped: "Already rewarded" }); continue; }
+
+          // Mark as sold if still active
+          if (item.status === 'active') {
+            await storage.updateShopItem(itemId, { status: 'sold' });
+
+            // Seller sale reward
+            await storage.creditWalletTokens(item.postedBy, SALE_REWARD);
+            await db.insert(rewards).values({
+              userId: item.postedBy,
+              rewardType: 'shop_sale',
+              tokenAmount: SALE_REWARD.toString(),
+              cashValue: '0',
+              status: 'confirmed',
+              referenceId: itemId,
+              metadata: { itemId, itemTitle: item.title, role: 'seller', trigger: 'payment' },
+            });
+          }
+
+          // Buyer reward
+          await storage.creditWalletTokens(buyerId, BUYER_REWARD);
+          await db.insert(rewards).values({
+            userId: buyerId,
+            rewardType: 'shop_purchase',
+            tokenAmount: BUYER_REWARD.toString(),
+            cashValue: '0',
+            status: 'confirmed',
+            referenceId: itemId,
+            metadata: { itemId, itemTitle: item.title, role: 'buyer', trigger: 'payment' },
+          });
+
+          // Seller sale-confirmed bonus
+          await storage.creditWalletTokens(item.postedBy, SELLER_BONUS);
+          await db.insert(rewards).values({
+            userId: item.postedBy,
+            rewardType: 'shop_sale_confirmed',
+            tokenAmount: SELLER_BONUS.toString(),
+            cashValue: '0',
+            status: 'confirmed',
+            referenceId: itemId,
+            metadata: { itemId, itemTitle: item.title, role: 'seller_confirmed', buyerId, trigger: 'payment' },
+          });
+
+          results.push({ itemId, buyerReward: BUYER_REWARD, sellerReward: SALE_REWARD + SELLER_BONUS });
+        } catch (itemErr: any) {
+          results.push({ itemId, error: itemErr.message });
+        }
+      }
+
+      res.json({ success: true, results });
+    } catch (error: any) {
+      console.error("Error processing shop payment-complete rewards:", error);
+      res.status(500).json({ error: "Failed to process rewards" });
+    }
+  });
+
   // Mark shop item as sold — rewards seller 300 JCMOVES
   app.post("/api/shop/:id/mark-sold", isAuthenticated, async (req: any, res) => {
     try {
@@ -9026,7 +9112,15 @@ Thank you for your business!
         };
       });
 
-      const redirectParams = leadId ? `?type=cart&leadId=${leadId}` : `?type=cart`;
+      // Extract community shop item IDs for auto-reward on payment-success
+      const shopItemIds = validatedItems
+        .filter((i: any) => i.type === "shop" || (typeof i.id === "string" && i.id.startsWith("shop-")))
+        .map((i: any) => (typeof i.id === "string" && i.id.startsWith("shop-") ? i.id.slice(5) : i.id));
+
+      let redirectParams = leadId ? `?type=cart&leadId=${leadId}` : `?type=cart`;
+      if (shopItemIds.length > 0) {
+        redirectParams += `&shopItems=${shopItemIds.join(",")}`;
+      }
 
       const orderResponse = await client.checkout.paymentLinks.create({
         idempotencyKey: randomUUID(),
