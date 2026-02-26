@@ -9,11 +9,15 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, LogIn, Lock, Mail, User, UserPlus, Phone, Coins } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { WelcomeModal } from "@/components/welcome-modal";
 
 export default function CustomerLogin() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [showWelcome, setShowWelcome] = useState(false);
+  const [welcomeFirstName, setWelcomeFirstName] = useState("");
+  const [pendingUser, setPendingUser] = useState<any>(null);
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -62,13 +66,18 @@ export default function CustomerLogin() {
       return response.json();
     },
     onSuccess: async (data: any) => {
-      toast({
-        title: "Account Created!",
-        description: `Welcome, ${data.user.firstName}!`,
-      });
-
       queryClient.setQueryData(["/api/auth/user"], data.user);
-      setLocation("/customer-portal");
+      if (data.showWelcome) {
+        setPendingUser(data.user);
+        setWelcomeFirstName(data.user?.firstName || formData.firstName);
+        setShowWelcome(true);
+      } else {
+        toast({
+          title: "Account Created!",
+          description: `Welcome, ${data.user.firstName}!`,
+        });
+        setLocation("/customer-portal");
+      }
     },
     onError: (error: any) => {
       toast({
@@ -91,6 +100,13 @@ export default function CustomerLogin() {
   const isPending = loginMutation.isPending || registerMutation.isPending;
 
   return (
+    <>
+    <WelcomeModal
+      open={showWelcome}
+      firstName={welcomeFirstName}
+      bonus={250}
+      onClose={() => { setShowWelcome(false); setLocation("/customer-portal"); }}
+    />
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
       <Card className="w-full max-w-md bg-slate-800/50 border-slate-700">
         <CardHeader className="text-center">
@@ -297,5 +313,6 @@ export default function CustomerLogin() {
         </CardContent>
       </Card>
     </div>
+    </>
   );
 }

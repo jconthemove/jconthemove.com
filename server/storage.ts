@@ -710,16 +710,16 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.referredByUserId, userId))
       .orderBy(desc(users.createdAt));
 
-    // Get total earnings from referral rewards
+    // Get total earnings from all referral-related rewards (JCMOVES)
     const referralRewards = await db
       .select()
       .from(rewards)
       .where(and(
         eq(rewards.userId, userId),
-        eq(rewards.rewardType, 'referral_bonus')
+        sql`${rewards.rewardType} IN ('referral_bonus', 'referral_request', 'referral_confirmed', 'referral_signup_bonus')`
       ));
 
-    const totalEarned = referralRewards.reduce((sum, reward) => sum + parseFloat(reward.cashValue), 0);
+    const totalEarned = referralRewards.reduce((sum, reward) => sum + parseFloat(reward.tokenAmount), 0);
 
     return {
       referralCount: referredUsers.length,

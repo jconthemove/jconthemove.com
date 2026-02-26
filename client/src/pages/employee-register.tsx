@@ -9,10 +9,13 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, UserPlus, Lock, Mail, User, Phone, Coins } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { apiRequest } from "@/lib/queryClient";
+import { WelcomeModal } from "@/components/welcome-modal";
 
 export default function EmployeeRegister() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const [showWelcome, setShowWelcome] = useState(false);
+  const [welcomeFirstName, setWelcomeFirstName] = useState("");
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -36,11 +39,16 @@ export default function EmployeeRegister() {
       return response.json();
     },
     onSuccess: (data: any) => {
-      toast({
-        title: "Registration Successful!",
-        description: data.message || "Your account has been created and is pending approval.",
-      });
-      setLocation("/pending-approval");
+      if (data.showWelcome) {
+        setWelcomeFirstName(data.user?.firstName || formData.firstName);
+        setShowWelcome(true);
+      } else {
+        toast({
+          title: "Registration Successful!",
+          description: data.message || "Your account has been created and is pending approval.",
+        });
+        setLocation("/pending-approval");
+      }
     },
     onError: (error: any) => {
       toast({
@@ -86,6 +94,13 @@ export default function EmployeeRegister() {
   };
 
   return (
+    <>
+    <WelcomeModal
+      open={showWelcome}
+      firstName={welcomeFirstName}
+      bonus={250}
+      onClose={() => { setShowWelcome(false); setLocation("/pending-approval"); }}
+    />
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
       <Card className="w-full max-w-md bg-slate-800/50 border-slate-700">
         <CardHeader className="text-center">
@@ -258,5 +273,6 @@ export default function EmployeeRegister() {
         </CardContent>
       </Card>
     </div>
+    </>
   );
 }

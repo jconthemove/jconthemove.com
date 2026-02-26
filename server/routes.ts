@@ -527,6 +527,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         newUser.rewardsEnrolled = true;
       }
 
+      // Award 250 JCMOVES welcome bonus to new employee
+      const WELCOME_BONUS = 250;
+      try {
+        await storage.createWalletAccount(newUser.id).catch(() => {});
+        await storage.creditWalletTokens(newUser.id, WELCOME_BONUS);
+        await db.insert(rewards).values({
+          userId: newUser.id,
+          rewardType: 'signup_bonus',
+          tokenAmount: WELCOME_BONUS.toFixed(8),
+          cashValue: (WELCOME_BONUS * 0.01).toFixed(2),
+          status: 'confirmed',
+          metadata: { reason: 'New employee welcome bonus' }
+        });
+        console.log(`🎉 Awarded ${WELCOME_BONUS} JCMOVES welcome bonus to new employee ${newUser.email}`);
+      } catch (bonusErr) {
+        console.error('Welcome bonus error (non-blocking):', bonusErr);
+      }
+
       (req.session as any).userId = newUser.id;
       (req.session as any).userEmail = newUser.email;
       (req.session as any).userRole = newUser.role;
@@ -572,6 +590,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         res.json({
           success: true,
+          showWelcome: true,
+          welcomeBonus: 250,
           user: {
             id: newUser.id,
             email: newUser.email,
@@ -824,9 +844,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error('Retroactive rewards error (non-blocking):', retroError);
       }
 
+      // Award 250 JCMOVES welcome bonus to new customer
+      const CUSTOMER_WELCOME_BONUS = 250;
+      try {
+        await storage.creditWalletTokens(newUser.id, CUSTOMER_WELCOME_BONUS);
+        await db.insert(rewards).values({
+          userId: newUser.id,
+          rewardType: 'signup_bonus',
+          tokenAmount: CUSTOMER_WELCOME_BONUS.toFixed(8),
+          cashValue: (CUSTOMER_WELCOME_BONUS * 0.01).toFixed(2),
+          status: 'confirmed',
+          metadata: { reason: 'New customer welcome bonus' }
+        });
+        console.log(`🎉 Awarded ${CUSTOMER_WELCOME_BONUS} JCMOVES welcome bonus to new customer ${newUser.email}`);
+      } catch (bonusErr) {
+        console.error('Welcome bonus error (non-blocking):', bonusErr);
+      }
+
       (req.session as any).userId = newUser.id;
       (req.session as any).userEmail = newUser.email;
       (req.session as any).userRole = newUser.role;
+      (req.session as any).showWelcome = true;
 
       try {
         const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
@@ -868,6 +906,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         res.json({
           success: true,
+          showWelcome: true,
+          welcomeBonus: 250,
           user: {
             id: newUser.id,
             email: newUser.email,
@@ -4616,26 +4656,45 @@ Thank you for your business!
       const result = await storage.applyReferralCode(userId, referralCode);
       
       if (result.success && result.referrerId) {
-        // Award referral request bonus to referrer (50 JCMOVES / $0.50)
+        // Award referral request bonus to referrer (50 JCMOVES)
+        // Also award referral signup bonus to the new user (1,000 JCMOVES)
         try {
           const REFERRAL_REQUEST_REWARD = TREASURY_CONFIG.REFERRAL_REQUEST_TOKENS;
+          const REFERRAL_SIGNUP_BONUS = 1000;
+
+          // Credit the referrer
           await storage.creditWalletTokens(result.referrerId, REFERRAL_REQUEST_REWARD);
           await db.insert(rewards).values({
-            recipientId: result.referrerId,
-            type: REWARD_TYPES.REFERRAL_REQUEST,
+            userId: result.referrerId,
+            rewardType: REWARD_TYPES.REFERRAL_REQUEST,
             tokenAmount: REFERRAL_REQUEST_REWARD.toFixed(8),
+            cashValue: (REFERRAL_REQUEST_REWARD * 0.01).toFixed(2),
             status: "confirmed",
-            createdAt: new Date(),
+            referenceId: userId,
             metadata: { referredUserId: userId }
           });
-          console.log(`🎁 Awarded ${REFERRAL_REQUEST_REWARD} JCMOVES ($${(REFERRAL_REQUEST_REWARD * 0.01).toFixed(2)}) to referrer ${result.referrerId} for referral request`);
+          console.log(`🎁 Awarded ${REFERRAL_REQUEST_REWARD} JCMOVES to referrer ${result.referrerId} for referral request`);
+
+          // Credit the new user who applied the code
+          await storage.creditWalletTokens(userId, REFERRAL_SIGNUP_BONUS);
+          await db.insert(rewards).values({
+            userId,
+            rewardType: 'referral_signup_bonus',
+            tokenAmount: REFERRAL_SIGNUP_BONUS.toFixed(8),
+            cashValue: (REFERRAL_SIGNUP_BONUS * 0.01).toFixed(2),
+            status: "confirmed",
+            referenceId: result.referrerId,
+            metadata: { referrerUserId: result.referrerId, referralCode }
+          });
+          console.log(`🎁 Awarded ${REFERRAL_SIGNUP_BONUS} JCMOVES referral signup bonus to new user ${userId}`);
         } catch (rewardError) {
-          console.error("Error awarding referral request bonus:", rewardError);
+          console.error("Error awarding referral bonus:", rewardError);
         }
         
         res.json({
           success: true,
-          message: "Referral code applied successfully! Your referrer earned a bonus."
+          message: "Referral code applied! You earned 1,000 JCMOVES and your referrer earned a bonus.",
+          bonusAwarded: 1000
         });
       } else {
         res.status(400).json({

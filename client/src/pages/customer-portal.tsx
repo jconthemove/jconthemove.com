@@ -217,7 +217,8 @@ export default function CustomerPortal() {
       job_completion: 'Job Completion',
       loyalty_booking: 'Loyalty Reward',
       referral: 'Referral Bonus',
-      referral_request: 'Referral Signup',
+      referral_request: 'Referral Code Applied',
+      referral_signup_bonus: 'Referral Signup Bonus',
       referral_confirmed: 'Referral Confirmed',
       signup_bonus: 'Welcome Bonus',
     };

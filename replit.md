@@ -1,6 +1,6 @@
 # Overview
 
-This full-stack application provides a comprehensive moving and junk removal service platform. It enables customers to request quotes for residential moving, commercial moving, and junk removal services. The system features a business operations dashboard, automated email notifications, role-based authentication, and employee job assignment capabilities. Built with React, TypeScript, Express.js, and Drizzle ORM, it utilizes a modern, responsive design with shadcn/ui components. The project integrates Solana blockchain for treasury management with the unified "IN GOD WE TRUST" dashboard consolidating all admin operations: token transfers, treasury deposits, live blockchain monitoring, and business analytics.
+This full-stack application is a comprehensive platform for moving and junk removal services, designed to streamline operations for "JC ON THE MOVE". It allows customers to request quotes for various services and provides businesses with a powerful operations dashboard for managing leads, assigning jobs, and tracking finances. The platform integrates a custom Solana blockchain solution for treasury management, featuring real-time monitoring and analytics. Key capabilities include automated notifications, role-based authentication, and a modern, responsive user interface. The project aims to enhance efficiency, customer engagement, and financial transparency for moving and junk removal businesses.
 
 # User Preferences
 
@@ -10,141 +10,50 @@ Preferred communication style: Simple, everyday language.
 
 ## Frontend Architecture
 - **Framework**: React 18 with TypeScript and Vite.
-- **Routing**: Wouter for lightweight client-side routing.
-- **UI Components**: shadcn/ui built on Radix UI primitives.
+- **Routing**: Wouter for client-side routing.
+- **UI Components**: shadcn/ui built on Radix UI.
 - **Styling**: Tailwind CSS with CSS variables.
 - **State Management**: TanStack Query for server state.
 - **Forms**: React Hook Form with Zod validation.
+- **UI/UX Decisions**: Modern, responsive design with dark mode toggle. Features include live price cards, a unified mining dashboard, and a consolidated "IN GOD WE TRUST" admin dashboard with tabbed navigation. Emphasizes intuitive navigation and visual prominence for key features.
 
 ## Backend Architecture
 - **Server**: Express.js with TypeScript.
-- **Database ORM**: Drizzle ORM with PostgreSQL dialect.
+- **Database ORM**: Drizzle ORM with PostgreSQL.
 - **Session Management**: Express sessions with PostgreSQL store.
-- **API Design**: RESTful API with error handling and logging.
-- **Build System**: ESBuild for production bundling.
-
-## Database Schema
-- **Leads**: Stores quote requests, customer info, service details, status, and employee assignments.
-- **Contacts**: Stores general contact form submissions.
-- **Users**: Role-based authentication (admin, employee, customer).
-- **Status Management**: Leads progress through defined states (new to completed).
-- **Job Assignment**: Tracks employee job delegation.
-- **Mining Sessions**: Tracks user mining activity, including `lastClaimDate` and `streakCount` for streak bonuses.
-
-## Email Integration
-- **Service**: SendGrid for transactional emails.
-- **Notifications**: Automated alerts for new leads and contacts.
-- **Templates**: HTML and text email templates.
-
-## Authentication & Security
-- **Email/Password Authentication**: 
-  - Custom bcrypt-hashed authentication system (10 rounds for optimal security/performance balance).
-  - No third-party authentication dependencies - ready for Google Play Store deployment.
-  - **Public Registration Routes**: `/employee-register`, `/employee-login` accessible without authentication.
-  - **Session Fixation Protection**: Session regeneration on login/registration prevents session fixation attacks.
-  - **Status-Based Access Control**: Pending users blocked from protected routes; only "active" users can access the platform.
-- **Session Management**: 
-  - Express sessions with PostgreSQL store for persistence.
-  - 90 days (3 months) session duration for extended user sessions.
-  - Secure cookie configuration with httpOnly and sameSite protection.
-- **Role-Based Access Control**: Admin, employee, and customer roles with distinct permissions.
-- **Route Protection**: Role-specific and status-aware middleware.
-- **Data Isolation**: Employees access available jobs and their own assignments.
-- **CORS**: Express CORS middleware.
-- **Input Validation**: Zod schemas.
-- **Database Security**: Parameterized queries and atomic job assignment.
+- **API Design**: RESTful API with robust error handling and logging.
+- **Authentication**: Custom email/password authentication with bcrypt hashing and session fixation protection. Implements role-based access control (Admin, Employee, Customer) and status-based access for route protection.
+- **Database Schema**: Manages leads, contacts, users, job statuses, employee assignments, and mining sessions.
+- **Email Integration**: SendGrid for transactional emails and automated notifications.
+- **Solana Blockchain Integration**: Treasury management, JCMOVES token transfers, real-time balance verification, and reconciliation.
+- **Reward Systems**: Implements a comprehensive system for JCMOVES token rewards for various activities including lead creation, job completion, referrals, shop listings, and purchases.
+- **Staking System**: Tiers of JCMOVES token staking with varying APRs and lockup periods, designed for long-term sustainability with dynamic APR adjustments based on treasury health.
+- **AI Crew Assignment Assistant**: Algorithm for suggesting optimal employee job assignments based on various factors.
 - **Compliance**: Mandatory age verification (18+) and Terms of Service acceptance.
 
 ## Deployment Architecture
-- **Production Build**: Static asset generation with Express serving SPA.
-- **Environment Variables**: Managed for database, SendGrid, session secrets, and company email.
+- **Build System**: ESBuild for production bundling.
+- **Environment Variables**: Managed for database, SendGrid, session secrets, and Solana RPC URL.
 - **Database Migrations**: Drizzle Kit for schema management.
-- **Graceful Startup**: Error handling prevents service failures from blocking server startup.
-- **Production Configuration**: `NODE_ENV=production` for optimized builds.
-- **Session Security**: `SESSION_SECRET` for secure session encryption.
-- **Health Check Endpoint**: `/health` endpoint for Autoscale Deployment monitoring.
-- **Media Asset Storage**: Large media files (>50MB) stored in Replit Object Storage to bypass deployment file size limits. Files uploaded to the `public` directory are served at `/public/<filename>` in both development and production.
-
-### Required Environment Variables for Deployment
-- **SESSION_SECRET**: Required for secure session encryption. Should be a random, long string (minimum 32 characters recommended).
-- **SENDGRID_API_KEY**: Must be a valid SendGrid API key starting with `SG.` (e.g., `SG.xxxxxxxxxxxxx`). If not provided or invalid, email notifications will be disabled but the app will continue to function.
-- **VITE_SOLANA_RPC_URL**: Must be a valid HTTP/HTTPS URL pointing to a Solana RPC endpoint (e.g., `https://api.mainnet-beta.solana.com` or `https://api.devnet.solana.com`). This is a frontend environment variable bundled at build time.
-- **DATABASE_URL**: PostgreSQL connection string (automatically provided by Replit).
-- **NODE_ENV**: Set to `production` for deployment builds.
-
-## UI/UX Decisions
-- **Dark Mode Toggle**: ThemeProvider (`client/src/hooks/useTheme.tsx`) with localStorage persistence. Default is dark mode. Toggle in header (sun/moon icon) for both desktop and mobile. CSS variables in `:root` (light) and `.dark` (dark) handle theming. Tailwind `darkMode: ["class"]` config.
-- Modern, responsive design.
-- Live price cards with gradient backgrounds and trend indicators.
-- Unified mining dashboard displaying streak count and bonus previews.
-- Non-dismissible modal for age and TOS compliance.
-- "Add a Job" button for employees on mobile dashboard.
-- **"IN GOD WE TRUST" Dashboard**: Unified admin interface replacing separate Treasury, Admin, and Moonshot pages with tabbed navigation (Operations, Transfers, Deposits, Analytics, Reconcile).
-- **Gradient Navigation**: "IN GOD WE TRUST" link uses blue-to-purple gradient for visual prominence.
-- **Clickable Users Card**: Orange "System" card with total users count is clickable, navigating to `/admin/users` with hover effects for better UX.
-- **Simplified Navigation**: Removed redundant "Users" tab from header navigation; admins access user management via clickable card in "IN GOD WE TRUST" dashboard.
-
-## Technical Implementations
-- Consolidated daily check-in and passive mining into a unified system with linear streak bonuses.
-- Implemented employee job creation with bonus rewards for creators.
-- Integrated Solana blockchain for treasury management, including real-time balance verification, reconciliation, and deposit recording.
-- Real-time JCMOVES token pricing via DexScreener API with fallback mechanism.
-- **Token Transfer System**: `/api/treasury/transfer` endpoint enables wallet-to-wallet JCMOVES transfers with validation, balance checks, and database tracking. Supports both record-only and real blockchain execution modes.
-- **Unified Admin Dashboard**: "IN GOD WE TRUST" page consolidates all admin features with tabbed navigation (Operations, Safety, Transfers, Deposits, Analytics, Reviews).
-- **Treasury Safety Tab**: Spending limits dashboard showing per-transaction (10K), daily (100K), and minimum reserve (50K) limits with security controls status.
-- **Real Blockchain Transfers**: `SolanaTransferService` with `TreasuryKeyManager` enables real SPL token transfers when `TREASURY_WALLET_PRIVATE_KEY` secret is configured.
-- **Hybrid Wallet System**: `WalletChoiceModal` lets employees choose between company-generated Solana wallets or connecting personal Phantom wallets.
-- **Compliant Swap Request System (Option A)**: Manual review system for token exchanges. Users submit requests at `/request-swap`, admins review in "IN GOD WE TRUST" dashboard → Swaps tab. No live prices, no automated execution, all swaps fulfilled off-platform through treasury or external DEX. Features required compliance acknowledgements, monthly caps (500K tokens), per-user limits (10K/month), and status tracking (pending → approved → completed).
-- **Streamlined Navigation**: Removed legacy `/treasury`, `/admin`, and `/admin-moonshot` routes in favor of single unified entry point. Removed redundant "Users" navigation tab from header.
-- **Total Earnings Fix**: Admin user details endpoint (`/api/admin/users/:id/details`) now correctly calculates total earnings from ALL rewards instead of only the last 10.
-- **AI Crew Assignment Assistant**: Intelligent algorithm suggests optimal crew assignments based on employee workload, performance ratings, experience, and job requirements. Scoring system considers active jobs (-15 pts each), ratings (+20 max), experience (+30 max), and special items handling (+10).
-- **Percentage-Based Payout Fee**: Token payouts use a 1% fee (minimum 10 JCMOVES) transferred to IN GOD WE TRUST wallet for the buyback program. Fee is calculated as max(balance * 1%, 10).
-- **Token Decimals Fix**: JCMOVES token uses 6 decimals (not 8). Corrected in Solana transfer service to prevent 100x transfer multiplier bug.
-- **Community Shop JCMOVES Rewards**: Token incentive system for marketplace activity:
-  - **Listing Reward**: 100 JCMOVES when a user posts a shop item (daily cap: 5 listings/day)
-  - **Sale Reward**: 300 JCMOVES when a seller marks their item as sold (`POST /api/shop/:id/mark-sold`)
-  - **Purchase Confirmation**: Buyer earns 150 JCMOVES + seller gets 200 JCMOVES bonus via `POST /api/shop/:id/confirm-purchase` (one-time per buyer per item)
-  - UI shows reward info banners on item detail page for both buyer and seller perspectives
-  - "I Bought This (+150 JCMOVES)" button for non-owner authenticated users on active listings
-- **Customer Rewards System**: Points-based credits system (no cash value displayed):
-  - **Lead Creation**: Employees earn 200 JCMOVES credits per job created (5/day cap)
-  - **Loyalty Booking**: Customers earn 1,500 JCMOVES credits when their job completes
-  - **Referral Request**: Referrers earn 50 JCMOVES credits when someone uses their code
-  - **Referral Confirmed**: Referrers earn 2,500 JCMOVES credits when referred user's first job completes
-- **Customer Portal Rewards Display**: Mining tab shows all earning opportunities as credits (no dollar values)
-- **Staking Treasury System**: Users stake JCMOVES tokens across 5 tiers: Flexible (no lockup/5% APR, min 50), Bronze (30d/10% APR, min 100), Silver (90d/15% APR, min 250), Gold (180d/20% APR, min 500), Diamond (365d/30% APR, min 1000). Rewards accrue continuously and are claimable anytime. Lockup tiers enforce lockup period - cannot unstake until timer expires. Flexible tier can withdraw anytime. Daily rate = annual rate / 365. Page at `/staking` with navigation from employee home.
-- **Diamond Celebration Bonus**: Limited-time 90-day +10% APR bonus for new Diamond tier stakers (40% total APR for first 90 days). After 90 days, rate reverts to base 30% APR. Diamond badge with special cyan gradient styling and PartyPopper icon. Backend auto-detects celebration period expiry during claims and adjusts rate.
-- **Treasury Health Score Dashboard**: Real-time health monitoring on staking page showing health score (reserve/staked ratio), runway days, APR status, and daily payout obligations. Color-coded status: Strong (>2x, green), Healthy (1.5-2x, blue), Warning (1-1.5x, yellow), Critical (<1x, red). Visual progress bar with threshold markers.
-- **Dynamic APR Adjustment**: APR rates automatically scale based on treasury health score. Full rates at 2x+ health, 90% at 1.5-2x, 75% at 1-1.5x, 50% at 0.5-1x, 25% below 0.5x. Tier cards show adjusted rates with strikethrough of base rate when adjustment is active. Ensures long-term staking sustainability per financial engineering principles.
+- **Media Storage**: Replit Object Storage for large media files.
+- **Mobile App Deployment**: Utilizes Capacitor for hybrid mobile app wrapping for Android.
 
 # External Dependencies
 
 ## Database
-- **Neon Database**: Serverless PostgreSQL database (`@neondatabase/serverless`).
-- **Migration System**: Drizzle Kit.
+- **Neon Database**: Serverless PostgreSQL.
 
 ## Email Service
-- **SendGrid**: Email delivery service (`@sendgrid/mail`).
+- **SendGrid**: Email delivery service.
 
 ## UI Components
 - **Radix UI**: Primitive component library.
 - **Lucide React**: Icon library.
 - **shadcn/ui**: Pre-built component system.
 
-## Development Tools
-- **Vite**: Development server and build tool.
-- **TypeScript**: Static type checking.
-- **ESLint/Prettier**: Code formatting and linting.
-- **PostCSS**: CSS processing with Tailwind CSS and Autoprefixer.
-
 ## Blockchain Integration
-- **Solana Blockchain**: For JCMOVES token treasury and transaction history.
-- **DexScreener API**: For live JCMOVES token pricing data.
+- **Solana Blockchain**: For JCMOVES token and treasury.
+- **DexScreener API**: For live JCMOVES token pricing.
 
-## Mobile App Deployment
-- **Framework**: Capacitor for hybrid mobile app wrapping the React web app.
-- **App ID**: `com.jconthemove.mobile`
-- **App Name**: "JC ON THE MOVE"
-- **Android Project**: Located in `/android` folder, ready for Android Studio.
-- **Build Process**: Run `npm run build && npx cap sync android` to update the Android project with latest web changes.
-- **Play Store Submission**: Open `/android` folder in Android Studio, generate signed AAB, upload to Google Play Console.
+## Mobile App Framework
+- **Capacitor**: Hybrid mobile app wrapping.

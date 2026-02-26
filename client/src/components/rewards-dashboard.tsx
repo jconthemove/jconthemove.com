@@ -313,11 +313,14 @@ export default function RewardsDashboard() {
     onSuccess: (data) => {
       if (data.success) {
         toast({
-          title: "Referral applied!",
+          title: data.bonusAwarded ? `+${data.bonusAwarded} JCMOVES Earned!` : "Referral applied!",
           description: data.message,
         });
         setReferralCodeInput('');
         queryClient.invalidateQueries({ queryKey: ['/api/referrals/stats'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/wallet'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/wallet/balance'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/rewards/history'] });
       } else {
         toast({
           title: "Failed to apply referral code",
@@ -426,8 +429,9 @@ export default function RewardsDashboard() {
       case 'daily_checkin': return <Calendar className="h-4 w-4 text-blue-400" />;
       case 'mining_claim': return <Coins className="h-4 w-4 text-yellow-400" />;
       case 'booking': case 'booking_request': return <Award className="h-4 w-4 text-purple-400" />;
-      case 'referral': case 'referral_request': return <Gift className="h-4 w-4 text-pink-400" />;
+      case 'referral': case 'referral_request': case 'referral_signup_bonus': return <Gift className="h-4 w-4 text-pink-400" />;
       case 'referral_confirmed': return <Gift className="h-4 w-4 text-green-400" />;
+      case 'signup_bonus': return <Gift className="h-4 w-4 text-yellow-400" />;
       case 'job_completion': case 'loyalty_booking': return <CheckCircle className="h-4 w-4 text-green-400" />;
       case 'job_creation_bonus': case 'lead_creation': return <TrendingUp className="h-4 w-4 text-cyan-400" />;
       case 'staking_claim': return <TrendingUp className="h-4 w-4 text-yellow-400" />;
@@ -442,8 +446,10 @@ export default function RewardsDashboard() {
       'booking': 'Booking Reward',
       'booking_request': 'Booking Request',
       'referral': 'Referral Bonus',
-      'referral_request': 'Referral Submitted',
+      'referral_request': 'Referral Code Applied',
+      'referral_signup_bonus': 'Referral Signup Bonus',
       'referral_confirmed': 'Referral Confirmed',
+      'signup_bonus': 'Welcome Bonus',
       'job_completion': 'Job Completed',
       'loyalty_booking': 'Loyalty Booking',
       'job_creation_bonus': 'Job Creation Bonus',
@@ -987,7 +993,7 @@ export default function RewardsDashboard() {
                   Have a Referral Code?
                 </CardTitle>
                 <CardDescription className="text-slate-400">
-                  Enter a friend's referral code to help them earn rewards!
+                  Enter a friend's referral code and earn <span className="text-green-400 font-semibold">1,000 JCMOVES</span> instantly!
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -1033,7 +1039,7 @@ export default function RewardsDashboard() {
                       </div>
                       <div className="text-center p-4 bg-green-500/10 border border-green-500/30 rounded-xl">
                         <p className="text-3xl font-black text-green-400">{referralStats.totalEarned.toFixed(0)}</p>
-                        <p className="text-sm text-slate-400">Credits Earned</p>
+                        <p className="text-sm text-slate-400">JCMOVES Earned</p>
                       </div>
                     </div>
 
