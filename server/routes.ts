@@ -3612,9 +3612,9 @@ Thank you for your business!
       
       const item = await storage.createShopItem(itemData);
 
-      // Reward creator 100 JCMOVES for listing (cap: 5 listings per day)
+      // Reward creator 100 JCMOVES for listing (cap: 50 listings per day)
       const LISTING_REWARD = 100;
-      const LISTING_DAILY_CAP = 5;
+      const LISTING_DAILY_CAP = 50;
       try {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
