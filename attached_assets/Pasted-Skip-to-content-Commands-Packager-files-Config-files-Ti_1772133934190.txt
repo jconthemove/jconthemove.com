@@ -1,0 +1,251 @@
+Skip to content
+Commands
+Packager files
+Config files
+Time
+Deployment
+Source
+Log
+2026-02-26 13:24:18.56
+4d5d489a
+User
+[AUTH CHECK] Path: /api/mining/status | Session ID: H14wfFeh | Has cookie: true
+2026-02-26 13:24:50.24
+4d5d489a
+User
+7:24:50 PM [express] GET /api/mining/status 200 in 232ms :: {"currentSession":{"id":"bf0327de-ae64-4…
+2026-02-26 13:24:53.22
+4d5d489a
+User
+[COOKIE-IN] GET /api/auth/user | proto=https secure=true | jc.sid=true connect.sid=false | raw="jc.sid=s%3AqlAiWip4jVFtiZxmom7Rjsru5xmro3W0.yrN5iWT%2FOO14prd5hlHokmJlh1wsbfM%2B66cst3HrJRY; GAESA=Cp4BMDBkYTZjZDJjNGI0M"
+2026-02-26 13:24:53.27
+4d5d489a
+User
+[AUTH CHECK] Path: /api/auth/user | Session ID: qlAiWip4 | Has cookie: true
+2026-02-26 13:24:53.33
+4d5d489a
+User
+[AUTH CHECK] ✅ User authenticated (allow pending): admin status: approved
+2026-02-26 13:24:53.33
+4d5d489a
+User
+✅ Authentication successful - Fetching user data for userId: b6de5c82-1473-4f61-b3dc-0497a40e854b
+2026-02-26 13:24:53.38
+4d5d489a
+User
+User data retrieved: found - ashleyseegert64@gmail.com with role admin
+2026-02-26 13:24:53.38
+4d5d489a
+User
+📤 Returning user data for ashleyseegert64@gmail.com
+2026-02-26 13:24:53.40
+4d5d489a
+User
+[AUTH CHECK] Path: /api/mining/status | Session ID: H14wfFeh | Has cookie: true
+2026-02-26 13:24:53.42
+4d5d489a
+User
+7:24:53 PM [express] GET /api/auth/user 304 in 199ms :: {"id":"b6de5c82-1473-4f61-b3dc-0497a40e854b"…
+2026-02-26 13:24:53.60
+4d5d489a
+User
+[AUTH CHECK] Path: /api/rewards/history | Session ID: qlAiWip4 | Has cookie: true
+2026-02-26 13:24:53.60
+4d5d489a
+User
+[AUTH CHECK] Path: /api/rewards/token-info | Session ID: qlAiWip4 | Has cookie: true
+2026-02-26 13:24:53.60
+4d5d489a
+User
+[AUTH CHECK] Path: /api/rewards/wallet | Session ID: qlAiWip4 | Has cookie: true
+2026-02-26 13:24:53.60
+4d5d489a
+User
+[AUTH CHECK] Path: /api/mining/status | Session ID: qlAiWip4 | Has cookie: true
+2026-02-26 13:24:53.60
+4d5d489a
+User
+[AUTH CHECK] Path: /api/referrals/my-code | Session ID: qlAiWip4 | Has cookie: true
+2026-02-26 13:24:53.61
+4d5d489a
+User
+[AUTH CHECK] Path: /api/wallet/payouts | Session ID: qlAiWip4 | Has cookie: true
+2026-02-26 13:24:53.61
+4d5d489a
+User
+[AUTH CHECK] Path: /api/referrals/stats | Session ID: qlAiWip4 | Has cookie: true
+2026-02-26 13:24:53.61
+4d5d489a
+User
+[AUTH CHECK] Path: /api/wallet/payout/status | Session ID: qlAiWip4 | Has cookie: true
+2026-02-26 13:24:53.65
+4d5d489a
+User
+[AUTH CHECK] ✅ User authenticated and approved: admin
+2026-02-26 13:24:53.74
+4d5d489a
+User
+7:24:53 PM [express] GET /api/referrals/my-code 304 in 180ms :: {"referralCode":"EMP-RLRISW"}
+2026-02-26 13:24:53.76
+4d5d489a
+User
+No trading pairs found for token on DexScreener
+2026-02-26 13:24:58.97
+4d5d489a
+User
+[AUTH CHECK] Path: /api/mining/status | Session ID: qlAiWip4 | Has cookie: true
+2026-02-26 13:24:59.02
+4d5d489a
+User
+[AUTH CHECK] ✅ User authenticated and approved: admin
+2026-02-26 13:24:59.07
+4d5d489a
+User
+[COOKIE-IN] GET /api/jewelry | proto=https secure=true | jc.sid=true connect.sid=false | raw="jc.sid=s%3AqlAiWip4jVFtiZxmom7Rjsru5xmro3W0.yrN5iWT%2FOO14prd5hlHokmJlh1wsbfM%2B66cst3HrJRY; GAESA=Cp4BMDBkYTZjZDJjNGI0M"
+2026-02-26 13:24:59.16
+4d5d489a
+User
+7:24:59 PM [express] GET /api/mining/status 200 in 229ms :: {"currentSession":{"id":"bf0327de-ae64-4…
+2026-02-26 13:24:59.20
+4d5d489a
+User
+[AUTH CHECK] Path: /api/mining/status | Session ID: H14wfFeh | Has cookie: true
+2026-02-26 13:24:59.26
+4d5d489a
+User
+7:24:59 PM [express] GET /api/jewelry 200 in 184ms :: [{"id":"b120a5bf-e1c1-4f4c-b975-494758304bcf",…
+2026-02-26 13:24:59.64
+4d5d489a
+User
+[AUTH CHECK] ✅ User authenticated and approved: admin
+2026-02-26 13:24:59.81
+4d5d489a
+User
+7:24:59 PM [express] GET /api/mining/status 200 in 654ms :: {"currentSession":{"id":"b412d2e7-77a9-4…
+2026-02-26 13:24:59.81
+f7cb0516
+System
+system: received signal terminated
+2026-02-26 13:25:00.46
+4d5d489a
+User
+7:25:00 PM [express] GET /api/shop 200 in 1200ms :: [{"id":"5aa640e9-f495-4f80-9094-53afe4485532","p…
+2026-02-26 13:25:04.92
+4d5d489a
+User
+[AUTH CHECK] Path: /api/mining/status | Session ID: H14wfFeh | Has cookie: true
+Wrap
+Colors
+Secrets
+Secrets are accessible to anyone who has access to this App. To restrict secret access, you must update App invite permissions. For more information, visit our documentation.
+SESSION_SECRET
+••••••••
+DEFAULT_OBJECT_STORAGE_BUCKET_ID
+••••••••
+PUBLIC_OBJECT_SEARCH_PATHS
+••••••••
+PRIVATE_OBJECT_DIR
+••••••••
+NODE_ENV
+••••••••
+REPLIT_DOMAINS
+••••••••
+COMPANY_EMAIL
+••••••••
+VITE_SOLANA_RPC_URL
+••••••••
+TREASURY_WALLET_PUBLIC_KEY
+••••••••
+TWILIO_ACCOUNT_SID
+••••••••
+TWILIO_AUTH_TOKEN
+••••••••
+TWILIO_PHONE_NUMBER
+••••••••
+ADMIN_PHONE_NUMBER
+••••••••
+JCMOVES_BANKS_PRIVATE_KEY
+••••••••
+IN_GOD_WE_TRUST_PRIVATE_KEY
+••••••••
+MOONSHOT_TOKEN_ADDRESS
+••••••••
+NEON_DATABASE_URL
+••••••••
+SQUARE_ACCESS_TOKEN
+••••••••
+AADS_PUBLISHER_ID
+••••••••
+BTC_WALLET_ADDRESS
+••••••••
+COMPANY_EMAIL
+••••••••
+MOONSHOT_TOKEN_ADDRESS
+••••••••
+REQUEST_TECH_API_KEY
+••••••••
+SENDGRID_API_KEY
+••••••••
+TREASURY_WALLET_PRIVATE_KEY
+••••••••
+VITE_SOLANA_RPC_URL
+••••••••
+Configurations
+Configurations are similar to secrets, but should only be used for non-sensitive information. They're useful for having a variable that's different between your published app and when testing on Replit.
+SQUARE_ENVIRONMENT
+production
+npm run dev
+7m
+ • 
+7 minutes ago
+Update the application environment and configuration settings
+Instead of an island it should be auto tracked based on payment received payment completion since we already have our payments going through the shop and carts
+
+No I bought this button
+
+Listing — when someone posts an item, they instantly get +100 JCMOVES (capped at 50/day)
+
+https://chatgpt.com/share/69a09abe-8470-8001-a1b1-9ae479a65046
+
+Got it — a full revamp of the JCMOVES rewards/mining page based on that strategy. Let me look at the current page first:
+
+Now let me also check the wallet and streak data available from the API:
+
+Now I have everything I need. Let me check the wallet query quickly then build the revamped page:
+
+Now I have everything. Let me write the revamped mining page:
+
+Now let me verify the wallet balance endpoint returns the right shape, and check the logs:
+
+The wallet endpoint returns tokenBalance not balance — need to fix that in the new page:
+
+The revamp is live and clean. Here's what changed on the Daily Rewards page:
+
+Zone 1 — Hero (Token + Claim)
+
+Wallet balance and earning rate displayed at the top
+Circular SVG countdown ring with a smooth animated arc — much more visual than plain numbers
+Large accumulating token counter in green
+Big, glowing "Claim Reward" button in green that becomes the obvious focal point — disabled state shows "Accumulating..." instead of confusing users
+Confetti burst animation fires when you claim
+Zone 2 — Progress (Streak + Level)
+
+Flame icon with a progress bar for the streak (Day X / 30) and a live bonus % display
+Level system with 4 tiers based on your streak:
+Level 1 — Mover (days 0–6)
+Level 2 — Crew (days 7–29)
+Level 3 — Pro Worker (days 30–89)
+Level 4 — Elite Operator (90+ days)
+Each level has its own gradient and XP-style progress bar to the next tier
+Today's base rate and tokens claimed shown as stat cards
+Zone 3 — Earn More + Use Your JCMOVES
+
+Quick links to Staking (up to 30% APR), Referrals (+2,500 JCMOVES), and Community Shop (+100/+150)
+Clear "Use Your JCMOVES" panel showing real utility: worker bonuses, staking, marketplace, discounts
+Language is also cleaned up throughout — "Daily Rewards" instead of "Token Mining", "Earning Rate" instead of "Speed 1x", "Claim Reward" instead of "Claim Tokens Now."
+
+
+Scroll to latest
+
+Make, test, iterate…
+JC ON THE MOVE - Replit
