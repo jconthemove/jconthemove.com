@@ -56,6 +56,46 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
+
+      {/* Nature Made Jewls — Top Dedication Banner */}
+      <Link href="/nature-made-jewls">
+        <div className="w-full cursor-pointer group relative overflow-hidden"
+          style={{ background: "linear-gradient(90deg, #0d0704 0%, #2d1a0f 25%, #1e1208 50%, #2d1a0f 75%, #0d0704 100%)" }}>
+          <div className="absolute inset-0 opacity-10"
+            style={{ backgroundImage: "repeating-linear-gradient(60deg, transparent, transparent 3px, rgba(180,100,30,0.12) 3px, rgba(180,100,30,0.12) 6px)" }} />
+          <div className="relative flex items-center justify-between px-4 py-2.5 max-w-5xl mx-auto gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="flex-shrink-0 w-10 h-10 rounded-lg overflow-hidden border border-amber-700/50 shadow">
+                <img src={businessCardImg} alt="Nature Made Jewls" className="w-full h-full object-cover object-left" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-amber-400/80 text-[9px] uppercase tracking-widest leading-none mb-0.5">Dedicated with love ♡</p>
+                <p className="text-amber-100 font-serif font-bold text-sm md:text-base leading-tight truncate"
+                  style={{ fontFamily: "'Georgia', serif" }}>
+                  Nature Made Jewls — Handmade Jewelry &amp; Custom Creations
+                </p>
+              </div>
+            </div>
+            <div className="hidden sm:flex items-center gap-4 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                {["Copper Wire", "Natural Stone", "Custom Designs"].map(f => (
+                  <span key={f} className="flex items-center gap-1 text-amber-100/70 text-[10px]">
+                    <CheckCircle2 className="h-2.5 w-2.5 text-amber-500" />{f}
+                  </span>
+                ))}
+              </div>
+              <span className="text-amber-400 text-xs font-semibold group-hover:underline whitespace-nowrap">
+                Shop Now →
+              </span>
+            </div>
+            <span className="sm:hidden text-amber-400 text-xs font-semibold group-hover:underline flex-shrink-0">
+              Shop →
+            </span>
+          </div>
+          <div className="h-px bg-gradient-to-r from-transparent via-amber-700/50 to-transparent" />
+        </div>
+      </Link>
+
       {/* Hero Section with Branding and Video */}
       <section className="py-8 px-4">
         <div className="max-w-4xl mx-auto">

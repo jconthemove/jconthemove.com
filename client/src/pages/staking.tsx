@@ -301,6 +301,10 @@ export default function StakingPage() {
                   <span className="text-muted-foreground">Treasury Reserve</span>
                   <span className="font-medium">{formatNumber(healthData.treasuryBalance)} JCMOVES</span>
                 </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Total Staked (all users)</span>
+                  <span className="font-medium text-green-400">{formatNumber(healthData.totalStaked)} JCMOVES</span>
+                </div>
                 <div className="w-full bg-black/30 rounded-full h-2.5 overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all ${
