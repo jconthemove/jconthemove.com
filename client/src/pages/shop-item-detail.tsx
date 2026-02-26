@@ -19,7 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ChevronLeft, ChevronRight, ArrowLeft, Eye, MessageCircle, DollarSign, X, Phone, Trash2, CheckCircle2, Pencil, ShoppingCart, Plus, Upload, ImageIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, ArrowLeft, Eye, MessageCircle, DollarSign, X, Phone, Trash2, CheckCircle2, Pencil, ShoppingCart, Plus, Upload, ImageIcon, Coins, Handshake } from "lucide-react";
 import { type ShopItem } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -72,23 +72,45 @@ export function ShopItemDetailPage() {
     },
   });
 
-  // Mark as sold mutation
+  // Mark as sold mutation — now uses reward endpoint
   const markAsSoldMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest("PATCH", `/api/shop/${id}`, { status: "sold" });
+      return await apiRequest("POST", `/api/shop/${id}/mark-sold`);
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/shop", id] });
       queryClient.invalidateQueries({ queryKey: ["/api/shop"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet"] });
       toast({
-        title: "Marked as Sold",
-        description: "This item is now marked as sold.",
+        title: "Item Sold! +300 JCMOVES",
+        description: data?.message || "Congratulations on your sale! Tokens credited to your wallet.",
       });
     },
     onError: (error: any) => {
       toast({
         title: "Error",
         description: error.message || "Failed to update item status",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Confirm purchase mutation — buyer claims their reward
+  const confirmPurchaseMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("POST", `/api/shop/${id}/confirm-purchase`);
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet"] });
+      toast({
+        title: "Purchase Confirmed! +150 JCMOVES",
+        description: data?.message || "Reward credited to your wallet. The seller also received a bonus!",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Already Claimed",
+        description: error.message || "You've already claimed a reward for this purchase.",
         variant: "destructive",
       });
     },
@@ -380,10 +402,40 @@ export function ShopItemDetailPage() {
               </div>
             )}
 
+            {/* JCMOVES Rewards Info Banner */}
+            {user && item.status === "active" && item.postedBy !== user.id && (
+              <div className="mb-3 rounded-lg bg-gradient-to-r from-yellow-950/60 to-amber-950/60 border border-yellow-700/40 px-3 py-2 flex items-center gap-2">
+                <Coins className="h-4 w-4 text-yellow-400 flex-shrink-0" />
+                <p className="text-xs text-yellow-200/90">
+                  Earn <span className="font-bold text-yellow-300">150 JCMOVES</span> when you buy this item — tap "I Bought This" after purchase!
+                </p>
+              </div>
+            )}
+            {user && item.status === "active" && item.postedBy === user.id && (
+              <div className="mb-3 rounded-lg bg-gradient-to-r from-green-950/60 to-emerald-950/60 border border-green-700/40 px-3 py-2 flex items-center gap-2">
+                <Coins className="h-4 w-4 text-green-400 flex-shrink-0" />
+                <p className="text-xs text-green-200/90">
+                  Earn <span className="font-bold text-green-300">300 JCMOVES</span> when you mark this as sold!
+                </p>
+              </div>
+            )}
+
             {/* Action Buttons */}
             <div className="space-y-2 mb-4">
               {item.status === "active" && (
                 <>
+                  {/* Confirm Purchase button for non-owners */}
+                  {user && item.postedBy !== user.id && (
+                    <Button
+                      size="lg"
+                      className="w-full bg-gradient-to-r from-yellow-600 to-amber-600 hover:from-yellow-500 hover:to-amber-500 text-black font-bold"
+                      onClick={() => confirmPurchaseMutation.mutate()}
+                      disabled={confirmPurchaseMutation.isPending}
+                    >
+                      <Handshake className="h-5 w-5 mr-2" />
+                      {confirmPurchaseMutation.isPending ? "Confirming..." : "I Bought This (+150 JCMOVES)"}
+                    </Button>
+                  )}
                   {isInCart(`shop-${item.id}`) ? (
                     <Button
                       size="lg"

@@ -3611,13 +3611,142 @@ Thank you for your business!
       });
       
       const item = await storage.createShopItem(itemData);
-      res.json(item);
+
+      // Reward creator 100 JCMOVES for listing (cap: 5 listings per day)
+      const LISTING_REWARD = 100;
+      const LISTING_DAILY_CAP = 5;
+      try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todayListings = await db.select().from(rewards)
+          .where(and(
+            eq(rewards.userId, userId),
+            eq(rewards.rewardType, 'shop_listing'),
+            gte(rewards.earnedDate, today),
+          ));
+        if (todayListings.length < LISTING_DAILY_CAP) {
+          await storage.creditWalletTokens(userId, LISTING_REWARD);
+          await db.insert(rewards).values({
+            userId,
+            rewardType: 'shop_listing',
+            tokenAmount: LISTING_REWARD.toString(),
+            cashValue: '0',
+            status: 'confirmed',
+            referenceId: item.id,
+            metadata: { itemId: item.id, itemTitle: item.title },
+          });
+        }
+      } catch (rewardErr) {
+        console.error("Error granting shop listing reward:", rewardErr);
+      }
+
+      res.json({ ...item, listingReward: LISTING_REWARD });
     } catch (error) {
       console.error("Error creating shop item:", error);
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: "Invalid shop item data", details: error.errors });
       }
       res.status(500).json({ error: "Failed to create shop item" });
+    }
+  });
+
+  // Mark shop item as sold — rewards seller 300 JCMOVES
+  app.post("/api/shop/:id/mark-sold", isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = (req.session as any).userId;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const item = await storage.getShopItem(id);
+      if (!item) return res.status(404).json({ error: "Item not found" });
+
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(401).json({ error: "User not found" });
+
+      if (item.postedBy !== userId && user.role !== 'admin') {
+        return res.status(403).json({ error: "Only the seller can mark an item as sold" });
+      }
+      if (item.status === 'sold') {
+        return res.status(400).json({ error: "Item is already marked as sold" });
+      }
+
+      await storage.updateShopItem(id, { status: 'sold' });
+
+      const SALE_REWARD = 300;
+      await storage.creditWalletTokens(userId, SALE_REWARD);
+      await db.insert(rewards).values({
+        userId,
+        rewardType: 'shop_sale',
+        tokenAmount: SALE_REWARD.toString(),
+        cashValue: '0',
+        status: 'confirmed',
+        referenceId: id,
+        metadata: { itemId: id, itemTitle: item.title, role: 'seller' },
+      });
+
+      res.json({ success: true, reward: SALE_REWARD, message: `Item marked as sold! +${SALE_REWARD} JCMOVES credited.` });
+    } catch (error: any) {
+      console.error("Error marking shop item as sold:", error);
+      res.status(500).json({ error: "Failed to mark item as sold" });
+    }
+  });
+
+  // Confirm purchase — rewards buyer 150 JCMOVES, and seller additional 200 JCMOVES
+  app.post("/api/shop/:id/confirm-purchase", isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const buyerId = (req.session as any).userId;
+      if (!buyerId) return res.status(401).json({ error: "Unauthorized" });
+
+      const item = await storage.getShopItem(id);
+      if (!item) return res.status(404).json({ error: "Item not found" });
+
+      if (item.postedBy === buyerId) {
+        return res.status(400).json({ error: "You cannot confirm purchase of your own item" });
+      }
+
+      // Check if buyer already confirmed purchase
+      const alreadyClaimed = await db.select().from(rewards)
+        .where(and(
+          eq(rewards.userId, buyerId),
+          eq(rewards.rewardType, 'shop_purchase'),
+          sql`${rewards.referenceId} = ${id}`
+        ));
+      if (alreadyClaimed.length > 0) {
+        return res.status(400).json({ error: "You already claimed a reward for this purchase" });
+      }
+
+      const BUYER_REWARD = 150;
+      const SELLER_BONUS = 200;
+
+      // Reward buyer
+      await storage.creditWalletTokens(buyerId, BUYER_REWARD);
+      await db.insert(rewards).values({
+        userId: buyerId,
+        rewardType: 'shop_purchase',
+        tokenAmount: BUYER_REWARD.toString(),
+        cashValue: '0',
+        status: 'confirmed',
+        referenceId: id,
+        metadata: { itemId: id, itemTitle: item.title, role: 'buyer' },
+      });
+
+      // Bonus to seller for a confirmed sale
+      await storage.creditWalletTokens(item.postedBy, SELLER_BONUS);
+      await db.insert(rewards).values({
+        userId: item.postedBy,
+        rewardType: 'shop_sale_confirmed',
+        tokenAmount: SELLER_BONUS.toString(),
+        cashValue: '0',
+        status: 'confirmed',
+        referenceId: id,
+        metadata: { itemId: id, itemTitle: item.title, role: 'seller_confirmed', buyerId },
+      });
+
+      res.json({ success: true, buyerReward: BUYER_REWARD, sellerBonus: SELLER_BONUS, message: `Purchase confirmed! +${BUYER_REWARD} JCMOVES earned.` });
+    } catch (error: any) {
+      console.error("Error confirming shop purchase:", error);
+      res.status(500).json({ error: "Failed to confirm purchase" });
     }
   });
 
