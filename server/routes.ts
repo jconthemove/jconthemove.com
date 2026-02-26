@@ -3615,6 +3615,7 @@ Thank you for your business!
       // Reward creator 100 JCMOVES for listing (cap: 50 listings per day)
       const LISTING_REWARD = 100;
       const LISTING_DAILY_CAP = 50;
+      let rewardGranted = 0;
       try {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -3630,17 +3631,21 @@ Thank you for your business!
             userId,
             rewardType: 'shop_listing',
             tokenAmount: LISTING_REWARD.toString(),
-            cashValue: '0',
+            cashValue: '0.00',
             status: 'confirmed',
-            referenceId: item.id,
+            referenceId: String(item.id),
             metadata: { itemId: item.id, itemTitle: item.title },
           });
+          rewardGranted = LISTING_REWARD;
+          console.log(`✅ Shop listing reward: ${LISTING_REWARD} JCMOVES credited to user ${userId}`);
+        } else {
+          console.log(`ℹ️ Shop listing reward skipped: daily cap reached for user ${userId}`);
         }
       } catch (rewardErr) {
-        console.error("Error granting shop listing reward:", rewardErr);
+        console.error("❌ Error granting shop listing reward:", rewardErr);
       }
 
-      res.json({ ...item, listingReward: LISTING_REWARD });
+      res.json({ ...item, listingReward: rewardGranted || null });
     } catch (error) {
       console.error("Error creating shop item:", error);
       if (error instanceof z.ZodError) {
@@ -8585,8 +8590,9 @@ Thank you for your business!
       const url = await objectStorage.saveBase64Image(image, extension || 'jpg');
       res.json({ url });
     } catch (error: any) {
-      console.error("Error uploading jewelry photo:", error);
-      res.status(500).json({ error: "Failed to upload photo" });
+      const detail = error?.message || String(error);
+      console.error("❌ Error uploading jewelry photo:", detail);
+      res.status(500).json({ error: "Failed to upload photo", detail });
     }
   });
 
@@ -8607,8 +8613,9 @@ Thank you for your business!
       const url = await objectStorage.saveBase64Video(video, extension || 'mp4');
       res.json({ url });
     } catch (error: any) {
-      console.error("Error uploading jewelry video:", error);
-      res.status(500).json({ error: "Failed to upload video" });
+      const detail = error?.message || String(error);
+      console.error("❌ Error uploading jewelry video:", detail);
+      res.status(500).json({ error: "Failed to upload video", detail });
     }
   });
 

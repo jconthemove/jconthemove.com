@@ -327,7 +327,10 @@ export default function NatureMadeJewls() {
           credentials: 'include',
           body: JSON.stringify({ [bodyKey]: base64, extension: ext }),
         });
-        if (!res.ok) throw new Error('Upload failed');
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || errData.error || `Server error ${res.status}`);
+        }
         const { url } = await res.json();
         setEditPhotoUrls(prev => [...prev, url]);
       }
@@ -393,8 +396,11 @@ export default function NatureMadeJewls() {
           credentials: 'include',
           body: JSON.stringify({ [bodyKey]: base64, extension: ext }),
         });
-        
-        if (!res.ok) throw new Error('Upload failed');
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || errData.error || `Server error ${res.status}`);
+        }
         const { url } = await res.json();
         setPhotoUrls(prev => [...prev, url]);
       }

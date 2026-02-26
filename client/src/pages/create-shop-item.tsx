@@ -63,13 +63,16 @@ export function CreateShopItemPage() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/shop"] });
       queryClient.invalidateQueries({ queryKey: ["/api/wallet"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet/balance"] });
+      const rewarded = data?.listingReward;
       toast({
-        title: "Listed! +100 JCMOVES Earned",
-        description: data?.listingReward
-          ? `Your item is live! ${data.listingReward} JCMOVES credited to your wallet. Earn 300 more when it sells!`
+        title: rewarded ? `Listed! +${rewarded} JCMOVES Earned` : "Item Listed!",
+        description: rewarded
+          ? `Your item is live! ${rewarded} JCMOVES credited to your wallet. Earn 300 more when it sells!`
           : "Your item has been posted to the shop. Earn 300 JCMOVES when it sells!",
       });
-      setLocation("/shop");
+      // Delay navigation so the toast is visible
+      setTimeout(() => setLocation("/shop"), 2500);
     },
     onError: (error: any) => {
       toast({
