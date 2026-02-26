@@ -107,6 +107,9 @@ export default function AdminUsersPage() {
   const [transferDescription, setTransferDescription] = useState("");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [grantModalOpen, setGrantModalOpen] = useState(false);
+  const [grantAmount, setGrantAmount] = useState("");
+  const [grantReason, setGrantReason] = useState("");
 
   // Check if user has admin or business_owner role
   const hasAccess = hasAdminAccess || user?.role === 'business_owner';
@@ -172,6 +175,32 @@ export default function AdminUsersPage() {
         description: error.message || "Failed to transfer tokens",
         variant: "destructive"
       });
+    }
+  });
+
+  // Grant tokens mutation (admin manual award)
+  const grantTokensMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest(
+        "POST",
+        `/api/admin/grant-tokens`,
+        {
+          userId: selectedUser,
+          amount: parseFloat(grantAmount),
+          reason: grantReason
+        }
+      );
+      return await response.json();
+    },
+    onSuccess: (data: any) => {
+      toast({ title: "Tokens Granted", description: data.message || "Tokens granted successfully" });
+      setGrantAmount("");
+      setGrantReason("");
+      setGrantModalOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users", selectedUser, "details"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Grant Failed", description: error.message || "Failed to grant tokens", variant: "destructive" });
     }
   });
 
@@ -746,15 +775,25 @@ export default function AdminUsersPage() {
                             <Wallet className="h-4 w-4 mr-2" />
                             Wallet Balance
                           </CardTitle>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => setWalletModalOpen(true)}
-                            data-testid="button-manage-wallet"
-                          >
-                            <ArrowRightLeft className="h-4 w-4 mr-2" />
-                            Manage
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => setGrantModalOpen(true)}
+                            >
+                              <Award className="h-4 w-4 mr-2" />
+                              Grant
+                            </Button>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => setWalletModalOpen(true)}
+                              data-testid="button-manage-wallet"
+                            >
+                              <ArrowRightLeft className="h-4 w-4 mr-2" />
+                              Manage
+                            </Button>
+                          </div>
                         </div>
                       </CardHeader>
                       <CardContent className="space-y-2">
@@ -1145,6 +1184,51 @@ export default function AdminUsersPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Grant Tokens Dialog */}
+      <Dialog open={grantModalOpen} onOpenChange={setGrantModalOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Grant JCMOVES Tokens</DialogTitle>
+            <DialogDescription>
+              Manually award tokens to {userDetails?.user?.firstName} {userDetails?.user?.lastName} for missed rewards or adjustments.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Amount (JCMOVES)</Label>
+              <Input
+                type="number"
+                placeholder="e.g. 200"
+                value={grantAmount}
+                onChange={(e) => setGrantAmount(e.target.value)}
+                min="1"
+                max="100000"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Reason</Label>
+              <Input
+                placeholder="e.g. Missed lead creation reward"
+                value={grantReason}
+                onChange={(e) => setGrantReason(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setGrantModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => grantTokensMutation.mutate()}
+                disabled={!grantAmount || !grantReason || grantTokensMutation.isPending}
+              >
+                {grantTokensMutation.isPending ? "Granting..." : `Grant ${grantAmount || "0"} JCMOVES`}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       </div>
     </div>
   );

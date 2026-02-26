@@ -2016,9 +2016,9 @@ export class DatabaseStorage implements IStorage {
     return await db.select()
       .from(rewards)
       .where(and(
-        eq(rewards.recipientId, userId),
-        eq(rewards.type, rewardType),
-        gte(rewards.createdAt, today)
+        eq(rewards.userId, userId),
+        eq(rewards.rewardType, rewardType),
+        gte(rewards.earnedDate, today)
       ));
   }
 
