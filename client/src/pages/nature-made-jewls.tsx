@@ -13,9 +13,10 @@ import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ArrowLeft, Gem, Leaf, Search, Plus, ChevronLeft, ChevronRight, Mail, Phone, ImagePlus, X, Heart, Pencil, Trash2, Video, CreditCard, Tag, RotateCcw, ShoppingCart, Check, CheckCircle2, Sparkles, Star } from "lucide-react";
-import businessCardImg from "@assets/20260225_172830_0000_1772063302969.png";
 import { useCart } from "@/hooks/useCart";
 import { FloatingCartButton } from "@/components/cart-button";
+
+const jewelryVideoSrc = "/jewelry-video.mp4";
 
 const isVideoUrl = (url: string) => /\.(mp4|webm|ogg|mov)$/i.test(url);
 
@@ -640,50 +641,43 @@ export default function NatureMadeJewls() {
         </div>
       </div>
 
-      {/* Business Card Style Banner */}
-      <section className="px-3 sm:px-4 pt-4 pb-2 max-w-4xl mx-auto">
-        <div className="relative overflow-hidden rounded-2xl shadow-2xl border border-amber-800/40"
-          style={{ background: "linear-gradient(135deg, #1a0e08 0%, #2d1a0f 30%, #1e1208 60%, #120a05 100%)" }}>
-          <div className="absolute inset-0 opacity-20"
-            style={{ backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(139,90,43,0.1) 2px, rgba(139,90,43,0.1) 4px)" }} />
-          <div className="relative flex flex-col sm:flex-row items-center gap-4 sm:gap-6 p-4 sm:p-6">
-            <div className="flex-shrink-0 w-36 h-36 sm:w-44 sm:h-44 rounded-xl overflow-hidden shadow-lg border border-amber-700/30">
-              <img src={businessCardImg} alt="Nature Made Jewls - Handmade Jewelry" className="w-full h-full object-cover object-left" />
+      {/* Slim Video Banner */}
+      <div className="w-full"
+        style={{ background: "linear-gradient(90deg, #0d0704 0%, #2d1a0f 25%, #1e1208 50%, #2d1a0f 75%, #0d0704 100%)" }}>
+        <div className="absolute inset-0 opacity-10 pointer-events-none"
+          style={{ backgroundImage: "repeating-linear-gradient(60deg, transparent, transparent 3px, rgba(180,100,30,0.12) 3px, rgba(180,100,30,0.12) 6px)" }} />
+        <div className="relative flex items-center justify-between px-4 py-2.5 max-w-5xl mx-auto gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex-shrink-0 w-10 h-10 rounded-lg overflow-hidden border border-amber-700/50 shadow">
+              <video
+                src={jewelryVideoSrc}
+                autoPlay
+                loop
+                muted
+                playsInline
+                className="w-full h-full object-cover"
+              />
             </div>
-            <div className="flex-1 text-center sm:text-left">
-              <div className="mb-1">
-                <span className="text-amber-400/70 text-xs uppercase tracking-widest font-medium">Nature Made Jewls</span>
-              </div>
-              <h2 className="font-serif text-2xl sm:text-3xl font-bold text-amber-100 mb-3 leading-tight"
-                style={{ fontFamily: "'Georgia', serif", textShadow: "0 2px 8px rgba(0,0,0,0.6)" }}>
-                Handmade Jewelry<br />&amp; Custom Creations
-              </h2>
-              <div className="space-y-1.5 mb-4">
-                {[
-                  "Copper Wire Jewelry",
-                  "Natural Stone Pieces",
-                  "Custom Designs Available",
-                ].map((feature) => (
-                  <div key={feature} className="flex items-center gap-2 justify-center sm:justify-start">
-                    <CheckCircle2 className="h-4 w-4 text-amber-500 flex-shrink-0" />
-                    <span className="text-amber-100/90 text-sm font-medium">{feature}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="border-t border-amber-700/40 pt-3 flex flex-wrap items-center gap-3 justify-center sm:justify-start">
-                <a href="mailto:upmichiganstatemovers@gmail.com"
-                  className="flex items-center gap-1.5 text-amber-300/80 hover:text-amber-200 text-xs transition-colors">
-                  <Mail className="h-3.5 w-3.5" /> upmichiganstatemovers@gmail.com
-                </a>
-                <a href="tel:906-285-9312"
-                  className="flex items-center gap-1.5 text-amber-300/80 hover:text-amber-200 text-xs transition-colors">
-                  <Phone className="h-3.5 w-3.5" /> 906-285-9312
-                </a>
-              </div>
+            <div className="min-w-0">
+              <p className="text-amber-400/80 text-[9px] uppercase tracking-widest leading-none mb-0.5">Handmade with love ♡</p>
+              <p className="text-amber-100 font-serif font-bold text-sm md:text-base leading-tight truncate"
+                style={{ fontFamily: "'Georgia', serif" }}>
+                Nature Made Jewls — Handmade Jewelry &amp; Custom Creations
+              </p>
+            </div>
+          </div>
+          <div className="hidden sm:flex items-center gap-4 flex-shrink-0">
+            <div className="flex items-center gap-2">
+              {["Copper Wire", "Natural Stone", "Custom Designs"].map(f => (
+                <span key={f} className="flex items-center gap-1 text-amber-100/70 text-[10px]">
+                  <CheckCircle2 className="h-2.5 w-2.5 text-amber-500" />{f}
+                </span>
+              ))}
             </div>
           </div>
         </div>
-      </section>
+        <div className="h-px bg-gradient-to-r from-transparent via-amber-700/50 to-transparent" />
+      </div>
 
       {/* Sponsored Item Banner */}
       <section className="px-3 sm:px-4 pt-3 pb-1 max-w-4xl mx-auto">

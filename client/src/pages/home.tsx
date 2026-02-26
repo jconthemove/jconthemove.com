@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Truck, Trash2, Snowflake, Sparkles, Gift, ShoppingBag, Star, Users, Volume2, VolumeX, Gem, Clock, BadgeDollarSign, CheckCircle2 } from "lucide-react";
 import promoImage from "@assets/file_00000000839871fd8e13378301744f2e_(1)_1771260918919.png";
-import businessCardImg from "@assets/20260225_172830_0000_1772063302969.png";
 import { Link } from "wouter";
+
+const jewelryVideoSrc = "/jewelry-video.mp4";
 
 export default function HomePage() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -66,7 +67,7 @@ export default function HomePage() {
           <div className="relative flex items-center justify-between px-4 py-2.5 max-w-5xl mx-auto gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <div className="flex-shrink-0 w-10 h-10 rounded-lg overflow-hidden border border-amber-700/50 shadow">
-                <img src={businessCardImg} alt="Nature Made Jewls" className="w-full h-full object-cover object-left" />
+                <video src={jewelryVideoSrc} autoPlay loop muted playsInline className="w-full h-full object-cover" />
               </div>
               <div className="min-w-0">
                 <p className="text-amber-400/80 text-[9px] uppercase tracking-widest leading-none mb-0.5">Dedicated with love ♡</p>
@@ -251,10 +252,13 @@ export default function HomePage() {
                 style={{ backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(139,90,43,0.15) 2px, rgba(139,90,43,0.15) 4px)" }} />
               <div className="relative flex items-center gap-0 overflow-hidden">
                 <div className="flex-shrink-0 w-32 md:w-48 h-28 md:h-36 overflow-hidden">
-                  <img
-                    src={businessCardImg}
-                    alt="Nature Made Jewls"
-                    className="w-full h-full object-cover object-left group-hover:scale-105 transition-transform duration-500"
+                  <video
+                    src={jewelryVideoSrc}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                   <div className="absolute inset-y-0 left-32 md:left-48 w-8 bg-gradient-to-r from-[#1a0e08] to-transparent" />
                 </div>
