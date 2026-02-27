@@ -709,16 +709,17 @@ export default function NatureMadeJewls() {
           </div>
         ) : (
           <>
-          <div className="columns-2 sm:columns-2 md:columns-3 lg:columns-4 xl:columns-5 gap-2 sm:gap-3">
-            {items.map((item, idx) => {
+          {/* Diverging offset gallery — items split into explicit columns with cascading offsets */}
+          {(() => {
+            const heights = ['aspect-[3/4]', 'aspect-[4/5]', 'aspect-square', 'aspect-[2/3]', 'aspect-[5/6]'];
+
+            const renderCard = (item: JewelryItem, origIdx: number) => {
               const photos = getItemPhotos(item);
-              const heights = ['aspect-[3/4]', 'aspect-square', 'aspect-[4/5]', 'aspect-[2/3]'];
-              const itemHeight = heights[idx % heights.length];
-              
+              const itemHeight = heights[origIdx % heights.length];
               return (
                 <Card
                   key={item.id}
-                  className={`break-inside-avoid mb-2 sm:mb-3 overflow-hidden cursor-pointer group hover:shadow-xl transition-all border-0 bg-white/90 backdrop-blur-sm shadow-md shadow-purple-100/50 ${idx % 2 === 1 ? 'mt-4 sm:mt-6' : ''}`}
+                  className="overflow-hidden cursor-pointer group hover:shadow-xl transition-all duration-300 border-0 bg-white/90 backdrop-blur-sm shadow-md shadow-purple-100/50"
                   onClick={() => openItem(item)}
                   onMouseEnter={(e) => {
                     const rect = e.currentTarget.getBoundingClientRect();
@@ -744,44 +745,84 @@ export default function NatureMadeJewls() {
                       <MediaThumb
                         src={photos[0]}
                         alt={item.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
-                        <Gem className="w-12 h-12 text-stone-300" />
+                        <Gem className="w-10 h-10 text-stone-300" />
                       </div>
                     )}
                     {photos.some(p => isVideoUrl(p)) && (
-                      <span className="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
-                        <Video className="h-3 w-3" /> Video
+                      <span className="absolute top-2 left-2 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                        <Video className="h-2.5 w-2.5" /> Video
                       </span>
                     )}
                     {photos.length > 1 && (
-                      <span className="absolute top-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded-full">
+                      <span className="absolute top-2 right-2 bg-black/50 text-white text-[10px] px-1.5 py-0.5 rounded-full">
                         +{photos.length - 1}
                       </span>
                     )}
                     {item.featured && (
-                      <Heart className="absolute top-2 left-2 w-5 h-5 text-rose-500 fill-rose-500" />
+                      <Heart className="absolute bottom-2 left-2 w-4 h-4 text-rose-500 fill-rose-500" />
                     )}
                     {!item.inStock && (
                       <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                        <span className="bg-white text-stone-800 px-3 py-1 rounded-full text-sm font-medium">Sold</span>
+                        <span className="bg-white text-stone-800 px-2 py-0.5 rounded-full text-xs font-medium">Sold</span>
                       </div>
                     )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                   </div>
-                  <div className="p-3">
-                    <h3 className="font-medium text-stone-800 line-clamp-1">{item.title}</h3>
-                    <p className="text-stone-500 text-sm line-clamp-1">{item.shortDescription || item.category || "Handcrafted"}</p>
+                  <div className="p-2 sm:p-3">
+                    <h3 className="font-medium text-stone-800 text-sm line-clamp-1">{item.title}</h3>
+                    <p className="text-stone-400 text-xs line-clamp-1">{item.shortDescription || item.category || "Handcrafted"}</p>
                     {item.price && (
-                      <p className="text-purple-600 font-semibold mt-1">${item.price}</p>
+                      <p className="text-purple-600 font-semibold text-sm mt-0.5">${item.price}</p>
                     )}
                   </div>
                 </Card>
               );
-            })}
-          </div>
+            };
+
+            /* Mobile/tablet: 2 explicit columns, right offset down */
+            const col0 = items.filter((_, i) => i % 2 === 0);
+            const col1 = items.filter((_, i) => i % 2 === 1);
+
+            /* Desktop (lg+): 4 columns with cascading offsets */
+            const lg0 = items.filter((_, i) => i % 4 === 0);
+            const lg1 = items.filter((_, i) => i % 4 === 1);
+            const lg2 = items.filter((_, i) => i % 4 === 2);
+            const lg3 = items.filter((_, i) => i % 4 === 3);
+
+            return (
+              <>
+                {/* Mobile + tablet: 2-column diverging */}
+                <div className="grid grid-cols-2 gap-2 sm:gap-3 items-start lg:hidden">
+                  <div className="flex flex-col gap-2 sm:gap-3">
+                    {col0.map((item, i) => renderCard(item, i * 2))}
+                  </div>
+                  <div className="flex flex-col gap-2 sm:gap-3 pt-12 sm:pt-16">
+                    {col1.map((item, i) => renderCard(item, i * 2 + 1))}
+                  </div>
+                </div>
+
+                {/* Desktop: 4-column cascading diverge */}
+                <div className="hidden lg:grid lg:grid-cols-4 lg:gap-3 items-start">
+                  <div className="flex flex-col gap-3">
+                    {lg0.map((item, i) => renderCard(item, i * 4))}
+                  </div>
+                  <div className="flex flex-col gap-3 pt-16">
+                    {lg1.map((item, i) => renderCard(item, i * 4 + 1))}
+                  </div>
+                  <div className="flex flex-col gap-3 pt-8">
+                    {lg2.map((item, i) => renderCard(item, i * 4 + 2))}
+                  </div>
+                  <div className="flex flex-col gap-3 pt-20">
+                    {lg3.map((item, i) => renderCard(item, i * 4 + 3))}
+                  </div>
+                </div>
+              </>
+            );
+          })()}
 
           {hoveredItem && (
             <div
