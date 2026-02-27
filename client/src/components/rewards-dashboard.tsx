@@ -196,6 +196,7 @@ export default function RewardsDashboard() {
   });
 
   const [showPayoutConfirm, setShowPayoutConfirm] = useState(false);
+  const [historyFilter, setHistoryFilter] = useState<string>('all');
 
   // Start mining mutation
   const startMiningMutation = useMutation({
@@ -486,16 +487,55 @@ export default function RewardsDashboard() {
   const priceChange24h = tokenInfo?.priceChange24h || 0;
   const isPositiveChange = priceChange24h >= 0;
 
+  const historyFilterOptions = [
+    { value: 'all', label: 'All', color: 'slate' },
+    { value: 'mining_claim', label: 'Mining', color: 'cyan' },
+    { value: 'referral', label: 'Referrals', color: 'violet' },
+    { value: 'job', label: 'Jobs', color: 'emerald' },
+    { value: 'staking', label: 'Staking', color: 'yellow' },
+    { value: 'signup_bonus', label: 'Bonus', color: 'pink' },
+  ];
+
+  const filteredHistory = (rewardsHistory || []).filter(r => {
+    if (historyFilter === 'all') return true;
+    if (historyFilter === 'referral') return r.rewardType.includes('referral');
+    if (historyFilter === 'job') return r.rewardType.includes('job') || r.rewardType.includes('lead') || r.rewardType.includes('booking');
+    if (historyFilter === 'staking') return r.rewardType.includes('staking');
+    if (historyFilter === 'signup_bonus') return r.rewardType.includes('signup') || r.rewardType.includes('admin') || r.rewardType === 'signup_bonus';
+    return r.rewardType === historyFilter || r.rewardType.includes(historyFilter);
+  });
+
+  const miningFill = Math.min(100, (parseFloat(accumulatedTokens) / (1728 * parseFloat(miningStatus?.miningSpeed || "1"))) * 100);
+  const canClaim = parseFloat(accumulatedTokens) > 0 && !claimMutation.isPending;
+
   return (
     <div className="min-h-screen">
-      <div className="container mx-auto p-4 md:p-6 max-w-7xl">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-        <div className="relative">
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 via-orange-500/10 to-blue-600/20 blur-3xl -z-10"></div>
-          <h1 className="text-3xl md:text-4xl font-black bg-gradient-to-r from-blue-400 via-orange-400 to-blue-400 bg-clip-text text-transparent tracking-tight">Rewards Center</h1>
-          <p className="text-sm text-slate-400 mt-1">
-            Earn {tokenInfo?.symbol || 'JCMOVES'} through mining and referrals
-          </p>
+      <div className="container mx-auto p-3 md:p-6 max-w-2xl">
+      {/* Futuristic Header */}
+      <div className="mb-5">
+        <div className="flex items-center gap-3 mb-1">
+          <div className="w-2 h-8 rounded-full bg-gradient-to-b from-cyan-400 to-blue-600 shadow-[0_0_12px_rgba(0,220,255,0.7)]" />
+          <h1 className="text-2xl md:text-3xl font-black text-white tracking-tight">JCMOVES <span className="text-cyan-400">Rewards</span></h1>
+        </div>
+        <p className="text-xs text-slate-500 pl-5">Earn tokens every day — mine, refer, work, stake</p>
+      </div>
+
+      {/* Stats Strip */}
+      <div className="grid grid-cols-3 gap-2 mb-4">
+        <div className="rounded-xl bg-slate-900 border border-cyan-500/20 p-3 text-center shadow-[0_0_12px_rgba(0,220,255,0.06)]">
+          <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-0.5">Balance</p>
+          <p className="text-lg font-black text-cyan-400 leading-none">{tokenBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+          <p className="text-[9px] text-slate-600 mt-0.5">JCMOVES</p>
+        </div>
+        <div className="rounded-xl bg-slate-900 border border-orange-500/20 p-3 text-center shadow-[0_0_12px_rgba(251,146,60,0.06)]">
+          <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-0.5">Streak</p>
+          <p className="text-lg font-black text-orange-400 leading-none">{miningStatus?.streakCount || 0}</p>
+          <p className="text-[9px] text-slate-600 mt-0.5">days 🔥</p>
+        </div>
+        <div className="rounded-xl bg-slate-900 border border-emerald-500/20 p-3 text-center shadow-[0_0_12px_rgba(52,211,153,0.06)]">
+          <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-0.5">All-Time</p>
+          <p className="text-lg font-black text-emerald-400 leading-none">{parseFloat(wallet?.totalEarned || '0').toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+          <p className="text-[9px] text-slate-600 mt-0.5">earned</p>
         </div>
       </div>
 
@@ -597,653 +637,448 @@ export default function RewardsDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* Wallet Overview - Condensed to 2 Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <Card 
-          className="transition-all border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80 hover:border-blue-500/50 hover:shadow-xl hover:shadow-blue-900/20 cursor-pointer"
-          data-testid="card-wallet-balance"
-          onClick={() => setWalletModalOpen(true)}
+      {/* Wallet Action Bar */}
+      <div className="flex gap-2 mb-5">
+        <Button
+          onClick={() => setShowPayoutConfirm(true)}
+          disabled={payoutMutation.isPending || tokenBalance <= (payoutConfig?.minimumPayout || 11)}
+          className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold shadow-[0_0_16px_rgba(52,211,153,0.3)] border-0"
+          size="sm"
+          data-testid="button-claim-to-wallet"
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-slate-300 flex items-center gap-2">
-              Balance & Holdings
-              <ChevronRight className="h-4 w-4 text-slate-400" />
-            </CardTitle>
-            <div className="p-2 rounded-lg bg-blue-500/20 border border-blue-500/30">
-              <Wallet className="h-4 w-4 text-blue-400" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-black text-slate-100" data-testid="token-balance">
-              {tokenBalance.toFixed(2)} {tokenInfo?.symbol || 'JCMOVES'}
-            </div>
-            <p className="text-xs text-slate-400 mt-1 flex items-center mb-3">
-              Portfolio Value: <span className="font-bold text-orange-400 ml-1">${(tokenBalance * (tokenInfo?.price || 0)).toFixed(2)}</span>
-            </p>
-            <div className="flex gap-2">
-              <Button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowPayoutConfirm(true);
-                }}
-                disabled={payoutMutation.isPending || tokenBalance <= (payoutConfig?.minimumPayout || 11)}
-                className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white shadow-lg shadow-green-500/20"
-                size="sm"
-                data-testid="button-claim-to-wallet"
-              >
-                <ArrowUpRight className="mr-1 h-4 w-4" />
-                Claim to Wallet
-              </Button>
-              <Link href="/staking" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
-                <Button
-                  variant="outline"
-                  className="border-purple-500/50 text-purple-300 hover:bg-purple-500/20 hover:border-purple-400"
-                  size="sm"
-                  data-testid="button-earn-staking"
-                >
-                  <TrendingUp className="mr-1 h-4 w-4" />
-                  Earn Staking
-                </Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-slate-300">Streak & Earnings</CardTitle>
-            <div className="p-2 rounded-lg bg-orange-500/20 border border-orange-500/30">
-              <Zap className="h-4 w-4 text-orange-400" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-black text-orange-400" data-testid="streak-count">
-                {miningStatus?.streakCount || 0} days
-              </span>
-              {miningStatus?.streakCount && miningStatus.streakCount > 1 && (
-                <Badge className="text-xs bg-green-500/20 text-green-300 border border-green-500/30">
-                  +{((miningStatus.streakCount - 1) * 1)}% bonus
-                </Badge>
-              )}
-            </div>
-            <p className="text-xs text-slate-400 mt-1">
-              Total Earned: <span className="font-bold text-green-400" data-testid="total-earned">{parseFloat(wallet?.totalEarned || '0').toFixed(2)}</span>
-            </p>
-          </CardContent>
-        </Card>
+          <ArrowUpRight className="mr-1.5 h-4 w-4" /> Send to Wallet
+        </Button>
+        <Link href="/staking">
+          <Button variant="outline" size="sm" className="border-violet-500/40 text-violet-300 hover:bg-violet-500/20" data-testid="button-earn-staking">
+            <TrendingUp className="mr-1.5 h-4 w-4" /> Stake
+          </Button>
+        </Link>
+        <Button variant="ghost" size="sm" className="text-slate-400 hover:text-white border border-slate-700/50" onClick={() => setWalletModalOpen(true)}>
+          <Wallet className="h-4 w-4" />
+        </Button>
       </div>
 
       {/* Main Tabs */}
-      <Tabs defaultValue="mining" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3 bg-slate-800/50 border border-slate-700/50 p-1">
-          <TabsTrigger value="mining" className="data-[state=active]:bg-orange-500/20 data-[state=active]:text-orange-300" data-testid="tab-mining">
-            <Zap className="h-4 w-4 mr-2" />
-            Mining
+      <Tabs defaultValue="mining" className="space-y-4">
+        <TabsList className="grid w-full grid-cols-3 bg-slate-900 border border-slate-800 p-1 rounded-xl">
+          <TabsTrigger value="mining" className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500/30 data-[state=active]:to-amber-500/20 data-[state=active]:text-orange-300 data-[state=active]:border data-[state=active]:border-orange-500/30 text-slate-500" data-testid="tab-mining">
+            <Zap className="h-4 w-4 mr-1.5" /> Mining
           </TabsTrigger>
-          <TabsTrigger value="referrals" className="data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-300" data-testid="tab-referrals">
-            <Users className="h-4 w-4 mr-2" />
-            Referrals
+          <TabsTrigger value="referrals" className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-500/30 data-[state=active]:to-purple-500/20 data-[state=active]:text-violet-300 data-[state=active]:border data-[state=active]:border-violet-500/30 text-slate-500" data-testid="tab-referrals">
+            <Users className="h-4 w-4 mr-1.5" /> Referrals
           </TabsTrigger>
-          <TabsTrigger value="history" className="data-[state=active]:bg-green-500/20 data-[state=active]:text-green-300" data-testid="tab-history">
-            <Clock className="h-4 w-4 mr-2" />
-            History
+          <TabsTrigger value="history" className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500/30 data-[state=active]:to-teal-500/20 data-[state=active]:text-emerald-300 data-[state=active]:border data-[state=active]:border-emerald-500/30 text-slate-500" data-testid="tab-history">
+            <Clock className="h-4 w-4 mr-1.5" /> History
           </TabsTrigger>
         </TabsList>
 
         {/* Mining Tab */}
         <TabsContent value="mining" className="space-y-4">
           <div className="max-w-2xl mx-auto space-y-4">
-            {/* Balance Card - Gradient Style */}
-            <Card className="p-6 bg-gradient-to-br from-purple-500 via-pink-500 to-red-500 text-white border-0 shadow-xl shadow-purple-900/30 overflow-hidden relative">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-12 -mt-12"></div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm opacity-90 font-medium">Mining Balance</p>
-                  <p className="text-4xl font-black mt-1">
-                    {parseFloat(accumulatedTokens).toFixed(2)}
-                  </p>
-                  <p className="text-xs opacity-75 mt-1 font-medium">JCMOVES</p>
+            {/* ── MINING CORE CARD ── */}
+            <div className="rounded-2xl bg-slate-900 border border-orange-500/20 overflow-hidden shadow-[0_0_30px_rgba(251,146,60,0.1)]">
+              {/* Top: accumulation */}
+              <div className="p-5 pb-3">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <p className="text-[11px] text-slate-500 uppercase tracking-widest mb-1">Accumulating</p>
+                    <p className="text-4xl font-black text-white tabular-nums" data-testid="text-accumulated-tokens">
+                      {parseFloat(accumulatedTokens).toFixed(2)}
+                    </p>
+                    <p className="text-xs text-orange-400 font-bold mt-0.5">JCMOVES</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[11px] text-slate-500 uppercase tracking-widest mb-1">Speed</p>
+                    <p className="text-2xl font-black text-cyan-400" data-testid="text-mining-speed">
+                      {hasActiveSession ? `${parseFloat(miningStatus?.miningSpeed || "1").toFixed(0)}X` : '—'}
+                    </p>
+                  </div>
                 </div>
-                <Coins className="h-14 w-14 opacity-90" />
+                {/* Progress bar */}
+                <div className="w-full h-2.5 rounded-full bg-slate-800 border border-slate-700 overflow-hidden mb-1">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-orange-500 via-amber-400 to-yellow-300 transition-all duration-1000"
+                    style={{ width: `${miningFill}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-slate-600 text-right">{miningFill.toFixed(1)}% of daily max</p>
               </div>
-            </Card>
 
-            {!hasActiveSession ? (
-              <Card className="p-8 text-center border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
-                <div className="p-4 rounded-full bg-orange-500/20 border border-orange-500/30 w-fit mx-auto mb-4">
-                  <Zap className="h-12 w-12 text-orange-400" />
-                </div>
-                <h2 className="text-2xl font-black text-slate-100 mb-2">Start Mining JCMOVES</h2>
-                <p className="text-slate-400 mb-6">
-                  Begin earning passive tokens automatically. You'll receive 1,728 JCMOVES every 24 hours! (2x Boost Active)
-                </p>
-                <Button
-                  onClick={() => startMiningMutation.mutate()}
-                  disabled={startMiningMutation.isPending}
-                  className="w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 shadow-lg shadow-orange-500/25"
-                  data-testid="button-start-mining"
-                >
-                  {startMiningMutation.isPending ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Starting...
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="mr-2 h-4 w-4" />
-                      Start Mining
-                    </>
-                  )}
-                </Button>
-              </Card>
-            ) : (
-              <>
-                <Card className="p-6 bg-gradient-to-br from-orange-400 to-red-500 text-white border-0 shadow-xl shadow-orange-900/30 overflow-hidden relative">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
+              {/* Divider */}
+              <div className="h-px bg-gradient-to-r from-transparent via-orange-500/30 to-transparent" />
+
+              {/* Bottom: timer or start */}
+              <div className="p-5 pt-4">
+                {!hasActiveSession ? (
+                  <div className="text-center space-y-4">
+                    <div className="text-4xl">⛏️</div>
+                    <div>
+                      <p className="text-white font-black text-lg">Ready to Mine?</p>
+                      <p className="text-slate-500 text-xs mt-1">Earn 1,728 JCMOVES every 24 hours — 2× boost active!</p>
+                    </div>
+                    <Button
+                      onClick={() => startMiningMutation.mutate()}
+                      disabled={startMiningMutation.isPending}
+                      className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-black text-base py-5 shadow-[0_0_20px_rgba(251,146,60,0.4)] border-0"
+                      data-testid="button-start-mining"
+                    >
+                      {startMiningMutation.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Starting...</> : <><Zap className="mr-2 h-5 w-5" />Activate Mining</>}
+                    </Button>
+                  </div>
+                ) : (
                   <div className="space-y-4">
+                    {/* Countdown */}
                     <div className="text-center">
-                      <p className="text-sm opacity-90 font-medium">Next Claim In</p>
-                      <p className="text-5xl font-black font-mono mt-1" data-testid="text-countdown-timer">
-                        {formatTimeRemaining(timeRemaining)}
+                      <p className="text-[11px] text-slate-500 uppercase tracking-widest mb-1">
+                        {timeRemaining > 0 ? 'Next Claim In' : '✅ Ready to Claim!'}
+                      </p>
+                      <p className="text-4xl font-black font-mono text-white" data-testid="text-countdown-timer">
+                        {timeRemaining > 0 ? formatTimeRemaining(timeRemaining) : 'CLAIM NOW'}
                       </p>
                     </div>
-
-                    <div className="bg-white/20 rounded-xl p-4 backdrop-blur-sm space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-xs opacity-90 font-medium">Base Tokens</p>
-                          <p className="text-2xl font-black" data-testid="text-accumulated-tokens">
-                            {parseFloat(accumulatedTokens).toFixed(4)}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs opacity-90 font-medium">Speed</p>
-                          <p className="text-2xl font-black" data-testid="text-mining-speed">
-                            {parseFloat(miningStatus.miningSpeed || "1.00").toFixed(0)}X
-                          </p>
-                        </div>
+                    {/* Streak bonus */}
+                    {(miningStatus?.streakCount || 0) > 0 && (
+                      <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                        <span className="text-xs text-amber-300 flex items-center gap-1.5">
+                          <span>🔥</span> {miningStatus.streakCount}-Day Streak Bonus
+                        </span>
+                        <span className="text-sm font-black text-amber-400" data-testid="text-streak-bonus">
+                          +{parseFloat(streakBonus || "0").toFixed(2)}
+                        </span>
                       </div>
-                      
-                      {miningStatus?.streakCount > 0 && (
-                        <div className="border-t border-white/30 pt-3">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <Award className="h-4 w-4" />
-                              <span className="text-xs opacity-90 font-medium">
-                                {miningStatus.streakCount} Day Streak Bonus
-                              </span>
-                            </div>
-                            <span className="text-lg font-black" data-testid="text-streak-bonus">
-                              +{parseFloat(streakBonus || "0").toFixed(4)}
-                            </span>
-                          </div>
-                          <div className="mt-2 text-center">
-                            <p className="text-sm font-black">
-                              Total: {(parseFloat(accumulatedTokens) + parseFloat(streakBonus || "0")).toFixed(4)} JCMOVES
-                            </p>
-                          </div>
-                        </div>
-                      )}
+                    )}
+                    {/* Stats row */}
+                    <div className="grid grid-cols-2 gap-2 text-center">
+                      <div className="rounded-xl bg-slate-800/80 border border-slate-700/50 p-2">
+                        <p className="text-lg font-black text-orange-400" data-testid="text-daily-rate">1,728</p>
+                        <p className="text-[10px] text-slate-500">Tokens/Day (2×)</p>
+                      </div>
+                      <div className="rounded-xl bg-slate-800/80 border border-slate-700/50 p-2">
+                        <p className="text-lg font-black text-orange-400" data-testid="text-claimed-today">{parseFloat(miningStatus?.totalClaimedToday || "0").toFixed(0)}</p>
+                        <p className="text-[10px] text-slate-500">Claimed Today</p>
+                      </div>
                     </div>
-
-                    <Button
-                      disabled
-                      className="w-full bg-white/30 hover:bg-white/40 text-white border-white/50"
-                      data-testid="button-speed-up"
-                    >
-                      <Zap className="mr-2 h-4 w-4" />
-                      Speed Up (Coming Soon)
-                    </Button>
-
+                    {/* Claim button */}
                     <Button
                       onClick={() => claimMutation.mutate()}
-                      disabled={claimMutation.isPending || parseFloat(accumulatedTokens) === 0}
-                      className="w-full bg-white text-orange-600 hover:bg-gray-100 font-bold"
+                      disabled={!canClaim}
+                      className={`w-full font-black text-base py-5 border-0 transition-all ${canClaim
+                        ? 'bg-gradient-to-r from-orange-500 to-amber-400 hover:from-orange-600 hover:to-amber-500 text-white shadow-[0_0_24px_rgba(251,146,60,0.5)] animate-pulse'
+                        : 'bg-slate-800 text-slate-500 cursor-not-allowed'}`}
                       data-testid="button-claim-tokens"
                     >
-                      {claimMutation.isPending ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Claiming...
-                        </>
-                      ) : (
-                        <>
-                          <Coins className="mr-2 h-4 w-4" />
-                          Claim Tokens Now
-                        </>
-                      )}
+                      {claimMutation.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Claiming...</> : <><Coins className="mr-2 h-5 w-5" />Claim Tokens Now</>}
                     </Button>
                   </div>
-                </Card>
+                )}
+              </div>
+            </div>
 
-                <Card className="p-4 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
-                  <div className="grid grid-cols-2 gap-4 text-center">
+            {/* ── Partner Bonuses (compact 2-up) ── */}
+            <div>
+              <p className="text-[10px] text-slate-600 uppercase tracking-widest mb-2 pl-1">Partner Bonuses</p>
+              <div className="grid grid-cols-2 gap-2">
+                {/* TrustDice */}
+                <div className="rounded-xl bg-purple-950/60 border border-purple-500/20 p-3 flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🏴‍☠️</span>
                     <div>
-                      <p className="text-2xl font-black text-orange-400" data-testid="text-daily-rate">
-                        1,728
-                      </p>
-                      <p className="text-xs text-slate-400">Tokens/Day (2X)</p>
-                    </div>
-                    <div>
-                      <p className="text-2xl font-black text-orange-400" data-testid="text-claimed-today">
-                        {parseFloat(miningStatus.totalClaimedToday || "0").toFixed(2)}
-                      </p>
-                      <p className="text-xs text-slate-400">Claimed Today</p>
+                      <p className="text-xs font-bold text-purple-300 leading-tight">TrustDice</p>
+                      <p className="text-[10px] text-slate-500">Free crypto every 6 hrs</p>
                     </div>
                   </div>
-                </Card>
-              </>
-            )}
-
-            {/* TrustDice Faucet Widget */}
-            <Card className="p-6 bg-gradient-to-br from-purple-600 via-purple-700 to-purple-800 text-white border-0 shadow-xl">
-              <div className="text-center space-y-4">
-                <div className="flex justify-center">
-                  <div className="text-6xl">🏴‍☠️</div>
+                  <div className="flex items-center gap-1.5 bg-black/30 rounded-lg px-2 py-1">
+                    <code className="text-[10px] text-purple-300 flex-1 truncate font-mono">u_jconthemove</code>
+                    <button onClick={() => { navigator.clipboard.writeText('u_jconthemove'); toast({ title: "Copied!" }); }} className="text-slate-400 hover:text-white" data-testid="button-copy-trustdice-code">
+                      <Copy className="h-3 w-3" />
+                    </button>
+                  </div>
+                  <a href="https://trustdice.win/?ref=u_jconthemove" target="_blank" rel="noopener noreferrer" className="text-[10px] text-purple-400 hover:text-purple-300 flex items-center gap-1 font-medium" data-testid="button-trustdice-faucet">
+                    Open Faucet <ArrowUpRight className="h-2.5 w-2.5" />
+                  </a>
                 </div>
-                <h3 className="text-2xl font-bold">TrustDice Crypto Faucet</h3>
-                <p className="text-sm opacity-90">
-                  Claim free crypto every 6 hours! Earn Bitcoin, Ethereum, and more from the TrustDice faucet.
-                </p>
-                <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 space-y-2">
-                  <p className="text-xs opacity-75">Referral Code</p>
+                {/* EMBER */}
+                <div className="rounded-xl bg-orange-950/60 border border-orange-500/20 p-3 flex flex-col gap-2">
                   <div className="flex items-center gap-2">
-                    <code className="flex-1 bg-black/30 px-3 py-2 rounded font-mono text-sm">
-                      u_jconthemove
-                    </code>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => {
-                        navigator.clipboard.writeText('u_jconthemove');
-                        toast({
-                          title: "Copied!",
-                          description: "Referral code copied to clipboard",
-                        });
-                      }}
-                      data-testid="button-copy-trustdice-code"
-                    >
-                      <Copy className="h-4 w-4" />
-                    </Button>
+                    <span className="text-lg">₿</span>
+                    <div>
+                      <p className="text-xs font-bold text-orange-300 leading-tight">EMBER</p>
+                      <p className="text-[10px] text-slate-500">Bitcoin every hour</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-black/30 rounded-lg px-2 py-1">
+                    <code className="text-[10px] text-orange-300 flex-1 truncate font-mono">MNG-POKER-LPG</code>
+                    <button onClick={() => { navigator.clipboard.writeText('MNG-POKER-LPG'); toast({ title: "Copied!" }); }} className="text-slate-400 hover:text-white" data-testid="button-copy-ember-code">
+                      <Copy className="h-3 w-3" />
+                    </button>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <button onClick={() => setEmberDialogOpen(true)} className="text-[10px] text-orange-400 hover:text-orange-300 flex items-center gap-0.5 font-medium" data-testid="button-ember-details">
+                      Details <ChevronRight className="h-2.5 w-2.5" />
+                    </button>
+                    <span className="text-slate-700">·</span>
+                    <a href="https://emberfund.onelink.me/ljTI/l4g18zii?mining_referrer_id=MNG-POKER-LPG" target="_blank" rel="noopener noreferrer" className="text-[10px] text-orange-400 hover:text-orange-300 flex items-center gap-0.5 font-medium" data-testid="button-ember-signup">
+                      Sign Up <ArrowUpRight className="h-2.5 w-2.5" />
+                    </a>
                   </div>
                 </div>
-                <Button
-                  asChild
-                  className="w-full bg-white text-purple-700 hover:bg-gray-100 font-semibold"
-                  data-testid="button-trustdice-faucet"
-                >
-                  <a
-                    href="https://trustdice.win/?ref=u_jconthemove"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <ArrowUpRight className="mr-2 h-4 w-4" />
-                    Open TrustDice Faucet
-                  </a>
-                </Button>
-                <p className="text-xs opacity-75">
-                  Use our referral code when signing up to support JCMOVES!
-                </p>
               </div>
-            </Card>
+            </div>
 
-            {/* EMBER App Widget */}
-            <Card className="p-6 bg-gradient-to-br from-orange-500 via-orange-600 to-red-600 text-white border-0 shadow-xl">
-              <div className="text-center space-y-4">
-                <div className="flex justify-center">
-                  <div className="text-6xl">₿</div>
-                </div>
-                <h3 className="text-2xl font-bold">EMBER - Earn Bitcoin</h3>
-                <p className="text-sm opacity-90">
-                  Earn Satoshis (Bitcoin) every hour! Play games, make predictions, and join tournaments.
-                </p>
-                <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 space-y-2">
-                  <p className="text-xs opacity-75">Referral Code</p>
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 bg-black/30 px-3 py-2 rounded font-mono text-sm">
-                      MNG-POKER-LPG
-                    </code>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => {
-                        navigator.clipboard.writeText('MNG-POKER-LPG');
-                        toast({
-                          title: "Copied!",
-                          description: "EMBER referral code copied to clipboard",
-                        });
-                      }}
-                      data-testid="button-copy-ember-code"
-                    >
-                      <Copy className="h-4 w-4" />
-                    </Button>
+            {/* ── How to Earn More ── */}
+            <div className="rounded-2xl bg-slate-900 border border-slate-800 p-4">
+              <p className="text-xs font-bold text-slate-300 mb-3 flex items-center gap-2"><Zap className="h-3.5 w-3.5 text-yellow-400" /> Boost Your Earnings</p>
+              <div className="space-y-2">
+                {[
+                  { icon: '📋', label: 'Create a job lead', amount: '+200 JCMOVES', color: 'text-cyan-400' },
+                  { icon: '✅', label: 'Complete a job', amount: '+500 JCMOVES', color: 'text-emerald-400' },
+                  { icon: '👥', label: 'Refer a friend', amount: '+2,500 JCMOVES', color: 'text-violet-400' },
+                  { icon: '🔗', label: 'Daily mining claim', amount: '+1,728 JCMOVES', color: 'text-orange-400' },
+                  { icon: '💎', label: 'Stake JCMOVES', amount: 'Up to 18% APR', color: 'text-yellow-400' },
+                ].map(({ icon, label, amount, color }) => (
+                  <div key={label} className="flex items-center justify-between py-1.5 border-b border-slate-800/80 last:border-0">
+                    <span className="text-xs text-slate-400 flex items-center gap-2"><span>{icon}</span>{label}</span>
+                    <span className={`text-xs font-bold ${color}`}>{amount}</span>
                   </div>
-                </div>
-                <Button
-                  variant="secondary"
-                  className="w-full"
-                  onClick={() => setEmberDialogOpen(true)}
-                  data-testid="button-ember-details"
-                >
-                  <ChevronRight className="mr-2 h-4 w-4" />
-                  See More Details
-                </Button>
-                <Button
-                  asChild
-                  className="w-full bg-white text-orange-600 hover:bg-gray-100 font-semibold"
-                  data-testid="button-ember-signup"
-                >
-                  <a
-                    href="https://emberfund.onelink.me/ljTI/l4g18zii?mining_referrer_id=MNG-POKER-LPG"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <ArrowUpRight className="mr-2 h-4 w-4" />
-                    Sign Up with Referral Link
-                  </a>
-                </Button>
-                <p className="text-xs opacity-75">
-                  Use our referral link to support JCMOVES and earn more Satoshis!
-                </p>
+                ))}
               </div>
-            </Card>
+            </div>
           </div>
         </TabsContent>
 
         {/* Referrals Tab */}
         <TabsContent value="referrals" className="space-y-4">
-          <div className="grid gap-6">
-            <Card className="border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-slate-100">
-                  <div className="p-2 rounded-lg bg-blue-500/20 border border-blue-500/30">
-                    <Share2 className="h-5 w-5 text-blue-400" />
+          <div className="space-y-4">
+            {/* Your code */}
+            <div className="rounded-2xl bg-slate-900 border border-violet-500/20 p-5 shadow-[0_0_20px_rgba(139,92,246,0.07)]">
+              <div className="flex items-center gap-2 mb-3">
+                <Share2 className="h-4 w-4 text-violet-400" />
+                <p className="text-sm font-bold text-white">Your Referral Code</p>
+              </div>
+              <p className="text-[11px] text-slate-500 mb-3">Share this code — you earn <span className="text-violet-400 font-bold">+2,500 JCMOVES</span> when a friend signs up</p>
+              {referralCode?.referralCode ? (
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 px-4 py-3 bg-slate-800 border border-violet-500/30 rounded-xl font-mono text-xl text-center text-violet-300 font-black tracking-widest shadow-[0_0_12px_rgba(139,92,246,0.2)]">
+                    {referralCode.referralCode}
                   </div>
-                  Your Referral Code
-                </CardTitle>
-                <CardDescription className="text-slate-400">
-                  Share your code and earn bonus {tokenInfo?.symbol || 'JCMOVES'} credits for each friend who signs up!
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {referralCode?.referralCode ? (
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 p-3 bg-slate-900/50 border border-slate-700/50 rounded-lg font-mono text-lg text-center text-orange-400 font-bold">
-                      {referralCode.referralCode}
-                    </div>
-                    <Button onClick={copyReferralCode} variant="outline" className="border-slate-600 text-slate-300 hover:bg-blue-500/20 hover:border-blue-500/50" data-testid="copy-referral-code">
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="text-center py-4">
-                    <p className="text-slate-400">Loading your referral code...</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-slate-100">
-                  <div className="p-2 rounded-lg bg-green-500/20 border border-green-500/30">
-                    <Gift className="h-5 w-5 text-green-400" />
-                  </div>
-                  Have a Referral Code?
-                </CardTitle>
-                <CardDescription className="text-slate-400">
-                  Enter a friend's referral code and earn <span className="text-green-400 font-semibold">1,000 JCMOVES</span> instantly!
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex gap-3">
-                  <Input
-                    value={referralCodeInput}
-                    onChange={(e) => setReferralCodeInput(e.target.value.toUpperCase())}
-                    placeholder="Enter referral code"
-                    className="font-mono bg-slate-800/50 border-slate-600 text-slate-100 placeholder:text-slate-500"
-                    data-testid="input-referral-code"
-                  />
-                  <Button 
-                    onClick={() => applyReferralMutation.mutate(referralCodeInput)}
-                    disabled={!referralCodeInput || applyReferralMutation.isPending}
-                    className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
-                    data-testid="apply-referral-code"
-                  >
-                    {applyReferralMutation.isPending ? 'Applying...' : 'Apply'}
+                  <Button onClick={copyReferralCode} size="sm" className="bg-violet-600 hover:bg-violet-700 border-0 text-white" data-testid="copy-referral-code">
+                    <Copy className="h-4 w-4" />
                   </Button>
                 </div>
-              </CardContent>
-            </Card>
+              ) : (
+                <div className="h-12 rounded-xl bg-slate-800 animate-pulse" />
+              )}
+            </div>
 
-            <Card className="border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-slate-100">
-                  <div className="p-2 rounded-lg bg-purple-500/20 border border-purple-500/30">
-                    <Users className="h-5 w-5 text-purple-400" />
-                  </div>
-                  Your Referral Stats
-                </CardTitle>
-                <CardDescription className="text-slate-400">
-                  Track your referral earnings and see who you've referred
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {referralStats ? (
-                  <div className="space-y-6">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="text-center p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl">
-                        <p className="text-3xl font-black text-blue-400">{referralStats.referralCount}</p>
-                        <p className="text-sm text-slate-400">Friends Referred</p>
-                      </div>
-                      <div className="text-center p-4 bg-green-500/10 border border-green-500/30 rounded-xl">
-                        <p className="text-3xl font-black text-green-400">{referralStats.totalEarned.toFixed(0)}</p>
-                        <p className="text-sm text-slate-400">JCMOVES Earned</p>
-                      </div>
-                    </div>
+            {/* Referral stats */}
+            {referralStats && (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-xl bg-slate-900 border border-blue-500/20 p-4 text-center">
+                  <p className="text-3xl font-black text-blue-400">{referralStats.referralCount}</p>
+                  <p className="text-[10px] text-slate-500 mt-1">Friends Recruited</p>
+                </div>
+                <div className="rounded-xl bg-slate-900 border border-emerald-500/20 p-4 text-center">
+                  <p className="text-3xl font-black text-emerald-400">{referralStats.totalEarned.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                  <p className="text-[10px] text-slate-500 mt-1">JCMOVES Earned</p>
+                </div>
+              </div>
+            )}
 
-                    {referralStats.referredUsers.length > 0 && (
+            {/* Apply a code */}
+            <div className="rounded-2xl bg-slate-900 border border-emerald-500/20 p-5">
+              <div className="flex items-center gap-2 mb-2">
+                <Gift className="h-4 w-4 text-emerald-400" />
+                <p className="text-sm font-bold text-white">Got a Referral Code?</p>
+              </div>
+              <p className="text-[11px] text-slate-500 mb-3">Apply a friend's code and get <span className="text-emerald-400 font-bold">+1,000 JCMOVES</span> instantly</p>
+              <div className="flex gap-2">
+                <Input
+                  value={referralCodeInput}
+                  onChange={(e) => setReferralCodeInput(e.target.value.toUpperCase())}
+                  placeholder="Enter code..."
+                  className="font-mono bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-600"
+                  data-testid="input-referral-code"
+                />
+                <Button
+                  onClick={() => applyReferralMutation.mutate(referralCodeInput)}
+                  disabled={!referralCodeInput || applyReferralMutation.isPending}
+                  className="bg-emerald-600 hover:bg-emerald-700 border-0 text-white font-bold"
+                  data-testid="apply-referral-code"
+                >
+                  {applyReferralMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Apply'}
+                </Button>
+              </div>
+            </div>
+
+            {/* Recent referrals */}
+            {referralStats && referralStats.referredUsers.length > 0 && (
+              <div className="rounded-2xl bg-slate-900 border border-slate-800 p-4">
+                <p className="text-xs font-bold text-slate-400 mb-3 flex items-center gap-2"><Users className="h-3.5 w-3.5 text-violet-400" /> Recent Referrals</p>
+                <div className="space-y-2">
+                  {referralStats.referredUsers.slice(0, 5).map((user) => (
+                    <div key={user.id} className="flex items-center justify-between py-2 border-b border-slate-800 last:border-0">
                       <div>
-                        <h4 className="font-bold mb-3 text-slate-200">Recent Referrals</h4>
-                        <div className="space-y-2">
-                          {referralStats.referredUsers.slice(0, 5).map((user) => (
-                            <div key={user.id} className="flex items-center justify-between p-3 border border-slate-700/50 rounded-lg bg-slate-900/50">
-                              <div>
-                                <p className="font-medium text-slate-200">
-                                  {user.firstName && user.lastName 
-                                    ? `${user.firstName} ${user.lastName}` 
-                                    : user.email || 'Anonymous User'}
-                                </p>
-                                <p className="text-sm text-slate-500">
-                                  Joined {new Date(user.createdAt).toLocaleDateString()}
-                                </p>
-                              </div>
-                              <Badge className="bg-green-500/20 text-green-300 border border-green-500/30">
-                                <Award className="h-3 w-3 mr-1" />
-                                Credits Earned
-                              </Badge>
-                            </div>
-                          ))}
-                        </div>
+                        <p className="text-sm font-medium text-slate-200">
+                          {user.firstName && user.lastName ? `${user.firstName} ${user.lastName}` : user.email || 'Anonymous'}
+                        </p>
+                        <p className="text-[10px] text-slate-600">{new Date(user.createdAt).toLocaleDateString()}</p>
                       </div>
-                    )}
+                      <Badge className="bg-violet-500/20 text-violet-300 border border-violet-500/30 text-[10px]">+2,500</Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Earn ways card */}
+            <div className="rounded-2xl overflow-hidden border border-slate-800">
+              <div className="bg-gradient-to-r from-violet-900/60 to-purple-900/40 p-3 border-b border-slate-800">
+                <p className="text-xs font-bold text-violet-300 flex items-center gap-1.5"><Award className="h-3.5 w-3.5" /> Referral Reward Tiers</p>
+              </div>
+              <div className="bg-slate-900 divide-y divide-slate-800">
+                {[
+                  { label: 'You apply a code', reward: '+1,000 JCMOVES', note: 'one time' },
+                  { label: 'Friend signs up with your code', reward: '+2,500 JCMOVES', note: 'per person' },
+                  { label: 'Friend completes first booking', reward: '+500 JCMOVES', note: 'bonus' },
+                ].map(({ label, reward, note }) => (
+                  <div key={label} className="flex items-center justify-between px-4 py-3">
+                    <span className="text-xs text-slate-400">{label}</span>
+                    <div className="text-right">
+                      <span className="text-xs font-bold text-violet-400 block">{reward}</span>
+                      <span className="text-[9px] text-slate-600">{note}</span>
+                    </div>
                   </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <Users className="h-12 w-12 text-slate-500 mx-auto mb-4" />
-                    <p className="text-slate-400">Loading referral stats...</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                ))}
+              </div>
+            </div>
+
           </div>
         </TabsContent>
 
-        {/* Full Earnings History Tab */}
+        {/* History Tab */}
         <TabsContent value="history" className="space-y-4">
-          {rewardsHistory && rewardsHistory.length > 0 && (
-            <Card className="border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
-              <CardContent className="p-4">
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20 text-center">
-                    <p className="text-xs text-slate-400">Total Earned (All Time)</p>
-                    <p className="text-lg font-bold text-green-400">
-                      {allTimeTokensEarned.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </p>
-                    <p className="text-xs text-slate-500">JCMOVES</p>
-                  </div>
-                  <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-center">
-                    <p className="text-xs text-slate-400">Total Transactions</p>
-                    <p className="text-lg font-bold text-blue-400">{totalRewards}</p>
-                    <p className="text-xs text-slate-500">records</p>
-                  </div>
-                  <div className="p-3 rounded-lg bg-purple-500/10 border border-purple-500/20 text-center col-span-2 md:col-span-1">
-                    <p className="text-xs text-slate-400">Total Credits</p>
-                    <p className="text-lg font-bold text-purple-400">
-                      {allTimeTokensEarned.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                    </p>
-                    <p className="text-xs text-slate-500">JCMOVES credits</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          {/* Summary strip */}
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-xl bg-slate-900 border border-emerald-500/20 p-3 text-center">
+              <p className="text-lg font-black text-emerald-400">{allTimeTokensEarned.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+              <p className="text-[10px] text-slate-500">All-Time JCMOVES</p>
+            </div>
+            <div className="rounded-xl bg-slate-900 border border-blue-500/20 p-3 text-center">
+              <p className="text-lg font-black text-blue-400">{totalRewards}</p>
+              <p className="text-[10px] text-slate-500">Transactions</p>
+            </div>
+            <div className="rounded-xl bg-slate-900 border border-violet-500/20 p-3 text-center">
+              <p className="text-lg font-black text-violet-400">{(rewardsHistory || []).filter(r => r.rewardType.includes('mining')).length}</p>
+              <p className="text-[10px] text-slate-500">Mining Claims</p>
+            </div>
+          </div>
+
+          {/* Filter chips */}
+          <div className="flex gap-2 flex-wrap">
+            {historyFilterOptions.map(({ value, label }) => (
+              <button
+                key={value}
+                onClick={() => setHistoryFilter(value)}
+                className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
+                  historyFilter === value
+                    ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
+                    : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300 hover:border-slate-700'
+                }`}
+              >
+                {label}
+                {value !== 'all' && (
+                  <span className="ml-1.5 opacity-60">
+                    {(rewardsHistory || []).filter(r => {
+                      if (value === 'referral') return r.rewardType.includes('referral');
+                      if (value === 'job') return r.rewardType.includes('job') || r.rewardType.includes('lead') || r.rewardType.includes('booking');
+                      if (value === 'staking') return r.rewardType.includes('staking');
+                      if (value === 'signup_bonus') return r.rewardType.includes('signup') || r.rewardType.includes('admin');
+                      return r.rewardType === value || r.rewardType.includes(value);
+                    }).length}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Transaction list */}
+          <div className="rounded-2xl bg-slate-900 border border-slate-800 overflow-hidden">
+            {filteredHistory.length > 0 ? (
+              <div className="divide-y divide-slate-800/80">
+                {filteredHistory.map((reward) => {
+                  const isMining = reward.rewardType.includes('mining');
+                  const isReferral = reward.rewardType.includes('referral');
+                  const isJob = reward.rewardType.includes('job') || reward.rewardType.includes('lead');
+                  const isStaking = reward.rewardType.includes('staking');
+                  const borderColor = isMining ? 'border-l-orange-500' : isReferral ? 'border-l-violet-500' : isJob ? 'border-l-emerald-500' : isStaking ? 'border-l-yellow-500' : 'border-l-pink-500';
+                  const amountColor = isMining ? 'text-orange-400' : isReferral ? 'text-violet-400' : isJob ? 'text-emerald-400' : isStaking ? 'text-yellow-400' : 'text-pink-400';
+                  return (
+                    <div key={reward.id} className={`flex items-center justify-between px-4 py-3 border-l-2 ${borderColor}`}>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="text-lg flex-shrink-0">{getRewardTypeIcon(reward.rewardType)}</div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-slate-200 truncate">{getRewardTypeLabel(reward.rewardType)}</p>
+                          <p className="text-[10px] text-slate-600">{new Date(reward.earnedDate).toLocaleDateString()} · {new Date(reward.earnedDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0 ml-3">
+                        <p className={`text-sm font-black ${amountColor}`}>+{parseFloat(reward.tokenAmount).toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+                        <p className={`text-[9px] uppercase tracking-wider ${reward.status === 'confirmed' ? 'text-emerald-600' : 'text-slate-600'}`}>{reward.status}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <div className="text-4xl mb-3">📭</div>
+                <p className="text-slate-500 text-sm">No {historyFilter === 'all' ? '' : historyFilter} transactions yet</p>
+                {historyFilter !== 'all' && (
+                  <button onClick={() => setHistoryFilter('all')} className="text-xs text-emerald-400 hover:text-emerald-300 mt-2">Show all</button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Load more */}
+          {hasMoreHistory && rewardsHistory && rewardsHistory.length < totalRewards && (
+            <Button
+              variant="outline"
+              className="w-full border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 bg-slate-900"
+              onClick={loadMoreHistory}
+              disabled={loadingMore}
+            >
+              {loadingMore ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Loading...</> : <>Load More ({totalRewards - (rewardsHistory?.length || 0)} remaining)</>}
+            </Button>
           )}
 
-          <Card className="border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-slate-100">
-                <div className="p-2 rounded-lg bg-green-500/20 border border-green-500/30">
-                  <Clock className="h-5 w-5 text-green-400" />
-                </div>
-                Earnings Statement
-              </CardTitle>
-              <CardDescription className="text-slate-400">
-                Complete history of all JCMOVES earned — jobs, mining, referrals, staking, and more
-                {totalRewards > 0 && ` (showing ${rewardsHistory?.length || 0} of ${totalRewards})`}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {rewardsHistory && rewardsHistory.length > 0 ? (
-                <div className="space-y-3">
-                  {rewardsHistory.map((reward) => (
-                    <div key={reward.id} className="flex items-center justify-between p-3 md:p-4 border border-slate-700/50 rounded-lg bg-slate-900/50">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-slate-800 border border-slate-700">
-                          {getRewardTypeIcon(reward.rewardType)}
-                        </div>
-                        <div>
-                          <p className="font-medium text-sm md:text-base text-slate-200">{getRewardTypeLabel(reward.rewardType)}</p>
-                          <p className="text-xs text-slate-500">
-                            {new Date(reward.earnedDate).toLocaleDateString()} {new Date(reward.earnedDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-bold text-green-400 text-sm md:text-base">
-                          +{parseFloat(reward.tokenAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })} JCMOVES
-                        </p>
-                        <Badge className={`text-[10px] ${getStatusColor(reward.status)}`}>
-                          {reward.status}
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
-
-                  {hasMoreHistory && rewardsHistory.length < totalRewards && (
-                    <Button
-                      variant="outline"
-                      className="w-full border-slate-600 text-slate-300 hover:bg-slate-700"
-                      onClick={loadMoreHistory}
-                      disabled={loadingMore}
-                    >
-                      {loadingMore ? (
-                        <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading...</>
-                      ) : (
-                        <>Load More ({totalRewards - rewardsHistory.length} remaining)</>
-                      )}
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <Coins className="h-12 w-12 text-slate-500 mx-auto mb-4" />
-                  <p className="text-slate-400">No rewards yet. Start mining to earn tokens!</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Wallet Payouts History */}
+          {/* Payout history (compact) */}
           {payoutHistory && payoutHistory.length > 0 && (
-            <Card className="border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-slate-100">
-                  <div className="p-2 rounded-lg bg-blue-500/20 border border-blue-500/30">
-                    <ArrowUpRight className="h-5 w-5 text-blue-400" />
-                  </div>
-                  Wallet Payouts
-                </CardTitle>
-                <CardDescription className="text-slate-400">Tokens sent to your personal wallet</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {payoutHistory.slice(0, 10).map((payout) => (
-                    <div key={payout.id} className="flex items-center justify-between p-4 border border-slate-700/50 rounded-lg bg-slate-900/50">
-                      <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg border ${
-                          payout.status === 'confirmed' 
-                            ? 'bg-green-500/20 border-green-500/30' 
-                            : payout.status === 'failed'
-                            ? 'bg-red-500/20 border-red-500/30'
-                            : 'bg-yellow-500/20 border-yellow-500/30'
-                        }`}>
-                          {payout.status === 'confirmed' ? (
-                            <CheckCircle className="h-4 w-4 text-green-400" />
-                          ) : payout.status === 'failed' ? (
-                            <Clock className="h-4 w-4 text-red-400" />
-                          ) : (
-                            <Loader2 className="h-4 w-4 text-yellow-400 animate-spin" />
-                          )}
-                        </div>
-                        <div>
-                          <p className="font-medium text-slate-200">
-                            Payout to {payout.recipientAddress.slice(0, 6)}...{payout.recipientAddress.slice(-4)}
-                          </p>
-                          <p className="text-sm text-slate-500">
-                            {new Date(payout.requestedAt).toLocaleDateString()}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-bold text-blue-400">
-                          -{parseFloat(payout.tokenAmount).toFixed(2)} JCMOVES
-                        </p>
+            <div className="rounded-2xl bg-slate-900 border border-blue-500/20 overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-800 flex items-center gap-2">
+                <ArrowUpRight className="h-3.5 w-3.5 text-blue-400" />
+                <p className="text-xs font-bold text-blue-300">Wallet Payouts</p>
+              </div>
+              <div className="divide-y divide-slate-800/80">
+                {payoutHistory.slice(0, 10).map((payout) => (
+                  <div key={payout.id} className="flex items-center justify-between px-4 py-3 border-l-2 border-l-blue-500">
+                    <div>
+                      <p className="text-sm text-slate-300 font-medium">→ {payout.recipientAddress.slice(0, 6)}…{payout.recipientAddress.slice(-4)}</p>
+                      <p className="text-[10px] text-slate-600">{new Date(payout.requestedAt).toLocaleDateString()}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-black text-blue-400">-{parseFloat(payout.tokenAmount).toFixed(0)}</p>
+                      <div className="flex items-center gap-1.5 justify-end">
                         {payout.transactionHash && (
-                          <a 
-                            href={`https://solscan.io/tx/${payout.transactionHash}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-blue-400 hover:underline flex items-center justify-end gap-1"
-                          >
-                            View TX <ArrowUpRight className="h-3 w-3" />
-                          </a>
+                          <a href={`https://solscan.io/tx/${payout.transactionHash}`} target="_blank" rel="noopener noreferrer" className="text-[9px] text-blue-500 hover:text-blue-400">TX ↗</a>
                         )}
-                        <Badge className={
-                          payout.status === 'confirmed' 
-                            ? 'bg-green-500/20 text-green-300 border border-green-500/30'
-                            : payout.status === 'failed'
-                            ? 'bg-red-500/20 text-red-300 border border-red-500/30'
-                            : 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30'
-                        }>
-                          {payout.status}
-                        </Badge>
+                        <span className={`text-[9px] uppercase ${payout.status === 'confirmed' ? 'text-emerald-600' : payout.status === 'failed' ? 'text-red-600' : 'text-yellow-600'}`}>{payout.status}</span>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
         </TabsContent>
       </Tabs>
