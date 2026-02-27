@@ -19,7 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ChevronLeft, ChevronRight, ArrowLeft, Eye, MessageCircle, DollarSign, X, Phone, Trash2, CheckCircle2, Pencil, ShoppingCart, Plus, Upload, ImageIcon, Coins } from "lucide-react";
+import { ChevronLeft, ChevronRight, ArrowLeft, Eye, MessageCircle, DollarSign, X, Phone, Trash2, CheckCircle2, Pencil, ShoppingCart, Plus, Upload, ImageIcon, Coins, Bitcoin, Check } from "lucide-react";
 import { type ShopItem } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -404,23 +404,18 @@ export function ShopItemDetailPage() {
             <div className="space-y-2 mb-4">
               {item.status === "active" && (
                 <>
-                  {isInCart(`shop-${item.id}`) ? (
-                    <Button
-                      size="lg"
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
-                      onClick={() => {
+                  <Button
+                    size="lg"
+                    className={`w-full font-semibold ${
+                      isInCart(`shop-${item.id}`)
+                        ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                        : "bg-emerald-500 hover:bg-emerald-600 text-white"
+                    }`}
+                    onClick={() => {
+                      if (isInCart(`shop-${item.id}`)) {
                         removeItem(`shop-${item.id}`);
                         toast({ title: "Removed from cart" });
-                      }}
-                    >
-                      <ShoppingCart className="h-5 w-5 mr-2" />
-                      In Cart — Remove
-                    </Button>
-                  ) : (
-                    <Button
-                      size="lg"
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                      onClick={() => {
+                      } else {
                         const photos = Array.isArray(item.photos) ? item.photos : [];
                         addItem({
                           id: `shop-${item.id}`,
@@ -429,48 +424,29 @@ export function ShopItemDetailPage() {
                           image: photos[0] || "",
                           type: "shop",
                         });
-                        toast({
-                          title: "Added to cart!",
-                          description: itemCount > 0 ? "10% stacking discount on additional items!" : undefined,
-                        });
-                      }}
-                      data-testid="button-add-to-cart"
-                    >
-                      <ShoppingCart className="h-5 w-5 mr-2" />
-                      Add to Cart{itemCount > 0 ? " — Save 10%" : ""}
-                    </Button>
-                  )}
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      size="lg"
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => setLocation("/shop")}
-                    >
-                      <Plus className="h-5 w-5 mr-2" />
-                      Browse More Items
-                    </Button>
-                    <Button
-                      size="lg"
-                      variant="outline"
-                      className="w-full"
-                      onClick={handleContactSeller}
-                      data-testid="button-contact-seller"
-                    >
-                      <MessageCircle className="h-5 w-5 mr-2" />
-                      Contact
-                    </Button>
-                  </div>
-                  {itemCount > 0 && (
-                    <Button
-                      size="lg"
-                      variant="outline"
-                      className="w-full border-yellow-500/50 text-yellow-300 hover:bg-yellow-900/30"
-                      onClick={() => setLocation("/cart")}
-                    >
-                      <ShoppingCart className="h-5 w-5 mr-2" />
-                      View Cart ({itemCount} item{itemCount > 1 ? "s" : ""})
-                    </Button>
+                        toast({ title: "Added to cart!" });
+                      }
+                    }}
+                    data-testid="button-add-to-cart"
+                  >
+                    {isInCart(`shop-${item.id}`) ? (
+                      <><Check className="h-5 w-5 mr-2" /> In Cart</>
+                    ) : (
+                      <><ShoppingCart className="h-5 w-5 mr-2" /> Add to Cart</>
+                    )}
+                  </Button>
+
+                  <a href="/bitcoin-payment" className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-orange-500/40 bg-orange-500/10 hover:bg-orange-500/20 transition-colors">
+                    <Bitcoin className="h-4 w-4 text-orange-400" />
+                    <span className="text-orange-300 text-sm font-medium">Pay with Bitcoin</span>
+                    <span className="inline-flex items-center bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">Save 10%</span>
+                  </a>
+
+                  {isInCart(`shop-${item.id}`) && (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-950/40 border border-orange-500/30">
+                      <Bitcoin className="h-3.5 w-3.5 text-orange-400 flex-shrink-0" />
+                      <p className="text-orange-300/90 text-xs">Added! Pay with Bitcoin at checkout to <span className="font-bold text-orange-300">save 10%</span></p>
+                    </div>
                   )}
                 </>
               )}

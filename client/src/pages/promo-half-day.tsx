@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
-import { ArrowLeft, Truck, Clock, Users, MapPin, CalendarDays, Shield, Loader2, Plus, X, Percent, Gem, ShoppingCart, Check, UserPlus, Timer } from "lucide-react";
+import { ArrowLeft, Truck, Clock, Users, MapPin, CalendarDays, Shield, Loader2, Plus, X, Percent, Gem, ShoppingCart, Check, UserPlus, Timer, Bitcoin } from "lucide-react";
 import promoImage from "@assets/file_00000000839871fd8e13378301744f2e_(1)_1771260918919.png";
 import truckImage from "@assets/file_00000000219471fdb0d2dab84a32d060_1771261914341.png";
 import { useCart } from "@/hooks/useCart";
@@ -547,6 +547,19 @@ export default function PromoHalfDayPage() {
                   <><ShoppingCart className="h-4 w-4 mr-2" /> Add to Cart{cartCount > 0 ? " — Save 10%" : " Instead"}</>
                 )}
               </Button>
+
+              <a href="/bitcoin-payment" className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-orange-500/40 bg-orange-500/10 hover:bg-orange-500/20 transition-colors">
+                <Bitcoin className="h-4 w-4 text-orange-400" />
+                <span className="text-orange-300 text-sm font-medium">Pay with Bitcoin</span>
+                <span className="inline-flex items-center bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">Save 10%</span>
+              </a>
+
+              {promoInCart && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-950/40 border border-orange-500/30">
+                  <Bitcoin className="h-3.5 w-3.5 text-orange-400 flex-shrink-0" />
+                  <p className="text-orange-300/90 text-xs">Added! Pay with Bitcoin at checkout to <span className="font-bold text-orange-300">save 10%</span></p>
+                </div>
+              )}
 
               <p className="text-center text-xs text-slate-400">
                 Secure payment processed by Square. You'll be redirected to complete payment.

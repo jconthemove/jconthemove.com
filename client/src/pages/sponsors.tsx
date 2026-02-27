@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowLeft, Heart, Building2, Handshake, Mail, Phone, CreditCard, Loader2, ShoppingCart, Check, Star, Trophy, Megaphone, Truck as TruckIcon, Globe, Users } from "lucide-react";
+import { ArrowLeft, Heart, Building2, Handshake, Mail, Phone, Loader2, ShoppingCart, Check, Star, Trophy, Megaphone, Truck as TruckIcon, Globe, Users, Bitcoin } from "lucide-react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useCart } from "@/hooks/useCart";
@@ -208,27 +208,30 @@ export default function SponsorsPage() {
 
                   <div className="space-y-2">
                     <Button
-                      className="w-full bg-white/20 hover:bg-white/30 text-white font-semibold backdrop-blur-sm"
-                      onClick={() => setCheckoutTier(tier.id)}
-                    >
-                      <CreditCard className="h-4 w-4 mr-2" />
-                      Buy Now — ${tier.price}
-                    </Button>
-                    <Button
-                      variant={inCart ? "default" : "outline"}
-                      className={`w-full text-sm ${
+                      className={`w-full text-sm font-semibold py-4 ${
                         inCart
-                          ? "bg-emerald-600 hover:bg-emerald-700 text-white border-transparent"
-                          : "bg-slate-800 hover:bg-slate-700 text-white border-slate-600"
+                          ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                          : "bg-emerald-500 hover:bg-emerald-600 text-white"
                       }`}
                       onClick={() => handleAddToCart(tier)}
                     >
                       {inCart ? (
-                        <><Check className="h-4 w-4 mr-1" /> In Cart{itemCount > 1 ? " — 10% Off!" : ""}</>
+                        <><Check className="h-4 w-4 mr-1" /> In Cart</>
                       ) : (
-                        <><ShoppingCart className="h-4 w-4 mr-1" /> Add to Cart{itemCount > 0 ? " — Save 10%" : ""}</>
+                        <><ShoppingCart className="h-4 w-4 mr-1" /> Add to Cart</>
                       )}
                     </Button>
+                    <a href="/bitcoin-payment" className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-xl border border-orange-500/40 bg-orange-500/10 hover:bg-orange-500/20 transition-colors">
+                      <Bitcoin className="h-4 w-4 text-orange-400" />
+                      <span className="text-orange-300 text-sm font-medium">Pay with Bitcoin</span>
+                      <span className="inline-flex items-center bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">Save 10%</span>
+                    </a>
+                    {inCart && (
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-950/40 border border-orange-500/30">
+                        <Bitcoin className="h-3.5 w-3.5 text-orange-400 flex-shrink-0" />
+                        <p className="text-orange-300/90 text-xs">Added! Pay with Bitcoin at checkout to <span className="font-bold text-orange-300">save 10%</span></p>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>

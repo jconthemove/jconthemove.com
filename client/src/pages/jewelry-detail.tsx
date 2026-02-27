@@ -11,7 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
-import { ArrowLeft, Gem, ChevronLeft, ChevronRight, Mail, Phone, CreditCard, Pencil, Trash2, Video, Loader2, Tag, RotateCcw, ShoppingCart, Check, Bitcoin } from "lucide-react";
+import { ArrowLeft, Gem, ChevronLeft, ChevronRight, Pencil, Trash2, Video, Loader2, Tag, RotateCcw, ShoppingCart, Check, Bitcoin } from "lucide-react";
 import { useCart } from "@/hooks/useCart";
 import { FloatingCartButton } from "@/components/cart-button";
 
@@ -41,8 +41,8 @@ interface JewelryItem {
   createdAt: string;
 }
 
-function DetailCartButtons({ item, onCheckout, checkoutLoading, onBtcCheckout, btcLoading }: { item: JewelryItem; onCheckout: () => void; checkoutLoading: boolean; onBtcCheckout?: () => void; btcLoading?: boolean }) {
-  const { addItem, removeItem, isInCart, itemCount } = useCart();
+function DetailCartButtons({ item, onBtcCheckout, btcLoading }: { item: JewelryItem; onCheckout?: () => void; checkoutLoading?: boolean; onBtcCheckout?: () => void; btcLoading?: boolean }) {
+  const { addItem, removeItem, isInCart } = useCart();
   const cartId = `jewelry-${item.id}`;
   const inCart = isInCart(cartId);
 
@@ -51,35 +51,10 @@ function DetailCartButtons({ item, onCheckout, checkoutLoading, onBtcCheckout, b
   return (
     <div className="pt-3 border-t space-y-2.5">
       <Button
-        className="w-full bg-purple-600 hover:bg-purple-700 py-5 text-base font-semibold"
-        onClick={onCheckout}
-        disabled={checkoutLoading}
-      >
-        {checkoutLoading ? (
-          <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Processing...</>
-        ) : (
-          <><CreditCard className="h-5 w-5 mr-2" /> Buy Now - ${item.price}</>
-        )}
-      </Button>
-      {onBtcCheckout && (
-        <Button
-          className="w-full bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-400 hover:to-amber-500 text-white py-4 text-sm font-semibold"
-          onClick={onBtcCheckout}
-          disabled={btcLoading}
-        >
-          {btcLoading ? (
-            <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Creating BTC Payment...</>
-          ) : (
-            <><Bitcoin className="h-4 w-4 mr-2" /> Pay with Bitcoin <span className="ml-1 text-xs bg-white/20 px-2 py-0.5 rounded-full">Save 10%</span></>
-          )}
-        </Button>
-      )}
-      <Button
-        variant={inCart ? "default" : "outline"}
-        className={`w-full py-4 text-sm font-medium ${
+        className={`w-full py-5 text-base font-semibold ${
           inCart
             ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-            : "border-emerald-500 text-emerald-600 hover:bg-emerald-50"
+            : "bg-emerald-500 hover:bg-emerald-600 text-white"
         }`}
         onClick={() => {
           if (inCart) {
@@ -96,11 +71,36 @@ function DetailCartButtons({ item, onCheckout, checkoutLoading, onBtcCheckout, b
         }}
       >
         {inCart ? (
-          <><Check className="h-4 w-4 mr-2" /> In Cart{itemCount > 1 ? " — 10% Bundle!" : ""}</>
+          <><Check className="h-5 w-5 mr-2" /> In Cart</>
         ) : (
-          <><ShoppingCart className="h-4 w-4 mr-2" /> Add to Cart{itemCount > 0 ? " — Save 10%" : ""}</>
+          <><ShoppingCart className="h-5 w-5 mr-2" /> Add to Cart</>
         )}
       </Button>
+
+      {onBtcCheckout && (
+        <button
+          onClick={onBtcCheckout}
+          disabled={btcLoading}
+          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-orange-500/40 bg-orange-500/10 hover:bg-orange-500/20 transition-colors cursor-pointer"
+        >
+          {btcLoading ? (
+            <><Loader2 className="h-4 w-4 text-orange-400 animate-spin" /><span className="text-orange-300 text-sm">Creating BTC Payment...</span></>
+          ) : (
+            <>
+              <Bitcoin className="h-4 w-4 text-orange-400" />
+              <span className="text-orange-300 text-sm font-medium">Pay with Bitcoin</span>
+              <span className="inline-flex items-center bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">Save 10%</span>
+            </>
+          )}
+        </button>
+      )}
+
+      {inCart && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-950/40 border border-orange-500/30">
+          <Bitcoin className="h-3.5 w-3.5 text-orange-400 flex-shrink-0" />
+          <p className="text-orange-300/90 text-xs">Added! Pay with Bitcoin at checkout to <span className="font-bold text-orange-300">save 10%</span></p>
+        </div>
+      )}
     </div>
   );
 }
@@ -350,19 +350,6 @@ export default function JewelryDetailPage() {
               </div>
             )}
 
-            <div className="flex gap-2">
-              <a href={`mailto:upmichiganstatemovers@gmail.com?subject=Inquiry: ${item.title}`} className="flex-1">
-                <Button variant="outline" className="w-full border-purple-600 text-purple-600 hover:bg-purple-50 text-sm py-4">
-                  <Mail className="h-4 w-4 mr-2" />
-                  Ask a Question
-                </Button>
-              </a>
-              <a href="tel:906-285-9312">
-                <Button variant="outline" className="border-stone-300 py-4">
-                  <Phone className="h-4 w-4" />
-                </Button>
-              </a>
-            </div>
 
             {canEditItem(item) && (
               <div className="space-y-2 pt-2 border-t border-stone-200">
