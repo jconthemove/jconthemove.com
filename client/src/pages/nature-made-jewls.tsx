@@ -311,21 +311,12 @@ export default function NatureMadeJewls() {
     setIsEditUploading(true);
     try {
       for (const file of filesToUpload) {
-        const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
-        const isVideo = videoExts.includes(ext) || file.type.startsWith('video/');
-        const reader = new FileReader();
-        const base64 = await new Promise<string>((resolve, reject) => {
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-        const endpoint = isVideo ? '/api/jewelry/upload-video' : '/api/jewelry/upload-photo';
-        const bodyKey = isVideo ? 'video' : 'image';
-        const res = await fetch(endpoint, {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch('/api/jewelry/upload', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ [bodyKey]: base64, extension: ext }),
+          body: formData,
         });
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
@@ -372,31 +363,18 @@ export default function NatureMadeJewls() {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-    
     const remaining = 10 - photoUrls.length;
     const filesToUpload = Array.from(files).slice(0, remaining);
-    
     setIsUploading(true);
     try {
       for (const file of filesToUpload) {
-        const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
-        const isVideo = videoExts.includes(ext) || file.type.startsWith('video/');
-        const reader = new FileReader();
-        const base64 = await new Promise<string>((resolve, reject) => {
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-        
-        const endpoint = isVideo ? '/api/jewelry/upload-video' : '/api/jewelry/upload-photo';
-        const bodyKey = isVideo ? 'video' : 'image';
-        const res = await fetch(endpoint, {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch('/api/jewelry/upload', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ [bodyKey]: base64, extension: ext }),
+          body: formData,
         });
-
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
           throw new Error(errData.detail || errData.error || `Server error ${res.status}`);
@@ -1010,47 +988,68 @@ export default function NatureMadeJewls() {
               </div>
 
               <div>
-                <Label>Photos & Videos</Label>
-                <div className="space-y-2">
-                  {editPhotoUrls.map((url, index) => (
-                    <div key={index} className="flex gap-2 items-center">
-                      {isVideoUrl(url) ? (
-                        <div className="w-12 h-12 rounded bg-stone-200 flex items-center justify-center"><Video className="h-5 w-5 text-purple-600" /></div>
-                      ) : (
-                        <img src={url} alt="" className="w-12 h-12 object-cover rounded" />
-                      )}
-                      <span className="text-sm text-stone-600 truncate flex-1">{url.split('/').pop()}</span>
-                      <Button type="button" variant="ghost" size="sm" onClick={() => setEditPhotoUrls(editPhotoUrls.filter((_, i) => i !== index))}>
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                  <div className="flex gap-2">
-                    <Input
-                      value={editPhotoUrl}
-                      onChange={(e) => setEditPhotoUrl(e.target.value)}
-                      placeholder="Paste image URL..."
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (editPhotoUrl.trim() && editPhotoUrls.length < 10) { setEditPhotoUrls([...editPhotoUrls, editPhotoUrl.trim()]); setEditPhotoUrl(""); } } }}
-                      className="flex-1"
+                <div className="flex items-center justify-between mb-2">
+                  <Label>Photos & Videos <span className="text-stone-400 font-normal text-xs">({editPhotoUrls.length}/10)</span></Label>
+                  <label className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${editPhotoUrls.length >= 10 || isEditUploading ? 'opacity-50 pointer-events-none bg-stone-100 text-stone-400' : 'bg-purple-100 hover:bg-purple-200 text-purple-700'}`}>
+                    <input
+                      type="file"
+                      ref={editFileInputRef}
+                      onChange={handleEditFileUpload}
+                      accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime"
+                      multiple
+                      className="sr-only"
                     />
-                    <Button type="button" variant="outline" onClick={() => { if (editPhotoUrl.trim() && editPhotoUrls.length < 10) { setEditPhotoUrls([...editPhotoUrls, editPhotoUrl.trim()]); setEditPhotoUrl(""); } }} disabled={!editPhotoUrl.trim() || editPhotoUrls.length >= 10}>
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                    <label
-                      className={`inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 cursor-pointer ${editPhotoUrls.length >= 10 || isEditUploading ? 'opacity-50 pointer-events-none' : ''}`}
-                    >
-                      <input
-                        type="file"
-                        ref={editFileInputRef}
-                        onChange={handleEditFileUpload}
-                        accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime"
-                        multiple
-                        className="sr-only"
-                      />
-                      {isEditUploading ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <ImagePlus className="h-4 w-4" />}
-                    </label>
+                    {isEditUploading ? (
+                      <><span className="h-3 w-3 animate-spin rounded-full border-2 border-purple-600 border-t-transparent" /> Uploading...</>
+                    ) : (
+                      <><ImagePlus className="h-3.5 w-3.5" /> Add Photos/Videos</>
+                    )}
+                  </label>
+                </div>
+                {/* Photo/video thumbnail grid */}
+                {editPhotoUrls.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2 mb-2">
+                    {editPhotoUrls.map((url, index) => (
+                      <div key={index} className="relative group aspect-square rounded-lg overflow-hidden bg-stone-100 border border-stone-200">
+                        {isVideoUrl(url) ? (
+                          <div className="w-full h-full flex flex-col items-center justify-center gap-1">
+                            <Video className="h-7 w-7 text-purple-500" />
+                            <span className="text-[10px] text-stone-500">Video</span>
+                          </div>
+                        ) : (
+                          <img src={url} alt="" className="w-full h-full object-cover" />
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setEditPhotoUrls(editPhotoUrls.filter((_, i) => i !== index))}
+                          className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-md"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                        {index === 0 && (
+                          <span className="absolute bottom-1 left-1 bg-purple-600 text-white text-[9px] px-1.5 py-0.5 rounded-full font-medium">Cover</span>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                  <p className="text-xs text-stone-500">{editPhotoUrls.length}/10 photos & videos</p>
+                )}
+                {editPhotoUrls.length === 0 && (
+                  <div className="border-2 border-dashed border-stone-200 rounded-lg p-6 text-center text-stone-400 text-sm mb-2">
+                    No photos yet — tap "Add Photos/Videos" above
+                  </div>
+                )}
+                {/* URL paste option */}
+                <div className="flex gap-2">
+                  <Input
+                    value={editPhotoUrl}
+                    onChange={(e) => setEditPhotoUrl(e.target.value)}
+                    placeholder="Or paste a URL..."
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (editPhotoUrl.trim() && editPhotoUrls.length < 10) { setEditPhotoUrls([...editPhotoUrls, editPhotoUrl.trim()]); setEditPhotoUrl(""); } } }}
+                    className="flex-1 text-sm"
+                  />
+                  <Button type="button" variant="outline" size="sm" onClick={() => { if (editPhotoUrl.trim() && editPhotoUrls.length < 10) { setEditPhotoUrls([...editPhotoUrls, editPhotoUrl.trim()]); setEditPhotoUrl(""); } }} disabled={!editPhotoUrl.trim() || editPhotoUrls.length >= 10}>
+                    <Plus className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
 

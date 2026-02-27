@@ -8660,6 +8660,39 @@ Thank you for your business!
     }
   });
   
+  // Multipart upload endpoint — accepts any file (image or video) without the 413 JSON limit
+  app.post("/api/jewelry/upload", isAuthenticated, async (req: any, res) => {
+    const allowedRoles = ['admin', 'business_owner', 'employee'];
+    if (!allowedRoles.includes(req.user?.role)) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    try {
+      const multer = (await import("multer")).default;
+      const upload = multer({
+        storage: multer.memoryStorage(),
+        limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
+      }).single("file");
+
+      await new Promise<void>((resolve, reject) => {
+        upload(req, res as any, (err: any) => {
+          if (err) reject(err); else resolve();
+        });
+      });
+
+      if (!req.file) return res.status(400).json({ error: "No file provided" });
+
+      const file = req.file as Express.Multer.File;
+      const ext = (file.originalname.split('.').pop() || 'bin').toLowerCase();
+      const { ObjectStorageService } = await import("./objectStorage");
+      const objectStorage = new ObjectStorageService();
+      const url = await objectStorage.saveFileBuffer(file.buffer, file.mimetype, ext);
+      res.json({ url });
+    } catch (error: any) {
+      console.error("❌ Jewelry upload error:", error?.message);
+      res.status(500).json({ error: "Upload failed", detail: error?.message });
+    }
+  });
+
   app.post("/api/jewelry/upload-photo", isAuthenticated, async (req: any, res) => {
     try {
       const allowedRoles = ['admin', 'business_owner', 'employee'];

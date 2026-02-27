@@ -199,6 +199,29 @@ export class ObjectStorageService {
     // Return the public URL path
     return `/public-objects/${filename}`;
   }
+
+  // Save a raw Buffer directly (from multipart upload) to object storage
+  async saveFileBuffer(buffer: Buffer, mimeType: string, fileExtension: string): Promise<string> {
+    const isVideo = mimeType.startsWith('video/');
+    const subdir = isVideo ? 'shop/videos' : 'shop';
+    const filename = `${subdir}/${randomUUID()}.${fileExtension}`;
+    const publicSearchPaths = this.getPublicObjectSearchPaths();
+    const publicPath = publicSearchPaths[0];
+    const fullPath = `${publicPath}/${filename}`;
+
+    const { bucketName, objectName } = parseObjectPath(fullPath);
+    const bucket = objectStorageClient.bucket(bucketName);
+    const file = bucket.file(objectName);
+
+    await file.save(buffer, {
+      contentType: mimeType,
+      metadata: {
+        cacheControl: 'public, max-age=31536000',
+      },
+    });
+
+    return `/public-objects/${filename}`;
+  }
 }
 
 function parseObjectPath(path: string): {
