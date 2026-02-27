@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Gem, Leaf, Search, Plus, ChevronLeft, ChevronRight, Mail, Phone, ImagePlus, X, Heart, Pencil, Trash2, Video, Tag, RotateCcw, ShoppingCart, Check, CheckCircle2, Sparkles, Star, Bitcoin } from "lucide-react";
+import { ArrowLeft, Gem, Leaf, Search, Plus, ChevronLeft, ChevronRight, Mail, Phone, ImagePlus, X, Heart, Pencil, Trash2, Video, Tag, RotateCcw, ShoppingCart, Check, CheckCircle2, Bitcoin } from "lucide-react";
 import { useCart } from "@/hooks/useCart";
 import { FloatingCartButton } from "@/components/cart-button";
 
@@ -678,33 +678,6 @@ export default function NatureMadeJewls() {
         <div className="h-px bg-gradient-to-r from-transparent via-amber-700/50 to-transparent" />
       </div>
 
-      {/* Sponsored Item Banner */}
-      <section className="px-3 sm:px-4 pt-3 pb-1 max-w-4xl mx-auto">
-        <div className="relative overflow-hidden rounded-xl border border-amber-500/40 bg-gradient-to-r from-amber-950/80 via-stone-900/90 to-amber-950/80 shadow-lg">
-          <div className="absolute top-2 left-3 z-10">
-            <span className="inline-flex items-center gap-1 bg-amber-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">
-              <Star className="h-2.5 w-2.5" /> Sponsored
-            </span>
-          </div>
-          <div className="flex items-center gap-4 p-4 pt-7 sm:pt-4 sm:pl-28">
-            <div className="hidden sm:block absolute left-4 top-1/2 -translate-y-1/2">
-              <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-amber-500/60 shadow-lg flex items-center justify-center bg-amber-950">
-                <Sparkles className="h-9 w-9 text-amber-400" />
-              </div>
-            </div>
-            <div className="flex-1">
-              <p className="text-amber-200 font-serif font-semibold text-base sm:text-lg">Tree of Life — Copper &amp; Jade</p>
-              <p className="text-amber-100/70 text-xs sm:text-sm mt-0.5">Our signature piece — hand-wrapped copper wire with natural jade stones. Each one unique.</p>
-            </div>
-            <a href="mailto:upmichiganstatemovers@gmail.com?subject=Custom Order - Tree of Life"
-              className="flex-shrink-0">
-              <button className="bg-amber-500 hover:bg-amber-400 text-black text-xs sm:text-sm font-bold px-3 sm:px-4 py-2 rounded-lg transition-colors shadow whitespace-nowrap">
-                Inquire
-              </button>
-            </a>
-          </div>
-        </div>
-      </section>
 
       <main className="container mx-auto px-2 sm:px-3 py-3 sm:py-6">
         {isLoading ? (
@@ -736,15 +709,16 @@ export default function NatureMadeJewls() {
           </div>
         ) : (
           <>
-          <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 xl:columns-5 gap-3 space-y-3">
-            {items.map((item) => {
+          <div className="columns-2 sm:columns-2 md:columns-3 lg:columns-4 xl:columns-5 gap-2 sm:gap-3">
+            {items.map((item, idx) => {
               const photos = getItemPhotos(item);
-              const randomHeight = Math.random() > 0.5 ? 'aspect-[3/4]' : 'aspect-square';
+              const heights = ['aspect-[3/4]', 'aspect-square', 'aspect-[4/5]', 'aspect-[2/3]'];
+              const itemHeight = heights[idx % heights.length];
               
               return (
                 <Card
                   key={item.id}
-                  className="break-inside-avoid mb-3 overflow-hidden cursor-pointer group hover:shadow-xl transition-all border-0 bg-white/90 backdrop-blur-sm shadow-md shadow-purple-100/50"
+                  className={`break-inside-avoid mb-2 sm:mb-3 overflow-hidden cursor-pointer group hover:shadow-xl transition-all border-0 bg-white/90 backdrop-blur-sm shadow-md shadow-purple-100/50 ${idx % 2 === 1 ? 'mt-4 sm:mt-6' : ''}`}
                   onClick={() => openItem(item)}
                   onMouseEnter={(e) => {
                     const rect = e.currentTarget.getBoundingClientRect();
@@ -765,7 +739,7 @@ export default function NatureMadeJewls() {
                     setHoveredItem(null);
                   }}
                 >
-                  <div className={`${randomHeight} relative overflow-hidden bg-stone-100`}>
+                  <div className={`${itemHeight} relative overflow-hidden bg-stone-100`}>
                     {photos.length > 0 ? (
                       <MediaThumb
                         src={photos[0]}
