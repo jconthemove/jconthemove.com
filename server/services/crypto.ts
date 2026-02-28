@@ -158,7 +158,7 @@ class CryptoService {
         'Accept': 'application/json',
         'User-Agent': 'JC-ON-THE-MOVE/1.0',
       },
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(3000),
     });
     
     if (!response.ok) {
