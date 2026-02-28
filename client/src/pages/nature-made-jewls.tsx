@@ -987,42 +987,40 @@ export default function NatureMadeJewls() {
                 />
               </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <Label>Photos & Videos <span className="text-stone-400 font-normal text-xs">({editPhotoUrls.length}/10)</span></Label>
-                  <label className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${editPhotoUrls.length >= 10 || isEditUploading ? 'opacity-50 pointer-events-none bg-stone-100 text-stone-400' : 'bg-purple-100 hover:bg-purple-200 text-purple-700'}`}>
-                    <input
-                      type="file"
-                      ref={editFileInputRef}
-                      onChange={handleEditFileUpload}
-                      accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime"
-                      multiple
-                      className="sr-only"
-                    />
-                    {isEditUploading ? (
-                      <><span className="h-3 w-3 animate-spin rounded-full border-2 border-purple-600 border-t-transparent" /> Uploading...</>
-                    ) : (
-                      <><ImagePlus className="h-3.5 w-3.5" /> Add Photos/Videos</>
-                    )}
-                  </label>
+              {/* ── Photos & Videos ── */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-semibold">Photos & Videos <span className="text-stone-400 font-normal text-xs">({editPhotoUrls.length}/10)</span></Label>
                 </div>
-                {/* Photo/video thumbnail grid */}
-                {editPhotoUrls.length > 0 && (
-                  <div className="grid grid-cols-3 gap-2 mb-2">
+
+                {/* Hidden file input — triggered by buttons below */}
+                <input
+                  type="file"
+                  ref={editFileInputRef}
+                  onChange={handleEditFileUpload}
+                  accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime"
+                  multiple
+                  className="sr-only"
+                />
+
+                {/* Thumbnail grid */}
+                {editPhotoUrls.length > 0 ? (
+                  <div className="grid grid-cols-3 gap-2">
                     {editPhotoUrls.map((url, index) => (
-                      <div key={index} className="relative group aspect-square rounded-lg overflow-hidden bg-stone-100 border border-stone-200">
+                      <div key={index} className="relative group aspect-square rounded-xl overflow-hidden bg-stone-100 border-2 border-stone-200">
                         {isVideoUrl(url) ? (
-                          <div className="w-full h-full flex flex-col items-center justify-center gap-1">
+                          <div className="w-full h-full flex flex-col items-center justify-center gap-1 bg-purple-50">
                             <Video className="h-7 w-7 text-purple-500" />
                             <span className="text-[10px] text-stone-500">Video</span>
                           </div>
                         ) : (
                           <img src={url} alt="" className="w-full h-full object-cover" />
                         )}
+                        {/* Delete button — always visible */}
                         <button
                           type="button"
                           onClick={() => setEditPhotoUrls(editPhotoUrls.filter((_, i) => i !== index))}
-                          className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-md"
+                          className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-md z-10"
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -1031,23 +1029,82 @@ export default function NatureMadeJewls() {
                         )}
                       </div>
                     ))}
+                    {/* Add more slot */}
+                    {editPhotoUrls.length < 10 && (
+                      <button
+                        type="button"
+                        onClick={() => editFileInputRef.current?.click()}
+                        disabled={isEditUploading}
+                        className="aspect-square rounded-xl border-2 border-dashed border-purple-300 bg-purple-50 hover:bg-purple-100 flex flex-col items-center justify-center gap-1 text-purple-500 transition-colors disabled:opacity-50"
+                      >
+                        {isEditUploading ? (
+                          <span className="h-5 w-5 animate-spin rounded-full border-2 border-purple-600 border-t-transparent" />
+                        ) : (
+                          <>
+                            <Plus className="h-6 w-6" />
+                            <span className="text-[10px] font-medium">Add</span>
+                          </>
+                        )}
+                      </button>
+                    )}
                   </div>
+                ) : (
+                  /* Empty state — full-width clickable zone */
+                  <button
+                    type="button"
+                    onClick={() => editFileInputRef.current?.click()}
+                    disabled={isEditUploading}
+                    className="w-full border-2 border-dashed border-purple-300 rounded-xl p-8 text-center bg-purple-50 hover:bg-purple-100 transition-colors disabled:opacity-50"
+                  >
+                    {isEditUploading ? (
+                      <div className="flex flex-col items-center gap-2 text-purple-500">
+                        <span className="h-6 w-6 animate-spin rounded-full border-2 border-purple-600 border-t-transparent" />
+                        <span className="text-sm font-medium">Uploading...</span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-2 text-purple-500">
+                        <ImagePlus className="h-8 w-8" />
+                        <span className="text-sm font-semibold">Tap to Add Photos or Videos</span>
+                        <span className="text-xs text-stone-400">JPG, PNG, MP4 · Up to 10 files</span>
+                      </div>
+                    )}
+                  </button>
                 )}
-                {editPhotoUrls.length === 0 && (
-                  <div className="border-2 border-dashed border-stone-200 rounded-lg p-6 text-center text-stone-400 text-sm mb-2">
-                    No photos yet — tap "Add Photos/Videos" above
-                  </div>
+
+                {/* Add more button (when photos exist) */}
+                {editPhotoUrls.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full border-purple-300 text-purple-700 hover:bg-purple-50"
+                    onClick={() => editFileInputRef.current?.click()}
+                    disabled={isEditUploading || editPhotoUrls.length >= 10}
+                  >
+                    {isEditUploading ? (
+                      <><span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-purple-600 border-t-transparent mr-2" />Uploading...</>
+                    ) : (
+                      <><ImagePlus className="h-3.5 w-3.5 mr-2" />Add More Photos/Videos</>
+                    )}
+                  </Button>
                 )}
-                {/* URL paste option */}
+
+                {/* URL paste fallback */}
                 <div className="flex gap-2">
                   <Input
                     value={editPhotoUrl}
                     onChange={(e) => setEditPhotoUrl(e.target.value)}
-                    placeholder="Or paste a URL..."
+                    placeholder="Or paste an image URL..."
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (editPhotoUrl.trim() && editPhotoUrls.length < 10) { setEditPhotoUrls([...editPhotoUrls, editPhotoUrl.trim()]); setEditPhotoUrl(""); } } }}
                     className="flex-1 text-sm"
                   />
-                  <Button type="button" variant="outline" size="sm" onClick={() => { if (editPhotoUrl.trim() && editPhotoUrls.length < 10) { setEditPhotoUrls([...editPhotoUrls, editPhotoUrl.trim()]); setEditPhotoUrl(""); } }} disabled={!editPhotoUrl.trim() || editPhotoUrls.length >= 10}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { if (editPhotoUrl.trim() && editPhotoUrls.length < 10) { setEditPhotoUrls([...editPhotoUrls, editPhotoUrl.trim()]); setEditPhotoUrl(""); } }}
+                    disabled={!editPhotoUrl.trim() || editPhotoUrls.length >= 10}
+                  >
                     <Plus className="h-4 w-4" />
                   </Button>
                 </div>
