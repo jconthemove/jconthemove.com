@@ -8760,7 +8760,42 @@ Thank you for your business!
       };
       
       const item = await storage.createJewelryItem(cleanedData);
-      res.status(201).json(item);
+
+      // Reward creator 200 JCMOVES for each jewelry listing (cap: 20 per day)
+      const JEWELRY_LISTING_REWARD = 200;
+      const JEWELRY_DAILY_CAP = 20;
+      let listingReward = 0;
+      try {
+        const userId = req.user.id;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todayListings = await db.select().from(rewards)
+          .where(and(
+            eq(rewards.userId, userId),
+            eq(rewards.rewardType, 'jewelry_listing'),
+            gte(rewards.earnedDate, today),
+          ));
+        if (todayListings.length < JEWELRY_DAILY_CAP) {
+          await storage.creditWalletTokens(userId, JEWELRY_LISTING_REWARD);
+          await db.insert(rewards).values({
+            userId,
+            rewardType: 'jewelry_listing',
+            tokenAmount: JEWELRY_LISTING_REWARD.toString(),
+            cashValue: '0.00',
+            status: 'confirmed',
+            referenceId: String(item.id),
+            metadata: { itemId: item.id, itemTitle: item.title },
+          });
+          listingReward = JEWELRY_LISTING_REWARD;
+          console.log(`✅ Jewelry listing reward: ${JEWELRY_LISTING_REWARD} JCMOVES credited to user ${userId}`);
+        } else {
+          console.log(`ℹ️ Jewelry listing reward skipped: daily cap reached for user ${userId}`);
+        }
+      } catch (rewardErr) {
+        console.error("❌ Error granting jewelry listing reward:", rewardErr);
+      }
+
+      res.status(201).json({ ...item, listingReward: listingReward || null });
     } catch (error: any) {
       console.error("Error creating jewelry item:", error);
       res.status(500).json({ error: error.message || "Failed to create jewelry item" });
@@ -8837,6 +8872,51 @@ Thank you for your business!
     } catch (error: any) {
       console.error("Error marking jewelry item sold:", error);
       res.status(500).json({ error: error.message || "Failed to update item" });
+    }
+  });
+
+  // Admin: Retroactively grant jewelry listing rewards for existing items
+  app.post("/api/admin/jewelry-listing-rewards", isAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const { jewelryItems } = await import("@shared/schema");
+      const JEWELRY_LISTING_REWARD = 200;
+      const { userId } = req.body; // optional: target specific user, otherwise all jewelry creators
+
+      const allItems = userId
+        ? await db.select().from(jewelryItems).where(eq(jewelryItems.postedBy, userId))
+        : await db.select().from(jewelryItems);
+
+      let rewarded = 0;
+      let skipped = 0;
+
+      for (const item of allItems) {
+        if (!item.postedBy) { skipped++; continue; }
+        // Check if reward already exists for this item
+        const existing = await db.select().from(rewards).where(and(
+          eq(rewards.userId, item.postedBy),
+          eq(rewards.rewardType, 'jewelry_listing'),
+          eq(rewards.referenceId, String(item.id)),
+        ));
+        if (existing.length > 0) { skipped++; continue; }
+
+        await storage.creditWalletTokens(item.postedBy, JEWELRY_LISTING_REWARD);
+        await db.insert(rewards).values({
+          userId: item.postedBy,
+          rewardType: 'jewelry_listing',
+          tokenAmount: JEWELRY_LISTING_REWARD.toString(),
+          cashValue: '0.00',
+          status: 'confirmed',
+          referenceId: String(item.id),
+          metadata: { itemId: item.id, itemTitle: item.title, retroactive: true },
+        });
+        rewarded++;
+        console.log(`✅ Retroactive jewelry reward: ${JEWELRY_LISTING_REWARD} JCMOVES for item "${item.title}" → user ${item.postedBy}`);
+      }
+
+      res.json({ success: true, rewarded, skipped, totalItems: allItems.length, tokensGranted: rewarded * JEWELRY_LISTING_REWARD });
+    } catch (error: any) {
+      console.error("Error granting retroactive jewelry rewards:", error);
+      res.status(500).json({ error: error.message || "Failed to grant retroactive rewards" });
     }
   });
 

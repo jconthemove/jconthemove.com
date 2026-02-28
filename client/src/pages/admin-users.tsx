@@ -178,6 +178,26 @@ export default function AdminUsersPage() {
     }
   });
 
+  // Grant retroactive jewelry listing rewards
+  const jewelryRewardsMutation = useMutation({
+    mutationFn: async (targetUserId?: string) => {
+      const response = await apiRequest("POST", "/api/admin/jewelry-listing-rewards", targetUserId ? { userId: targetUserId } : {});
+      return await response.json();
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "Jewelry Rewards Granted",
+        description: `${data.rewarded} items rewarded (${data.tokensGranted} JCMOVES total). ${data.skipped} already had rewards.`,
+      });
+      if (selectedUser) {
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/users", selectedUser, "details"] });
+      }
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed", description: error.message || "Could not grant jewelry rewards", variant: "destructive" });
+    },
+  });
+
   // Grant tokens mutation (admin manual award)
   const grantTokensMutation = useMutation({
     mutationFn: async () => {
@@ -775,7 +795,7 @@ export default function AdminUsersPage() {
                             <Wallet className="h-4 w-4 mr-2" />
                             Wallet Balance
                           </CardTitle>
-                          <div className="flex gap-2">
+                          <div className="flex gap-2 flex-wrap">
                             <Button 
                               variant="outline" 
                               size="sm"
@@ -783,6 +803,15 @@ export default function AdminUsersPage() {
                             >
                               <Award className="h-4 w-4 mr-2" />
                               Grant
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => jewelryRewardsMutation.mutate(selectedUser || undefined)}
+                              disabled={jewelryRewardsMutation.isPending}
+                              title="Grant 200 JCMOVES for each jewelry item this user listed that hasn't been rewarded yet"
+                            >
+                              💎 {jewelryRewardsMutation.isPending ? "Rewarding..." : "Jewelry Rewards"}
                             </Button>
                             <Button 
                               variant="outline" 

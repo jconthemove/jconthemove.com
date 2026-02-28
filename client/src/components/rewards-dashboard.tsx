@@ -436,6 +436,9 @@ export default function RewardsDashboard() {
       case 'job_completion': case 'loyalty_booking': return <CheckCircle className="h-4 w-4 text-green-400" />;
       case 'job_creation_bonus': case 'lead_creation': return <TrendingUp className="h-4 w-4 text-cyan-400" />;
       case 'staking_claim': return <TrendingUp className="h-4 w-4 text-yellow-400" />;
+      case 'jewelry_listing': return <span className="text-base">💎</span>;
+      case 'shop_listing': return <span className="text-base">🛍️</span>;
+      case 'shop_purchase': case 'shop_sale': case 'shop_sale_confirmed': return <span className="text-base">🛒</span>;
       default: return <Coins className="h-4 w-4 text-slate-400" />;
     }
   };
@@ -456,6 +459,11 @@ export default function RewardsDashboard() {
       'job_creation_bonus': 'Job Creation Bonus',
       'lead_creation': 'Lead Created',
       'staking_claim': 'Staking Reward',
+      'jewelry_listing': 'Jewelry Listed',
+      'shop_listing': 'Shop Item Listed',
+      'shop_purchase': 'Shop Purchase',
+      'shop_sale': 'Shop Sale',
+      'shop_sale_confirmed': 'Sale Confirmed',
     };
     return labels[type] || type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   };
