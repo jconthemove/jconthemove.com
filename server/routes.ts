@@ -20,7 +20,7 @@ import { z } from "zod";
 import { EncryptionService } from "./services/encryption";
 import { eq, desc, sql, and, gte } from 'drizzle-orm';
 import { db } from './db';
-import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers } from '@shared/schema';
+import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings } from '@shared/schema';
 import { getFaucetPayService } from "./services/faucetpay";
 import { getAdvertisingService } from "./services/advertising";
 import { FAUCET_CONFIG } from "./constants";
@@ -9653,6 +9653,103 @@ Thank you for your business!
       if (!updated) return res.status(404).json({ error: "Payment not found" });
       res.json(updated);
     } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ==================== DATABASE BACKUP ====================
+  app.get("/api/admin/database/backup", isAuthenticated, requireAdmin, async (_req, res) => {
+    try {
+      const [
+        usersData,
+        leadsData,
+        contactsData,
+        notificationsData,
+        rewardsData,
+        walletAccountsData,
+        walletTransactionsData,
+        cashoutRequestsData,
+        walletPayoutsData,
+        fundingDepositsData,
+        reserveTransactionsData,
+        miningSessionsData,
+        miningClaimsData,
+        treasuryWithdrawalsData,
+        tokenConversionsData,
+        rewardSettingsData,
+        shopItemsData,
+        jewelryItemsData,
+        stakesData,
+        stakingTiersData,
+        bitcoinPaymentsData,
+      ] = await Promise.all([
+        db.select().from(users),
+        db.select().from(leads),
+        db.select().from(contacts),
+        db.select().from(notifications),
+        db.select().from(rewards),
+        db.select().from(walletAccounts),
+        db.select().from(walletTransactions),
+        db.select().from(cashoutRequests),
+        db.select().from(walletPayouts),
+        db.select().from(fundingDeposits),
+        db.select().from(reserveTransactions),
+        db.select().from(miningSessions),
+        db.select().from(miningClaims),
+        db.select().from(treasuryWithdrawals),
+        db.select().from(tokenConversions),
+        db.select().from(rewardSettings),
+        db.select().from(shopItems),
+        db.select().from(jewelryItems),
+        db.select().from(stakes),
+        db.select().from(stakingTiers),
+        db.select().from(bitcoinPayments),
+      ]);
+
+      const backup = {
+        exportedAt: new Date().toISOString(),
+        version: "1.0",
+        tables: {
+          users: usersData,
+          leads: leadsData,
+          contacts: contactsData,
+          notifications: notificationsData,
+          rewards: rewardsData,
+          walletAccounts: walletAccountsData,
+          walletTransactions: walletTransactionsData,
+          cashoutRequests: cashoutRequestsData,
+          walletPayouts: walletPayoutsData,
+          fundingDeposits: fundingDepositsData,
+          reserveTransactions: reserveTransactionsData,
+          miningSessions: miningSessionsData,
+          miningClaims: miningClaimsData,
+          treasuryWithdrawals: treasuryWithdrawalsData,
+          tokenConversions: tokenConversionsData,
+          rewardSettings: rewardSettingsData,
+          shopItems: shopItemsData,
+          jewelryItems: jewelryItemsData,
+          stakes: stakesData,
+          stakingTiers: stakingTiersData,
+          bitcoinPayments: bitcoinPaymentsData,
+        },
+        counts: {
+          users: usersData.length,
+          leads: leadsData.length,
+          contacts: contactsData.length,
+          rewards: rewardsData.length,
+          walletAccounts: walletAccountsData.length,
+          shopItems: shopItemsData.length,
+          jewelryItems: jewelryItemsData.length,
+          stakes: stakesData.length,
+        },
+      };
+
+      const filename = `jcmove-backup-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.json`;
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.json(backup);
+    } catch (error: any) {
+      console.error("Database backup error:", error);
       res.status(500).json({ error: error.message });
     }
   });

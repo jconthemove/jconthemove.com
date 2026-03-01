@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,7 +28,8 @@ import {
   ChevronRight,
   Send,
   ArrowRightLeft,
-  History
+  History,
+  Download
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -108,8 +109,23 @@ export default function AdminUsersPage() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [grantModalOpen, setGrantModalOpen] = useState(false);
+  const [confirmRemoveUserId, setConfirmRemoveUserId] = useState<string | null>(null);
+  const confirmRemoveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [grantAmount, setGrantAmount] = useState("");
   const [grantReason, setGrantReason] = useState("");
+
+  const handleRemoveAccessClick = (e: React.MouseEvent, userId: string) => {
+    e.stopPropagation();
+    if (confirmRemoveUserId === userId) {
+      updateStatusMutation.mutate({ userId, status: 'removed' });
+      setConfirmRemoveUserId(null);
+      if (confirmRemoveTimerRef.current) clearTimeout(confirmRemoveTimerRef.current);
+    } else {
+      setConfirmRemoveUserId(userId);
+      if (confirmRemoveTimerRef.current) clearTimeout(confirmRemoveTimerRef.current);
+      confirmRemoveTimerRef.current = setTimeout(() => setConfirmRemoveUserId(null), 4000);
+    }
+  };
 
   // Check if user has admin or business_owner role
   const hasAccess = hasAdminAccess || user?.role === 'business_owner';
@@ -391,13 +407,40 @@ export default function AdminUsersPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
       <div className="container mx-auto px-4 py-6 md:py-8 max-w-7xl">
       {/* Header */}
-      <div className="mb-6 md:mb-8">
-        <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2" data-testid="heading-admin-users">
-          User Management
-        </h1>
-        <p className="text-sm md:text-base text-muted-foreground">
-          View and manage all employees and customers
-        </p>
+      <div className="mb-6 md:mb-8 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2" data-testid="heading-admin-users">
+            User Management
+          </h1>
+          <p className="text-sm md:text-base text-muted-foreground">
+            View and manage all employees and customers
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0 flex items-center gap-2 border-blue-400 text-blue-600 hover:bg-blue-50 dark:border-blue-500 dark:text-blue-400 dark:hover:bg-blue-950 text-xs"
+          onClick={async () => {
+            try {
+              const res = await fetch('/api/admin/database/backup', { credentials: 'include' });
+              if (!res.ok) throw new Error('Backup failed');
+              const blob = await res.blob();
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+              a.href = url;
+              a.download = `jcmove-backup-${ts}.json`;
+              a.click();
+              URL.revokeObjectURL(url);
+              toast({ title: 'Backup downloaded', description: 'Save this file somewhere safe.' });
+            } catch {
+              toast({ title: 'Backup failed', variant: 'destructive' });
+            }
+          }}
+        >
+          <Download className="h-3.5 w-3.5" />
+          Backup DB
+        </Button>
       </div>
 
       {/* Search Bar */}
@@ -512,17 +555,14 @@ export default function AdminUsersPage() {
                           </>
                           )}
                           {user.status === 'approved' && (
-                            <Button 
-                              variant="destructive" 
-                              size="sm" 
-                              className="flex-1"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                updateStatusMutation.mutate({ userId: user.id, status: 'removed' });
-                              }}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className={`text-xs px-2 py-1 h-7 border transition-all ${confirmRemoveUserId === user.id ? 'border-red-600 bg-red-600 text-white hover:bg-red-700 animate-pulse' : 'border-red-400 text-red-500 hover:border-red-600 hover:text-red-600 bg-transparent'}`}
+                              onClick={(e) => handleRemoveAccessClick(e, user.id)}
                               data-testid={`button-remove-${user.id}`}
                             >
-                              Remove Access
+                              {confirmRemoveUserId === user.id ? '⚠️ Confirm?' : 'Remove Access'}
                             </Button>
                           )}
                           {user.status === 'removed' && (
@@ -664,17 +704,14 @@ export default function AdminUsersPage() {
                           </>
                         )}
                         {user.status === 'approved' && (
-                          <Button 
-                            variant="destructive" 
-                            size="sm" 
-                            className="flex-1"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              updateStatusMutation.mutate({ userId: user.id, status: 'removed' });
-                            }}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className={`text-xs px-2 py-1 h-7 border transition-all ${confirmRemoveUserId === user.id ? 'border-red-600 bg-red-600 text-white hover:bg-red-700 animate-pulse' : 'border-red-400 text-red-500 hover:border-red-600 hover:text-red-600 bg-transparent'}`}
+                            onClick={(e) => handleRemoveAccessClick(e, user.id)}
                             data-testid={`button-remove-${user.id}`}
                           >
-                            Remove Access
+                            {confirmRemoveUserId === user.id ? '⚠️ Confirm?' : 'Remove Access'}
                           </Button>
                         )}
                         {user.status === 'removed' && (
