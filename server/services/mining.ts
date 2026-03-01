@@ -443,9 +443,20 @@ export class MiningService {
           sql`${miningSessions.nextClaimAt} <= ${now}`
         ));
 
-      // Auto-claim for each expired session
+      // Auto-claim for each expired session and send push notification
       for (const session of expiredSessions) {
-        await this.claimTokens(session.userId, 'auto');
+        const result = await this.claimTokens(session.userId, 'auto');
+        if (result.success && parseFloat(result.tokensClaimed) > 0) {
+          try {
+            const { notificationService } = await import('./notification');
+            await notificationService.notifyMiningComplete(
+              session.userId,
+              parseFloat(result.tokensClaimed)
+            );
+          } catch (notifyErr) {
+            console.error('Error sending mining complete push notification:', notifyErr);
+          }
+        }
       }
 
       console.log(`Auto-claimed tokens for ${expiredSessions.length} expired mining sessions`);

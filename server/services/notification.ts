@@ -2,70 +2,76 @@ import webpush from 'web-push';
 import { storage } from '../storage';
 import type { InsertNotification } from '@shared/schema';
 
-// Configure web push (in production, set these as environment variables)
-webpush.setVapidDetails(
-  'mailto:your-email@example.com', // Replace with your email
-  process.env.VAPID_PUBLIC_KEY || 'temp-public-key',
-  process.env.VAPID_PRIVATE_KEY || 'temp-private-key'
-);
+const vapidPublicKey = process.env.VAPID_PUBLIC_KEY;
+const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
+const vapidEmail = process.env.VAPID_EMAIL || 'mailto:upmichiganstatemovers@gmail.com';
+
+if (vapidPublicKey && vapidPrivateKey) {
+  webpush.setVapidDetails(vapidEmail, vapidPublicKey, vapidPrivateKey);
+} else {
+  console.warn('[PushNotification] VAPID keys not configured — push notifications disabled');
+}
 
 export interface NotificationData {
   userId: string;
-  type: 'job_assigned' | 'job_status_change' | 'new_message' | 'system_alert';
+  type: 'job_assigned' | 'job_status_change' | 'new_message' | 'system_alert' | 'mining_complete' | 'reward_available';
   title: string;
   message: string;
   data?: any;
 }
 
 export class NotificationService {
-  // Create a notification in the database
+  private vapidReady = !!(vapidPublicKey && vapidPrivateKey);
+
   async createNotification(notificationData: NotificationData): Promise<void> {
     try {
       const insertData: InsertNotification = {
         userId: notificationData.userId,
-        type: notificationData.type,
+        type: notificationData.type as any,
         title: notificationData.title,
         message: notificationData.message,
         data: notificationData.data,
       };
-
       await storage.createNotification(insertData);
     } catch (error) {
       console.error('Error creating notification:', error);
     }
   }
 
-  // Send push notification to a user
-  async sendPushNotification(userId: string, notification: { title: string; body: string; data?: any }): Promise<void> {
+  async sendPushNotification(
+    userId: string,
+    notification: { title: string; body: string; tag?: string; requireInteraction?: boolean; data?: any }
+  ): Promise<void> {
+    if (!this.vapidReady) return;
     try {
-      // Get user's push subscription
       const user = await storage.getUser(userId);
-      if (!user?.pushSubscription) {
-        console.log(`No push subscription found for user ${userId}`);
-        return;
-      }
+      if (!user?.pushSubscription) return;
 
       const payload = JSON.stringify({
         title: notification.title,
         body: notification.body,
-        data: notification.data || {},
-        icon: '/icons/icon-192x192.svg',
-        badge: '/icons/icon-192x192.svg',
+        tag: notification.tag || 'jcmove-notification',
+        requireInteraction: notification.requireInteraction ?? false,
+        icon: '/icons/icon-192x192.png',
+        badge: '/icons/icon-72x72.png',
+        data: { url: '/rewards', ...(notification.data || {}) },
       });
 
-      await webpush.sendNotification(user.pushSubscription, payload);
-      console.log(`Push notification sent to user ${userId}`);
-    } catch (error) {
-      console.error('Error sending push notification:', error);
+      await webpush.sendNotification(user.pushSubscription as webpush.PushSubscription, payload);
+      console.log(`[PushNotification] Sent to user ${userId}: ${notification.title}`);
+    } catch (error: any) {
+      if (error?.statusCode === 410) {
+        // Subscription expired — clear it
+        await storage.updateUserPushSubscription(userId, null as any);
+        console.log(`[PushNotification] Cleared expired subscription for ${userId}`);
+      } else {
+        console.error('[PushNotification] Error sending push:', error?.message || error);
+      }
     }
   }
 
-  // Send both database notification and push notification
   async sendNotification(notificationData: NotificationData): Promise<void> {
-    // Create database notification
     await this.createNotification(notificationData);
-
-    // Send push notification
     await this.sendPushNotification(notificationData.userId, {
       title: notificationData.title,
       body: notificationData.message,
@@ -73,7 +79,42 @@ export class NotificationService {
     });
   }
 
-  // Helper methods for common notification types
+  // Mining / rewards push helpers
+  async notifyMiningComplete(userId: string, tokensEarned: number): Promise<void> {
+    await this.sendPushNotification(userId, {
+      title: '⛏️ Mining Session Complete!',
+      body: `${tokensEarned.toLocaleString()} JCMOVES are ready to claim. Tap to collect!`,
+      tag: 'mining-complete',
+      requireInteraction: true,
+      data: { url: '/rewards', type: 'mining_complete' },
+    });
+    await this.createNotification({
+      userId,
+      type: 'mining_complete',
+      title: '⛏️ Mining Session Complete!',
+      message: `${tokensEarned.toLocaleString()} JCMOVES are ready to claim.`,
+      data: { type: 'mining_complete', tokens: tokensEarned },
+    });
+  }
+
+  async notifyRewardAvailable(userId: string, rewardType: string, amount: number): Promise<void> {
+    const label = rewardType.replace(/_/g, ' ');
+    await this.sendPushNotification(userId, {
+      title: '🎉 New Reward Available!',
+      body: `You earned ${amount.toLocaleString()} JCMOVES for ${label}`,
+      tag: 'reward-available',
+      data: { url: '/rewards', type: 'reward_available' },
+    });
+    await this.createNotification({
+      userId,
+      type: 'reward_available',
+      title: '🎉 New Reward Available!',
+      message: `You earned ${amount.toLocaleString()} JCMOVES for ${label}`,
+      data: { type: 'reward_available', rewardType, amount },
+    });
+  }
+
+  // Existing helpers (jobs, alerts)
   async notifyJobAssigned(userId: string, jobId: string, customerName: string): Promise<void> {
     await this.sendNotification({
       userId,
@@ -104,11 +145,9 @@ export class NotificationService {
     });
   }
 
-  // Notify all employees about a new job
   async notifyAllEmployees(title: string, message: string, data?: any): Promise<void> {
     try {
       const employees = await storage.getEmployees();
-      
       for (const employee of employees) {
         await this.sendNotification({
           userId: employee.id,

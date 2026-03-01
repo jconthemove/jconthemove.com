@@ -96,6 +96,54 @@ export default function RewardsDashboard() {
   const [fitnessType, setFitnessType] = useState<'pushups' | 'situps'>('pushups');
   const [fitnessCount, setFitnessCount] = useState('');
 
+  // Push notifications state
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission>('default');
+  const [notifLoading, setNotifLoading] = useState(false);
+  const [miningAlertSent, setMiningAlertSent] = useState(false);
+
+  // Sync permission state on mount
+  useEffect(() => {
+    if ('Notification' in window) {
+      setNotifPermission(Notification.permission);
+    }
+  }, []);
+
+  // Send a local notification when the mining timer hits zero (and we haven't sent one yet this cycle)
+  useEffect(() => {
+    if (
+      !miningAlertSent &&
+      timeRemaining <= 0 &&
+      parseFloat(accumulatedTokens) > 0 &&
+      notifPermission === 'granted'
+    ) {
+      setMiningAlertSent(true);
+      import('@/lib/notifications').then(({ notificationService }) => {
+        notificationService.notifyCanClaim(parseFloat(accumulatedTokens));
+      });
+    }
+    if (timeRemaining > 30000) {
+      setMiningAlertSent(false);
+    }
+  }, [timeRemaining, accumulatedTokens, notifPermission, miningAlertSent]);
+
+  const handleEnableNotifications = async () => {
+    setNotifLoading(true);
+    try {
+      const { notificationService } = await import('@/lib/notifications');
+      const permission = await notificationService.requestPermission();
+      setNotifPermission(permission);
+      if (permission === 'granted') {
+        toast({ title: 'Notifications enabled!', description: "We'll alert you when your mining session completes." });
+      } else {
+        toast({ title: 'Notifications blocked', description: 'You can enable them in your browser settings.', variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Error', description: 'Could not enable notifications.', variant: 'destructive' });
+    } finally {
+      setNotifLoading(false);
+    }
+  };
+
   // Fitness mutation
   const fitnessMutation = useMutation({
     mutationFn: async (data: { type: 'pushups' | 'situps', count: number }) => {
@@ -807,6 +855,46 @@ export default function RewardsDashboard() {
                 )}
               </div>
             </div>
+
+            {/* Push Notification Toggle */}
+            {'Notification' in window && (
+              <div className="px-5 pb-4">
+                {notifPermission === 'granted' ? (
+                  <div className="flex items-center gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3">
+                    <span className="text-emerald-400 text-lg">🔔</span>
+                    <div className="flex-1">
+                      <p className="text-xs font-bold text-emerald-400 leading-tight">Notifications On</p>
+                      <p className="text-[10px] text-slate-500">You'll be alerted when tokens are ready to claim</p>
+                    </div>
+                  </div>
+                ) : notifPermission === 'denied' ? (
+                  <div className="flex items-center gap-3 bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3">
+                    <span className="text-slate-500 text-lg">🔕</span>
+                    <div className="flex-1">
+                      <p className="text-xs font-bold text-slate-400 leading-tight">Notifications Blocked</p>
+                      <p className="text-[10px] text-slate-600">Enable in your browser or device settings</p>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleEnableNotifications}
+                    disabled={notifLoading}
+                    className="w-full flex items-center gap-3 bg-blue-500/10 border border-blue-500/30 hover:border-blue-400/60 hover:bg-blue-500/15 rounded-xl px-4 py-3 text-left transition-all active:scale-95 disabled:opacity-60"
+                  >
+                    {notifLoading ? (
+                      <Loader2 className="h-4 w-4 text-blue-400 animate-spin flex-shrink-0" />
+                    ) : (
+                      <span className="text-lg">🔔</span>
+                    )}
+                    <div className="flex-1">
+                      <p className="text-xs font-bold text-blue-400 leading-tight">Enable Mining Alerts</p>
+                      <p className="text-[10px] text-slate-500">Get notified when your session completes or you earn tokens</p>
+                    </div>
+                    <ChevronRight className="h-3.5 w-3.5 text-blue-500/60 flex-shrink-0" />
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Fitness Boost Section */}
             <div className="px-5 pb-5">

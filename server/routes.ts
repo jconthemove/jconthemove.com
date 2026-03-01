@@ -4313,6 +4313,13 @@ Thank you for your business!
     }
   });
 
+  // Return VAPID public key for client-side push subscription setup
+  app.get("/api/notifications/vapid-public-key", (req, res) => {
+    const key = process.env.VAPID_PUBLIC_KEY;
+    if (!key) return res.status(503).json({ error: "Push notifications not configured" });
+    res.json({ publicKey: key });
+  });
+
   app.post("/api/notifications/subscribe", isAuthenticated, async (req: any, res) => {
     try {
       const userId = (req.session as any).userId;
@@ -4328,6 +4335,17 @@ Thank you for your business!
     } catch (error) {
       console.error("Error subscribing to push notifications:", error);
       res.status(500).json({ error: "Failed to subscribe to push notifications" });
+    }
+  });
+
+  // Unsubscribe from push notifications
+  app.post("/api/notifications/unsubscribe", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      await storage.updateUserPushSubscription(userId, null as any);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to unsubscribe" });
     }
   });
 
