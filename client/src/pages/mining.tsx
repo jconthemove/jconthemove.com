@@ -390,7 +390,7 @@ export default function MiningPage() {
                 <TrendingUp className="h-5 w-5 text-purple-400 flex-shrink-0" />
                 <div className="flex-1">
                   <p className="text-sm font-medium text-white">Stake JCMOVES</p>
-                  <p className="text-xs text-slate-400">Up to 30% APR</p>
+                  <p className="text-xs text-slate-400">Up to 30% APR*</p>
                 </div>
                 <p className="text-xs text-purple-300 font-medium">→</p>
               </div>
@@ -416,6 +416,7 @@ export default function MiningPage() {
               </div>
             </Link>
           </div>
+          <p className="text-[10px] text-slate-500 mt-2.5 leading-snug">* Variable rewards based on company policy of distribution</p>
         </div>
 
         {/* ── USE YOUR JCMOVES ── */}
