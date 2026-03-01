@@ -399,9 +399,9 @@ export class GamificationService {
     // Check if this job was created by an employee and reward them too
     const lead = await storage.getLead(jobId);
     if (lead && lead.createdByUserId && lead.createdByUserId !== userId) {
-      // Award bonus to employee who created the job (10% of completion reward)
-      const creatorBonusTokens = (parseFloat(tokenAmount) * 0.1).toFixed(8);
-      const creatorBonusPoints = Math.floor(points * 0.1);
+      // Award full per-worker amount to the person who created/booked the job
+      const creatorBonusTokens = (parseFloat(tokenAmount) * 1.0).toFixed(8);
+      const creatorBonusPoints = Math.floor(points * 1.0);
 
       const creatorDistributionResult = await treasuryService.distributeTokens(
         parseFloat(creatorBonusTokens),
@@ -545,9 +545,9 @@ export class GamificationService {
     // Check if this job was created by an employee and reward them too
     const lead = await storage.getLead(jobId);
     if (lead && lead.createdByUserId && lead.createdByUserId !== userId) {
-      // Award bonus to employee who created the job (50% of completion reward)
-      const creatorBonusTokens = (parseFloat(tokenAmount) * 0.5).toFixed(8);
-      const creatorBonusPoints = Math.floor(points * 0.5);
+      // Award full per-worker amount to the person who created/booked the job
+      const creatorBonusTokens = (parseFloat(tokenAmount) * 1.0).toFixed(8);
+      const creatorBonusPoints = Math.floor(points * 1.0);
 
       await treasuryService.distributeTokens(
         parseFloat(creatorBonusTokens),
