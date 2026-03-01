@@ -23,6 +23,7 @@ import {
   Share2,
   Users,
   Copy,
+  Send,
   Loader2,
   ArrowUpRight,
   ArrowDownRight,
@@ -496,6 +497,42 @@ export default function RewardsDashboard() {
           variant: "destructive"
         });
       }
+    }
+  };
+
+  // Share referral code via native share sheet, SMS, or email
+  const shareReferralCode = async () => {
+    const code = referralCode?.referralCode;
+    if (!code) return;
+    const shareUrl = `${window.location.origin}/auth?ref=${code}`;
+    const shareText = `Join me on JC ON THE MOVE! Use my referral code ${code} when you sign up and get +1,000 JCMOVES tokens instantly. Sign up here: ${shareUrl}`;
+
+    // Try native Web Share API first (works great on Android/iOS)
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "Join JC ON THE MOVE",
+          text: `Use my referral code ${code} and get +1,000 JCMOVES tokens when you sign up!`,
+          url: shareUrl,
+        });
+        return;
+      } catch (err) {
+        // User cancelled — do nothing
+        if ((err as Error).name === "AbortError") return;
+      }
+    }
+
+    // Fallback: open a share options dialog via mailto (email)
+    const emailSubject = encodeURIComponent("Join me on JC ON THE MOVE");
+    const emailBody = encodeURIComponent(shareText);
+    const smsBody = encodeURIComponent(shareText);
+
+    // On mobile without Web Share, open SMS
+    const isMobile = /android|iphone|ipad/i.test(navigator.userAgent);
+    if (isMobile) {
+      window.open(`sms:?body=${smsBody}`, "_self");
+    } else {
+      window.open(`mailto:?subject=${emailSubject}&body=${emailBody}`);
     }
   };
 
@@ -1013,9 +1050,18 @@ export default function RewardsDashboard() {
           <div className="space-y-4">
             {/* Your code */}
             <div className="rounded-2xl bg-slate-900 border border-violet-500/20 p-5 shadow-[0_0_20px_rgba(139,92,246,0.07)]">
-              <div className="flex items-center gap-2 mb-3">
-                <Share2 className="h-4 w-4 text-violet-400" />
-                <p className="text-sm font-bold text-white">Your Referral Code</p>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Share2 className="h-4 w-4 text-violet-400" />
+                  <p className="text-sm font-bold text-white">Your Referral Code</p>
+                </div>
+                <button
+                  onClick={shareReferralCode}
+                  className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 font-medium transition-colors"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  Share
+                </button>
               </div>
               <p className="text-[11px] text-slate-500 mb-3">Share this code — you earn <span className="text-violet-400 font-bold">+2,500 JCMOVES</span> when a friend signs up</p>
               {referralCode?.referralCode ? (
@@ -1025,6 +1071,9 @@ export default function RewardsDashboard() {
                   </div>
                   <Button onClick={copyReferralCode} size="sm" className="bg-violet-600 hover:bg-violet-700 border-0 text-white" data-testid="copy-referral-code">
                     <Copy className="h-4 w-4" />
+                  </Button>
+                  <Button onClick={shareReferralCode} size="sm" className="bg-blue-600 hover:bg-blue-700 border-0 text-white" title="Share via text or email">
+                    <Send className="h-4 w-4" />
                   </Button>
                 </div>
               ) : (
