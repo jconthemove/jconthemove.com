@@ -86,6 +86,8 @@ export class MiningService {
         nextClaimAt,
         miningSpeed: "1.00",
         status: "active",
+        pushupsCount: 0,
+        situpsCount: 0,
       })
       .returning();
 

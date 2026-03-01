@@ -808,6 +808,30 @@ export default function RewardsDashboard() {
               </div>
             </div>
 
+            {/* Fitness Boost Section */}
+            <div className="px-5 pb-5">
+              <div className="grid grid-cols-2 gap-3">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="bg-slate-800/50 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
+                  onClick={(e) => { e.stopPropagation(); setFitnessType('pushups'); setFitnessDialogOpen(true); }}
+                >
+                  <TrendingUp className="h-3.5 w-3.5 mr-2" />
+                  Push-ups: {miningStatus?.fitness?.pushups || 0}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="bg-slate-800/50 border-purple-500/30 text-purple-400 hover:bg-purple-500/10"
+                  onClick={(e) => { e.stopPropagation(); setFitnessType('situps'); setFitnessDialogOpen(true); }}
+                >
+                  <TrendingUp className="h-3.5 w-3.5 mr-2" />
+                  Sit-ups: {miningStatus?.fitness?.situps || 0}
+                </Button>
+              </div>
+            </div>
+
             {/* ── Partner Bonuses (compact 2-up) ── */}
             <div>
               <p className="text-[10px] text-slate-600 uppercase tracking-widest mb-2 pl-1">Partner Bonuses</p>

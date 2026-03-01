@@ -7458,13 +7458,30 @@ Thank you for your business!
     }
   });
 
-  // Get mining status and stats
   app.get("/api/mining/status", isAuthenticated, async (req: any, res) => {
     try {
       const userId = (req.session as any).userId;
       const { miningService } = await import('./services/mining');
       
-      const stats = await miningService.getMiningStats(userId);
+      let stats;
+      try {
+        stats = await miningService.getMiningStats(userId);
+      } catch (e: any) {
+        console.error("Mining stats error:", e);
+        // Fallback stats if columns are missing or other DB issues
+        return res.json({
+          currentSession: null,
+          accumulatedTokens: "0.00000000",
+          timeRemaining: 0,
+          totalClaimedToday: "0.00000000",
+          miningSpeed: "1.00",
+          streakCount: 0,
+          nextStreakBonus: "0.00000000",
+          claimsRemainingToday: 3,
+          lastScriptureClaimDate: null,
+          fitness: { pushups: 0, situps: 0 }
+        });
+      }
       res.json(stats);
     } catch (error) {
       console.error("Error getting mining status:", error);
@@ -7480,12 +7497,27 @@ Thank you for your business!
         count: z.number().min(0).max(1000)
       }).parse(req.body);
 
-      const session = await storage.getMiningSession(userId);
-      if (!session) return res.status(404).json({ error: "No active mining session" });
+      let session = await storage.getMiningSession(userId);
+      
+      if (!session) {
+        // Create an 'inactive' session so fitness can be tracked before mining starts
+        const nextClaimAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        session = await storage.createMiningSession({
+          userId,
+          startTime: new Date(),
+          lastClaimTime: new Date(),
+          nextClaimAt,
+          miningSpeed: "1.00",
+          status: "inactive", 
+          pushupsCount: 0,
+          situpsCount: 0,
+        });
+      }
 
       const today = new Date().toISOString().split('T')[0];
       const updateData: any = { fitnessLastUpdated: today };
       
+      // Update counts based on whether it's a new day for fitness
       if (session.fitnessLastUpdated !== today) {
         updateData.pushupsCount = type === 'pushups' ? count : 0;
         updateData.situpsCount = type === 'situps' ? count : 0;
@@ -7497,6 +7529,7 @@ Thank you for your business!
       await storage.updateMiningSession(session.id, updateData);
       res.json({ success: true });
     } catch (error: any) {
+      console.error("Fitness logging error:", error);
       res.status(400).json({ error: error.message });
     }
   });
