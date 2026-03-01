@@ -7420,6 +7420,192 @@ Thank you for your business!
     }
   });
 
+  // ============ PROMO CODE ENDPOINTS ============
+
+  // Validate a promo code (public - no auth required, just checks if valid)
+  app.post("/api/promo-codes/validate", async (req: any, res) => {
+    try {
+      const { code, context } = z.object({
+        code: z.string().min(1).max(50),
+        context: z.enum(['service', 'jewelry', 'any']).default('any'),
+      }).parse(req.body);
+
+      const { promoCodes } = await import("@shared/schema");
+      const [promo] = await db
+        .select()
+        .from(promoCodes)
+        .where(eq(promoCodes.code, code.toUpperCase().trim()))
+        .limit(1);
+
+      if (!promo) return res.status(404).json({ valid: false, error: "Promo code not found" });
+      if (!promo.isActive) return res.status(400).json({ valid: false, error: "This promo code is no longer active" });
+      if (promo.expiresAt && new Date(promo.expiresAt) < new Date()) {
+        return res.status(400).json({ valid: false, error: "This promo code has expired" });
+      }
+      if (promo.maxUses !== null && promo.usesCount >= promo.maxUses) {
+        return res.status(400).json({ valid: false, error: "This promo code has reached its usage limit" });
+      }
+
+      const discountPercent = context === 'jewelry'
+        ? parseFloat(promo.discountPercentJewelry || "0")
+        : parseFloat(promo.discountPercent || "0");
+
+      return res.json({
+        valid: true,
+        code: promo.code,
+        description: promo.description,
+        discountPercent,
+        discountPercentService: parseFloat(promo.discountPercent || "0"),
+        discountPercentJewelry: parseFloat(promo.discountPercentJewelry || "0"),
+        rewardTokens: parseFloat(promo.rewardTokens || "0"),
+      });
+    } catch (error: any) {
+      res.status(400).json({ valid: false, error: error.message });
+    }
+  });
+
+  // Apply a promo code (authenticated — credits tokens to user and referral user)
+  app.post("/api/promo-codes/apply", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { code, context } = z.object({
+        code: z.string().min(1).max(50),
+        context: z.enum(['service', 'jewelry', 'any']).default('any'),
+      }).parse(req.body);
+
+      const { promoCodes } = await import("@shared/schema");
+      const [promo] = await db
+        .select()
+        .from(promoCodes)
+        .where(eq(promoCodes.code, code.toUpperCase().trim()))
+        .limit(1);
+
+      if (!promo) return res.status(404).json({ success: false, error: "Promo code not found" });
+      if (!promo.isActive) return res.status(400).json({ success: false, error: "This promo code is no longer active" });
+      if (promo.expiresAt && new Date(promo.expiresAt) < new Date()) {
+        return res.status(400).json({ success: false, error: "This promo code has expired" });
+      }
+      if (promo.maxUses !== null && promo.usesCount >= promo.maxUses) {
+        return res.status(400).json({ success: false, error: "This promo code has reached its usage limit" });
+      }
+
+      // Increment uses count
+      await db.update(promoCodes)
+        .set({ usesCount: promo.usesCount + 1, updatedAt: new Date() })
+        .where(eq(promoCodes.id, promo.id));
+
+      // Credit reward tokens to the customer
+      const customerReward = parseFloat(promo.rewardTokens || "0");
+      if (customerReward > 0) {
+        await storage.creditWalletTokens(userId, customerReward);
+        const { rewards } = await import("@shared/schema");
+        await db.insert(rewards).values({
+          userId,
+          rewardType: 'promo_code',
+          tokenAmount: customerReward.toString(),
+          cashValue: "0.00",
+          status: 'confirmed',
+          metadata: { promoCode: promo.code, context }
+        });
+      }
+
+      // Credit referral tokens to the code owner
+      const referralReward = parseFloat(promo.referralRewardTokens || "0");
+      if (referralReward > 0 && promo.referralUserId && promo.referralUserId !== userId) {
+        await storage.creditWalletTokens(promo.referralUserId, referralReward);
+        const { rewards } = await import("@shared/schema");
+        await db.insert(rewards).values({
+          userId: promo.referralUserId,
+          rewardType: 'referral_promo',
+          tokenAmount: referralReward.toString(),
+          cashValue: "0.00",
+          status: 'confirmed',
+          metadata: { promoCode: promo.code, usedByUserId: userId, context }
+        });
+      }
+
+      const discountPercent = context === 'jewelry'
+        ? parseFloat(promo.discountPercentJewelry || "0")
+        : parseFloat(promo.discountPercent || "0");
+
+      return res.json({
+        success: true,
+        code: promo.code,
+        description: promo.description,
+        discountPercent,
+        discountPercentService: parseFloat(promo.discountPercent || "0"),
+        discountPercentJewelry: parseFloat(promo.discountPercentJewelry || "0"),
+        rewardTokens: customerReward,
+        referralReward,
+        message: `Promo code applied! ${customerReward > 0 ? `You earned ${customerReward} JCMOVES tokens. ` : ""}${discountPercent > 0 ? `${discountPercent}% discount applied.` : ""}`,
+      });
+    } catch (error: any) {
+      console.error("Error applying promo code:", error);
+      res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  // Admin: list all promo codes
+  app.get("/api/admin/promo-codes", isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const { promoCodes } = await import("@shared/schema");
+      const codes = await db.select().from(promoCodes).orderBy(promoCodes.createdAt);
+      res.json(codes);
+    } catch (error) {
+      console.error("Error fetching promo codes:", error);
+      res.status(500).json({ error: "Failed to fetch promo codes" });
+    }
+  });
+
+  // Admin: create a promo code
+  app.post("/api/admin/promo-codes", isAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const { promoCodes, insertPromoCodeSchema } = await import("@shared/schema");
+      const data = insertPromoCodeSchema.parse({
+        ...req.body,
+        code: req.body.code?.toUpperCase().trim(),
+      });
+      const [created] = await db.insert(promoCodes).values(data).returning();
+      res.json(created);
+    } catch (error: any) {
+      console.error("Error creating promo code:", error);
+      if (error.code === '23505') return res.status(400).json({ error: "A promo code with that name already exists" });
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  // Admin: update a promo code
+  app.patch("/api/admin/promo-codes/:id", isAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { promoCodes } = await import("@shared/schema");
+      const updateData: any = { ...req.body, updatedAt: new Date() };
+      if (updateData.code) updateData.code = updateData.code.toUpperCase().trim();
+      const [updated] = await db.update(promoCodes)
+        .set(updateData)
+        .where(eq(promoCodes.id, id))
+        .returning();
+      if (!updated) return res.status(404).json({ error: "Promo code not found" });
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error updating promo code:", error);
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  // Admin: delete a promo code
+  app.delete("/api/admin/promo-codes/:id", isAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { promoCodes } = await import("@shared/schema");
+      await db.delete(promoCodes).where(eq(promoCodes.id, id));
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error deleting promo code:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Get supported currencies
   app.get("/api/wallets/currencies", isAuthenticated, async (req, res) => {
     try {

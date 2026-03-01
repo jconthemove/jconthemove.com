@@ -8,7 +8,17 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { useCart } from "@/hooks/useCart";
 import { Link, useLocation } from "wouter";
-import { ArrowLeft, Trash2, ShoppingCart, Percent, Shield, Loader2, CreditCard, Gem, Truck, Plus, MapPin, CalendarDays, Heart, Building2, Trophy, Check, Bitcoin } from "lucide-react";
+import { ArrowLeft, Trash2, ShoppingCart, Percent, Shield, Loader2, CreditCard, Gem, Truck, Plus, MapPin, CalendarDays, Heart, Building2, Trophy, Check, Bitcoin, Tag, X, CheckCircle2 } from "lucide-react";
+
+interface PromoResult {
+  valid: boolean;
+  code: string;
+  description: string;
+  discountPercent: number;
+  discountPercentService: number;
+  discountPercentJewelry: number;
+  rewardTokens: number;
+}
 
 export default function CartPage() {
   const { toast } = useToast();
@@ -18,8 +28,24 @@ export default function CartPage() {
   const [isBtcSubmitting, setIsBtcSubmitting] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const hasServiceItems = items.some((i) => i.type === "service" || i.type === "promo");
+  const hasJewelryItems = items.some((i) => i.type === "jewelry");
   const hasSponsorItems = items.some((i) => i.type === "sponsor");
   const needsMoveInfo = hasServiceItems;
+
+  // Promo code state
+  const [promoInput, setPromoInput] = useState("");
+  const [promoResult, setPromoResult] = useState<PromoResult | null>(null);
+  const [promoError, setPromoError] = useState("");
+  const [promoLoading, setPromoLoading] = useState(false);
+  const [promoApplied, setPromoApplied] = useState(false);
+
+  const context = hasServiceItems ? 'service' : hasJewelryItems ? 'jewelry' : 'any';
+
+  const promoDiscountAmount = promoResult && promoApplied
+    ? Math.round(total * (promoResult.discountPercent / 100) * 100) / 100
+    : 0;
+
+  const finalTotal = Math.max(0, total - promoDiscountAmount);
 
   const [form, setForm] = useState({
     firstName: "",
@@ -36,12 +62,48 @@ export default function CartPage() {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleValidatePromo = async () => {
+    if (!promoInput.trim()) return;
+    setPromoLoading(true);
+    setPromoError("");
+    setPromoResult(null);
+    setPromoApplied(false);
+    try {
+      const res = await fetch("/api/promo-codes/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: promoInput.trim(), context }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.valid) {
+        setPromoError(data.error || "Invalid promo code");
+      } else {
+        setPromoResult(data);
+        setPromoApplied(true);
+        toast({
+          title: "Promo code applied!",
+          description: data.description,
+        });
+      }
+    } catch {
+      setPromoError("Failed to validate promo code. Please try again.");
+    } finally {
+      setPromoLoading(false);
+    }
+  };
+
+  const handleRemovePromo = () => {
+    setPromoResult(null);
+    setPromoApplied(false);
+    setPromoInput("");
+    setPromoError("");
+  };
+
   const handleCheckout = async () => {
     if (items.length === 0) {
       toast({ title: "Your cart is empty", variant: "destructive" });
       return;
     }
-
     if (!form.firstName || !form.lastName || !form.email || !form.phone) {
       toast({ title: "Please fill in your contact info", variant: "destructive" });
       return;
@@ -50,7 +112,6 @@ export default function CartPage() {
       toast({ title: "Please fill in your address and preferred date", variant: "destructive" });
       return;
     }
-
     if (!agreedToTerms) {
       toast({ title: "Please agree to the terms", variant: "destructive" });
       return;
@@ -64,11 +125,24 @@ export default function CartPage() {
         body: JSON.stringify({
           ...form,
           items: items.map((i) => ({ id: i.id, name: i.name, price: i.price, type: i.type })),
+          promoCode: promoApplied && promoResult ? promoResult.code : undefined,
+          promoDiscountPercent: promoApplied && promoResult ? promoResult.discountPercent : 0,
         }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Checkout failed");
+
+      // Apply promo code (credit tokens to user) if logged in
+      if (promoApplied && promoResult && promoResult.rewardTokens > 0) {
+        try {
+          await fetch("/api/promo-codes/apply", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ code: promoResult.code, context }),
+          });
+        } catch {}
+      }
 
       if (data.checkoutUrl) {
         clearCart();
@@ -108,10 +182,10 @@ export default function CartPage() {
           customerName: `${form.firstName} ${form.lastName}`,
           customerEmail: form.email,
           customerPhone: form.phone,
-          usdAmount: total,
+          usdAmount: finalTotal,
           referenceType: "cart",
           items: items.map((i) => ({ id: i.id, name: i.name, price: i.price, type: i.type })),
-          notes: `${form.fromAddress ? `From: ${form.fromAddress}` : ""} ${form.toAddress ? `To: ${form.toAddress}` : ""} ${form.moveDate ? `Date: ${form.moveDate}` : ""} ${form.details || ""}`.trim(),
+          notes: `${form.fromAddress ? `From: ${form.fromAddress}` : ""} ${form.toAddress ? `To: ${form.toAddress}` : ""} ${form.moveDate ? `Date: ${form.moveDate}` : ""} ${promoApplied && promoResult ? `Promo: ${promoResult.code}` : ""} ${form.details || ""}`.trim(),
         }),
       });
       const data = await res.json();
@@ -214,10 +288,79 @@ export default function CartPage() {
                 <span>-${discount.toFixed(2)}</span>
               </div>
             )}
+            {promoApplied && promoResult && promoDiscountAmount > 0 && (
+              <div className="flex justify-between text-green-400 font-medium">
+                <span className="flex items-center gap-1">
+                  <Tag className="h-3 w-3" />
+                  Promo: {promoResult.code} ({promoResult.discountPercent}% off)
+                </span>
+                <span>-${promoDiscountAmount.toFixed(2)}</span>
+              </div>
+            )}
+            {promoApplied && promoResult && promoResult.rewardTokens > 0 && (
+              <div className="flex justify-between text-orange-400 font-medium text-xs">
+                <span className="flex items-center gap-1">
+                  🪙 Token Reward
+                </span>
+                <span>+{promoResult.rewardTokens} JCMOVES</span>
+              </div>
+            )}
             <div className="border-t border-slate-600 pt-2 flex justify-between text-white font-bold text-lg">
               <span>Total</span>
-              <span className="text-yellow-400">${total.toFixed(2)}</span>
+              <span className="text-yellow-400">${finalTotal.toFixed(2)}</span>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Promo Code */}
+        <Card className="bg-slate-800/80 border-green-500/20 mb-4">
+          <CardContent className="pt-4 pb-4">
+            {!promoApplied ? (
+              <div>
+                <p className="text-sm font-medium text-slate-300 mb-2 flex items-center gap-2">
+                  <Tag className="h-4 w-4 text-green-400" />
+                  Have a promo code?
+                </p>
+                <div className="flex gap-2">
+                  <Input
+                    value={promoInput}
+                    onChange={(e) => { setPromoInput(e.target.value.toUpperCase()); setPromoError(""); }}
+                    onKeyDown={(e) => e.key === "Enter" && handleValidatePromo()}
+                    placeholder="Enter code (e.g. JCMOVES)"
+                    className="bg-slate-700 border-slate-600 text-white uppercase placeholder:normal-case placeholder:text-slate-500"
+                  />
+                  <Button
+                    onClick={handleValidatePromo}
+                    disabled={promoLoading || !promoInput.trim()}
+                    className="bg-green-600 hover:bg-green-700 text-white shrink-0"
+                  >
+                    {promoLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Apply"}
+                  </Button>
+                </div>
+                {promoError && (
+                  <p className="text-red-400 text-xs mt-2">{promoError}</p>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-start justify-between gap-3 p-3 bg-green-900/30 rounded-xl border border-green-500/30">
+                <div className="flex items-start gap-2">
+                  <CheckCircle2 className="h-5 w-5 text-green-400 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-green-300 font-bold text-sm">{promoResult?.code} applied!</p>
+                    <p className="text-green-400/70 text-xs mt-0.5">{promoResult?.description}</p>
+                    {promoResult && promoResult.discountPercent > 0 && (
+                      <p className="text-green-300 text-xs mt-1">{promoResult.discountPercent}% off — saves ${promoDiscountAmount.toFixed(2)}</p>
+                    )}
+                    {promoResult && promoResult.rewardTokens > 0 && (
+                      <p className="text-orange-300 text-xs">+{promoResult.rewardTokens} JCMOVES tokens on checkout</p>
+                    )}
+                  </div>
+                </div>
+                <button onClick={handleRemovePromo} className="text-slate-400 hover:text-white shrink-0">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -386,10 +529,10 @@ export default function CartPage() {
                 ) : (
                   <>
                     <CreditCard className="h-5 w-5 mr-2" />
-                    Pay ${total.toFixed(2)}
-                    {hasMultipleItems && (
+                    Pay ${finalTotal.toFixed(2)}
+                    {(hasMultipleItems || promoApplied) && (
                       <span className="ml-2 text-xs bg-black/20 px-2 py-0.5 rounded-full">
-                        Save ${discount.toFixed(2)}
+                        Save ${(discount + promoDiscountAmount).toFixed(2)}
                       </span>
                     )}
                   </>

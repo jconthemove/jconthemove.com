@@ -26,6 +26,7 @@ import AdminMoonshotPage from "@/pages/admin-moonshot";
 import InGodWeTrustPage from "@/pages/in-god-we-trust";
 import AdminUsersPage from "@/pages/admin-users";
 import AdminTestimonialsPage from "@/pages/admin-testimonials";
+import AdminPromoCodesPage from "@/pages/admin-promo-codes";
 import NotFound from "@/pages/not-found";
 import MobileLeadManager from "@/components/mobile-lead-manager";
 import CustomerMobileInterface from "@/components/customer-mobile-interface";
@@ -201,6 +202,11 @@ function AuthenticatedApp() {
           <Route path="/admin/testimonials">
             <RouteGuard allowedRoles={['admin', 'business_owner']}>
               <PageWrapper component={AdminTestimonialsPage} />
+            </RouteGuard>
+          </Route>
+          <Route path="/admin/promo-codes">
+            <RouteGuard allowedRoles={['admin', 'business_owner']}>
+              <PageWrapper component={AdminPromoCodesPage} />
             </RouteGuard>
           </Route>
           <Route path="/snow-removal">

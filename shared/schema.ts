@@ -1557,3 +1557,39 @@ export type StakingTier = typeof stakingTiers.$inferSelect;
 export type InsertStakingTier = z.infer<typeof insertStakingTierSchema>;
 export type Stake = typeof stakes.$inferSelect;
 export type InsertStake = z.infer<typeof insertStakeSchema>;
+
+// ── PROMO CODES ──────────────────────────────────────────────────────────────
+export const promoCodes = pgTable("promo_codes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: text("code").notNull().unique(),
+  description: text("description").notNull().default(""),
+  // discountPercent: applied to service total (0 = no service discount)
+  discountPercent: decimal("discount_percent", { precision: 5, scale: 2 }).notNull().default("0.00"),
+  // discountPercentJewelry: applied to jewelry/shop order (0 = no jewelry discount)
+  discountPercentJewelry: decimal("discount_percent_jewelry", { precision: 5, scale: 2 }).notNull().default("0.00"),
+  // rewardTokens: JCMOVES tokens credited to the customer when code is applied
+  rewardTokens: decimal("reward_tokens", { precision: 18, scale: 2 }).notNull().default("0.00"),
+  // referralUserId: if set, this user created the code and earns referral tokens per use
+  referralUserId: varchar("referral_user_id").references(() => users.id),
+  // referralRewardTokens: tokens credited to referralUserId per successful use
+  referralRewardTokens: decimal("referral_reward_tokens", { precision: 18, scale: 2 }).notNull().default("0.00"),
+  maxUses: integer("max_uses"),
+  usesCount: integer("uses_count").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_promo_codes_code").on(table.code),
+  index("idx_promo_codes_active").on(table.isActive),
+]);
+
+export const insertPromoCodeSchema = createInsertSchema(promoCodes).omit({
+  id: true,
+  usesCount: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type PromoCode = typeof promoCodes.$inferSelect;
+export type InsertPromoCode = z.infer<typeof insertPromoCodeSchema>;

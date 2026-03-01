@@ -21,7 +21,8 @@ import {
   Briefcase,
   X,
   ChevronRight,
-  Home
+  Home,
+  Tag
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "wouter";
@@ -430,6 +431,19 @@ export default function AdminDashboardFull() {
                 <div>
                   <p className="font-medium">User Management</p>
                   <p className="text-sm text-muted-foreground">Manage all users</p>
+                </div>
+              </div>
+              <ChevronRight className="h-5 w-5 text-muted-foreground" />
+            </div>
+          </Link>
+
+          <Link href="/admin/promo-codes">
+            <div className="flex items-center justify-between p-4 hover:bg-muted/50 transition-colors cursor-pointer border-b last:border-0">
+              <div className="flex items-center gap-3">
+                <Tag className="h-5 w-5 text-green-500" />
+                <div>
+                  <p className="font-medium">Promo Codes</p>
+                  <p className="text-sm text-muted-foreground">Create & manage discount codes</p>
                 </div>
               </div>
               <ChevronRight className="h-5 w-5 text-muted-foreground" />
