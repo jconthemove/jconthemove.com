@@ -7750,27 +7750,32 @@ Thank you for your business!
         count: z.number().min(0).max(1000)
       }).parse(req.body);
 
-      let session = await storage.getMiningSession(userId);
-      
+      // Get the user's mining session directly via db
+      let [session] = await db
+        .select()
+        .from(miningSessions)
+        .where(eq(miningSessions.userId, userId))
+        .limit(1);
+
       if (!session) {
-        // Create an 'inactive' session so fitness can be tracked before mining starts
+        // Create an inactive session so fitness can be tracked before mining starts
         const nextClaimAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-        session = await storage.createMiningSession({
+        [session] = await db.insert(miningSessions).values({
           userId,
           startTime: new Date(),
           lastClaimTime: new Date(),
           nextClaimAt,
           miningSpeed: "1.00",
-          status: "inactive", 
+          status: "inactive",
           pushupsCount: 0,
           situpsCount: 0,
-        });
+        }).returning();
       }
 
       const today = new Date().toISOString().split('T')[0];
       const updateData: any = { fitnessLastUpdated: today };
-      
-      // Update counts based on whether it's a new day for fitness
+
+      // If it's a new day, reset counts; otherwise accumulate
       if (session.fitnessLastUpdated !== today) {
         updateData.pushupsCount = type === 'pushups' ? count : 0;
         updateData.situpsCount = type === 'situps' ? count : 0;
@@ -7779,7 +7784,7 @@ Thank you for your business!
         if (type === 'situps') updateData.situpsCount = (session.situpsCount || 0) + count;
       }
 
-      await storage.updateMiningSession(session.id, updateData);
+      await db.update(miningSessions).set(updateData).where(eq(miningSessions.id, session.id));
       res.json({ success: true });
     } catch (error: any) {
       console.error("Fitness logging error:", error);
@@ -7803,11 +7808,10 @@ Thank you for your business!
       }
 
       const rewardAmount = 100;
-      // Use the reward type for scripture claim
-      const { REWARD_TYPES } = await import('./constants');
-      
       await storage.creditWalletTokens(userId, rewardAmount);
-      await storage.updateMiningSession(session.id, { lastScriptureClaimDate: today });
+      await db.update(miningSessions)
+        .set({ lastScriptureClaimDate: today })
+        .where(eq(miningSessions.id, session.id));
       
       // Record as a reward
       const { rewards } = await import("@shared/schema");
