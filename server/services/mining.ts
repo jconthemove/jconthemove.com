@@ -119,21 +119,33 @@ export class MiningService {
    */
   async calculateAccumulatedTokens(session: any): Promise<string> {
     const now = Date.now();
-    const lastClaim = new Date(session.lastClaimTime).getTime();
-    const secondsElapsed = Math.floor((now - lastClaim) / 1000);
-    
-    // Calculate tokens: seconds * rate * speed multiplier
     const miningSpeed = parseFloat(session.miningSpeed || "1.00");
-    const tokensEarned = secondsElapsed * MINING_CONFIG.TOKENS_PER_SECOND * miningSpeed;
-    
-    // Add to previously accumulated tokens
+
+    // Use lastSpeedUpdateAt as reference if available — this ensures the current
+    // speed only applies from the moment fitness was logged, not retroactively.
+    const lastClaimMs = new Date(session.lastClaimTime).getTime();
+    const speedUpdateMs = session.lastSpeedUpdateAt
+      ? new Date(session.lastSpeedUpdateAt).getTime()
+      : null;
+
+    // Reference time for live calculation: whichever is more recent
+    const referenceMs = speedUpdateMs && speedUpdateMs > lastClaimMs
+      ? speedUpdateMs
+      : lastClaimMs;
+
+    const secondsElapsed = Math.max(0, Math.floor((now - referenceMs) / 1000));
+
+    // Live tokens earned at the current speed since the reference time
+    const liveTokens = secondsElapsed * MINING_CONFIG.TOKENS_PER_SECOND * miningSpeed;
+
+    // previousAccumulated already has tokens banked at previous speeds (including before any boost)
     const previousAccumulated = parseFloat(session.accumulatedTokens || "0");
-    const totalAccumulated = previousAccumulated + tokensEarned;
-    
-    // Cap at 24-hour maximum
+    const totalAccumulated = previousAccumulated + liveTokens;
+
+    // Cap at 24-hour maximum for the current speed
     const maxTokens = MINING_CONFIG.TOKENS_PER_24_HOURS * miningSpeed;
     const cappedTokens = Math.min(totalAccumulated, maxTokens);
-    
+
     return cappedTokens.toFixed(8);
   }
 

@@ -7784,8 +7784,37 @@ Thank you for your business!
         if (type === 'situps') updateData.situpsCount = (session.situpsCount || 0) + count;
       }
 
+      // Calculate the new mining speed from the updated rep counts
+      const calcFitnessBonus = (n: number) => {
+        if (n >= 61) return 1.0;
+        if (n >= 41) return 0.75;
+        if (n >= 31) return 0.5;
+        if (n >= 21) return 0.4;
+        if (n >= 10) return 0.25;
+        return 0;
+      };
+      const newPushups = updateData.pushupsCount ?? (session.pushupsCount || 0);
+      const newSitups = updateData.situpsCount ?? (session.situpsCount || 0);
+      const newSpeed = (1.0 + calcFitnessBonus(newPushups) + calcFitnessBonus(newSitups)).toFixed(2);
+      const oldSpeed = parseFloat(session.miningSpeed || "1.00");
+
+      if (newSpeed !== session.miningSpeed) {
+        // Bank all tokens accumulated so far at the OLD speed before switching
+        const nowMs = Date.now();
+        const lastRef = session.lastSpeedUpdateAt
+          ? Math.max(new Date(session.lastSpeedUpdateAt).getTime(), new Date(session.lastClaimTime).getTime())
+          : new Date(session.lastClaimTime).getTime();
+        const secondsElapsed = Math.floor((nowMs - lastRef) / 1000);
+        const liveTokens = secondsElapsed * 0.02 * oldSpeed;
+        const banked = parseFloat(session.accumulatedTokens || "0") + liveTokens;
+        const maxTokens = 1728 * parseFloat(newSpeed);
+        updateData.accumulatedTokens = Math.min(banked, maxTokens).toFixed(8);
+        updateData.miningSpeed = newSpeed;
+        updateData.lastSpeedUpdateAt = new Date();
+      }
+
       await db.update(miningSessions).set(updateData).where(eq(miningSessions.id, session.id));
-      res.json({ success: true });
+      res.json({ success: true, newSpeed });
     } catch (error: any) {
       console.error("Fitness logging error:", error);
       res.status(400).json({ error: error.message });
