@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { useCart } from "@/hooks/useCart";
 import { Link, useLocation } from "wouter";
-import { ArrowLeft, Trash2, ShoppingCart, Percent, Shield, Loader2, CreditCard, Gem, Truck, Plus, MapPin, CalendarDays, Heart, Building2, Trophy, Check, Bitcoin, Tag, X, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Trash2, ShoppingCart, Percent, Shield, Loader2, CreditCard, Gem, Truck, Plus, MapPin, CalendarDays, Heart, Building2, Trophy, Check, Bitcoin, Tag, X, CheckCircle2, Package, Home } from "lucide-react";
 
 interface PromoResult {
   valid: boolean;
@@ -30,7 +30,14 @@ export default function CartPage() {
   const hasServiceItems = items.some((i) => i.type === "service" || i.type === "promo");
   const hasJewelryItems = items.some((i) => i.type === "jewelry");
   const hasSponsorItems = items.some((i) => i.type === "sponsor");
+  const hasShippableItems = items.some((i) => i.type === "shop" || i.type === "jewelry");
   const needsMoveInfo = hasServiceItems;
+
+  // Shipping/pickup selection (for shop & jewelry items)
+  const [shippingMethod, setShippingMethod] = useState<'shipping' | 'pickup' | null>(null);
+  const [shippingAddress, setShippingAddress] = useState("");
+  const SHIPPING_FEE = 10;
+  const shippingFee = hasShippableItems && shippingMethod === 'shipping' ? SHIPPING_FEE : 0;
 
   // Promo code state
   const [promoInput, setPromoInput] = useState("");
@@ -45,7 +52,7 @@ export default function CartPage() {
     ? Math.round(total * (promoResult.discountPercent / 100) * 100) / 100
     : 0;
 
-  const finalTotal = Math.max(0, total - promoDiscountAmount);
+  const finalTotal = Math.max(0, total - promoDiscountAmount + shippingFee);
 
   const [form, setForm] = useState({
     firstName: "",
@@ -113,6 +120,14 @@ export default function CartPage() {
       toast({ title: "Please fill in your address and preferred date", variant: "destructive" });
       return;
     }
+    if (hasShippableItems && !shippingMethod) {
+      toast({ title: "Please select shipping or local pickup", variant: "destructive" });
+      return;
+    }
+    if (hasShippableItems && shippingMethod === 'shipping' && !shippingAddress.trim()) {
+      toast({ title: "Please enter a shipping address", variant: "destructive" });
+      return;
+    }
     if (!agreedToTerms) {
       toast({ title: "Please agree to the terms", variant: "destructive" });
       return;
@@ -129,6 +144,9 @@ export default function CartPage() {
           promoCode: promoApplied && promoResult ? promoResult.code : undefined,
           promoDiscountPercent: promoApplied && promoResult ? promoResult.discountPercent : 0,
           enrollRewards: form.enrollRewards,
+          shippingMethod: hasShippableItems ? shippingMethod : undefined,
+          shippingAddress: hasShippableItems && shippingMethod === 'shipping' ? shippingAddress : undefined,
+          shippingFee: shippingFee > 0 ? shippingFee : undefined,
         }),
       });
 
@@ -179,10 +197,24 @@ export default function CartPage() {
       toast({ title: "Please fill in your address and preferred date", variant: "destructive" });
       return;
     }
+    if (hasShippableItems && !shippingMethod) {
+      toast({ title: "Please select shipping or local pickup", variant: "destructive" });
+      return;
+    }
+    if (hasShippableItems && shippingMethod === 'shipping' && !shippingAddress.trim()) {
+      toast({ title: "Please enter a shipping address", variant: "destructive" });
+      return;
+    }
     if (!agreedToTerms) {
       toast({ title: "Please agree to the terms", variant: "destructive" });
       return;
     }
+
+    const shippingNote = hasShippableItems
+      ? shippingMethod === 'pickup'
+        ? 'PICKUP: Local pickup in Ironwood, MI'
+        : `SHIP TO: ${shippingAddress} (+$${SHIPPING_FEE} shipping)`
+      : '';
 
     setIsBtcSubmitting(true);
     try {
@@ -196,7 +228,7 @@ export default function CartPage() {
           usdAmount: finalTotal,
           referenceType: "cart",
           items: items.map((i) => ({ id: i.id, name: i.name, price: i.price, type: i.type })),
-          notes: `${form.fromAddress ? `From: ${form.fromAddress}` : ""} ${form.toAddress ? `To: ${form.toAddress}` : ""} ${form.moveDate ? `Date: ${form.moveDate}` : ""} ${promoApplied && promoResult ? `Promo: ${promoResult.code}` : ""} ${form.details || ""}`.trim(),
+          notes: `${shippingNote} ${form.fromAddress ? `From: ${form.fromAddress}` : ""} ${form.toAddress ? `To: ${form.toAddress}` : ""} ${form.moveDate ? `Date: ${form.moveDate}` : ""} ${promoApplied && promoResult ? `Promo: ${promoResult.code}` : ""} ${form.details || ""}`.trim(),
         }),
       });
       const data = await res.json();
@@ -316,12 +348,104 @@ export default function CartPage() {
                 <span>+{promoResult.rewardTokens} JCMOVES</span>
               </div>
             )}
+            {shippingFee > 0 && (
+              <div className="flex justify-between text-blue-300 font-medium">
+                <span className="flex items-center gap-1">
+                  <Package className="h-3 w-3" />
+                  Shipping
+                </span>
+                <span>+${shippingFee.toFixed(2)}</span>
+              </div>
+            )}
             <div className="border-t border-slate-600 pt-2 flex justify-between text-white font-bold text-lg">
               <span>Total</span>
               <span className="text-yellow-400">${finalTotal.toFixed(2)}</span>
             </div>
           </CardContent>
         </Card>
+
+        {/* Shipping / Pickup Selection — shown for jewelry & shop items */}
+        {hasShippableItems && (
+          <Card className={`mb-4 border-2 transition-colors ${!shippingMethod ? 'border-orange-500/60 bg-orange-950/20' : 'border-blue-500/30 bg-slate-800/80'}`}>
+            <CardContent className="pt-4 pb-4">
+              <p className="text-sm font-bold text-white mb-1 flex items-center gap-2">
+                <Package className="h-4 w-4 text-blue-400" />
+                Delivery Method <span className="text-orange-400 ml-1">*</span>
+              </p>
+              <p className="text-xs text-slate-400 mb-3">Select how you'd like to receive your item(s)</p>
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                {/* Shipping option */}
+                <button
+                  onClick={() => setShippingMethod('shipping')}
+                  className={`rounded-xl border-2 p-3 text-left transition-all ${
+                    shippingMethod === 'shipping'
+                      ? 'border-blue-500 bg-blue-900/40'
+                      : 'border-slate-600 bg-slate-700/50 hover:border-slate-500'
+                  }`}
+                >
+                  <Package className={`h-5 w-5 mb-1.5 ${shippingMethod === 'shipping' ? 'text-blue-400' : 'text-slate-400'}`} />
+                  <p className={`text-sm font-bold ${shippingMethod === 'shipping' ? 'text-blue-300' : 'text-white'}`}>Ship It</p>
+                  <p className={`text-xs mt-0.5 ${shippingMethod === 'shipping' ? 'text-blue-400' : 'text-slate-400'}`}>+$10.00 shipping</p>
+                  {shippingMethod === 'shipping' && (
+                    <div className="mt-1.5 flex items-center gap-1">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-blue-400" />
+                      <span className="text-xs text-blue-400 font-medium">Selected</span>
+                    </div>
+                  )}
+                </button>
+                {/* Local pickup option */}
+                <button
+                  onClick={() => setShippingMethod('pickup')}
+                  className={`rounded-xl border-2 p-3 text-left transition-all ${
+                    shippingMethod === 'pickup'
+                      ? 'border-emerald-500 bg-emerald-900/40'
+                      : 'border-slate-600 bg-slate-700/50 hover:border-slate-500'
+                  }`}
+                >
+                  <Home className={`h-5 w-5 mb-1.5 ${shippingMethod === 'pickup' ? 'text-emerald-400' : 'text-slate-400'}`} />
+                  <p className={`text-sm font-bold ${shippingMethod === 'pickup' ? 'text-emerald-300' : 'text-white'}`}>Local Pickup</p>
+                  <p className={`text-xs mt-0.5 ${shippingMethod === 'pickup' ? 'text-emerald-400' : 'text-slate-400'}`}>FREE · Ironwood, MI</p>
+                  {shippingMethod === 'pickup' && (
+                    <div className="mt-1.5 flex items-center gap-1">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                      <span className="text-xs text-emerald-400 font-medium">Selected</span>
+                    </div>
+                  )}
+                </button>
+              </div>
+
+              {/* Shipping address — only shows when shipping is selected */}
+              {shippingMethod === 'shipping' && (
+                <div className="mt-1 animate-in slide-in-from-top-2 duration-200">
+                  <Label className="text-white text-xs flex items-center gap-1.5 mb-1.5">
+                    <MapPin className="h-3.5 w-3.5 text-blue-400" />
+                    Shipping Address *
+                  </Label>
+                  <Input
+                    value={shippingAddress}
+                    onChange={(e) => setShippingAddress(e.target.value)}
+                    placeholder="123 Main St, City, State, ZIP"
+                    className="bg-slate-700 border-slate-600 text-white"
+                  />
+                </div>
+              )}
+
+              {/* Pickup info */}
+              {shippingMethod === 'pickup' && (
+                <div className="mt-1 p-2.5 rounded-lg bg-emerald-900/30 border border-emerald-500/30 animate-in slide-in-from-top-2 duration-200">
+                  <p className="text-xs text-emerald-300 font-medium">📍 Ironwood, MI</p>
+                  <p className="text-xs text-emerald-400/80 mt-0.5">We'll contact you to arrange a pickup time after your order is confirmed.</p>
+                </div>
+              )}
+
+              {!shippingMethod && (
+                <p className="text-xs text-orange-400 mt-1 flex items-center gap-1">
+                  <span>⚠</span> Please select a delivery method to continue
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Promo Code */}
         <Card className="bg-slate-800/80 border-green-500/20 mb-4">
