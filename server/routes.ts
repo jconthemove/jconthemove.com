@@ -7529,6 +7529,9 @@ Thank you for your business!
       // Credit reward tokens to the customer
       const customerReward = parseFloat(promo.rewardTokens || "0");
       if (customerReward > 0) {
+        // Ensure user is enrolled in rewards
+        await db.update(users).set({ rewardsEnrolled: true }).where(eq(users.id, userId));
+        
         await storage.creditWalletTokens(userId, customerReward);
         const { rewards } = await import("@shared/schema");
         await db.insert(rewards).values({

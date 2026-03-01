@@ -209,6 +209,11 @@ function AuthenticatedApp() {
               <PageWrapper component={AdminPromoCodesPage} />
             </RouteGuard>
           </Route>
+          <Route path="/admin/users">
+            <RouteGuard allowedRoles={['admin', 'business_owner']}>
+              <PageWrapper component={AdminUsersPage} />
+            </RouteGuard>
+          </Route>
           <Route path="/snow-removal">
             <RouteGuard allowedRoles={['admin', 'employee', 'business_owner']}>
               <PageWrapper component={SnowRemovalPage} />

@@ -56,6 +56,7 @@ export default function CartPage() {
     toAddress: "",
     moveDate: "",
     details: "",
+    enrollRewards: true,
   });
 
   const updateField = (field: string, value: string) => {
@@ -512,6 +513,18 @@ export default function CartPage() {
                   </CardContent>
                 </Card>
               )}
+
+              <div className="flex items-start space-x-3">
+                <Checkbox
+                  id="rewards-enroll"
+                  checked={form.enrollRewards}
+                  onCheckedChange={(checked) => setForm(prev => ({ ...prev, enrollRewards: checked === true }))}
+                  className="mt-1 border-emerald-500 data-[state=checked]:bg-emerald-600"
+                />
+                <label htmlFor="rewards-enroll" className="text-sm text-emerald-300 cursor-pointer leading-relaxed">
+                  Enroll in <span className="font-bold text-emerald-400">JCMOVES Rewards</span> to earn tokens on this order!
+                </label>
+              </div>
 
               <div className="flex items-start space-x-3">
                 <Checkbox
