@@ -56,7 +56,7 @@ export default function CartPage() {
     toAddress: "",
     moveDate: "",
     details: "",
-    enrollRewards: true,
+    enrollRewards: false,
   });
 
   const updateField = (field: string, value: string) => {
@@ -128,6 +128,7 @@ export default function CartPage() {
           items: items.map((i) => ({ id: i.id, name: i.name, price: i.price, type: i.type })),
           promoCode: promoApplied && promoResult ? promoResult.code : undefined,
           promoDiscountPercent: promoApplied && promoResult ? promoResult.discountPercent : 0,
+          enrollRewards: form.enrollRewards,
         }),
       });
 
@@ -140,7 +141,7 @@ export default function CartPage() {
           const applyRes = await fetch("/api/promo-codes/apply", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ code: promoResult.code, context }),
+            body: JSON.stringify({ code: promoResult.code, context, enrollRewards: form.enrollRewards }),
           });
           const applyData = await applyRes.json();
           if (!applyRes.ok && applyData.error) {

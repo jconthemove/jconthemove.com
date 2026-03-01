@@ -7468,12 +7468,13 @@ Thank you for your business!
   app.post("/api/promo-codes/apply", isAuthenticated, async (req: any, res) => {
     try {
       const userId = (req.session as any).userId;
-      const { code, context } = z.object({
+      const { code, context, enrollRewards } = z.object({
         code: z.string().min(1).max(50),
         context: z.enum(['service', 'jewelry', 'any']).default('any'),
+        enrollRewards: z.boolean().optional(),
       }).parse(req.body);
 
-      const { promoCodes } = await import("@shared/schema");
+      const { promoCodes, users } = await import("@shared/schema");
       const [promo] = await db
         .select()
         .from(promoCodes)
@@ -7490,26 +7491,43 @@ Thank you for your business!
       }
 
       // Check that the user has a real, completed account (TOS accepted)
-      const { users } = await import("@shared/schema");
       const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
       if (!user) return res.status(404).json({ success: false, error: "User not found" });
-      if (!user.tosAccepted) {
-        return res.status(403).json({
-          success: false,
-          error: "You must complete account setup and accept the Terms of Service before redeeming token rewards.",
-        });
+      
+      // If customer reward exists, handle enrollment
+      const customerRewardRaw = parseFloat(promo.rewardTokens || "0");
+      let customerReward = customerRewardRaw;
+
+      if (customerRewardRaw > 0) {
+        // If they didn't check the box and aren't already enrolled, they don't get the tokens
+        // but the discount still applies.
+        if (!enrollRewards && !user.rewardsEnrolled) {
+          customerReward = 0;
+        } else {
+          // They want to enroll or are already enrolled
+          if (!user.tosAccepted) {
+            return res.status(403).json({
+              success: false,
+              error: "You must complete account setup and accept the Terms of Service before redeeming token rewards.",
+            });
+          }
+          // Auto-enroll ONLY if they checked the box and aren't already
+          if (enrollRewards && !user.rewardsEnrolled) {
+            await db.update(users).set({ rewardsEnrolled: true }).where(eq(users.id, userId));
+          }
+        }
       }
 
       // Prevent the same user from using the same promo code twice
-      const { rewards } = await import("@shared/schema");
+      const { rewards: rewardsSchema } = await import("@shared/schema");
       const [existingUse] = await db
         .select()
-        .from(rewards)
+        .from(rewardsSchema)
         .where(
           and(
-            eq(rewards.userId, userId),
-            eq(rewards.rewardType, 'promo_code'),
-            sql`${rewards.metadata}->>'promoCode' = ${promo.code}`
+            eq(rewardsSchema.userId, userId),
+            eq(rewardsSchema.rewardType, 'promo_code'),
+            sql`${rewardsSchema.metadata}->>'promoCode' = ${promo.code}`
           )
         )
         .limit(1);
@@ -7527,14 +7545,10 @@ Thank you for your business!
         .where(eq(promoCodes.id, promo.id));
 
       // Credit reward tokens to the customer
-      const customerReward = parseFloat(promo.rewardTokens || "0");
       if (customerReward > 0) {
-        // Ensure user is enrolled in rewards
-        await db.update(users).set({ rewardsEnrolled: true }).where(eq(users.id, userId));
-        
         await storage.creditWalletTokens(userId, customerReward);
-        const { rewards } = await import("@shared/schema");
-        await db.insert(rewards).values({
+        const { rewards: rewardsTable } = await import("@shared/schema");
+        await db.insert(rewardsTable).values({
           userId,
           rewardType: 'promo_code',
           tokenAmount: customerReward.toString(),
