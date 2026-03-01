@@ -9,6 +9,7 @@ import { WalletProviderWrapper } from "@/components/WalletProviderWrapper";
 import { RouteGuard } from "@/components/RouteGuard";
 import { ComplianceCheck } from "@/components/compliance-check";
 import Header from "@/components/header";
+import PwaInstallPrompt from "@/components/pwa-install-prompt";
 import Footer from "@/components/footer";
 import HomePage from "@/pages/home";
 import Dashboard from "@/pages/dashboard";
@@ -350,6 +351,7 @@ function App() {
             <TooltipProvider>
               <Router />
               <Toaster />
+              <PwaInstallPrompt />
             </TooltipProvider>
           </CartProvider>
         </WalletProviderWrapper>
