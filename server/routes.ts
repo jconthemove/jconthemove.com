@@ -3079,11 +3079,35 @@ Thank you for your business!
             console.log(`⚠️ Invalid token allocation for job ${id}: ${updatedLead.tokenAllocation}`);
             return res.status(400).json({ error: "Invalid or missing token allocation. Please set a valid token amount before marking the job as completed." });
           } else {
-            const tokensPerWorker = totalTokens / updatedLead.crewMembers.length;
+            // ── Creator gets 10% of the total allocation as a creation fee ──
+            // ── Crew splits the remaining 90% equally ──
+            const creatorUserId = currentLead.createdByUserId;
+            const isCreatorInCrew = creatorUserId && updatedLead.crewMembers.includes(creatorUserId);
+
+            let crewAllocation = totalTokens;
+            if (creatorUserId && !isCreatorInCrew) {
+              const creatorBonus = totalTokens * 0.1;
+              crewAllocation = totalTokens * 0.9;
+              const TOKEN_PRICE = 0.00000508432;
+
+              await storage.creditWalletTokens(creatorUserId, creatorBonus);
+              await db.insert(rewards).values({
+                userId: creatorUserId,
+                rewardType: 'job_creation_bonus',
+                tokenAmount: creatorBonus.toFixed(8),
+                cashValue: (creatorBonus * TOKEN_PRICE).toFixed(4),
+                status: 'confirmed',
+                referenceId: id,
+                metadata: { totalAllocation: totalTokens, percentage: '10%', jobId: id }
+              });
+              console.log(`💰 Awarded ${creatorBonus} JCMOVES (10% creation fee) to creator ${creatorUserId}`);
+            }
+
+            const tokensPerWorker = crewAllocation / updatedLead.crewMembers.length;
             
-            console.log(`💰 Admin completion: Distributing ${totalTokens} tokens to ${updatedLead.crewMembers.length} crew members (${tokensPerWorker} each)`);
+            console.log(`💰 Admin completion: Distributing ${crewAllocation} tokens (${isCreatorInCrew || !creatorUserId ? '100%' : '90%'}) to ${updatedLead.crewMembers.length} crew members (${tokensPerWorker} each)`);
             
-            // Award tokens to each crew member using gamification service (includes creator bonus)
+            // Award tokens to each crew member
             for (const crewMemberId of updatedLead.crewMembers) {
               await gamificationService.awardJobCompletion(crewMemberId, id, tokensPerWorker.toFixed(8), {
                 onTime: true,
@@ -8917,6 +8941,39 @@ Thank you for your business!
     } catch (error: any) {
       console.error("Error granting retroactive jewelry rewards:", error);
       res.status(500).json({ error: error.message || "Failed to grant retroactive rewards" });
+    }
+  });
+
+  // One-time retroactive correction for jobs completed on 3/1/2026 that received wrong creator bonus (got 50+50 instead of 250+500)
+  app.post("/api/admin/job-reward-correction-20260301", isAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const adminId = req.session?.userId || req.user?.id;
+      if (!adminId) return res.status(401).json({ error: "Not authenticated" });
+
+      // Check if correction already applied
+      const existing = await db.select().from(rewards)
+        .where(and(eq(rewards.userId, adminId), eq(rewards.rewardType, 'admin_grant'), eq(rewards.referenceId, 'job-reward-correction-20260301')));
+      if (existing.length > 0) {
+        return res.status(409).json({ error: "Correction already applied", appliedAt: existing[0].createdAt });
+      }
+
+      const CORRECTION_AMOUNT = 650; // 200 (job 1 shortfall) + 450 (job 2 shortfall)
+      await storage.creditWalletTokens(adminId, CORRECTION_AMOUNT);
+      await db.insert(rewards).values({
+        userId: adminId,
+        rewardType: 'admin_grant',
+        tokenAmount: CORRECTION_AMOUNT.toFixed(8),
+        cashValue: (CORRECTION_AMOUNT * 0.00000508432).toFixed(4),
+        status: 'confirmed',
+        referenceId: 'job-reward-correction-20260301',
+        metadata: { reason: 'Retroactive correction for 2 jobs marked complete 3/1/2026 (received 50+50 instead of 250+500)' }
+      });
+
+      console.log(`✅ Job reward correction applied: +${CORRECTION_AMOUNT} JCMOVES to ${adminId}`);
+      res.json({ success: true, tokensGranted: CORRECTION_AMOUNT, message: `+${CORRECTION_AMOUNT} JCMOVES correction applied to your wallet` });
+    } catch (error: any) {
+      console.error("Error applying job reward correction:", error);
+      res.status(500).json({ error: error.message || "Failed to apply correction" });
     }
   });
 

@@ -396,61 +396,6 @@ export class GamificationService {
       });
     }
 
-    // Check if this job was created by an employee and reward them too
-    const lead = await storage.getLead(jobId);
-    if (lead && lead.createdByUserId && lead.createdByUserId !== userId) {
-      // Award full per-worker amount to the person who created/booked the job
-      const creatorBonusTokens = (parseFloat(tokenAmount) * 1.0).toFixed(8);
-      const creatorBonusPoints = Math.floor(points * 1.0);
-
-      const creatorDistributionResult = await treasuryService.distributeTokens(
-        parseFloat(creatorBonusTokens),
-        `Job creation bonus - Job #${jobId} completed`,
-        "job_creation_bonus",
-        lead.createdByUserId
-      );
-
-      // Only create reward record if distribution was successful
-      if (creatorDistributionResult.success) {
-        // Create reward record for creator bonus
-        await storage.createReward({
-          userId: lead.createdByUserId,
-          rewardType: 'job_creation_bonus',
-          tokenAmount: creatorBonusTokens,
-          cashValue: creatorDistributionResult.cashValue.toFixed(4),
-          status: 'confirmed',
-          referenceId: jobId,
-          metadata: {
-            completedBy: userId,
-            points: creatorBonusPoints
-          }
-        });
-
-        await storage.createPointTransaction({
-          userId: lead.createdByUserId,
-          points: creatorBonusPoints,
-          transactionType: "job_creation_bonus",
-          relatedEntityType: "lead",
-          relatedEntityId: jobId,
-          description: `Job creation bonus - Job #${jobId} completed`,
-          metadata: {
-            completedBy: userId,
-            tokenAmount: creatorBonusTokens
-          }
-        });
-
-        // Update creator's stats
-        const creatorStats = await storage.getEmployeeStats(lead.createdByUserId);
-        if (creatorStats) {
-          await storage.updateEmployeeStats(lead.createdByUserId, {
-            totalPoints: (creatorStats.totalPoints || 0) + creatorBonusPoints,
-            totalEarnedTokens: (parseFloat(creatorStats.totalEarnedTokens || "0") + parseFloat(creatorBonusTokens)).toFixed(8),
-            lastActivityDate: new Date()
-          });
-        }
-      }
-    }
-
     return { points, tokens: tokenAmount, level: stats ? this.calculateLevel((stats.totalPoints || 0) + points) : 1 };
   }
 
@@ -540,58 +485,6 @@ export class GamificationService {
         newLevel,
         customerRating: performance.customerRating
       });
-    }
-
-    // Check if this job was created by an employee and reward them too
-    const lead = await storage.getLead(jobId);
-    if (lead && lead.createdByUserId && lead.createdByUserId !== userId) {
-      // Award full per-worker amount to the person who created/booked the job
-      const creatorBonusTokens = (parseFloat(tokenAmount) * 1.0).toFixed(8);
-      const creatorBonusPoints = Math.floor(points * 1.0);
-
-      await treasuryService.distributeTokens(
-        parseFloat(creatorBonusTokens),
-        `Job creation bonus - Job #${jobId} completed`,
-        "job_creation_bonus",
-        lead.createdByUserId
-      );
-
-      // Create reward record for creator bonus
-      await storage.createReward({
-        userId: lead.createdByUserId,
-        rewardType: 'job_creation_bonus',
-        tokenAmount: creatorBonusTokens,
-        cashValue: (parseFloat(creatorBonusTokens) * tokenPrice).toFixed(4),
-        status: 'confirmed',
-        referenceId: jobId,
-        metadata: {
-          completedBy: userId,
-          points: creatorBonusPoints
-        }
-      });
-
-      await storage.createPointTransaction({
-        userId: lead.createdByUserId,
-        points: creatorBonusPoints,
-        transactionType: "job_creation_bonus",
-        relatedEntityType: "lead",
-        relatedEntityId: jobId,
-        description: `Job creation bonus - Job #${jobId} completed`,
-        metadata: {
-          completedBy: userId,
-          tokenAmount: creatorBonusTokens
-        }
-      });
-
-      // Update creator's stats
-      const creatorStats = await storage.getEmployeeStats(lead.createdByUserId);
-      if (creatorStats) {
-        await storage.updateEmployeeStats(lead.createdByUserId, {
-          totalPoints: (creatorStats.totalPoints || 0) + creatorBonusPoints,
-          totalEarnedTokens: (parseFloat(creatorStats.totalEarnedTokens || "0") + parseFloat(creatorBonusTokens)).toFixed(8),
-          lastActivityDate: new Date()
-        });
-      }
     }
 
     return { points, tokens: tokenAmount, level: stats ? this.calculateLevel((stats.totalPoints || 0) + points) : 1 };

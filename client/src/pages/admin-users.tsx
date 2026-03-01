@@ -214,6 +214,26 @@ export default function AdminUsersPage() {
     },
   });
 
+  // One-time job reward correction (650 JCMOVES shortfall from 3/1/2026)
+  const jobRewardCorrectionMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/admin/job-reward-correction-20260301", {});
+      return await response.json();
+    },
+    onSuccess: (data: any) => {
+      toast({ title: "Correction Applied", description: data.message || `+650 JCMOVES added to your wallet` });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+    },
+    onError: (error: any) => {
+      const msg = error.message || "";
+      if (msg.includes("already applied") || error.status === 409) {
+        toast({ title: "Already Applied", description: "This correction has already been credited to your wallet.", variant: "destructive" });
+      } else {
+        toast({ title: "Failed", description: msg || "Could not apply correction", variant: "destructive" });
+      }
+    },
+  });
+
   // Grant tokens mutation (admin manual award)
   const grantTokensMutation = useMutation({
     mutationFn: async () => {
@@ -849,6 +869,16 @@ export default function AdminUsersPage() {
                               title="Grant 200 JCMOVES for each jewelry item this user listed that hasn't been rewarded yet"
                             >
                               💎 {jewelryRewardsMutation.isPending ? "Rewarding..." : "Jewelry Rewards"}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => jobRewardCorrectionMutation.mutate()}
+                              disabled={jobRewardCorrectionMutation.isPending}
+                              title="One-time correction: +650 JCMOVES for the 2 jobs completed 3/1/2026 that received wrong creator bonus"
+                              className="border-amber-400 text-amber-600 hover:bg-amber-50 dark:border-amber-500 dark:text-amber-400"
+                            >
+                              🔧 {jobRewardCorrectionMutation.isPending ? "Applying..." : "+650 Fix"}
                             </Button>
                             <Button 
                               variant="outline" 
