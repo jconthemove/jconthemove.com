@@ -39,9 +39,9 @@ app.use(cors({
 // This preserves raw body bytes needed for HMAC signature validation
 app.use('/api/advertising/webhook', express.raw({ type: 'application/json' }));
 
-// Increase body size limit to support video uploads (50MB videos become ~66MB as base64)
-app.use(express.json({ limit: '500mb' }));
-app.use(express.urlencoded({ extended: false, limit: '500mb' }));
+// Increase body size limit to support video uploads (4GB limit to accommodate large videos and base64 overhead)
+app.use(express.json({ limit: '4096mb' }));
+app.use(express.urlencoded({ extended: true, limit: '4096mb' }));
 
 app.use((req, res, next) => {
   const start = Date.now();
