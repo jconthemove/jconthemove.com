@@ -7489,6 +7489,38 @@ Thank you for your business!
         return res.status(400).json({ success: false, error: "This promo code has reached its usage limit" });
       }
 
+      // Check that the user has a real, completed account (TOS accepted)
+      const { users } = await import("@shared/schema");
+      const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user) return res.status(404).json({ success: false, error: "User not found" });
+      if (!user.tosAccepted) {
+        return res.status(403).json({
+          success: false,
+          error: "You must complete account setup and accept the Terms of Service before redeeming token rewards.",
+        });
+      }
+
+      // Prevent the same user from using the same promo code twice
+      const { rewards } = await import("@shared/schema");
+      const [existingUse] = await db
+        .select()
+        .from(rewards)
+        .where(
+          and(
+            eq(rewards.userId, userId),
+            eq(rewards.rewardType, 'promo_code'),
+            sql`${rewards.metadata}->>'promoCode' = ${promo.code}`
+          )
+        )
+        .limit(1);
+
+      if (existingUse) {
+        return res.status(400).json({
+          success: false,
+          error: "You have already used this promo code.",
+        });
+      }
+
       // Increment uses count
       await db.update(promoCodes)
         .set({ usesCount: promo.usesCount + 1, updatedAt: new Date() })

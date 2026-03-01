@@ -136,11 +136,20 @@ export default function CartPage() {
       // Apply promo code (credit tokens to user) if logged in
       if (promoApplied && promoResult && promoResult.rewardTokens > 0) {
         try {
-          await fetch("/api/promo-codes/apply", {
+          const applyRes = await fetch("/api/promo-codes/apply", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ code: promoResult.code, context }),
           });
+          const applyData = await applyRes.json();
+          if (!applyRes.ok && applyData.error) {
+            // Show non-blocking info — checkout still proceeds, discount is already applied
+            toast({
+              title: "Token reward not credited",
+              description: applyData.error,
+              variant: "destructive",
+            });
+          }
         } catch {}
       }
 
@@ -352,7 +361,7 @@ export default function CartPage() {
                       <p className="text-green-300 text-xs mt-1">{promoResult.discountPercent}% off — saves ${promoDiscountAmount.toFixed(2)}</p>
                     )}
                     {promoResult && promoResult.rewardTokens > 0 && (
-                      <p className="text-orange-300 text-xs">+{promoResult.rewardTokens} JCMOVES tokens on checkout</p>
+                      <p className="text-orange-300 text-xs">+{promoResult.rewardTokens} JCMOVES tokens credited on checkout (requires verified account)</p>
                     )}
                   </div>
                 </div>
