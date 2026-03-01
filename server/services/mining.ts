@@ -464,9 +464,12 @@ export class MiningService {
     streakCount: number;
     nextStreakBonus: string;
     claimsRemainingToday: number;
+    lastScriptureClaimDate: string | null;
+    fitness: { pushups: number; situps: number };
   }> {
     const MAX_DAILY_CLAIMS = 3;
     const session = await this.getActiveSession(userId);
+    const todayStr = new Date().toISOString().split('T')[0];
     
     if (!session) {
       return {
@@ -478,11 +481,28 @@ export class MiningService {
         streakCount: 0,
         nextStreakBonus: "0.00000000",
         claimsRemainingToday: MAX_DAILY_CLAIMS,
+        lastScriptureClaimDate: null,
+        fitness: { pushups: 0, situps: 0 }
       };
     }
 
     const accumulatedTokens = await this.calculateAccumulatedTokens(session);
     const timeRemaining = this.getTimeRemaining(session);
+
+    // Calculate current mining speed based on fitness
+    const calculateFitnessBonus = (count: number) => {
+      if (count >= 61) return 1.0;
+      if (count >= 41) return 0.75;
+      if (count >= 31) return 0.5;
+      if (count >= 21) return 0.4;
+      if (count >= 10) return 0.25;
+      return 0;
+    };
+    
+    const isFitnessToday = session.fitnessLastUpdated === todayStr;
+    const pushups = isFitnessToday ? (session.pushupsCount || 0) : 0;
+    const situps = isFitnessToday ? (session.situpsCount || 0) : 0;
+    const totalSpeed = (1.0 + calculateFitnessBonus(pushups) + calculateFitnessBonus(situps)).toFixed(2);
 
     // Get today's total claims
     const today = new Date();
@@ -501,9 +521,8 @@ export class MiningService {
       .toFixed(8);
 
     // Calculate claims remaining today
-    const todayDate = new Date().toISOString().split('T')[0];
     let dailyClaimCount = session.dailyClaimCount || 0;
-    if (session.dailyClaimDate !== todayDate) {
+    if (session.dailyClaimDate !== todayStr) {
       dailyClaimCount = 0; // Reset for new day
     }
     const claimsRemainingToday = Math.max(0, MAX_DAILY_CLAIMS - dailyClaimCount);
@@ -517,10 +536,12 @@ export class MiningService {
       accumulatedTokens,
       timeRemaining,
       totalClaimedToday,
-      miningSpeed: session.miningSpeed || "1.00",
+      miningSpeed: totalSpeed,
       streakCount,
       nextStreakBonus: streakBonus.toFixed(8),
       claimsRemainingToday,
+      lastScriptureClaimDate: session.lastScriptureClaimDate,
+      fitness: { pushups, situps }
     };
   }
 }

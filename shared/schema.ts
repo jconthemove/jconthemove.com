@@ -385,6 +385,10 @@ export const miningSessions = pgTable("mining_sessions", {
   dailyClaimCount: integer("daily_claim_count").default(0), // Number of claims made today (max 3)
   accumulatedTokens: decimal("accumulated_tokens", { precision: 18, scale: 8 }).notNull().default("0.00000000"),
   miningSpeed: decimal("mining_speed", { precision: 5, scale: 2 }).notNull().default("1.00"), // Speed multiplier (1X, 2X, etc.)
+  pushupsCount: integer("pushups_count").default(0),
+  situpsCount: integer("situps_count").default(0),
+  fitnessLastUpdated: date("fitness_last_updated"),
+  lastScriptureClaimDate: date("last_scripture_claim_date"),
   status: text("status").notNull().default("active"), // 'active', 'paused', 'completed'
   nextClaimAt: timestamp("next_claim_at").notNull(), // 24 hours from start
   createdAt: timestamp("created_at").notNull().default(sql`now()`),

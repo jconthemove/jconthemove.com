@@ -7472,6 +7472,75 @@ Thank you for your business!
     }
   });
 
+  app.post("/api/mining/fitness", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { type, count } = z.object({
+        type: z.enum(['pushups', 'situps']),
+        count: z.number().min(0).max(1000)
+      }).parse(req.body);
+
+      const session = await storage.getMiningSession(userId);
+      if (!session) return res.status(404).json({ error: "No active mining session" });
+
+      const today = new Date().toISOString().split('T')[0];
+      const updateData: any = { fitnessLastUpdated: today };
+      
+      if (session.fitnessLastUpdated !== today) {
+        updateData.pushupsCount = type === 'pushups' ? count : 0;
+        updateData.situpsCount = type === 'situps' ? count : 0;
+      } else {
+        if (type === 'pushups') updateData.pushupsCount = (session.pushupsCount || 0) + count;
+        if (type === 'situps') updateData.situpsCount = (session.situpsCount || 0) + count;
+      }
+
+      await storage.updateMiningSession(session.id, updateData);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/mining/scripture-claim", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const today = new Date().toISOString().split('T')[0];
+      
+      const { miningService } = await import('./services/mining');
+      const stats = await miningService.getMiningStats(userId);
+      const session = stats.currentSession;
+
+      if (!session) return res.status(404).json({ error: "No active mining session" });
+      
+      if (stats.lastScriptureClaimDate === today) {
+        return res.status(400).json({ error: "Already claimed today's scripture reward" });
+      }
+
+      const rewardAmount = 100;
+      // Use the reward type for scripture claim
+      const { REWARD_TYPES } = await import('./constants');
+      
+      await storage.creditWalletTokens(userId, rewardAmount);
+      await storage.updateMiningSession(session.id, { lastScriptureClaimDate: today });
+      
+      // Record as a reward
+      const { rewards } = await import("@shared/schema");
+      await db.insert(rewards).values({
+        userId,
+        rewardType: 'scripture_claim',
+        tokenAmount: rewardAmount.toString(),
+        cashValue: (rewardAmount * 0.00000508432).toFixed(4),
+        status: 'confirmed',
+        metadata: { date: today }
+      });
+
+      res.json({ success: true, amount: rewardAmount });
+    } catch (error: any) {
+      console.error("Error claiming scripture reward:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Manually claim accumulated tokens
   app.post("/api/mining/claim", isAuthenticated, async (req: any, res) => {
     try {

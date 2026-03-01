@@ -135,9 +135,42 @@ export class TreasuryService {
   }
 
   /**
+   * Calculate current year's distribution limit based on 10-year accounting model
+   * Total supply: 300,000,000 JCMOVES
+   * Year 1-5: 15% each
+   * Year 6: 8%
+   * Year 7: 4%
+   * Year 8: 2%
+   * Year 9: 1%
+   * Year 10: 10% (remaining/reserve)
+   */
+  getYearlyDistributionLimit(): number {
+    const TOTAL_SUPPLY = 300000000;
+    const launchDate = new Date('2024-01-01'); // Adjust to actual launch date
+    const now = new Date();
+    const yearsSinceLaunch = Math.floor((now.getTime() - launchDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25));
+    
+    const rates = [0.15, 0.15, 0.15, 0.15, 0.15, 0.08, 0.04, 0.02, 0.01, 0.10];
+    const currentRate = rates[Math.min(yearsSinceLaunch, rates.length - 1)];
+    
+    return TOTAL_SUPPLY * currentRate;
+  }
+
+  /**
    * Check if specific token amount can be distributed using real-time crypto pricing
    */
   async canDistributeTokens(tokenAmount: number): Promise<{ canDistribute: boolean; reason?: string; currentPrice?: number }> {
+    // Check yearly distribution model limit
+    const yearlyLimit = this.getYearlyDistributionLimit();
+    // In a full implementation, we would query the total distributed this year from the DB
+    // For now, we ensure the requested amount is at least within the annual cap
+    if (tokenAmount > yearlyLimit) {
+      return {
+        canDistribute: false,
+        reason: `Distribution amount exceeds the annual cap of ${yearlyLimit.toLocaleString()} tokens based on our 10-year model.`
+      };
+    }
+
     // Get current JCMOVES price
     const priceData = await this.getCurrentTokenPrice();
     const currentPrice = priceData.price;

@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Calendar as CalendarIcon, BookOpen, Store, Star, Camera, MapPin, Phone, Mail, Plus, Settings, Award, User, Snowflake } from "lucide-react";
+import { Calendar as CalendarIcon, BookOpen, Store, Star, Camera, MapPin, Phone, Mail, Plus, Settings, Award, User, Snowflake, Coins, Loader2 } from "lucide-react";
 import { Link } from "wouter";
 import { useState, useEffect } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -61,6 +61,34 @@ export default function EmployeeHomePage() {
   const [selectedCrewMembers, setSelectedCrewMembers] = useState<string[]>([]);
   const scripture = getDailyScripture();
   const { toast } = useToast();
+
+  const { data: miningStatus } = useQuery({
+    queryKey: ["/api/mining/status"],
+  });
+
+  const scriptureMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("POST", "/api/mining/scripture-claim", {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/mining/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/rewards/wallet"] });
+      toast({
+        title: "Reward Claimed!",
+        description: "You've earned 100 JCMOVES for reading today's scripture.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Claim Failed",
+        description: error.message || "Please try again later",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const hasClaimedScripture = miningStatus?.lastScriptureClaimDate === todayStr;
 
   const { data: allJobs = [] } = useQuery<Lead[]>({
     queryKey: ["/api/leads"],
@@ -387,12 +415,44 @@ export default function EmployeeHomePage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <blockquote className="text-xl font-semibold italic text-slate-200 mb-3 leading-relaxed">
-              "{scripture.verse}"
-            </blockquote>
-            <p className="text-sm text-orange-400 font-semibold">
-              — {scripture.reference}
-            </p>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="flex-1">
+                <blockquote className="text-xl font-semibold italic text-slate-200 mb-3 leading-relaxed">
+                  "{scripture.verse}"
+                </blockquote>
+                <p className="text-sm text-orange-400 font-semibold">
+                  — {scripture.reference}
+                </p>
+              </div>
+              <div className="flex flex-col items-center gap-2 min-w-[140px]">
+                <Button
+                  onClick={() => scriptureMutation.mutate()}
+                  disabled={hasClaimedScripture || scriptureMutation.isPending || !miningStatus?.currentSession}
+                  className={`w-full py-6 font-bold shadow-lg transition-all ${
+                    hasClaimedScripture 
+                      ? "bg-slate-800 text-slate-500 cursor-not-allowed border-slate-700" 
+                      : "bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white border-0 animate-pulse shadow-orange-500/20"
+                  }`}
+                >
+                  {scriptureMutation.isPending ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : hasClaimedScripture ? (
+                    "Claimed ✓"
+                  ) : (
+                    <>
+                      <Coins className="mr-2 h-5 w-5" />
+                      Claim 100
+                    </>
+                  )}
+                </Button>
+                {!miningStatus?.currentSession && (
+                  <p className="text-[10px] text-slate-500 text-center">Activate mining to claim</p>
+                )}
+                {hasClaimedScripture && (
+                  <p className="text-[10px] text-green-500/70 font-medium">Daily reward collected</p>
+                )}
+              </div>
+            </div>
           </CardContent>
         </Card>
 

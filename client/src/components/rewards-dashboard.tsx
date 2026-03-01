@@ -92,6 +92,32 @@ export default function RewardsDashboard() {
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [walletModalOpen, setWalletModalOpen] = useState(false);
   const [emberDialogOpen, setEmberDialogOpen] = useState(false);
+  const [fitnessDialogOpen, setFitnessDialogOpen] = useState(false);
+  const [fitnessType, setFitnessType] = useState<'pushups' | 'situps'>('pushups');
+  const [fitnessCount, setFitnessCount] = useState('');
+
+  // Fitness mutation
+  const fitnessMutation = useMutation({
+    mutationFn: async (data: { type: 'pushups' | 'situps', count: number }) => {
+      return await apiRequest("POST", "/api/mining/fitness", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/mining/status"] });
+      setFitnessDialogOpen(false);
+      setFitnessCount('');
+      toast({
+        title: "Fitness Logged!",
+        description: `Your mining speed has been boosted!`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to log fitness",
+        description: error.message || "Please try again",
+        variant: "destructive",
+      });
+    },
+  });
 
   // Fetch wallet data
   const { data: wallet, isLoading: walletLoading } = useQuery<WalletAccount>({
