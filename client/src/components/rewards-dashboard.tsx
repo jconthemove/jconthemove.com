@@ -810,25 +810,40 @@ export default function RewardsDashboard() {
 
             {/* Fitness Boost Section */}
             <div className="px-5 pb-5">
+              <p className="text-[10px] text-slate-600 uppercase tracking-widest mb-2 pl-0.5">💪 Fitness Speed Boosts</p>
               <div className="grid grid-cols-2 gap-3">
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  className="bg-slate-800/50 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
+                {/* Push-ups card */}
+                <button
                   onClick={(e) => { e.stopPropagation(); setFitnessType('pushups'); setFitnessDialogOpen(true); }}
+                  className="group bg-slate-800/60 border border-cyan-500/20 hover:border-cyan-500/60 hover:bg-cyan-500/5 rounded-xl p-3 text-left transition-all active:scale-95"
                 >
-                  <TrendingUp className="h-3.5 w-3.5 mr-2" />
-                  Push-ups: {miningStatus?.fitness?.pushups || 0}
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  className="bg-slate-800/50 border-purple-500/30 text-purple-400 hover:bg-purple-500/10"
+                  <div className="flex items-start justify-between mb-2">
+                    <span className="text-xl leading-none">💪</span>
+                    <span className="text-[10px] text-cyan-500/70 font-semibold uppercase tracking-wide">Tap to Log</span>
+                  </div>
+                  <p className="text-2xl font-black text-white leading-none">{miningStatus?.fitness?.pushups || 0}</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Push-ups today</p>
+                  <div className="mt-2 h-1 bg-slate-700 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all"
+                      style={{ width: `${Math.min(100, ((miningStatus?.fitness?.pushups || 0) / 61) * 100)}%` }} />
+                  </div>
+                </button>
+                {/* Sit-ups card */}
+                <button
                   onClick={(e) => { e.stopPropagation(); setFitnessType('situps'); setFitnessDialogOpen(true); }}
+                  className="group bg-slate-800/60 border border-purple-500/20 hover:border-purple-500/60 hover:bg-purple-500/5 rounded-xl p-3 text-left transition-all active:scale-95"
                 >
-                  <TrendingUp className="h-3.5 w-3.5 mr-2" />
-                  Sit-ups: {miningStatus?.fitness?.situps || 0}
-                </Button>
+                  <div className="flex items-start justify-between mb-2">
+                    <span className="text-xl leading-none">🔥</span>
+                    <span className="text-[10px] text-purple-500/70 font-semibold uppercase tracking-wide">Tap to Log</span>
+                  </div>
+                  <p className="text-2xl font-black text-white leading-none">{miningStatus?.fitness?.situps || 0}</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Sit-ups today</p>
+                  <div className="mt-2 h-1 bg-slate-700 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all"
+                      style={{ width: `${Math.min(100, ((miningStatus?.fitness?.situps || 0) / 61) * 100)}%` }} />
+                  </div>
+                </button>
               </div>
             </div>
 
@@ -1382,6 +1397,145 @@ export default function RewardsDashboard() {
                 </Button>
               </CardContent>
             </Card>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Fitness Boost Dialog ── */}
+      <Dialog open={fitnessDialogOpen} onOpenChange={setFitnessDialogOpen}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-sm mx-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl font-black">
+              <span>{fitnessType === 'pushups' ? '💪' : '🔥'}</span>
+              {fitnessType === 'pushups' ? 'Log Push-ups' : 'Log Sit-ups'}
+            </DialogTitle>
+            <DialogDescription className="text-slate-400 text-sm">
+              Tap a set size each time you finish a round. Your daily total builds up all day.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Current daily total + speed badge */}
+          {(() => {
+            const current = fitnessType === 'pushups'
+              ? (miningStatus?.fitness?.pushups || 0)
+              : (miningStatus?.fitness?.situps || 0);
+            const tiers = [
+              { min: 61, boost: '+1.00x', label: 'MAX BOOST', color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/40' },
+              { min: 41, boost: '+0.75x', label: 'Elite', color: 'text-purple-400', bg: 'bg-purple-500/10 border-purple-500/40' },
+              { min: 31, boost: '+0.50x', label: 'Advanced', color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/40' },
+              { min: 21, boost: '+0.40x', label: 'Intermediate', color: 'text-cyan-400', bg: 'bg-cyan-500/10 border-cyan-500/40' },
+              { min: 10, boost: '+0.25x', label: 'Starter', color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/40' },
+              { min: 0, boost: '+0.00x', label: 'No boost yet', color: 'text-slate-500', bg: 'bg-slate-800 border-slate-700' },
+            ];
+            const currentTier = tiers.find(t => current >= t.min)!;
+            const nextTier = tiers.slice(0, tiers.indexOf(currentTier)).reverse()[0];
+            const progressToNext = nextTier
+              ? Math.min(100, Math.round(((current - currentTier.min) / (nextTier.min - currentTier.min)) * 100))
+              : 100;
+            return (
+              <div className="space-y-4">
+                {/* Total + tier badge */}
+                <div className="flex items-center justify-between bg-slate-800/60 rounded-xl p-4">
+                  <div>
+                    <p className="text-3xl font-black text-white">{current}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Today's total</p>
+                  </div>
+                  <div className={`px-3 py-2 rounded-xl border text-right ${currentTier.bg}`}>
+                    <p className={`text-lg font-black ${currentTier.color}`}>{currentTier.boost}</p>
+                    <p className={`text-[10px] font-semibold ${currentTier.color} opacity-80`}>{currentTier.label}</p>
+                  </div>
+                </div>
+
+                {/* Progress to next tier */}
+                {nextTier && (
+                  <div>
+                    <div className="flex justify-between text-xs text-slate-500 mb-1.5">
+                      <span>{current} reps</span>
+                      <span>Next tier at {nextTier.min} reps</span>
+                    </div>
+                    <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-purple-500 transition-all duration-500"
+                        style={{ width: `${progressToNext}%` }}
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">{nextTier.min - current} more to reach {nextTier.boost} speed boost</p>
+                  </div>
+                )}
+                {!nextTier && (
+                  <div className="flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3">
+                    <span className="text-xl">🏆</span>
+                    <p className="text-sm font-bold text-yellow-400">MAX BOOST REACHED! Keep grinding!</p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Quick-add set buttons */}
+          <div>
+            <p className="text-xs text-slate-500 uppercase tracking-widest mb-2">Tap when you finish a set</p>
+            <div className="grid grid-cols-4 gap-2">
+              {[10, 25, 50, 100].map((amt) => (
+                <Button
+                  key={amt}
+                  variant="outline"
+                  size="sm"
+                  disabled={fitnessMutation.isPending}
+                  onClick={() => fitnessMutation.mutate({ type: fitnessType, count: amt })}
+                  className="bg-slate-800/60 border-slate-600 text-white hover:bg-slate-700 hover:border-cyan-500/50 hover:text-cyan-300 font-bold text-base py-6 flex flex-col gap-0.5 h-auto transition-all active:scale-95"
+                >
+                  <span className="text-lg leading-none">+{amt}</span>
+                  <span className="text-[10px] text-slate-400 font-normal">reps</span>
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          {/* Custom count input */}
+          <div>
+            <p className="text-xs text-slate-500 uppercase tracking-widest mb-2">Or enter a custom count</p>
+            <div className="flex gap-2">
+              <Input
+                type="number"
+                placeholder="e.g. 15"
+                min={1}
+                max={1000}
+                value={fitnessCount}
+                onChange={(e) => setFitnessCount(e.target.value)}
+                className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-600 flex-1"
+              />
+              <Button
+                disabled={!fitnessCount || parseInt(fitnessCount) < 1 || fitnessMutation.isPending}
+                onClick={() => {
+                  const n = parseInt(fitnessCount);
+                  if (n > 0) fitnessMutation.mutate({ type: fitnessType, count: n });
+                }}
+                className="bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white font-bold px-5 border-0"
+              >
+                {fitnessMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Add'}
+              </Button>
+            </div>
+          </div>
+
+          {/* Speed tier chart */}
+          <div className="bg-slate-800/40 rounded-xl p-3 border border-slate-700/50">
+            <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-2">Speed Boost Tiers</p>
+            <div className="space-y-1.5">
+              {[
+                { reps: '61+', boost: '+1.00x', color: 'text-yellow-400' },
+                { reps: '41–60', boost: '+0.75x', color: 'text-purple-400' },
+                { reps: '31–40', boost: '+0.50x', color: 'text-blue-400' },
+                { reps: '21–30', boost: '+0.40x', color: 'text-cyan-400' },
+                { reps: '10–20', boost: '+0.25x', color: 'text-emerald-400' },
+              ].map(({ reps, boost, color }) => (
+                <div key={reps} className="flex justify-between items-center">
+                  <span className="text-xs text-slate-400">{reps} reps</span>
+                  <span className={`text-xs font-bold ${color}`}>{boost} mining speed</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-slate-600 mt-2">Each exercise counts separately. Max boost = +2.00x total.</p>
           </div>
         </DialogContent>
       </Dialog>
