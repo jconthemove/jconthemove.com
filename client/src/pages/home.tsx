@@ -239,6 +239,24 @@ export default function HomePage() {
               </Card>
             </Link>
           </div>
+
+          {/* Estimator CTA */}
+          <Link href="/moving-estimator">
+            <div className="mt-5 group flex items-center justify-between px-5 py-4 rounded-2xl border-2 border-teal-500/50 bg-gradient-to-r from-teal-900/40 to-blue-900/40 hover:border-teal-400 hover:from-teal-900/60 hover:to-blue-900/60 transition-all duration-300 cursor-pointer">
+              <div className="flex items-center gap-3">
+                <div className="bg-teal-500/20 p-2.5 rounded-xl">
+                  <Truck className="h-6 w-6 text-teal-400" />
+                </div>
+                <div>
+                  <p className="font-bold text-white text-base">Not sure what you need?</p>
+                  <p className="text-teal-300 text-sm">Get an instant moving estimate →</p>
+                </div>
+              </div>
+              <div className="bg-teal-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg group-hover:bg-teal-400 transition-colors">
+                Estimate
+              </div>
+            </div>
+          </Link>
         </div>
       </section>
 

@@ -56,6 +56,7 @@ import PiJackpotPage from "@/pages/pi-jackpot";
 import PrivacyPolicy from "@/pages/privacy";
 import NatureMadeJewls from "@/pages/nature-made-jewls";
 import JewelryDetailPage from "@/pages/jewelry-detail";
+import MovingEstimator from "@/pages/moving-estimator";
 import PaymentSuccessPage from "@/pages/payment-success";
 import PromoHalfDayPage from "@/pages/promo-half-day";
 import CartPage from "@/pages/cart";
@@ -318,6 +319,7 @@ function Router() {
       {/* Nature Made Jewls - Jewelry business page */}
       <Route path="/nature-made-jewls" component={NatureMadeJewls} />
       <Route path="/nature-made-jewls/:id" component={JewelryDetailPage} />
+      <Route path="/moving-estimator" component={MovingEstimator} />
       <Route path="/payment-success" component={PaymentSuccessPage} />
       <Route path="/promo/half-day" component={PromoHalfDayPage} />
       <Route path="/cart" component={CartPage} />

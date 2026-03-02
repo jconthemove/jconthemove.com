@@ -717,6 +717,7 @@ export default function NatureMadeJewls() {
                   </div>
                 </DialogContent>
               </Dialog>
+              </div>
             ) : (
               <Link href="/employee-login?redirect=/nature-made-jewls">
                 <Button className="bg-gradient-to-r from-purple-500 to-slate-600 hover:from-purple-600 hover:to-slate-700 whitespace-nowrap">
@@ -1294,6 +1295,116 @@ export default function NatureMadeJewls() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── Jewelry Listing Chatbot Dialog ──────────────────────────── */}
+      {chatOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) { setChatOpen(false); setChatMessages([]); } }}>
+          <div className="w-full sm:max-w-md bg-slate-900 border border-purple-700/50 rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col" style={{ maxHeight: '90vh' }}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700/60 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600">
+                  <Bot className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <p className="font-bold text-white">Listing Assistant</p>
+                  <p className="text-xs text-slate-400">Chat to add a new piece</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="ghost" size="sm" onClick={() => { setChatMessages([]); setChatData({ photos: [], title: '', category: '', price: '', materials: '', shortDesc: '', description: '' }); }} className="text-slate-400 hover:text-white h-8 w-8 p-0" title="Restart">
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => { setChatOpen(false); setChatMessages([]); }} className="text-slate-400 hover:text-white h-8 w-8 p-0">
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Messages */}
+            <div ref={chatScrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4 min-h-0">
+              {chatMessages.map((msg, i) => (
+                <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  {msg.role === 'bot' ? (
+                    <div className="max-w-[85%] bg-slate-700/60 rounded-2xl rounded-tl-sm px-4 py-3 text-slate-100 text-sm whitespace-pre-wrap leading-relaxed">
+                      {msg.content}
+                    </div>
+                  ) : (
+                    <div className="max-w-[75%] bg-gradient-to-r from-emerald-600 to-teal-600 rounded-2xl rounded-tr-sm px-4 py-2.5 text-white text-sm">
+                      {msg.content}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {/* Category buttons — show when on category step */}
+              {chatStep === 'category' && (
+                <div className="flex flex-wrap gap-2 pl-1">
+                  {['earrings','necklaces','bracelets','rings','custom'].map(cat => (
+                    <button key={cat} onClick={() => { userSay(cat.charAt(0).toUpperCase() + cat.slice(1)); setChatData(d => ({ ...d, category: cat })); setTimeout(() => { botSay(`Perfect! What price will you list this for? (Just the number, e.g. 45)`); setChatStep('price'); }, 400); }} className="px-3 py-2 rounded-xl text-sm font-medium border border-purple-500/60 text-purple-300 bg-purple-900/30 hover:bg-purple-900/60 hover:border-purple-400 transition-all capitalize">
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Upload more photos button during title/later steps */}
+              {(chatStep === 'title' || chatStep === 'category' || chatStep === 'price') && chatData.photos.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1 flex-wrap">
+                    {chatData.photos.slice(0, 3).map((url, idx) => (
+                      <img key={idx} src={url} alt="" className="w-10 h-10 rounded-lg object-cover border border-slate-600" />
+                    ))}
+                    {chatData.photos.length > 3 && <div className="w-10 h-10 rounded-lg bg-slate-700 flex items-center justify-center text-xs text-slate-400">+{chatData.photos.length - 3}</div>}
+                  </div>
+                  <label className="text-xs text-teal-400 cursor-pointer hover:underline">
+                    <input type="file" className="sr-only" multiple accept="image/*" ref={chatFileRef} onChange={e => handleChatUpload(e.target.files)} />
+                    + more photos
+                  </label>
+                </div>
+              )}
+
+              {chatUploading && (
+                <div className="flex justify-start">
+                  <div className="bg-slate-700/60 rounded-2xl px-4 py-3 text-slate-400 text-sm flex items-center gap-2">
+                    <span className="h-4 w-4 rounded-full border-2 border-teal-400 border-t-transparent animate-spin" />
+                    Uploading photos…
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Input area */}
+            <div className="px-4 py-4 border-t border-slate-700/60 shrink-0">
+              {chatStep === 'photos' ? (
+                <label className="flex items-center justify-center gap-3 w-full py-4 rounded-2xl border-2 border-dashed border-teal-500/50 bg-teal-900/20 cursor-pointer hover:border-teal-400 hover:bg-teal-900/40 transition-all text-teal-300">
+                  <input type="file" className="sr-only" multiple accept="image/*" onChange={e => handleChatUpload(e.target.files)} disabled={chatUploading} />
+                  {chatUploading ? <span className="h-5 w-5 rounded-full border-2 border-teal-400 border-t-transparent animate-spin" /> : <ImagePlus className="h-5 w-5" />}
+                  <span className="font-medium">{chatUploading ? 'Uploading…' : 'Tap to upload photos'}</span>
+                </label>
+              ) : chatStep === 'category' ? (
+                <p className="text-center text-xs text-slate-500">Select a category above</p>
+              ) : chatStep === 'done' ? (
+                <Button onClick={handleChatSend} className="w-full bg-emerald-600 hover:bg-emerald-700">Add Another Piece</Button>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    value={chatInput}
+                    onChange={e => setChatInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleChatSend(); } }}
+                    placeholder={chatStep === 'price' ? 'e.g. 45' : chatStep === 'materials' ? 'e.g. sterling silver, turquoise' : chatStep === 'confirm' ? 'yes or no' : 'Type your answer…'}
+                    className="flex-1 bg-slate-800 border border-slate-600 rounded-xl px-4 py-2.5 text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-teal-500"
+                    autoFocus
+                  />
+                  <Button onClick={handleChatSend} disabled={!chatInput.trim()} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl px-3">
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <footer className="bg-gradient-to-r from-slate-800 via-purple-900 to-slate-800 border-t border-purple-700/50 py-8 mt-8">
         <div className="container mx-auto px-4 text-center">
