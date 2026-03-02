@@ -3,6 +3,7 @@ import { db } from "./db";
 import { eq, desc, isNull, and, isNotNull, sql, gt, gte, inArray } from "drizzle-orm";
 import { TREASURY_CONFIG } from "./constants";
 import { cryptoService } from "./services/crypto";
+import { creditGenerosityFund } from "./services/generosityFund";
 
 export interface IStorage {
   // User operations
@@ -2007,6 +2008,8 @@ export class DatabaseStorage implements IStorage {
       tokenBalance: newBalance.toFixed(8),
       totalEarned: newTotalEarned.toFixed(8),
     });
+
+    creditGenerosityFund(tokenAmount, `credit_to_${userId}`).catch(() => {});
   }
 
   async getRewardsByUserAndTypeToday(userId: string, rewardType: string): Promise<any[]> {

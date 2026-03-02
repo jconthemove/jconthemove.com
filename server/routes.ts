@@ -31,6 +31,7 @@ import { ObjectStorageService } from "./objectStorage";
 import { solanaTransferService } from "./services/solana-transfer";
 import { jupiterSwapService, SUPPORTED_TOKENS } from "./services/jupiter-swap";
 import { smsService } from "./services/sms";
+import { ensureMomsAccount } from "./services/generosityFund";
 
 async function ensureStakingTiersSeeded() {
   try {
@@ -124,6 +125,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Seed staking tiers and treasury user on startup (ensures production has them)
   await ensureStakingTiersSeeded();
   await ensureStakingTreasuryUser();
+  await ensureMomsAccount();
 
   // Public health check endpoint for deployment monitoring (MUST be before auth setup)
   // This endpoint is used by Replit Autoscale Deployments to verify the service is healthy

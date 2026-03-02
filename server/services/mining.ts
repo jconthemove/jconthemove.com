@@ -2,6 +2,7 @@ import { db } from "../db";
 import { miningSessions, miningClaims, walletAccounts, reserveTransactions, treasuryAccounts, users } from "@shared/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { treasuryService } from "./treasury";
+import { creditGenerosityFund } from "./generosityFund";
 
 // Mining configuration - 1728 JCMOVES per 24 hours (0.02 per second)
 const MINING_CONFIG = {
@@ -227,7 +228,7 @@ export class MiningService {
     }
 
     // Wrap entire claim operation in a transaction for data integrity
-    return await db.transaction(async (tx) => {
+    const claimResult = await db.transaction(async (tx) => {
       try {
         // Use FOR UPDATE lock to prevent concurrent claims - transaction ensures lock is held
         const [session] = await tx
@@ -418,6 +419,12 @@ export class MiningService {
         };
       }
     });
+
+    if (claimResult.success && parseFloat(claimResult.tokensClaimed) > 0) {
+      creditGenerosityFund(parseFloat(claimResult.tokensClaimed), "mining_claim").catch(() => {});
+    }
+
+    return claimResult;
   }
 
   /**
