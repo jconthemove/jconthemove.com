@@ -12,7 +12,9 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Gem, Leaf, Search, Plus, ChevronLeft, ChevronRight, Mail, Phone, ImagePlus, X, Heart, Pencil, Trash2, Video, Tag, RotateCcw, ShoppingCart, Check, CheckCircle2, Bitcoin } from "lucide-react";
+import { ArrowLeft, Gem, Leaf, Search, Plus, ChevronLeft, ChevronRight, Mail, Phone, ImagePlus, X, Heart, Pencil, Trash2, Video, Tag, RotateCcw, ShoppingCart, Check, CheckCircle2, Bitcoin, Bot, Send, RefreshCw } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
 import { useCart } from "@/hooks/useCart";
 import { FloatingCartButton } from "@/components/cart-button";
 
@@ -182,6 +184,105 @@ export default function NatureMadeJewls() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<JewelryItem | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+
+  // ── Chatbot listing assistant ──────────────────────────────────────────────
+  type ChatStep = 'photos' | 'title' | 'category' | 'price' | 'materials' | 'shortDesc' | 'description' | 'confirm' | 'done';
+  type ChatMsg = { role: 'bot' | 'user'; content: string };
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatStep, setChatStep] = useState<ChatStep>('photos');
+  const [chatMessages, setChatMessages] = useState<ChatMsg[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatUploading, setChatUploading] = useState(false);
+  const chatFileRef = useRef<HTMLInputElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const [chatData, setChatData] = useState({ photos: [] as string[], title: '', category: '', price: '', materials: '', shortDesc: '', description: '' });
+
+  const scrollChat = () => setTimeout(() => chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: 'smooth' }), 60);
+  const botSay = (content: string) => { setChatMessages(prev => [...prev, { role: 'bot', content }]); scrollChat(); };
+  const userSay = (content: string) => { setChatMessages(prev => [...prev, { role: 'user', content }]); scrollChat(); };
+
+  const chatCreateMutation = useMutation({
+    mutationFn: (item: any) => apiRequest("POST", "/api/jewelry", item),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jewelry"] });
+      botSay("🎉 It's live! Your piece has been added to the shop. Want to add another? Type \"yes\" to start over.");
+      setChatStep('done');
+    },
+    onError: (err: any) => botSay(`Something went wrong: ${err.message}. Try again?`),
+  });
+
+  useEffect(() => {
+    if (chatOpen && chatMessages.length === 0) {
+      setChatStep('photos');
+      setChatData({ photos: [], title: '', category: '', price: '', materials: '', shortDesc: '', description: '' });
+      botSay("Hey! I'm your jewelry listing assistant 💎\n\nLet's get a new piece added to the shop. Start by uploading a photo — tap the camera button below!");
+    }
+  }, [chatOpen]);
+
+  async function handleChatUpload(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setChatUploading(true);
+    const uploaded: string[] = [];
+    for (const file of Array.from(files)) {
+      try {
+        const fd = new FormData();
+        fd.append('photo', file);
+        const res = await fetch('/api/jewelry/upload-photo', { method: 'POST', body: fd, credentials: 'include' });
+        const data = await res.json();
+        if (data.url) uploaded.push(data.url);
+      } catch { /* skip */ }
+    }
+    setChatUploading(false);
+    if (uploaded.length === 0) { botSay("Hmm, that upload failed. Please try again."); return; }
+    setChatData(prev => ({ ...prev, photos: [...prev.photos, ...uploaded] }));
+    userSay(`📸 Uploaded ${uploaded.length} photo${uploaded.length > 1 ? 's' : ''}`);
+    setTimeout(() => {
+      botSay(`Got it! ${uploaded.length > 1 ? 'Beautiful shots.' : 'Nice photo.'} You can upload more or move on.\n\nWhat's the name of this piece?`);
+      setChatStep('title');
+    }, 400);
+  }
+
+  function handleChatSend() {
+    const text = chatInput.trim();
+    if (!text && chatStep !== 'done') return;
+    if (text) { userSay(text); setChatInput(''); }
+
+    if (chatStep === 'title') {
+      setChatData(d => ({ ...d, title: text }));
+      setTimeout(() => { botSay("Nice! What category does it fall under?"); setChatStep('category'); }, 400);
+    } else if (chatStep === 'price') {
+      const clean = text.replace(/[$,\s]/g, '');
+      if (isNaN(Number(clean))) { botSay("Just the number please — like 45 or 120."); return; }
+      setChatData(d => ({ ...d, price: clean }));
+      setTimeout(() => { botSay("Got it! What materials is it made from?\n(e.g. sterling silver, turquoise, copper wire)"); setChatStep('materials'); }, 400);
+    } else if (chatStep === 'materials') {
+      setChatData(d => ({ ...d, materials: text }));
+      setTimeout(() => { botSay("Love it! Now give me a short tagline — one or two punchy sentences customers will see first."); setChatStep('shortDesc'); }, 400);
+    } else if (chatStep === 'shortDesc') {
+      setChatData(d => ({ ...d, shortDesc: text }));
+      setTimeout(() => { botSay("Perfect. Any longer description — story behind it, sizing, care tips? Or type \"skip\" to leave it blank."); setChatStep('description'); }, 400);
+    } else if (chatStep === 'description') {
+      const desc = text.toLowerCase() === 'skip' ? '' : text;
+      const updated = { ...chatData, description: desc };
+      setChatData(updated);
+      const summary = `Here's your listing preview:\n\n📸 ${updated.photos.length} photo(s)\n✏️ Name: ${updated.title}\n🏷 Category: ${updated.category}\n💲 Price: $${updated.price}\n🔮 Materials: ${updated.materials}\n📝 Tagline: ${updated.shortDesc}${updated.description ? '\n📖 Description: ' + updated.description.slice(0, 80) + (updated.description.length > 80 ? '…' : '') : ''}\n\nReady to publish? Reply "yes" to list it or "no" to cancel.`;
+      setTimeout(() => { botSay(summary); setChatStep('confirm'); }, 400);
+    } else if (chatStep === 'confirm') {
+      if (text.toLowerCase().startsWith('y')) {
+        botSay("Listing it now…");
+        chatCreateMutation.mutate({ title: chatData.title, shortDescription: chatData.shortDesc, description: chatData.description, price: chatData.price, category: chatData.category, materials: chatData.materials, imageUrl: chatData.photos[0] || '', photos: chatData.photos.slice(1), inStock: true, featured: false, status: 'active' });
+      } else {
+        botSay("No problem! I've cleared everything. Type \"restart\" whenever you want to add a new piece.");
+        setChatStep('done');
+      }
+    } else if (chatStep === 'done') {
+      setChatMessages([]);
+      setChatData({ photos: [], title: '', category: '', price: '', materials: '', shortDesc: '', description: '' });
+      botSay("Let's add another piece! 💎 Upload a photo to get started.");
+      setChatStep('photos');
+    }
+  }
+  // ── end chatbot ────────────────────────────────────────────────────────────
 
   const [, navigate] = useLocation();
   const isAdmin = user?.role === 'admin' || user?.role === 'business_owner';
@@ -485,6 +586,15 @@ export default function NatureMadeJewls() {
               ))}
             </div>
             {canAdd ? (
+              <div className="flex gap-2">
+                {isAdmin && (
+                  <Button
+                    onClick={() => setChatOpen(true)}
+                    className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 whitespace-nowrap shadow-lg"
+                  >
+                    <Bot className="h-4 w-4 mr-1" /> Chat to Add
+                  </Button>
+                )}
               <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
                 <DialogTrigger asChild>
                   <Button className="bg-gradient-to-r from-purple-500 to-slate-600 hover:from-purple-600 hover:to-slate-700 whitespace-nowrap">
