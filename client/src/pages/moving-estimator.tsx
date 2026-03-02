@@ -1,19 +1,37 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, Truck, Package2, Users, Clock, DollarSign,
-  RotateCcw, ChevronRight, Star, Stairs, AlertCircle
+  RotateCcw, ChevronRight, Star, AlertCircle, MapPin,
+  Navigation, Send, Loader2
 } from "lucide-react";
 
-const RATE = 50;
+// ── Constants ──────────────────────────────────────────────────────────────
+const RATE = 50;                   // $ per mover per hour
+const DRIVE_SPEED_MPH = 45;        // conservative UP Michigan roads
+const BASE_ZIP = "49938";
+const BASE_LAT = 46.4539;
+const BASE_LNG = -90.1715;
+const BASE_CITY = "Ironwood, MI";
 
+// ── Types ──────────────────────────────────────────────────────────────────
 type Service = "moving" | "junk";
 type TruckSize = "small" | "large";
 type LoadType = "loadOnly" | "loadUnload";
 type JunkSize = "small" | "large";
+
+interface ZipInfo { zip: string; city: string; lat: number; lng: number; }
+interface DriveInfo {
+  pickupMiles: number;
+  dropoffMiles: number;   // pickup → dropoff (0 if load-only)
+  returnMiles: number;    // last stop → base
+  totalMiles: number;
+  totalDriveHours: number;
+}
 
 interface Sel {
   service?: Service;
@@ -21,66 +39,85 @@ interface Sel {
   loadType?: LoadType;
   stairs?: boolean;
   junkSize?: JunkSize;
+  pickup?: ZipInfo;
+  dropoff?: ZipInfo;
+  driveInfo?: DriveInfo;
 }
 
-interface Option {
-  movers: number;
-  hours: number;
-  tag?: string;
-}
-
-function getOptions(sel: Sel): Option[] {
-  const bonus = sel.stairs ? 1 : 0;
-  if (sel.service === "moving") {
-    if (sel.truckSize === "small" && sel.loadType === "loadOnly") {
-      return [{ movers: 2 + bonus, hours: 2, tag: "Standard" }];
-    }
-    if (sel.truckSize === "large" && sel.loadType === "loadOnly") {
-      return [
-        { movers: 2 + bonus, hours: 4 },
-        { movers: 3 + bonus, hours: 3, tag: "Most Popular" },
-        { movers: 4 + bonus, hours: 2, tag: "Fastest" },
-      ];
-    }
-    if (sel.loadType === "loadUnload") {
-      return [
-        { movers: 2 + bonus, hours: 6 },
-        { movers: 3 + bonus, hours: 4, tag: "Most Popular" },
-        { movers: 4 + bonus, hours: 3, tag: "Fastest" },
-      ];
-    }
-  }
-  return [];
-}
-
+interface Option { movers: number; hours: number; tag?: string; }
 type MsgRole = "bot" | "user";
 interface Msg {
   role: MsgRole;
   text: string;
   choices?: { label: string; value: string; icon?: string }[];
   isResult?: boolean;
-  resultSel?: Sel;
+  isZipInput?: "pickup" | "dropoff";
 }
 
+// ── Math helpers ───────────────────────────────────────────────────────────
+function haversine(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 3958.8;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.asin(Math.sqrt(a));
+}
+
+function roundHalf(n: number) { return Math.ceil(n * 2) / 2; }
+
+function computeDrive(sel: Sel): DriveInfo | undefined {
+  if (!sel.pickup) return undefined;
+  const p = sel.pickup;
+
+  const pickupMiles = haversine(BASE_LAT, BASE_LNG, p.lat, p.lng);
+
+  if (sel.loadType === "loadOnly" || !sel.dropoff) {
+    // base → pickup → base
+    const total = pickupMiles * 2;
+    return { pickupMiles, dropoffMiles: 0, returnMiles: pickupMiles, totalMiles: total, totalDriveHours: roundHalf(total / DRIVE_SPEED_MPH) };
+  }
+
+  const d = sel.dropoff;
+  const dropoffMiles = haversine(p.lat, p.lng, d.lat, d.lng);
+  const returnMiles = haversine(d.lat, d.lng, BASE_LAT, BASE_LNG);
+  const total = pickupMiles + dropoffMiles + returnMiles;
+  return { pickupMiles, dropoffMiles, returnMiles, totalMiles: total, totalDriveHours: roundHalf(total / DRIVE_SPEED_MPH) };
+}
+
+function getOptions(sel: Sel): Option[] {
+  const bonus = sel.stairs ? 1 : 0;
+  if (sel.service !== "moving") return [];
+  if (sel.truckSize === "small" && sel.loadType === "loadOnly")
+    return [{ movers: 2 + bonus, hours: 2, tag: "Standard" }];
+  if (sel.truckSize === "large" && sel.loadType === "loadOnly")
+    return [{ movers: 2 + bonus, hours: 4 }, { movers: 3 + bonus, hours: 3, tag: "Most Popular" }, { movers: 4 + bonus, hours: 2, tag: "Fastest" }];
+  if (sel.loadType === "loadUnload")
+    return [{ movers: 2 + bonus, hours: 6 }, { movers: 3 + bonus, hours: 4, tag: "Most Popular" }, { movers: 4 + bonus, hours: 3, tag: "Fastest" }];
+  return [];
+}
+
+// ── Build chat message list ────────────────────────────────────────────────
 function buildMessages(sel: Sel): Msg[] {
   const msgs: Msg[] = [];
 
   msgs.push({
     role: "bot",
-    text: "Hi! I'm your moving estimate assistant. Let's figure out what crew and time you need. What service are you looking for?",
+    text: "Hi! I'm your moving estimate assistant 🚛\n\nLet's figure out your crew, time, and drive cost. What service do you need?",
     choices: [
       { label: "Moving Help", value: "moving", icon: "🚛" },
       { label: "Junk Removal", value: "junk", icon: "♻️" },
     ],
   });
-
   if (!sel.service) return msgs;
   msgs.push({ role: "user", text: sel.service === "moving" ? "🚛 Moving Help" : "♻️ Junk Removal" });
 
+  // ── Junk removal branch ────────────────────────────────────────────────
   if (sel.service === "junk") {
     msgs.push({
       role: "bot",
-      text: "Great! How much junk are we talking about?",
+      text: "How much junk are we talking about?",
       choices: [
         { label: "Small Load (pickup truck)", value: "small", icon: "📦" },
         { label: "Full Truckload", value: "large", icon: "🚛" },
@@ -88,10 +125,19 @@ function buildMessages(sel: Sel): Msg[] {
     });
     if (!sel.junkSize) return msgs;
     msgs.push({ role: "user", text: sel.junkSize === "small" ? "📦 Small Load" : "🚛 Full Truckload" });
-    msgs.push({ role: "bot", text: "", isResult: true, resultSel: sel });
+
+    msgs.push({
+      role: "bot",
+      text: "What's the zip code for the pickup location? (We'll calculate drive time from our Ironwood, MI base.)",
+      isZipInput: "pickup",
+    });
+    if (!sel.pickup) return msgs;
+    msgs.push({ role: "user", text: `📍 ${sel.pickup.zip} — ${sel.pickup.city}` });
+    msgs.push({ role: "bot", text: "", isResult: true });
     return msgs;
   }
 
+  // ── Moving branch ──────────────────────────────────────────────────────
   msgs.push({
     role: "bot",
     text: "What size truck will you need?",
@@ -105,7 +151,7 @@ function buildMessages(sel: Sel): Msg[] {
 
   msgs.push({
     role: "bot",
-    text: "Are we loading only, or loading AND unloading at the destination?",
+    text: "Loading only, or loading AND unloading at the destination?",
     choices: [
       { label: "Load Only", value: "loadOnly", icon: "⬆️" },
       { label: "Load & Unload", value: "loadUnload", icon: "↕️" },
@@ -116,25 +162,55 @@ function buildMessages(sel: Sel): Msg[] {
 
   msgs.push({
     role: "bot",
-    text: "Are there stairs involved at pickup or drop-off? (Stairs require an extra mover for safety.)",
+    text: "Are there stairs involved at pickup or drop-off?",
     choices: [
-      { label: "Yes, there are stairs", value: "yes", icon: "🪜" },
+      { label: "Yes, stairs", value: "yes", icon: "🪜" },
       { label: "No stairs", value: "no", icon: "✅" },
     ],
   });
   if (sel.stairs === undefined) return msgs;
   msgs.push({ role: "user", text: sel.stairs ? "🪜 Yes, there are stairs" : "✅ No stairs" });
 
-  msgs.push({ role: "bot", text: "", isResult: true, resultSel: sel });
+  msgs.push({
+    role: "bot",
+    text: `What's the zip code for the PICKUP location?\n(We're based in Ironwood, MI ${BASE_ZIP} — we'll calculate exact drive time from there.)`,
+    isZipInput: "pickup",
+  });
+  if (!sel.pickup) return msgs;
+  msgs.push({ role: "user", text: `📍 ${sel.pickup.zip} — ${sel.pickup.city}` });
+
+  if (sel.loadType === "loadUnload") {
+    msgs.push({
+      role: "bot",
+      text: "And the zip code for the DROP-OFF location?",
+      isZipInput: "dropoff",
+    });
+    if (!sel.dropoff) return msgs;
+    msgs.push({ role: "user", text: `📍 ${sel.dropoff.zip} — ${sel.dropoff.city}` });
+  }
+
+  msgs.push({ role: "bot", text: "", isResult: true });
   return msgs;
 }
 
+// ── Result card ────────────────────────────────────────────────────────────
 function ResultCard({ sel }: { sel: Sel }) {
+  const drive = sel.driveInfo;
+  const driveCostNote = drive
+    ? `+$${(drive.totalDriveHours * RATE).toLocaleString()}–$${(drive.totalDriveHours * 4 * RATE).toLocaleString()} drive`
+    : "";
+
   if (sel.service === "junk") {
     const isSmall = sel.junkSize === "small";
+    const laborLow = isSmall ? 100 : 200;
+    const laborHigh = isSmall ? 200 : 600;
+    const driveCost = drive ? drive.totalDriveHours * 2 * RATE : 0;
     return (
       <div className="space-y-4">
-        <p className="text-sm text-slate-300 font-medium">Here's your junk removal estimate:</p>
+        <p className="text-sm text-slate-300 font-semibold">Your junk removal estimate:</p>
+
+        {drive && <DriveBreakdown drive={drive} sel={sel} movers={2} />}
+
         <div className="rounded-xl overflow-hidden border border-emerald-500/40">
           <div className="bg-emerald-900/40 px-4 py-3 flex items-center gap-2">
             <Package2 className="h-4 w-4 text-emerald-400" />
@@ -143,16 +219,19 @@ function ResultCard({ sel }: { sel: Sel }) {
           <div className="p-4 grid grid-cols-2 gap-3 text-sm">
             <div className="text-slate-400">Crew</div>
             <div className="text-white font-semibold">{isSmall ? "2 movers" : "2–3 movers"}</div>
-            <div className="text-slate-400">Estimated Time</div>
-            <div className="text-white font-semibold">{isSmall ? "1–2 hours" : "2–4 hours"}</div>
-            <div className="text-slate-400">Estimate</div>
-            <div className="text-emerald-400 font-bold text-base">{isSmall ? "$100–$200" : "$200–$600"}</div>
+            <div className="text-slate-400">Labor estimate</div>
+            <div className="text-white font-semibold">${laborLow}–${laborHigh}</div>
+            {drive && <>
+              <div className="text-slate-400">Drive time</div>
+              <div className="text-white font-semibold">{drive.totalDriveHours} hr{drive.totalDriveHours !== 1 ? "s" : ""} ({Math.round(drive.totalMiles)} mi)</div>
+              <div className="text-slate-400">Drive cost (2 movers)</div>
+              <div className="text-amber-400 font-semibold">+${driveCost.toLocaleString()}</div>
+              <div className="text-slate-400 font-semibold">Total estimate</div>
+              <div className="text-emerald-400 font-bold text-base">${(laborLow + driveCost).toLocaleString()}–${(laborHigh + driveCost).toLocaleString()}</div>
+            </>}
           </div>
         </div>
-        <p className="text-xs text-slate-400 flex items-start gap-1.5">
-          <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-yellow-400" />
-          Pricing varies by volume and location. Get a free quote for an exact number.
-        </p>
+        <Disclaimer />
       </div>
     );
   }
@@ -162,68 +241,118 @@ function ResultCard({ sel }: { sel: Sel }) {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-slate-300 font-medium">
-        Here are your crew options{sel.stairs ? " (stairs bonus included)" : ""}:
+      <p className="text-sm text-slate-300 font-semibold">
+        Your moving estimate{sel.stairs ? " (stairs: +1 mover)" : ""}:
       </p>
+
+      {drive && <DriveBreakdown drive={drive} sel={sel} movers={options[0]?.movers ?? 2} />}
+
       <div className="rounded-xl overflow-hidden border border-slate-700/60">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-slate-800/80 text-slate-400 text-xs uppercase tracking-wide">
-              <th className="px-3 py-2 text-left">Movers</th>
-              <th className="px-3 py-2 text-left">Hours</th>
-              <th className="px-3 py-2 text-left">Estimate</th>
-              <th className="px-3 py-2 text-left"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {options.map((opt, i) => (
-              <tr key={i} className={`border-t border-slate-700/40 ${opt.tag === "Most Popular" ? "bg-teal-900/20" : ""}`}>
-                <td className="px-3 py-3">
-                  <div className="flex items-center gap-1.5">
-                    <Users className="h-4 w-4 text-teal-400" />
-                    <span className="font-semibold text-white">{opt.movers}</span>
-                  </div>
-                </td>
-                <td className="px-3 py-3">
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="h-4 w-4 text-blue-400" />
-                    <span className="text-slate-200">{opt.hours} hrs</span>
-                  </div>
-                </td>
-                <td className="px-3 py-3">
-                  <div className="flex items-center gap-1">
-                    <DollarSign className="h-3.5 w-3.5 text-emerald-400" />
-                    <span className="font-bold text-emerald-400 text-base">
-                      {(opt.movers * opt.hours * RATE).toLocaleString()}
-                    </span>
-                  </div>
-                </td>
-                <td className="px-3 py-3">
-                  {opt.tag && (
-                    <Badge className={`text-xs ${opt.tag === "Most Popular" ? "bg-teal-600/40 text-teal-300 border-teal-500/40" : "bg-slate-700/60 text-slate-400 border-slate-600/40"}`}>
-                      {opt.tag === "Most Popular" && <Star className="h-2.5 w-2.5 mr-1" />}
-                      {opt.tag}
-                    </Badge>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="bg-slate-800/80 px-3 py-2 grid grid-cols-5 text-slate-400 text-xs uppercase tracking-wide font-medium">
+          <span>Movers</span>
+          <span>Hours</span>
+          <span>Labor</span>
+          <span>{drive ? "Drive" : ""}</span>
+          <span>Total</span>
+        </div>
+        {options.map((opt, i) => {
+          const labor = opt.movers * opt.hours * RATE;
+          const driveCost = drive ? Math.round(drive.totalDriveHours * opt.movers * RATE) : 0;
+          const total = labor + driveCost;
+          return (
+            <div key={i} className={`border-t border-slate-700/40 px-3 py-3 grid grid-cols-5 gap-1 items-center text-sm ${opt.tag === "Most Popular" ? "bg-teal-900/20" : ""}`}>
+              <div className="flex items-center gap-1">
+                <Users className="h-3.5 w-3.5 text-teal-400" />
+                <span className="font-bold text-white">{opt.movers}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Clock className="h-3.5 w-3.5 text-blue-400" />
+                <span className="text-slate-200">{opt.hours}h</span>
+              </div>
+              <div className="text-slate-300">${labor.toLocaleString()}</div>
+              <div className="text-amber-400 text-xs">{drive ? `+$${driveCost.toLocaleString()}` : "—"}</div>
+              <div className="flex flex-col gap-0.5">
+                <span className="font-bold text-emerald-400">${total.toLocaleString()}</span>
+                {opt.tag && (
+                  <Badge className={`text-[10px] px-1 py-0 h-4 w-fit ${opt.tag === "Most Popular" ? "bg-teal-600/40 text-teal-300 border-teal-500/40" : "bg-slate-700/50 text-slate-400 border-slate-600/40"}`}>
+                    {opt.tag === "Most Popular" && <Star className="h-2 w-2 mr-0.5" />}{opt.tag}
+                  </Badge>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
-      <p className="text-xs text-slate-400 flex items-start gap-1.5">
-        <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-yellow-400" />
-        Estimates based on ${RATE}/mover/hr. Travel time &amp; distance may affect final price.
-      </p>
+      <Disclaimer drive={drive} />
     </div>
   );
 }
 
+function DriveBreakdown({ drive, sel, movers }: { drive: DriveInfo; sel: Sel; movers: number }) {
+  return (
+    <div className="rounded-xl border border-amber-500/30 bg-amber-900/15 p-3 space-y-2 text-sm">
+      <div className="flex items-center gap-2 font-semibold text-amber-300">
+        <Navigation className="h-4 w-4" />
+        Drive Time Breakdown
+      </div>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-400">
+        <span>From {BASE_CITY}</span>
+        <span className="text-slate-200">→ {sel.pickup?.city} ({Math.round(drive.pickupMiles)} mi)</span>
+        {sel.loadType === "loadUnload" && sel.dropoff && <>
+          <span>Pickup → Drop-off</span>
+          <span className="text-slate-200">→ {sel.dropoff.city} ({Math.round(drive.dropoffMiles)} mi)</span>
+        </>}
+        <span>Return to {BASE_CITY}</span>
+        <span className="text-slate-200">({Math.round(drive.returnMiles)} mi)</span>
+        <span className="font-semibold text-amber-300 pt-1 border-t border-amber-700/30">Total drive</span>
+        <span className="text-amber-300 font-semibold pt-1 border-t border-amber-700/30">
+          {Math.round(drive.totalMiles)} mi · {drive.totalDriveHours} hr{drive.totalDriveHours !== 1 ? "s" : ""}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function Disclaimer({ drive }: { drive?: DriveInfo }) {
+  return (
+    <p className="text-xs text-slate-400 flex items-start gap-1.5">
+      <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-yellow-400" />
+      Estimates based on ${RATE}/mover/hr labor{drive ? ` + drive time at ${DRIVE_SPEED_MPH} mph avg` : ""}. Actual pricing confirmed at booking.
+    </p>
+  );
+}
+
+// ── Zip fetcher ────────────────────────────────────────────────────────────
+async function fetchZip(zip: string): Promise<ZipInfo> {
+  const res = await fetch(`https://api.zippopotam.us/us/${zip}`);
+  if (!res.ok) throw new Error("Zip not found");
+  const data = await res.json();
+  const place = data.places[0];
+  return {
+    zip,
+    city: `${place["place name"]}, ${place["state abbreviation"]}`,
+    lat: parseFloat(place.latitude),
+    lng: parseFloat(place.longitude),
+  };
+}
+
+// ── Main component ─────────────────────────────────────────────────────────
 export default function MovingEstimator() {
   const [sel, setSel] = useState<Sel>({});
-  const messages = buildMessages(sel);
+  const [zipInput, setZipInput] = useState("");
+  const [zipLoading, setZipLoading] = useState(false);
+  const [zipError, setZipError] = useState("");
+  const bottomRef = useRef<HTMLDivElement>(null);
 
-  function handle(step: keyof Sel | "junkSize", value: string) {
+  const messages = buildMessages(sel);
+  const isComplete = messages.some(m => m.isResult);
+  const activeZipStep = !isComplete ? messages.findLast(m => m.isZipInput)?.isZipInput : undefined;
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages.length]);
+
+  function handleChoice(step: string, value: string) {
     if (step === "service") setSel({ service: value as Service });
     else if (step === "truckSize") setSel(s => ({ ...s, truckSize: value as TruckSize }));
     else if (step === "loadType") setSel(s => ({ ...s, loadType: value as LoadType }));
@@ -231,24 +360,51 @@ export default function MovingEstimator() {
     else if (step === "junkSize") setSel(s => ({ ...s, junkSize: value as JunkSize }));
   }
 
-  function getStepForChoice(msgIndex: number): keyof Sel | "junkSize" {
-    const botMsgs = messages.filter(m => m.role === "bot" && m.choices);
-    const idx = messages.slice(0, msgIndex + 1).filter(m => m.role === "bot" && m.choices).length - 1;
-    const stepOrder: (keyof Sel | "junkSize")[] = ["service", "junkSize", "truckSize", "loadType", "stairs"];
+  function getStepKey(msgIndex: number): string {
+    const botChoiceMsgs = messages.slice(0, msgIndex + 1).filter(m => m.role === "bot" && m.choices);
+    const idx = botChoiceMsgs.length - 1;
     if (sel.service === "moving") {
-      const moveSteps: (keyof Sel | "junkSize")[] = ["service", "truckSize", "loadType", "stairs"];
-      return moveSteps[idx] ?? "service";
+      return (["service", "truckSize", "loadType", "stairs"] as const)[idx] ?? "service";
     }
-    return stepOrder[idx] ?? "service";
+    return (["service", "junkSize"] as const)[idx] ?? "service";
   }
 
-  const isComplete = messages.some(m => m.isResult);
+  async function handleZipSubmit() {
+    const zip = zipInput.trim().replace(/\D/g, "").slice(0, 5);
+    if (zip.length !== 5) { setZipError("Please enter a valid 5-digit zip code."); return; }
+    setZipLoading(true);
+    setZipError("");
+    try {
+      const info = await fetchZip(zip);
+      if (activeZipStep === "pickup") {
+        setSel(s => {
+          const updated = { ...s, pickup: info };
+          if (s.loadType !== "loadUnload") {
+            updated.driveInfo = computeDrive(updated);
+          }
+          return updated;
+        });
+      } else if (activeZipStep === "dropoff") {
+        setSel(s => {
+          const updated = { ...s, dropoff: info };
+          updated.driveInfo = computeDrive(updated);
+          return updated;
+        });
+      }
+      setZipInput("");
+    } catch {
+      setZipError("Zip code not found. Please check and try again.");
+    } finally {
+      setZipLoading(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      <div className="max-w-lg mx-auto px-4 pb-8">
+      <div className="max-w-lg mx-auto px-4 pb-24">
+
         {/* Header */}
-        <div className="flex items-center gap-3 pt-6 pb-4">
+        <div className="flex items-center gap-3 pt-6 pb-5">
           <Link href="/">
             <Button variant="ghost" size="sm" className="text-slate-400 hover:text-white p-2">
               <ArrowLeft className="h-5 w-5" />
@@ -260,61 +416,59 @@ export default function MovingEstimator() {
             </div>
             <div>
               <h1 className="font-bold text-white text-lg leading-tight">Moving Estimator</h1>
-              <p className="text-slate-400 text-xs">Get an instant cost estimate</p>
+              <p className="text-slate-400 text-xs">Based in Ironwood, MI {BASE_ZIP}</p>
             </div>
           </div>
           {Object.keys(sel).length > 0 && (
-            <Button variant="ghost" size="sm" onClick={() => setSel({})} className="ml-auto text-slate-400 hover:text-white gap-1">
-              <RotateCcw className="h-4 w-4" /> Start Over
+            <Button variant="ghost" size="sm" onClick={() => { setSel({}); setZipInput(""); setZipError(""); }} className="ml-auto text-slate-400 hover:text-white gap-1 text-xs">
+              <RotateCcw className="h-3.5 w-3.5" /> Restart
             </Button>
           )}
         </div>
 
-        {/* Chat bubbles */}
+        {/* Chat messages */}
         <div className="space-y-4">
           {messages.map((msg, i) => (
             <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
               {msg.role === "bot" && (
-                <div className="flex items-end gap-2 max-w-[85%]">
+                <div className="flex items-end gap-2 max-w-[88%]">
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-teal-500 to-blue-600 flex items-center justify-center shrink-0 mb-1">
                     <Truck className="h-4 w-4 text-white" />
                   </div>
-                  <div className="space-y-3">
-                    {msg.isResult && msg.resultSel ? (
+                  <div className="space-y-2 flex-1">
+                    {msg.isResult ? (
                       <Card className="bg-slate-800/80 border-slate-700/60 p-4">
-                        <ResultCard sel={msg.resultSel} />
+                        <ResultCard sel={sel} />
                         <div className="mt-5 space-y-2">
-                          <Link href="/request-quote">
+                          <Link href="/quote">
                             <Button className="w-full bg-gradient-to-r from-teal-500 to-blue-600 hover:from-teal-600 hover:to-blue-700 font-semibold">
-                              Get a Free Official Quote <ChevronRight className="h-4 w-4 ml-1" />
+                              Get My Free Official Quote <ChevronRight className="h-4 w-4 ml-1" />
                             </Button>
                           </Link>
-                          <Button variant="outline" onClick={() => setSel({})} className="w-full border-slate-600 text-slate-300 hover:bg-slate-700 gap-2">
-                            <RotateCcw className="h-4 w-4" /> Start Over
+                          <Button variant="outline" onClick={() => { setSel({}); setZipInput(""); setZipError(""); }} className="w-full border-slate-600 text-slate-300 hover:bg-slate-700 gap-2 text-sm">
+                            <RotateCcw className="h-3.5 w-3.5" /> Start Over
                           </Button>
                         </div>
                       </Card>
                     ) : (
-                      <div className="bg-slate-700/60 rounded-2xl rounded-tl-sm px-4 py-3 text-slate-100 text-sm leading-relaxed">
+                      <div className="bg-slate-700/60 rounded-2xl rounded-tl-sm px-4 py-3 text-slate-100 text-sm leading-relaxed whitespace-pre-wrap">
                         {msg.text}
                         {msg.choices && (
                           <div className="mt-3 flex flex-wrap gap-2">
                             {msg.choices.map((c) => {
-                              const step = getStepForChoice(i);
                               const isAnswered = i < messages.length - 1;
                               return (
                                 <button
                                   key={c.value}
                                   disabled={isAnswered}
-                                  onClick={() => handle(step, c.value)}
+                                  onClick={() => handleChoice(getStepKey(i), c.value)}
                                   className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border transition-all
                                     ${isAnswered
-                                      ? "border-slate-600/40 text-slate-500 bg-slate-800/30 cursor-default"
+                                      ? "border-slate-600/30 text-slate-600 bg-slate-800/20 cursor-default"
                                       : "border-teal-500/60 text-teal-300 bg-teal-900/30 hover:bg-teal-900/60 hover:border-teal-400 active:scale-95"
                                     }`}
                                 >
-                                  {c.icon && <span>{c.icon}</span>}
-                                  {c.label}
+                                  {c.icon && <span>{c.icon}</span>}{c.label}
                                 </button>
                               );
                             })}
@@ -334,20 +488,56 @@ export default function MovingEstimator() {
           ))}
         </div>
 
-        {/* Tip card while in progress */}
-        {!isComplete && Object.keys(sel).length === 0 && (
-          <Card className="mt-6 p-4 border-slate-700/50 bg-slate-800/40">
-            <p className="text-xs text-slate-400 text-center">
-              💡 Tip: Stairs add 1 extra mover for safety and efficiency
+        <div ref={bottomRef} />
+
+        {/* Tip shown at start */}
+        {Object.keys(sel).length === 0 && (
+          <Card className="mt-6 p-4 border-slate-700/50 bg-slate-800/40 space-y-1.5">
+            <p className="text-xs text-slate-400 flex items-center gap-2">
+              <MapPin className="h-3.5 w-3.5 text-teal-400 shrink-0" />
+              Drive time is calculated from our Ironwood, MI base (49938) to your location and back
+            </p>
+            <p className="text-xs text-slate-400 flex items-center gap-2">
+              <Users className="h-3.5 w-3.5 text-teal-400 shrink-0" />
+              Stairs add 1 extra mover for safety
             </p>
           </Card>
         )}
 
         {/* Rate note */}
-        <p className="text-center text-xs text-slate-500 mt-6">
-          Rates from <span className="text-slate-400 font-medium">${RATE}/mover/hr</span> · Travel time billed separately · Licensed & insured
+        <p className="text-center text-xs text-slate-500 mt-5">
+          ${RATE}/mover/hr · {DRIVE_SPEED_MPH} mph avg drive speed · Licensed & Insured
         </p>
       </div>
+
+      {/* Zip input — sticky at bottom when active */}
+      {activeZipStep && (
+        <div className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur border-t border-slate-700/60 px-4 py-4">
+          <p className="text-xs text-slate-400 mb-2 flex items-center gap-1.5">
+            <MapPin className="h-3.5 w-3.5 text-teal-400" />
+            Enter the {activeZipStep === "pickup" ? "pickup" : "drop-off"} zip code
+          </p>
+          <div className="flex gap-2 max-w-lg mx-auto">
+            <Input
+              value={zipInput}
+              onChange={e => { setZipInput(e.target.value.replace(/\D/g, "").slice(0, 5)); setZipError(""); }}
+              onKeyDown={e => { if (e.key === "Enter") handleZipSubmit(); }}
+              placeholder="e.g. 49938"
+              maxLength={5}
+              className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 text-lg font-mono tracking-widest text-center"
+              autoFocus
+            />
+            <Button
+              onClick={handleZipSubmit}
+              disabled={zipLoading || zipInput.length !== 5}
+              className="bg-teal-600 hover:bg-teal-700 px-5"
+            >
+              {zipLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            </Button>
+          </div>
+          {zipError && <p className="text-xs text-red-400 mt-1.5 text-center">{zipError}</p>}
+        </div>
+      )}
     </div>
   );
 }
