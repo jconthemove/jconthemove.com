@@ -109,6 +109,30 @@ async function ensureStakingTreasuryUser() {
   }
 }
 
+async function ensureRewardSettingsSeeded() {
+  try {
+    const existing = await db.select().from(rewardSettings);
+    if (existing.length === 0) {
+      console.log("Seeding default reward settings...");
+      const defaults = [
+        { settingKey: "signup_bonus", label: "Sign Up Bonus", description: "Tokens awarded when a new user registers", tokenAmount: "250.00", isActive: true },
+        { settingKey: "customer_quote_accepted", label: "Quote Accepted", description: "Tokens awarded when customer's quote is accepted/confirmed", tokenAmount: "200.00", isActive: true },
+        { settingKey: "customer_quote_completed", label: "Job Completed", description: "Tokens awarded when a moving/junk job is fully completed", tokenAmount: "1500.00", isActive: true },
+        { settingKey: "referral_confirmed", label: "Referral Confirmed", description: "Tokens awarded when a referred user signs up and activates", tokenAmount: "2500.00", isActive: true },
+        { settingKey: "employee_job_completed", label: "Employee Job Reward", description: "Tokens awarded to each employee who completes a job", tokenAmount: "1000.00", isActive: true },
+        { settingKey: "daily_checkin", label: "Daily Check-in", description: "Tokens awarded for daily app check-in", tokenAmount: "50.00", isActive: true },
+        { settingKey: "scripture_reward", label: "Daily Scripture", description: "Tokens awarded for reading the daily scripture", tokenAmount: "10.00", isActive: true },
+        { settingKey: "shop_purchase", label: "Shop Purchase Reward", description: "Tokens awarded to buyer after a community shop purchase", tokenAmount: "100.00", isActive: true },
+        { settingKey: "jewelry_purchase", label: "Jewelry Purchase Reward", description: "Tokens awarded after a Nature Made Jewls purchase", tokenAmount: "150.00", isActive: true },
+      ];
+      await db.insert(rewardSettings).values(defaults);
+      console.log("✅ Default reward settings seeded successfully");
+    }
+  } catch (error) {
+    console.error("Failed to seed reward settings:", error);
+  }
+}
+
 const approvalTokens = new Map<string, { userId: string; action: string; expiresAt: Date }>();
 
 function generateApprovalToken(userId: string, action: string): string {
@@ -126,6 +150,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   await ensureStakingTiersSeeded();
   await ensureStakingTreasuryUser();
   await ensureMomsAccount();
+  await ensureRewardSettingsSeeded();
 
   // Public health check endpoint for deployment monitoring (MUST be before auth setup)
   // This endpoint is used by Replit Autoscale Deployments to verify the service is healthy

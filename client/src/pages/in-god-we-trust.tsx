@@ -39,7 +39,11 @@ import {
   ChevronDown,
   Settings,
   Snowflake,
-  Layers
+  Layers,
+  Trash2,
+  Tag,
+  ToggleLeft,
+  ToggleRight
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -145,6 +149,54 @@ export default function InGodWeTrustPage() {
   });
   const [editingRewardKey, setEditingRewardKey] = useState<string | null>(null);
   const [newRewardAmount, setNewRewardAmount] = useState("");
+
+  // Promo Codes
+  type PromoCode = {
+    id: string; code: string; description: string;
+    discountPercent: string; discountPercentJewelry: string;
+    rewardTokens: string; referralRewardTokens: string;
+    maxUses: number | null; usesCount: number;
+    isActive: boolean; expiresAt: string | null; createdAt: string;
+  };
+  const { data: promoCodes, refetch: refetchPromoCodes } = useQuery<PromoCode[]>({
+    queryKey: ["/api/admin/promo-codes"],
+  });
+  const blankPromo = { code: "", description: "", discountPercent: "0", discountPercentJewelry: "0", rewardTokens: "0", referralRewardTokens: "0", maxUses: "", expiresAt: "", isActive: true };
+  const [showPromoForm, setShowPromoForm] = useState(false);
+  const [editingPromo, setEditingPromo] = useState<PromoCode | null>(null);
+  const [promoForm, setPromoForm] = useState(blankPromo);
+
+  const createPromoMutation = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/admin/promo-codes", data),
+    onSuccess: () => { toast({ title: "Promo code created!" }); queryClient.invalidateQueries({ queryKey: ["/api/admin/promo-codes"] }); setShowPromoForm(false); setPromoForm(blankPromo); },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+  const updatePromoMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => apiRequest("PATCH", `/api/admin/promo-codes/${id}`, data),
+    onSuccess: () => { toast({ title: "Promo code updated!" }); queryClient.invalidateQueries({ queryKey: ["/api/admin/promo-codes"] }); setEditingPromo(null); },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+  const deletePromoMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/admin/promo-codes/${id}`),
+    onSuccess: () => { toast({ title: "Promo code deleted" }); queryClient.invalidateQueries({ queryKey: ["/api/admin/promo-codes"] }); },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  function savePromo() {
+    const payload = {
+      code: promoForm.code.toUpperCase().trim(),
+      description: promoForm.description,
+      discountPercent: promoForm.discountPercent || "0",
+      discountPercentJewelry: promoForm.discountPercentJewelry || "0",
+      rewardTokens: promoForm.rewardTokens || "0",
+      referralRewardTokens: promoForm.referralRewardTokens || "0",
+      maxUses: promoForm.maxUses ? parseInt(promoForm.maxUses as string) : null,
+      expiresAt: promoForm.expiresAt || null,
+      isActive: promoForm.isActive,
+    };
+    if (editingPromo) { updatePromoMutation.mutate({ id: editingPromo.id, data: payload }); }
+    else { createPromoMutation.mutate(payload); }
+  }
 
   // Token Ledger - All JCMOVES transactions across customers and employees
   const { data: tokenLedger, refetch: refetchLedger } = useQuery<{
@@ -2426,6 +2478,8 @@ export default function InGodWeTrustPage() {
 
           {/* Reward Configuration Tab */}
           <TabsContent value="reward-config" className="space-y-6">
+
+            {/* ── REWARD AMOUNTS ── */}
             <Card className="p-6 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
@@ -2433,120 +2487,183 @@ export default function InGodWeTrustPage() {
                     <Settings className="h-6 w-6 text-white" />
                   </div>
                   <div>
-                    <h2 className="text-xl font-bold text-white">Reward Configuration</h2>
-                    <p className="text-sm text-slate-400">Configure token amounts for customer and employee rewards</p>
+                    <h2 className="text-xl font-bold text-white">Reward Amounts</h2>
+                    <p className="text-sm text-slate-400">Set how many JCMOVES each action earns</p>
                   </div>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => refetchRewardSettings()}
-                  className="border-teal-500/50 text-teal-300 hover:bg-teal-500/10"
-                  data-testid="button-refresh-rewards"
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Refresh
+                <Button variant="outline" size="sm" onClick={() => refetchRewardSettings()} className="border-teal-500/50 text-teal-300 hover:bg-teal-500/10">
+                  <RefreshCw className="h-4 w-4 mr-2" />Refresh
                 </Button>
               </div>
-
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {rewardSettings?.map((setting) => (
                   <div key={setting.id} className="flex items-center justify-between p-4 rounded-lg bg-slate-900/50 border border-slate-700/50">
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <span className="text-white font-medium">{setting.label}</span>
-                        <Badge variant="outline" className={setting.isActive ? "border-green-500 text-green-400" : "border-red-500 text-red-400"}>
-                          {setting.isActive ? "Active" : "Inactive"}
+                        <Badge variant="outline" className={setting.isActive ? "border-green-500 text-green-400 text-xs" : "border-red-500 text-red-400 text-xs"}>
+                          {setting.isActive ? "Active" : "Off"}
                         </Badge>
                       </div>
-                      {setting.description && (
-                        <p className="text-sm text-slate-400 mt-1">{setting.description}</p>
-                      )}
-                      <div className="text-xs text-slate-500 mt-1">
-                        Key: {setting.settingKey}
-                      </div>
+                      {setting.description && <p className="text-xs text-slate-400 mt-0.5">{setting.description}</p>}
                     </div>
                     <div className="flex items-center gap-3">
                       {editingRewardKey === setting.settingKey ? (
                         <>
-                          <Input
-                            type="number"
-                            value={newRewardAmount}
-                            onChange={(e) => setNewRewardAmount(e.target.value)}
-                            className="w-32 bg-slate-800 border-slate-600"
-                            placeholder="Amount"
-                            data-testid={`input-reward-${setting.settingKey}`}
-                          />
-                          <Button
-                            size="sm"
-                            onClick={() => {
-                              const amount = parseFloat(newRewardAmount);
-                              if (!isNaN(amount) && amount >= 0) {
-                                updateRewardSettingMutation.mutate({ key: setting.settingKey, tokenAmount: amount });
-                              }
-                            }}
-                            disabled={updateRewardSettingMutation.isPending}
-                            className="bg-green-600 hover:bg-green-700"
-                            data-testid={`button-save-reward-${setting.settingKey}`}
-                          >
-                            {updateRewardSettingMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                          <Input type="number" value={newRewardAmount} onChange={(e) => setNewRewardAmount(e.target.value)} className="w-28 bg-slate-800 border-slate-600 h-8" placeholder="Amount" />
+                          <Button size="sm" onClick={() => { const a = parseFloat(newRewardAmount); if (!isNaN(a) && a >= 0) updateRewardSettingMutation.mutate({ key: setting.settingKey, tokenAmount: a }); }} disabled={updateRewardSettingMutation.isPending} className="bg-green-600 hover:bg-green-700 h-8">
+                            {updateRewardSettingMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
                           </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setEditingRewardKey(null);
-                              setNewRewardAmount("");
-                            }}
-                            className="border-slate-600"
-                            data-testid={`button-cancel-reward-${setting.settingKey}`}
-                          >
-                            <XCircle className="h-4 w-4" />
-                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => { setEditingRewardKey(null); setNewRewardAmount(""); }} className="border-slate-600 h-8"><XCircle className="h-3 w-3" /></Button>
                         </>
                       ) : (
                         <>
                           <div className="text-right">
-                            <div className="text-2xl font-bold text-teal-400">
-                              {parseFloat(setting.tokenAmount).toLocaleString()}
-                            </div>
-                            <div className="text-xs text-slate-500">
-                              ${(parseFloat(setting.tokenAmount) * 0.01).toFixed(2)} value
-                            </div>
+                            <div className="text-xl font-bold text-teal-400">{parseFloat(setting.tokenAmount).toLocaleString()}</div>
+                            <div className="text-xs text-slate-500">JCMOVES</div>
                           </div>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setEditingRewardKey(setting.settingKey);
-                              setNewRewardAmount(setting.tokenAmount);
-                            }}
-                            className="border-teal-500/50 text-teal-300 hover:bg-teal-500/10"
-                            data-testid={`button-edit-reward-${setting.settingKey}`}
-                          >
-                            <Edit className="h-4 w-4" />
+                          <Button size="sm" variant="outline" onClick={() => { setEditingRewardKey(setting.settingKey); setNewRewardAmount(setting.tokenAmount); }} className="border-teal-500/50 text-teal-300 hover:bg-teal-500/10 h-8">
+                            <Edit className="h-3 w-3" />
                           </Button>
                         </>
                       )}
                     </div>
                   </div>
                 ))}
-
                 {(!rewardSettings || rewardSettings.length === 0) && (
-                  <div className="text-center py-8 text-slate-400">
-                    <Settings className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    No reward settings configured
+                  <div className="text-center py-6 text-slate-400">
+                    <Settings className="h-10 w-10 mx-auto mb-3 opacity-40" />
+                    <p className="text-sm">Loading reward settings…</p>
                   </div>
                 )}
               </div>
+            </Card>
 
-              <div className="mt-6 p-4 rounded-lg bg-teal-500/10 border border-teal-500/30">
-                <h4 className="font-medium text-teal-300 mb-2">Reward Credits Guide</h4>
-                <ul className="text-sm text-slate-400 space-y-1">
-                  <li>• <strong>200 JCMOVES</strong> credits (Quote Accepted)</li>
-                  <li>• <strong>1,500 JCMOVES</strong> credits (Job Completed)</li>
-                  <li>• <strong>2,500 JCMOVES</strong> credits (Referral Confirmed)</li>
-                </ul>
+            {/* ── PROMO CODES ── */}
+            <Card className="p-6 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600">
+                    <Tag className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-white">Promo Codes</h2>
+                    <p className="text-sm text-slate-400">Create and manage discount codes for customers</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => refetchPromoCodes()} className="border-slate-600 text-slate-300 h-8">
+                    <RefreshCw className="h-3 w-3 mr-1" />Refresh
+                  </Button>
+                  <Button size="sm" onClick={() => { setEditingPromo(null); setPromoForm(blankPromo); setShowPromoForm(true); }} className="bg-green-600 hover:bg-green-700 h-8">
+                    <Plus className="h-3 w-3 mr-1" />New Code
+                  </Button>
+                </div>
+              </div>
+
+              {/* Add / Edit Form */}
+              {(showPromoForm || editingPromo) && (
+                <div className="mb-6 p-5 rounded-xl border border-green-500/30 bg-green-900/20 space-y-4">
+                  <h3 className="font-bold text-green-300 flex items-center gap-2">
+                    <Tag className="h-4 w-4" />
+                    {editingPromo ? `Editing: ${editingPromo.code}` : "New Promo Code"}
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-slate-300 text-xs">Code *</Label>
+                      <Input value={promoForm.code} onChange={e => setPromoForm(f => ({...f, code: e.target.value.toUpperCase()}))} placeholder="SUMMER25" className="bg-slate-800 border-slate-600 text-white uppercase font-mono mt-1" disabled={!!editingPromo} />
+                    </div>
+                    <div>
+                      <Label className="text-slate-300 text-xs">Description</Label>
+                      <Input value={promoForm.description} onChange={e => setPromoForm(f => ({...f, description: e.target.value}))} placeholder="Summer sale discount" className="bg-slate-800 border-slate-600 text-white mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-slate-300 text-xs">Service Discount %</Label>
+                      <Input type="number" min="0" max="100" value={promoForm.discountPercent} onChange={e => setPromoForm(f => ({...f, discountPercent: e.target.value}))} placeholder="0" className="bg-slate-800 border-slate-600 text-white mt-1" />
+                      <p className="text-xs text-slate-500 mt-0.5">Applied to moving/junk removal quotes</p>
+                    </div>
+                    <div>
+                      <Label className="text-slate-300 text-xs">Jewelry Discount %</Label>
+                      <Input type="number" min="0" max="100" value={promoForm.discountPercentJewelry} onChange={e => setPromoForm(f => ({...f, discountPercentJewelry: e.target.value}))} placeholder="0" className="bg-slate-800 border-slate-600 text-white mt-1" />
+                      <p className="text-xs text-slate-500 mt-0.5">Applied to Nature Made Jewls purchases</p>
+                    </div>
+                    <div>
+                      <Label className="text-slate-300 text-xs">Bonus JCMOVES (to customer)</Label>
+                      <Input type="number" min="0" value={promoForm.rewardTokens} onChange={e => setPromoForm(f => ({...f, rewardTokens: e.target.value}))} placeholder="0" className="bg-slate-800 border-slate-600 text-white mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-slate-300 text-xs">Referral JCMOVES (to code owner)</Label>
+                      <Input type="number" min="0" value={promoForm.referralRewardTokens} onChange={e => setPromoForm(f => ({...f, referralRewardTokens: e.target.value}))} placeholder="0" className="bg-slate-800 border-slate-600 text-white mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-slate-300 text-xs">Max Uses (blank = unlimited)</Label>
+                      <Input type="number" min="1" value={promoForm.maxUses} onChange={e => setPromoForm(f => ({...f, maxUses: e.target.value}))} placeholder="Unlimited" className="bg-slate-800 border-slate-600 text-white mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-slate-300 text-xs">Expiry Date (blank = never)</Label>
+                      <Input type="date" value={promoForm.expiresAt} onChange={e => setPromoForm(f => ({...f, expiresAt: e.target.value}))} className="bg-slate-800 border-slate-600 text-white mt-1" />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Switch checked={promoForm.isActive} onCheckedChange={v => setPromoForm(f => ({...f, isActive: v}))} />
+                    <Label className="text-slate-300 text-sm">{promoForm.isActive ? "Active — customers can use this code" : "Inactive — code is disabled"}</Label>
+                  </div>
+                  <div className="flex gap-3 pt-2">
+                    <Button onClick={savePromo} disabled={createPromoMutation.isPending || updatePromoMutation.isPending || !promoForm.code} className="bg-green-600 hover:bg-green-700">
+                      {(createPromoMutation.isPending || updatePromoMutation.isPending) ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                      {editingPromo ? "Save Changes" : "Create Code"}
+                    </Button>
+                    <Button variant="outline" onClick={() => { setShowPromoForm(false); setEditingPromo(null); setPromoForm(blankPromo); }} className="border-slate-600">
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Promo Code List */}
+              <div className="space-y-3">
+                {promoCodes?.map((pc) => (
+                  <div key={pc.id} className={`p-4 rounded-xl border transition-colors ${pc.isActive ? "border-green-500/30 bg-green-900/10" : "border-slate-700/50 bg-slate-900/30 opacity-60"}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono font-black text-lg text-white tracking-widest">{pc.code}</span>
+                          <Badge className={pc.isActive ? "bg-green-600/30 text-green-300 border-green-500/40" : "bg-slate-700/50 text-slate-400"}>
+                            {pc.isActive ? "Active" : "Inactive"}
+                          </Badge>
+                          <Badge variant="outline" className="border-slate-600 text-slate-400 text-xs">
+                            {pc.usesCount}{pc.maxUses ? `/${pc.maxUses}` : ""} uses
+                          </Badge>
+                        </div>
+                        {pc.description && <p className="text-sm text-slate-400 mt-1">{pc.description}</p>}
+                        <div className="flex flex-wrap gap-3 mt-2 text-xs">
+                          {parseFloat(pc.discountPercent) > 0 && <span className="text-blue-300">🏷 {pc.discountPercent}% off services</span>}
+                          {parseFloat(pc.discountPercentJewelry) > 0 && <span className="text-purple-300">💎 {pc.discountPercentJewelry}% off jewelry</span>}
+                          {parseFloat(pc.rewardTokens) > 0 && <span className="text-teal-300">🪙 +{parseFloat(pc.rewardTokens).toLocaleString()} JCMOVES to customer</span>}
+                          {parseFloat(pc.referralRewardTokens) > 0 && <span className="text-amber-300">⭐ +{parseFloat(pc.referralRewardTokens).toLocaleString()} JCMOVES to referrer</span>}
+                          {pc.expiresAt && <span className="text-red-300">⏰ Expires {format(new Date(pc.expiresAt), 'MMM d, yyyy')}</span>}
+                        </div>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <Button size="sm" variant="outline" onClick={() => { setEditingPromo(pc); setPromoForm({ code: pc.code, description: pc.description, discountPercent: pc.discountPercent, discountPercentJewelry: pc.discountPercentJewelry, rewardTokens: pc.rewardTokens, referralRewardTokens: pc.referralRewardTokens, maxUses: pc.maxUses?.toString() || "", expiresAt: pc.expiresAt ? pc.expiresAt.split('T')[0] : "", isActive: pc.isActive }); setShowPromoForm(false); }} className="border-slate-600 text-slate-300 h-8 w-8 p-0">
+                          <Edit className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => updatePromoMutation.mutate({ id: pc.id, data: { isActive: !pc.isActive } })} className={`h-8 w-8 p-0 ${pc.isActive ? "border-orange-500/50 text-orange-400" : "border-green-500/50 text-green-400"}`}>
+                          {pc.isActive ? <ToggleRight className="h-3.5 w-3.5" /> : <ToggleLeft className="h-3.5 w-3.5" />}
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => { if (confirm(`Delete promo code "${pc.code}"?`)) deletePromoMutation.mutate(pc.id); }} disabled={deletePromoMutation.isPending} className="border-red-500/50 text-red-400 hover:bg-red-500/10 h-8 w-8 p-0">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {(!promoCodes || promoCodes.length === 0) && (
+                  <div className="text-center py-10 text-slate-500">
+                    <Tag className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                    <p className="text-sm">No promo codes yet. Click "New Code" to create one.</p>
+                  </div>
+                )}
               </div>
             </Card>
           </TabsContent>
