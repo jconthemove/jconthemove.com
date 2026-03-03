@@ -11,8 +11,11 @@ import {
 } from "lucide-react";
 
 // ── Constants ──────────────────────────────────────────────────────────────
-const RATE = 50;                   // $ per mover per hour
-const DRIVE_SPEED_MPH = 45;        // conservative UP Michigan roads
+const RATE = 50;                   // $ per mover per hour (3–4 hr jobs, 2–4 movers)
+const SHORT_JOB_RATE = 150;        // $ per hour flat for <3 hr / 2-mover small jobs
+const SHORT_JOB_FULL = 300;        // full price for short job (2 movers, 2 hrs)
+const JC222_PRICE = 222;           // JC222 promo discount price for short jobs
+const DRIVE_SPEED_MPH = 35;        // UP Michigan roads average
 const BASE_ZIP = "49938";
 const BASE_LAT = 46.4539;
 const BASE_LNG = -90.1715;
@@ -86,11 +89,16 @@ function computeDrive(sel: Sel): DriveInfo | undefined {
   return { pickupMiles, dropoffMiles, returnMiles, totalMiles: total, totalDriveHours: roundHalf(total / DRIVE_SPEED_MPH) };
 }
 
+/** Small truck, load-only = short job → flat $300 rate (not $50/mover/hr) */
+function isShortJob(sel: Sel): boolean {
+  return sel.service === "moving" && sel.truckSize === "small" && sel.loadType === "loadOnly";
+}
+
 function getOptions(sel: Sel): Option[] {
   const bonus = sel.stairs ? 1 : 0;
   if (sel.service !== "moving") return [];
   if (sel.truckSize === "small" && sel.loadType === "loadOnly")
-    return [{ movers: 2 + bonus, hours: 2, tag: "Standard" }];
+    return [{ movers: 2 + bonus, hours: 2, tag: "JC222 Available" }];
   if (sel.truckSize === "large" && sel.loadType === "loadOnly")
     return [{ movers: 2 + bonus, hours: 4 }, { movers: 3 + bonus, hours: 3, tag: "Most Popular" }, { movers: 4 + bonus, hours: 2, tag: "Fastest" }];
   if (sel.loadType === "loadUnload")
@@ -239,6 +247,74 @@ function ResultCard({ sel }: { sel: Sel }) {
   const options = getOptions(sel);
   if (!options.length) return null;
 
+  const shortJob = isShortJob(sel);
+  const opt0 = options[0];
+  const driveCost0 = drive ? Math.round(drive.totalDriveHours * opt0.movers * RATE) : 0;
+
+  // ── Short job (small truck, load-only, 2 movers, 2 hrs) ─────────────────
+  if (shortJob) {
+    const fullTotal = SHORT_JOB_FULL + driveCost0;
+    const promoTotal = JC222_PRICE + driveCost0;
+    return (
+      <div className="space-y-4">
+        <p className="text-sm text-slate-300 font-semibold">
+          Your moving estimate{sel.stairs ? " (+1 mover for stairs)" : ""}:
+        </p>
+
+        {drive && <DriveBreakdown drive={drive} sel={sel} movers={opt0.movers} />}
+
+        {/* Rate explanation */}
+        <div className="rounded-xl border border-yellow-500/30 bg-yellow-900/15 p-3 text-xs text-yellow-200 space-y-1">
+          <p className="font-semibold text-yellow-300 flex items-center gap-1.5">
+            <AlertCircle className="h-3.5 w-3.5" /> Short Job Rate Applies
+          </p>
+          <p className="text-yellow-200/80">Jobs under 3 hours with 2 movers are billed at <span className="font-semibold text-white">${SHORT_JOB_RATE}/hr flat</span> — to unlock the $50/mover/hr rate, book a large truck or a load & unload job.</p>
+        </div>
+
+        <div className="rounded-xl overflow-hidden border border-slate-700/60">
+          {/* Regular price row */}
+          <div className="px-4 py-3 flex items-center justify-between border-b border-slate-700/40">
+            <div>
+              <p className="text-slate-400 text-xs uppercase tracking-wide">Regular Price</p>
+              <p className="text-sm text-slate-300 mt-0.5">
+                <Users className="h-3.5 w-3.5 inline text-teal-400 mr-1" />{opt0.movers} movers ·
+                <Clock className="h-3.5 w-3.5 inline text-blue-400 mx-1" />{opt0.hours} hrs ·
+                ${SHORT_JOB_RATE}/hr flat
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-slate-500 line-through text-sm">${SHORT_JOB_FULL.toLocaleString()}</p>
+              {drive && <p className="text-amber-400 text-xs">+${driveCost0} drive</p>}
+              <p className="text-slate-500 line-through text-sm font-bold">${fullTotal.toLocaleString()} total</p>
+            </div>
+          </div>
+
+          {/* JC222 promo row */}
+          <div className="px-4 py-4 bg-gradient-to-r from-teal-900/40 to-emerald-900/30 flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <Badge className="bg-teal-500/30 text-teal-300 border-teal-500/50 font-mono font-bold text-sm px-2">
+                  JC222
+                </Badge>
+                <span className="text-teal-300 text-xs font-semibold">Promo Price</span>
+              </div>
+              <p className="text-xs text-slate-400">Use code <span className="font-mono text-teal-300 font-bold">JC222</span> at booking</p>
+            </div>
+            <div className="text-right">
+              <p className="text-emerald-400 font-black text-2xl">${JC222_PRICE}</p>
+              {drive && <p className="text-amber-400 text-xs">+${driveCost0} drive</p>}
+              <p className="text-emerald-300 font-bold text-base">${promoTotal.toLocaleString()} total</p>
+              <p className="text-emerald-600 text-xs">Save ${fullTotal - promoTotal}</p>
+            </div>
+          </div>
+        </div>
+
+        <Disclaimer drive={drive} shortJob />
+      </div>
+    );
+  }
+
+  // ── Standard rate jobs (3–4 hrs, qualifies for $50/mover/hr) ───────────
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-300 font-semibold">
@@ -246,6 +322,12 @@ function ResultCard({ sel }: { sel: Sel }) {
       </p>
 
       {drive && <DriveBreakdown drive={drive} sel={sel} movers={options[0]?.movers ?? 2} />}
+
+      {/* Standard rate badge */}
+      <div className="flex items-center gap-2 text-xs text-teal-300">
+        <Star className="h-3.5 w-3.5 text-teal-400" />
+        <span>Qualifies for <span className="font-bold">${RATE}/mover/hr</span> standard rate</span>
+      </div>
 
       <div className="rounded-xl overflow-hidden border border-slate-700/60">
         <div className="bg-slate-800/80 px-3 py-2 grid grid-cols-5 text-slate-400 text-xs uppercase tracking-wide font-medium">
@@ -313,11 +395,14 @@ function DriveBreakdown({ drive, sel, movers }: { drive: DriveInfo; sel: Sel; mo
   );
 }
 
-function Disclaimer({ drive }: { drive?: DriveInfo }) {
+function Disclaimer({ drive, shortJob }: { drive?: DriveInfo; shortJob?: boolean }) {
   return (
     <p className="text-xs text-slate-400 flex items-start gap-1.5">
       <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-yellow-400" />
-      Estimates based on ${RATE}/mover/hr labor{drive ? ` + drive time at ${DRIVE_SPEED_MPH} mph avg` : ""}. Actual pricing confirmed at booking.
+      {shortJob
+        ? `Short job flat rate $${SHORT_JOB_RATE}/hr ($${SHORT_JOB_FULL} total). Use code JC222 for $${JC222_PRICE}.`
+        : `Standard rate $${RATE}/mover/hr for 3–4 hr jobs.`}
+      {drive ? ` Drive time at ${DRIVE_SPEED_MPH} mph avg.` : ""} Confirmed at booking.
     </p>
   );
 }
