@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -479,313 +478,225 @@ export default function AdminUsersPage() {
         </CardContent>
       </Card>
 
-      {/* User Lists */}
-      <Tabs defaultValue="employees" className="w-full">
-        <TabsList className={`grid w-full ${isMobile ? 'grid-cols-1' : 'grid-cols-2'} mb-6`}>
-          <TabsTrigger value="employees" data-testid="tab-employees">
-            <UserCog className="h-4 w-4 mr-2" />
-            Employees ({employees.length})
-          </TabsTrigger>
-          <TabsTrigger value="customers" data-testid="tab-customers">
-            <Users className="h-4 w-4 mr-2" />
-            Customers ({customers.length})
-          </TabsTrigger>
-        </TabsList>
+      {/* ── Unified User List (no tabs — everyone visible) ── */}
+      {usersLoading ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading users...</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-8">
 
-        <TabsContent value="employees">
-          {usersLoading ? (
-            <Card>
-              <CardContent className="py-12 text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                <p className="text-muted-foreground">Loading employees...</p>
-              </CardContent>
-            </Card>
-          ) : employees.length === 0 ? (
-            <Card>
-              <CardContent className="py-12 text-center">
-                <UserCog className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground">No employees found</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {employees.map(user => (
-                <Card 
-                  key={user.id} 
-                  className="hover:shadow-lg transition-shadow cursor-pointer"
-                  onClick={() => setSelectedUser(user.id)}
-                  data-testid={`card-user-${user.id}`}
-                >
-                  <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <CardTitle className="text-lg mb-1">
-                          {user.firstName} {user.lastName}
-                        </CardTitle>
-                        <CardDescription className="text-sm break-all">
-                          {user.email}
-                        </CardDescription>
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        {getRoleBadge(user.role)}
-                        {getStatusBadge(user.status)}
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2 text-sm">
-                      {user.username && (
-                        <div className="flex items-center text-muted-foreground">
-                          <span className="font-medium mr-2">@{user.username}</span>
+          {/* ── Employees section ── */}
+          <div>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center gap-2">
+                <UserCog className="h-5 w-5 text-blue-500" />
+                <h2 className="text-lg font-bold text-foreground">Employees & Admins</h2>
+                <Badge variant="outline" className="border-blue-400 text-blue-500">{employees.length}</Badge>
+              </div>
+              <div className="flex-1 h-px bg-border" />
+            </div>
+            {employees.length === 0 ? (
+              <Card>
+                <CardContent className="py-8 text-center">
+                  <UserCog className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                  <p className="text-muted-foreground text-sm">No employees found</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {employees.map(emp => (
+                  <Card
+                    key={emp.id}
+                    className="hover:shadow-lg transition-shadow cursor-pointer"
+                    onClick={() => setSelectedUser(emp.id)}
+                    data-testid={`card-user-${emp.id}`}
+                  >
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <CardTitle className="text-lg mb-1">{emp.firstName} {emp.lastName}</CardTitle>
+                          <CardDescription className="text-sm break-all">{emp.email}</CardDescription>
                         </div>
-                      )}
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Joined</span>
-                        <span className="font-medium">{formatDate(user.createdAt)}</span>
+                        <div className="flex flex-col gap-1">
+                          {getRoleBadge(emp.role)}
+                          {getStatusBadge(emp.status)}
+                        </div>
                       </div>
-                      
-                      {/* Status Actions */}
-                      <div className="flex gap-2 mt-3">
-                        {user.status === 'pending' && (
-                          <>
-                            <Button 
-                              variant="default" 
-                              size="sm" 
-                              className="flex-1 bg-green-600 hover:bg-green-700"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                updateStatusMutation.mutate({ userId: user.id, status: 'approved' });
-                              }}
-                              data-testid={`button-approve-${user.id}`}
-                            >
-                              Approve
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="flex-1"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                resendApprovalMutation.mutate(user.id);
-                              }}
-                              disabled={resendApprovalMutation.isPending}
-                            >
-                              {resendApprovalMutation.isPending ? 'Sending...' : 'Resend Email'}
-                            </Button>
-                          </>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2 text-sm">
+                        {emp.username && (
+                          <div className="flex items-center text-muted-foreground">
+                            <span className="font-medium mr-2">@{emp.username}</span>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Joined</span>
+                          <span className="font-medium">{formatDate(emp.createdAt)}</span>
+                        </div>
+                        <div className="flex gap-2 mt-3">
+                          {emp.status === 'pending' && (
+                            <>
+                              <Button variant="default" size="sm" className="flex-1 bg-green-600 hover:bg-green-700"
+                                onClick={(e) => { e.stopPropagation(); updateStatusMutation.mutate({ userId: emp.id, status: 'approved' }); }}
+                                data-testid={`button-approve-${emp.id}`}>
+                                Approve
+                              </Button>
+                              <Button variant="outline" size="sm" className="flex-1"
+                                onClick={(e) => { e.stopPropagation(); resendApprovalMutation.mutate(emp.id); }}
+                                disabled={resendApprovalMutation.isPending}>
+                                {resendApprovalMutation.isPending ? 'Sending...' : 'Resend Email'}
+                              </Button>
+                            </>
                           )}
-                          {user.status === 'approved' && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className={`text-xs px-2 py-1 h-7 border transition-all ${confirmRemoveUserId === user.id ? 'border-red-600 bg-red-600 text-white hover:bg-red-700 animate-pulse' : 'border-red-400 text-red-500 hover:border-red-600 hover:text-red-600 bg-transparent'}`}
-                              onClick={(e) => handleRemoveAccessClick(e, user.id)}
-                              data-testid={`button-remove-${user.id}`}
-                            >
-                              {confirmRemoveUserId === user.id ? '⚠️ Confirm?' : 'Remove Access'}
+                          {emp.status === 'approved' && (
+                            <Button variant="outline" size="sm"
+                              className={`text-xs px-2 py-1 h-7 border transition-all ${confirmRemoveUserId === emp.id ? 'border-red-600 bg-red-600 text-white hover:bg-red-700 animate-pulse' : 'border-red-400 text-red-500 hover:border-red-600 hover:text-red-600 bg-transparent'}`}
+                              onClick={(e) => handleRemoveAccessClick(e, emp.id)}
+                              data-testid={`button-remove-${emp.id}`}>
+                              {confirmRemoveUserId === emp.id ? '⚠️ Confirm?' : 'Remove Access'}
                             </Button>
                           )}
-                          {user.status === 'removed' && (
-                            <Button 
-                              variant="default" 
-                              size="sm" 
-                              className="flex-1 bg-blue-600 hover:bg-blue-700"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                updateStatusMutation.mutate({ userId: user.id, status: 'approved' });
-                              }}
-                              data-testid={`button-restore-${user.id}`}
-                            >
+                          {emp.status === 'removed' && (
+                            <Button variant="default" size="sm" className="flex-1 bg-blue-600 hover:bg-blue-700"
+                              onClick={(e) => { e.stopPropagation(); updateStatusMutation.mutate({ userId: emp.id, status: 'approved' }); }}
+                              data-testid={`button-restore-${emp.id}`}>
                               Restore
                             </Button>
                           )}
-                          {(user.status === 'pending' || user.status === 'removed') && (
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              className="flex-1"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setUserToDelete(user);
-                                setDeleteConfirmOpen(true);
-                              }}
-                              data-testid={`button-delete-${user.id}`}
-                            >
+                          {(emp.status === 'pending' || emp.status === 'removed') && (
+                            <Button variant="outline" size="sm" className="flex-1"
+                              onClick={(e) => { e.stopPropagation(); setUserToDelete(emp); setDeleteConfirmOpen(true); }}
+                              data-testid={`button-delete-${emp.id}`}>
                               Delete
                             </Button>
                           )}
                         </div>
-                      
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="w-full mt-2"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedUser(user.id);
-                        }}
-                        data-testid={`button-view-details-${user.id}`}
-                      >
-                        <Eye className="h-4 w-4 mr-2" />
-                        View Details
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </TabsContent>
+                        <Button variant="outline" size="sm" className="w-full mt-2"
+                          onClick={(e) => { e.stopPropagation(); setSelectedUser(emp.id); }}
+                          data-testid={`button-view-details-${emp.id}`}>
+                          <Eye className="h-4 w-4 mr-2" />
+                          View Details
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
 
-        <TabsContent value="customers">
-          {usersLoading ? (
-            <Card>
-              <CardContent className="py-12 text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                <p className="text-muted-foreground">Loading customers...</p>
-              </CardContent>
-            </Card>
-          ) : customers.length === 0 ? (
-            <Card>
-              <CardContent className="py-12 text-center">
-                <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground">No customers found</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {customers.map(user => (
-                <Card 
-                  key={user.id} 
-                  className="hover:shadow-lg transition-shadow cursor-pointer"
-                  onClick={() => setSelectedUser(user.id)}
-                  data-testid={`card-user-${user.id}`}
-                >
-                  <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <CardTitle className="text-lg mb-1">
-                          {user.firstName} {user.lastName}
-                        </CardTitle>
-                        <CardDescription className="text-sm break-all">
-                          {user.email}
-                        </CardDescription>
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        {getRoleBadge(user.role)}
-                        {getStatusBadge(user.status)}
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2 text-sm">
-                      {user.username && (
-                        <div className="flex items-center text-muted-foreground">
-                          <span className="font-medium mr-2">@{user.username}</span>
-                        </div>
-                      )}
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Joined</span>
-                        <span className="font-medium">{formatDate(user.createdAt)}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Referrals</span>
-                        <Badge variant="outline">{user.referralCount || 0}</Badge>
-                      </div>
-                      
-                      {/* Status Actions */}
-                      <div className="flex gap-2 mt-3">
-                        {user.status === 'pending' && (
-                          <>
-                            <Button 
-                              variant="default" 
-                              size="sm" 
-                              className="flex-1 bg-green-600 hover:bg-green-700"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                updateStatusMutation.mutate({ userId: user.id, status: 'approved' });
-                              }}
-                              data-testid={`button-approve-${user.id}`}
-                            >
-                              Approve
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="flex-1"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                resendApprovalMutation.mutate(user.id);
-                              }}
-                              disabled={resendApprovalMutation.isPending}
-                            >
-                              {resendApprovalMutation.isPending ? 'Sending...' : 'Resend Email'}
-                            </Button>
-                          </>
-                        )}
-                        {user.status === 'approved' && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className={`text-xs px-2 py-1 h-7 border transition-all ${confirmRemoveUserId === user.id ? 'border-red-600 bg-red-600 text-white hover:bg-red-700 animate-pulse' : 'border-red-400 text-red-500 hover:border-red-600 hover:text-red-600 bg-transparent'}`}
-                            onClick={(e) => handleRemoveAccessClick(e, user.id)}
-                            data-testid={`button-remove-${user.id}`}
-                          >
-                            {confirmRemoveUserId === user.id ? '⚠️ Confirm?' : 'Remove Access'}
-                          </Button>
-                        )}
-                        {user.status === 'removed' && (
-                          <Button 
-                            variant="default" 
-                            size="sm" 
-                            className="flex-1 bg-blue-600 hover:bg-blue-700"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              updateStatusMutation.mutate({ userId: user.id, status: 'approved' });
-                            }}
-                            data-testid={`button-restore-${user.id}`}
-                          >
-                            Restore
-                          </Button>
-                        )}
-                        {(user.status === 'pending' || user.status === 'removed') && (
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="flex-1"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setUserToDelete(user);
-                              setDeleteConfirmOpen(true);
-                            }}
-                            data-testid={`button-delete-${user.id}`}
-                          >
-                            Delete
-                          </Button>
-                        )}
-                      </div>
-                      
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="w-full mt-2"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedUser(user.id);
-                        }}
-                        data-testid={`button-view-details-${user.id}`}
-                      >
-                        <Eye className="h-4 w-4 mr-2" />
-                        View Details
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+          {/* ── Customers section ── */}
+          <div>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-emerald-500" />
+                <h2 className="text-lg font-bold text-foreground">Customers</h2>
+                <Badge variant="outline" className="border-emerald-400 text-emerald-500">{customers.length}</Badge>
+              </div>
+              <div className="flex-1 h-px bg-border" />
             </div>
-          )}
-        </TabsContent>
-      </Tabs>
+            {customers.length === 0 ? (
+              <Card>
+                <CardContent className="py-8 text-center">
+                  <Users className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                  <p className="text-muted-foreground text-sm">No customers found</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {customers.map(cust => (
+                  <Card
+                    key={cust.id}
+                    className="hover:shadow-lg transition-shadow cursor-pointer"
+                    onClick={() => setSelectedUser(cust.id)}
+                    data-testid={`card-user-${cust.id}`}
+                  >
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <CardTitle className="text-lg mb-1">{cust.firstName} {cust.lastName}</CardTitle>
+                          <CardDescription className="text-sm break-all">{cust.email}</CardDescription>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          {getRoleBadge(cust.role)}
+                          {getStatusBadge(cust.status)}
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2 text-sm">
+                        {cust.username && (
+                          <div className="flex items-center text-muted-foreground">
+                            <span className="font-medium mr-2">@{cust.username}</span>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Joined</span>
+                          <span className="font-medium">{formatDate(cust.createdAt)}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Referrals</span>
+                          <Badge variant="outline">{cust.referralCount || 0}</Badge>
+                        </div>
+                        <div className="flex gap-2 mt-3">
+                          {cust.status === 'pending' && (
+                            <>
+                              <Button variant="default" size="sm" className="flex-1 bg-green-600 hover:bg-green-700"
+                                onClick={(e) => { e.stopPropagation(); updateStatusMutation.mutate({ userId: cust.id, status: 'approved' }); }}
+                                data-testid={`button-approve-${cust.id}`}>
+                                Approve
+                              </Button>
+                              <Button variant="outline" size="sm" className="flex-1"
+                                onClick={(e) => { e.stopPropagation(); resendApprovalMutation.mutate(cust.id); }}
+                                disabled={resendApprovalMutation.isPending}>
+                                {resendApprovalMutation.isPending ? 'Sending...' : 'Resend Email'}
+                              </Button>
+                            </>
+                          )}
+                          {cust.status === 'approved' && (
+                            <Button variant="outline" size="sm"
+                              className={`text-xs px-2 py-1 h-7 border transition-all ${confirmRemoveUserId === cust.id ? 'border-red-600 bg-red-600 text-white hover:bg-red-700 animate-pulse' : 'border-red-400 text-red-500 hover:border-red-600 hover:text-red-600 bg-transparent'}`}
+                              onClick={(e) => handleRemoveAccessClick(e, cust.id)}
+                              data-testid={`button-remove-${cust.id}`}>
+                              {confirmRemoveUserId === cust.id ? '⚠️ Confirm?' : 'Remove Access'}
+                            </Button>
+                          )}
+                          {cust.status === 'removed' && (
+                            <Button variant="default" size="sm" className="flex-1 bg-blue-600 hover:bg-blue-700"
+                              onClick={(e) => { e.stopPropagation(); updateStatusMutation.mutate({ userId: cust.id, status: 'approved' }); }}
+                              data-testid={`button-restore-${cust.id}`}>
+                              Restore
+                            </Button>
+                          )}
+                          {(cust.status === 'pending' || cust.status === 'removed') && (
+                            <Button variant="outline" size="sm" className="flex-1"
+                              onClick={(e) => { e.stopPropagation(); setUserToDelete(cust); setDeleteConfirmOpen(true); }}
+                              data-testid={`button-delete-${cust.id}`}>
+                              Delete
+                            </Button>
+                          )}
+                        </div>
+                        <Button variant="outline" size="sm" className="w-full mt-2"
+                          onClick={(e) => { e.stopPropagation(); setSelectedUser(cust.id); }}
+                          data-testid={`button-view-details-${cust.id}`}>
+                          <Eye className="h-4 w-4 mr-2" />
+                          View Details
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+
+        </div>
+      )}
 
       {/* User Details Modal */}
       <Dialog open={!!selectedUser} onOpenChange={(open) => !open && setSelectedUser(null)}>
