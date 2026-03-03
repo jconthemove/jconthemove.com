@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowLeft, Heart, Building2, Handshake, Mail, Phone, Loader2, ShoppingCart, Check, Star, Trophy, Megaphone, Truck as TruckIcon, Globe, Users, Bitcoin } from "lucide-react";
+import { ArrowLeft, Heart, Building2, Handshake, Mail, Phone, Loader2, ShoppingCart, Check, Star, Trophy, Megaphone, Truck as TruckIcon, Globe, Users, Bitcoin, CreditCard, Upload, ImageIcon, X } from "lucide-react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useCart } from "@/hooks/useCart";
@@ -83,6 +83,9 @@ export default function SponsorsPage() {
   const [checkoutTier, setCheckoutTier] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [businessCard, setBusinessCard] = useState<File | null>(null);
+  const [businessCardUrl, setBusinessCardUrl] = useState<string>("");
+  const [uploadingCard, setUploadingCard] = useState(false);
   const [form, setForm] = useState({
     businessName: "",
     contactName: "",
@@ -92,6 +95,26 @@ export default function SponsorsPage() {
 
   const updateField = (field: string, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleCardUpload = async (file: File) => {
+    setBusinessCard(file);
+    setUploadingCard(true);
+    try {
+      const fd = new FormData();
+      fd.append("card", file);
+      const res = await fetch("/api/sponsor/upload-card", { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      setBusinessCardUrl(data.url);
+      toast({ title: "Business card uploaded!" });
+    } catch (err: any) {
+      toast({ title: err.message || "Upload failed", variant: "destructive" });
+      setBusinessCard(null);
+      setBusinessCardUrl("");
+    } finally {
+      setUploadingCard(false);
+    }
   };
 
   const handleDirectCheckout = async (tier: typeof sponsorTiers[0]) => {
@@ -114,6 +137,7 @@ export default function SponsorsPage() {
           tierId: tier.id,
           tierName: tier.name,
           tierPrice: tier.price,
+          businessCardUrl: businessCardUrl || null,
         }),
       });
       const data = await res.json();
@@ -276,6 +300,45 @@ export default function SponsorsPage() {
                     <Label className="text-white text-sm">Phone *</Label>
                     <Input type="tel" value={form.phone} onChange={(e) => updateField("phone", e.target.value)} placeholder="(906) 555-1234" className="bg-slate-700 border-slate-600 text-white" />
                   </div>
+
+                  {/* Business Card Upload */}
+                  <div>
+                    <Label className="text-white text-sm">Business Card / Logo (optional)</Label>
+                    <p className="text-xs text-slate-400 mb-2">Upload your business card or logo — we'll include it when setting up your sponsorship.</p>
+                    {!businessCard ? (
+                      <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-slate-600 rounded-lg cursor-pointer hover:border-yellow-500/60 hover:bg-slate-700/40 transition-colors">
+                        <Upload className="h-6 w-6 text-slate-400 mb-1" />
+                        <span className="text-xs text-slate-400">Click to upload (JPG, PNG, PDF)</span>
+                        <input
+                          type="file"
+                          accept="image/*,.pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleCardUpload(file);
+                          }}
+                        />
+                      </label>
+                    ) : (
+                      <div className={`flex items-center gap-3 p-3 rounded-lg border ${businessCardUrl ? "border-green-500/40 bg-green-900/20" : "border-slate-600 bg-slate-700/40"}`}>
+                        {uploadingCard ? (
+                          <Loader2 className="h-5 w-5 text-yellow-400 animate-spin shrink-0" />
+                        ) : (
+                          <ImageIcon className="h-5 w-5 text-green-400 shrink-0" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-white font-medium truncate">{businessCard.name}</p>
+                          <p className="text-xs text-slate-400">{uploadingCard ? "Uploading…" : "Ready to submit"}</p>
+                        </div>
+                        <button
+                          onClick={() => { setBusinessCard(null); setBusinessCardUrl(""); }}
+                          className="text-slate-400 hover:text-red-400 transition-colors"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex items-start space-x-3 mb-4">
@@ -292,11 +355,13 @@ export default function SponsorsPage() {
 
                 <Button
                   onClick={() => handleDirectCheckout(activeTier)}
-                  disabled={isSubmitting || !agreedToTerms}
+                  disabled={isSubmitting || !agreedToTerms || uploadingCard}
                   className="w-full py-5 text-base font-bold bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-400 hover:to-amber-500 text-black"
                 >
                   {isSubmitting ? (
                     <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Processing...</>
+                  ) : uploadingCard ? (
+                    <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Uploading card...</>
                   ) : (
                     <><CreditCard className="h-5 w-5 mr-2" /> Pay ${activeTier.price} Now</>
                   )}

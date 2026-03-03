@@ -9864,9 +9864,31 @@ Thank you for your business!
     }
   });
 
+  // ── Sponsor business card upload ──────────────────────────────────────────
+  app.post("/api/sponsor/upload-card", async (req: any, res) => {
+    try {
+      const multer = (await import("multer")).default;
+      const cardUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }).single("card");
+      await new Promise<void>((resolve, reject) => cardUpload(req, res as any, (err) => err ? reject(err) : resolve()));
+      if (!req.file) return res.status(400).json({ error: "No file provided" });
+      const { Client } = await import("@replit/object-storage");
+      const storage = new Client();
+      const ext = (req.file.originalname.split(".").pop() || "jpg").toLowerCase();
+      const key = `public/sponsor-cards/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      await storage.uploadFromBytes(key, req.file.buffer, { contentType: req.file.mimetype });
+      const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
+      const host = req.headers["x-forwarded-host"] || req.headers.host;
+      const url = `${protocol}://${host}/api/object-storage/${encodeURIComponent(key)}`;
+      res.json({ success: true, url, key });
+    } catch (err: any) {
+      console.error("Sponsor card upload error:", err);
+      res.status(500).json({ error: err.message || "Upload failed" });
+    }
+  });
+
   app.post("/api/sponsor/checkout", async (req: any, res) => {
     try {
-      const { businessName, contactName, email, phone, tierId, tierName, tierPrice } = req.body;
+      const { businessName, contactName, email, phone, tierId, tierName, tierPrice, businessCardUrl } = req.body;
 
       if (!businessName || !contactName || !email || !phone || !tierName || !tierPrice) {
         return res.status(400).json({ error: "Missing required fields" });
@@ -9929,27 +9951,64 @@ Thank you for your business!
         return res.status(500).json({ error: "Failed to create payment link" });
       }
 
+      const cardBlock = businessCardUrl
+        ? `<div style="margin: 16px 0; padding: 14px; background: #0f172a; border-radius: 8px; border: 1px solid #334155;">
+             <p style="margin: 0 0 8px; color: #94a3b8; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Business Card / Logo</p>
+             <img src="${businessCardUrl}" alt="Business Card" style="max-width: 100%; border-radius: 6px;" onerror="this.style.display='none'" />
+             <p style="margin: 8px 0 0;"><a href="${businessCardUrl}" style="color: #38bdf8; font-size: 12px;">View / Download</a></p>
+           </div>`
+        : "";
+
       try {
+        // ── Sponsor confirmation email ───────────────────────────────────────
         await sendEmail({
           to: email,
           from: process.env.COMPANY_EMAIL || "michigankid906@gmail.com",
-          subject: `JC ON THE MOVE - ${tierName} Sponsorship Confirmation`,
+          subject: `JC ON THE MOVE - ${tierName} Sponsorship Confirmed`,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #1e293b; color: #e2e8f0; padding: 30px; border-radius: 12px;">
               <h1 style="color: #facc15; text-align: center;">JC ON THE MOVE LLC</h1>
-              <h2 style="color: white; text-align: center;">Sponsorship Confirmed!</h2>
+              <h2 style="color: white; text-align: center;">Sponsorship Initiated!</h2>
               <div style="background: #334155; padding: 20px; border-radius: 8px; margin: 20px 0;">
                 <h3 style="color: #facc15; margin-top: 0;">${tierName}</h3>
                 <p><strong>Business:</strong> ${businessName}</p>
                 <p><strong>Contact:</strong> ${contactName}</p>
+                <p><strong>Phone:</strong> ${phone}</p>
                 <p><strong>Monthly Rate:</strong> $${tierPrice}</p>
               </div>
-              <p style="text-align: center; color: #94a3b8; font-size: 12px;">Thank you for supporting JC ON THE MOVE! Questions? Call (906) 285-9312</p>
+              ${businessCardUrl ? `<p style="color: #94a3b8; font-size: 13px;">We received your business card/logo and will use it when setting up your sponsorship.</p>${cardBlock}` : ""}
+              <p style="text-align: center; margin-top: 20px;">Please complete your payment through the Square checkout link to activate your sponsorship.</p>
+              <p style="text-align: center; color: #94a3b8; font-size: 12px; margin-top: 20px;">Questions? Call <strong>(906) 285-9312</strong> or email upmichiganstatemovers@gmail.com</p>
             </div>
           `,
         });
       } catch (emailErr) {
-        console.log("Sponsor email failed (non-critical):", emailErr);
+        console.log("Sponsor confirmation email failed (non-critical):", emailErr);
+      }
+
+      try {
+        // ── Admin notification email ─────────────────────────────────────────
+        await sendEmail({
+          to: "upmichiganstatemovers@gmail.com",
+          from: process.env.COMPANY_EMAIL || "michigankid906@gmail.com",
+          subject: `NEW SPONSOR: ${businessName} — ${tierName} ($${tierPrice}/mo)`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #1e293b; color: #e2e8f0; padding: 30px; border-radius: 12px;">
+              <h1 style="color: #facc15; text-align: center;">New Sponsorship Inquiry</h1>
+              <div style="background: #334155; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <h3 style="color: #facc15; margin-top: 0;">${tierName} — $${tierPrice}/month</h3>
+                <p><strong>Business:</strong> ${businessName}</p>
+                <p><strong>Contact:</strong> ${contactName}</p>
+                <p><strong>Email:</strong> <a href="mailto:${email}" style="color: #38bdf8;">${email}</a></p>
+                <p><strong>Phone:</strong> <a href="tel:${phone}" style="color: #38bdf8;">${phone}</a></p>
+              </div>
+              ${cardBlock || `<p style="color: #94a3b8; font-size: 13px;">No business card uploaded.</p>`}
+              <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-top: 20px;">They were sent to Square checkout. Follow up if payment is not completed within 24 hours.</p>
+            </div>
+          `,
+        });
+      } catch (adminEmailErr) {
+        console.log("Sponsor admin email failed (non-critical):", adminEmailErr);
       }
 
       res.json({
