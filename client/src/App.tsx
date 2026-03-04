@@ -40,6 +40,7 @@ import LeadDetailPage from "@/pages/lead-detail";
 import EmployeeRegister from "@/pages/employee-register";
 import EmployeeLogin from "@/pages/employee-login";
 import CustomerLogin from "@/pages/customer-login";
+import ForgotAccessPage from "@/pages/forgot-access";
 import QuotePage from "@/pages/quote";
 import SponsorsPage from "@/pages/sponsors";
 import ServicesPage from "@/pages/services";
@@ -286,6 +287,7 @@ function Router() {
       <Route path="/employee-register" component={EmployeeRegister} />
       <Route path="/employee-login" component={EmployeeLogin} />
       <Route path="/customer-login" component={CustomerLogin} />
+      <Route path="/forgot-access" component={ForgotAccessPage} />
       
       {/* Customer interface - accessible to all users without authentication */}
       <Route path="/customer" component={CustomerMobileInterface} />

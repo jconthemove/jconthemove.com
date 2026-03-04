@@ -254,6 +254,18 @@ export default function CustomerLogin() {
               )}
             </Button>
 
+            <div className="text-center text-sm pt-1">
+              <Button
+                variant="link"
+                className="p-0 h-auto text-slate-500 hover:text-slate-300 text-xs"
+                onClick={() => setLocation('/forgot-access')}
+                type="button"
+                data-testid="link-forgot-access"
+              >
+                Forgot your access? Recover account
+              </Button>
+            </div>
+
             <div className="text-center text-sm border-t border-slate-700 pt-4 mt-4">
               {mode === 'login' ? (
                 <>

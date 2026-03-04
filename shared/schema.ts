@@ -1594,3 +1594,17 @@ export const insertPromoCodeSchema = createInsertSchema(promoCodes).omit({
 
 export type PromoCode = typeof promoCodes.$inferSelect;
 export type InsertPromoCode = z.infer<typeof insertPromoCodeSchema>;
+
+// ── Account Recovery Tokens ─────────────────────────────────────────────────
+export const recoveryTokens = pgTable("recovery_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  token: varchar("token", { length: 8 }).notNull(),    // 6-digit OTP
+  method: text("method").notNull(),                     // 'email' | 'sms'
+  contact: text("contact").notNull(),                   // email address or phone number used
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type RecoveryToken = typeof recoveryTokens.$inferSelect;
