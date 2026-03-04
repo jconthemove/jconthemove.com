@@ -4071,7 +4071,7 @@ Thank you for your business!
     }
   });
 
-  app.patch("/api/employees/:id/role", isAuthenticated, requireAdmin, async (req, res) => {
+  app.patch("/api/employees/:id/role", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
       const { id } = req.params;
       const { role } = req.body;
@@ -6077,7 +6077,7 @@ Thank you for your business!
   // ====================== ADMIN SYSTEM MANAGEMENT API ======================
 
   // Admin dashboard data endpoints
-  app.get("/api/admin/users", isAuthenticated, requireAdmin, async (req, res) => {
+  app.get("/api/admin/users", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
       const users = await storage.getAllUsers();
       res.json(users);
@@ -6087,7 +6087,7 @@ Thank you for your business!
     }
   });
 
-  app.get("/api/admin/leads", isAuthenticated, requireAdmin, async (req, res) => {
+  app.get("/api/admin/leads", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
       const leads = await storage.getLeads();
       res.json(leads);
@@ -6097,7 +6097,7 @@ Thank you for your business!
     }
   });
 
-  app.get("/api/admin/stats", isAuthenticated, requireAdmin, async (req, res) => {
+  app.get("/api/admin/stats", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
       const users = await storage.getAllUsers();
       const leads = await storage.getLeads();
@@ -6119,7 +6119,7 @@ Thank you for your business!
   });
 
   // Admin Token Ledger - Shows all JCMOVES transactions across customers and employees
-  app.get("/api/admin/token-ledger", isAuthenticated, requireAdmin, async (req, res) => {
+  app.get("/api/admin/token-ledger", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
       const { limit = 100, type, role } = req.query;
       
@@ -6217,7 +6217,7 @@ Thank you for your business!
   });
 
   // Test SendGrid email service (admin only)
-  app.get("/api/admin/test-email", isAuthenticated, requireAdmin, async (req, res) => {
+  app.get("/api/admin/test-email", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
       const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
       
@@ -6265,7 +6265,7 @@ Thank you for your business!
   });
 
   // Get system configuration (admin only) - shows environment variable status without exposing values
-  app.get("/api/admin/system/config", isAuthenticated, requireAdmin, async (req, res) => {
+  app.get("/api/admin/system/config", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
       const systemConfig = {
         environment: process.env.NODE_ENV || 'development',
@@ -6308,7 +6308,7 @@ Thank you for your business!
   });
 
   // Get system health status (admin only)
-  app.get("/api/admin/system/health", isAuthenticated, requireAdmin, async (req, res) => {
+  app.get("/api/admin/system/health", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
       const healthStatus = {
         database: {
@@ -7045,7 +7045,7 @@ Thank you for your business!
   });
 
   // Get wallet transfer summary (Admin only)
-  app.get("/api/wallets/transfer-summary", isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.get("/api/wallets/transfer-summary", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
     try {
       const userId = (req.session as any).userId;
       
@@ -7084,7 +7084,7 @@ Thank you for your business!
   });
 
   // Treasury Wallet Endpoints (Admin only)
-  app.get("/api/treasury/wallets", isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.get("/api/treasury/wallets", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
     try {
       const treasuryWallets = await storage.getTreasuryWallets('admin');
       res.json({ wallets: treasuryWallets });
@@ -7095,7 +7095,7 @@ Thank you for your business!
   });
 
   // Update treasury wallet address (Admin only)
-  app.put("/api/treasury/wallets/:walletId", isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.put("/api/treasury/wallets/:walletId", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
     try {
       const { walletId } = req.params;
       const { walletAddress } = req.body;
@@ -7124,7 +7124,7 @@ Thank you for your business!
   });
 
   // Create or update treasury wallet for a currency (Admin only)
-  app.post("/api/treasury/wallets", isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.post("/api/treasury/wallets", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
     try {
       const { currencyId, walletAddress, purpose } = req.body;
 
@@ -7662,7 +7662,7 @@ Thank you for your business!
   });
 
   // Admin: list all promo codes
-  app.get("/api/admin/promo-codes", isAuthenticated, requireAdmin, async (req, res) => {
+  app.get("/api/admin/promo-codes", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
       const { promoCodes } = await import("@shared/schema");
       const codes = await db.select().from(promoCodes).orderBy(promoCodes.createdAt);
@@ -7674,7 +7674,7 @@ Thank you for your business!
   });
 
   // Admin: create a promo code
-  app.post("/api/admin/promo-codes", isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.post("/api/admin/promo-codes", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
     try {
       const { promoCodes, insertPromoCodeSchema } = await import("@shared/schema");
       const data = insertPromoCodeSchema.parse({
@@ -7691,7 +7691,7 @@ Thank you for your business!
   });
 
   // Admin: update a promo code
-  app.patch("/api/admin/promo-codes/:id", isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.patch("/api/admin/promo-codes/:id", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
     try {
       const { id } = req.params;
       const { promoCodes } = await import("@shared/schema");
@@ -7710,7 +7710,7 @@ Thank you for your business!
   });
 
   // Admin: delete a promo code
-  app.delete("/api/admin/promo-codes/:id", isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.delete("/api/admin/promo-codes/:id", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
     try {
       const { id } = req.params;
       const { promoCodes } = await import("@shared/schema");
@@ -9337,7 +9337,7 @@ Thank you for your business!
   });
 
   // Admin: Retroactively grant jewelry listing rewards for existing items
-  app.post("/api/admin/jewelry-listing-rewards", isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.post("/api/admin/jewelry-listing-rewards", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
     try {
       const { jewelryItems } = await import("@shared/schema");
       const JEWELRY_LISTING_REWARD = 200;
@@ -9382,7 +9382,7 @@ Thank you for your business!
   });
 
   // One-time retroactive correction for jobs completed on 3/1/2026 that received wrong creator bonus (got 50+50 instead of 250+500)
-  app.post("/api/admin/job-reward-correction-20260301", isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.post("/api/admin/job-reward-correction-20260301", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
     try {
       const adminId = req.session?.userId || req.user?.id;
       if (!adminId) return res.status(401).json({ error: "Not authenticated" });
@@ -10179,7 +10179,7 @@ Thank you for your business!
     }
   });
 
-  app.get("/api/admin/btc-payments", isAuthenticated, requireAdmin, async (_req, res) => {
+  app.get("/api/admin/btc-payments", isAuthenticated, requireBusinessOwner, async (_req, res) => {
     try {
       const payments = await db.select().from(bitcoinPayments).orderBy(sql`created_at DESC`);
       res.json(payments);
@@ -10188,7 +10188,7 @@ Thank you for your business!
     }
   });
 
-  app.patch("/api/admin/btc-payments/:id/verify", isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.patch("/api/admin/btc-payments/:id/verify", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
     try {
       const { id } = req.params;
       const { status } = req.body;
@@ -10211,7 +10211,7 @@ Thank you for your business!
   });
 
   // ==================== DATABASE BACKUP ====================
-  app.get("/api/admin/database/backup", isAuthenticated, requireAdmin, async (_req, res) => {
+  app.get("/api/admin/database/backup", isAuthenticated, requireBusinessOwner, async (_req, res) => {
     try {
       const [
         usersData,
@@ -10386,7 +10386,7 @@ Thank you for your business!
     }
   });
 
-  app.get("/api/staking/treasury", isAuthenticated, requireAdmin, async (_req: any, res) => {
+  app.get("/api/staking/treasury", isAuthenticated, requireBusinessOwner, async (_req: any, res) => {
     try {
       const treasuryBalance = await storage.getStakingTreasuryBalance();
       const tiers = await storage.getStakingTiers();
