@@ -3096,102 +3096,124 @@ Thank you for your business!
       // IDEMPOTENCY CHECK: Only distribute tokens if rewards haven't been distributed yet
       const isStatusChangingToCompleted = updateData.status === "completed" && currentLead.status !== "completed";
       const rewardsAlreadyDistributed = currentLead.completionRewardedAt !== null && currentLead.completionRewardedAt !== undefined;
-      
-      if (isStatusChangingToCompleted && !rewardsAlreadyDistributed && updatedLead.tokenAllocation && updatedLead.crewMembers && updatedLead.crewMembers.length > 0) {
+
+      if (isStatusChangingToCompleted && !rewardsAlreadyDistributed) {
         try {
-          const totalTokens = parseFloat(updatedLead.tokenAllocation);
-          
-          // Validate token allocation
-          if (isNaN(totalTokens) || totalTokens <= 0) {
-            console.log(`⚠️ Invalid token allocation for job ${id}: ${updatedLead.tokenAllocation}`);
-            return res.status(400).json({ error: "Invalid or missing token allocation. Please set a valid token amount before marking the job as completed." });
-          } else {
-            // ── Creator gets 10% of the total allocation as a creation fee ──
-            // ── Crew splits the remaining 90% equally ──
-            const creatorUserId = currentLead.createdByUserId;
-            const isCreatorInCrew = creatorUserId && updatedLead.crewMembers.includes(creatorUserId);
+          const TOKEN_PRICE = 0.00000508432;
 
-            let crewAllocation = totalTokens;
-            if (creatorUserId && !isCreatorInCrew) {
-              const creatorBonus = totalTokens * 0.1;
-              crewAllocation = totalTokens * 0.9;
-              const TOKEN_PRICE = 0.00000508432;
+          // ── Determine who gets rewarded ──────────────────────────────────
+          // Use crew_members if set, otherwise fall back to assignedToUserId
+          const crewIds: string[] = (updatedLead.crewMembers && updatedLead.crewMembers.length > 0)
+            ? updatedLead.crewMembers
+            : (updatedLead.assignedToUserId ? [updatedLead.assignedToUserId] : []);
 
-              await storage.creditWalletTokens(creatorUserId, creatorBonus);
+          // ── 1. FLAT PER-EMPLOYEE REWARD (employee_job_completed setting) ─
+          // Fires for every crew member / assigned employee regardless of tokenAllocation
+          if (crewIds.length > 0) {
+            const empSetting = await db.select().from(rewardSettings).where(eq(rewardSettings.settingKey, 'employee_job_completed')).limit(1);
+            const flatReward = empSetting.length > 0 && empSetting[0].isActive
+              ? parseFloat(empSetting[0].tokenAmount)
+              : 500; // fallback 500 JCMOVES
+
+            for (const memberId of crewIds) {
+              const memberUser = await storage.getUserById(memberId).catch(() => null);
+              if (!memberUser) { console.log(`⚠️ Crew member ${memberId} not found in DB — skipping flat reward`); continue; }
+              await storage.creditWalletTokens(memberId, flatReward);
               await db.insert(rewards).values({
-                userId: creatorUserId,
-                rewardType: 'job_creation_bonus',
-                tokenAmount: creatorBonus.toFixed(8),
-                cashValue: (creatorBonus * TOKEN_PRICE).toFixed(4),
+                userId: memberId,
+                rewardType: 'employee_job_completed',
+                tokenAmount: flatReward.toFixed(8),
+                cashValue: (flatReward * TOKEN_PRICE).toFixed(6),
                 status: 'confirmed',
                 referenceId: id,
-                metadata: { totalAllocation: totalTokens, percentage: '10%', jobId: id }
+                metadata: { jobId: id, serviceType: updatedLead.serviceType, flat: true }
               });
-              console.log(`💰 Awarded ${creatorBonus} JCMOVES (10% creation fee) to creator ${creatorUserId}`);
+              console.log(`🏆 Awarded ${flatReward} JCMOVES (job completion flat reward) to ${memberUser.email}`);
             }
+          } else {
+            console.log(`⚠️ Job ${id} has no crew members or assigned employee — skipping employee flat reward`);
+          }
 
-            const tokensPerWorker = crewAllocation / updatedLead.crewMembers.length;
-            
-            console.log(`💰 Admin completion: Distributing ${crewAllocation} tokens (${isCreatorInCrew || !creatorUserId ? '100%' : '90%'}) to ${updatedLead.crewMembers.length} crew members (${tokensPerWorker} each)`);
-            
-            // Award tokens to each crew member
-            for (const crewMemberId of updatedLead.crewMembers) {
-              await gamificationService.awardJobCompletion(crewMemberId, id, tokensPerWorker.toFixed(8), {
-                onTime: true,
-                customerRating: 5
-              });
-              console.log(`✅ Awarded ${tokensPerWorker} tokens to crew member ${crewMemberId}`);
+          // ── 2. TOKEN ALLOCATION DISTRIBUTION (bonus from job budget) ────
+          // Only runs when tokenAllocation is explicitly set and > 0
+          if (updatedLead.tokenAllocation && crewIds.length > 0) {
+            const totalTokens = parseFloat(updatedLead.tokenAllocation);
+            if (!isNaN(totalTokens) && totalTokens > 0) {
+              const creatorUserId = currentLead.createdByUserId;
+              const isCreatorInCrew = creatorUserId && crewIds.includes(creatorUserId);
+
+              let crewAllocation = totalTokens;
+              if (creatorUserId && !isCreatorInCrew) {
+                const creatorBonus = totalTokens * 0.1;
+                crewAllocation = totalTokens * 0.9;
+                await storage.creditWalletTokens(creatorUserId, creatorBonus);
+                await db.insert(rewards).values({
+                  userId: creatorUserId,
+                  rewardType: 'job_creation_bonus',
+                  tokenAmount: creatorBonus.toFixed(8),
+                  cashValue: (creatorBonus * TOKEN_PRICE).toFixed(6),
+                  status: 'confirmed',
+                  referenceId: id,
+                  metadata: { totalAllocation: totalTokens, percentage: '10%', jobId: id }
+                });
+                console.log(`💰 Awarded ${creatorBonus} JCMOVES (10% creation fee) to creator ${creatorUserId}`);
+              }
+
+              const tokensPerWorker = crewAllocation / crewIds.length;
+              for (const crewMemberId of crewIds) {
+                await gamificationService.awardJobCompletion(crewMemberId, id, tokensPerWorker.toFixed(8), { onTime: true, customerRating: 5 });
+                console.log(`✅ Awarded ${tokensPerWorker} JCMOVES (allocation share) to crew member ${crewMemberId}`);
+              }
             }
-            
-            // Mark rewards as distributed
-            await storage.updateLeadQuote(id, { completionRewardedAt: new Date() });
-            console.log(`✅ Marked job ${id} as rewarded at ${new Date().toISOString()}`);
+          }
 
-            // Customer loyalty reward: Award tokens when their job completes
-            try {
-              if (updatedLead.customerEmail) {
-                const customer = await storage.getUserByEmail(updatedLead.customerEmail);
-                if (customer) {
-                  const LOYALTY_REWARD = TREASURY_CONFIG.LOYALTY_REWARD_TOKENS; // $15 worth
-                  await storage.creditWalletTokens(customer.id, LOYALTY_REWARD);
-                  await db.insert(rewards).values({
-                    userId: customer.id,
-                    rewardType: REWARD_TYPES.LOYALTY_BOOKING,
-                    tokenAmount: LOYALTY_REWARD.toFixed(8),
-                    cashValue: (LOYALTY_REWARD * 0.01).toFixed(2),
-                    status: "confirmed",
-                    metadata: { jobId: id, serviceType: updatedLead.serviceType }
-                  });
-                  console.log(`🎁 Awarded ${LOYALTY_REWARD} JCMOVES ($${(LOYALTY_REWARD * 0.01).toFixed(2)}) loyalty reward to customer ${customer.email}`);
+          // ── Mark rewards as distributed ──────────────────────────────────
+          await storage.updateLeadQuote(id, { completionRewardedAt: new Date() });
+          console.log(`✅ Marked job ${id} as rewarded at ${new Date().toISOString()}`);
 
-                  // Referral bonus: Award tokens to referrer on first completed job
-                  if (customer.referredByUserId) {
-                    const completedJobs = await db.select().from(rewards)
-                      .where(and(eq(rewards.userId, customer.id), eq(rewards.rewardType, REWARD_TYPES.LOYALTY_BOOKING)));
-                    
-                    if (completedJobs.length === 1) { // This is their first completed job
-                      const REFERRAL_BONUS = TREASURY_CONFIG.REFERRAL_CONFIRMED_TOKENS; // $25 worth
-                      await storage.creditWalletTokens(customer.referredByUserId, REFERRAL_BONUS);
-                      await db.insert(rewards).values({
-                        userId: customer.referredByUserId,
-                        rewardType: REWARD_TYPES.REFERRAL_CONFIRMED,
-                        tokenAmount: REFERRAL_BONUS.toFixed(8),
-                        cashValue: (REFERRAL_BONUS * 0.01).toFixed(2),
-                        status: "confirmed",
-                        metadata: { referredUserId: customer.id, jobId: id }
-                      });
-                      console.log(`🎉 Awarded ${REFERRAL_BONUS} JCMOVES ($${(REFERRAL_BONUS * 0.01).toFixed(2)}) referral bonus to ${customer.referredByUserId}`);
-                    }
+          // ── 3. CUSTOMER LOYALTY REWARD ───────────────────────────────────
+          try {
+            const customerEmail = updatedLead.email || updatedLead.customerEmail;
+            if (customerEmail) {
+              const customer = await storage.getUserByEmail(customerEmail);
+              if (customer) {
+                const LOYALTY_REWARD = TREASURY_CONFIG.LOYALTY_REWARD_TOKENS;
+                await storage.creditWalletTokens(customer.id, LOYALTY_REWARD);
+                await db.insert(rewards).values({
+                  userId: customer.id,
+                  rewardType: REWARD_TYPES.LOYALTY_BOOKING,
+                  tokenAmount: LOYALTY_REWARD.toFixed(8),
+                  cashValue: (LOYALTY_REWARD * 0.01).toFixed(2),
+                  status: "confirmed",
+                  metadata: { jobId: id, serviceType: updatedLead.serviceType }
+                });
+                console.log(`🎁 Awarded ${LOYALTY_REWARD} JCMOVES loyalty reward to customer ${customer.email}`);
+
+                if (customer.referredByUserId) {
+                  const prevLoyalty = await db.select().from(rewards)
+                    .where(and(eq(rewards.userId, customer.id), eq(rewards.rewardType, REWARD_TYPES.LOYALTY_BOOKING)));
+                  if (prevLoyalty.length === 1) {
+                    const REFERRAL_BONUS = TREASURY_CONFIG.REFERRAL_CONFIRMED_TOKENS;
+                    await storage.creditWalletTokens(customer.referredByUserId, REFERRAL_BONUS);
+                    await db.insert(rewards).values({
+                      userId: customer.referredByUserId,
+                      rewardType: REWARD_TYPES.REFERRAL_CONFIRMED,
+                      tokenAmount: REFERRAL_BONUS.toFixed(8),
+                      cashValue: (REFERRAL_BONUS * 0.01).toFixed(2),
+                      status: "confirmed",
+                      metadata: { referredUserId: customer.id, jobId: id }
+                    });
+                    console.log(`🎉 Awarded ${REFERRAL_BONUS} JCMOVES referral bonus to ${customer.referredByUserId}`);
                   }
                 }
               }
-            } catch (customerRewardError) {
-              console.error("Error awarding customer rewards:", customerRewardError);
             }
+          } catch (customerRewardError) {
+            console.error("Error awarding customer rewards:", customerRewardError);
           }
         } catch (tokenError) {
-          console.error("Error distributing tokens:", tokenError);
-          // Don't fail the request if token distribution fails - job is still completed
+          console.error("Error distributing job completion tokens:", tokenError);
+          // Don't fail the request if token distribution fails
         }
       } else if (rewardsAlreadyDistributed) {
         console.log(`ℹ️ Job ${id} rewards already distributed at ${currentLead.completionRewardedAt} - skipping`);
