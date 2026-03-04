@@ -21,10 +21,8 @@ import EmployeeAddJob from "@/pages/employee-add-job";
 import LeadsPage from "@/pages/leads";
 import CustomerPortal from "@/pages/customer-portal";
 import PendingApprovalPage from "@/pages/pending-approval";
-import TreasuryDashboard from "@/pages/treasury-dashboard";
-import AdminDashboardFull from "@/pages/admin-dashboard-full";
-import AdminMoonshotPage from "@/pages/admin-moonshot";
 import InGodWeTrustPage from "@/pages/in-god-we-trust";
+import AdminTreasuryPage from "@/pages/admin-treasury";
 import AdminUsersPage from "@/pages/admin-users";
 import AdminTestimonialsPage from "@/pages/admin-testimonials";
 import AdminPromoCodesPage from "@/pages/admin-promo-codes";
@@ -192,8 +190,13 @@ function AuthenticatedApp() {
             <PendingApprovalPage />
           </Route>
           <Route path="/in-god-we-trust">
-            <RouteGuard allowedRoles={['admin']}>
+            <RouteGuard allowedRoles={['admin', 'business_owner']}>
               <PageWrapper component={InGodWeTrustPage} />
+            </RouteGuard>
+          </Route>
+          <Route path="/admin/treasury">
+            <RouteGuard allowedRoles={['admin', 'business_owner']}>
+              <PageWrapper component={AdminTreasuryPage} />
             </RouteGuard>
           </Route>
           <Route path="/admin/users">
@@ -209,11 +212,6 @@ function AuthenticatedApp() {
           <Route path="/admin/promo-codes">
             <RouteGuard allowedRoles={['admin', 'business_owner']}>
               <PageWrapper component={AdminPromoCodesPage} />
-            </RouteGuard>
-          </Route>
-          <Route path="/admin/users">
-            <RouteGuard allowedRoles={['admin', 'business_owner']}>
-              <PageWrapper component={AdminUsersPage} />
             </RouteGuard>
           </Route>
           <Route path="/snow-removal">
