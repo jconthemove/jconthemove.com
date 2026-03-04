@@ -20,7 +20,7 @@ import { z } from "zod";
 import { EncryptionService } from "./services/encryption";
 import { eq, desc, sql, and, gte } from 'drizzle-orm';
 import { db } from './db';
-import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens } from '@shared/schema';
+import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens, promoCodes } from '@shared/schema';
 import { getFaucetPayService } from "./services/faucetpay";
 import { getAdvertisingService } from "./services/advertising";
 import { FAUCET_CONFIG } from "./constants";
@@ -133,6 +133,25 @@ async function ensureRewardSettingsSeeded() {
   }
 }
 
+// Links employee promo codes to their user accounts on startup
+async function linkEmployeePromoCodes() {
+  try {
+    const knownLinks = [
+      { code: 'MATTMOVES', email: 'dawsonsdad8176@gmail.com' },
+    ];
+    for (const { code, email } of knownLinks) {
+      const [user] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
+      if (!user) continue;
+      const [promo] = await db.select({ referralUserId: promoCodes.referralUserId }).from(promoCodes).where(eq(promoCodes.code, code)).limit(1);
+      if (!promo || promo.referralUserId) continue;
+      await db.update(promoCodes).set({ referralUserId: user.id }).where(eq(promoCodes.code, code));
+      console.log(`✅ Promo code ${code} linked to ${email} (${user.id})`);
+    }
+  } catch (err) {
+    console.error('Failed to link employee promo codes:', err);
+  }
+}
+
 const approvalTokens = new Map<string, { userId: string; action: string; expiresAt: Date }>();
 
 function generateApprovalToken(userId: string, action: string): string {
@@ -151,6 +170,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   await ensureStakingTreasuryUser();
   await ensureMomsAccount();
   await ensureRewardSettingsSeeded();
+  await linkEmployeePromoCodes();
 
   // Public health check endpoint for deployment monitoring (MUST be before auth setup)
   // This endpoint is used by Replit Autoscale Deployments to verify the service is healthy
