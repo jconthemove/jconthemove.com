@@ -1,0 +1,168 @@
+2026-03-04 07:52:28.80
+546c3cd7
+User
+[AUTH CHECK] ✅ User authenticated and approved: admin
+2026-03-04 07:52:28.89
+546c3cd7
+User
+1:52:28 PM [express] GET /api/rewards/wallet 200 in 382ms :: {"id":"4935b87e-f972-4c96-b091-72ef4ec4…
+2026-03-04 07:52:29.04
+546c3cd7
+User
+[AUTH CHECK] ✅ User authenticated and approved: admin
+2026-03-04 07:52:29.18
+546c3cd7
+User
+1:52:29 PM [express] GET /api/mining/status 200 in 671ms :: {"currentSession":{"id":"b412d2e7-77a9-4…
+2026-03-04 07:52:34.40
+546c3cd7
+User
+[AUTH CHECK] Path: /api/mining/status | Session ID: fi9gJcbP | Has cookie: true
+2026-03-04 07:52:34.99
+546c3cd7
+User
+[AUTH CHECK] ✅ User authenticated and approved: admin
+2026-03-04 07:52:35.14
+546c3cd7
+User
+1:52:35 PM [express] GET /api/mining/status 200 in 786ms :: {"currentSession":{"id":"b412d2e7-77a9-4…
+2026-03-04 07:52:39.53
+546c3cd7
+User
+[COOKIE-IN] GET /api/auth/user | proto=https secure=true | jc.sid=true connect.sid=false | raw="jc.sid=s%3Afi9gJcbPmXuuV_x5zts9MoS_Bo7CrpE3.MpTg9ESknP9Y9joeLeCzlomRrXHhVHVSogmtgZrCWFU; GAESA=CpwBMDBkYTZjZDJjNGQ0ODY1Z"
+2026-03-04 07:52:39.58
+546c3cd7
+User
+[AUTH CHECK] Path: /api/auth/user | Session ID: fi9gJcbP | Has cookie: true
+2026-03-04 07:52:40.16
+546c3cd7
+User
+✅ Authentication successful - Fetching user data for userId: 47798367
+2026-03-04 07:52:40.16
+546c3cd7
+User
+[AUTH CHECK] ✅ User authenticated (allow pending): admin status: approved
+2026-03-04 07:52:40.47
+546c3cd7
+User
+User data retrieved: found - upmichiganstatemovers@gmail.com with role admin
+2026-03-04 07:52:40.47
+546c3cd7
+User
+📤 Returning user data for upmichiganstatemovers@gmail.com
+2026-03-04 07:52:40.59
+546c3cd7
+User
+1:52:40 PM [express] GET /api/auth/user 304 in 1033ms :: {"id":"47798367","email":"upmichiganstatemo…
+2026-03-04 07:52:40.77
+546c3cd7
+User
+[AUTH CHECK] Path: /api/referrals/stats | Session ID: fi9gJcbP | Has cookie: true
+2026-03-04 07:52:40.82
+546c3cd7
+User
+1:52:40 PM [express] GET /api/wallet/payout-config 304 in 99ms :: {"feePercent":1,"minFee":10,"minim…
+2026-03-04 07:52:41.05
+546c3cd7
+User
+[AUTH CHECK] Path: /api/referrals/my-code | Session ID: fi9gJcbP | Has cookie: true
+2026-03-04 07:52:41.09
+546c3cd7
+User
+[AUTH CHECK] Path: /api/rewards/wallet | Session ID: fi9gJcbP | Has cookie: true
+2026-03-04 07:52:41.09
+546c3cd7
+User
+[AUTH CHECK] Path: /api/wallet/payouts | Session ID: fi9gJcbP | Has cookie: true
+2026-03-04 07:52:41.10
+546c3cd7
+User
+[AUTH CHECK] Path: /api/rewards/history | Session ID: fi9gJcbP | Has cookie: true
+2026-03-04 07:52:41.10
+546c3cd7
+User
+[AUTH CHECK] Path: /api/rewards/token-info | Session ID: fi9gJcbP | Has cookie: true
+2026-03-04 07:52:41.11
+546c3cd7
+User
+[AUTH CHECK] Path: /api/wallet/payout/status | Session ID: fi9gJcbP | Has cookie: true
+2026-03-04 07:52:41.11
+546c3cd7
+User
+[AUTH CHECK] Path: /api/mining/status | Session ID: fi9gJcbP | Has cookie: true
+2026-03-04 07:52:41.13
+546c3cd7
+User
+[AUTH CHECK] ✅ User authenticated and approved: admin
+2026-03-04 07:52:41.27
+546c3cd7
+User
+1:52:41 PM [express] GET /api/referrals/stats 304 in 548ms :: {"referralCount":1,"totalEarned":0,"re…
+2026-03-04 07:52:41.82
+546c3cd7
+User
+[AUTH CHECK] ✅ User authenticated and approved: admin
+2026-03-04 07:52:42.16
+546c3cd7
+User
+[AUTH CHECK] ✅ User authenticated and approved: admin
+2026-03-04 07:52:47.64
+546c3cd7
+User
+[AUTH CHECK] Path: /api/mining/status | Session ID: fi9gJcbP | Has cookie: true
+2026-03-04 07:52:48.41
+546c3cd7
+User
+[AUTH CHECK] ✅ User authenticated and approved: admin
+2026-03-04 07:52:48.55
+546c3cd7
+User
+1:52:48 PM [express] GET /api/mining/status 200 in 960ms :: {"currentSession":{"id":"b412d2e7-77a9-4…
+2026-03-04 07:52:53.77
+546c3cd7
+User
+[AUTH CHECK] Path: /api/mining/status | Session ID: fi9gJcbP | Has cookie: true
+2026-03-04 07:52:54.52
+546c3cd7
+User
+[AUTH CHECK] ✅ User authenticated and approved: admin
+2026-03-04 07:52:54.67
+546c3cd7
+User
+1:52:54 PM [express] GET /api/mining/status 200 in 947ms :: {"currentSession":{"id":"b412d2e7-77a9-4…
+2026-03-04 07:52:57.73
+546c3cd7
+User
+[COOKIE-IN] GET /api/auth/user | proto=https secure=true | jc.sid=true connect.sid=false | raw="jc.sid=s%3Afi9gJcbPmXuuV_x5zts9MoS_Bo7CrpE3.MpTg9ESknP9Y9joeLeCzlomRrXHhVHVSogmtgZrCWFU; GAESA=CpwBMDBkYTZjZDJjNGQ0ODY1Z"
+2026-03-04 07:52:57.77
+546c3cd7
+User
+[AUTH CHECK] Path: /api/auth/user | Session ID: fi9gJcbP | Has cookie: true
+2026-03-04 07:52:58.52
+546c3cd7
+User
+[AUTH CHECK] ✅ User authenticated (allow pending): admin status: approved
+2026-03-04 07:52:58.52
+546c3cd7
+User
+✅ Authentication successful - Fetching user data for userId: 47798367
+2026-03-04 07:52:59.07
+546c3cd7
+User
+User data retrieved: found - upmichiganstatemovers@gmail.com with role admin
+2026-03-04 07:52:59.07
+546c3cd7
+User
+📤 Returning user data for upmichiganstatemovers@gmail.com
+2026-03-04 07:52:59.18
+546c3cd7
+User
+1:52:59 PM [express] GET /api/auth/user 304 in 1427ms :: {"id":"47798367","email":"upmichiganstatemo…
+2026-03-04 07:52:59.45
+546c3cd7
+User
+[AUTH CHECK] Path: /api/rewards/wallet | Session ID: fi9gJcbP | Has cookie: true
+2026-03-04 07:52:59.45
+546c3cd7
+User
+[AUTH CHECK] Path: /api/rewards/token-info | Session ID: fi9gJcbP | Has cookie: true
