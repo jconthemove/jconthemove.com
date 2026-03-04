@@ -2547,7 +2547,12 @@ export default function InGodWeTrustPage() {
                     <Tag className="h-6 w-6 text-white" />
                   </div>
                   <div>
-                    <h2 className="text-xl font-bold text-white">Promo Codes</h2>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-xl font-bold text-white">Promo Codes</h2>
+                      {promoCodes && (
+                        <span className="text-xs font-bold bg-green-600/40 text-green-300 border border-green-500/40 px-2 py-0.5 rounded-full">{promoCodes.length} total</span>
+                      )}
+                    </div>
                     <p className="text-sm text-slate-400">Create and manage discount codes for customers</p>
                   </div>
                 </div>
@@ -2621,6 +2626,9 @@ export default function InGodWeTrustPage() {
               )}
 
               {/* Promo Code List */}
+              {promoCodes && promoCodes.length > 0 && (
+                <p className="text-xs text-slate-500 mb-3">Showing all {promoCodes.length} promo code{promoCodes.length !== 1 ? "s" : ""}</p>
+              )}
               <div className="space-y-3">
                 {promoCodes?.map((pc) => (
                   <div key={pc.id} className={`p-4 rounded-xl border transition-colors ${pc.isActive ? "border-green-500/30 bg-green-900/10" : "border-slate-700/50 bg-slate-900/30 opacity-60"}`}>
