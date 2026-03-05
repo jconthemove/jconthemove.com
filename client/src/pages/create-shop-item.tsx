@@ -12,8 +12,9 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ChevronLeft, ChevronRight, X, Upload, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, Upload, Loader2, Coins } from "lucide-react";
 import { z } from "zod";
+import { useAuth } from "@/hooks/useAuth";
 
 // Form schema for client-side validation
 // Updated to accept both URLs and base64 data URLs for photo uploads
@@ -31,6 +32,11 @@ const formSchema = z.object({
   ).min(1, "At least one photo is required").max(10, "Maximum 10 photos allowed"),
   status: z.enum(["draft", "active", "sold", "archived"]),
   category: z.string().optional(),
+  itemType: z.enum(["community", "moving_supplies", "gift_card", "official"]).optional(),
+  jcmovesPrice: z.string().optional(),
+  jcmovesDiscountPercent: z.string().optional(),
+  jcmovesDiscountTokens: z.string().optional(),
+  giftCardValue: z.string().optional(),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -38,6 +44,8 @@ type FormData = z.infer<typeof formSchema>;
 export function CreateShopItemPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin' || user?.role === 'business_owner';
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [photoInputValue, setPhotoInputValue] = useState("");
@@ -52,6 +60,11 @@ export function CreateShopItemPage() {
       photos: [],
       status: "draft",
       category: "",
+      itemType: "community",
+      jcmovesPrice: "",
+      jcmovesDiscountPercent: "",
+      jcmovesDiscountTokens: "",
+      giftCardValue: "",
     },
   });
 
@@ -443,6 +456,79 @@ export function CreateShopItemPage() {
                   </FormItem>
                 )}
               />
+
+              {/* Admin-only: Item Type & JCMOVES Pricing */}
+              {isAdmin && (
+                <div className="rounded-xl border border-yellow-500/30 bg-yellow-950/20 p-4 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Coins className="h-4 w-4 text-yellow-400" />
+                    <span className="text-sm font-semibold text-yellow-300">Official Listing Settings</span>
+                  </div>
+
+                  <FormField control={form.control} name="itemType" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Item Type</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select type" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="community">Community (Default)</SelectItem>
+                          <SelectItem value="moving_supplies">📦 Moving Supplies</SelectItem>
+                          <SelectItem value="gift_card">🎁 Gift Card</SelectItem>
+                          <SelectItem value="official">⭐ Official JC Item</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormField control={form.control} name="jcmovesPrice" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>JCMOVES Full Price</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g. 9800" {...field} />
+                        </FormControl>
+                        <FormDescription className="text-xs">Tokens to buy outright</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="giftCardValue" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Gift Card Value ($)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g. 100.00" {...field} />
+                        </FormControl>
+                        <FormDescription className="text-xs">USD value on card (gift cards only)</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="jcmovesDiscountPercent" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Discount % (JCMOVES)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g. 15" type="number" {...field} />
+                        </FormControl>
+                        <FormDescription className="text-xs">% off for spending tokens</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="jcmovesDiscountTokens" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Tokens Needed for Discount</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g. 500" {...field} />
+                        </FormControl>
+                        <FormDescription className="text-xs">JCMOVES to spend to unlock discount</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </div>
+                </div>
+              )}
 
               {/* Status Field */}
               <FormField

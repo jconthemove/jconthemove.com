@@ -509,6 +509,11 @@ export const shopItems = pgTable("shop_items", {
   phoneNumber: text("phone_number").notNull(), // Contact number for this listing
   photos: jsonb("photos").notNull().default("[]"), // Array of photo objects for slideshow
   category: text("category"), // Optional category (furniture, electronics, etc.)
+  itemType: text("item_type").notNull().default("community"), // 'community', 'moving_supplies', 'gift_card', 'official'
+  jcmovesPrice: decimal("jcmoves_price", { precision: 18, scale: 8 }), // Full JCMOVES price to purchase outright
+  jcmovesDiscountPercent: integer("jcmoves_discount_percent"), // % discount earned by spending JCMOVES (e.g. 10 = 10% off)
+  jcmovesDiscountTokens: decimal("jcmoves_discount_tokens", { precision: 18, scale: 8 }), // JCMOVES to spend to unlock the partial discount
+  giftCardValue: decimal("gift_card_value", { precision: 10, scale: 2 }), // USD value on the gift card
   status: text("status").notNull().default("active"), // 'active', 'sold', 'archived'
   views: integer("views").default(0),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
@@ -519,6 +524,24 @@ export const shopItems = pgTable("shop_items", {
   index("idx_shop_items_created").on(table.createdAt),
   index("idx_shop_items_active_created").on(table.status, table.createdAt),
 ]);
+
+// Gift card codes issued after purchase
+export const giftCards = pgTable("gift_cards", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: text("code").notNull().unique(), // e.g. JCMOVE-XXXX-XXXX
+  purchasedByUserId: varchar("purchased_by_user_id").references(() => users.id),
+  recipientEmail: text("recipient_email"),
+  valueUsd: decimal("value_usd", { precision: 10, scale: 2 }).notNull(),
+  shopItemId: varchar("shop_item_id").references(() => shopItems.id),
+  paymentMethod: text("payment_method").notNull().default("usd"), // 'usd', 'jcmoves', 'partial'
+  jcmovesSpent: decimal("jcmoves_spent", { precision: 18, scale: 8 }),
+  isRedeemed: boolean("is_redeemed").default(false),
+  redeemedByUserId: varchar("redeemed_by_user_id").references(() => users.id),
+  redeemedAt: timestamp("redeemed_at"),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  notes: text("notes"),
+});
 
 // Nature Made Jewls marketplace items
 export const jewelryItems = pgTable("jewelry_items", {
@@ -732,6 +755,16 @@ export const insertShopItemSchema = createInsertSchema(shopItems).omit({
 
 export type InsertShopItem = z.infer<typeof insertShopItemSchema>;
 export type ShopItem = typeof shopItems.$inferSelect;
+
+export const insertGiftCardSchema = createInsertSchema(giftCards).omit({
+  id: true,
+  createdAt: true,
+  isRedeemed: true,
+  redeemedByUserId: true,
+  redeemedAt: true,
+});
+export type InsertGiftCard = z.infer<typeof insertGiftCardSchema>;
+export type GiftCard = typeof giftCards.$inferSelect;
 
 // Faucet system tables
 export const faucetConfig = pgTable("faucet_config", {

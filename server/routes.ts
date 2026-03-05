@@ -20,7 +20,7 @@ import { z } from "zod";
 import { EncryptionService } from "./services/encryption";
 import { eq, desc, sql, and, gte, or, ilike } from 'drizzle-orm';
 import { db } from './db';
-import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens, promoCodes, reviews } from '@shared/schema';
+import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, giftCards, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens, promoCodes, reviews } from '@shared/schema';
 import { getFaucetPayService } from "./services/faucetpay";
 import { getAdvertisingService } from "./services/advertising";
 import { FAUCET_CONFIG } from "./constants";
@@ -4592,6 +4592,326 @@ Thank you for your business!
     } catch (error) {
       console.error("Error incrementing view count:", error);
       res.status(500).json({ error: "Failed to increment view count" });
+    }
+  });
+
+  // ── JCMOVES Redemption for shop items ─────────────────────────────────────
+
+  // Full JCMOVES purchase of a shop item
+  app.post("/api/shop/:id/redeem-jcmoves", isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = (req.session as any).userId;
+
+      const item = await storage.getShopItem(id);
+      if (!item) return res.status(404).json({ error: "Item not found" });
+      if (item.status !== 'active') return res.status(400).json({ error: "Item is no longer available" });
+      if (!item.jcmovesPrice) return res.status(400).json({ error: "This item does not have a JCMOVES price set" });
+
+      const jcmovesNeeded = parseFloat(item.jcmovesPrice);
+      const wallet = await storage.getWalletAccount(userId);
+      const currentBalance = parseFloat(wallet?.tokenBalance || "0");
+
+      if (currentBalance < jcmovesNeeded) {
+        return res.status(400).json({ error: `Insufficient JCMOVES. You have ${currentBalance.toFixed(0)}, need ${jcmovesNeeded.toFixed(0)}` });
+      }
+
+      // Deduct JCMOVES from buyer's wallet
+      await storage.updateWalletAccount(userId, {
+        tokenBalance: (currentBalance - jcmovesNeeded).toFixed(8),
+      });
+
+      // Record the spend as a reward debit
+      const TOKEN_PRICE = 0.00000508432;
+      await db.insert(rewards).values({
+        userId,
+        rewardType: 'shop_purchase_jcmoves',
+        tokenAmount: (-jcmovesNeeded).toFixed(8),
+        cashValue: (-jcmovesNeeded * TOKEN_PRICE).toFixed(6),
+        status: 'confirmed',
+        referenceId: id,
+        metadata: { shopItemId: id, itemTitle: item.title, paymentMethod: 'jcmoves_full' }
+      });
+
+      // Handle gift card issuance
+      let giftCardCode: string | null = null;
+      if (item.itemType === 'gift_card' && item.giftCardValue) {
+        const code = `JCMOVE-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+        await db.insert(giftCards).values({
+          code,
+          purchasedByUserId: userId,
+          valueUsd: item.giftCardValue,
+          shopItemId: id,
+          paymentMethod: 'jcmoves',
+          jcmovesSpent: jcmovesNeeded.toFixed(8),
+          expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+        });
+        giftCardCode = code;
+      }
+
+      console.log(`✅ User ${userId} purchased shop item ${id} with ${jcmovesNeeded} JCMOVES`);
+      res.json({ success: true, message: `Purchased with ${jcmovesNeeded.toLocaleString()} JCMOVES!`, giftCardCode });
+    } catch (error) {
+      console.error("Error processing JCMOVES purchase:", error);
+      res.status(500).json({ error: "Failed to process JCMOVES purchase" });
+    }
+  });
+
+  // Partial JCMOVES discount on a shop item
+  app.post("/api/shop/:id/discount-jcmoves", isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = (req.session as any).userId;
+
+      const item = await storage.getShopItem(id);
+      if (!item) return res.status(404).json({ error: "Item not found" });
+      if (item.status !== 'active') return res.status(400).json({ error: "Item is no longer available" });
+      if (!item.jcmovesDiscountPercent || !item.jcmovesDiscountTokens) {
+        return res.status(400).json({ error: "This item does not have a JCMOVES discount available" });
+      }
+
+      const tokensNeeded = parseFloat(item.jcmovesDiscountTokens);
+      const wallet = await storage.getWalletAccount(userId);
+      const currentBalance = parseFloat(wallet?.tokenBalance || "0");
+
+      if (currentBalance < tokensNeeded) {
+        return res.status(400).json({ error: `Insufficient JCMOVES. You have ${currentBalance.toFixed(0)}, need ${tokensNeeded.toFixed(0)}` });
+      }
+
+      // Deduct JCMOVES
+      await storage.updateWalletAccount(userId, {
+        tokenBalance: (currentBalance - tokensNeeded).toFixed(8),
+      });
+
+      const TOKEN_PRICE = 0.00000508432;
+      await db.insert(rewards).values({
+        userId,
+        rewardType: 'shop_discount_jcmoves',
+        tokenAmount: (-tokensNeeded).toFixed(8),
+        cashValue: (-tokensNeeded * TOKEN_PRICE).toFixed(6),
+        status: 'confirmed',
+        referenceId: id,
+        metadata: { shopItemId: id, itemTitle: item.title, discountPercent: item.jcmovesDiscountPercent, paymentMethod: 'jcmoves_partial' }
+      });
+
+      const discountedPrice = parseFloat(item.price) * (1 - item.jcmovesDiscountPercent / 100);
+      console.log(`🎟️ User ${userId} unlocked ${item.jcmovesDiscountPercent}% discount on item ${id} by spending ${tokensNeeded} JCMOVES`);
+      res.json({
+        success: true,
+        message: `${item.jcmovesDiscountPercent}% discount unlocked!`,
+        originalPrice: parseFloat(item.price),
+        discountedPrice: parseFloat(discountedPrice.toFixed(2)),
+        discountPercent: item.jcmovesDiscountPercent,
+        tokensSpent: tokensNeeded
+      });
+    } catch (error) {
+      console.error("Error processing JCMOVES discount:", error);
+      res.status(500).json({ error: "Failed to process JCMOVES discount" });
+    }
+  });
+
+  // ── Gift Card Routes ────────────────────────────────────────────────────────
+
+  // Get the current user's purchased gift cards
+  app.get("/api/gift-cards/mine", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const cards = await db.select().from(giftCards)
+        .where(eq(giftCards.purchasedByUserId, userId))
+        .orderBy(desc(giftCards.createdAt));
+      res.json(cards);
+    } catch (error) {
+      console.error("Error fetching gift cards:", error);
+      res.status(500).json({ error: "Failed to fetch gift cards" });
+    }
+  });
+
+  // Purchase a gift card item with USD (generates code immediately)
+  app.post("/api/gift-cards/purchase", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { shopItemId, recipientEmail, paymentMethod } = req.body;
+
+      const item = await storage.getShopItem(shopItemId);
+      if (!item || item.itemType !== 'gift_card') {
+        return res.status(404).json({ error: "Gift card item not found" });
+      }
+      if (!item.giftCardValue) {
+        return res.status(400).json({ error: "Gift card value not set" });
+      }
+
+      const code = `JCMOVE-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+      const [card] = await db.insert(giftCards).values({
+        code,
+        purchasedByUserId: userId,
+        recipientEmail: recipientEmail || null,
+        valueUsd: item.giftCardValue,
+        shopItemId,
+        paymentMethod: paymentMethod || 'usd',
+        expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      }).returning();
+
+      // Award buyer 50 JCMOVES for purchasing a gift card
+      await storage.creditWalletTokens(userId, 50);
+      await db.insert(rewards).values({
+        userId,
+        rewardType: 'gift_card_purchase',
+        tokenAmount: '50.00000000',
+        cashValue: (50 * 0.00000508432).toFixed(6),
+        status: 'confirmed',
+        referenceId: card.id,
+        metadata: { giftCardCode: code, shopItemId }
+      });
+
+      console.log(`🎁 Gift card ${code} issued to user ${userId} (value: $${item.giftCardValue})`);
+      res.json({ success: true, code, card });
+    } catch (error) {
+      console.error("Error purchasing gift card:", error);
+      res.status(500).json({ error: "Failed to purchase gift card" });
+    }
+  });
+
+  // Check / validate a gift card code
+  app.get("/api/gift-cards/check/:code", async (req, res) => {
+    try {
+      const { code } = req.params;
+      const [card] = await db.select().from(giftCards).where(eq(giftCards.code, code.toUpperCase())).limit(1);
+      if (!card) return res.status(404).json({ error: "Gift card not found" });
+      if (card.isRedeemed) return res.status(400).json({ error: "This gift card has already been redeemed", card });
+      if (card.expiresAt && new Date() > card.expiresAt) return res.status(400).json({ error: "Gift card has expired", card });
+      res.json({ valid: true, card });
+    } catch (error) {
+      console.error("Error checking gift card:", error);
+      res.status(500).json({ error: "Failed to check gift card" });
+    }
+  });
+
+  // Redeem a gift card (apply to a quote/booking)
+  app.post("/api/gift-cards/redeem", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { code } = req.body;
+
+      const [card] = await db.select().from(giftCards).where(eq(giftCards.code, code.toUpperCase())).limit(1);
+      if (!card) return res.status(404).json({ error: "Gift card not found" });
+      if (card.isRedeemed) return res.status(400).json({ error: "This gift card has already been redeemed" });
+      if (card.expiresAt && new Date() > card.expiresAt) return res.status(400).json({ error: "Gift card has expired" });
+
+      await db.update(giftCards)
+        .set({ isRedeemed: true, redeemedByUserId: userId, redeemedAt: new Date() })
+        .where(eq(giftCards.code, code.toUpperCase()));
+
+      // Award 25 JCMOVES for redeeming a gift card
+      await storage.creditWalletTokens(userId, 25);
+      await db.insert(rewards).values({
+        userId,
+        rewardType: 'gift_card_redemption',
+        tokenAmount: '25.00000000',
+        cashValue: (25 * 0.00000508432).toFixed(6),
+        status: 'confirmed',
+        referenceId: card.id,
+        metadata: { giftCardCode: code, valueUsd: card.valueUsd }
+      });
+
+      console.log(`✅ Gift card ${code} redeemed by user ${userId} (value: $${card.valueUsd})`);
+      res.json({ success: true, message: `$${parseFloat(card.valueUsd).toFixed(2)} gift card applied!`, valueUsd: card.valueUsd });
+    } catch (error) {
+      console.error("Error redeeming gift card:", error);
+      res.status(500).json({ error: "Failed to redeem gift card" });
+    }
+  });
+
+  // Admin: get all gift cards
+  app.get("/api/admin/gift-cards", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const cards = await db.select().from(giftCards).orderBy(desc(giftCards.createdAt));
+      res.json(cards);
+    } catch (error) {
+      console.error("Error fetching all gift cards:", error);
+      res.status(500).json({ error: "Failed to fetch gift cards" });
+    }
+  });
+
+  // Admin: seed official moving supplies and gift card shop items
+  app.post("/api/admin/seed-shop-items", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const adminId = (req.session as any).userId;
+      const adminUser = await storage.getUser(adminId);
+      if (!adminUser) return res.status(404).json({ error: "Admin user not found" });
+
+      const adminPhone = adminUser.phoneNumber || "9062003654";
+
+      const movingSupplies = [
+        { title: "Small Moving Box (10-Pack)", description: "Sturdy corrugated cardboard boxes, 16×12×12 inches. Perfect for books, dishes, and small heavy items. Double-walled for extra protection.", price: "24.99", itemType: "moving_supplies", category: "Boxes", jcmovesPrice: "4800.00", jcmovesDiscountPercent: 15, jcmovesDiscountTokens: "500.00" },
+        { title: "Medium Moving Box (10-Pack)", description: "Versatile 18×18×16 inch boxes for clothes, toys, kitchen items, and more. Pre-folded for easy assembly.", price: "34.99", itemType: "moving_supplies", category: "Boxes", jcmovesPrice: "6800.00", jcmovesDiscountPercent: 15, jcmovesDiscountTokens: "500.00" },
+        { title: "Large Moving Box (10-Pack)", description: "Oversized 18×18×24 inch boxes for pillows, bedding, lamps, and light bulky items.", price: "44.99", itemType: "moving_supplies", category: "Boxes", jcmovesPrice: "8800.00", jcmovesDiscountPercent: 15, jcmovesDiscountTokens: "500.00" },
+        { title: "Bubble Wrap Roll (100 ft)", description: "Premium 12-inch wide bubble wrap with 3/16 inch bubbles. Ideal for wrapping fragile glassware, electronics, and artwork.", price: "19.99", itemType: "moving_supplies", category: "Packing Materials", jcmovesPrice: "3900.00", jcmovesDiscountPercent: 10, jcmovesDiscountTokens: "300.00" },
+        { title: "Packing Tape (6-Roll Bundle)", description: "Heavy-duty 2-inch × 60-yard rolls with dispenser. Crystal-clear, ultra-strong adhesive rated for 50+ lb boxes.", price: "18.99", itemType: "moving_supplies", category: "Packing Materials", jcmovesPrice: "3700.00", jcmovesDiscountPercent: 10, jcmovesDiscountTokens: "300.00" },
+        { title: "Moving Blanket (4-Pack)", description: "Professional-grade quilted furniture pads, 72×80 inches each. Protects sofas, dressers, appliances, and hardwood floors from scratches and dings.", price: "49.99", itemType: "moving_supplies", category: "Protection", jcmovesPrice: "9800.00", jcmovesDiscountPercent: 20, jcmovesDiscountTokens: "750.00" },
+        { title: "Furniture Dolly (Two-Wheel)", description: "Heavy-duty aluminum hand truck with a 600 lb weight capacity. Stair-climbing design and solid rubber wheels for easy maneuvering.", price: "89.99", itemType: "moving_supplies", category: "Equipment", jcmovesPrice: "17500.00", jcmovesDiscountPercent: 25, jcmovesDiscountTokens: "1000.00" },
+        { title: "Mattress Bag — Queen/King", description: "Thick 4-mil poly bag protects your mattress from dirt, moisture, and damage during a move. Fits queen and king mattresses.", price: "12.99", itemType: "moving_supplies", category: "Protection", jcmovesPrice: "2500.00", jcmovesDiscountPercent: 10, jcmovesDiscountTokens: "200.00" },
+        { title: "Stretch Wrap (4-Pack)", description: "Self-cling stretch film — wrap furniture legs, bundle cables, seal drawer contents, or secure boxes without tape marks.", price: "29.99", itemType: "moving_supplies", category: "Packing Materials", jcmovesPrice: "5800.00", jcmovesDiscountPercent: 15, jcmovesDiscountTokens: "400.00" },
+        { title: "Wardrobe Moving Box (3-Pack)", description: "Tall 24×20×45 inch boxes with built-in metal hanging bar. Move hanging clothes wrinkle-free — no folding required.", price: "54.99", itemType: "moving_supplies", category: "Boxes", jcmovesPrice: "10700.00", jcmovesDiscountPercent: 20, jcmovesDiscountTokens: "800.00" },
+      ];
+
+      const giftCardItems = [
+        { title: "$25 JC ON THE MOVE Gift Card", description: "Give the gift of stress-free moving! This $25 digital gift card can be applied toward any JC ON THE MOVE moving, junk removal, or cleaning service. Code delivered instantly after purchase.", price: "25.00", itemType: "gift_card", category: "Gift Cards", giftCardValue: "25.00", jcmovesPrice: "4900.00", jcmovesDiscountPercent: 5, jcmovesDiscountTokens: "500.00" },
+        { title: "$50 JC ON THE MOVE Gift Card", description: "A $50 credit toward any JC ON THE MOVE service — moving, junk removal, cleaning, handyman, and more. Perfect for housewarming gifts or helping a friend with their next move.", price: "50.00", itemType: "gift_card", category: "Gift Cards", giftCardValue: "50.00", jcmovesPrice: "9800.00", jcmovesDiscountPercent: 5, jcmovesDiscountTokens: "750.00" },
+        { title: "$100 JC ON THE MOVE Gift Card", description: "A $100 service credit — our most popular gift for new homeowners and renters. Covers a significant portion of most local moves or a full junk removal session.", price: "100.00", itemType: "gift_card", category: "Gift Cards", giftCardValue: "100.00", jcmovesPrice: "19600.00", jcmovesDiscountPercent: 10, jcmovesDiscountTokens: "1000.00" },
+        { title: "$200 JC ON THE MOVE Gift Card", description: "A $200 premium gift card — ideal for long-distance moves, full-day services, or gifting to a business. Combine with JCMOVES tokens for even more savings.", price: "200.00", itemType: "gift_card", category: "Gift Cards", giftCardValue: "200.00", jcmovesPrice: "39000.00", jcmovesDiscountPercent: 15, jcmovesDiscountTokens: "2000.00" },
+        { title: "$500 JC ON THE MOVE Gift Card", description: "The ultimate moving gift. A $500 service credit that covers a full residential move for most customers. Great for corporate relocation packages or generous gifting.", price: "500.00", itemType: "gift_card", category: "Gift Cards", giftCardValue: "500.00", jcmovesPrice: "97000.00", jcmovesDiscountPercent: 20, jcmovesDiscountTokens: "5000.00" },
+      ];
+
+      const placeholderPhoto = "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&q=80";
+      const giftCardPhoto = "https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=400&q=80";
+
+      let created = 0;
+      for (const item of movingSupplies) {
+        const existing = await db.select().from(shopItems).where(eq(shopItems.title, item.title)).limit(1);
+        if (existing.length === 0) {
+          await db.insert(shopItems).values({
+            postedBy: adminId,
+            title: item.title,
+            description: item.description,
+            price: item.price,
+            phoneNumber: adminPhone,
+            photos: [placeholderPhoto],
+            category: item.category,
+            itemType: item.itemType,
+            jcmovesPrice: item.jcmovesPrice,
+            jcmovesDiscountPercent: item.jcmovesDiscountPercent,
+            jcmovesDiscountTokens: item.jcmovesDiscountTokens,
+            status: 'active',
+          });
+          created++;
+        }
+      }
+      for (const item of giftCardItems) {
+        const existing = await db.select().from(shopItems).where(eq(shopItems.title, item.title)).limit(1);
+        if (existing.length === 0) {
+          await db.insert(shopItems).values({
+            postedBy: adminId,
+            title: item.title,
+            description: item.description,
+            price: item.price,
+            phoneNumber: adminPhone,
+            photos: [giftCardPhoto],
+            category: item.category,
+            itemType: item.itemType,
+            giftCardValue: item.giftCardValue,
+            jcmovesPrice: item.jcmovesPrice,
+            jcmovesDiscountPercent: item.jcmovesDiscountPercent,
+            jcmovesDiscountTokens: item.jcmovesDiscountTokens,
+            status: 'active',
+          });
+          created++;
+        }
+      }
+
+      res.json({ success: true, message: `Seeded ${created} official shop items`, created });
+    } catch (error) {
+      console.error("Error seeding shop items:", error);
+      res.status(500).json({ error: "Failed to seed shop items" });
     }
   });
 

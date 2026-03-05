@@ -19,7 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ChevronLeft, ChevronRight, ArrowLeft, Eye, MessageCircle, DollarSign, X, Phone, Trash2, CheckCircle2, Pencil, ShoppingCart, Plus, Upload, ImageIcon, Coins, Bitcoin, Check } from "lucide-react";
+import { ChevronLeft, ChevronRight, ArrowLeft, Eye, MessageCircle, DollarSign, X, Phone, Trash2, CheckCircle2, Pencil, ShoppingCart, Plus, Upload, ImageIcon, Coins, Bitcoin, Check, Gift, Tag, Package } from "lucide-react";
 import { type ShopItem } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -43,6 +43,8 @@ export function ShopItemDetailPage() {
   const [editCategory, setEditCategory] = useState("");
   const [editPhotos, setEditPhotos] = useState<string[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [giftCardCode, setGiftCardCode] = useState<string | null>(null);
+  const [discountedPrice, setDiscountedPrice] = useState<number | null>(null);
 
   // Fetch shop item details
   const { data: item, isLoading } = useQuery<ShopItem>({
@@ -108,6 +110,38 @@ export function ShopItemDetailPage() {
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message || "Failed to update item", variant: "destructive" });
+    },
+  });
+
+  // Buy entirely with JCMOVES
+  const buyWithJcmovesMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/shop/${id}/redeem-jcmoves`);
+      return await res.json();
+    },
+    onSuccess: (data: any) => {
+      if (data.giftCardCode) setGiftCardCode(data.giftCardCode);
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet"] });
+      toast({ title: "Purchase Successful!", description: data.message });
+    },
+    onError: (error: any) => {
+      toast({ title: "Purchase Failed", description: error.message || "Failed to purchase with JCMOVES", variant: "destructive" });
+    },
+  });
+
+  // Unlock partial JCMOVES discount
+  const discountWithJcmovesMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/shop/${id}/discount-jcmoves`);
+      return await res.json();
+    },
+    onSuccess: (data: any) => {
+      setDiscountedPrice(data.discountedPrice);
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet"] });
+      toast({ title: `${data.discountPercent}% Discount Unlocked!`, description: `New price: $${data.discountedPrice.toFixed(2)}` });
+    },
+    onError: (error: any) => {
+      toast({ title: "Discount Failed", description: error.message || "Failed to unlock discount", variant: "destructive" });
     },
   });
 
@@ -343,10 +377,20 @@ export function ShopItemDetailPage() {
           <CardContent className="p-4">
             <div className="flex items-start justify-between mb-4">
               <div>
-                <h2 className="text-3xl font-bold text-primary mb-1" data-testid="text-price">
-                  ${item.price}
-                </h2>
-                <div className="flex gap-2 items-center">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <h2 className={`text-3xl font-bold mb-1 ${discountedPrice ? "line-through text-muted-foreground text-2xl" : "text-primary"}`} data-testid="text-price">
+                    ${parseFloat(item.price).toFixed(2)}
+                  </h2>
+                  {discountedPrice && (
+                    <span className="text-3xl font-bold text-emerald-400">${discountedPrice.toFixed(2)}</span>
+                  )}
+                </div>
+                <div className="flex gap-2 items-center flex-wrap">
+                  {item.itemType && item.itemType !== 'community' && (
+                    <Badge className={`text-xs ${item.itemType === 'gift_card' ? 'bg-purple-600 text-white' : item.itemType === 'moving_supplies' ? 'bg-blue-600 text-white' : 'bg-orange-600 text-white'}`}>
+                      {item.itemType === 'gift_card' ? '🎁 Gift Card' : item.itemType === 'moving_supplies' ? '📦 Moving Supplies' : '⭐ Official'}
+                    </Badge>
+                  )}
                   {item.category && (
                     <Badge variant="secondary" data-testid="badge-category">
                       {item.category}
@@ -358,12 +402,38 @@ export function ShopItemDetailPage() {
                     </Badge>
                   )}
                 </div>
+                {/* Gift card value badge */}
+                {item.itemType === 'gift_card' && item.giftCardValue && (
+                  <p className="text-sm text-purple-300 mt-1 font-medium">
+                    <Gift className="h-3.5 w-3.5 inline mr-1" />
+                    ${parseFloat(item.giftCardValue).toFixed(2)} service credit
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-1 text-muted-foreground">
                 <Eye className="h-4 w-4" />
                 <span className="text-sm" data-testid="text-views">{item.views || 0}</span>
               </div>
             </div>
+
+            {/* Gift card code display after JCMOVES purchase */}
+            {giftCardCode && (
+              <div className="mb-4 p-4 rounded-xl bg-gradient-to-br from-purple-950/60 to-pink-950/60 border border-purple-500/40">
+                <div className="flex items-center gap-2 mb-2">
+                  <Gift className="h-5 w-5 text-purple-400" />
+                  <span className="font-bold text-purple-200">Your Gift Card Code</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <code className="text-2xl font-mono font-bold text-white tracking-widest bg-black/30 px-4 py-2 rounded-lg flex-1 text-center">
+                    {giftCardCode}
+                  </code>
+                  <Button size="sm" variant="outline" className="border-purple-500/40 text-purple-300 hover:bg-purple-500/20" onClick={() => { navigator.clipboard.writeText(giftCardCode); toast({ title: "Copied!" }); }}>
+                    Copy
+                  </Button>
+                </div>
+                <p className="text-xs text-purple-300/70 mt-2 text-center">Save this code — use it to redeem ${item.giftCardValue && parseFloat(item.giftCardValue).toFixed(2)} off any JC ON THE MOVE service</p>
+              </div>
+            )}
 
             {/* Phone Number */}
             {item.phoneNumber && (
@@ -420,7 +490,7 @@ export function ShopItemDetailPage() {
                         addItem({
                           id: `shop-${item.id}`,
                           name: item.title,
-                          price: parseFloat(item.price),
+                          price: discountedPrice ?? parseFloat(item.price),
                           image: photos[0] || "",
                           type: "shop",
                         });
@@ -432,9 +502,56 @@ export function ShopItemDetailPage() {
                     {isInCart(`shop-${item.id}`) ? (
                       <><Check className="h-5 w-5 mr-2" /> In Cart</>
                     ) : (
-                      <><ShoppingCart className="h-5 w-5 mr-2" /> Add to Cart</>
+                      <><ShoppingCart className="h-5 w-5 mr-2" /> Add to Cart — ${(discountedPrice ?? parseFloat(item.price)).toFixed(2)}</>
                     )}
                   </Button>
+
+                  {/* JCMOVES purchase options */}
+                  {user && (item.jcmovesPrice || item.jcmovesDiscountPercent) && (
+                    <div className="rounded-xl border border-yellow-500/30 bg-gradient-to-br from-yellow-950/40 to-amber-950/40 p-3 space-y-2">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Coins className="h-4 w-4 text-yellow-400" />
+                        <span className="text-sm font-semibold text-yellow-300">Pay with JCMOVES</span>
+                      </div>
+
+                      {item.jcmovesPrice && !giftCardCode && (
+                        <Button
+                          size="sm"
+                          className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold"
+                          onClick={() => buyWithJcmovesMutation.mutate()}
+                          disabled={buyWithJcmovesMutation.isPending}
+                          data-testid="button-buy-jcmoves"
+                        >
+                          {buyWithJcmovesMutation.isPending ? "Processing..." : (
+                            <>{item.itemType === 'gift_card' ? <Gift className="h-4 w-4 mr-2" /> : <Coins className="h-4 w-4 mr-2" />}
+                            Buy with {parseFloat(item.jcmovesPrice).toLocaleString()} JCMOVES</>
+                          )}
+                        </Button>
+                      )}
+
+                      {item.jcmovesDiscountPercent && item.jcmovesDiscountTokens && !discountedPrice && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full border-yellow-500/40 text-yellow-300 hover:bg-yellow-500/20"
+                          onClick={() => discountWithJcmovesMutation.mutate()}
+                          disabled={discountWithJcmovesMutation.isPending}
+                          data-testid="button-discount-jcmoves"
+                        >
+                          {discountWithJcmovesMutation.isPending ? "Applying..." : (
+                            <><Tag className="h-4 w-4 mr-2" />Use {parseFloat(item.jcmovesDiscountTokens).toLocaleString()} JCMOVES for {item.jcmovesDiscountPercent}% off</>
+                          )}
+                        </Button>
+                      )}
+
+                      {discountedPrice && (
+                        <div className="flex items-center gap-2 text-xs text-emerald-300">
+                          <Check className="h-3.5 w-3.5" />
+                          {item.jcmovesDiscountPercent}% discount applied — add to cart at ${discountedPrice.toFixed(2)}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <a href="/bitcoin-payment" className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-orange-500/40 bg-orange-500/10 hover:bg-orange-500/20 transition-colors">
                     <Bitcoin className="h-4 w-4 text-orange-400" />
