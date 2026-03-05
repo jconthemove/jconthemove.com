@@ -112,6 +112,16 @@ export default function InGodWeTrustPage() {
       badge: adminStats?.totalLeads != null ? `${adminStats.totalLeads} total` : null,
       badgeColor: "bg-blue-500",
     },
+    {
+      href: "/admin/pipeline",
+      icon: Activity,
+      label: "Job Pipeline A–Z",
+      description: "Track every job from quote → review with full lifecycle view",
+      badge: null,
+      badgeColor: "",
+      color: "from-amber-500 to-orange-500",
+      shadow: "shadow-amber-900/30",
+    },
   ];
 
   return (

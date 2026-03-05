@@ -18,7 +18,7 @@ import { faucetService } from "./services/faucet";
 import { insertFundingDepositSchema, insertFaucetConfigSchema, insertFaucetWalletSchema } from "@shared/schema";
 import { z } from "zod";
 import { EncryptionService } from "./services/encryption";
-import { eq, desc, sql, and, gte } from 'drizzle-orm';
+import { eq, desc, sql, and, gte, or, ilike } from 'drizzle-orm';
 import { db } from './db';
 import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens, promoCodes, reviews } from '@shared/schema';
 import { getFaucetPayService } from "./services/faucetpay";
@@ -3113,6 +3113,144 @@ Thank you for your business!
       crewSize: lead.crewSize || 2,
     };
   }
+
+  // POST: Customer self-service job lookup (public — no auth required)
+  app.post("/api/review/lookup", async (req, res) => {
+    try {
+      const { search } = req.body; // phone, email, or job ID
+      if (!search || search.trim().length < 3) {
+        return res.status(400).json({ error: "Please enter at least 3 characters" });
+      }
+      const q = search.trim().toLowerCase();
+
+      // Try exact job ID first
+      let matchedLeads: any[] = [];
+      try {
+        const byId = await storage.getLead(q);
+        if (byId) matchedLeads = [byId];
+      } catch {}
+
+      // If not found by ID, search by phone or email
+      if (matchedLeads.length === 0) {
+        matchedLeads = await db.select().from(leads)
+          .where(or(
+            ilike(leads.phone, `%${q}%`),
+            ilike(leads.email, `%${q}%`),
+            ilike(leads.firstName, `%${q}%`),
+            ilike(leads.lastName, `%${q}%`),
+          ))
+          .orderBy(desc(leads.createdAt))
+          .limit(5);
+      }
+
+      if (matchedLeads.length === 0) {
+        return res.status(404).json({ error: "No jobs found matching that information" });
+      }
+
+      // Return summary for each matching lead
+      const results = matchedLeads.map((l: any) => ({
+        id: l.id,
+        firstName: l.firstName,
+        lastName: l.lastName,
+        serviceType: l.serviceType,
+        status: l.status,
+        createdAt: l.createdAt,
+        reviewToken: l.reviewToken || null,
+        hasReviewToken: !!l.reviewToken,
+        isCompleted: l.status === 'completed',
+      }));
+      res.json({ results });
+    } catch (err: any) {
+      console.error("Review lookup error:", err);
+      res.status(500).json({ error: "Lookup failed. Please try again." });
+    }
+  });
+
+  // GET: Admin A-Z Pipeline view — all jobs with lifecycle stages
+  app.get("/api/admin/pipeline", async (req: any, res) => {
+    if (!req.session?.userId) return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const { search, status, limit: lim = 100, offset: off = 0 } = req.query;
+      let query = db.select().from(leads);
+      const conditions: any[] = [];
+      if (status && status !== 'all') conditions.push(eq(leads.status, status as string));
+      if (search) {
+        const q = `%${search}%`;
+        conditions.push(or(
+          ilike(leads.firstName, q), ilike(leads.lastName, q),
+          ilike(leads.email, q), ilike(leads.phone, q),
+        ));
+      }
+      const allLeads = await db.select().from(leads)
+        .where(conditions.length ? and(...conditions) : undefined)
+        .orderBy(desc(leads.createdAt))
+        .limit(Number(lim))
+        .offset(Number(off));
+
+      // Fetch reviews for all lead IDs
+      const leadIds = allLeads.map((l: any) => l.id);
+      let reviewMap: Record<string, any> = {};
+      if (leadIds.length > 0) {
+        const allReviews = await db.select().from(reviews).where(
+          leadIds.length === 1
+            ? eq(reviews.leadId, leadIds[0])
+            : or(...leadIds.map((id: string) => eq(reviews.leadId, id)))
+        );
+        for (const r of allReviews) {
+          reviewMap[r.leadId] = r;
+        }
+      }
+
+      // Fetch employee names for assigned employees
+      const assignedIds = [...new Set(allLeads.map((l: any) => l.assignedToUserId).filter(Boolean))];
+      let employeeMap: Record<string, string> = {};
+      for (const eid of assignedIds) {
+        try {
+          const emp = await storage.getUser(eid as string);
+          if (emp) employeeMap[eid as string] = `${emp.firstName || ''} ${emp.lastName || ''}`.trim();
+        } catch {}
+      }
+
+      const pipeline = allLeads.map((l: any) => {
+        const review = reviewMap[l.id];
+        const stages = {
+          quoteRequested: { done: true, at: l.createdAt },
+          contacted: { done: l.status !== 'quote_requested', at: null },
+          assigned: { done: !!l.assignedToUserId, at: null },
+          completed: { done: l.status === 'completed', at: null },
+          reviewSent: { done: !!l.reviewRequestSentAt, at: l.reviewRequestSentAt },
+          reviewReceived: { done: !!review, at: review?.createdAt || null },
+        };
+        return {
+          id: l.id,
+          firstName: l.firstName,
+          lastName: l.lastName,
+          email: l.email,
+          phone: l.phone,
+          serviceType: l.serviceType,
+          status: l.status,
+          createdAt: l.createdAt,
+          assignedEmployee: l.assignedToUserId ? (employeeMap[l.assignedToUserId] || 'Assigned') : null,
+          reviewToken: l.reviewToken,
+          reviewRequestSentAt: l.reviewRequestSentAt,
+          review: review ? {
+            id: review.id, rating: review.rating, comment: review.comment,
+            tipAmount: review.tipAmount, wouldRecommend: review.wouldRecommend,
+            createdAt: review.createdAt,
+          } : null,
+          stages,
+        };
+      });
+
+      const totalCount = await db.select({ count: sql<number>`count(*)` }).from(leads)
+        .where(conditions.length ? and(...conditions) : undefined);
+
+      res.json({ pipeline, total: Number(totalCount[0]?.count || 0) });
+    } catch (err: any) {
+      console.error("Pipeline fetch error:", err);
+      res.status(500).json({ error: err.message || "Failed to load pipeline" });
+    }
+  });
 
   // GET job info by review token (public)
   app.get("/api/review/token/:token", async (req, res) => {

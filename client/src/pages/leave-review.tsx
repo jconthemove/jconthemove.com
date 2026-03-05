@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Star, Heart, Users, DollarSign, ChevronRight, CheckCircle, Truck,
-  ShoppingCart, Bitcoin, Copy, Check, Gem, Tag, ExternalLink
+  ShoppingCart, Bitcoin, Copy, Check, Gem, Tag, ExternalLink,
+  Search, Phone, Mail, Hash, ArrowRight, AlertCircle, Calendar
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -213,16 +214,210 @@ function JewelryDiscountCard() {
   );
 }
 
+// ─── Job Lookup Screen ────────────────────────────────────────────────────────
+const SERVICE_LABELS: Record<string, string> = {
+  residential: "Residential Move", commercial: "Commercial Move",
+  junk: "Junk Removal", snow: "Snow Removal", cleaning: "Cleaning",
+  handyman: "Handyman", demolition: "Demolition", flooring: "Flooring", painting: "Painting",
+};
+
+function JobLookupScreen({ onSelect }: { onSelect: (jobId: string, token?: string) => void }) {
+  const [searchInput, setSearchInput] = useState("");
+  const [submitted, setSubmitted] = useState("");
+  const [results, setResults] = useState<any[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [lookupError, setLookupError] = useState("");
+
+  const handleLookup = async () => {
+    const val = searchInput.trim();
+    if (val.length < 3) { setLookupError("Please enter at least 3 characters"); return; }
+    setSearching(true);
+    setLookupError("");
+    setResults(null);
+    setSubmitted(val);
+    try {
+      const res = await fetch("/api/review/lookup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ search: val }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setLookupError(data.error || "Not found"); return; }
+      setResults(data.results || []);
+    } catch {
+      setLookupError("Something went wrong. Please try again.");
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-amber-50 via-white to-white dark:from-slate-900 dark:via-slate-950 dark:to-slate-950">
+      <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-4 py-8 text-center shadow-lg">
+        <div className="max-w-2xl mx-auto">
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <Truck className="h-7 w-7" />
+            <span className="text-xl font-bold tracking-wide">JC ON THE MOVE</span>
+          </div>
+          <h1 className="text-2xl md:text-3xl font-bold mb-1">Leave a Review</h1>
+          <p className="opacity-90 text-sm md:text-base">
+            Look up your job to get started
+          </p>
+        </div>
+      </div>
+
+      <div className="max-w-lg mx-auto px-4 py-10 space-y-6">
+        <Card className="border-amber-200 dark:border-amber-800 shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Search className="h-5 w-5 text-amber-500" />
+              Find Your Job
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Enter your phone number, email address, or job ID — we'll pull up your job.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Lookup hints */}
+            <div className="grid grid-cols-3 gap-2 text-center">
+              {[
+                { icon: Phone, label: "Phone", example: "906-285-…" },
+                { icon: Mail, label: "Email", example: "your@email.com" },
+                { icon: Hash, label: "Job ID", example: "abc12345" },
+              ].map(({ icon: Icon, label, example }) => (
+                <div key={label} className="rounded-lg border border-border bg-muted/40 px-2 py-2">
+                  <Icon className="h-4 w-4 text-amber-500 mx-auto mb-1" />
+                  <p className="text-xs font-medium text-foreground">{label}</p>
+                  <p className="text-xs text-muted-foreground">{example}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <Input
+                value={searchInput}
+                onChange={(e) => { setSearchInput(e.target.value); setLookupError(""); }}
+                onKeyDown={(e) => e.key === "Enter" && handleLookup()}
+                placeholder="Phone, email, or job ID…"
+                className="flex-1"
+                autoFocus
+              />
+              <Button onClick={handleLookup} disabled={searching}
+                className="bg-amber-500 hover:bg-amber-600 text-white shrink-0">
+                {searching
+                  ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                  : <Search className="h-4 w-4" />}
+              </Button>
+            </div>
+
+            {lookupError && (
+              <div className="flex items-start gap-2 text-destructive text-sm bg-destructive/10 rounded-lg px-3 py-2">
+                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                {lookupError}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Results */}
+        {results !== null && (
+          <div className="space-y-3">
+            {results.length === 0 ? (
+              <div className="text-center py-6">
+                <AlertCircle className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
+                <p className="font-medium text-foreground">No jobs found</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Try your phone number, email address, or the job ID from your confirmation.
+                </p>
+              </div>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  {results.length} job{results.length !== 1 ? "s" : ""} found — select yours below:
+                </p>
+                {results.map((job) => (
+                  <button
+                    key={job.id}
+                    type="button"
+                    onClick={() => {
+                      if (job.reviewToken) onSelect(job.id, job.reviewToken);
+                      else onSelect(job.id);
+                    }}
+                    className={`w-full text-left rounded-xl border-2 p-4 transition-all hover:border-amber-400 ${
+                      job.isCompleted
+                        ? "border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/30"
+                        : "border-border bg-background hover:bg-muted/30"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <span className="font-semibold text-foreground">
+                            {job.firstName} {job.lastName}
+                          </span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                            job.isCompleted
+                              ? "bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300"
+                              : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                          }`}>
+                            {job.isCompleted ? "✓ Completed" : job.status.replace(/_/g, " ")}
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {SERVICE_LABELS[job.serviceType] || job.serviceType}
+                        </p>
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                          <Calendar className="h-3 w-3" />
+                          {new Date(job.createdAt).toLocaleDateString("en-US", {
+                            month: "long", day: "numeric", year: "numeric"
+                          })}
+                        </div>
+                        <p className="text-xs text-muted-foreground font-mono mt-1">
+                          ID: {job.id}
+                        </p>
+                      </div>
+                      <div className="shrink-0">
+                        {job.isCompleted
+                          ? <ArrowRight className="h-5 w-5 text-green-500 mt-1" />
+                          : <ArrowRight className="h-5 w-5 text-muted-foreground mt-1" />}
+                      </div>
+                    </div>
+                    {!job.isCompleted && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                        Reviews can only be submitted for completed jobs
+                      </p>
+                    )}
+                  </button>
+                ))}
+              </>
+            )}
+          </div>
+        )}
+
+        <p className="text-center text-xs text-muted-foreground">
+          Can't find your job? Call us at{" "}
+          <a href="tel:9062859312" className="text-amber-600 dark:text-amber-400 font-medium hover:underline">
+            (906) 285-9312
+          </a>
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function LeaveReviewPage() {
   const params = new URLSearchParams(window.location.search);
-  const token = params.get("token");
-  const jobId = params.get("jobId");
+  const urlToken = params.get("token");
+  const urlJobId = params.get("jobId");
 
+  // Support self-service lookup: user arrives without a token/jobId
+  // All hooks must be declared before any conditional returns
+  const [resolvedJobId, setResolvedJobId] = useState<string | null>(urlJobId);
+  const [resolvedToken, setResolvedToken] = useState<string | null>(urlToken);
   const { addItem, isInCart, itemCount } = useCart();
   const { toast } = useToast();
   const [, navigate] = useLocation();
-
   const [submitted, setSubmitted] = useState(false);
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
@@ -233,9 +428,13 @@ export default function LeaveReviewPage() {
   const [tipPerMover, setTipPerMover] = useState(20);
   const [tipMethod, setTipMethod] = useState<"cart" | "bitcoin">("cart");
 
-  const totalTip = numberOfMovers * tipPerMover;
+  const token = resolvedToken;
+  const jobId = resolvedJobId;
+
+  // Keep all hooks ABOVE any conditional returns
   const tipCartId = `tip-${token || jobId || "job"}`;
   const tipInCart = isInCart(tipCartId);
+  const totalTip = numberOfMovers * tipPerMover;
 
   const { data: jobInfo, isLoading, error } = useQuery<{
     jobId: string; customerName: string; serviceType: string;
@@ -289,6 +488,18 @@ export default function LeaveReviewPage() {
     },
     onSuccess: () => setSubmitted(true),
   });
+
+  // ─── Lookup screen (all hooks already called above) ───────────────────────
+  if (!token && !jobId) {
+    return (
+      <JobLookupScreen
+        onSelect={(id, tok) => {
+          setResolvedJobId(id);
+          if (tok) setResolvedToken(tok);
+        }}
+      />
+    );
+  }
 
   // ─── Success screen ────────────────────────────────────────────────────────
   if (submitted) {
