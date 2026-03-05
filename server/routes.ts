@@ -134,6 +134,59 @@ async function ensureRewardSettingsSeeded() {
 }
 
 // Links employee promo codes to their user accounts on startup
+async function seedDefaultPromoCodes() {
+  try {
+    const defaults = [
+      {
+        code: 'JCMOVES',
+        description: 'JC ON THE MOVE official referral code — 10% off services + 500 bonus tokens',
+        discountPercent: '10.00',
+        discountPercentJewelry: '5.00',
+        rewardTokens: '500.00',
+        referralRewardTokens: '250.00',
+        isActive: true,
+      },
+      {
+        code: 'MATTMOVES',
+        description: "Matt's employee referral code — earn tokens when your crew refer customers",
+        discountPercent: '5.00',
+        discountPercentJewelry: '0.00',
+        rewardTokens: '100.00',
+        referralRewardTokens: '50.00',
+        isActive: true,
+      },
+      {
+        code: 'TIMTHEMOVER',
+        description: "Tim's employee referral code",
+        discountPercent: '5.00',
+        discountPercentJewelry: '0.00',
+        rewardTokens: '100.00',
+        referralRewardTokens: '50.00',
+        isActive: true,
+      },
+      {
+        code: 'BILLSBARGAIN',
+        description: "Bill's employee referral code",
+        discountPercent: '5.00',
+        discountPercentJewelry: '0.00',
+        rewardTokens: '100.00',
+        referralRewardTokens: '50.00',
+        isActive: true,
+      },
+    ];
+    for (const promo of defaults) {
+      const existing = await db.select({ id: promoCodes.id }).from(promoCodes)
+        .where(eq(promoCodes.code, promo.code)).limit(1);
+      if (existing.length === 0) {
+        await db.insert(promoCodes).values(promo);
+        console.log(`✅ Seeded promo code: ${promo.code}`);
+      }
+    }
+  } catch (err) {
+    console.error('Failed to seed default promo codes:', err);
+  }
+}
+
 async function linkEmployeePromoCodes() {
   try {
     const knownLinks = [
@@ -170,6 +223,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   await ensureStakingTreasuryUser();
   await ensureMomsAccount();
   await ensureRewardSettingsSeeded();
+  await seedDefaultPromoCodes();
   await linkEmployeePromoCodes();
 
   // Public health check endpoint for deployment monitoring (MUST be before auth setup)
