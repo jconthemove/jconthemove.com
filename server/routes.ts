@@ -2409,6 +2409,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin retro-credit: directly credit wallet without deducting from treasury (use when treasury was already debited)
+  app.post('/api/admin/wallet/:userId/retro-credit', isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { tokenAmount, reason } = req.body;
+
+      if (!tokenAmount || parseFloat(tokenAmount) <= 0) {
+        return res.status(400).json({ error: "Valid token amount is required" });
+      }
+
+      const targetUser = await storage.getUser(userId);
+      if (!targetUser) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const amount = parseFloat(tokenAmount);
+      await storage.creditWalletTokens(userId, amount);
+
+      const TOKEN_PRICE = 0.00000508432;
+      await db.insert(rewards).values({
+        userId,
+        rewardType: 'admin_retro_credit',
+        tokenAmount: amount.toFixed(8),
+        cashValue: (amount * TOKEN_PRICE).toFixed(6),
+        status: 'confirmed',
+        metadata: { reason: reason || 'Admin retro-credit', creditedBy: (req.user as any)?.id }
+      });
+
+      const wallet = await storage.getWalletAccount(userId);
+      console.log(`🔧 Admin retro-credit: ${amount} JCMOVES credited to ${targetUser.email} — reason: ${reason}`);
+
+      res.json({
+        success: true,
+        message: `Successfully credited ${amount} JCMOVES to ${targetUser.email}`,
+        newBalance: wallet?.tokenBalance || '0',
+        reason
+      });
+    } catch (error) {
+      console.error("Error applying retro-credit:", error);
+      res.status(500).json({ error: "Failed to apply retro-credit" });
+    }
+  });
+
   // Admin transfer tokens to user wallet
   app.post('/api/admin/wallet/:userId/transfer', isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
@@ -3596,19 +3639,23 @@ Thank you for your business!
               : 500; // fallback 500 JCMOVES
 
             for (const memberId of crewIds) {
-              const memberUser = await storage.getUserById(memberId).catch(() => null);
-              if (!memberUser) { console.log(`⚠️ Crew member ${memberId} not found in DB — skipping flat reward`); continue; }
-              await storage.creditWalletTokens(memberId, flatReward);
-              await db.insert(rewards).values({
-                userId: memberId,
-                rewardType: 'employee_job_completed',
-                tokenAmount: flatReward.toFixed(8),
-                cashValue: (flatReward * TOKEN_PRICE).toFixed(6),
-                status: 'confirmed',
-                referenceId: id,
-                metadata: { jobId: id, serviceType: updatedLead.serviceType, flat: true }
-              });
-              console.log(`🏆 Awarded ${flatReward} JCMOVES (job completion flat reward) to ${memberUser.email}`);
+              try {
+                const memberUser = await storage.getUser(memberId).catch(() => null);
+                if (!memberUser) { console.log(`⚠️ Crew member ${memberId} not found in DB — skipping flat reward`); continue; }
+                await storage.creditWalletTokens(memberId, flatReward);
+                await db.insert(rewards).values({
+                  userId: memberId,
+                  rewardType: 'employee_job_completed',
+                  tokenAmount: flatReward.toFixed(8),
+                  cashValue: (flatReward * TOKEN_PRICE).toFixed(6),
+                  status: 'confirmed',
+                  referenceId: id,
+                  metadata: { jobId: id, serviceType: updatedLead.serviceType, flat: true }
+                });
+                console.log(`🏆 Awarded ${flatReward} JCMOVES (job completion flat reward) to ${memberUser.email}`);
+              } catch (memberErr) {
+                console.error(`❌ Failed to award flat reward to crew member ${memberId}:`, memberErr);
+              }
             }
           } else {
             console.log(`⚠️ Job ${id} has no crew members or assigned employee — skipping employee flat reward`);
@@ -3641,8 +3688,12 @@ Thank you for your business!
 
               const tokensPerWorker = crewAllocation / crewIds.length;
               for (const crewMemberId of crewIds) {
-                await gamificationService.awardJobCompletion(crewMemberId, id, tokensPerWorker.toFixed(8), { onTime: true, customerRating: 5 });
-                console.log(`✅ Awarded ${tokensPerWorker} JCMOVES (allocation share) to crew member ${crewMemberId}`);
+                try {
+                  await gamificationService.awardJobCompletion(crewMemberId, id, tokensPerWorker.toFixed(8), { onTime: true, customerRating: 5 });
+                  console.log(`✅ Awarded ${tokensPerWorker} JCMOVES (allocation share) to crew member ${crewMemberId}`);
+                } catch (memberErr) {
+                  console.error(`❌ Failed to award allocation share to crew member ${crewMemberId}:`, memberErr);
+                }
               }
             }
           }
@@ -3834,11 +3885,15 @@ Thank you for your business!
                 console.log(`💰 Quote completion: Distributing ${totalTokens} tokens to ${updatedLead.crewMembers.length} crew members (${tokensPerWorker} each)`);
                 
                 for (const crewMemberId of updatedLead.crewMembers) {
-                  await gamificationService.awardJobCompletion(crewMemberId, id, tokensPerWorker.toFixed(8), {
-                    onTime: true,
-                    customerRating: 5
-                  });
-                  console.log(`✅ Awarded ${tokensPerWorker} tokens to crew member ${crewMemberId}`);
+                  try {
+                    await gamificationService.awardJobCompletion(crewMemberId, id, tokensPerWorker.toFixed(8), {
+                      onTime: true,
+                      customerRating: 5
+                    });
+                    console.log(`✅ Awarded ${tokensPerWorker} tokens to crew member ${crewMemberId}`);
+                  } catch (memberErr) {
+                    console.error(`❌ Failed to award allocation share to crew member ${crewMemberId}:`, memberErr);
+                  }
                 }
                 
                 await storage.updateLeadQuote(id, { completionRewardedAt: new Date() });

@@ -341,6 +341,9 @@ export class GamificationService {
       throw new Error(`Token distribution failed: ${distributionResult.error || 'Unknown error'}`);
     }
 
+    // Credit the user's wallet balance with the tokens
+    await storage.creditWalletTokens(userId, parseFloat(tokenAmount));
+
     // Create reward record for history tracking (use actual cash value from distribution)
     await storage.createReward({
       userId,
