@@ -41,6 +41,7 @@ import EmployeeRegister from "@/pages/employee-register";
 import EmployeeLogin from "@/pages/employee-login";
 import CustomerLogin from "@/pages/customer-login";
 import ForgotAccessPage from "@/pages/forgot-access";
+import LeaveReviewPage from "@/pages/leave-review";
 import QuotePage from "@/pages/quote";
 import SponsorsPage from "@/pages/sponsors";
 import ServicesPage from "@/pages/services";
@@ -288,6 +289,7 @@ function Router() {
       <Route path="/employee-login" component={EmployeeLogin} />
       <Route path="/customer-login" component={CustomerLogin} />
       <Route path="/forgot-access" component={ForgotAccessPage} />
+      <Route path="/leave-review" component={LeaveReviewPage} />
       
       {/* Customer interface - accessible to all users without authentication */}
       <Route path="/customer" component={CustomerMobileInterface} />

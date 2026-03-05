@@ -20,7 +20,7 @@ import { z } from "zod";
 import { EncryptionService } from "./services/encryption";
 import { eq, desc, sql, and, gte } from 'drizzle-orm';
 import { db } from './db';
-import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens, promoCodes } from '@shared/schema';
+import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens, promoCodes, reviews } from '@shared/schema';
 import { getFaucetPayService } from "./services/faucetpay";
 import { getAdvertisingService } from "./services/advertising";
 import { FAUCET_CONFIG } from "./constants";
@@ -3075,6 +3075,123 @@ Thank you for your business!
     } catch (error) {
       console.error("Error sending review request:", error);
       res.status(500).json({ error: "Failed to send review request" });
+    }
+  });
+
+  // =====================
+  // PUBLIC REVIEW / TIP ROUTES (no auth required — token based)
+  // =====================
+
+  async function getJobInfoByLead(lead: any) {
+    const serviceLabels: Record<string, string> = {
+      residential: "Residential Moving", commercial: "Commercial Moving",
+      junk: "Junk Removal", snow: "Snow Removal", cleaning: "Move In/Out Cleaning",
+      handyman: "Handyman", demolition: "Light Demolition", flooring: "Flooring", painting: "Painting",
+    };
+    const employees: Array<{ id: string; name: string }> = [];
+    const crewIds: string[] = [
+      ...(lead.crewMembers || []),
+      ...(lead.acceptedByEmployees || []),
+      ...(lead.assignedToUserId ? [lead.assignedToUserId] : []),
+    ];
+    const seenIds = new Set<string>();
+    for (const eid of crewIds) {
+      if (seenIds.has(eid)) continue;
+      seenIds.add(eid);
+      const emp = await storage.getUser(eid);
+      if (emp && emp.role === 'employee') {
+        employees.push({ id: emp.id, name: `${emp.firstName} ${emp.lastName}`.trim() });
+      }
+    }
+    return {
+      jobId: lead.id,
+      customerName: `${lead.firstName}`,
+      serviceType: lead.serviceType,
+      serviceLabel: serviceLabels[lead.serviceType] || lead.serviceType,
+      completedDate: lead.createdAt ? new Date(lead.createdAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : null,
+      assignedEmployees: employees,
+      crewSize: lead.crewSize || 2,
+    };
+  }
+
+  // GET job info by review token (public)
+  app.get("/api/review/token/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+      const [lead] = await db.select().from(leads).where(eq(leads.reviewToken, token)).limit(1);
+      if (!lead) return res.status(404).json({ error: "Invalid or expired review link" });
+      res.json(await getJobInfoByLead(lead));
+    } catch (err) {
+      res.status(500).json({ error: "Failed to load review info" });
+    }
+  });
+
+  // GET job info by jobId (fallback for legacy links)
+  app.get("/api/review/job/:jobId", async (req, res) => {
+    try {
+      const lead = await storage.getLead(req.params.jobId);
+      if (!lead || lead.status !== 'completed') return res.status(404).json({ error: "Job not found" });
+      res.json(await getJobInfoByLead(lead));
+    } catch (err) {
+      res.status(500).json({ error: "Failed to load review info" });
+    }
+  });
+
+  async function submitPublicReview(lead: any, body: any, res: any) {
+    const { rating, comment, moverNames, wouldRecommend, numberOfMovers, tipPerMover, tipAmount } = body;
+    if (!rating || rating < 1 || rating > 5) return res.status(400).json({ error: "Rating must be 1–5" });
+
+    const employeeId = lead.assignedToUserId || 'staking-treasury-system';
+    const userId = lead.userId || '47798367';
+
+    try {
+      const existing = await db.select().from(reviews)
+        .where(and(eq(reviews.leadId, lead.id), eq(reviews.userId, userId))).limit(1);
+      if (existing.length > 0) return res.status(400).json({ error: "A review was already submitted for this job" });
+    } catch {}
+
+    const [review] = await db.insert(reviews).values({
+      leadId: lead.id,
+      userId,
+      employeeId,
+      rating,
+      comment: comment || null,
+      wouldRecommend: wouldRecommend !== false,
+      moverNames: moverNames || null,
+      numberOfMovers: numberOfMovers || null,
+      tipAmount: tipAmount ? tipAmount.toString() : null,
+      tipPerMover: tipPerMover ? tipPerMover.toString() : null,
+      isPublic: true,
+    }).returning();
+
+    if (rating >= 4 && employeeId !== 'staking-treasury-system') {
+      try { await gamificationService.awardHighRatingBonus(employeeId, review.id, rating); } catch {}
+    }
+
+    res.json({ success: true, review });
+  }
+
+  // POST submit review by token (public)
+  app.post("/api/review/token/:token", async (req, res) => {
+    try {
+      const [lead] = await db.select().from(leads).where(eq(leads.reviewToken, req.params.token)).limit(1);
+      if (!lead) return res.status(404).json({ error: "Invalid review link" });
+      await submitPublicReview(lead, req.body, res);
+    } catch (err: any) {
+      console.error("Error submitting review by token:", err);
+      res.status(500).json({ error: err.message || "Failed to submit review" });
+    }
+  });
+
+  // POST submit review by jobId (fallback)
+  app.post("/api/review/job/:jobId", async (req, res) => {
+    try {
+      const lead = await storage.getLead(req.params.jobId);
+      if (!lead || lead.status !== 'completed') return res.status(404).json({ error: "Job not found" });
+      await submitPublicReview(lead, req.body, res);
+    } catch (err: any) {
+      console.error("Error submitting review by jobId:", err);
+      res.status(500).json({ error: err.message || "Failed to submit review" });
     }
   });
 
@@ -10212,6 +10329,30 @@ Thank you for your business!
       console.error("Error creating sponsor checkout:", error);
       const errorMsg = error?.errors?.[0]?.detail || error.message || "Failed to create checkout";
       res.status(500).json({ error: errorMsg });
+    }
+  });
+
+  // Public endpoint: BTC wallet address + live price for tip payments on review page
+  app.get("/api/btc/tip-info", async (_req, res) => {
+    try {
+      const btcAddress = process.env.BTC_WALLET_ADDRESS;
+      if (!btcAddress) return res.status(503).json({ error: "Bitcoin tips not configured" });
+      let btcPrice = 0;
+      try {
+        const r = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd");
+        const d = await r.json();
+        btcPrice = d.bitcoin?.usd || 0;
+      } catch {}
+      if (!btcPrice) {
+        try {
+          const r2 = await fetch("https://api.coinbase.com/v2/prices/BTC-USD/spot");
+          const d2 = await r2.json();
+          btcPrice = parseFloat(d2.data?.amount) || 0;
+        } catch {}
+      }
+      res.json({ address: btcAddress, btcPrice, timestamp: Date.now() });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to load tip info" });
     }
   });
 

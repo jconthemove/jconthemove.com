@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { useCart } from "@/hooks/useCart";
 import { Link, useLocation } from "wouter";
-import { ArrowLeft, Trash2, ShoppingCart, Percent, Shield, Loader2, CreditCard, Gem, Truck, Plus, MapPin, CalendarDays, Heart, Building2, Trophy, Check, Bitcoin, Tag, X, CheckCircle2, Package, Home } from "lucide-react";
+import { ArrowLeft, Trash2, ShoppingCart, Percent, Shield, Loader2, CreditCard, Gem, Truck, Plus, MapPin, CalendarDays, Heart, Building2, Trophy, Check, Bitcoin, Tag, X, CheckCircle2, Package, Home, DollarSign } from "lucide-react";
 
 interface PromoResult {
   valid: boolean;
@@ -299,12 +299,12 @@ export default function CartPage() {
                   <img src={item.image} alt={item.name} className="w-16 h-16 rounded-lg object-cover shrink-0" />
                 ) : (
                   <div className="w-16 h-16 rounded-lg bg-slate-600 flex items-center justify-center shrink-0">
-                    {item.type === "jewelry" ? <Gem className="h-6 w-6 text-purple-400" /> : item.type === "sponsor" ? <Trophy className="h-6 w-6 text-yellow-400" /> : item.type === "shop" ? <ShoppingCart className="h-6 w-6 text-green-400" /> : <Truck className="h-6 w-6 text-blue-400" />}
+                    {item.type === "tip" ? <DollarSign className="h-6 w-6 text-amber-400" /> : item.type === "jewelry" ? <Gem className="h-6 w-6 text-purple-400" /> : item.type === "sponsor" ? <Trophy className="h-6 w-6 text-yellow-400" /> : item.type === "shop" ? <ShoppingCart className="h-6 w-6 text-green-400" /> : <Truck className="h-6 w-6 text-blue-400" />}
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="text-white font-medium text-sm truncate">{item.name}</p>
-                  <p className="text-slate-400 text-xs capitalize">{item.type === "promo" ? "Moving Service" : item.type === "sponsor" ? "Monthly Sponsorship" : item.type === "shop" ? "Community Shop" : item.type}</p>
+                  <p className="text-slate-400 text-xs capitalize">{item.type === "tip" ? "Crew Tip" : item.type === "promo" ? "Moving Service" : item.type === "sponsor" ? "Monthly Sponsorship" : item.type === "shop" ? "Community Shop" : item.type}</p>
                   <p className="text-yellow-400 font-bold">${item.price.toFixed(2)}</p>
                 </div>
                 <button onClick={() => removeItem(item.id)} className="text-red-400 hover:text-red-300 p-2">

@@ -78,7 +78,11 @@ export const leads = pgTable("leads", {
   
   // Promo code for discounts
   promoCode: text("promo_code"), // Customer-entered promo code for discounts
-  
+
+  // Review/tip link token (so customers can leave a review without logging in)
+  reviewToken: varchar("review_token").unique(),
+  reviewRequestSentAt: timestamp("review_request_sent_at"),
+
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
 
@@ -963,6 +967,11 @@ export const reviews = pgTable("reviews", {
   isHelpful: boolean("is_helpful").default(true), // Review marked as helpful
   isPublic: boolean("is_public").default(true), // Display publicly on site
   rewardedAt: timestamp("rewarded_at"), // Timestamp when employee received bonus tokens for this review
+  // Tip tracking
+  moverNames: text("mover_names"), // Customer-specified mover names to credit
+  numberOfMovers: integer("number_of_movers"), // How many movers the customer is tipping
+  tipAmount: decimal("tip_amount", { precision: 10, scale: 2 }), // Total tip amount left by customer
+  tipPerMover: decimal("tip_per_mover", { precision: 10, scale: 2 }), // Per-mover tip amount
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 }, (table) => [
   index("idx_reviews_lead").on(table.leadId),
