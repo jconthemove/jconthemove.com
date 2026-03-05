@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/hooks/useTheme";
 import { WalletProviderWrapper } from "@/components/WalletProviderWrapper";
 import { RouteGuard } from "@/components/RouteGuard";
 import { ComplianceCheck } from "@/components/compliance-check";
+import { EarnTasksButton } from "@/components/earn-tasks-button";
 import Header from "@/components/header";
 import PwaInstallPrompt from "@/components/pwa-install-prompt";
 import Footer from "@/components/footer";
@@ -362,6 +363,7 @@ function App() {
               <Router />
               <Toaster />
               <PwaInstallPrompt />
+              <EarnTasksButton />
             </TooltipProvider>
           </CartProvider>
         </WalletProviderWrapper>
