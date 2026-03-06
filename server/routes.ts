@@ -20,7 +20,7 @@ import { z } from "zod";
 import { EncryptionService } from "./services/encryption";
 import { eq, desc, sql, and, gte, lte, or, ilike } from 'drizzle-orm';
 import { db } from './db';
-import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, giftCards, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens, promoCodes, reviews } from '@shared/schema';
+import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, giftCards, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens, promoCodes, reviews, rewardCategories, rewardItems, rewardRedemptions } from '@shared/schema';
 import { getFaucetPayService } from "./services/faucetpay";
 import { getAdvertisingService } from "./services/advertising";
 import { FAUCET_CONFIG } from "./constants";
@@ -11634,6 +11634,312 @@ Thank you for your business!
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================================
+  // JCMOVES REWARDS MARKETPLACE
+  // ============================================================
+
+  // ── Customer: Get active categories ─────────────────────────
+  app.get("/api/reward-shop/categories", isAuthenticated, async (req: any, res) => {
+    try {
+      const cats = await db.select().from(rewardCategories).where(eq(rewardCategories.isActive, true)).orderBy(rewardCategories.sortOrder);
+      res.json(cats);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch categories" });
+    }
+  });
+
+  // ── Customer: Browse items ───────────────────────────────────
+  app.get("/api/reward-shop/items", isAuthenticated, async (req: any, res) => {
+    try {
+      const { categoryId, featured, maxTokens, search } = req.query;
+      let query = db.select({ item: rewardItems, category: rewardCategories })
+        .from(rewardItems)
+        .leftJoin(rewardCategories, eq(rewardItems.categoryId, rewardCategories.id))
+        .where(eq(rewardItems.status, "active"));
+
+      const items = await query.orderBy(rewardItems.featured, rewardItems.id);
+
+      let filtered = items;
+      if (categoryId) filtered = filtered.filter(r => r.item.categoryId === parseInt(categoryId as string));
+      if (featured === "true") filtered = filtered.filter(r => r.item.featured);
+      if (maxTokens) filtered = filtered.filter(r => r.item.tokenPrice <= parseInt(maxTokens as string));
+      if (search) {
+        const q = (search as string).toLowerCase();
+        filtered = filtered.filter(r => r.item.name.toLowerCase().includes(q) || r.item.shortDesc.toLowerCase().includes(q));
+      }
+
+      // Get user wallet balance for affordability info
+      const userId = (req.session as any).userId;
+      const wallet = await storage.getWalletAccount(userId);
+      const balance = parseFloat(wallet?.tokenBalance || "0");
+
+      res.json({ items: filtered, walletBalance: balance });
+    } catch (e) {
+      console.error("Reward shop items error:", e);
+      res.status(500).json({ error: "Failed to fetch items" });
+    }
+  });
+
+  // ── Customer: Single item ────────────────────────────────────
+  app.get("/api/reward-shop/items/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const [row] = await db.select({ item: rewardItems, category: rewardCategories })
+        .from(rewardItems)
+        .leftJoin(rewardCategories, eq(rewardItems.categoryId, rewardCategories.id))
+        .where(eq(rewardItems.id, parseInt(req.params.id)));
+      if (!row) return res.status(404).json({ error: "Item not found" });
+      const userId = (req.session as any).userId;
+      const wallet = await storage.getWalletAccount(userId);
+      res.json({ ...row, walletBalance: parseFloat(wallet?.tokenBalance || "0") });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch item" });
+    }
+  });
+
+  // ── Customer: Redeem item ────────────────────────────────────
+  app.post("/api/reward-shop/redeem", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { itemId, userNotes, scheduledDate } = req.body;
+      if (!itemId) return res.status(400).json({ error: "itemId required" });
+
+      const [itemRow] = await db.select().from(rewardItems).where(eq(rewardItems.id, parseInt(itemId)));
+      if (!itemRow) return res.status(404).json({ error: "Item not found" });
+      if (itemRow.status !== "active") return res.status(400).json({ error: "Item is not available" });
+
+      // Check limited time window
+      const now = new Date();
+      if (itemRow.startDate && now < new Date(itemRow.startDate)) return res.status(400).json({ error: "Item not yet available" });
+      if (itemRow.endDate && now > new Date(itemRow.endDate)) return res.status(400).json({ error: "Item has expired" });
+
+      // Check inventory
+      if (itemRow.inventory !== null && itemRow.inventory <= 0) return res.status(400).json({ error: "Item out of stock" });
+
+      // Check wallet balance
+      const wallet = await storage.getWalletAccount(userId);
+      const balance = parseFloat(wallet?.tokenBalance || "0");
+      const cost = itemRow.salePriceTokens ?? itemRow.tokenPrice;
+      if (balance < cost) return res.status(400).json({ error: `Insufficient tokens. You have ${Math.floor(balance).toLocaleString()} JCMOVES, need ${cost.toLocaleString()}` });
+
+      // Check per-user monthly limit
+      const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
+      const monthlyCount = await db.select({ count: sql<number>`count(*)` })
+        .from(rewardRedemptions)
+        .where(and(eq(rewardRedemptions.userId, userId), eq(rewardRedemptions.itemId, itemRow.id), gte(rewardRedemptions.createdAt, monthStart)));
+      if (Number(monthlyCount[0]?.count) >= (itemRow.maxPerMonth ?? 5)) {
+        return res.status(400).json({ error: `Monthly limit reached for this reward (max ${itemRow.maxPerMonth}/month)` });
+      }
+
+      // Deduct tokens
+      const newBalance = balance - cost;
+      await storage.updateWalletAccount(userId, { tokenBalance: newBalance.toFixed(8) });
+
+      // Decrement inventory if limited
+      if (itemRow.inventory !== null) {
+        await db.update(rewardItems).set({ inventory: itemRow.inventory - 1 }).where(eq(rewardItems.id, itemRow.id));
+        if (itemRow.inventory - 1 <= 0) {
+          await db.update(rewardItems).set({ status: "sold_out" }).where(eq(rewardItems.id, itemRow.id));
+        }
+      }
+
+      // Create redemption record
+      const [redemption] = await db.insert(rewardRedemptions).values({
+        userId,
+        itemId: itemRow.id,
+        itemName: itemRow.name,
+        tokenCost: cost,
+        status: itemRow.deliveryType === "service_credit" || itemRow.deliveryType === "schedule_required" ? "pending" : "approved",
+        userNotes: userNotes || null,
+        scheduledDate: scheduledDate ? new Date(scheduledDate) : null,
+      }).returning();
+
+      console.log(`🎁 Reward redeemed: ${itemRow.name} by user ${userId} for ${cost} JCMOVES`);
+      res.json({ success: true, redemption, newBalance: newBalance.toFixed(2), item: itemRow });
+    } catch (e: any) {
+      console.error("Reward redemption error:", e);
+      res.status(500).json({ error: e.message || "Redemption failed" });
+    }
+  });
+
+  // ── Customer: My redemptions ─────────────────────────────────
+  app.get("/api/reward-shop/my-redemptions", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const list = await db.select().from(rewardRedemptions)
+        .where(eq(rewardRedemptions.userId, userId))
+        .orderBy(desc(rewardRedemptions.createdAt));
+      res.json(list);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch redemptions" });
+    }
+  });
+
+  // ── Admin: All items (including hidden/draft) ─────────────────
+  app.get("/api/admin/reward-shop/items", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser((req.session as any).userId);
+      if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
+      const items = await db.select({ item: rewardItems, category: rewardCategories })
+        .from(rewardItems)
+        .leftJoin(rewardCategories, eq(rewardItems.categoryId, rewardCategories.id))
+        .orderBy(desc(rewardItems.createdAt));
+      res.json(items);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch items" });
+    }
+  });
+
+  // ── Admin: Create item ────────────────────────────────────────
+  app.post("/api/admin/reward-shop/items", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser((req.session as any).userId);
+      if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
+      const [item] = await db.insert(rewardItems).values(req.body).returning();
+      res.json(item);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message || "Failed to create item" });
+    }
+  });
+
+  // ── Admin: Update item ────────────────────────────────────────
+  app.patch("/api/admin/reward-shop/items/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser((req.session as any).userId);
+      if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
+      const [item] = await db.update(rewardItems).set({ ...req.body, updatedAt: new Date() }).where(eq(rewardItems.id, parseInt(req.params.id))).returning();
+      res.json(item);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message || "Failed to update item" });
+    }
+  });
+
+  // ── Admin: Delete/archive item ────────────────────────────────
+  app.delete("/api/admin/reward-shop/items/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser((req.session as any).userId);
+      if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
+      await db.update(rewardItems).set({ status: "hidden", updatedAt: new Date() }).where(eq(rewardItems.id, parseInt(req.params.id)));
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message || "Failed to archive item" });
+    }
+  });
+
+  // ── Admin: Get all categories ─────────────────────────────────
+  app.get("/api/admin/reward-shop/categories", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser((req.session as any).userId);
+      if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
+      const cats = await db.select().from(rewardCategories).orderBy(rewardCategories.sortOrder);
+      res.json(cats);
+    } catch (e) {
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  // ── Admin: Create category ────────────────────────────────────
+  app.post("/api/admin/reward-shop/categories", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser((req.session as any).userId);
+      if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
+      const [cat] = await db.insert(rewardCategories).values(req.body).returning();
+      res.json(cat);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Admin: Update category ────────────────────────────────────
+  app.patch("/api/admin/reward-shop/categories/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser((req.session as any).userId);
+      if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
+      const [cat] = await db.update(rewardCategories).set(req.body).where(eq(rewardCategories.id, parseInt(req.params.id))).returning();
+      res.json(cat);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Admin: All redemptions ────────────────────────────────────
+  app.get("/api/admin/reward-shop/redemptions", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser((req.session as any).userId);
+      if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
+      const { status } = req.query;
+      let list = db.select({ redemption: rewardRedemptions, user: { id: users.id, name: users.name, email: users.email } })
+        .from(rewardRedemptions)
+        .leftJoin(users, eq(rewardRedemptions.userId, users.id))
+        .orderBy(desc(rewardRedemptions.createdAt));
+      if (status) {
+        const rows = await db.select({ redemption: rewardRedemptions, user: { id: users.id, name: users.name, email: users.email } })
+          .from(rewardRedemptions)
+          .leftJoin(users, eq(rewardRedemptions.userId, users.id))
+          .where(eq(rewardRedemptions.status, status as string))
+          .orderBy(desc(rewardRedemptions.createdAt));
+        return res.json(rows);
+      }
+      const rows = await list;
+      res.json(rows);
+    } catch (e) {
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  // ── Admin: Update redemption status ──────────────────────────
+  app.patch("/api/admin/reward-shop/redemptions/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser((req.session as any).userId);
+      if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
+      const { status, adminNotes } = req.body;
+      const updates: any = { status };
+      if (adminNotes) updates.adminNotes = adminNotes;
+      if (status === "completed") updates.fulfilledAt = new Date();
+
+      // If canceling, refund tokens
+      if (status === "cancelled") {
+        const [redemption] = await db.select().from(rewardRedemptions).where(eq(rewardRedemptions.id, parseInt(req.params.id)));
+        if (redemption) {
+          await storage.creditWalletTokens(redemption.userId, redemption.tokenCost);
+          console.log(`💰 Refunded ${redemption.tokenCost} JCMOVES to user ${redemption.userId}`);
+        }
+      }
+
+      const [updated] = await db.update(rewardRedemptions).set(updates).where(eq(rewardRedemptions.id, parseInt(req.params.id))).returning();
+      res.json(updated);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Admin: Dashboard stats ────────────────────────────────────
+  app.get("/api/admin/reward-shop/stats", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser((req.session as any).userId);
+      if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
+
+      const [activeItems] = await db.select({ count: sql<number>`count(*)` }).from(rewardItems).where(eq(rewardItems.status, "active"));
+      const [pendingRedemptions] = await db.select({ count: sql<number>`count(*)` }).from(rewardRedemptions).where(eq(rewardRedemptions.status, "pending"));
+      const [tokensBurned] = await db.select({ total: sql<number>`coalesce(sum(token_cost), 0)` }).from(rewardRedemptions).where(eq(rewardRedemptions.status, "completed"));
+      const [lowStock] = await db.select({ count: sql<number>`count(*)` }).from(rewardItems).where(and(eq(rewardItems.status, "active"), sql`inventory IS NOT NULL AND inventory < 5`));
+
+      const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
+      const [monthBurned] = await db.select({ total: sql<number>`coalesce(sum(token_cost), 0)` })
+        .from(rewardRedemptions)
+        .where(and(gte(rewardRedemptions.createdAt!, monthStart)));
+
+      res.json({
+        activeItems: Number(activeItems?.count ?? 0),
+        pendingRedemptions: Number(pendingRedemptions?.count ?? 0),
+        totalTokensBurned: Number(tokensBurned?.total ?? 0),
+        tokensBurnedThisMonth: Number(monthBurned?.total ?? 0),
+        lowStockItems: Number(lowStock?.count ?? 0),
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
     }
   });
 

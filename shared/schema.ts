@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, index, jsonb, decimal, integer, bigint, date, boolean, uniqueIndex, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, index, jsonb, decimal, integer, bigint, date, boolean, uniqueIndex, unique, serial } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -1637,6 +1637,71 @@ export const insertPromoCodeSchema = createInsertSchema(promoCodes).omit({
 
 export type PromoCode = typeof promoCodes.$inferSelect;
 export type InsertPromoCode = z.infer<typeof insertPromoCodeSchema>;
+
+// ── JCMOVES Rewards Marketplace ─────────────────────────────────────────────
+export const rewardCategories = pgTable("reward_categories", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  icon: text("icon").notNull().default("🎁"),
+  color: text("color").notNull().default("#f59e0b"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertRewardCategorySchema = createInsertSchema(rewardCategories).omit({ id: true, createdAt: true });
+export type RewardCategory = typeof rewardCategories.$inferSelect;
+export type InsertRewardCategory = z.infer<typeof insertRewardCategorySchema>;
+
+export const rewardItems = pgTable("reward_items", {
+  id: serial("id").primaryKey(),
+  categoryId: integer("category_id").notNull(),
+  name: text("name").notNull(),
+  shortDesc: text("short_desc").notNull(),
+  fullDesc: text("full_desc"),
+  image: text("image"),
+  tokenPrice: integer("token_price").notNull(),
+  salePriceTokens: integer("sale_price_tokens"),
+  cashValue: decimal("cash_value", { precision: 10, scale: 2 }),
+  status: text("status").notNull().default("active"), // active | hidden | draft | sold_out
+  featured: boolean("featured").notNull().default(false),
+  inventory: integer("inventory"), // null = unlimited
+  maxPerUser: integer("max_per_user").notNull().default(10),
+  maxPerMonth: integer("max_per_month").notNull().default(5),
+  tierRequired: text("tier_required").notNull().default("none"), // none | bronze | silver | gold | vip
+  deliveryType: text("delivery_type").notNull().default("manual"), // service_credit | digital_code | manual | schedule_required
+  scheduleRequired: boolean("schedule_required").notNull().default(false),
+  expirationDays: integer("expiration_days"),
+  promoBadge: text("promo_badge"),
+  isLimitedTime: boolean("is_limited_time").notNull().default(false),
+  startDate: timestamp("start_date"),
+  endDate: timestamp("end_date"),
+  adminNotes: text("admin_notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertRewardItemSchema = createInsertSchema(rewardItems).omit({ id: true, createdAt: true, updatedAt: true });
+export type RewardItem = typeof rewardItems.$inferSelect;
+export type InsertRewardItem = z.infer<typeof insertRewardItemSchema>;
+
+export const rewardRedemptions = pgTable("reward_redemptions", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  itemId: integer("item_id").notNull(),
+  itemName: text("item_name").notNull(),
+  tokenCost: integer("token_cost").notNull(),
+  status: text("status").notNull().default("pending"), // pending | approved | completed | cancelled | expired
+  scheduledDate: timestamp("scheduled_date"),
+  userNotes: text("user_notes"),
+  adminNotes: text("admin_notes"),
+  fulfilledAt: timestamp("fulfilled_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertRewardRedemptionSchema = createInsertSchema(rewardRedemptions).omit({ id: true, createdAt: true });
+export type RewardRedemption = typeof rewardRedemptions.$inferSelect;
+export type InsertRewardRedemption = z.infer<typeof insertRewardRedemptionSchema>;
 
 // ── Account Recovery Tokens ─────────────────────────────────────────────────
 export const recoveryTokens = pgTable("recovery_tokens", {

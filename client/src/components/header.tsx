@@ -101,6 +101,15 @@ export default function Header() {
                     Rewards
                   </Link>
 
+                  <Link
+                    href="/marketplace"
+                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                      location === '/marketplace' ? 'text-yellow-500 bg-yellow-500/10' : 'text-muted-foreground hover:text-yellow-500'
+                    }`}
+                  >
+                    Rewards Shop
+                  </Link>
+
                   <div className="relative" ref={moreMenuRef}>
                     <button
                       onClick={() => setMoreMenuOpen(!moreMenuOpen)}
@@ -307,6 +316,16 @@ export default function Header() {
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     Rewards
+                  </Link>
+
+                  <Link
+                    href="/marketplace"
+                    className={`px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                      location === '/marketplace' ? 'text-yellow-500 bg-yellow-500/10' : 'text-muted-foreground hover:text-yellow-500 hover:bg-muted'
+                    }`}
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    🎁 Rewards Shop
                   </Link>
 
                   <div className="border-t border-border my-1" />

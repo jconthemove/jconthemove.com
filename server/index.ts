@@ -94,6 +94,10 @@ app.use((req, res, next) => {
     server = await registerRoutes(app);
     console.log('Application routes registered successfully');
 
+    // Seed the rewards marketplace catalog (idempotent)
+    const { seedRewardShop } = await import('./seed-reward-shop');
+    seedRewardShop().catch(e => console.error("Reward shop seed error:", e));
+
     // Serve static files from attached_assets directory with proper video support
     app.use('/attached_assets', express.static(path.resolve(process.cwd(), 'attached_assets'), {
       setHeaders: (res, filePath) => {

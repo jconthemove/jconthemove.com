@@ -29,6 +29,8 @@ import AdminUsersPage from "@/pages/admin-users";
 import AdminTestimonialsPage from "@/pages/admin-testimonials";
 import AdminPromoCodesPage from "@/pages/admin-promo-codes";
 import AdminPipelinePage from "@/pages/admin-pipeline";
+import RewardsMarketplacePage from "@/pages/rewards-marketplace";
+import AdminRewardShopPage from "@/pages/admin-reward-shop";
 import NotFound from "@/pages/not-found";
 import MobileLeadManager from "@/components/mobile-lead-manager";
 import CustomerMobileInterface from "@/components/customer-mobile-interface";
@@ -259,6 +261,14 @@ function AuthenticatedApp() {
             <RouteGuard allowedRoles={['admin', 'business_owner']}>
               <PageWrapper component={AdminPromoCodesPage} />
             </RouteGuard>
+          </Route>
+          <Route path="/admin/marketplace">
+            <RouteGuard allowedRoles={['admin', 'business_owner']}>
+              <PageWrapper component={AdminRewardShopPage} />
+            </RouteGuard>
+          </Route>
+          <Route path="/marketplace">
+            <PageWrapper component={RewardsMarketplacePage} />
           </Route>
           <Route path="/snow-removal">
             <RouteGuard allowedRoles={['admin', 'employee', 'business_owner']}>

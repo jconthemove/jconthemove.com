@@ -28,6 +28,7 @@ Preferred communication style: Simple, everyday language.
 - **Solana Blockchain Integration**: Treasury management, JCMOVES token transfers, real-time balance verification, and reconciliation.
 - **Reward Systems**: Implements a comprehensive system for JCMOVES token rewards for various activities including lead creation, job completion, referrals, shop listings, and purchases.
 - **Staking System**: Tiers of JCMOVES token staking with varying APRs and lockup periods, designed for long-term sustainability with dynamic APR adjustments based on treasury health.
+- **JCMOVES Rewards Marketplace**: Full CMS-driven token redemption marketplace. Customers browse and redeem earned JCMOVES for service credits, gift cards, and local deals. Admin catalog manager at `/admin/marketplace` allows creating/editing/hiding items, managing categories, and approving/fulfilling redemptions. Tables: `reward_categories`, `reward_items`, `reward_redemptions`. Auto-seeded with 6 categories and 21 starter items on first run.
 - **AI Crew Assignment Assistant**: Algorithm for suggesting optimal employee job assignments based on various factors.
 - **Compliance**: Mandatory age verification (18+) and Terms of Service acceptance.
 

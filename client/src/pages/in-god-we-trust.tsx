@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import {
   Users, Briefcase, Gem, Tag, Wallet, Star,
   Snowflake, Handshake, TrendingUp, Activity,
-  Coins, ChevronRight, Shield, FileText
+  Coins, ChevronRight, Shield, FileText, Gift
 } from "lucide-react";
 
 export default function InGodWeTrustPage() {
@@ -59,6 +59,15 @@ export default function InGodWeTrustPage() {
       description: "Discount codes, token disbursements, and reward settings",
       color: "from-purple-500 to-purple-600",
       shadow: "shadow-purple-900/30",
+      stat: null,
+    },
+    {
+      href: "/admin/marketplace",
+      icon: Gift,
+      label: "Rewards Marketplace",
+      description: "Manage reward catalog, categories, pricing, and redemptions",
+      color: "from-yellow-500 to-orange-500",
+      shadow: "shadow-yellow-900/30",
       stat: null,
     },
   ];
