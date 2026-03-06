@@ -16,7 +16,20 @@ interface BtcPaymentData {
   btcPrice: number;
   discountPercent: number;
   expiresAt: string;
+  referenceType?: string;
+  notes?: string;
+  customerName?: string;
+  status?: string;
 }
+
+const REFERENCE_TYPE_LABELS: Record<string, string> = {
+  job_payment: "Job Payment",
+  jcmoves_purchase: "JCMOVES Token Purchase",
+  shop_purchase: "Shop Item",
+  jewelry: "Jewelry Purchase",
+  sponsorship: "Sponsorship",
+  general: "Payment",
+};
 
 export default function BitcoinPaymentPage() {
   const { toast } = useToast();
@@ -144,6 +157,19 @@ export default function BitcoinPaymentPage() {
             Pay with Bitcoin
           </div>
           <h1 className="text-2xl font-bold text-white">Bitcoin Payment</h1>
+          {(payment?.referenceType || payment?.notes) && (
+            <div className="mt-3 inline-block px-4 py-2 bg-slate-700/60 border border-slate-600/50 rounded-xl">
+              <p className="text-sm text-slate-300">
+                <span className="text-slate-400">For: </span>
+                <span className="font-semibold text-white">
+                  {payment.notes || REFERENCE_TYPE_LABELS[payment.referenceType || ""] || payment.referenceType}
+                </span>
+              </p>
+              {payment.customerName && (
+                <p className="text-xs text-slate-400 mt-0.5">Customer: {payment.customerName}</p>
+              )}
+            </div>
+          )}
         </div>
 
         <Card className="bg-emerald-900/30 border-emerald-500/30 mb-4">

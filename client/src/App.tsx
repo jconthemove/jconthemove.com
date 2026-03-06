@@ -66,6 +66,7 @@ import PaymentSuccessPage from "@/pages/payment-success";
 import PromoHalfDayPage from "@/pages/promo-half-day";
 import CartPage from "@/pages/cart";
 import BitcoinPaymentPage from "@/pages/bitcoin-payment";
+import AdminBtcPaymentsPage from "@/pages/admin-btc-payments";
 import StakingPage from "@/pages/staking";
 import { CartProvider } from "@/hooks/useCart";
 import { NotificationPrompt } from "@/components/notification-prompt";
@@ -380,6 +381,7 @@ function Router() {
       <Route path="/promo/half-day" component={PromoHalfDayPage} />
       <Route path="/cart" component={CartPage} />
       <Route path="/bitcoin-payment" component={BitcoinPaymentPage} />
+      <Route path="/admin/btc-payments" component={AdminBtcPaymentsPage} />
       <Route path="/staking" component={StakingPage} />
       
       {/* Authenticated vs unauthenticated routing */}

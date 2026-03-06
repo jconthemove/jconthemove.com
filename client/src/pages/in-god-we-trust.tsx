@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import {
   Users, Briefcase, Gem, Tag, Wallet, Star,
   Snowflake, Handshake, TrendingUp, Activity,
-  Coins, ChevronRight, Shield, FileText, Gift
+  Coins, ChevronRight, Shield, FileText, Gift, Bitcoin
 } from "lucide-react";
 
 export default function InGodWeTrustPage() {
@@ -21,8 +21,12 @@ export default function InGodWeTrustPage() {
   const { data: pendingPayouts } = useQuery<{ payouts: any[] }>({
     queryKey: ["/api/admin/payouts/pending"],
   });
+  const { data: btcPayments } = useQuery<any[]>({
+    queryKey: ["/api/admin/btc-payments"],
+  });
 
   const pendingCount = pendingPayouts?.payouts?.length || 0;
+  const pendingBtcCount = btcPayments?.filter(p => p.status === "pending").length || 0;
 
   const mainTiles = [
     {
@@ -130,6 +134,14 @@ export default function InGodWeTrustPage() {
       badgeColor: "",
       color: "from-amber-500 to-orange-500",
       shadow: "shadow-amber-900/30",
+    },
+    {
+      href: "/admin/btc-payments",
+      icon: Bitcoin,
+      label: "Bitcoin Payments",
+      description: "Verify BTC job payments and send deposit confirmations",
+      badge: pendingBtcCount > 0 ? `${pendingBtcCount} pending` : null,
+      badgeColor: "bg-orange-500",
     },
   ];
 

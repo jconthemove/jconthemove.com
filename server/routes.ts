@@ -11387,6 +11387,65 @@ Thank you for your business!
         console.log(`[BTC Verify] Credited ${tokensToCredit} JCMOVES to user ${payment.userId} for payment ${id}`);
       }
 
+      // Send confirmation email + SMS to customer when payment is verified
+      if (status === "verified") {
+        const paymentContext = payment.referenceType === "job_payment"
+          ? (payment.notes || "your moving/junk removal job")
+          : payment.notes || "your purchase";
+
+        const emailBody = `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#0f172a;color:#f1f5f9;padding:32px;border-radius:12px;">
+            <div style="text-align:center;margin-bottom:24px;">
+              <h1 style="color:#f97316;font-size:28px;margin:0;">JC ON THE MOVE</h1>
+              <p style="color:#94a3b8;margin-top:4px;">Bitcoin Payment Confirmed</p>
+            </div>
+            <div style="background:#1e293b;border-radius:8px;padding:24px;margin-bottom:20px;border:1px solid #f97316/30;">
+              <h2 style="color:#4ade80;margin:0 0 16px;">✅ Payment Received!</h2>
+              <p style="color:#cbd5e1;margin:0 0 12px;">Hello ${payment.customerName},</p>
+              <p style="color:#cbd5e1;margin:0 0 12px;">Your Bitcoin payment for <strong style="color:#f97316;">${paymentContext}</strong> has been confirmed and received by our team.</p>
+              <div style="background:#0f172a;border-radius:6px;padding:16px;margin-top:16px;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+                  <span style="color:#94a3b8;">Payment ID</span>
+                  <span style="color:#f1f5f9;font-family:monospace;">${payment.id.slice(0, 8)}...</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+                  <span style="color:#94a3b8;">Amount Paid</span>
+                  <span style="color:#4ade80;font-weight:bold;">$${parseFloat(payment.usdAmount).toFixed(2)} (10% BTC Discount Applied)</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;">
+                  <span style="color:#94a3b8;">BTC Amount</span>
+                  <span style="color:#f97316;">${parseFloat(payment.btcAmount).toFixed(8)} BTC</span>
+                </div>
+              </div>
+            </div>
+            <p style="color:#94a3b8;text-align:center;font-size:14px;margin:0;">Questions? Call us at <a href="tel:9062859312" style="color:#f97316;">(906) 285-9312</a></p>
+          </div>`;
+
+        try {
+          await sendEmail({
+            to: payment.customerEmail,
+            subject: "✅ Bitcoin Payment Confirmed — JC ON THE MOVE",
+            html: emailBody,
+            text: `Hello ${payment.customerName}, your Bitcoin payment of $${parseFloat(payment.usdAmount).toFixed(2)} for ${paymentContext} has been confirmed. Payment ID: ${payment.id.slice(0,8)}. Questions? Call (906) 285-9312.`,
+          });
+          console.log(`[BTC Verify] Confirmation email sent to ${payment.customerEmail}`);
+        } catch (emailErr) {
+          console.error(`[BTC Verify] Email notification failed:`, emailErr);
+        }
+
+        if (payment.customerPhone) {
+          try {
+            await smsService.sendSMS(
+              payment.customerPhone,
+              `JC ON THE MOVE: Your Bitcoin payment of $${parseFloat(payment.usdAmount).toFixed(2)} for ${paymentContext} has been confirmed! ✅ Payment ID: ${payment.id.slice(0,8)}. Questions? Call (906) 285-9312.`
+            );
+            console.log(`[BTC Verify] Confirmation SMS sent to ${payment.customerPhone}`);
+          } catch (smsErr) {
+            console.error(`[BTC Verify] SMS notification failed:`, smsErr);
+          }
+        }
+      }
+
       res.json(updated);
     } catch (error: any) {
       res.status(500).json({ error: error.message });

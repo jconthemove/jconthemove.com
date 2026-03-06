@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Mail, Phone, MapPin, Calendar, Truck, Users, DollarSign, Award, TrendingUp, CheckCircle, Circle, Clock, Star, ExternalLink, Sparkles, Send, FileText, Loader2 } from "lucide-react";
+import { ArrowLeft, Mail, Phone, MapPin, Calendar, Truck, Users, DollarSign, Award, TrendingUp, CheckCircle, Circle, Clock, Star, ExternalLink, Sparkles, Send, FileText, Loader2, Bitcoin, Copy, Check } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -84,6 +84,10 @@ export default function LeadDetailPage() {
   const [showInvoiceDialog, setShowInvoiceDialog] = useState(false);
   const [invoiceAmount, setInvoiceAmount] = useState("");
   const [invoiceDescription, setInvoiceDescription] = useState("");
+  const [showBtcDialog, setShowBtcDialog] = useState(false);
+  const [btcAmount, setBtcAmount] = useState("");
+  const [btcPaymentLink, setBtcPaymentLink] = useState<string | null>(null);
+  const [copiedBtcLink, setCopiedBtcLink] = useState(false);
   const { hasAdminAccess } = useAuth();
 
   const { data: lead, isLoading, isError, error } = useQuery<Lead>({
@@ -183,6 +187,33 @@ export default function LeadDetailPage() {
         description: error.message || "Something went wrong",
         variant: "destructive",
       });
+    },
+  });
+
+  const createBtcPaymentMutation = useMutation({
+    mutationFn: async () => {
+      const amount = parseFloat(btcAmount);
+      if (!amount || amount <= 0) throw new Error("Please enter a valid amount");
+      if (!lead) throw new Error("Lead not found");
+      const response = await apiRequest("POST", "/api/btc/create-payment", {
+        customerName: `${lead.firstName} ${lead.lastName}`,
+        customerEmail: lead.email,
+        customerPhone: lead.phone,
+        usdAmount: amount,
+        referenceType: "job_payment",
+        referenceId: lead.id,
+        notes: `${lead.serviceType} - ${lead.firstName} ${lead.lastName}`,
+        items: [{ name: `${lead.serviceType}`, amount }],
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      const link = `${window.location.origin}/bitcoin-payment?id=${data.payment?.id || data.id}`;
+      setBtcPaymentLink(link);
+      toast({ title: "Bitcoin payment link created!", description: "Share this link with the customer to collect payment." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to create BTC payment", description: error.message, variant: "destructive" });
     },
   });
 
@@ -807,6 +838,47 @@ export default function LeadDetailPage() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Bitcoin Payment - Admin Only */}
+            {hasAdminAccess && (
+              <Card className="border-orange-500/30 bg-gradient-to-br from-orange-50/50 to-white dark:from-orange-950/20 dark:to-background">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Bitcoin className="h-5 w-5 text-orange-500" />
+                    Bitcoin Payment
+                  </CardTitle>
+                  <CardDescription>Generate a BTC payment link for this job (10% discount)</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="p-3 bg-muted/50 rounded-lg space-y-1">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Customer</span>
+                      <span className="font-medium">{lead.firstName} {lead.lastName}</span>
+                    </div>
+                    {(lead.totalPrice || lead.basePrice) && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Quote Total</span>
+                        <span className="font-bold text-orange-600 dark:text-orange-400">
+                          ${parseFloat(lead.totalPrice || lead.basePrice || "0").toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <Button
+                    onClick={() => {
+                      const price = lead.totalPrice || lead.basePrice || "";
+                      setBtcAmount(price ? parseFloat(price).toString() : "");
+                      setBtcPaymentLink(null);
+                      setShowBtcDialog(true);
+                    }}
+                    className="w-full bg-orange-600 hover:bg-orange-700 text-white"
+                  >
+                    <Bitcoin className="h-4 w-4 mr-2" />
+                    Generate BTC Payment Link
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           {/* Sidebar - Potential Earnings & Rewards */}
@@ -998,6 +1070,98 @@ export default function LeadDetailPage() {
               {createInvoiceMutation.isPending ? "Sending..." : "Send Invoice"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bitcoin Payment Dialog */}
+      <Dialog open={showBtcDialog} onOpenChange={(open) => { setShowBtcDialog(open); if (!open) setBtcPaymentLink(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bitcoin className="h-5 w-5 text-orange-500" />
+              Generate Bitcoin Payment Link
+            </DialogTitle>
+            <DialogDescription>
+              Create a BTC payment link for {lead.firstName} {lead.lastName}. Customer gets a 10% discount for paying with Bitcoin.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {!btcPaymentLink ? (
+              <>
+                <div>
+                  <Label>Amount ($)</Label>
+                  <div className="relative">
+                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      className="pl-9"
+                      value={btcAmount}
+                      onChange={(e) => setBtcAmount(e.target.value)}
+                      placeholder="Enter amount in USD"
+                    />
+                  </div>
+                </div>
+                {btcAmount && parseFloat(btcAmount) > 0 && (
+                  <div className="p-3 bg-orange-950/30 border border-orange-500/30 rounded-lg text-sm space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Original</span>
+                      <span>${parseFloat(btcAmount).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-orange-400 font-medium">
+                      <span>With 10% BTC Discount</span>
+                      <span>${(parseFloat(btcAmount) * 0.9).toFixed(2)}</span>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="space-y-3">
+                <div className="p-3 bg-orange-950/30 border border-orange-500/30 rounded-xl">
+                  <p className="text-xs text-muted-foreground mb-2 font-medium">Payment Link — share this with the customer:</p>
+                  <p className="text-xs font-mono break-all text-orange-300 leading-relaxed">{btcPaymentLink}</p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    className="flex-1"
+                    variant="outline"
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(btcPaymentLink);
+                      setCopiedBtcLink(true);
+                      setTimeout(() => setCopiedBtcLink(false), 3000);
+                    }}
+                  >
+                    {copiedBtcLink ? <Check className="h-4 w-4 mr-2 text-green-500" /> : <Copy className="h-4 w-4 mr-2" />}
+                    {copiedBtcLink ? "Copied!" : "Copy Link"}
+                  </Button>
+                  <Button
+                    className="flex-1 bg-orange-600 hover:bg-orange-700"
+                    onClick={() => window.open(btcPaymentLink, "_blank")}
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Open
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground text-center">
+                  You can verify this payment in the Admin Bitcoin Payments panel once the customer sends BTC.
+                </p>
+              </div>
+            )}
+          </div>
+          {!btcPaymentLink && (
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowBtcDialog(false)}>Cancel</Button>
+              <Button
+                onClick={() => createBtcPaymentMutation.mutate()}
+                disabled={createBtcPaymentMutation.isPending || !btcAmount || parseFloat(btcAmount) <= 0}
+                className="bg-orange-600 hover:bg-orange-700"
+              >
+                {createBtcPaymentMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Bitcoin className="h-4 w-4 mr-2" />}
+                {createBtcPaymentMutation.isPending ? "Generating..." : "Generate Link"}
+              </Button>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
     </div>
