@@ -20,7 +20,7 @@ import { z } from "zod";
 import { EncryptionService } from "./services/encryption";
 import { eq, desc, sql, and, gte, lte, or, ilike } from 'drizzle-orm';
 import { db } from './db';
-import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, giftCards, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens, promoCodes, reviews, rewardCategories, rewardItems, rewardRedemptions } from '@shared/schema';
+import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, giftCards, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens, promoCodes, reviews, rewardCategories, rewardItems, rewardRedemptions, buybackFund } from '@shared/schema';
 import { getFaucetPayService } from "./services/faucetpay";
 import { getAdvertisingService } from "./services/advertising";
 import { FAUCET_CONFIG } from "./constants";
@@ -11191,7 +11191,8 @@ Thank you for your business!
 
   app.post("/api/btc/create-payment", async (req: any, res) => {
     try {
-      const { customerName, customerEmail, customerPhone, usdAmount, items, referenceType, referenceId, notes } = req.body;
+      const { customerName, customerEmail, customerPhone, usdAmount, jcmovesAmount, items, referenceType, referenceId, notes } = req.body;
+      const sessionUserId: string | undefined = req.session?.userId;
 
       if (!customerName || !customerEmail || !usdAmount || !referenceType) {
         return res.status(400).json({ error: "Missing required fields" });
@@ -11227,7 +11228,28 @@ Thank you for your business!
 
       const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
 
+      // For JCMOVES token purchases: caller may supply jcmovesAmount directly,
+      // otherwise compute it from the discounted USD at the live token price.
+      let computedJcmovesAmount: string | null = null;
+      if (referenceType === "jcmoves_purchase") {
+        if (jcmovesAmount && parseFloat(jcmovesAmount) > 0) {
+          computedJcmovesAmount = parseFloat(jcmovesAmount).toFixed(8);
+        } else {
+          try {
+            const tokenPriceRes = await fetch("https://api.dexscreener.com/latest/dex/tokens/HsuN8RXj2Q3kkx6mRV6aHryjLizagPHoiqCGZ8BfEMeS");
+            if (tokenPriceRes.ok) {
+              const tokenData = await tokenPriceRes.json();
+              const tokenPriceUsd = parseFloat(tokenData?.pairs?.[0]?.priceUsd || "0");
+              if (tokenPriceUsd > 0) {
+                computedJcmovesAmount = (discountedUsd / tokenPriceUsd).toFixed(8);
+              }
+            }
+          } catch (_e) { /* non-blocking */ }
+        }
+      }
+
       const [payment] = await db.insert(bitcoinPayments).values({
+        userId: sessionUserId || null,
         referenceId: referenceId || null,
         referenceType,
         customerName,
@@ -11238,6 +11260,7 @@ Thank you for your business!
         btcPrice: btcPrice.toFixed(2),
         discountPercent: "10.00",
         originalUsdAmount: originalUsd.toFixed(2),
+        jcmovesAmount: computedJcmovesAmount,
         btcAddress,
         status: "pending",
         items: items || null,
@@ -11319,15 +11342,51 @@ Thank you for your business!
       if (!["verified", "expired", "cancelled"].includes(status)) {
         return res.status(400).json({ error: "Invalid status" });
       }
+
+      // Fetch the payment first so we can credit tokens on verification
+      const [payment] = await db.select().from(bitcoinPayments).where(eq(bitcoinPayments.id, id));
+      if (!payment) return res.status(404).json({ error: "Payment not found" });
+
       const [updated] = await db.update(bitcoinPayments)
         .set({
           status,
           verifiedByUserId: req.session?.userId,
           verifiedAt: status === "verified" ? new Date() : null,
+          jcmovesCredited: status === "verified" && payment.jcmovesAmount && parseFloat(payment.jcmovesAmount) > 0 ? 1 : (payment.jcmovesCredited ?? 0),
         })
         .where(eq(bitcoinPayments.id, id))
         .returning();
-      if (!updated) return res.status(404).json({ error: "Payment not found" });
+
+      // Credit JCMOVES tokens to the buyer on verification
+      if (
+        status === "verified" &&
+        payment.userId &&
+        payment.jcmovesAmount &&
+        parseFloat(payment.jcmovesAmount) > 0 &&
+        !payment.jcmovesCredited
+      ) {
+        const tokensToCredit = parseFloat(payment.jcmovesAmount);
+        await storage.creditWalletTokens(payment.userId, tokensToCredit);
+        // Log as a reward record for full audit trail
+        await db.insert(rewards).values({
+          userId: payment.userId,
+          rewardType: "btc_token_purchase",
+          tokenAmount: tokensToCredit.toFixed(8),
+          cashValue: payment.usdAmount,
+          status: "confirmed",
+          earnedDate: new Date(),
+          metadata: {
+            paymentId: payment.id,
+            btcAmount: payment.btcAmount,
+            btcPrice: payment.btcPrice,
+            usdAmount: payment.usdAmount,
+            verifiedBy: req.session?.userId,
+            description: "JCMOVES tokens purchased via Bitcoin payment",
+          },
+        });
+        console.log(`[BTC Verify] Credited ${tokensToCredit} JCMOVES to user ${payment.userId} for payment ${id}`);
+      }
+
       res.json(updated);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -11733,9 +11792,24 @@ Thank you for your business!
         return res.status(400).json({ error: `Monthly limit reached for this reward (max ${itemRow.maxPerMonth}/month)` });
       }
 
-      // Deduct tokens
+      // Deduct tokens from user balance
       const newBalance = balance - cost;
       await storage.updateWalletAccount(userId, { tokenBalance: newBalance.toFixed(8) });
+
+      // Credit burned tokens to the buyback/treasury fund (tracks all tokens removed from circulation)
+      try {
+        const [fundRow] = await db.select().from(buybackFund).limit(1);
+        if (fundRow) {
+          const currentTokenBalance = parseFloat(fundRow.tokenBalance || "0");
+          const currentTotalCollected = parseFloat(fundRow.totalTokensCollected || "0");
+          await db.update(buybackFund).set({
+            tokenBalance: (currentTokenBalance + cost).toFixed(8),
+            totalTokensCollected: (currentTotalCollected + cost).toFixed(8),
+            feeContributionCount: (fundRow.feeContributionCount ?? 0) + 1,
+            lastUpdated: new Date(),
+          }).where(eq(buybackFund.id, fundRow.id));
+        }
+      } catch (_e) { /* non-blocking — treasury credit is best-effort */ }
 
       // Decrement inventory if limited
       if (itemRow.inventory !== null) {

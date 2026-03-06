@@ -1539,6 +1539,7 @@ export type InsertSnowServiceLog = z.infer<typeof insertSnowServiceLogSchema>;
 
 export const bitcoinPayments = pgTable("bitcoin_payments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id"),
   referenceId: varchar("reference_id"),
   referenceType: text("reference_type").notNull(),
   customerName: text("customer_name").notNull(),
@@ -1549,6 +1550,8 @@ export const bitcoinPayments = pgTable("bitcoin_payments", {
   btcPrice: decimal("btc_price", { precision: 12, scale: 2 }).notNull(),
   discountPercent: decimal("discount_percent", { precision: 5, scale: 2 }).default("10.00"),
   originalUsdAmount: decimal("original_usd_amount", { precision: 10, scale: 2 }).notNull(),
+  jcmovesAmount: decimal("jcmoves_amount", { precision: 18, scale: 8 }),
+  jcmovesCredited: integer("jcmoves_credited").default(0),
   btcAddress: text("btc_address").notNull(),
   status: text("status").notNull().default("pending"),
   items: jsonb("items"),
