@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
@@ -14,6 +14,7 @@ import {
   Star, Zap, Trophy, Package, Gift, MapPin, Snowflake, Gamepad2,
   Wrench, Crown, ShoppingBag, History
 } from "lucide-react";
+import { SpinWheelDialog } from "@/components/spin-wheel";
 
 interface RewardCategory {
   id: number;
@@ -93,6 +94,9 @@ export default function RewardsMarketplacePage() {
   const [redeemItem, setRedeemItem] = useState<RewardItem | null>(null);
   const [userNotes, setUserNotes] = useState("");
   const [scheduledDate, setScheduledDate] = useState("");
+  const [spinWheelOpen, setSpinWheelOpen] = useState(false);
+  const [spinRedemptionId, setSpinRedemptionId] = useState<number | undefined>(undefined);
+  const lastRedeemedItemRef = useRef<RewardItem | null>(null);
 
   const { data: shopData, isLoading } = useQuery<{ items: ItemRow[]; walletBalance: number }>({
     queryKey: ["/api/reward-shop/items"],
@@ -118,13 +122,23 @@ export default function RewardsMarketplacePage() {
       queryClient.invalidateQueries({ queryKey: ["/api/reward-shop/my-redemptions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/rewards/wallet"] });
       queryClient.invalidateQueries({ queryKey: ["/api/mining/status"] });
+      const redeemedItem = redeemItem;
+      lastRedeemedItemRef.current = redeemItem;
       setRedeemItem(null);
       setUserNotes("");
       setScheduledDate("");
-      toast({
-        title: "🎁 Reward Redeemed!",
-        description: `${redeemItem?.name} — ${(data as any)?.redemption?.status === "pending" ? "Pending admin approval" : "Check your redemption history"}`,
-      });
+      // If this was a Spin Wheel Entry, launch the wheel immediately
+      const isSpinEntry = redeemedItem?.name?.toLowerCase().includes("spin");
+      if (isSpinEntry) {
+        const rid = (data as any)?.redemption?.id;
+        setSpinRedemptionId(rid);
+        setSpinWheelOpen(true);
+      } else {
+        toast({
+          title: "🎁 Reward Redeemed!",
+          description: `${redeemedItem?.name} — ${(data as any)?.redemption?.status === "pending" ? "Pending admin approval" : "Check your redemption history"}`,
+        });
+      }
     },
     onError: (err: any) => {
       toast({ title: "Redemption failed", description: err.message || "Please try again.", variant: "destructive" });
@@ -512,6 +526,16 @@ export default function RewardsMarketplacePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Spin Wheel — auto-launches after a Spin Wheel Entry redemption */}
+      <SpinWheelDialog
+        open={spinWheelOpen}
+        redemptionId={spinRedemptionId}
+        onClose={() => {
+          setSpinWheelOpen(false);
+          setSpinRedemptionId(undefined);
+        }}
+      />
     </div>
   );
 }

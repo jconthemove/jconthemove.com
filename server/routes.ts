@@ -11943,6 +11943,62 @@ Thank you for your business!
     }
   });
 
+  // ── Spin Wheel ───────────────────────────────────────────────
+  app.post("/api/reward-shop/spin", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { redemptionId } = req.body;
+
+      // Prize table: index 0-7, must match frontend PRIZES array
+      const PRIZES = [
+        { label: "100",    tokens: 100,   probability: 25 },
+        { label: "250",    tokens: 250,   probability: 22 },
+        { label: "500",    tokens: 500,   probability: 18 },
+        { label: "750",    tokens: 750,   probability: 14 },
+        { label: "1,000",  tokens: 1000,  probability: 10 },
+        { label: "2,500",  tokens: 2500,  probability: 6  },
+        { label: "5,000",  tokens: 5000,  probability: 3  },
+        { label: "10,000", tokens: 10000, probability: 2  },
+      ];
+
+      // Pick prize using server-side RNG
+      const rand = Math.random() * 100;
+      let cumulative = 0;
+      let prizeIndex = 0;
+      for (let i = 0; i < PRIZES.length; i++) {
+        cumulative += PRIZES[i].probability;
+        if (rand <= cumulative) { prizeIndex = i; break; }
+      }
+      const prize = PRIZES[prizeIndex];
+
+      // Credit tokens to wallet
+      await storage.creditWalletTokens(userId, prize.tokens);
+
+      // Mark redemption as completed if provided
+      if (redemptionId) {
+        await db.update(rewardRedemptions)
+          .set({ status: "completed", fulfilledAt: new Date(), adminNotes: `Spin wheel: won ${prize.tokens} JCMOVES` })
+          .where(and(eq(rewardRedemptions.id, parseInt(redemptionId)), eq(rewardRedemptions.userId, userId)));
+      }
+
+      // Log as a reward record
+      await db.insert(rewards).values({
+        userId,
+        rewardType: "spin_wheel_win",
+        tokenAmount: prize.tokens.toString(),
+        cashValue: (prize.tokens * 0.00000508432).toFixed(4),
+        status: "confirmed",
+        metadata: { prizeIndex, label: prize.label, redemptionId: redemptionId || null },
+      });
+
+      console.log(`🎰 Spin wheel: user ${userId} won ${prize.tokens} JCMOVES (prize #${prizeIndex})`);
+      res.json({ prizeIndex, tokens: prize.tokens, label: prize.label });
+    } catch (e: any) {
+      console.error("Spin wheel error:", e);
+      res.status(500).json({ error: e.message || "Spin failed" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
