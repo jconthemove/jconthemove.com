@@ -18,7 +18,7 @@ import { faucetService } from "./services/faucet";
 import { insertFundingDepositSchema, insertFaucetConfigSchema, insertFaucetWalletSchema } from "@shared/schema";
 import { z } from "zod";
 import { EncryptionService } from "./services/encryption";
-import { eq, desc, sql, and, gte, or, ilike } from 'drizzle-orm';
+import { eq, desc, sql, and, gte, lte, or, ilike } from 'drizzle-orm';
 import { db } from './db';
 import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, giftCards, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens, promoCodes, reviews } from '@shared/schema';
 import { getFaucetPayService } from "./services/faucetpay";
@@ -8776,10 +8776,79 @@ Thank you for your business!
           fitness: { pushups: 0, situps: 0 }
         });
       }
-      res.json(stats);
+      // Check if this user added a lead today
+      const today = new Date().toISOString().split('T')[0];
+      const todayStart = new Date(today + 'T00:00:00.000Z');
+      const todayEnd = new Date(today + 'T23:59:59.999Z');
+      const leadTodayRows = await db.select({ id: rewards.id })
+        .from(rewards)
+        .where(and(
+          eq(rewards.userId, userId),
+          eq(rewards.rewardType, 'lead_creation'),
+          gte(rewards.earnedDate, todayStart),
+          lte(rewards.earnedDate, todayEnd)
+        ))
+        .limit(1);
+      const leadAddedToday = leadTodayRows.length > 0;
+
+      // Check if daily completion bonus already claimed today
+      const bonusRows = await db.select({ id: rewards.id })
+        .from(rewards)
+        .where(and(
+          eq(rewards.userId, userId),
+          eq(rewards.rewardType, 'daily_completion_bonus'),
+          gte(rewards.earnedDate, todayStart),
+          lte(rewards.earnedDate, todayEnd)
+        ))
+        .limit(1);
+      const dailyBonusClaimed = bonusRows.length > 0;
+
+      res.json({ ...stats, leadAddedToday, dailyBonusClaimed });
     } catch (error) {
       console.error("Error getting mining status:", error);
       res.status(500).json({ error: "Failed to get mining status" });
+    }
+  });
+
+  // Daily tasks completion bonus — 500 JCMOVES when all tasks done
+  app.post("/api/gamification/daily-tasks-bonus", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const today = new Date().toISOString().split('T')[0];
+      const todayStart = new Date(today + 'T00:00:00.000Z');
+      const todayEnd = new Date(today + 'T23:59:59.999Z');
+
+      // Check already claimed today
+      const alreadyClaimed = await db.select({ id: rewards.id })
+        .from(rewards)
+        .where(and(
+          eq(rewards.userId, userId),
+          eq(rewards.rewardType, 'daily_completion_bonus'),
+          gte(rewards.earnedDate, todayStart),
+          lte(rewards.earnedDate, todayEnd)
+        ))
+        .limit(1);
+      if (alreadyClaimed.length > 0) {
+        return res.status(400).json({ error: "Daily bonus already claimed today" });
+      }
+
+      // Award 500 JCMOVES
+      const BONUS = 500;
+      await storage.creditWalletTokens(userId, BONUS);
+      await db.insert(rewards).values({
+        userId,
+        rewardType: 'daily_completion_bonus',
+        tokenAmount: BONUS.toString(),
+        cashValue: (BONUS * 0.00000508432).toFixed(4),
+        status: 'confirmed',
+        metadata: { date: today, reason: 'All 6 daily tasks completed' }
+      });
+
+      console.log(`🏆 Daily completion bonus awarded: ${BONUS} JCMOVES to user ${userId}`);
+      res.json({ success: true, amount: BONUS });
+    } catch (error) {
+      console.error("Error awarding daily completion bonus:", error);
+      res.status(500).json({ error: "Failed to award bonus" });
     }
   });
 
@@ -8866,35 +8935,56 @@ Thank you for your business!
     try {
       const userId = (req.session as any).userId;
       const today = new Date().toISOString().split('T')[0];
-      
-      const { miningService } = await import('./services/mining');
-      const stats = await miningService.getMiningStats(userId);
-      const session = stats.currentSession;
 
-      if (!session) return res.status(404).json({ error: "No active mining session" });
-      
-      if (stats.lastScriptureClaimDate === today) {
+      // Check rewards table — no active session required
+      const { rewards: rewardsTable } = await import("@shared/schema");
+      const todayStart = new Date(today + 'T00:00:00.000Z');
+      const todayEnd = new Date(today + 'T23:59:59.999Z');
+      const alreadyClaimed = await db.select({ id: rewardsTable.id })
+        .from(rewardsTable)
+        .where(
+          and(
+            eq(rewardsTable.userId, userId),
+            eq(rewardsTable.rewardType, 'scripture_claim'),
+            gte(rewardsTable.earnedDate, todayStart),
+            lte(rewardsTable.earnedDate, todayEnd)
+          )
+        )
+        .limit(1);
+
+      if (alreadyClaimed.length > 0) {
         return res.status(400).json({ error: "Already claimed today's scripture reward" });
       }
 
-      // Calculate streak: check if yesterday was claimed
+      // Calculate streak from rewards table
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
       const yesterdayStr = yesterday.toISOString().split('T')[0];
-      const currentStreak = session.scriptureStreak || 0;
-      const newStreak = stats.lastScriptureClaimDate === yesterdayStr ? currentStreak + 1 : 1;
+      const ydayStart = new Date(yesterdayStr + 'T00:00:00.000Z');
+      const ydayEnd = new Date(yesterdayStr + 'T23:59:59.999Z');
+
+      const yesterdayClaim = await db.select({ metadata: rewardsTable.metadata })
+        .from(rewardsTable)
+        .where(
+          and(
+            eq(rewardsTable.userId, userId),
+            eq(rewardsTable.rewardType, 'scripture_claim'),
+            gte(rewardsTable.earnedDate, ydayStart),
+            lte(rewardsTable.earnedDate, ydayEnd)
+          )
+        )
+        .limit(1);
+
+      const prevStreak = yesterdayClaim.length > 0 ? ((yesterdayClaim[0].metadata as any)?.streak || 0) : 0;
+      const newStreak = yesterdayClaim.length > 0 ? prevStreak + 1 : 1;
 
       const baseReward = 100;
       const streakBonus = newStreak % 7 === 0 ? 300 : 0;
       const rewardAmount = baseReward + streakBonus;
 
       await storage.creditWalletTokens(userId, rewardAmount);
-      await db.update(miningSessions)
-        .set({ lastScriptureClaimDate: today, scriptureStreak: newStreak })
-        .where(eq(miningSessions.id, session.id));
-      
-      const { rewards } = await import("@shared/schema");
-      await db.insert(rewards).values({
+
+      await db.insert(rewardsTable).values({
         userId,
         rewardType: 'scripture_claim',
         tokenAmount: rewardAmount.toString(),
@@ -8902,6 +8992,15 @@ Thank you for your business!
         status: 'confirmed',
         metadata: { date: today, streak: newStreak, streakBonus }
       });
+
+      // Also update session if one exists (for legacy streak display)
+      const [session] = await db.select().from(miningSessions)
+        .where(eq(miningSessions.userId, userId)).limit(1);
+      if (session) {
+        await db.update(miningSessions)
+          .set({ lastScriptureClaimDate: today, scriptureStreak: newStreak })
+          .where(eq(miningSessions.id, session.id));
+      }
 
       res.json({ success: true, amount: rewardAmount, streak: newStreak, streakBonus });
     } catch (error: any) {

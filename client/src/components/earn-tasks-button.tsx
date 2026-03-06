@@ -4,7 +4,7 @@ import { useLocation } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Coins, CheckCircle2, Circle, ChevronRight, X, Zap, Star } from "lucide-react";
+import { Coins, CheckCircle2, Circle, ChevronRight, X, Zap, Star, Trophy } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -16,6 +16,8 @@ interface MiningStatus {
   lastScriptureClaimDate: string | null;
   scriptureStreak: number;
   fitness: { pushups: number; situps: number };
+  leadAddedToday: boolean;
+  dailyBonusClaimed: boolean;
 }
 
 interface GamificationStats {
@@ -52,11 +54,30 @@ export function EarnTasksButton() {
     refetchInterval: open ? 15000 : false,
   });
 
+  // After each task succeeds, refresh status and try to claim the completion bonus
+  function afterTaskSuccess() {
+    queryClient.invalidateQueries({ queryKey: ["/api/mining/status"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/gamification/stats"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/rewards/wallet"] });
+  }
+
+  const completionBonusMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/gamification/daily-tasks-bonus", {}),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/mining/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/rewards/wallet"] });
+      toast({
+        title: "🏆 Daily Bonus Unlocked!",
+        description: `+500 JCMOVES for completing all daily tasks!`,
+      });
+    },
+  });
+
   const checkinMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/gamification/checkin", {}),
     onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/gamification/stats"] });
-      toast({ title: "Check-in complete!", description: `+${data?.tokensAwarded || 100} JCMOVES earned!` });
+      afterTaskSuccess();
+      toast({ title: "Check-in complete!", description: `+${(data as any)?.tokensAwarded || 100} JCMOVES earned!` });
     },
     onError: () => toast({ title: "Check-in failed", variant: "destructive" }),
   });
@@ -64,7 +85,7 @@ export function EarnTasksButton() {
   const miningMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/mining/start"),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/mining/status"] });
+      afterTaskSuccess();
       toast({ title: "Mining started!", description: "Tokens are now accumulating." });
     },
   });
@@ -72,33 +93,39 @@ export function EarnTasksButton() {
   const claimMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/mining/claim"),
     onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/mining/status"] });
-      toast({ title: "Tokens claimed!", description: `+${parseFloat(data?.tokensClaimed || 0).toFixed(2)} JCMOVES!` });
+      afterTaskSuccess();
+      toast({ title: "Tokens claimed!", description: `+${parseFloat((data as any)?.tokensClaimed || 0).toFixed(2)} JCMOVES!` });
     },
   });
 
   const scriptureMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/mining/scripture-claim", {}),
     onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/mining/status"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/rewards/wallet"] });
-      const streakBonus = data?.streakBonus || 0;
+      afterTaskSuccess();
+      const streakBonus = (data as any)?.streakBonus || 0;
       toast({
         title: streakBonus > 0 ? "🔥 7-Day Streak Bonus!" : "Scripture Claimed!",
         description: streakBonus > 0
-          ? `+${data?.amount} JCMOVES! (100 + 300 streak bonus)`
-          : `+100 JCMOVES! Day ${data?.streak || 1} streak 🔥`,
+          ? `+${(data as any)?.amount} JCMOVES! (100 + 300 streak bonus)`
+          : `+100 JCMOVES! Day ${(data as any)?.streak || 1} streak 🔥`,
       });
     },
-    onError: () => toast({ title: "Claim failed", description: "Activate mining first or already claimed today.", variant: "destructive" }),
+    onError: (err: any) => {
+      const msg = err?.message || "";
+      toast({
+        title: "Already claimed",
+        description: msg.includes("Already claimed") ? "You've already claimed your scripture reward today." : "Something went wrong.",
+        variant: "destructive",
+      });
+    },
   });
 
   const fitnessMutation = useMutation({
     mutationFn: ({ type, count }: { type: 'pushups' | 'situps'; count: number }) =>
       apiRequest("POST", "/api/mining/fitness", { type, count }),
     onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/mining/status"] });
-      toast({ title: "Fitness logged!", description: `Mining speed boosted to ${data?.newSpeed}x 💪` });
+      afterTaskSuccess();
+      toast({ title: "Fitness logged!", description: `Mining speed boosted to ${(data as any)?.newSpeed}x 💪` });
     },
     onError: () => toast({ title: "Failed to log fitness", variant: "destructive" }),
   });
@@ -108,16 +135,12 @@ export function EarnTasksButton() {
   const miningDone = (miningStatus?.claimsRemainingToday ?? 3) < 3;
   const checkinDone = gamificationData ? !gamificationData.data.canCheckIn : false;
   const scriptureDone = isToday(miningStatus?.lastScriptureClaimDate);
-
-  const todayStr = new Date().toISOString().split('T')[0];
-  const fitnessToday = miningStatus?.fitness;
-  const isFitnessToday = !!(miningStatus as any)?.currentSession?.fitnessLastUpdated === undefined
-    ? false
-    : true;
-  const pushupsToday = fitnessToday?.pushups || 0;
-  const situpsToday = fitnessToday?.situps || 0;
+  const pushupsToday = miningStatus?.fitness?.pushups || 0;
+  const situpsToday = miningStatus?.fitness?.situps || 0;
   const pushupsGoalDone = pushupsToday >= 10;
   const situpsGoalDone = situpsToday >= 10;
+  const leadDone = !!(miningStatus?.leadAddedToday);
+  const dailyBonusClaimed = !!(miningStatus?.dailyBonusClaimed);
 
   const scriptureStreak = miningStatus?.scriptureStreak || 0;
   const streakToBonus = scriptureStreak > 0 ? (7 - (scriptureStreak % 7 || 7)) : 7;
@@ -147,7 +170,7 @@ export function EarnTasksButton() {
       id: "checkin",
       label: "Daily Check-In",
       description: checkinDone
-        ? `Next: ${gamificationData?.data.nextCheckInAt ? new Date(gamificationData.data.nextCheckInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "soon"}`
+        ? `Next: ${gamificationData?.data.nextCheckInAt ? new Date(gamificationData.data.nextCheckInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "tomorrow"}`
         : "Check in to earn bonus tokens",
       reward: "+100",
       done: checkinDone,
@@ -172,7 +195,7 @@ export function EarnTasksButton() {
       id: "pushups",
       label: "10 Pushups",
       description: pushupsGoalDone
-        ? `Done! ${pushupsToday} reps today — boosts mining speed`
+        ? `Done! ${pushupsToday} reps today`
         : `${pushupsToday}/10 reps today — boosts your mining speed`,
       reward: "+speed",
       done: pushupsGoalDone,
@@ -184,7 +207,7 @@ export function EarnTasksButton() {
       id: "situps",
       label: "10 Situps",
       description: situpsGoalDone
-        ? `Done! ${situpsToday} reps today — boosts mining speed`
+        ? `Done! ${situpsToday} reps today`
         : `${situpsToday}/10 reps today — boosts your mining speed`,
       reward: "+speed",
       done: situpsGoalDone,
@@ -195,11 +218,13 @@ export function EarnTasksButton() {
     {
       id: "add_job",
       label: "Add a Job Lead",
-      description: "Submit a new moving or junk removal lead",
+      description: leadDone
+        ? "Lead submitted today — great work!"
+        : "Submit a new moving or junk removal lead",
       reward: "+500",
-      done: false,
+      done: leadDone,
       action: () => { setOpen(false); setLocation("/employee/add-job"); },
-      actionLabel: "Add Lead",
+      actionLabel: leadDone ? "Add More" : "Add Lead",
       isPending: false,
     },
   ];
@@ -208,6 +233,7 @@ export function EarnTasksButton() {
   const totalCount = tasks.length;
   const progressPct = Math.round((doneCount / totalCount) * 100);
   const pendingCount = totalCount - doneCount;
+  const allDone = doneCount === totalCount;
 
   if (!user) return null;
 
@@ -241,7 +267,7 @@ export function EarnTasksButton() {
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Complete daily tasks to earn tokens and boost your mining speed!</p>
+            <p className="text-xs text-muted-foreground mt-1">Complete all {totalCount} daily tasks for a <span className="text-yellow-500 font-bold">+500 JCMOVES bonus!</span></p>
 
             <div className="mt-3 space-y-1">
               <div className="flex justify-between text-xs">
@@ -274,8 +300,8 @@ export function EarnTasksButton() {
                     <p className={`text-sm font-semibold leading-tight ${task.done ? "line-through text-muted-foreground" : ""}`}>
                       {task.label}
                     </p>
-                    {'badge' in task && task.badge && (
-                      <span className="text-[10px] bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded-full font-bold">{task.badge}</span>
+                    {'badge' in task && (task as any).badge && (
+                      <span className="text-[10px] bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded-full font-bold">{(task as any).badge}</span>
                     )}
                     <span className="text-xs text-yellow-500 font-bold flex items-center gap-0.5 shrink-0">
                       <Star className="h-3 w-3" />{task.reward} JCMOVES
@@ -302,15 +328,43 @@ export function EarnTasksButton() {
             ))}
           </div>
 
-          {doneCount === totalCount && (
-            <div className="px-5 pb-5 text-center">
-              <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4">
+          {/* Daily completion bonus section */}
+          <div className="px-5 pb-5">
+            {allDone && !dailyBonusClaimed && (
+              <div className="bg-gradient-to-br from-yellow-500/20 to-orange-500/20 border border-yellow-500/40 rounded-xl p-4 text-center">
+                <Trophy className="h-8 w-8 text-yellow-400 mx-auto mb-2" />
+                <p className="text-sm font-bold text-yellow-300">All Tasks Complete!</p>
+                <p className="text-xs text-muted-foreground mt-1 mb-3">Claim your 500 JCMOVES daily completion bonus</p>
+                <Button
+                  className="w-full bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white font-bold"
+                  onClick={() => completionBonusMutation.mutate()}
+                  disabled={completionBonusMutation.isPending}
+                >
+                  {completionBonusMutation.isPending
+                    ? <><Zap className="h-4 w-4 animate-spin mr-2" />Claiming...</>
+                    : <><Trophy className="h-4 w-4 mr-2" />Claim +500 JCMOVES</>
+                  }
+                </Button>
+              </div>
+            )}
+
+            {allDone && dailyBonusClaimed && (
+              <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 text-center">
                 <CheckCircle2 className="h-8 w-8 text-green-500 mx-auto mb-2" />
-                <p className="text-sm font-semibold text-green-400">All done for today!</p>
+                <p className="text-sm font-semibold text-green-400">All done for today! +500 JCMOVES earned 🏆</p>
                 <p className="text-xs text-muted-foreground mt-1">Come back tomorrow for more rewards.</p>
               </div>
-            </div>
-          )}
+            )}
+
+            {!allDone && (
+              <div className="border border-yellow-500/20 rounded-xl p-3 text-center">
+                <p className="text-xs text-muted-foreground">
+                  Complete all {totalCount} tasks to unlock <span className="text-yellow-500 font-bold">+500 JCMOVES</span> bonus
+                </p>
+                <p className="text-xs text-yellow-600 mt-0.5">{pendingCount} task{pendingCount !== 1 ? 's' : ''} remaining</p>
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </>
