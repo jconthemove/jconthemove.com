@@ -20,7 +20,7 @@ import { z } from "zod";
 import { EncryptionService } from "./services/encryption";
 import { eq, desc, sql, and, gte, lte, or, ilike } from 'drizzle-orm';
 import { db } from './db';
-import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, giftCards, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens, promoCodes, reviews, rewardCategories, rewardItems, rewardRedemptions, buybackFund } from '@shared/schema';
+import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, giftCards, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens, promoCodes, reviews, rewardCategories, rewardItems, rewardRedemptions, buybackFund, laborQuotes } from '@shared/schema';
 import { getFaucetPayService } from "./services/faucetpay";
 import { getAdvertisingService } from "./services/advertising";
 import { FAUCET_CONFIG } from "./constants";
@@ -12281,6 +12281,186 @@ Thank you for your business!
     } catch (e: any) {
       console.error("Spin wheel error:", e);
       res.status(500).json({ error: e.message || "Spin failed" });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ── LABOR CALCULATOR ────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const TOKENS_PER_MOVER_MINUTE = 500;
+  const CASH_PER_MOVER_HOUR = 62.5;
+  const SERVICE_MIN_CASH_CENTS = 5000; // $50 minimum
+  const SERVICE_MIN_TOKENS = 15000;    // 15,000 token minimum
+
+  function calcLaborQuote(movers: number, minutes: number) {
+    const moverMinutes = movers * minutes;
+    const rawTokens = moverMinutes * TOKENS_PER_MOVER_MINUTE;
+    const rawCashCents = Math.round((movers * minutes * CASH_PER_MOVER_HOUR / 60) * 100);
+
+    const tokenPrice = Math.max(rawTokens, SERVICE_MIN_TOKENS);
+    const cashPriceCents = Math.max(rawCashCents, SERVICE_MIN_CASH_CENTS);
+
+    // Token coverage cap based on duration
+    let tokenCoverageRatio = 1.0;
+    if (minutes >= 120) tokenCoverageRatio = 0.5;
+    else if (minutes >= 60) tokenCoverageRatio = 0.75;
+
+    const tokenCap = Math.floor(tokenPrice * tokenCoverageRatio);
+    return { moverMinutes, tokenPrice, cashPriceCents, tokenCap, tokenCoverageRatio };
+  }
+
+  // ── Calculate (no side effects, no auth required) ────────────────────────
+  app.post("/api/labor-quote/calculate", async (req: any, res) => {
+    try {
+      const { movers, minutes } = req.body;
+      if (!movers || !minutes) return res.status(400).json({ error: "movers and minutes are required" });
+      const m = parseInt(movers), min = parseInt(minutes);
+      if (![2, 3, 4].includes(m)) return res.status(400).json({ error: "Movers must be 2, 3, or 4" });
+      if (min < 15 || min % 15 !== 0) return res.status(400).json({ error: "Duration must be in 15-minute increments, minimum 15 minutes" });
+      res.json({ ok: true, ...calcLaborQuote(m, min) });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Submit quote → deduct tokens + create lead ────────────────────────────
+  app.post("/api/labor-quote/submit", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { movers, minutes, serviceType, paymentMode, tokenApplied, userNotes, scheduledDate } = req.body;
+
+      const m = parseInt(movers), min = parseInt(minutes), tApplied = parseInt(tokenApplied ?? 0);
+      if (![2, 3, 4].includes(m)) return res.status(400).json({ error: "Invalid mover count" });
+      if (min < 15 || min % 15 !== 0) return res.status(400).json({ error: "Duration must be in 15-minute increments" });
+
+      const { tokenPrice, cashPriceCents, tokenCap } = calcLaborQuote(m, min);
+
+      // Validate token amount requested
+      const finalTokenApplied = Math.min(tApplied, tokenCap);
+      if (finalTokenApplied < 0) return res.status(400).json({ error: "Invalid token amount" });
+
+      // If tokens are being applied, check balance and deduct
+      if (finalTokenApplied > 0) {
+        const walletRow = await db.execute(sql`SELECT token_balance FROM wallet_accounts WHERE user_id = ${userId} LIMIT 1`);
+        const bal = parseFloat((walletRow.rows[0] as any)?.token_balance ?? "0");
+        if (bal < finalTokenApplied) return res.status(400).json({ error: "Insufficient JCMOVES balance" });
+        await storage.debitWalletTokens(userId, finalTokenApplied);
+      }
+
+      // Cash due = cash price minus cash value of tokens applied
+      const tokenValueCents = Math.round((finalTokenApplied / tokenPrice) * cashPriceCents);
+      const cashDueCents = Math.max(0, cashPriceCents - tokenValueCents);
+
+      // Quote expires in 45 days
+      const expiresAt = new Date(Date.now() + 45 * 86400000);
+
+      // Create the quote record
+      const [quote] = await db.insert(laborQuotes).values({
+        userId,
+        movers: m,
+        minutes: min,
+        serviceType: serviceType || "moving",
+        paymentMode: paymentMode || "tokens",
+        cashPriceCents,
+        tokenPrice,
+        tokenCap,
+        tokenApplied: finalTokenApplied,
+        cashDueCents,
+        userNotes: userNotes || null,
+        status: "quoted",
+        expiresAt,
+      }).returning();
+
+      // Auto-create a lead/job booking
+      const [userRecord] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      let leadId: string | null = null;
+      if (userRecord) {
+        const serviceLabels: Record<string, string> = {
+          moving: "moving",
+          loading: "moving",
+          furniture: "moving",
+          junk: "junk",
+        };
+        const leadServiceType = serviceLabels[serviceType] ?? "moving";
+        const serviceLabel = serviceType === "loading" ? "Loading/Unloading Help" : serviceType === "furniture" ? "Furniture Rearranging" : serviceType === "junk" ? "Junk Removal Labor" : "Moving Help";
+        const creditNote = `🧮 Labor Calculator Quote — ${m} movers × ${min} min = ${m * min} mover-minutes. ${finalTokenApplied > 0 ? `${finalTokenApplied.toLocaleString()} JCMOVES applied.` : ""} ${cashDueCents > 0 ? `Cash due at service: $${(cashDueCents / 100).toFixed(2)}.` : "Fully covered by JCMOVES."} Quote #${quote.id} expires ${expiresAt.toLocaleDateString()}.`;
+
+        const [newLead] = await db.insert(leads).values({
+          firstName: userRecord.firstName || userRecord.username || "Customer",
+          lastName: userRecord.lastName || "",
+          email: userRecord.email || "",
+          phone: userRecord.phone || "Not provided",
+          serviceType: leadServiceType,
+          fromAddress: "To be provided",
+          status: "quote_requested",
+          details: `Labor Calculator service request. ${m} movers, ${min} minutes, ${serviceLabel}.${userNotes ? ` Notes: ${userNotes}` : ""}`,
+          quoteNotes: creditNote,
+          crewSize: m,
+          createdByUserId: userId,
+          appliedCreditNote: creditNote,
+          moveDate: scheduledDate ? new Date(scheduledDate).toISOString().split("T")[0] : undefined,
+        } as any).returning();
+        leadId = newLead?.id || null;
+
+        // Link lead back to quote
+        if (leadId) {
+          await db.update(laborQuotes).set({ leadId, status: "scheduled" }).where(eq(laborQuotes.id, quote.id));
+        }
+
+        // Admin notification email
+        try {
+          const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
+          await sendEmail({
+            to: companyEmail,
+            subject: `🧮 Labor Calculator Booking — ${m} Movers × ${min} min — ${userRecord.firstName || userRecord.email}`,
+            html: `<div style="font-family:Arial,sans-serif;padding:24px;background:#0f172a;color:#f1f5f9;border-radius:8px;">
+              <h2 style="color:#f97316;">New Labor Calculator Booking</h2>
+              <p><strong>Customer:</strong> ${userRecord.firstName || ""} ${userRecord.lastName || ""} (${userRecord.email})</p>
+              <p><strong>Crew:</strong> ${m} movers</p>
+              <p><strong>Duration:</strong> ${min} minutes</p>
+              <p><strong>Service:</strong> ${serviceLabel}</p>
+              <p><strong>JCMOVES Applied:</strong> ${finalTokenApplied.toLocaleString()}</p>
+              <p><strong>Cash Due:</strong> $${(cashDueCents / 100).toFixed(2)}</p>
+              ${scheduledDate ? `<p><strong>Requested Date:</strong> ${new Date(scheduledDate).toLocaleDateString()}</p>` : ""}
+              ${userNotes ? `<p><strong>Notes:</strong> ${userNotes}</p>` : ""}
+              <p><strong>Lead ID:</strong> ${leadId}</p>
+            </div>`,
+            text: `New labor calculator booking from ${userRecord.email}: ${m} movers, ${min} min, $${(cashDueCents / 100).toFixed(2)} cash due, ${finalTokenApplied} JCMOVES applied.`,
+          });
+        } catch (_e) { /* non-blocking */ }
+      }
+
+      res.json({ ok: true, quote, leadId, cashDueCents, tokenApplied: finalTokenApplied });
+    } catch (e: any) {
+      console.error("Labor quote submit error:", e);
+      res.status(500).json({ error: e.message || "Failed to submit quote" });
+    }
+  });
+
+  // ── My quotes ─────────────────────────────────────────────────────────────
+  app.get("/api/labor-quote/my-quotes", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const quotes = await db.select().from(laborQuotes).where(eq(laborQuotes.userId, userId)).orderBy(desc(laborQuotes.createdAt));
+      res.json(quotes);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Admin: All labor quotes ────────────────────────────────────────────────
+  app.get("/api/admin/labor-quotes", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser((req.session as any).userId);
+      if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
+      const quotes = await db.select({ quote: laborQuotes, user: users })
+        .from(laborQuotes)
+        .leftJoin(users, eq(laborQuotes.userId, users.id))
+        .orderBy(desc(laborQuotes.createdAt));
+      res.json(quotes);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
     }
   });
 

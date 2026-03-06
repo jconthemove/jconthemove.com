@@ -1796,6 +1796,29 @@ export const serviceCreditBalances = pgTable("service_credit_balances", {
 });
 export type ServiceCreditBalance = typeof serviceCreditBalances.$inferSelect;
 
+// ── Labor Calculator Quotes ──────────────────────────────────────────────────
+export const laborQuotes = pgTable("labor_quotes", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  movers: integer("movers").notNull(),
+  minutes: integer("minutes").notNull(),
+  serviceType: text("service_type").notNull(), // 'moving' | 'loading' | 'furniture' | 'junk'
+  paymentMode: text("payment_mode").notNull(), // 'tokens' | 'split' | 'cash'
+  cashPriceCents: integer("cash_price_cents").notNull(),
+  tokenPrice: integer("token_price").notNull(),
+  tokenCap: integer("token_cap").notNull(),
+  tokenApplied: integer("token_applied").notNull().default(0),
+  cashDueCents: integer("cash_due_cents").notNull().default(0),
+  userNotes: text("user_notes"),
+  status: text("status").notNull().default("quoted"), // 'quoted' | 'redeemed' | 'scheduled' | 'completed' | 'expired' | 'canceled'
+  leadId: varchar("lead_id"), // linked auto-created lead/job
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+export type LaborQuote = typeof laborQuotes.$inferSelect;
+export type InsertLaborQuote = typeof laborQuotes.$inferInsert;
+
 // ── Account Recovery Tokens ─────────────────────────────────────────────────
 export const recoveryTokens = pgTable("recovery_tokens", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

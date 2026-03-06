@@ -134,6 +134,7 @@ export interface IStorage {
   updateWalletAccount(userId: string, updates: Partial<WalletAccount>): Promise<void>;
   awardJobCompletionTokens(userId: string, tokenAmount: number, jobId: string): Promise<void>;
   creditWalletTokens(userId: string, tokenAmount: number): Promise<void>;
+  debitWalletTokens(userId: string, tokenAmount: number): Promise<void>;
   getRewardsByUserAndTypeToday(userId: string, rewardType: string): Promise<any[]>;
   
   // Multi-currency wallet operations
@@ -2012,6 +2013,18 @@ export class DatabaseStorage implements IStorage {
 
     creditGenerosityFund(tokenAmount, `credit_to_${userId}`).catch(() => {});
   }
+
+  async debitWalletTokens(userId: string, tokenAmount: number): Promise<void> {
+    const wallet = await this.getWalletAccount(userId);
+    if (!wallet) throw new Error("Wallet not found");
+    const currentBalance = parseFloat(wallet.tokenBalance || "0");
+    if (currentBalance < tokenAmount) throw new Error("Insufficient balance");
+    const newBalance = Math.max(0, currentBalance - tokenAmount);
+    await this.updateWalletAccount(userId, {
+      tokenBalance: newBalance.toFixed(8),
+    });
+  }
+
 
   async getRewardsByUserAndTypeToday(userId: string, rewardType: string): Promise<any[]> {
     const today = new Date();

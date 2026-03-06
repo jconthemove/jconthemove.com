@@ -12,9 +12,10 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Coins, Search, Filter, CheckCircle2, Clock, ChevronRight,
   Star, Zap, Trophy, Package, Gift, MapPin, Snowflake, Gamepad2,
-  Wrench, Crown, ShoppingBag, History
+  Wrench, Crown, ShoppingBag, History, Calculator, Users
 } from "lucide-react";
 import { SpinWheelDialog } from "@/components/spin-wheel";
+import { LaborCalculatorDialog } from "@/components/labor-calculator-dialog";
 
 interface RewardCategory {
   id: number;
@@ -151,6 +152,7 @@ export default function RewardsMarketplacePage() {
   const [spinWheelOpen, setSpinWheelOpen] = useState(false);
   const [spinRedemptionId, setSpinRedemptionId] = useState<number | undefined>(undefined);
   const [autoBookingLeadId, setAutoBookingLeadId] = useState<string | null>(null);
+  const [calcOpen, setCalcOpen] = useState(false);
   const lastRedeemedItemRef = useRef<RewardItem | null>(null);
 
   const { data: shopData, isLoading } = useQuery<{ items: ItemRow[]; walletBalance: number }>({
@@ -332,6 +334,47 @@ export default function RewardsMarketplacePage() {
         {/* Shop tab */}
         {activeTab === "shop" && (
           <>
+            {/* ── Labor Calculator Feature Card ── */}
+            {!search && (
+              <div className="mb-6 relative overflow-hidden rounded-2xl border border-orange-500/40 bg-gradient-to-br from-orange-500/10 via-yellow-500/5 to-background">
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(249,115,22,0.15),transparent_70%)]" />
+                <div className="relative p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-start gap-4">
+                    <div className="w-14 h-14 rounded-xl bg-orange-500/20 border border-orange-500/30 flex items-center justify-center shrink-0">
+                      <span className="text-2xl">🧮</span>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-bold text-base text-foreground">Labor Calculator</h3>
+                        <Badge className="bg-orange-500 text-white text-[10px] px-1.5 py-0.5 border-0">FEATURED</Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground leading-relaxed max-w-md">
+                        Build your crew, choose your time, and convert JCMOVES into real moving labor. Get an instant quote, apply tokens toward payment.
+                      </p>
+                      <div className="flex items-center gap-3 mt-2 flex-wrap">
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Users className="h-3 w-3 text-orange-400" /> 2–4 movers
+                        </span>
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3 w-3 text-orange-400" /> 15 min – 3 hr
+                        </span>
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Coins className="h-3 w-3 text-yellow-500" /> 500 JCMOVES / mover-min
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={() => setCalcOpen(true)}
+                    className="bg-orange-500 hover:bg-orange-600 text-white font-bold px-6 py-5 rounded-xl shrink-0 text-sm gap-2"
+                  >
+                    <Calculator className="h-4 w-4" />
+                    Open Calculator
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {/* Featured strip */}
             {featured.length > 0 && !search && !activeCat && (
               <div className="mb-6">
@@ -632,6 +675,13 @@ export default function RewardsMarketplacePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Labor Calculator Dialog */}
+      <LaborCalculatorDialog
+        open={calcOpen}
+        onClose={() => setCalcOpen(false)}
+        walletBalance={walletBalance}
+      />
 
       {/* Spin Wheel — auto-launches after a Spin Wheel Entry redemption */}
       <SpinWheelDialog
