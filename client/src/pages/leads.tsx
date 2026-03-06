@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
-import { ArrowLeft, Home, Building, Trash2, Mail, Phone, CircleDot, MessageCircle, FileText, CheckCircle, Clock, Play, Activity, CheckCheck, Settings, MapPin, Calendar as CalendarIcon } from "lucide-react";
+import { ArrowLeft, Home, Building, Trash2, Mail, Phone, CircleDot, MessageCircle, FileText, CheckCircle, Clock, Play, Activity, CheckCheck, Settings, MapPin, Calendar as CalendarIcon, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -197,20 +197,26 @@ export default function LeadsPage() {
   };
 
   const renderLeadCard = (lead: Lead) => (
-    <Card key={lead.id} className="border border-slate-700 hover:border-slate-600 hover:shadow-lg transition-all bg-slate-800/80 backdrop-blur-sm" data-testid={`lead-card-${lead.id}`}>
+    <Card
+      key={lead.id}
+      className="border border-slate-700 hover:border-blue-500/60 hover:shadow-xl transition-all bg-slate-800/80 backdrop-blur-sm cursor-pointer group"
+      data-testid={`lead-card-${lead.id}`}
+      onClick={() => setLocation(`/lead/${lead.id}`)}
+    >
       <CardContent className="p-5">
         <div className="space-y-4">
           {/* Header row with name and status */}
           <div className="flex justify-between items-start flex-wrap gap-3">
             <div className="flex items-center gap-3 flex-wrap">
               {getStatusIcon(lead.status)}
-              <h3 className="font-bold text-lg text-white">
+              <h3 className="font-bold text-lg text-white group-hover:text-blue-300 transition-colors">
                 {lead.firstName} {lead.lastName}
               </h3>
               <Badge className={getServiceBadgeColor(lead.serviceType)}>
                 {lead.serviceType === "residential" && "Residential"}
                 {lead.serviceType === "commercial" && "Commercial"}
                 {lead.serviceType === "junk" && "Junk Removal"}
+                {!["residential","commercial","junk"].includes(lead.serviceType) && lead.serviceType.charAt(0).toUpperCase() + lead.serviceType.slice(1)}
               </Badge>
               <Badge variant={getStatusBadgeVariant(lead.status)}>
                 {lead.status.charAt(0).toUpperCase() + lead.status.slice(1).replace("_", " ")}
@@ -221,14 +227,16 @@ export default function LeadsPage() {
                 </Badge>
               )}
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
               <Button 
                 variant="default" 
                 size="sm" 
-                onClick={() => handleViewLead(lead)}
+                onClick={() => setLocation(`/lead/${lead.id}`)}
                 data-testid={`manage-button-${lead.id}`}
+                className="gap-1.5"
               >
-                Manage
+                <ChevronRight className="h-3.5 w-3.5" />
+                Open
               </Button>
               <Button 
                 variant="ghost" 
@@ -243,7 +251,7 @@ export default function LeadsPage() {
           </div>
           
           {/* Contact info row */}
-          <div className="flex flex-wrap gap-4 text-sm">
+          <div className="flex flex-wrap gap-4 text-sm" onClick={(e) => e.stopPropagation()}>
             <Button variant="outline" size="sm" asChild data-testid={`email-button-${lead.id}`} className="h-8">
               <a href={`mailto:${lead.email}`} className="flex items-center gap-2">
                 <Mail className="h-4 w-4" />
