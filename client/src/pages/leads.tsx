@@ -332,9 +332,7 @@ export default function LeadsPage() {
               <TabsTrigger value="completed" data-testid="tab-completed-leads" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
                 Completed ({leads.filter(l => l.status === 'completed').length})
               </TabsTrigger>
-              {isStaff && (
-                <TabsTrigger value="add" data-testid="tab-add-lead">+ Create Job</TabsTrigger>
-              )}
+              <TabsTrigger value="add" data-testid="tab-add-lead">+ Book a Job</TabsTrigger>
             </TabsList>
 
             <TabsContent value="view">
@@ -415,13 +413,16 @@ export default function LeadsPage() {
               )}
             </TabsContent>
 
-            {isStaff && (
             <TabsContent value="add">
               <Card className="bg-slate-800/50 border-slate-700">
                 <CardHeader>
-                  <CardTitle className="text-2xl text-white">Create a New Job</CardTitle>
+                  <CardTitle className="text-2xl text-white">
+                    {isStaff ? "Create a New Job" : "Book a Service"}
+                  </CardTitle>
                   <CardDescription className="text-slate-400">
-                    Create a job on behalf of a customer — phone call, walk-in, or referral. You'll earn rewards when the job is confirmed and completed.
+                    {isStaff
+                      ? "Create a job on behalf of a customer — phone call, walk-in, or referral. You'll earn rewards when the job is confirmed and completed."
+                      : "Book a moving, junk removal, or other service directly. Your job goes straight into our pipeline and you earn JCMOVES tokens when it's completed. You can track your order here anytime."}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -596,7 +597,6 @@ export default function LeadsPage() {
                 </CardContent>
               </Card>
             </TabsContent>
-            )}
           </Tabs>
         </div>
       </div>
