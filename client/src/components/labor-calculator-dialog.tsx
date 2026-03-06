@@ -21,11 +21,14 @@ const SERVICE_MIN_TOKENS = 15000;
 const DURATION_PRESETS = [
   { label: "15 min", value: 15 },
   { label: "30 min", value: 30 },
-  { label: "45 min", value: 45 },
   { label: "1 hr", value: 60 },
-  { label: "1.5 hr", value: 90 },
   { label: "2 hr", value: 120 },
   { label: "3 hr", value: 180 },
+  { label: "4 hr", value: 240 },
+  { label: "5 hr", value: 300 },
+  { label: "6 hr", value: 360 },
+  { label: "7 hr", value: 420 },
+  { label: "8 hr", value: 480 },
 ];
 
 const SERVICE_TYPES = [
@@ -229,7 +232,7 @@ export function LaborCalculatorDialog({ open, onClose, walletBalance }: Props) {
                   <span className="text-xs text-muted-foreground whitespace-nowrap">min (15 min min.)</span>
                 </div>
               ) : (
-                <div className="grid grid-cols-4 gap-1.5">
+                <div className="grid grid-cols-5 gap-1.5">
                   {DURATION_PRESETS.map((p) => (
                     <button
                       key={p.value}
