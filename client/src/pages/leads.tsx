@@ -215,6 +215,11 @@ export default function LeadsPage() {
               <Badge variant={getStatusBadgeVariant(lead.status)}>
                 {lead.status.charAt(0).toUpperCase() + lead.status.slice(1).replace("_", " ")}
               </Badge>
+              {lead.redemptionId && (
+                <Badge className="bg-orange-500/20 text-orange-400 border border-orange-500/30">
+                  🎁 From Rewards
+                </Badge>
+              )}
             </div>
             <div className="flex gap-2">
               <Button 

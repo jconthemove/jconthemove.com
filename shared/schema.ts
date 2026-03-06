@@ -79,6 +79,10 @@ export const leads = pgTable("leads", {
   // Promo code for discounts
   promoCode: text("promo_code"), // Customer-entered promo code for discounts
 
+  // Reward redemption linking
+  redemptionId: integer("redemption_id"), // Linked reward_redemptions.id if this job was created by a redemption
+  appliedCreditNote: text("applied_credit_note"), // Human-readable summary of discount/credit applied from redemption
+
   // Review/tip link token (so customers can leave a review without logging in)
   reviewToken: varchar("review_token").unique(),
   reviewRequestSentAt: timestamp("review_request_sent_at"),

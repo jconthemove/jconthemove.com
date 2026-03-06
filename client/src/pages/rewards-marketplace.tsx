@@ -150,6 +150,7 @@ export default function RewardsMarketplacePage() {
   const [scheduledDate, setScheduledDate] = useState("");
   const [spinWheelOpen, setSpinWheelOpen] = useState(false);
   const [spinRedemptionId, setSpinRedemptionId] = useState<number | undefined>(undefined);
+  const [autoBookingLeadId, setAutoBookingLeadId] = useState<string | null>(null);
   const lastRedeemedItemRef = useRef<RewardItem | null>(null);
 
   const { data: shopData, isLoading } = useQuery<{ items: ItemRow[]; walletBalance: number }>({
@@ -188,10 +189,19 @@ export default function RewardsMarketplacePage() {
         setSpinRedemptionId(rid);
         setSpinWheelOpen(true);
       } else {
-        toast({
-          title: "🎁 Reward Redeemed!",
-          description: `${redeemedItem?.name} — ${(data as any)?.redemption?.status === "pending" ? "Pending admin approval" : "Check your redemption history"}`,
-        });
+        const leadId = (data as any)?.autoCreatedLeadId;
+        if (leadId) {
+          setAutoBookingLeadId(leadId);
+          toast({
+            title: "🎁 Reward Redeemed — Booking Created!",
+            description: `${redeemedItem?.name} — A service request has been submitted with your reward applied.`,
+          });
+        } else {
+          toast({
+            title: "🎁 Reward Redeemed!",
+            description: `${redeemedItem?.name} — ${(data as any)?.redemption?.status === "pending" ? "Pending admin approval" : "Check your redemption history"}`,
+          });
+        }
       }
     },
     onError: (err: any) => {
@@ -250,6 +260,23 @@ export default function RewardsMarketplacePage() {
 
   return (
     <div className="min-h-screen bg-background pb-20">
+      {/* Auto-Booking Confirmation Banner */}
+      {autoBookingLeadId && (
+        <div className="bg-orange-500/10 border-b border-orange-500/30 px-4 py-3">
+          <div className="max-w-5xl mx-auto flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🎁</span>
+              <div>
+                <p className="font-semibold text-orange-400 text-sm">Service Request Submitted!</p>
+                <p className="text-xs text-foreground/70">Your reward discount has been applied and your booking is in our pipeline. We'll be in touch to confirm your date.</p>
+              </div>
+            </div>
+            <a href={`/lead/${autoBookingLeadId}`} className="text-xs bg-orange-500 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-orange-600 transition-colors whitespace-nowrap">
+              View Booking →
+            </a>
+          </div>
+        </div>
+      )}
       {/* Hero */}
       <div className="bg-gradient-to-br from-yellow-600/20 via-orange-600/10 to-background border-b border-border px-4 py-6">
         <div className="max-w-5xl mx-auto">

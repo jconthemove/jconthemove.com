@@ -59,6 +59,8 @@ interface Lead {
   checkedInAt?: string;
   completedAt?: string;
   createdAt: string;
+  redemptionId?: number;
+  appliedCreditNote?: string;
 }
 
 interface Reward {
@@ -473,6 +475,17 @@ export default function LeadDetailPage() {
             </Badge>
           </div>
         </div>
+
+        {/* Reward Credit Banner */}
+        {lead.appliedCreditNote && (
+          <div className="mb-6 p-4 rounded-xl border border-orange-500/40 bg-orange-500/10 flex items-start gap-3">
+            <span className="text-2xl">🎁</span>
+            <div>
+              <p className="font-semibold text-orange-400 text-sm mb-1">JCMOVES Reward Applied to This Job</p>
+              <p className="text-sm text-foreground/80">{lead.appliedCreditNote}</p>
+            </div>
+          </div>
+        )}
 
         {/* 5-Step Workflow Progress */}
         <Card className="mb-8">

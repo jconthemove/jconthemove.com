@@ -11962,8 +11962,87 @@ Thank you for your business!
         (redemption as any).mysteryPrize = pick;
       }
 
+      // ── Auto-create a job booking for schedule-required or invoice-credit rewards ──
+      // These require an actual service appointment, so we create a lead so the admin
+      // can see it in the pipeline and the customer can see their discount applied.
+      let autoCreatedLeadId: string | null = null;
+      const needsBooking = (itemRow as any).requiresSchedule || itemRow.scheduleRequired || (itemRow as any).createsInvoiceCredit || (itemRow as any).createsServiceCredit;
+      if (needsBooking) {
+        try {
+          const [userRecord] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+          if (userRecord) {
+            // Determine service type from item name
+            const nameLower = itemRow.name.toLowerCase();
+            let serviceType = "moving";
+            if (nameLower.includes("junk") || nameLower.includes("debris") || nameLower.includes("yard")) serviceType = "junk";
+            else if (nameLower.includes("snow")) serviceType = "snow";
+            else if (nameLower.includes("cleaning")) serviceType = "cleaning";
+
+            // Build a clear credit note
+            const cashVal = itemRow.cashValue ? `$${parseFloat(itemRow.cashValue).toFixed(2)}` : null;
+            const minutesMap: Record<string, string> = {
+              "15-Minute Labor Credit": "15 minutes of free labor",
+              "30-Minute Labor Credit": "30 minutes of free labor",
+              "1-Hour Labor Credit": "1 hour of free labor",
+            };
+            const creditDescription = minutesMap[itemRow.name] ||
+              (cashVal ? `${cashVal} discount` : itemRow.name);
+
+            const creditNote = `🎁 JCMOVES Reward Applied: ${itemRow.name} — ${creditDescription}. Redemption #${redemption.id}. The discount will be applied to the final invoice by our team.`;
+
+            const [newLead] = await db.insert(leads).values({
+              firstName: userRecord.firstName || userRecord.username || "Customer",
+              lastName: userRecord.lastName || "",
+              email: userRecord.email || "",
+              phone: userRecord.phone || "Not provided",
+              serviceType,
+              fromAddress: "To be provided",
+              status: "quote_requested",
+              details: `Service request created from JCMOVES Rewards redemption. Item: ${itemRow.name}.${scheduledDate ? ` Requested date: ${new Date(scheduledDate).toLocaleDateString()}.` : ""}`,
+              quoteNotes: creditNote,
+              createdByUserId: userId,
+              redemptionId: redemption.id,
+              appliedCreditNote: creditNote,
+              moveDate: scheduledDate ? new Date(scheduledDate).toISOString().split("T")[0] : undefined,
+            } as any).returning();
+
+            autoCreatedLeadId = newLead?.id || null;
+            console.log(`🏠 Auto-created booking lead ${autoCreatedLeadId} for reward redemption ${redemption.id}`);
+
+            // Update the redemption to link to this lead
+            if (autoCreatedLeadId) {
+              await db.update(rewardRedemptions)
+                .set({ adminNotes: `Auto-created job request: Lead #${autoCreatedLeadId}` })
+                .where(eq(rewardRedemptions.id, redemption.id));
+            }
+
+            // Notify admin via email that a reward-based service request came in
+            try {
+              const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
+              await sendEmail({
+                to: companyEmail,
+                subject: `🎁 New Reward Booking: ${itemRow.name} — ${userRecord.firstName || userRecord.username}`,
+                html: `<div style="font-family:Arial,sans-serif;padding:24px;background:#0f172a;color:#f1f5f9;border-radius:8px;">
+                  <h2 style="color:#f97316;">New Reward Service Request</h2>
+                  <p><strong>Customer:</strong> ${userRecord.firstName || userRecord.username} ${userRecord.lastName || ""} (${userRecord.email})</p>
+                  <p><strong>Reward Redeemed:</strong> ${itemRow.name}</p>
+                  <p><strong>Credit Applied:</strong> ${creditDescription}</p>
+                  <p><strong>Service Type:</strong> ${serviceType}</p>
+                  ${scheduledDate ? `<p><strong>Requested Date:</strong> ${new Date(scheduledDate).toLocaleDateString()}</p>` : ""}
+                  <p><strong>Lead ID:</strong> ${autoCreatedLeadId}</p>
+                  <p style="margin-top:16px;"><a href="${process.env.APP_URL || "https://jconthemove.com"}/lead/${autoCreatedLeadId}" style="background:#f97316;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;">View Booking</a></p>
+                </div>`,
+                text: `New reward service request: ${itemRow.name} redeemed by ${userRecord.email}. Lead: ${autoCreatedLeadId}`,
+              });
+            } catch (_e) { /* non-blocking */ }
+          }
+        } catch (leadErr) {
+          console.error("Auto-lead creation failed (non-blocking):", leadErr);
+        }
+      }
+
       console.log(`🎁 Reward redeemed: ${itemRow.name} by user ${userId} for ${cost} JCMOVES — status: ${redemptionStatus}`);
-      res.json({ success: true, redemption, newBalance: newBalance.toFixed(2), item: itemRow });
+      res.json({ success: true, redemption, newBalance: newBalance.toFixed(2), item: itemRow, autoCreatedLeadId });
     } catch (e: any) {
       console.error("Reward redemption error:", e);
       res.status(500).json({ error: e.message || "Redemption failed" });
