@@ -11745,18 +11745,91 @@ Thank you for your business!
         }
       }
 
+      // Determine redemption status from logic flags
+      let redemptionStatus = "pending";
+      if ((itemRow as any).requiresApproval) redemptionStatus = "pending_approval";
+      else if ((itemRow as any).requiresSchedule || itemRow.scheduleRequired) redemptionStatus = "redeemed_pending_schedule";
+      else if ((itemRow as any).isInstant) redemptionStatus = "completed";
+
       // Create redemption record
       const [redemption] = await db.insert(rewardRedemptions).values({
         userId,
         itemId: itemRow.id,
         itemName: itemRow.name,
         tokenCost: cost,
-        status: itemRow.deliveryType === "service_credit" || itemRow.deliveryType === "schedule_required" ? "pending" : "approved",
+        status: redemptionStatus,
         userNotes: userNotes || null,
         scheduledDate: scheduledDate ? new Date(scheduledDate) : null,
       }).returning();
 
-      console.log(`🎁 Reward redeemed: ${itemRow.name} by user ${userId} for ${cost} JCMOVES`);
+      const expiresAt = itemRow.expirationDays
+        ? new Date(Date.now() + itemRow.expirationDays * 86400000)
+        : null;
+
+      // ── Side effects based on logic flags ──────────────────────
+      // Service credit (labor minutes)
+      if ((itemRow as any).createsServiceCredit) {
+        const minutesMap: Record<string, number> = {
+          "15-Minute Labor Credit": 15,
+          "30-Minute Labor Credit": 30,
+          "1-Hour Labor Credit": 60,
+        };
+        const minutes = minutesMap[itemRow.name] ?? 0;
+        const cents = Math.round(parseFloat(itemRow.cashValue || "0") * 100);
+        await db.execute(sql`INSERT INTO service_credit_balances (user_id, item_id, redemption_id, minutes_credit, amount_cents, status, expires_at) VALUES (${userId}, ${itemRow.id}, ${redemption.id}, ${minutes}, ${cents}, 'active', ${expiresAt})`);
+      }
+
+      // Invoice credit (dollar discount on job)
+      if ((itemRow as any).createsInvoiceCredit) {
+        const cents = Math.round(parseFloat(itemRow.cashValue || "0") * 100);
+        const creditType = itemRow.name.toLowerCase().includes("junk") ? "junk_removal"
+          : itemRow.name.toLowerCase().includes("moving") ? "moving" : "any";
+        await db.execute(sql`INSERT INTO invoice_credits (user_id, redemption_id, item_id, credit_type, amount_cents, status, expires_at) VALUES (${userId}, ${redemption.id}, ${itemRow.id}, ${creditType}, ${cents}, 'active', ${expiresAt})`);
+      }
+
+      // Spin credit — spins handled via SpinWheelDialog on frontend
+      if ((itemRow as any).createsSpinCredit) {
+        await db.execute(sql`INSERT INTO reward_entitlements (user_id, item_id, redemption_id, entitlement_type, value_json, status, expires_at) VALUES (${userId}, ${itemRow.id}, ${redemption.id}, 'spin_credit', '{"spins":1}', 'active', ${expiresAt})`);
+      }
+
+      // Priority booking entitlement
+      if (itemRow.name === "Priority Booking Upgrade") {
+        await db.execute(sql`INSERT INTO reward_entitlements (user_id, item_id, redemption_id, entitlement_type, value_json, status, expires_at) VALUES (${userId}, ${itemRow.id}, ${redemption.id}, 'priority_booking', '{"priority":true}', 'active', ${expiresAt})`);
+      }
+
+      // Priority support text line
+      if (itemRow.name === "Priority Support Text Line") {
+        const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        await db.execute(sql`INSERT INTO reward_entitlements (user_id, item_id, redemption_id, entitlement_type, value_json, status, expires_at) VALUES (${userId}, ${itemRow.id}, ${redemption.id}, 'support_priority', '{"hours":24}', 'active', ${expiry})`);
+      }
+
+      // Loyalty tier boost — immediately credit 500 tokens
+      if (itemRow.name === "Loyalty Tier Boost") {
+        await storage.creditWalletTokens(userId, 500);
+        await db.execute(sql`INSERT INTO reward_entitlements (user_id, item_id, redemption_id, entitlement_type, value_json, status) VALUES (${userId}, ${itemRow.id}, ${redemption.id}, 'tier_points_bonus', '{"tokens":500}', 'consumed')`);
+      }
+
+      // Mystery reward box — resolve immediately from weighted pool
+      if ((itemRow as any).usesMysteryPool) {
+        const MYSTERY_PRIZES = [
+          { label: "100 JCMOVES", tokens: 100, weight: 30 },
+          { label: "250 JCMOVES", tokens: 250, weight: 25 },
+          { label: "500 JCMOVES", tokens: 500, weight: 20 },
+          { label: "1,000 JCMOVES", tokens: 1000, weight: 12 },
+          { label: "2,500 JCMOVES", tokens: 2500, weight: 8 },
+          { label: "Bonus Faucet", tokens: 0, weight: 3 },
+          { label: "5,000 JCMOVES", tokens: 5000, weight: 2 },
+        ];
+        const total = MYSTERY_PRIZES.reduce((s, p) => s + p.weight, 0);
+        let rand = Math.random() * total, pick = MYSTERY_PRIZES[0];
+        for (const p of MYSTERY_PRIZES) { rand -= p.weight; if (rand <= 0) { pick = p; break; } }
+        if (pick.tokens > 0) await storage.creditWalletTokens(userId, pick.tokens);
+        await db.update(rewardRedemptions).set({ adminNotes: `Mystery box: won ${pick.label}`, status: "completed" }).where(eq(rewardRedemptions.id, redemption.id));
+        redemption.adminNotes = `Mystery box: won ${pick.label}`;
+        (redemption as any).mysteryPrize = pick;
+      }
+
+      console.log(`🎁 Reward redeemed: ${itemRow.name} by user ${userId} for ${cost} JCMOVES — status: ${redemptionStatus}`);
       res.json({ success: true, redemption, newBalance: newBalance.toFixed(2), item: itemRow });
     } catch (e: any) {
       console.error("Reward redemption error:", e);

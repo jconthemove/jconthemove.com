@@ -45,6 +45,16 @@ interface RewardItem {
   expirationDays?: number | null;
   promoBadge?: string | null;
   isLimitedTime: boolean;
+  // Logic flags
+  isInstant: boolean;
+  requiresApproval: boolean;
+  requiresSchedule: boolean;
+  createsInvoiceCredit: boolean;
+  createsServiceCredit: boolean;
+  createsSpinCredit: boolean;
+  usesMysteryPool: boolean;
+  isBundle: boolean;
+  fulfillmentNote?: string | null;
 }
 
 interface ItemRow {
@@ -73,11 +83,55 @@ const CATEGORY_ICONS: Record<string, any> = {
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
+  pending_approval: "bg-orange-500/20 text-orange-400 border-orange-500/30",
+  redeemed_pending_schedule: "bg-blue-500/20 text-blue-400 border-blue-500/30",
   approved: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+  scheduled: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
   completed: "bg-green-500/20 text-green-400 border-green-500/30",
+  fulfilled: "bg-green-500/20 text-green-400 border-green-500/30",
   cancelled: "bg-red-500/20 text-red-400 border-red-500/30",
+  denied: "bg-red-500/20 text-red-400 border-red-500/30",
+  refunded: "bg-purple-500/20 text-purple-400 border-purple-500/30",
   expired: "bg-gray-500/20 text-gray-400 border-gray-500/30",
 };
+
+const STATUS_LABELS: Record<string, string> = {
+  pending: "Pending",
+  pending_approval: "Awaiting Approval",
+  redeemed_pending_schedule: "Schedule Needed",
+  approved: "Approved",
+  scheduled: "Scheduled",
+  completed: "Completed",
+  fulfilled: "Fulfilled",
+  cancelled: "Cancelled",
+  denied: "Denied",
+  refunded: "Refunded",
+  expired: "Expired",
+};
+
+function getCtaLabel(item: RewardItem): string {
+  if (item.createsSpinCredit) return "Spin for Prize";
+  if (item.usesMysteryPool) return "Open Mystery Box";
+  if (item.isBundle) return "Request VIP Bundle";
+  if (item.requiresApproval) return "Request Approval";
+  if (item.requiresSchedule || item.scheduleRequired) return "Redeem & Schedule";
+  if (item.createsServiceCredit) return "Redeem Credit";
+  if (item.createsInvoiceCredit) return "Apply Credit";
+  if (item.isInstant) return "Redeem Instantly";
+  return "Redeem Now";
+}
+
+function getFulfillmentBadge(item: RewardItem): { label: string; className: string } | null {
+  if (item.createsSpinCredit) return { label: "Spin Wheel", className: "bg-pink-500/20 text-pink-400 border-pink-500/30" };
+  if (item.usesMysteryPool) return { label: "Mystery", className: "bg-purple-500/20 text-purple-400 border-purple-500/30" };
+  if (item.isBundle) return { label: "Bundle", className: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" };
+  if (item.requiresApproval) return { label: "Approval Required", className: "bg-orange-500/20 text-orange-400 border-orange-500/30" };
+  if (item.requiresSchedule || item.scheduleRequired) return { label: "Schedule Required", className: "bg-blue-500/20 text-blue-400 border-blue-500/30" };
+  if (item.createsInvoiceCredit) return { label: "Invoice Credit", className: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30" };
+  if (item.createsServiceCredit) return { label: "Labor Credit", className: "bg-teal-500/20 text-teal-400 border-teal-500/30" };
+  if (item.isInstant) return { label: "Instant", className: "bg-green-500/20 text-green-400 border-green-500/30" };
+  return null;
+}
 
 function formatTokens(n: number) {
   if (n >= 1000) return `${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}K`;
@@ -397,12 +451,17 @@ export default function RewardsMarketplacePage() {
                           </div>
                         )}
 
-                        {/* Delivery info */}
-                        <div className="text-[10px] text-muted-foreground mb-2 flex items-center gap-1">
-                          {item.scheduleRequired && <><Clock className="h-3 w-3" /> Schedule required</>}
-                          {item.deliveryType === "digital_code" && <><Zap className="h-3 w-3 text-yellow-500" /> Instant digital</>}
-                          {item.deliveryType === "service_credit" && <><Wrench className="h-3 w-3 text-blue-400" /> Service credit</>}
-                          {item.expirationDays && <span className="ml-auto">{item.expirationDays}d expiry</span>}
+                        {/* Fulfillment type badge + expiry */}
+                        <div className="flex items-center justify-between mb-2">
+                          {(() => {
+                            const badge = getFulfillmentBadge(item);
+                            return badge ? (
+                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${badge.className}`}>{badge.label}</span>
+                            ) : <span />;
+                          })()}
+                          {item.expirationDays && (
+                            <span className="text-[10px] text-muted-foreground">{item.expirationDays}d expiry</span>
+                          )}
                         </div>
 
                         <Button
@@ -418,7 +477,7 @@ export default function RewardsMarketplacePage() {
                           onClick={() => openRedeem(item)}
                         >
                           {outOfStock ? "Out of Stock" : affordable ? (
-                            <><Gift className="h-3 w-3 mr-1" />Redeem Now</>
+                            <><Gift className="h-3 w-3 mr-1" />{getCtaLabel(item)}</>
                           ) : (
                             <><ChevronRight className="h-3 w-3 mr-1" />Need {formatTokens(Math.ceil(cost - walletBalance))} more</>
                           )}
@@ -457,8 +516,8 @@ export default function RewardsMarketplacePage() {
                     </div>
                     {r.userNotes && <div className="text-xs text-muted-foreground italic mt-0.5">"{r.userNotes}"</div>}
                   </div>
-                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full border capitalize ${STATUS_COLORS[r.status] ?? STATUS_COLORS.pending}`}>
-                    {r.status}
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${STATUS_COLORS[r.status] ?? STATUS_COLORS.pending}`}>
+                    {STATUS_LABELS[r.status] ?? r.status}
                   </span>
                 </div>
               ))
@@ -478,19 +537,43 @@ export default function RewardsMarketplacePage() {
           </DialogHeader>
           {redeemItem && (
             <div className="space-y-4 py-2">
+              {/* Item summary */}
               <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4">
-                <div className="font-bold mb-1">{redeemItem.name}</div>
-                <div className="text-sm text-muted-foreground">{redeemItem.shortDesc}</div>
-                <div className="flex items-center gap-2 mt-3">
+                <div className="flex items-start gap-3">
+                  {redeemItem.image && (
+                    <img src={redeemItem.image} alt={redeemItem.name} className="w-14 h-14 rounded-lg object-cover flex-shrink-0" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-sm leading-tight mb-0.5">{redeemItem.name}</div>
+                    <div className="text-xs text-muted-foreground mb-2">{redeemItem.shortDesc}</div>
+                    {(() => {
+                      const badge = getFulfillmentBadge(redeemItem);
+                      return badge ? <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${badge.className}`}>{badge.label}</span> : null;
+                    })()}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-yellow-500/20">
                   <Coins className="h-4 w-4 text-yellow-500" />
                   <span className="font-bold text-yellow-500">{formatTokens(redeemItem.salePriceTokens ?? redeemItem.tokenPrice)} JCMOVES</span>
                   <span className="text-xs text-muted-foreground ml-auto">Balance after: {formatTokens(Math.floor(walletBalance - (redeemItem.salePriceTokens ?? redeemItem.tokenPrice)))}</span>
                 </div>
               </div>
 
-              {redeemItem.deliveryType === "service_credit" || redeemItem.scheduleRequired ? (
+              {/* How it works */}
+              {redeemItem.fulfillmentNote && (
+                <div className="flex items-start gap-2 bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
+                  <CheckCircle2 className="h-4 w-4 text-blue-400 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-xs font-semibold text-blue-300 mb-0.5">How it works</p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">{redeemItem.fulfillmentNote}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Schedule date for service/schedule items */}
+              {(redeemItem.requiresSchedule || redeemItem.scheduleRequired || redeemItem.createsServiceCredit) ? (
                 <div>
-                  <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Preferred date (optional)</label>
+                  <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Preferred service date (optional)</label>
                   <Input type="date" value={scheduledDate} onChange={e => setScheduledDate(e.target.value)} className="h-9" />
                 </div>
               ) : null}
@@ -505,13 +588,6 @@ export default function RewardsMarketplacePage() {
                   rows={2}
                 />
               </div>
-
-              {redeemItem.deliveryType !== "digital_code" && (
-                <div className="flex items-start gap-2 text-xs text-muted-foreground bg-card border border-border rounded-lg p-3">
-                  <Clock className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                  <span>This reward requires admin approval. You'll be contacted within 24–48 hours to schedule or deliver.</span>
-                </div>
-              )}
             </div>
           )}
           <DialogFooter className="gap-2">
@@ -521,7 +597,10 @@ export default function RewardsMarketplacePage() {
               onClick={() => redeemMutation.mutate({ itemId: redeemItem!.id, userNotes: userNotes || undefined, scheduledDate: scheduledDate || undefined })}
               disabled={redeemMutation.isPending}
             >
-              {redeemMutation.isPending ? <><Zap className="h-4 w-4 animate-spin mr-2" />Processing…</> : <><CheckCircle2 className="h-4 w-4 mr-2" />Confirm Redeem</>}
+              {redeemMutation.isPending
+                ? <><Zap className="h-4 w-4 animate-spin mr-2" />Processing…</>
+                : <><CheckCircle2 className="h-4 w-4 mr-2" />{redeemItem ? getCtaLabel(redeemItem) : "Confirm"}</>
+              }
             </Button>
           </DialogFooter>
         </DialogContent>

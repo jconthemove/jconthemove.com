@@ -40,9 +40,30 @@ const STATUS_BADGE: Record<string, string> = {
 };
 const REDEMPTION_STATUS_BADGE: Record<string, string> = {
   pending: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
+  pending_approval: "bg-orange-500/20 text-orange-400 border-orange-500/30",
+  redeemed_pending_schedule: "bg-blue-500/20 text-blue-400 border-blue-500/30",
   approved: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+  scheduled: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
   completed: "bg-green-500/20 text-green-400 border-green-500/30",
+  fulfilled: "bg-green-500/20 text-green-400 border-green-500/30",
   cancelled: "bg-red-500/20 text-red-400 border-red-500/30",
+  denied: "bg-red-500/20 text-red-400 border-red-500/30",
+  refunded: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+  expired: "bg-gray-500/20 text-gray-400 border-gray-500/30",
+};
+
+const REDEMPTION_STATUS_LABELS: Record<string, string> = {
+  pending: "Pending",
+  pending_approval: "Needs Approval",
+  redeemed_pending_schedule: "Schedule Needed",
+  approved: "Approved",
+  scheduled: "Scheduled",
+  completed: "Completed",
+  fulfilled: "Fulfilled",
+  cancelled: "Cancelled",
+  denied: "Denied",
+  refunded: "Refunded",
+  expired: "Expired",
 };
 
 const BLANK_ITEM: Partial<RewardItem> = {
@@ -339,13 +360,13 @@ export default function AdminRewardShopPage() {
         {activeTab === "redemptions" && (
           <>
             <div className="flex gap-2 mb-4">
-              {["", "pending", "approved", "completed", "cancelled"].map(s => (
+              {["", "pending_approval", "redeemed_pending_schedule", "pending", "approved", "scheduled", "completed", "fulfilled", "denied", "cancelled"].map(s => (
                 <button
                   key={s}
                   onClick={() => setRedemptionFilter(s)}
                   className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors capitalize ${redemptionFilter === s ? "bg-yellow-500 text-black border-yellow-500" : "border-border text-muted-foreground hover:text-foreground"}`}
                 >
-                  {s || "All"}
+                  {s ? (REDEMPTION_STATUS_LABELS[s] ?? s) : "All"}
                 </button>
               ))}
             </div>
@@ -361,8 +382,8 @@ export default function AdminRewardShopPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full border capitalize ${REDEMPTION_STATUS_BADGE[redemption.status] ?? REDEMPTION_STATUS_BADGE.pending}`}>
-                            {redemption.status}
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${REDEMPTION_STATUS_BADGE[redemption.status] ?? REDEMPTION_STATUS_BADGE.pending}`}>
+                            {REDEMPTION_STATUS_LABELS[redemption.status] ?? redemption.status}
                           </span>
                           <span className="text-xs text-muted-foreground">#{redemption.id}</span>
                         </div>
@@ -377,7 +398,34 @@ export default function AdminRewardShopPage() {
                           <div className="text-xs text-blue-400 mt-1">Admin: {redemption.adminNotes}</div>
                         )}
                       </div>
-                      <div className="flex gap-1.5 shrink-0">
+                      <div className="flex gap-1.5 shrink-0 flex-wrap justify-end">
+                        {/* Needs Approval → Approve or Deny */}
+                        {redemption.status === "pending_approval" && (
+                          <>
+                            <Button size="sm" variant="outline" className="h-7 text-xs text-green-400 border-green-500/30 hover:bg-green-500/10"
+                              onClick={() => { setActionRedemption({ redemption, user: rUser }); setActionStatus("approved"); }}>
+                              <CheckCircle2 className="h-3 w-3 mr-1" /> Approve
+                            </Button>
+                            <Button size="sm" variant="outline" className="h-7 text-xs text-red-400 border-red-500/30 hover:bg-red-500/10"
+                              onClick={() => { setActionRedemption({ redemption, user: rUser }); setActionStatus("denied"); }}>
+                              <XCircle className="h-3 w-3 mr-1" /> Deny
+                            </Button>
+                          </>
+                        )}
+                        {/* Schedule Needed → Mark Scheduled or Fulfilled */}
+                        {redemption.status === "redeemed_pending_schedule" && (
+                          <>
+                            <Button size="sm" variant="outline" className="h-7 text-xs text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/10"
+                              onClick={() => { setActionRedemption({ redemption, user: rUser }); setActionStatus("scheduled"); }}>
+                              <CheckCircle2 className="h-3 w-3 mr-1" /> Scheduled
+                            </Button>
+                            <Button size="sm" variant="outline" className="h-7 text-xs text-green-400 border-green-500/30 hover:bg-green-500/10"
+                              onClick={() => { setActionRedemption({ redemption, user: rUser }); setActionStatus("fulfilled"); }}>
+                              <CheckCircle2 className="h-3 w-3 mr-1" /> Fulfill
+                            </Button>
+                          </>
+                        )}
+                        {/* Pending → Fulfill or Cancel */}
                         {redemption.status === "pending" && (
                           <>
                             <Button size="sm" variant="outline" className="h-7 text-xs text-green-400 border-green-500/30 hover:bg-green-500/10"
@@ -390,10 +438,24 @@ export default function AdminRewardShopPage() {
                             </Button>
                           </>
                         )}
+                        {/* Approved → Complete or Cancel */}
                         {redemption.status === "approved" && (
+                          <>
+                            <Button size="sm" variant="outline" className="h-7 text-xs text-green-400 border-green-500/30"
+                              onClick={() => { setActionRedemption({ redemption, user: rUser }); setActionStatus("completed"); }}>
+                              <CheckCircle2 className="h-3 w-3 mr-1" /> Complete
+                            </Button>
+                            <Button size="sm" variant="outline" className="h-7 text-xs text-red-400 border-red-500/30"
+                              onClick={() => { setActionRedemption({ redemption, user: rUser }); setActionStatus("cancelled"); }}>
+                              <XCircle className="h-3 w-3 mr-1" /> Cancel
+                            </Button>
+                          </>
+                        )}
+                        {/* Scheduled → Fulfill */}
+                        {redemption.status === "scheduled" && (
                           <Button size="sm" variant="outline" className="h-7 text-xs text-green-400 border-green-500/30"
-                            onClick={() => { setActionRedemption({ redemption, user: rUser }); setActionStatus("completed"); }}>
-                            <CheckCircle2 className="h-3 w-3 mr-1" /> Mark Complete
+                            onClick={() => { setActionRedemption({ redemption, user: rUser }); setActionStatus("fulfilled"); }}>
+                            <CheckCircle2 className="h-3 w-3 mr-1" /> Mark Fulfilled
                           </Button>
                         )}
                       </div>

@@ -1663,7 +1663,7 @@ export const rewardItems = pgTable("reward_items", {
   tokenPrice: integer("token_price").notNull(),
   salePriceTokens: integer("sale_price_tokens"),
   cashValue: decimal("cash_value", { precision: 10, scale: 2 }),
-  status: text("status").notNull().default("active"), // active | hidden | draft | sold_out
+  status: text("status").notNull().default("active"), // active | hidden | draft | sold_out | archived
   featured: boolean("featured").notNull().default(false),
   inventory: integer("inventory"), // null = unlimited
   maxPerUser: integer("max_per_user").notNull().default(10),
@@ -1677,6 +1677,16 @@ export const rewardItems = pgTable("reward_items", {
   startDate: timestamp("start_date"),
   endDate: timestamp("end_date"),
   adminNotes: text("admin_notes"),
+  // ── Logic flags (fulfillment behavior classification) ──
+  isInstant: boolean("is_instant").notNull().default(false),          // auto-fulfills immediately
+  requiresApproval: boolean("requires_approval").notNull().default(false), // admin must approve
+  requiresSchedule: boolean("requires_schedule").notNull().default(false), // user/admin must schedule
+  createsInvoiceCredit: boolean("creates_invoice_credit").notNull().default(false), // attaches $ credit to job invoice
+  createsServiceCredit: boolean("creates_service_credit").notNull().default(false), // creates minutes credit record
+  createsSpinCredit: boolean("creates_spin_credit").notNull().default(false),       // grants spin wheel entry
+  usesMysteryPool: boolean("uses_mystery_pool").notNull().default(false),            // triggers mystery prize resolution
+  isBundle: boolean("is_bundle").notNull().default(false),             // hybrid bundle with sub-entitlements
+  fulfillmentNote: text("fulfillment_note"),                           // "How it works" text shown in modal
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1702,6 +1712,82 @@ export const rewardRedemptions = pgTable("reward_redemptions", {
 export const insertRewardRedemptionSchema = createInsertSchema(rewardRedemptions).omit({ id: true, createdAt: true });
 export type RewardRedemption = typeof rewardRedemptions.$inferSelect;
 export type InsertRewardRedemption = z.infer<typeof insertRewardRedemptionSchema>;
+
+// ── Reward Entitlements ──────────────────────────────────────────────────────
+// Tracks active reward effects after redemption (priority booking, spin credits, etc.)
+export const rewardEntitlements = pgTable("reward_entitlements", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  itemId: integer("item_id"),
+  redemptionId: integer("redemption_id"),
+  entitlementType: text("entitlement_type").notNull(), // priority_booking | labor_credit | support_priority | spin_credit | faucet_bonus | tier_points_bonus | invoice_credit | service_credit
+  valueJson: jsonb("value_json"),   // flexible payload: { minutes, amount, code, etc. }
+  status: text("status").notNull().default("active"), // active | consumed | expired | cancelled
+  startsAt: timestamp("starts_at").defaultNow(),
+  expiresAt: timestamp("expires_at"),
+  consumedAt: timestamp("consumed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type RewardEntitlement = typeof rewardEntitlements.$inferSelect;
+
+// ── Spin Wheel Results ───────────────────────────────────────────────────────
+export const spinResults = pgTable("spin_results", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  redemptionId: integer("redemption_id"),
+  prizeIndex: integer("prize_index").notNull(),
+  prizeLabel: text("prize_label").notNull(),
+  prizeTokens: integer("prize_tokens").notNull(),
+  fulfillmentStatus: text("fulfillment_status").notNull().default("fulfilled"), // fulfilled | pending | failed
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type SpinResult = typeof spinResults.$inferSelect;
+
+// ── Gift Card Inventory ──────────────────────────────────────────────────────
+export const giftCardInventory = pgTable("gift_card_inventory", {
+  id: serial("id").primaryKey(),
+  itemId: integer("item_id").notNull(),
+  provider: text("provider"),         // e.g. "Starbucks", "Shell", "Meijer"
+  code: text("code"),                  // the gift card code
+  pin: text("pin"),
+  status: text("status").notNull().default("available"), // available | assigned | used | voided
+  assignedRedemptionId: integer("assigned_redemption_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  fulfilledAt: timestamp("fulfilled_at"),
+});
+export type GiftCardInventory = typeof giftCardInventory.$inferSelect;
+
+// ── Invoice Credits ──────────────────────────────────────────────────────────
+// Dollar credits that apply to job invoices
+export const invoiceCredits = pgTable("invoice_credits", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  redemptionId: integer("redemption_id").notNull(),
+  itemId: integer("item_id").notNull(),
+  creditType: text("credit_type").notNull(), // moving | junk_removal | any
+  amountCents: integer("amount_cents").notNull(),
+  status: text("status").notNull().default("active"), // active | applied | expired | cancelled
+  appliedJobId: integer("applied_job_id"),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type InvoiceCredit = typeof invoiceCredits.$inferSelect;
+
+// ── Service Credit Balances ──────────────────────────────────────────────────
+// Minutes/time credits for labor rewards
+export const serviceCreditBalances = pgTable("service_credit_balances", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  itemId: integer("item_id").notNull(),
+  redemptionId: integer("redemption_id").notNull(),
+  minutesCredit: integer("minutes_credit").notNull().default(0),
+  amountCents: integer("amount_cents").notNull().default(0),
+  status: text("status").notNull().default("active"), // active | used | expired | cancelled
+  expiresAt: timestamp("expires_at"),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type ServiceCreditBalance = typeof serviceCreditBalances.$inferSelect;
 
 // ── Account Recovery Tokens ─────────────────────────────────────────────────
 export const recoveryTokens = pgTable("recovery_tokens", {
