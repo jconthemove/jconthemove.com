@@ -474,7 +474,7 @@ export function LeadQuoteDialog({ open, onOpenChange, lead, employees, onSave }:
                           htmlFor={`crew-${employee.id}`}
                           className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                         >
-                          {employee.firstName} {employee.lastName} ({employee.email})
+                          {employee.firstName} {employee.lastName}
                         </label>
                       </div>
                     ))
