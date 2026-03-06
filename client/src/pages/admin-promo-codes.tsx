@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Link } from "wouter";
@@ -58,6 +59,15 @@ export default function AdminPromoCodesPage() {
   const { data: codes, isLoading } = useQuery<PromoCode[]>({
     queryKey: ["/api/admin/promo-codes"],
     enabled: !!hasAdminAccess,
+  });
+
+  const { data: staffUsers } = useQuery<any[]>({
+    queryKey: ["/api/admin/users"],
+    enabled: !!hasAdminAccess,
+    select: (users) => (users || []).filter((u: any) =>
+      ['admin', 'business_owner', 'employee'].includes(u.role) &&
+      ['approved', 'active'].includes(u.status)
+    ),
   });
 
   const createMutation = useMutation({
@@ -421,14 +431,25 @@ export default function AdminPromoCodesPage() {
               </div>
 
               <div>
-                <Label className="text-slate-200">Referrer User ID (optional)</Label>
-                <Input
-                  value={form.referralUserId}
-                  onChange={(e) => setForm(f => ({ ...f, referralUserId: e.target.value }))}
-                  placeholder="User ID of employee/owner who owns this code"
-                  className="bg-slate-700 border-slate-600 text-white font-mono text-xs"
-                />
-                <p className="text-xs text-slate-500 mt-1">This user earns the referrer reward every time the code is used</p>
+                <Label className="text-slate-200">Referrer (optional)</Label>
+                <Select
+                  value={form.referralUserId || "__none__"}
+                  onValueChange={(val) => setForm(f => ({ ...f, referralUserId: val === "__none__" ? "" : val }))}
+                >
+                  <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
+                    <SelectValue placeholder="Select employee or admin..." />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-slate-600">
+                    <SelectItem value="__none__" className="text-slate-400">— No referrer —</SelectItem>
+                    {(staffUsers || []).map((u: any) => (
+                      <SelectItem key={u.id} value={u.id} className="text-white">
+                        {u.firstName} {u.lastName}
+                        <span className="ml-2 text-xs text-slate-400 capitalize">({u.role.replace('_', ' ')})</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-slate-500 mt-1">This person earns the referrer reward every time the code is used</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
