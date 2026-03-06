@@ -25,12 +25,15 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { insertLeadSchema, type InsertLead, type Lead, type User } from "@shared/schema";
+import { useAuth } from "@/hooks/useAuth";
 import { LeadQuoteDialog } from "@/components/LeadQuoteDialog";
 
 export default function LeadsPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user: currentUser } = useAuth();
+  const isStaff = ["admin", "business_owner", "employee"].includes(currentUser?.role || "");
   const [selectedService, setSelectedService] = useState("");
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isQuickViewOpen, setIsQuickViewOpen] = useState(false);
@@ -329,7 +332,9 @@ export default function LeadsPage() {
               <TabsTrigger value="completed" data-testid="tab-completed-leads" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
                 Completed ({leads.filter(l => l.status === 'completed').length})
               </TabsTrigger>
-              <TabsTrigger value="add" data-testid="tab-add-lead">Add a Lead</TabsTrigger>
+              {isStaff && (
+                <TabsTrigger value="add" data-testid="tab-add-lead">+ Create Job</TabsTrigger>
+              )}
             </TabsList>
 
             <TabsContent value="view">
@@ -410,12 +415,13 @@ export default function LeadsPage() {
               )}
             </TabsContent>
 
+            {isStaff && (
             <TabsContent value="add">
               <Card className="bg-slate-800/50 border-slate-700">
                 <CardHeader>
-                  <CardTitle className="text-2xl text-white">Add a New Lead</CardTitle>
+                  <CardTitle className="text-2xl text-white">Create a New Job</CardTitle>
                   <CardDescription className="text-slate-400">
-                    Submit a lead on behalf of a customer. You'll earn rewards when the job is confirmed and completed.
+                    Create a job on behalf of a customer — phone call, walk-in, or referral. You'll earn rewards when the job is confirmed and completed.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -590,6 +596,7 @@ export default function LeadsPage() {
                 </CardContent>
               </Card>
             </TabsContent>
+            )}
           </Tabs>
         </div>
       </div>
