@@ -1,3 +1,4 @@
+import { Component as ReactComponent, ReactNode } from "react";
 import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -80,13 +81,49 @@ function LandingPage() {
   );
 }
 
+// Error boundary to prevent blank screens on render crashes
+class PageErrorBoundary extends ReactComponent<
+  { children: ReactNode },
+  { hasError: boolean; error: string }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: "" };
+  }
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error: error?.message || "Something went wrong" };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-8">
+          <div className="max-w-md w-full text-center space-y-4">
+            <div className="text-5xl">⚠️</div>
+            <h2 className="text-xl font-bold">Something went wrong</h2>
+            <p className="text-muted-foreground text-sm">{this.state.error}</p>
+            <button
+              className="mt-4 px-6 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium"
+              onClick={() => { this.setState({ hasError: false, error: "" }); window.location.href = "/"; }}
+            >
+              Go Home
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // Unified page wrapper with responsive header
 function PageWrapper({ component: Component }: { component: any }) {
   return (
     <div className="min-h-screen bg-background text-foreground font-sans">
       <Header />
       <main>
-        <Component />
+        <PageErrorBoundary>
+          <Component />
+        </PageErrorBoundary>
       </main>
     </div>
   );
@@ -334,16 +371,6 @@ function Router() {
       <Route path="/cart" component={CartPage} />
       <Route path="/bitcoin-payment" component={BitcoinPaymentPage} />
       <Route path="/staking" component={StakingPage} />
-      
-      {/* Lead detail - accessible without authentication (temporary for debugging) */}
-      <Route path="/lead/:id">
-        <PageWrapper component={LeadDetailPage} />
-      </Route>
-      
-      {/* Leads list - accessible without authentication (temporary for debugging) */}
-      <Route path="/leads">
-        <PageWrapper component={LeadsPage} />
-      </Route>
       
       {/* Authenticated vs unauthenticated routing */}
       <Route>

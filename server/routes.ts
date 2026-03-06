@@ -205,6 +205,105 @@ async function linkEmployeePromoCodes() {
   }
 }
 
+// Shared welcome email builder for approved users
+function buildApprovalWelcomeEmail(firstName: string): { subject: string; text: string; html: string } {
+  const subject = "You're In! Welcome to the JC on the Move Family 🎉";
+
+  const text = `Hey ${firstName}!
+
+Welcome to the JC on the Move family — we're SO glad you're here!
+
+Your account has been APPROVED and you're officially part of the crew.
+
+As a thank-you for joining, we've loaded your account with 250 JCMOVES tokens. These are your keys to the kingdom — save them, stack them, and use them for rewards throughout the app.
+
+A few things to take care of right away:
+• Save your password somewhere safe — you'll need it to log in every time.
+• Link your phone number in your profile settings for account recovery options.
+• Check back in DAILY — there are quests, missions, and rewards waiting for you throughout the app. New stuff drops all the time!
+
+Thank you for your interest in our future. We're building something special together.
+
+God bless,
+— The JC on the Move Team
+jconthemove.com`;
+
+  const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#0f172a;font-family:'Segoe UI',Arial,sans-serif;">
+  <div style="max-width:600px;margin:0 auto;padding:24px;">
+
+    <!-- Header -->
+    <div style="text-align:center;padding:32px 24px;background:linear-gradient(135deg,#1e3a5f 0%,#0f172a 100%);border-radius:16px 16px 0 0;border-bottom:3px solid #10b981;">
+      <div style="font-size:48px;margin-bottom:8px;">🚛</div>
+      <h1 style="color:#10b981;margin:0;font-size:26px;font-weight:800;letter-spacing:-0.5px;">JC ON THE MOVE</h1>
+      <p style="color:#94a3b8;margin:6px 0 0;font-size:13px;">Nationwide Moving & More</p>
+    </div>
+
+    <!-- Body -->
+    <div style="background:#1e293b;padding:32px 28px;border-radius:0 0 16px 16px;">
+      <h2 style="color:#f1f5f9;margin:0 0 8px;font-size:22px;">Hey ${firstName}, you're IN! 🎉</h2>
+      <p style="color:#94a3b8;font-size:15px;line-height:1.7;margin:0 0 24px;">
+        Welcome to the <strong style="color:#10b981;">JC on the Move family</strong> — we are so glad you're here. 
+        Thank you for your interest in our future. Your account has officially been <strong style="color:#10b981;">APPROVED</strong> 
+        and you're now part of the crew!
+      </p>
+
+      <!-- Token reward box -->
+      <div style="background:linear-gradient(135deg,#78350f,#451a03);border:1px solid #d97706;border-radius:12px;padding:20px;margin:0 0 24px;text-align:center;">
+        <div style="font-size:36px;margin-bottom:6px;">🪙</div>
+        <p style="color:#fbbf24;font-size:20px;font-weight:800;margin:0 0 4px;">250 JCMOVES Tokens</p>
+        <p style="color:#fde68a;font-size:13px;margin:0;">have been added to your account as a welcome gift. Stack them up — they unlock rewards, discounts, and more!</p>
+      </div>
+
+      <!-- Action items -->
+      <p style="color:#cbd5e1;font-size:15px;font-weight:600;margin:0 0 12px;">Here's what to do next:</p>
+      <div style="display:flex;flex-direction:column;gap:10px;margin:0 0 24px;">
+        <div style="background:#0f172a;border-radius:8px;padding:14px 16px;display:flex;align-items:flex-start;gap:12px;">
+          <span style="font-size:20px;">🔑</span>
+          <div>
+            <p style="color:#f1f5f9;font-weight:700;margin:0 0 2px;font-size:14px;">Save your password</p>
+            <p style="color:#64748b;font-size:13px;margin:0;">Write it down or store it in a password manager — you'll use it every time you log in.</p>
+          </div>
+        </div>
+        <div style="background:#0f172a;border-radius:8px;padding:14px 16px;display:flex;align-items:flex-start;gap:12px;">
+          <span style="font-size:20px;">📱</span>
+          <div>
+            <p style="color:#f1f5f9;font-weight:700;margin:0 0 2px;font-size:14px;">Link your phone number</p>
+            <p style="color:#64748b;font-size:13px;margin:0;">Go to your profile settings and add your phone number. It gives you recovery options if you ever get locked out.</p>
+          </div>
+        </div>
+        <div style="background:#0f172a;border-radius:8px;padding:14px 16px;display:flex;align-items:flex-start;gap:12px;">
+          <span style="font-size:20px;">🎯</span>
+          <div>
+            <p style="color:#f1f5f9;font-weight:700;margin:0 0 2px;font-size:14px;">Check in daily</p>
+            <p style="color:#64748b;font-size:13px;margin:0;">New quests, missions, and rewards drop all the time. The more you show up, the more you earn!</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- CTA button -->
+      <div style="text-align:center;margin:0 0 28px;">
+        <a href="https://jconthemove.com" style="display:inline-block;background:linear-gradient(135deg,#10b981,#059669);color:#fff;font-weight:700;font-size:15px;text-decoration:none;padding:14px 36px;border-radius:30px;letter-spacing:0.3px;">
+          Log In &amp; Start Earning →
+        </a>
+      </div>
+
+      <!-- Footer -->
+      <div style="border-top:1px solid #334155;padding-top:20px;text-align:center;">
+        <p style="color:#475569;font-size:12px;margin:0 0 4px;">God bless — The JC on the Move Team</p>
+        <p style="color:#334155;font-size:11px;margin:0;">jconthemove.com · Michigan's Moving Crew</p>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>`;
+
+  return { subject, text, html };
+}
+
 // Approval tokens stored in DB (persists across server restarts)
 async function generateApprovalToken(userId: string, action: string): Promise<string> {
   const token = crypto.randomBytes(32).toString("hex");
@@ -274,19 +373,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await db.update(users).set({ status: "approved" }).where(eq(users.id, userId));
 
         try {
+          const welcomeEmail = buildApprovalWelcomeEmail(user.firstName || 'Friend');
           await sendEmail({
             to: user.email,
             from: process.env.COMPANY_EMAIL || "michigankid906@gmail.com",
-            subject: "Welcome to JC ON THE MOVE - Account Approved!",
-            text: `Hi ${user.firstName},\n\nYour account has been approved! You can now log in and start using JC ON THE MOVE.\n\nWelcome aboard!`,
-            html: `<div style="font-family: Arial, sans-serif; padding: 20px; max-width: 500px;">
-              <h2 style="color: #10b981;">Welcome to JC ON THE MOVE!</h2>
-              <p>Hi ${user.firstName},</p>
-              <p>Your account has been <strong style="color: #10b981;">approved</strong>! You can now log in and start using JC ON THE MOVE.</p>
-              <p>Welcome aboard!</p>
-            </div>`,
+            subject: welcomeEmail.subject,
+            text: welcomeEmail.text,
+            html: welcomeEmail.html,
           });
-        } catch (e) {}
+        } catch (e) { console.error('Failed to send approval welcome email:', e); }
 
         return res.send(renderApprovalPage("Account Approved", `${user.firstName} ${user.lastName} (${user.email}) has been approved and can now access the platform.`, "success"));
       } else if (action === "reject") {
@@ -397,19 +492,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (action === 'approve') {
         try {
+          const welcomeEmail = buildApprovalWelcomeEmail(targetUser.firstName || 'Friend');
           await sendEmail({
             to: targetUser.email,
             from: process.env.COMPANY_EMAIL || "michigankid906@gmail.com",
-            subject: "Welcome to JC ON THE MOVE - Account Approved!",
-            text: `Hi ${targetUser.firstName},\n\nYour account has been approved! You can now log in and start using JC ON THE MOVE.\n\nWelcome aboard!`,
-            html: `<div style="font-family: Arial, sans-serif; padding: 20px; max-width: 500px;">
-              <h2 style="color: #10b981;">Welcome to JC ON THE MOVE!</h2>
-              <p>Hi ${targetUser.firstName},</p>
-              <p>Your account has been <strong style="color: #10b981;">approved</strong>! You can now log in and start using JC ON THE MOVE.</p>
-              <p>Welcome aboard!</p>
-            </div>`,
+            subject: welcomeEmail.subject,
+            text: welcomeEmail.text,
+            html: welcomeEmail.html,
           });
-        } catch (e) {}
+        } catch (e) { console.error('Failed to send approval welcome email:', e); }
       }
 
       console.log(`👤 User ${targetUser.email} ${action}d by admin ${adminUser.email}`);
@@ -2304,6 +2395,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .returning();
       
       console.log(`✅ User ${id} status updated to ${status}`);
+
+      // Send welcome email when approving
+      if (status === 'approved') {
+        try {
+          const welcomeEmail = buildApprovalWelcomeEmail(user.firstName || 'Friend');
+          await sendEmail({
+            to: user.email,
+            from: process.env.COMPANY_EMAIL || "michigankid906@gmail.com",
+            subject: welcomeEmail.subject,
+            text: welcomeEmail.text,
+            html: welcomeEmail.html,
+          });
+          console.log(`📧 Welcome email sent to ${user.email}`);
+        } catch (e) { console.error('Failed to send approval welcome email:', e); }
+      }
+
       res.json({ success: true, user: updatedUser });
     } catch (error) {
       console.error("Error updating user status:", error);
