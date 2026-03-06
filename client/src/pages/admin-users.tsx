@@ -393,6 +393,9 @@ export default function AdminUsersPage() {
   const employees = filteredUsers.filter(u => u.role === 'employee' || u.role === 'admin' || u.role === 'business_owner');
   const customers = filteredUsers.filter(u => u.role === 'customer');
 
+  // All pending users (employees + customers) regardless of search filter
+  const allPendingUsers = (users as any[])?.filter((u: any) => u.status === 'pending') || [];
+
   const getRoleBadge = (role: string) => {
     const variants: Record<string, { variant: "default" | "secondary" | "destructive" | "outline", label: string }> = {
       admin: { variant: "destructive", label: "Admin" },
@@ -462,6 +465,53 @@ export default function AdminUsersPage() {
           Backup DB
         </Button>
       </div>
+
+      {/* Pending Approvals Alert */}
+      {allPendingUsers.length > 0 && (
+        <div className="mb-5 rounded-xl border-2 border-yellow-500 bg-yellow-50 dark:bg-yellow-950/40 p-4 shadow-md">
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-2xl">⚠️</span>
+            <div>
+              <h2 className="font-bold text-yellow-800 dark:text-yellow-300 text-base">
+                {allPendingUsers.length} Account{allPendingUsers.length > 1 ? 's' : ''} Pending Approval
+              </h2>
+              <p className="text-sm text-yellow-700 dark:text-yellow-400">
+                These users are waiting to access the platform.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            {allPendingUsers.map((u: any) => (
+              <div key={u.id} className="flex items-center justify-between bg-white dark:bg-slate-800 rounded-lg px-4 py-2 shadow-sm">
+                <div>
+                  <span className="font-semibold text-foreground">{u.firstName} {u.lastName}</span>
+                  <span className="ml-2 text-xs text-muted-foreground">{u.email}</span>
+                  <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300">{u.role}</span>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    className="bg-green-600 hover:bg-green-700 text-white h-8"
+                    onClick={() => updateStatusMutation.mutate({ userId: u.id, status: 'approved' })}
+                    disabled={updateStatusMutation.isPending}
+                  >
+                    Approve
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 border-red-400 text-red-500 hover:bg-red-50 dark:hover:bg-red-950"
+                    onClick={() => updateStatusMutation.mutate({ userId: u.id, status: 'removed' })}
+                    disabled={updateStatusMutation.isPending}
+                  >
+                    Reject
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Search Bar */}
       <Card className="mb-6">

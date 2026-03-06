@@ -205,15 +205,15 @@ async function linkEmployeePromoCodes() {
   }
 }
 
-const approvalTokens = new Map<string, { userId: string; action: string; expiresAt: Date }>();
-
-function generateApprovalToken(userId: string, action: string): string {
+// Approval tokens stored in DB (persists across server restarts)
+async function generateApprovalToken(userId: string, action: string): Promise<string> {
   const token = crypto.randomBytes(32).toString("hex");
-  approvalTokens.set(token, {
-    userId,
-    action,
-    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-  });
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  await db.execute(sql`
+    INSERT INTO approval_tokens (token, user_id, action, expires_at)
+    VALUES (${token}, ${userId}, ${action}, ${expiresAt})
+    ON CONFLICT (token) DO NOTHING
+  `);
   return token;
 }
 
@@ -244,24 +244,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!token || !action) {
         return res.status(400).send(renderApprovalPage("Invalid Link", "This approval link is missing required information.", "error"));
       }
-      const tokenData = approvalTokens.get(token);
+
+      // Look up token from DB (persists across server restarts)
+      const tokenRows = await db.execute(sql`
+        SELECT user_id, action, expires_at, used_at FROM approval_tokens WHERE token = ${token}
+      `);
+      const tokenData = (tokenRows as any).rows?.[0] || tokenRows[0];
+
       if (!tokenData) {
-        return res.status(400).send(renderApprovalPage("Link Expired", "This approval link has already been used or has expired.", "error"));
+        return res.status(400).send(renderApprovalPage("Link Expired", "This approval link has already been used or has expired. Please approve from the admin dashboard.", "error"));
       }
-      if (new Date() > tokenData.expiresAt) {
-        approvalTokens.delete(token);
+      if (tokenData.used_at) {
+        return res.status(400).send(renderApprovalPage("Already Used", "This approval link has already been used.", "error"));
+      }
+      if (new Date() > new Date(tokenData.expires_at)) {
         return res.status(400).send(renderApprovalPage("Link Expired", "This approval link has expired. Please approve the user from the admin dashboard instead.", "error"));
       }
 
-      const user = await storage.getUser(tokenData.userId);
+      const userId = tokenData.user_id;
+      const user = await storage.getUser(userId);
       if (!user) {
-        approvalTokens.delete(token);
         return res.status(404).send(renderApprovalPage("User Not Found", "The user associated with this link no longer exists.", "error"));
       }
 
+      // Mark token as used
+      await db.execute(sql`UPDATE approval_tokens SET used_at = NOW() WHERE token = ${token}`);
+
       if (action === "approve") {
-        await db.update(users).set({ status: "active" }).where(eq(users.id, tokenData.userId));
-        approvalTokens.delete(token);
+        await db.update(users).set({ status: "approved" }).where(eq(users.id, userId));
 
         try {
           await sendEmail({
@@ -280,8 +290,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         return res.send(renderApprovalPage("Account Approved", `${user.firstName} ${user.lastName} (${user.email}) has been approved and can now access the platform.`, "success"));
       } else if (action === "reject") {
-        await db.update(users).set({ status: "rejected" }).where(eq(users.id, tokenData.userId));
-        approvalTokens.delete(token);
+        await db.update(users).set({ status: "rejected" }).where(eq(users.id, userId));
         return res.send(renderApprovalPage("Account Rejected", `${user.firstName} ${user.lastName} (${user.email}) has been rejected.`, "rejected"));
       } else {
         return res.status(400).send(renderApprovalPage("Invalid Action", "Unknown approval action.", "error"));
@@ -326,8 +335,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
       const baseUrl = process.env.APP_URL || 'https://jconthemove.com';
-      const approveToken = generateApprovalToken(targetUser.id, "approve");
-      const rejectToken = generateApprovalToken(targetUser.id, "reject");
+      const approveToken = await generateApprovalToken(targetUser.id, "approve");
+      const rejectToken = await generateApprovalToken(targetUser.id, "reject");
       const approveUrl = `${baseUrl}/api/approve-user?token=${approveToken}&action=approve`;
       const rejectUrl = `${baseUrl}/api/approve-user?token=${rejectToken}&action=reject`;
 
@@ -653,8 +662,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
         const baseUrl = process.env.APP_URL || 'https://jconthemove.com';
-        const approveToken = generateApprovalToken(newUser.id, "approve");
-        const rejectToken = generateApprovalToken(newUser.id, "reject");
+        const approveToken = await generateApprovalToken(newUser.id, "approve");
+        const rejectToken = await generateApprovalToken(newUser.id, "reject");
         const approveUrl = `${baseUrl}/api/approve-user?token=${approveToken}&action=approve`;
         const rejectUrl = `${baseUrl}/api/approve-user?token=${rejectToken}&action=reject`;
         await sendEmail({
@@ -970,8 +979,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
         const baseUrl = process.env.APP_URL || 'https://jconthemove.com';
-        const approveToken = generateApprovalToken(newUser.id, "approve");
-        const rejectToken = generateApprovalToken(newUser.id, "reject");
+        const approveToken = await generateApprovalToken(newUser.id, "approve");
+        const rejectToken = await generateApprovalToken(newUser.id, "reject");
         const approveUrl = `${baseUrl}/api/approve-user?token=${approveToken}&action=approve`;
         const rejectUrl = `${baseUrl}/api/approve-user?token=${rejectToken}&action=reject`;
         await sendEmail({
@@ -1323,8 +1332,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
         const baseUrl = process.env.APP_URL || 'https://jconthemove.com';
-        const approveToken = generateApprovalToken(newUser.id, "approve");
-        const rejectToken = generateApprovalToken(newUser.id, "reject");
+        const approveToken = await generateApprovalToken(newUser.id, "approve");
+        const rejectToken = await generateApprovalToken(newUser.id, "reject");
         const approveUrl = `${baseUrl}/api/approve-user?token=${approveToken}&action=approve`;
         const rejectUrl = `${baseUrl}/api/approve-user?token=${rejectToken}&action=reject`;
         await sendEmail({
