@@ -4,7 +4,7 @@ import { useLocation } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Coins, CheckCircle2, Circle, ChevronRight, X, Zap, Star } from "lucide-react";
+import { Coins, CheckCircle2, Circle, ChevronRight, X, Zap, Star, Flame } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -14,12 +14,13 @@ interface MiningStatus {
   accumulatedTokens: string;
   claimsRemainingToday: number;
   lastScriptureClaimDate: string | null;
+  scriptureStreak: number;
+  fitness: { pushups: number; situps: number };
 }
 
 interface GamificationStats {
   data: {
     canCheckIn: boolean;
-    checkInStreak?: number;
     nextCheckInAt?: string | null;
   };
 }
@@ -55,14 +56,9 @@ export function EarnTasksButton() {
     mutationFn: () => apiRequest("POST", "/api/gamification/checkin", {}),
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/gamification/stats"] });
-      toast({
-        title: "Check-in complete!",
-        description: `+${data?.tokensAwarded || 100} JCMOVES earned!`,
-      });
+      toast({ title: "Check-in complete!", description: `+${data?.tokensAwarded || 100} JCMOVES earned!` });
     },
-    onError: () => {
-      toast({ title: "Check-in failed", description: "Try again in a moment.", variant: "destructive" });
-    },
+    onError: () => toast({ title: "Check-in failed", variant: "destructive" }),
   });
 
   const miningMutation = useMutation({
@@ -77,11 +73,34 @@ export function EarnTasksButton() {
     mutationFn: () => apiRequest("POST", "/api/mining/claim"),
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/mining/status"] });
+      toast({ title: "Tokens claimed!", description: `+${parseFloat(data?.tokensClaimed || 0).toFixed(2)} JCMOVES!` });
+    },
+  });
+
+  const scriptureMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/mining/scripture-claim", {}),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/mining/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/rewards/wallet"] });
+      const streakBonus = data?.streakBonus || 0;
       toast({
-        title: "Tokens claimed!",
-        description: `+${parseFloat(data?.tokensClaimed || 0).toFixed(2)} JCMOVES!`,
+        title: streakBonus > 0 ? "🔥 7-Day Streak Bonus!" : "Scripture Claimed!",
+        description: streakBonus > 0
+          ? `+${data?.amount} JCMOVES! (100 + 300 streak bonus)`
+          : `+100 JCMOVES! Day ${data?.streak || 1} streak 🔥`,
       });
     },
+    onError: () => toast({ title: "Claim failed", description: "Activate mining first or already claimed today.", variant: "destructive" }),
+  });
+
+  const fitnessMutation = useMutation({
+    mutationFn: ({ type, count }: { type: 'pushups' | 'situps'; count: number }) =>
+      apiRequest("POST", "/api/mining/fitness", { type, count }),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/mining/status"] });
+      toast({ title: "Fitness logged!", description: `Mining speed boosted to ${data?.newSpeed}x 💪` });
+    },
+    onError: () => toast({ title: "Failed to log fitness", variant: "destructive" }),
   });
 
   const canClaim = !!miningStatus?.currentSession &&
@@ -89,6 +108,19 @@ export function EarnTasksButton() {
   const miningDone = (miningStatus?.claimsRemainingToday ?? 3) < 3;
   const checkinDone = gamificationData ? !gamificationData.data.canCheckIn : false;
   const scriptureDone = isToday(miningStatus?.lastScriptureClaimDate);
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const fitnessToday = miningStatus?.fitness;
+  const isFitnessToday = !!(miningStatus as any)?.currentSession?.fitnessLastUpdated === undefined
+    ? false
+    : true;
+  const pushupsToday = fitnessToday?.pushups || 0;
+  const situpsToday = fitnessToday?.situps || 0;
+  const pushupsGoalDone = pushupsToday >= 10;
+  const situpsGoalDone = situpsToday >= 10;
+
+  const scriptureStreak = miningStatus?.scriptureStreak || 0;
+  const streakToBonus = scriptureStreak > 0 ? (7 - (scriptureStreak % 7 || 7)) : 7;
 
   const isEmployee = user?.role === 'employee' || user?.role === 'admin' || user?.role === 'business_owner';
 
@@ -101,28 +133,23 @@ export function EarnTasksButton() {
         : miningStatus?.currentSession
           ? "Mining in progress…"
           : "Start your daily mining session",
-      reward: "+864 JCMOVES",
+      reward: "+864",
       done: miningDone,
       action: () => {
-        if (canClaim) {
-          claimMutation.mutate();
-        } else if (!miningStatus?.currentSession) {
-          miningMutation.mutate();
-        } else {
-          setOpen(false);
-          setLocation("/mining");
-        }
+        if (canClaim) { claimMutation.mutate(); }
+        else if (!miningStatus?.currentSession) { miningMutation.mutate(); }
+        else { setOpen(false); setLocation("/mining"); }
       },
-      actionLabel: canClaim ? "Claim Now" : miningStatus?.currentSession ? "View Mining" : "Start Mining",
+      actionLabel: canClaim ? "Claim Now" : miningStatus?.currentSession ? "View" : "Start",
       isPending: miningMutation.isPending || claimMutation.isPending,
     },
     {
       id: "checkin",
       label: "Daily Check-In",
       description: checkinDone
-        ? `Next check-in: ${gamificationData?.data.nextCheckInAt ? new Date(gamificationData.data.nextCheckInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "soon"}`
+        ? `Next: ${gamificationData?.data.nextCheckInAt ? new Date(gamificationData.data.nextCheckInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "soon"}`
         : "Check in to earn bonus tokens",
-      reward: "+100 JCMOVES",
+      reward: "+100",
       done: checkinDone,
       action: () => checkinMutation.mutate(),
       actionLabel: "Check In",
@@ -130,42 +157,49 @@ export function EarnTasksButton() {
     },
     ...(isEmployee ? [{
       id: "scripture",
-      label: "Read Daily Scripture",
-      description: scriptureDone ? "Claimed today — come back tomorrow" : "Read today's verse and earn tokens",
-      reward: "+10 JCMOVES",
+      label: "Daily Scripture",
+      description: scriptureDone
+        ? scriptureStreak > 0 ? `🔥 ${scriptureStreak} day streak${streakToBonus < 7 ? ` — ${streakToBonus} to +300 bonus` : ""}` : "Claimed today"
+        : scriptureStreak > 0 ? `🔥 ${scriptureStreak} day streak — claim to continue!` : "Read & claim daily scripture",
+      reward: "+100",
       done: scriptureDone,
-      action: () => { setOpen(false); setLocation("/employee-home"); },
-      actionLabel: "Read Now",
-      isPending: false,
+      action: () => scriptureMutation.mutate(),
+      actionLabel: "Claim Now",
+      isPending: scriptureMutation.isPending,
+      badge: scriptureStreak >= 6 ? "🔥 Almost!" : undefined,
     }] : []),
     {
-      id: "referral",
-      label: "Invite a Friend",
-      description: "Share your referral code and both earn",
-      reward: "+2,500 JCMOVES",
-      done: false,
-      action: () => { setOpen(false); setLocation("/customer-portal?tab=referrals"); },
-      actionLabel: "Share Code",
-      isPending: false,
+      id: "pushups",
+      label: "10 Pushups",
+      description: pushupsGoalDone
+        ? `Done! ${pushupsToday} reps today — boosts mining speed`
+        : `${pushupsToday}/10 reps today — boosts your mining speed`,
+      reward: "+speed",
+      done: pushupsGoalDone,
+      action: () => fitnessMutation.mutate({ type: 'pushups', count: 10 }),
+      actionLabel: pushupsGoalDone ? "Log More" : "Log 10",
+      isPending: fitnessMutation.isPending,
     },
     {
-      id: "shop",
-      label: "List an Item in Shop",
-      description: "Post something to the community shop",
-      reward: "+100 JCMOVES",
-      done: false,
-      action: () => { setOpen(false); setLocation("/shop/create"); },
-      actionLabel: "Create Listing",
-      isPending: false,
+      id: "situps",
+      label: "10 Situps",
+      description: situpsGoalDone
+        ? `Done! ${situpsToday} reps today — boosts mining speed`
+        : `${situpsToday}/10 reps today — boosts your mining speed`,
+      reward: "+speed",
+      done: situpsGoalDone,
+      action: () => fitnessMutation.mutate({ type: 'situps', count: 10 }),
+      actionLabel: situpsGoalDone ? "Log More" : "Log 10",
+      isPending: fitnessMutation.isPending,
     },
     {
-      id: "review",
-      label: "Leave a Review",
-      description: "Share your experience and earn tokens",
-      reward: "+50 JCMOVES",
+      id: "add_job",
+      label: "Add a Job Lead",
+      description: "Submit a new moving or junk removal lead",
+      reward: "+500",
       done: false,
-      action: () => { setOpen(false); setLocation("/leave-review"); },
-      actionLabel: "Write Review",
+      action: () => { setOpen(false); setLocation("/employee/add-job"); },
+      actionLabel: "Add Lead",
       isPending: false,
     },
   ];
@@ -207,7 +241,7 @@ export function EarnTasksButton() {
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Complete tasks to earn tokens. Get rewards for every action!</p>
+            <p className="text-xs text-muted-foreground mt-1">Complete daily tasks to earn tokens and boost your mining speed!</p>
 
             <div className="mt-3 space-y-1">
               <div className="flex justify-between text-xs">
@@ -236,29 +270,34 @@ export function EarnTasksButton() {
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <p className={`text-sm font-semibold leading-tight ${task.done ? "line-through text-muted-foreground" : ""}`}>
                       {task.label}
                     </p>
+                    {'badge' in task && task.badge && (
+                      <span className="text-[10px] bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded-full font-bold">{task.badge}</span>
+                    )}
                     <span className="text-xs text-yellow-500 font-bold flex items-center gap-0.5 shrink-0">
-                      <Star className="h-3 w-3" />{task.reward}
+                      <Star className="h-3 w-3" />{task.reward} JCMOVES
                     </span>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-0.5 leading-tight truncate">{task.description}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 leading-tight">{task.description}</p>
                 </div>
 
-                {!task.done && (
-                  <Button
-                    size="sm"
-                    className="shrink-0 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white text-xs px-3 h-8 font-semibold"
-                    onClick={task.action}
-                    disabled={task.isPending}
-                  >
-                    {task.isPending ? <Zap className="h-3 w-3 animate-spin" /> : (
-                      <>{task.actionLabel}<ChevronRight className="h-3 w-3 ml-0.5" /></>
-                    )}
-                  </Button>
-                )}
+                <Button
+                  size="sm"
+                  className={`shrink-0 text-xs px-3 h-8 font-semibold ${
+                    task.done && task.id !== 'pushups' && task.id !== 'situps' && task.id !== 'add_job'
+                      ? "bg-muted text-muted-foreground cursor-not-allowed"
+                      : "bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white"
+                  }`}
+                  onClick={task.action}
+                  disabled={task.isPending || (task.done && task.id !== 'pushups' && task.id !== 'situps' && task.id !== 'add_job')}
+                >
+                  {task.isPending ? <Zap className="h-3 w-3 animate-spin" /> : (
+                    <>{task.actionLabel}<ChevronRight className="h-3 w-3 ml-0.5" /></>
+                  )}
+                </Button>
               </div>
             ))}
           </div>

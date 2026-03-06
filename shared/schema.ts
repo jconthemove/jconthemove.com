@@ -393,6 +393,7 @@ export const miningSessions = pgTable("mining_sessions", {
   situpsCount: integer("situps_count").default(0),
   fitnessLastUpdated: date("fitness_last_updated"),
   lastScriptureClaimDate: date("last_scripture_claim_date"),
+  scriptureStreak: integer("scripture_streak").default(0),
   lastSpeedUpdateAt: timestamp("last_speed_update_at"), // When miningSpeed was last changed (for pro-rating)
   status: text("status").notNull().default("active"), // 'active', 'paused', 'completed'
   nextClaimAt: timestamp("next_claim_at").notNull(), // 24 hours from start

@@ -8636,6 +8636,7 @@ Thank you for your business!
           nextStreakBonus: "0.00000000",
           claimsRemainingToday: 3,
           lastScriptureClaimDate: null,
+          scriptureStreak: 0,
           fitness: { pushups: 0, situps: 0 }
         });
       }
@@ -8740,13 +8741,22 @@ Thank you for your business!
         return res.status(400).json({ error: "Already claimed today's scripture reward" });
       }
 
-      const rewardAmount = 100;
+      // Calculate streak: check if yesterday was claimed
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split('T')[0];
+      const currentStreak = session.scriptureStreak || 0;
+      const newStreak = stats.lastScriptureClaimDate === yesterdayStr ? currentStreak + 1 : 1;
+
+      const baseReward = 100;
+      const streakBonus = newStreak % 7 === 0 ? 300 : 0;
+      const rewardAmount = baseReward + streakBonus;
+
       await storage.creditWalletTokens(userId, rewardAmount);
       await db.update(miningSessions)
-        .set({ lastScriptureClaimDate: today })
+        .set({ lastScriptureClaimDate: today, scriptureStreak: newStreak })
         .where(eq(miningSessions.id, session.id));
       
-      // Record as a reward
       const { rewards } = await import("@shared/schema");
       await db.insert(rewards).values({
         userId,
@@ -8754,10 +8764,10 @@ Thank you for your business!
         tokenAmount: rewardAmount.toString(),
         cashValue: (rewardAmount * 0.00000508432).toFixed(4),
         status: 'confirmed',
-        metadata: { date: today }
+        metadata: { date: today, streak: newStreak, streakBonus }
       });
 
-      res.json({ success: true, amount: rewardAmount });
+      res.json({ success: true, amount: rewardAmount, streak: newStreak, streakBonus });
     } catch (error: any) {
       console.error("Error claiming scripture reward:", error);
       res.status(500).json({ error: error.message });

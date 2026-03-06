@@ -70,12 +70,16 @@ export default function EmployeeHomePage() {
     mutationFn: async () => {
       return await apiRequest("POST", "/api/mining/scripture-claim", {});
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/mining/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/rewards/wallet"] });
+      const streakBonus = data?.streakBonus || 0;
+      const streak = data?.streak || 1;
       toast({
-        title: "Reward Claimed!",
-        description: "You've earned 100 JCMOVES for reading today's scripture.",
+        title: streakBonus > 0 ? `🔥 7-Day Streak Bonus!` : "Reward Claimed!",
+        description: streakBonus > 0
+          ? `+${data?.amount} JCMOVES (100 base + 300 streak bonus)! Day ${streak} streak!`
+          : `+100 JCMOVES earned! ${streak} day streak 🔥`,
       });
     },
     onError: (error: any) => {
@@ -89,6 +93,8 @@ export default function EmployeeHomePage() {
 
   const todayStr = new Date().toISOString().split('T')[0];
   const hasClaimedScripture = miningStatus?.lastScriptureClaimDate === todayStr;
+  const scriptureStreak = (miningStatus as any)?.scriptureStreak || 0;
+  const streakToBonus = 7 - (scriptureStreak % 7);
 
   const { data: allJobs = [] } = useQuery<Lead[]>({
     queryKey: ["/api/leads"],
@@ -424,28 +430,48 @@ export default function EmployeeHomePage() {
                   — {scripture.reference}
                 </p>
               </div>
-              <div className="flex flex-col items-center gap-2 min-w-[140px]">
+              <div className="flex flex-col items-center gap-2 min-w-[160px]">
+                {/* Streak indicator */}
+                <div className="w-full flex items-center justify-center gap-1 mb-1">
+                  {[1,2,3,4,5,6,7].map(day => (
+                    <div
+                      key={day}
+                      className={`h-2 flex-1 rounded-full transition-all ${
+                        day <= (scriptureStreak % 7 || (scriptureStreak > 0 && scriptureStreak % 7 === 0 ? 7 : 0))
+                          ? "bg-orange-500"
+                          : "bg-slate-700"
+                      }`}
+                    />
+                  ))}
+                </div>
+                <p className="text-[10px] text-orange-400 font-semibold">
+                  {scriptureStreak > 0
+                    ? streakToBonus === 7
+                      ? `🔥 ${scriptureStreak} day streak!`
+                      : `🔥 ${scriptureStreak} days — ${streakToBonus} to +300 bonus`
+                    : "Start your streak for +300 bonus"}
+                </p>
                 <Button
                   onClick={() => scriptureMutation.mutate()}
                   disabled={hasClaimedScripture || scriptureMutation.isPending || !miningStatus?.currentSession}
-                  className={`w-full py-6 font-bold shadow-lg transition-all ${
+                  className={`w-full font-bold shadow-lg transition-all ${
                     hasClaimedScripture 
                       ? "bg-slate-800 text-slate-500 cursor-not-allowed border-slate-700" 
-                      : "bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white border-0 animate-pulse shadow-orange-500/20"
+                      : "bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white border-0 shadow-orange-500/20"
                   }`}
                 >
                   {scriptureMutation.isPending ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
+                    <Loader2 className="h-4 w-4 animate-spin" />
                   ) : hasClaimedScripture ? (
                     "Claimed ✓"
                   ) : (
                     <>
-                      <Coins className="mr-2 h-5 w-5" />
+                      <Coins className="mr-2 h-4 w-4" />
                       Claim 100
                     </>
                   )}
                 </Button>
-                {!miningStatus?.currentSession && (
+                {!miningStatus?.currentSession && !hasClaimedScripture && (
                   <p className="text-[10px] text-slate-500 text-center">Activate mining to claim</p>
                 )}
                 {hasClaimedScripture && (

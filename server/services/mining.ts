@@ -497,6 +497,7 @@ export class MiningService {
     nextStreakBonus: string;
     claimsRemainingToday: number;
     lastScriptureClaimDate: string | null;
+    scriptureStreak: number;
     fitness: { pushups: number; situps: number };
   }> {
     const MAX_DAILY_CLAIMS = 3;
@@ -514,6 +515,7 @@ export class MiningService {
         nextStreakBonus: "0.00000000",
         claimsRemainingToday: MAX_DAILY_CLAIMS,
         lastScriptureClaimDate: null,
+        scriptureStreak: 0,
         fitness: { pushups: 0, situps: 0 }
       };
     }
@@ -573,6 +575,7 @@ export class MiningService {
       nextStreakBonus: streakBonus.toFixed(8),
       claimsRemainingToday,
       lastScriptureClaimDate: session.lastScriptureClaimDate,
+      scriptureStreak: session.scriptureStreak || 0,
       fitness: { pushups, situps }
     };
   }
