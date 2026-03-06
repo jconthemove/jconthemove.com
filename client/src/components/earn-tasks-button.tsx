@@ -4,7 +4,7 @@ import { useLocation } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Coins, CheckCircle2, Circle, ChevronRight, X, Zap, Star, Flame } from "lucide-react";
+import { Coins, CheckCircle2, Circle, ChevronRight, X, Zap, Star } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
