@@ -156,8 +156,26 @@ async function seedDefaultPromoCodes() {
         isActive: true,
       },
       {
+        code: 'TIM',
+        description: "Tim's referral code — 5% off services + token bonus",
+        discountPercent: '5.00',
+        discountPercentJewelry: '0.00',
+        rewardTokens: '100.00',
+        referralRewardTokens: '50.00',
+        isActive: true,
+      },
+      {
+        code: 'TIMMOVES',
+        description: "Tim's referral code — 5% off services + token bonus",
+        discountPercent: '5.00',
+        discountPercentJewelry: '0.00',
+        rewardTokens: '100.00',
+        referralRewardTokens: '50.00',
+        isActive: true,
+      },
+      {
         code: 'TIMTHEMOVER',
-        description: "Tim's employee referral code",
+        description: "Tim's referral code — 5% off services + token bonus",
         discountPercent: '5.00',
         discountPercentJewelry: '0.00',
         rewardTokens: '100.00',
@@ -190,15 +208,17 @@ async function seedDefaultPromoCodes() {
 async function linkEmployeePromoCodes() {
   try {
     const knownLinks = [
-      { code: 'MATTMOVES', email: 'dawsonsdad8176@gmail.com' },
+      { code: 'MATTMOVES',   email: 'dawsonsdad8176@gmail.com' },
+      { code: 'TIM',         email: 'timothymewbourn3@gmail.com' },
+      { code: 'TIMMOVES',    email: 'timothymewbourn3@gmail.com' },
+      { code: 'TIMTHEMOVER', email: 'timothymewbourn3@gmail.com' },
     ];
     for (const { code, email } of knownLinks) {
       const [user] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
       if (!user) continue;
-      const [promo] = await db.select({ referralUserId: promoCodes.referralUserId }).from(promoCodes).where(eq(promoCodes.code, code)).limit(1);
-      if (!promo || promo.referralUserId) continue;
+      // Always update — ensures link is correct even if re-seeded
       await db.update(promoCodes).set({ referralUserId: user.id }).where(eq(promoCodes.code, code));
-      console.log(`✅ Promo code ${code} linked to ${email} (${user.id})`);
+      console.log(`✅ Promo code ${code} linked to ${email}`);
     }
   } catch (err) {
     console.error('Failed to link employee promo codes:', err);
