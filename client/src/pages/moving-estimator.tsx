@@ -421,7 +421,190 @@ async function fetchZip(zip: string): Promise<ZipInfo> {
   };
 }
 
-// ── Main component ─────────────────────────────────────────────────────────
+// ── Embeddable chat component (used in homepage dialog) ────────────────────
+export function MovingEstimatorChat() {
+  const [sel, setSel] = useState<Sel>({});
+  const [zipInput, setZipInput] = useState("");
+  const [zipLoading, setZipLoading] = useState(false);
+  const [zipError, setZipError] = useState("");
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  const messages = buildMessages(sel);
+  const isComplete = messages.some(m => m.isResult);
+  const activeZipStep = !isComplete ? messages.findLast(m => m.isZipInput)?.isZipInput : undefined;
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages.length]);
+
+  function handleChoice(step: string, value: string) {
+    if (step === "service") setSel({ service: value as Service });
+    else if (step === "truckSize") setSel(s => ({ ...s, truckSize: value as TruckSize }));
+    else if (step === "loadType") setSel(s => ({ ...s, loadType: value as LoadType }));
+    else if (step === "stairs") setSel(s => ({ ...s, stairs: value === "yes" }));
+    else if (step === "junkSize") setSel(s => ({ ...s, junkSize: value as JunkSize }));
+  }
+
+  function getStepKey(msgIndex: number): string {
+    const botChoiceMsgs = messages.slice(0, msgIndex + 1).filter(m => m.role === "bot" && m.choices);
+    const idx = botChoiceMsgs.length - 1;
+    if (sel.service === "moving") {
+      return (["service", "truckSize", "loadType", "stairs"] as const)[idx] ?? "service";
+    }
+    return (["service", "junkSize"] as const)[idx] ?? "service";
+  }
+
+  async function handleZipSubmit() {
+    const zip = zipInput.trim().replace(/\D/g, "").slice(0, 5);
+    if (zip.length !== 5) { setZipError("Please enter a valid 5-digit zip code."); return; }
+    setZipLoading(true);
+    setZipError("");
+    try {
+      const info = await fetchZip(zip);
+      if (activeZipStep === "pickup") {
+        setSel(s => {
+          const updated = { ...s, pickup: info };
+          if (s.loadType !== "loadUnload") updated.driveInfo = computeDrive(updated);
+          return updated;
+        });
+      } else if (activeZipStep === "dropoff") {
+        setSel(s => {
+          const updated = { ...s, dropoff: info };
+          updated.driveInfo = computeDrive(updated);
+          return updated;
+        });
+      }
+      setZipInput("");
+    } catch {
+      setZipError("Zip code not found. Please check and try again.");
+    } finally {
+      setZipLoading(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Restart button */}
+      {Object.keys(sel).length > 0 && (
+        <div className="flex justify-end mb-2 shrink-0">
+          <button
+            onClick={() => { setSel({}); setZipInput(""); setZipError(""); }}
+            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-teal-400 transition-colors"
+          >
+            <RotateCcw className="h-3 w-3" /> Restart
+          </button>
+        </div>
+      )}
+
+      {/* Chat messages — scrollable */}
+      <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+        {messages.map((msg, i) => (
+          <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+            {msg.role === "bot" && (
+              <div className="flex items-end gap-2 max-w-[90%]">
+                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-teal-500 to-blue-600 flex items-center justify-center shrink-0 mb-1">
+                  <Truck className="h-3.5 w-3.5 text-white" />
+                </div>
+                <div className="space-y-2 flex-1">
+                  {msg.isResult ? (
+                    <div className="bg-slate-800/80 border border-slate-700/60 rounded-2xl p-4">
+                      <ResultCard sel={sel} />
+                      <div className="mt-4 space-y-2">
+                        <Link href="/quote">
+                          <Button className="w-full bg-gradient-to-r from-teal-500 to-blue-600 hover:from-teal-600 hover:to-blue-700 font-semibold text-sm">
+                            Get My Free Official Quote <ChevronRight className="h-4 w-4 ml-1" />
+                          </Button>
+                        </Link>
+                        <Button variant="outline" size="sm" onClick={() => { setSel({}); setZipInput(""); setZipError(""); }} className="w-full border-slate-600 text-slate-300 hover:bg-slate-700 gap-1 text-xs">
+                          <RotateCcw className="h-3 w-3" /> Start Over
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-slate-700/60 rounded-2xl rounded-tl-sm px-3 py-2.5 text-slate-100 text-sm leading-relaxed whitespace-pre-wrap">
+                      {msg.text}
+                      {msg.choices && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {msg.choices.map((c) => {
+                            const isAnswered = i < messages.length - 1;
+                            return (
+                              <button
+                                key={c.value}
+                                disabled={isAnswered}
+                                onClick={() => handleChoice(getStepKey(i), c.value)}
+                                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border transition-all
+                                  ${isAnswered
+                                    ? "border-slate-600/30 text-slate-600 bg-slate-800/20 cursor-default"
+                                    : "border-teal-500/60 text-teal-300 bg-teal-900/30 hover:bg-teal-900/60 hover:border-teal-400 active:scale-95"
+                                  }`}
+                              >
+                                {c.icon && <span>{c.icon}</span>}{c.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            {msg.role === "user" && (
+              <div className="bg-gradient-to-r from-teal-600 to-blue-600 rounded-2xl rounded-tr-sm px-3 py-2 text-white text-sm font-medium max-w-[75%]">
+                {msg.text}
+              </div>
+            )}
+          </div>
+        ))}
+
+        {Object.keys(sel).length === 0 && (
+          <div className="mt-2 p-3 border border-slate-700/50 bg-slate-800/40 rounded-xl space-y-1.5">
+            <p className="text-xs text-slate-400 flex items-center gap-2">
+              <MapPin className="h-3.5 w-3.5 text-teal-400 shrink-0" />
+              Drive time calculated from our Ironwood, MI base
+            </p>
+            <p className="text-xs text-slate-400 flex items-center gap-2">
+              <Users className="h-3.5 w-3.5 text-teal-400 shrink-0" />
+              Stairs add 1 extra mover for safety
+            </p>
+          </div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Zip input — inline at bottom when active */}
+      {activeZipStep && (
+        <div className="mt-3 shrink-0 bg-slate-900/90 border border-slate-700/60 rounded-xl px-3 py-3">
+          <p className="text-xs text-slate-400 mb-2 flex items-center gap-1.5">
+            <MapPin className="h-3.5 w-3.5 text-teal-400" />
+            Enter the {activeZipStep === "pickup" ? "pickup" : "drop-off"} zip code
+          </p>
+          <div className="flex gap-2">
+            <Input
+              value={zipInput}
+              onChange={e => { setZipInput(e.target.value.replace(/\D/g, "").slice(0, 5)); setZipError(""); }}
+              onKeyDown={e => { if (e.key === "Enter") handleZipSubmit(); }}
+              placeholder="e.g. 49938"
+              maxLength={5}
+              className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 font-mono tracking-widest text-center"
+              autoFocus
+            />
+            <Button
+              onClick={handleZipSubmit}
+              disabled={zipLoading || zipInput.length !== 5}
+              className="bg-teal-600 hover:bg-teal-700 px-4 shrink-0"
+            >
+              {zipLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            </Button>
+          </div>
+          {zipError && <p className="text-xs text-red-400 mt-1.5">{zipError}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main page component ─────────────────────────────────────────────────────
 export default function MovingEstimator() {
   const [sel, setSel] = useState<Sel>({});
   const [zipInput, setZipInput] = useState("");

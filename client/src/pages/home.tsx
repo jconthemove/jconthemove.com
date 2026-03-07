@@ -1,14 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Truck, Trash2, Snowflake, Sparkles, Gift, ShoppingBag, Star, Users, Volume2, VolumeX, Gem, Clock, BadgeDollarSign, CheckCircle2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Truck, Trash2, Snowflake, Sparkles, Gift, ShoppingBag, Star, Users, Volume2, VolumeX, Gem, Clock, BadgeDollarSign, CheckCircle2, Calculator, MessageSquare, X } from "lucide-react";
 import promoImage from "@assets/file_00000000839871fd8e13378301744f2e_(1)_1771260918919.png";
 import { Link } from "wouter";
+import { MovingEstimatorChat } from "@/pages/moving-estimator";
+import { LaborCalculatorEmbedded } from "@/components/labor-calculator-dialog";
 
 const jewelryVideoSrc = "/jewelry-video.mp4";
 
 export default function HomePage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isMuted, setIsMuted] = useState(true);
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"estimator" | "calculator">("estimator");
 
   const toggleMute = () => {
     if (videoRef.current) {
@@ -240,23 +246,33 @@ export default function HomePage() {
             </Link>
           </div>
 
-          {/* Estimator CTA */}
-          <Link href="/moving-estimator">
-            <div className="mt-5 group flex items-center justify-between px-5 py-4 rounded-2xl border-2 border-teal-500/50 bg-gradient-to-r from-teal-900/40 to-blue-900/40 hover:border-teal-400 hover:from-teal-900/60 hover:to-blue-900/60 transition-all duration-300 cursor-pointer">
-              <div className="flex items-center gap-3">
-                <div className="bg-teal-500/20 p-2.5 rounded-xl">
-                  <Truck className="h-6 w-6 text-teal-400" />
-                </div>
-                <div>
-                  <p className="font-bold text-white text-base">Not sure what you need?</p>
-                  <p className="text-teal-300 text-sm">Get an instant moving estimate →</p>
-                </div>
+          {/* Combined Assistant CTA */}
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <button
+              onClick={() => { setActiveTab("estimator"); setAssistantOpen(true); }}
+              className="group flex flex-col items-center gap-2 px-4 py-4 rounded-2xl border-2 border-teal-500/50 bg-gradient-to-br from-teal-900/40 to-blue-900/40 hover:border-teal-400 hover:from-teal-900/60 hover:to-blue-900/60 transition-all duration-300 text-center"
+            >
+              <div className="bg-teal-500/20 p-2.5 rounded-xl">
+                <MessageSquare className="h-6 w-6 text-teal-400" />
               </div>
-              <div className="bg-teal-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg group-hover:bg-teal-400 transition-colors">
-                Estimate
+              <div>
+                <p className="font-bold text-white text-sm">Moving Estimator</p>
+                <p className="text-teal-300 text-xs">Chat-based instant quote</p>
               </div>
-            </div>
-          </Link>
+            </button>
+            <button
+              onClick={() => { setActiveTab("calculator"); setAssistantOpen(true); }}
+              className="group flex flex-col items-center gap-2 px-4 py-4 rounded-2xl border-2 border-orange-500/50 bg-gradient-to-br from-orange-900/40 to-yellow-900/40 hover:border-orange-400 hover:from-orange-900/60 hover:to-yellow-900/60 transition-all duration-300 text-center"
+            >
+              <div className="bg-orange-500/20 p-2.5 rounded-xl">
+                <Calculator className="h-6 w-6 text-orange-400" />
+              </div>
+              <div>
+                <p className="font-bold text-white text-sm">Labor Calculator</p>
+                <p className="text-orange-300 text-xs">Crew builder & JCMOVES</p>
+              </div>
+            </button>
+          </div>
         </div>
       </section>
 
@@ -365,6 +381,59 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* ── Combined Moving Assistant Dialog ── */}
+      <Dialog open={assistantOpen} onOpenChange={setAssistantOpen}>
+        <DialogContent className="sm:max-w-lg w-full max-h-[90vh] flex flex-col p-0 overflow-hidden bg-slate-950 border border-slate-700/60">
+          <DialogHeader className="px-5 pt-5 pb-0 shrink-0">
+            <DialogTitle className="flex items-center gap-2 text-white">
+              <div className="p-1.5 rounded-lg bg-gradient-to-br from-teal-500 to-blue-600">
+                <Truck className="h-4 w-4 text-white" />
+              </div>
+              JC Moving Assistant
+            </DialogTitle>
+          </DialogHeader>
+
+          {/* Tab switcher */}
+          <div className="flex mx-5 mt-3 mb-1 rounded-xl overflow-hidden border border-slate-700/60 shrink-0">
+            <button
+              onClick={() => setActiveTab("estimator")}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold transition-all ${
+                activeTab === "estimator"
+                  ? "bg-gradient-to-r from-teal-600 to-blue-600 text-white"
+                  : "bg-slate-900/60 text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <MessageSquare className="h-4 w-4" />
+              Quote Estimator
+            </button>
+            <button
+              onClick={() => setActiveTab("calculator")}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold transition-all ${
+                activeTab === "calculator"
+                  ? "bg-gradient-to-r from-orange-500 to-yellow-500 text-black"
+                  : "bg-slate-900/60 text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <Calculator className="h-4 w-4" />
+              Labor Calculator
+            </button>
+          </div>
+
+          {/* Tab content */}
+          <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-5">
+            {activeTab === "estimator" ? (
+              <div className="h-full min-h-[400px] flex flex-col">
+                <MovingEstimatorChat />
+              </div>
+            ) : (
+              <div className="pt-2">
+                <LaborCalculatorEmbedded />
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
