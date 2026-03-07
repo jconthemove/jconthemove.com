@@ -2023,6 +2023,10 @@ export class DatabaseStorage implements IStorage {
     await this.updateWalletAccount(userId, {
       tokenBalance: newBalance.toFixed(8),
     });
+    // 1% generosity fund on spend too (skip for mom's own wallet to avoid circular)
+    if (userId !== "nicolasa-jackson-generosity") {
+      creditGenerosityFund(tokenAmount, `debit_from_${userId}`).catch(() => {});
+    }
   }
 
 

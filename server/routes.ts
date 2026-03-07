@@ -444,6 +444,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   } catch (migErr) {
     console.error('⚠️ Jackpot migration error (non-fatal):', migErr);
   }
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS mom_hearts (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR,
+        display_name TEXT NOT NULL DEFAULT 'Anonymous',
+        jcmoves_amount INTEGER NOT NULL DEFAULT 0,
+        message TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    console.log('💝 Mom hearts table ready');
+  } catch (migErr) {
+    console.error('⚠️ Jackpot migration error (non-fatal):', migErr);
+  }
 
   // Seed staking tiers and treasury user on startup (ensures production has them)
   await ensureStakingTiersSeeded();
@@ -12739,6 +12754,104 @@ Thank you for your business!
       );
       res.json(rows[0]);
     } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ── I LOVE YOU MOM — Hearts & Donations ────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // Public: get mom's stats (balance + heart count + recent donors)
+  app.get("/api/mom/stats", async (_req, res) => {
+    try {
+      const { rows: walletRows } = await pool.query(
+        `SELECT token_balance, total_earned FROM wallet_accounts WHERE user_id='nicolasa-jackson-generosity' LIMIT 1`
+      );
+      const { rows: countRows } = await pool.query(
+        `SELECT COUNT(*) as total_hearts, COALESCE(SUM(jcmoves_amount),0) as total_donated FROM mom_hearts`
+      );
+      const { rows: recentRows } = await pool.query(
+        `SELECT display_name, jcmoves_amount, message, created_at FROM mom_hearts ORDER BY created_at DESC LIMIT 3`
+      );
+      res.json({
+        tokenBalance: parseFloat(walletRows[0]?.token_balance || "0"),
+        totalEarned: parseFloat(walletRows[0]?.total_earned || "0"),
+        totalHearts: parseInt(countRows[0]?.total_hearts || "0"),
+        totalDonated: parseInt(countRows[0]?.total_donated || "0"),
+        recentDonors: recentRows,
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Public: get heart timeline
+  app.get("/api/mom/hearts", async (req: any, res) => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit || "50"), 100);
+      const { rows } = await pool.query(
+        `SELECT id, display_name, jcmoves_amount, message, created_at FROM mom_hearts ORDER BY created_at DESC LIMIT $1`,
+        [limit]
+      );
+      res.json(rows);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Authenticated: donate JCMOVES + post a heart
+  app.post("/api/mom/hearts", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { amount, message, displayName } = req.body;
+      const tokens = Math.max(1, parseInt(amount) || 0);
+
+      // Deduct from sender's wallet
+      try {
+        await storage.debitWalletTokens(userId, tokens);
+      } catch {
+        return res.status(400).json({ error: `Not enough JCMOVES. You need ${tokens} to send love.` });
+      }
+
+      // Credit directly to mom's wallet (on top of the 1% she gets automatically)
+      await pool.query(
+        `UPDATE wallet_accounts SET token_balance=token_balance::numeric+$1, total_earned=total_earned::numeric+$1, last_activity=NOW() WHERE user_id='nicolasa-jackson-generosity'`,
+        [tokens]
+      );
+
+      // Log reward for mom's wallet
+      const [userRow] = await db.select({ firstName: users.firstName, lastName: users.lastName, username: users.username })
+        .from(users).where(eq(users.id, userId)).limit(1);
+      const senderName = displayName?.trim()
+        || userRow?.username
+        || (userRow?.firstName ? `${userRow.firstName}` : 'Someone special');
+
+      await db.insert(rewards).values({
+        userId: 'nicolasa-jackson-generosity',
+        rewardType: 'mom_heart_donation',
+        tokenAmount: tokens.toString(),
+        cashValue: (tokens * 0.00000508432).toFixed(4),
+        status: 'confirmed',
+        metadata: { from: userId, senderName, message: message?.trim() || null, amount: tokens },
+      });
+
+      // Insert heart into timeline
+      const { rows } = await pool.query(
+        `INSERT INTO mom_hearts (user_id, display_name, jcmoves_amount, message) VALUES ($1,$2,$3,$4) RETURNING *`,
+        [userId, senderName, tokens, message?.trim() || null]
+      );
+
+      // Activity feed event
+      await pool.query(
+        `INSERT INTO activity_feed_events (user_id, event_type, message, metadata) VALUES ($1,'mom_heart',$2,$3)`,
+        [userId, `❤️ ${senderName} sent ${tokens} JCMOVES love to Nicolasa`, JSON.stringify({ amount: tokens })]
+      );
+
+      console.log(`💝 ${senderName} sent ${tokens} JCMOVES love to Mom`);
+      res.json({ ok: true, heart: rows[0] });
+    } catch (e: any) {
+      console.error("Mom heart donation error:", e);
       res.status(500).json({ error: e.message });
     }
   });

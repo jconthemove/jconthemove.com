@@ -10,6 +10,7 @@ import { WalletProviderWrapper } from "@/components/WalletProviderWrapper";
 import { RouteGuard } from "@/components/RouteGuard";
 import { ComplianceCheck } from "@/components/compliance-check";
 import { EarnTasksButton } from "@/components/earn-tasks-button";
+import { FloatingMomHeart } from "@/components/floating-mom-heart";
 import Header from "@/components/header";
 import PwaInstallPrompt from "@/components/pwa-install-prompt";
 import Footer from "@/components/footer";
@@ -403,6 +404,7 @@ function App() {
               <Toaster />
               <PwaInstallPrompt />
               <EarnTasksButton />
+              <FloatingMomHeart />
             </TooltipProvider>
           </CartProvider>
         </WalletProviderWrapper>
