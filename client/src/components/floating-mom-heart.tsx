@@ -134,10 +134,14 @@ export function FloatingMomHeart() {
     });
   }
 
+  // Only visible to signed-in customers and employees
+  const allowedRoles = ["customer", "employee", "admin", "business_owner"];
+  if (!user || !allowedRoles.includes(user.role)) return null;
+
   return (
     <>
       {/* ── Floating button ── */}
-      <div className="fixed bottom-24 right-4 z-50 flex flex-col items-center pointer-events-none">
+      <div className="fixed bottom-24 left-4 z-50 flex flex-col items-center pointer-events-none">
         {/* Burst particles */}
         {floatParticles.map(p => (
           <div
