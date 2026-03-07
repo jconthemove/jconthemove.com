@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import {
   Package, Plus, Edit2, Eye, EyeOff, CheckCircle2, Clock, XCircle,
   Coins, Star, Gift, Trash2, ChevronDown, ChevronUp, BarChart3, AlertTriangle,
-  Zap, RefreshCw, Users, TrendingUp
+  Zap, RefreshCw, Users, TrendingUp, Flame, Crown, RotateCcw, Settings2
 } from "lucide-react";
 
 interface RewardCategory { id: number; name: string; icon: string; color: string; sortOrder: number; isActive: boolean; }
@@ -81,7 +81,7 @@ function formatTokens(n: number) {
 export default function AdminRewardShopPage() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<"items" | "categories" | "redemptions">("items");
+  const [activeTab, setActiveTab] = useState<"items" | "categories" | "redemptions" | "spin_wheel">("items");
   const [itemSearch, setItemSearch] = useState("");
   const [editItem, setEditItem] = useState<Partial<RewardItem> | null>(null);
   const [isNewItem, setIsNewItem] = useState(false);
@@ -99,6 +99,19 @@ export default function AdminRewardShopPage() {
     queryKey: ["/api/admin/reward-shop/redemptions", redemptionFilter],
     queryFn: () => fetch(`/api/admin/reward-shop/redemptions${redemptionFilter ? `?status=${redemptionFilter}` : ""}`, { credentials: "include" }).then(r => r.json()),
     enabled: !!user && activeTab === "redemptions",
+  });
+  const { data: spinAdminData, refetch: refetchSpinConfig } = useQuery<{ config: any[]; jackpots: any[] }>({
+    queryKey: ["/api/admin/spin-config"],
+    enabled: !!user && activeTab === "spin_wheel",
+  });
+  const spinConfigMutation = useMutation({
+    mutationFn: ({ key, value }: { key: string; value: string }) =>
+      apiRequest("PATCH", `/api/admin/spin-config/${key}`, { value }),
+    onSuccess: () => { refetchSpinConfig(); toast({ title: "Setting saved" }); },
+  });
+  const jackpotResetMutation = useMutation({
+    mutationFn: (type: string) => apiRequest("POST", `/api/admin/jackpots/${type}/reset`, {}),
+    onSuccess: () => { refetchSpinConfig(); toast({ title: "Jackpot reset to starting value" }); },
   });
 
   const saveItemMutation = useMutation({
@@ -169,6 +182,7 @@ export default function AdminRewardShopPage() {
     { id: "items", label: "Shop Items", count: stats?.activeItems },
     { id: "categories", label: "Categories", count: categories?.length },
     { id: "redemptions", label: "Redemptions", count: stats?.pendingRedemptions, alert: (stats?.pendingRedemptions ?? 0) > 0 },
+    { id: "spin_wheel", label: "🎰 Spin Wheel" },
   ] as const;
 
   if (!user || !["admin", "business_owner"].includes(user.role ?? "")) {
@@ -465,6 +479,124 @@ export default function AdminRewardShopPage() {
               )}
             </div>
           </>
+        )}
+
+        {/* ── Spin Wheel Tab ── */}
+        {activeTab === "spin_wheel" && (
+          <div className="space-y-6">
+            {/* Jackpot meters */}
+            <div>
+              <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
+                <Flame className="h-4 w-4 text-orange-400" /> Progressive Jackpots
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                {(spinAdminData?.jackpots ?? []).map((jp: any) => (
+                  <div key={jp.type} className={`border rounded-xl p-4 ${jp.type === "major" ? "border-yellow-500/30 bg-yellow-950/20" : "border-orange-500/30 bg-orange-950/20"}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5">
+                        {jp.type === "major" ? <Crown className="h-4 w-4 text-yellow-400" /> : <Flame className="h-4 w-4 text-orange-400" />}
+                        <span className="text-xs font-bold uppercase tracking-wide">{jp.type} Jackpot</span>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-6 text-xs"
+                        onClick={() => jackpotResetMutation.mutate(jp.type)}
+                        disabled={jackpotResetMutation.isPending}
+                      >
+                        <RotateCcw className="h-3 w-3 mr-1" /> Reset
+                      </Button>
+                    </div>
+                    <div className={`text-2xl font-black ${jp.type === "major" ? "text-yellow-400" : "text-orange-400"}`}>
+                      {parseInt(jp.current_value).toLocaleString()}
+                      <span className="text-xs font-normal text-muted-foreground ml-1">JCMOVES</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">Starting: {parseInt(jp.starting_value).toLocaleString()} • +{jp.contribution_per_spin}/spin • {parseFloat(jp.win_probability_pct).toFixed(4)}% win chance</div>
+                    {jp.last_winner_name && (
+                      <div className="text-xs text-purple-400 mt-1">Last won: <strong>{jp.last_winner_name}</strong> — {parseInt(jp.last_won_amount).toLocaleString()} JCMOVES {jp.last_won_at ? `(${new Date(jp.last_won_at).toLocaleDateString()})` : ""}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Spin config settings */}
+            <div>
+              <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
+                <Settings2 className="h-4 w-4 text-blue-400" /> Spin Settings
+              </h3>
+              <div className="space-y-3">
+                {(spinAdminData?.config ?? []).map((cfg: any) => (
+                  <div key={cfg.setting_key} className="flex items-center justify-between bg-card border border-border rounded-lg px-4 py-3">
+                    <div>
+                      <div className="text-sm font-semibold">{cfg.setting_key}</div>
+                      <div className="text-xs text-muted-foreground">{cfg.description}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {cfg.setting_key === "spin_wheel_enabled" ? (
+                        <Switch
+                          checked={cfg.setting_value === "true"}
+                          onCheckedChange={v => spinConfigMutation.mutate({ key: cfg.setting_key, value: v ? "true" : "false" })}
+                        />
+                      ) : (
+                        <Input
+                          defaultValue={cfg.setting_value}
+                          className="h-8 w-24 text-sm text-right"
+                          onBlur={e => {
+                            if (e.target.value !== cfg.setting_value) {
+                              spinConfigMutation.mutate({ key: cfg.setting_key, value: e.target.value });
+                            }
+                          }}
+                        />
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Prize table reference */}
+            <div>
+              <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
+                <Star className="h-4 w-4 text-yellow-400" /> Prize Table (Reference)
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-xs text-muted-foreground">
+                      <th className="text-left py-2 pr-4 font-medium">#</th>
+                      <th className="text-left py-2 pr-4 font-medium">Prize</th>
+                      <th className="text-left py-2 pr-4 font-medium">Type</th>
+                      <th className="text-right py-2 font-medium">Probability</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border text-xs">
+                    {[
+                      { label: "250 JCMOVES", type: "tokens", prob: "30%" },
+                      { label: "500 JCMOVES", type: "tokens", prob: "20%" },
+                      { label: "750 JCMOVES", type: "tokens", prob: "13%" },
+                      { label: "1,000 JCMOVES", type: "tokens", prob: "8%" },
+                      { label: "100 JCMOVES", type: "tokens", prob: "10%" },
+                      { label: "50 JCMOVES", type: "tokens", prob: "5%" },
+                      { label: "Nada", type: "tokens (0)", prob: "5%" },
+                      { label: "🎁 Mystery Box", type: "mystery", prob: "1%" },
+                      { label: "25% Off Coupon", type: "coupon_25pct", prob: "1%" },
+                      { label: "☕ $5 Coffee", type: "gift_card_coffee", prob: "2%" },
+                      { label: "10% Off Coupon", type: "coupon_10pct", prob: "5%" },
+                    ].map((p, i) => (
+                      <tr key={i}>
+                        <td className="py-2 pr-4 text-muted-foreground">{i}</td>
+                        <td className="py-2 pr-4 font-medium">{p.label}</td>
+                        <td className="py-2 pr-4 text-muted-foreground">{p.type}</td>
+                        <td className="py-2 text-right font-bold">{p.prob}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">Coupon prizes auto-generate promo codes with <strong>365-day expiry</strong>. Mystery box pays a random token bonus (250–5,000 JCMOVES).</p>
+            </div>
+          </div>
         )}
       </div>
 

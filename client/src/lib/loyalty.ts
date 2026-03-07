@@ -1,3 +1,12 @@
+// Official JCMOVES token economy rates
+// EARN: 1 USD spent on a job = 50 JCMOVES (Bronze base, higher tiers earn more)
+// SPEND: 1 mover-minute of labor = 500 JCMOVES
+export const TOKEN_ECONOMY = {
+  TOKENS_PER_USD_EARNED: 50,
+  TOKENS_PER_MOVER_MINUTE: 500,
+  CASH_PER_MOVER_HOUR: 62.50,
+} as const;
+
 export const LOYALTY_TIERS = {
   bronze: { rate: 0.10, tokensPerDollar: 50,  minSpend: 0,    maxSpend: 999,     label: 'Bronze', emoji: '🥉', color: 'text-amber-600',  border: 'border-amber-600/40', bg: 'bg-amber-600/10' },
   silver: { rate: 0.12, tokensPerDollar: 60,  minSpend: 1000, maxSpend: 2499,    label: 'Silver', emoji: '🥈', color: 'text-slate-300',   border: 'border-slate-400/40', bg: 'bg-slate-400/10' },

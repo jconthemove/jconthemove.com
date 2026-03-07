@@ -71,6 +71,22 @@ export const REWARD_TYPES = {
   CUSTOMER_QUOTE_REWARD: 'customer_quote_reward', // 200 JCMOVES for customer's accepted/completed quotes
 } as const;
 
+// ── Official JCMOVES Token Conversion Rates ────────────────────────────────
+// These two rates define the entire token economy and must never conflict.
+//
+//   EARN rate: 1 USD spent on a job = 50 JCMOVES (Bronze tier, 10% back)
+//   SPEND rate: 1 mover-minute of labor = 500 JCMOVES
+//
+// This means customers need to spend $10 worth of jobs to earn enough tokens
+// for 1 mover-minute of free labor — a sustainable 10:1 ratio.
+export const TOKEN_ECONOMY = {
+  TOKENS_PER_USD_EARNED: 50,         // Base Bronze earn rate (50 JCMOVES per $1 spent)
+  TOKENS_PER_MOVER_MINUTE: 500,      // Cost of 1 mover-minute in JCMOVES (labor spend rate)
+  CASH_PER_MOVER_HOUR: 62.50,        // Cash price of 1 mover-hour
+  MIN_LABOR_CASH: 50,                // Minimum cash portion of any labor job
+  MIN_LABOR_TOKENS: 15000,           // Minimum token portion of any labor job (30 min × 500 × 1 mover)
+} as const;
+
 // ── JCMOVES Loyalty Tier System ────────────────────────────────────────────
 // Earn 50 JCMOVES per $1 spent (10% of job value at 500 tokens/$1)
 // Higher tiers unlock multiplier bonuses for repeat customers

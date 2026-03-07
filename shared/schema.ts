@@ -1747,10 +1747,41 @@ export const spinResults = pgTable("spin_results", {
   prizeIndex: integer("prize_index").notNull(),
   prizeLabel: text("prize_label").notNull(),
   prizeTokens: integer("prize_tokens").notNull(),
+  prizeType: text("prize_type").notNull().default("tokens"), // tokens | coupon_10pct | coupon_25pct | gift_card_coffee | mystery | mini_jackpot | major_jackpot
+  jackpotTypeWon: text("jackpot_type_won"),   // 'mini' | 'major' | null
+  jackpotAmountWon: integer("jackpot_amount_won"),
+  couponCode: text("coupon_code"),            // auto-generated code for coupon prizes
   fulfillmentStatus: text("fulfillment_status").notNull().default("fulfilled"), // fulfilled | pending | failed
   createdAt: timestamp("created_at").defaultNow(),
 });
 export type SpinResult = typeof spinResults.$inferSelect;
+
+// ── Progressive Jackpots ─────────────────────────────────────────────────────
+export const jackpots = pgTable("jackpots", {
+  id: serial("id").primaryKey(),
+  type: text("type").notNull().unique(), // 'mini' | 'major'
+  currentValue: integer("current_value").notNull(),
+  startingValue: integer("starting_value").notNull(),
+  contributionPerSpin: integer("contribution_per_spin").notNull(), // JCMOVES added per spin
+  winProbabilityPct: decimal("win_probability_pct", { precision: 10, scale: 7 }).notNull(), // e.g. 0.05 = 0.05%
+  lastWonAt: timestamp("last_won_at"),
+  lastWinnerId: varchar("last_winner_id"),
+  lastWinnerName: text("last_winner_name"),
+  lastWonAmount: integer("last_won_amount"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+export type Jackpot = typeof jackpots.$inferSelect;
+
+// ── Spin Wheel Config ────────────────────────────────────────────────────────
+export const spinConfig = pgTable("spin_config", {
+  id: serial("id").primaryKey(),
+  settingKey: varchar("setting_key").unique().notNull(),
+  settingValue: text("setting_value").notNull(),
+  description: text("description"),
+  isActive: boolean("is_active").notNull().default(true),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+export type SpinConfigRow = typeof spinConfig.$inferSelect;
 
 // ── Gift Card Inventory ──────────────────────────────────────────────────────
 export const giftCardInventory = pgTable("gift_card_inventory", {

@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Coins, Search, Filter, CheckCircle2, Clock, ChevronRight,
   Star, Zap, Trophy, Package, Gift, MapPin, Snowflake, Gamepad2,
-  Wrench, Crown, ShoppingBag, History, Calculator, Users, TrendingUp, Info
+  Wrench, Crown, ShoppingBag, History, Calculator, Users, TrendingUp, Info, Flame, Sparkles
 } from "lucide-react";
 import { LOYALTY_TIERS, calculateJCMovesReward, getNextTier, formatTokens as fmtTokens, type LoyaltyTierKey } from "@/lib/loyalty";
 import { SpinWheelDialog } from "@/components/spin-wheel";
@@ -152,6 +152,7 @@ export default function RewardsMarketplacePage() {
   const [scheduledDate, setScheduledDate] = useState("");
   const [spinWheelOpen, setSpinWheelOpen] = useState(false);
   const [spinRedemptionId, setSpinRedemptionId] = useState<number | undefined>(undefined);
+  const [directSpinOpen, setDirectSpinOpen] = useState(false);
   const [autoBookingLeadId, setAutoBookingLeadId] = useState<string | null>(null);
   const [calcOpen, setCalcOpen] = useState(false);
   const [simOpen, setSimOpen] = useState(false);
@@ -187,6 +188,13 @@ export default function RewardsMarketplacePage() {
     queryKey: ["/api/reward-shop/categories"],
     enabled: !!user,
   });
+
+  const { data: jackpots = [] } = useQuery<any[]>({
+    queryKey: ["/api/reward-shop/jackpots"],
+    refetchInterval: 30000,
+  });
+  const miniJackpot = jackpots.find((j: any) => j.type === "mini");
+  const majorJackpot = jackpots.find((j: any) => j.type === "major");
 
   const { data: myRedemptions } = useQuery<RedemptionRecord[]>({
     queryKey: ["/api/reward-shop/my-redemptions"],
@@ -428,6 +436,55 @@ export default function RewardsMarketplacePage() {
                   >
                     <Calculator className="h-4 w-4" />
                     Open Calculator
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* 🎰 Spin the Wheel Feature Card */}
+            {!search && !activeCat && (
+              <div className="mb-6 bg-gradient-to-r from-yellow-950/60 via-orange-950/40 to-yellow-950/60 border border-yellow-500/30 rounded-2xl overflow-hidden">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4">
+                  {/* Jackpot meters */}
+                  <div className="flex gap-3 flex-1">
+                    <div className="bg-orange-950/60 border border-orange-500/30 rounded-xl px-4 py-2 text-center min-w-[90px]">
+                      <div className="flex items-center justify-center gap-1 mb-0.5">
+                        <Flame className="h-3 w-3 text-orange-400" />
+                        <span className="text-[10px] font-bold text-orange-300 uppercase">Mini</span>
+                      </div>
+                      <div className="text-base font-black text-orange-400">
+                        {miniJackpot ? parseInt(miniJackpot.current_value).toLocaleString() : "5,000"}
+                      </div>
+                      <div className="text-[10px] text-orange-600">JCMOVES</div>
+                    </div>
+                    <div className="bg-yellow-950/60 border border-yellow-500/30 rounded-xl px-4 py-2 text-center min-w-[90px]">
+                      <div className="flex items-center justify-center gap-1 mb-0.5">
+                        <Crown className="h-3 w-3 text-yellow-400" />
+                        <span className="text-[10px] font-bold text-yellow-300 uppercase">Major</span>
+                      </div>
+                      <div className="text-base font-black text-yellow-400">
+                        {majorJackpot ? parseInt(majorJackpot.current_value).toLocaleString() : "50,000"}
+                      </div>
+                      <div className="text-[10px] text-yellow-600">JCMOVES</div>
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-sm font-bold text-yellow-300 mb-0.5 flex items-center gap-1.5">
+                        <Sparkles className="h-4 w-4 text-yellow-400" /> Spin the Wheel
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Win JCMOVES, coupons & jackpots every spin! Each spin builds the jackpot.
+                        <br />
+                        <span className="text-yellow-500 font-semibold">Coupons valid 1 full year.</span>
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-black font-bold shrink-0"
+                    onClick={() => setDirectSpinOpen(true)}
+                    disabled={!user}
+                  >
+                    <Sparkles className="h-4 w-4 mr-1.5" />
+                    Spin (100 JCMOVES)
                   </Button>
                 </div>
               </div>
@@ -749,6 +806,12 @@ export default function RewardsMarketplacePage() {
           setSpinWheelOpen(false);
           setSpinRedemptionId(undefined);
         }}
+      />
+
+      {/* Direct spin — opened from the Spin the Wheel feature card (costs 100 JCMOVES) */}
+      <SpinWheelDialog
+        open={directSpinOpen}
+        onClose={() => setDirectSpinOpen(false)}
       />
 
       {/* Earnings Simulator Dialog */}

@@ -225,6 +225,34 @@ async function linkEmployeePromoCodes() {
   }
 }
 
+async function ensureJackpotsSeeded() {
+  try {
+    // Seed jackpots table
+    await pool.query(`
+      INSERT INTO jackpots (type, current_value, starting_value, contribution_per_spin, win_probability_pct)
+      VALUES ('mini', 5000, 5000, 2, 0.0500000)
+      ON CONFLICT (type) DO NOTHING;
+
+      INSERT INTO jackpots (type, current_value, starting_value, contribution_per_spin, win_probability_pct)
+      VALUES ('major', 50000, 50000, 5, 0.0010000)
+      ON CONFLICT (type) DO NOTHING;
+    `);
+    // Seed spin_config table
+    await pool.query(`
+      INSERT INTO spin_config (setting_key, setting_value, description)
+      VALUES
+        ('spin_cost_tokens',   '100',  'JCMOVES deducted per direct spin (no redemption entry)'),
+        ('spin_wheel_enabled', 'true', 'Whether the spin wheel is open to users'),
+        ('mini_jackpot_start', '5000', 'Starting value for mini jackpot after reset'),
+        ('major_jackpot_start','50000','Starting value for major jackpot after reset')
+      ON CONFLICT (setting_key) DO NOTHING;
+    `);
+    console.log('✅ Jackpots seeded');
+  } catch (err) {
+    console.error('Failed to seed jackpots:', err);
+  }
+}
+
 // Shared welcome email builder for approved users
 function buildApprovalWelcomeEmail(firstName: string): { subject: string; text: string; html: string } {
   const subject = "You're In! Welcome to the JC on the Move Family 🎉";
@@ -348,6 +376,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('⚠️ Loyalty tier migration error (non-fatal):', migErr);
   }
 
+  // Schema migration: spin_results extended columns + jackpots + spin_config tables
+  try {
+    await pool.query(`
+      ALTER TABLE spin_results ADD COLUMN IF NOT EXISTS prize_type TEXT NOT NULL DEFAULT 'tokens';
+      ALTER TABLE spin_results ADD COLUMN IF NOT EXISTS jackpot_type_won TEXT;
+      ALTER TABLE spin_results ADD COLUMN IF NOT EXISTS jackpot_amount_won INTEGER;
+      ALTER TABLE spin_results ADD COLUMN IF NOT EXISTS coupon_code TEXT;
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS jackpots (
+        id SERIAL PRIMARY KEY,
+        type TEXT NOT NULL UNIQUE,
+        current_value INTEGER NOT NULL,
+        starting_value INTEGER NOT NULL,
+        contribution_per_spin INTEGER NOT NULL,
+        win_probability_pct DECIMAL(10,7) NOT NULL,
+        last_won_at TIMESTAMP,
+        last_winner_id VARCHAR,
+        last_winner_name TEXT,
+        last_won_amount INTEGER,
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS spin_config (
+        id SERIAL PRIMARY KEY,
+        setting_key VARCHAR NOT NULL UNIQUE,
+        setting_value TEXT NOT NULL,
+        description TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    console.log('✅ Jackpot tables ready');
+  } catch (migErr) {
+    console.error('⚠️ Jackpot migration error (non-fatal):', migErr);
+  }
+
   // Seed staking tiers and treasury user on startup (ensures production has them)
   await ensureStakingTiersSeeded();
   await ensureStakingTreasuryUser();
@@ -355,6 +419,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   await ensureRewardSettingsSeeded();
   await seedDefaultPromoCodes();
   await linkEmployeePromoCodes();
+  await ensureJackpotsSeeded();
 
   // Public health check endpoint for deployment monitoring (MUST be before auth setup)
   // This endpoint is used by Replit Autoscale Deployments to verify the service is healthy
@@ -12269,25 +12334,55 @@ Thank you for your business!
     }
   });
 
-  // ── Spin Wheel ───────────────────────────────────────────────
+  // ── Public jackpot status ───────────────────────────────────────────────────
+  app.get("/api/reward-shop/jackpots", async (_req, res) => {
+    try {
+      const { rows } = await pool.query(`SELECT * FROM jackpots ORDER BY type`);
+      res.json(rows);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Spin wheel ──────────────────────────────────────────────────────────────
   app.post("/api/reward-shop/spin", isAuthenticated, async (req: any, res) => {
     try {
       const userId = (req.session as any).userId;
       const { redemptionId } = req.body;
 
-      // Prize table: index 0-7, must match frontend PRIZES array
+      // Check wheel is enabled
+      const { rows: cfgRows } = await pool.query(`SELECT setting_value FROM spin_config WHERE setting_key='spin_wheel_enabled'`);
+      if (cfgRows[0]?.setting_value === 'false') {
+        return res.status(403).json({ error: "Spin wheel is temporarily disabled." });
+      }
+
+      // Direct spin: deduct 100 JCMOVES from wallet
+      if (!redemptionId) {
+        const { rows: costRows } = await pool.query(`SELECT setting_value FROM spin_config WHERE setting_key='spin_cost_tokens'`);
+        const spinCost = parseInt(costRows[0]?.setting_value || '100');
+        try {
+          await storage.debitWalletTokens(userId, spinCost);
+        } catch {
+          return res.status(400).json({ error: `Not enough JCMOVES. You need ${spinCost} to spin.` });
+        }
+      }
+
+      // ── Prize table (indices must match frontend PRIZES array) ─────────────
       const PRIZES = [
-        { label: "100",    tokens: 100,   probability: 25 },
-        { label: "250",    tokens: 250,   probability: 22 },
-        { label: "500",    tokens: 500,   probability: 18 },
-        { label: "750",    tokens: 750,   probability: 14 },
-        { label: "1,000",  tokens: 1000,  probability: 10 },
-        { label: "2,500",  tokens: 2500,  probability: 6  },
-        { label: "5,000",  tokens: 5000,  probability: 3  },
-        { label: "10,000", tokens: 10000, probability: 2  },
+        { label: "250",        tokens: 250,  probability: 30, type: "tokens"          },
+        { label: "500",        tokens: 500,  probability: 20, type: "tokens"          },
+        { label: "750",        tokens: 750,  probability: 13, type: "tokens"          },
+        { label: "1,000",      tokens: 1000, probability: 8,  type: "tokens"          },
+        { label: "100",        tokens: 100,  probability: 10, type: "tokens"          },
+        { label: "50",         tokens: 50,   probability: 5,  type: "tokens"          },
+        { label: "Nada",       tokens: 0,    probability: 5,  type: "tokens"          },
+        { label: "Mystery",    tokens: 0,    probability: 1,  type: "mystery"         },
+        { label: "25% Off",    tokens: 0,    probability: 1,  type: "coupon_25pct"    },
+        { label: "Coffee",     tokens: 0,    probability: 2,  type: "gift_card_coffee"},
+        { label: "10% Off",    tokens: 0,    probability: 5,  type: "coupon_10pct"    },
       ];
 
-      // Pick prize using server-side RNG
+      // Pick prize server-side
       const rand = Math.random() * 100;
       let cumulative = 0;
       let prizeIndex = 0;
@@ -12297,31 +12392,173 @@ Thank you for your business!
       }
       const prize = PRIZES[prizeIndex];
 
-      // Credit tokens to wallet
-      await storage.creditWalletTokens(userId, prize.tokens);
+      // ── Jackpot contributions + win checks ─────────────────────────────────
+      const { rows: jRows } = await pool.query(`SELECT * FROM jackpots FOR UPDATE`);
+      let jackpotTypeWon: string | null = null;
+      let jackpotAmountWon: number | null = null;
+      let jackpotBonusTokens = 0;
 
-      // Mark redemption as completed if provided
+      for (const jp of jRows) {
+        const newVal = jp.current_value + jp.contribution_per_spin;
+        const winRoll = Math.random() * 100;
+        const winPct = parseFloat(jp.win_probability_pct);
+        const userWon = winRoll < winPct;
+
+        if (userWon) {
+          jackpotTypeWon = jp.type;
+          jackpotAmountWon = newVal;
+          jackpotBonusTokens += newVal;
+          const [userRow] = await db.select({ firstName: users.firstName, lastName: users.lastName, username: users.username })
+            .from(users).where(eq(users.id, userId)).limit(1);
+          const winnerName = userRow?.username || `${userRow?.firstName || ''} ${userRow?.lastName || ''}`.trim() || 'Lucky Winner';
+          await pool.query(
+            `UPDATE jackpots SET current_value=$1, last_won_at=NOW(), last_winner_id=$2, last_winner_name=$3, last_won_amount=$4, updated_at=NOW() WHERE type=$5`,
+            [jp.starting_value, userId, winnerName, newVal, jp.type]
+          );
+          console.log(`🏆 JACKPOT! ${jp.type.toUpperCase()} jackpot of ${newVal} JCMOVES won by ${winnerName}`);
+        } else {
+          await pool.query(`UPDATE jackpots SET current_value=$1, updated_at=NOW() WHERE type=$2`, [newVal, jp.type]);
+        }
+      }
+
+      // ── Coupon prize: auto-generate promo code ─────────────────────────────
+      let couponCode: string | null = null;
+      let couponDescription = '';
+      const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000); // 1 year
+
+      if (prize.type === 'coupon_25pct' || prize.type === 'coupon_10pct') {
+        const codePrefix = prize.type === 'coupon_25pct' ? 'SPIN25' : 'SPIN10';
+        const rand6 = Math.random().toString(36).substring(2, 8).toUpperCase();
+        couponCode = `${codePrefix}-${rand6}`;
+        const discPct = prize.type === 'coupon_25pct' ? '25.00' : '10.00';
+        couponDescription = prize.type === 'coupon_25pct'
+          ? `25% off moving/junk services — spin wheel prize. Expires ${expiresAt.toLocaleDateString()}`
+          : `10% off moving/junk services — spin wheel prize. Expires ${expiresAt.toLocaleDateString()}`;
+        await pool.query(
+          `INSERT INTO promo_codes (id, code, description, discount_percent, discount_percent_jewelry, reward_tokens, referral_reward_tokens, max_uses, is_active, expires_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, '0.00', '0.00', '0.00', 1, true, $4)`,
+          [couponCode, couponDescription, discPct, expiresAt]
+        );
+      } else if (prize.type === 'gift_card_coffee') {
+        const rand6 = Math.random().toString(36).substring(2, 8).toUpperCase();
+        couponCode = `COFFEE-${rand6}`;
+        couponDescription = `$5 coffee gift credit — spin wheel prize. Expires ${expiresAt.toLocaleDateString()}`;
+        await pool.query(
+          `INSERT INTO promo_codes (id, code, description, discount_percent, discount_percent_jewelry, reward_tokens, referral_reward_tokens, max_uses, is_active, expires_at)
+           VALUES (gen_random_uuid(), $1, $2, '0.00', '0.00', '0.00', '0.00', 1, true, $3)`,
+          [couponCode, couponDescription, expiresAt]
+        );
+      }
+
+      // ── Mystery prize: award random token bonus ────────────────────────────
+      let mysteryTokens = 0;
+      if (prize.type === 'mystery') {
+        const MYSTERY_PRIZES = [
+          { tokens: 500, weight: 40 }, { tokens: 1000, weight: 25 }, { tokens: 2500, weight: 15 },
+          { tokens: 5000, weight: 10 }, { tokens: 250, weight: 10 },
+        ];
+        const total = MYSTERY_PRIZES.reduce((s, p) => s + p.weight, 0);
+        let mRand = Math.random() * total;
+        let pick = MYSTERY_PRIZES[0];
+        for (const p of MYSTERY_PRIZES) { mRand -= p.weight; if (mRand <= 0) { pick = p; break; } }
+        mysteryTokens = pick.tokens;
+      }
+
+      // ── Credit all tokens ──────────────────────────────────────────────────
+      const totalTokensToCredit = (prize.tokens || 0) + mysteryTokens + jackpotBonusTokens;
+      if (totalTokensToCredit > 0) {
+        await storage.creditWalletTokens(userId, totalTokensToCredit);
+      }
+
+      // ── Mark redemption completed if provided ──────────────────────────────
       if (redemptionId) {
         await db.update(rewardRedemptions)
-          .set({ status: "completed", fulfilledAt: new Date(), adminNotes: `Spin wheel: won ${prize.tokens} JCMOVES` })
+          .set({ status: "completed", fulfilledAt: new Date(), adminNotes: `Spin wheel: won ${prize.label}` })
           .where(and(eq(rewardRedemptions.id, parseInt(redemptionId)), eq(rewardRedemptions.userId, userId)));
       }
 
-      // Log as a reward record
-      await db.insert(rewards).values({
-        userId,
-        rewardType: "spin_wheel_win",
-        tokenAmount: prize.tokens.toString(),
-        cashValue: (prize.tokens * 0.00000508432).toFixed(4),
-        status: "confirmed",
-        metadata: { prizeIndex, label: prize.label, redemptionId: redemptionId || null },
-      });
+      // ── Log spin result ────────────────────────────────────────────────────
+      await pool.query(
+        `INSERT INTO spin_results (user_id, redemption_id, prize_index, prize_label, prize_tokens, prize_type, jackpot_type_won, jackpot_amount_won, coupon_code, fulfillment_status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'fulfilled')`,
+        [userId, redemptionId || null, prizeIndex, prize.label, totalTokensToCredit, prize.type, jackpotTypeWon, jackpotAmountWon, couponCode]
+      );
 
-      console.log(`🎰 Spin wheel: user ${userId} won ${prize.tokens} JCMOVES (prize #${prizeIndex})`);
-      res.json({ prizeIndex, tokens: prize.tokens, label: prize.label });
+      // ── Log as reward record ───────────────────────────────────────────────
+      if (totalTokensToCredit > 0) {
+        await db.insert(rewards).values({
+          userId,
+          rewardType: jackpotTypeWon ? `${jackpotTypeWon}_jackpot_win` : "spin_wheel_win",
+          tokenAmount: totalTokensToCredit.toString(),
+          cashValue: (totalTokensToCredit * 0.00000508432).toFixed(4),
+          status: "confirmed",
+          metadata: { prizeIndex, label: prize.label, prizeType: prize.type, jackpotTypeWon, jackpotAmountWon, couponCode },
+        });
+      }
+
+      console.log(`🎰 Spin: user ${userId} → ${prize.label} (${prize.type})${jackpotTypeWon ? ` + ${jackpotTypeWon} JACKPOT ${jackpotAmountWon}` : ''}`);
+
+      res.json({
+        prizeIndex,
+        tokens: totalTokensToCredit,
+        label: prize.label,
+        prizeType: prize.type,
+        jackpotTypeWon,
+        jackpotAmountWon,
+        couponCode,
+        couponExpiry: couponCode ? expiresAt.toISOString() : null,
+        mysteryTokens: mysteryTokens || null,
+      });
     } catch (e: any) {
       console.error("Spin wheel error:", e);
       res.status(500).json({ error: e.message || "Spin failed" });
+    }
+  });
+
+  // ── Admin spin config endpoints ─────────────────────────────────────────────
+  app.get("/api/admin/spin-config", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!['admin', 'business_owner'].includes((req.session as any).userRole)) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      const { rows: cfg } = await pool.query(`SELECT * FROM spin_config ORDER BY setting_key`);
+      const { rows: jps } = await pool.query(`SELECT * FROM jackpots ORDER BY type`);
+      res.json({ config: cfg, jackpots: jps });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/admin/spin-config/:key", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!['admin', 'business_owner'].includes((req.session as any).userRole)) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      const { key } = req.params;
+      const { value } = req.body;
+      await pool.query(
+        `UPDATE spin_config SET setting_value=$1, updated_at=NOW() WHERE setting_key=$2`,
+        [String(value), key]
+      );
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/admin/jackpots/:type/reset", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!['admin', 'business_owner'].includes((req.session as any).userRole)) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      const { type } = req.params;
+      const { rows } = await pool.query(
+        `UPDATE jackpots SET current_value=starting_value, updated_at=NOW() WHERE type=$1 RETURNING *`,
+        [type]
+      );
+      res.json(rows[0]);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
     }
   });
 
