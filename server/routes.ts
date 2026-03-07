@@ -12702,6 +12702,38 @@ Thank you for your business!
     }
   });
 
+  // ── Spin Streak Bonus ────────────────────────────────────────────────────────
+  app.post("/api/reward-shop/streak-bonus", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { milestone } = req.body;
+      if (![10, 30, 50].includes(Number(milestone))) {
+        return res.status(400).json({ error: "Invalid milestone" });
+      }
+      const m = Number(milestone);
+      let bonusTokens = 0;
+      let mysteryType = false;
+      if (m === 10) bonusTokens = 100;
+      else if (m === 30) bonusTokens = 500;
+      else if (m === 50) {
+        // Mystery box: random 200–1500
+        bonusTokens = Math.floor(Math.random() * 1301) + 200;
+        mysteryType = true;
+      }
+      await storage.creditWalletTokens(userId, bonusTokens);
+      // Log to activity feed
+      const { rows: userRows } = await pool.query(`SELECT display_name FROM users WHERE id = $1`, [userId]);
+      const displayName = userRows[0]?.display_name || "Someone";
+      await pool.query(
+        `INSERT INTO activity_feed_events (user_id, event_type, message, metadata) VALUES ($1, 'streak_bonus', $2, $3)`,
+        [userId, `🔥 ${displayName} hit a ${m}-spin streak and earned ${bonusTokens.toLocaleString()} JCMOVES!`, JSON.stringify({ milestone: m, bonus: bonusTokens })]
+      );
+      res.json({ milestone: m, bonusTokens, mysteryType });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // ── Activity feed (public) ──────────────────────────────────────────────────
   app.get("/api/reward-shop/activity-feed", async (_req, res) => {
     try {

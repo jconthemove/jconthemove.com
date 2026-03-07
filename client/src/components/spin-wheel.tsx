@@ -99,7 +99,13 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
   const [particles, setParticles] = useState<ReturnType<typeof makeParticles>>([]);
   const [copied, setCopied] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [sessionSpinCount, setSessionSpinCount] = useState(0);
+  const [claimedMilestones, setClaimedMilestones] = useState<Set<number>>(new Set());
+  const [isAutoSpin, setIsAutoSpin] = useState(false);
+  const [holdProgress, setHoldProgress] = useState(0);
   const timerRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const holdTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const autoSpinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { toast } = useToast();
 
   const { data: jackpots = [] } = useQuery<JackpotRow[]>({
@@ -141,12 +147,33 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
     timerRef.current = [];
   }, []);
 
+  const streakBonusMutation = useMutation({
+    mutationFn: async (milestone: number) => {
+      const res = await apiRequest("POST", "/api/reward-shop/streak-bonus", { milestone });
+      return res.json() as Promise<{ milestone: number; bonusTokens: number; mysteryType: boolean }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/rewards/wallet"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reward-shop/activity-feed"] });
+      const m = data.milestone;
+      if (m === 10) toast({ title: "🔥 10-Spin Streak!", description: `+100 JCMOVES bonus credited to your wallet!` });
+      else if (m === 30) toast({ title: "🔥🔥 30-Spin Streak!", description: `+500 JCMOVES streak bonus! You're on fire!` });
+      else if (m === 50) toast({ title: "🎁 50-Spin Mystery Bonus!", description: `Mystery box revealed! +${data.bonusTokens.toLocaleString()} JCMOVES!` });
+    },
+  });
+
   useEffect(() => {
     if (!open) {
       clearTimers();
+      if (autoSpinTimerRef.current) clearTimeout(autoSpinTimerRef.current);
+      if (holdTimerRef.current) clearInterval(holdTimerRef.current);
       setAnimState("idle");
       setResult(null);
       setParticles([]);
+      setSessionSpinCount(0);
+      setClaimedMilestones(new Set());
+      setIsAutoSpin(false);
+      setHoldProgress(0);
     }
   }, [open, clearTimers]);
 
@@ -167,6 +194,23 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
         queryClient.invalidateQueries({ queryKey: ["/api/reward-shop/jackpots"] });
         queryClient.invalidateQueries({ queryKey: ["/api/reward-shop/activity-feed"] });
         queryClient.invalidateQueries({ queryKey: ["/api/reward-shop/free-spins"] });
+        // Streak tracking
+        setSessionSpinCount(prev => {
+          const newCount = prev + 1;
+          setClaimedMilestones(claimed => {
+            const MILESTONES = [10, 30, 50];
+            for (const m of MILESTONES) {
+              if (newCount >= m && !claimed.has(m)) {
+                streakBonusMutation.mutate(m);
+                const updated = new Set(claimed);
+                updated.add(m);
+                return updated;
+              }
+            }
+            return claimed;
+          });
+          return newCount;
+        });
       }, 1500);
       timerRef.current.push(t2, t3);
     },
@@ -178,17 +222,65 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
     },
   });
 
-  function handleSpin() {
-    if (animState !== "idle") return;
+  // Auto-spin effect: fires next spin 700ms after a result lands
+  useEffect(() => {
+    if (animState === "result" && isAutoSpin && canAffordSpin) {
+      autoSpinTimerRef.current = setTimeout(() => {
+        if (isAutoSpin) handleSpinCore();
+      }, 700);
+    }
+    return () => {
+      if (autoSpinTimerRef.current) clearTimeout(autoSpinTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [animState, isAutoSpin]);
+
+  function handleSpinCore() {
+    if (animState !== "idle" && animState !== "result") return;
     const freeSpin = freeSpins[0];
-    // Start animation immediately
+    setResult(null);
     setParticles(makeParticles(24));
     setAnimState("animating");
-    // Call server (result determined server-side)
     spinMutation.mutate({
       redemptionId,
       useFreeSpinEntitlementId: freeSpin?.id,
     });
+  }
+
+  function handleSpin() {
+    if (animState !== "idle") return;
+    handleSpinCore();
+  }
+
+  function startHold() {
+    let elapsed = 0;
+    setHoldProgress(0);
+    holdTimerRef.current = setInterval(() => {
+      elapsed += 100;
+      const pct = Math.min(100, (elapsed / 5000) * 100);
+      setHoldProgress(pct);
+      if (elapsed >= 5000) {
+        clearInterval(holdTimerRef.current!);
+        holdTimerRef.current = null;
+        setHoldProgress(0);
+        setIsAutoSpin(prev => {
+          const next = !prev;
+          toast({
+            title: next ? "⚡ Auto-Spin ON" : "⏸ Auto-Spin OFF",
+            description: next ? "Spins will fire automatically. Hold again to stop." : "Auto-spin stopped.",
+          });
+          return next;
+        });
+      }
+    }, 100);
+  }
+
+  function cancelHold() {
+    if (holdTimerRef.current) {
+      clearInterval(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    setHoldProgress(0);
   }
 
   function handleCopy(code: string) {
@@ -204,14 +296,7 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
   }
 
   function handleSpinAgain() {
-    const freeSpin = freeSpins[0];
-    setResult(null);
-    setParticles(makeParticles(24));
-    setAnimState("animating");
-    spinMutation.mutate({
-      redemptionId,
-      useFreeSpinEntitlementId: freeSpin?.id,
-    });
+    handleSpinCore();
   }
 
   // Compute display values for result card
@@ -301,6 +386,33 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
               </div>
             </div>
           </div>
+
+          {/* Streak counter row */}
+          {sessionSpinCount > 0 && (
+            <div className="mt-2 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Flame className="h-3.5 w-3.5 text-orange-400" />
+                <span className="text-xs font-bold text-orange-300">
+                  {sessionSpinCount} spin{sessionSpinCount !== 1 ? "s" : ""} this session
+                </span>
+                <div className="flex gap-1">
+                  {[10, 30, 50].map(m => (
+                    <span
+                      key={m}
+                      className={`text-[10px] font-black px-1.5 py-0.5 rounded ${claimedMilestones.has(m) ? "bg-green-500/20 text-green-400" : sessionSpinCount >= m * 0.7 ? "bg-orange-500/20 text-orange-400" : "bg-gray-800/60 text-gray-500"}`}
+                    >
+                      {claimedMilestones.has(m) ? "✓" : ""}{m}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              {isAutoSpin && (
+                <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 text-[10px] py-0 px-2 animate-pulse">
+                  ⚡ AUTO
+                </Badge>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ── Main spin area ── */}
@@ -423,20 +535,40 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
                   🎁 You have a free spin!
                 </Badge>
               )}
-              <Button
-                className="w-full h-14 text-base font-black bg-gradient-to-r from-orange-500 via-yellow-500 to-orange-500 hover:from-orange-600 hover:to-orange-600 text-black tracking-wide disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ boxShadow: "0 0 20px rgba(249,115,22,0.4)" }}
-                onClick={handleSpin}
-                disabled={!canAffordSpin}
-              >
-                <Zap className="h-5 w-5 mr-2" />
-                {hasFreeSpinEntry ? "Spin — Free Entry!" : "Spin for 100 JCMOVES"}
-              </Button>
-              {!redemptionId && !hasFreeSpinEntry && (
-                <p className="text-center text-xs text-muted-foreground">
-                  100 JCMOVES deducted · jackpots grow every spin
-                </p>
+              {isAutoSpin && (
+                <Badge className="w-full justify-center bg-orange-500/20 text-orange-400 border-orange-500/30 py-1 animate-pulse">
+                  ⚡ Auto-Spin Active — Hold 5s to stop
+                </Badge>
               )}
+              {/* Spin button with press-and-hold for auto-spin */}
+              <div className="relative">
+                <Button
+                  className={`w-full h-14 text-base font-black tracking-wide disabled:opacity-50 disabled:cursor-not-allowed select-none ${
+                    isAutoSpin
+                      ? "bg-gradient-to-r from-orange-600 via-red-500 to-orange-600 hover:from-orange-700 hover:to-orange-700 text-white"
+                      : "bg-gradient-to-r from-orange-500 via-yellow-500 to-orange-500 hover:from-orange-600 hover:to-orange-600 text-black"
+                  }`}
+                  style={{ boxShadow: isAutoSpin ? "0 0 24px rgba(249,115,22,0.7)" : "0 0 20px rgba(249,115,22,0.4)" }}
+                  onClick={handleSpin}
+                  onPointerDown={canAffordSpin ? startHold : undefined}
+                  onPointerUp={cancelHold}
+                  onPointerLeave={cancelHold}
+                  disabled={!canAffordSpin}
+                >
+                  <Zap className="h-5 w-5 mr-2" />
+                  {hasFreeSpinEntry ? "Spin — Free Entry!" : isAutoSpin ? "Auto-Spinning..." : "Spin for 100 JCMOVES"}
+                </Button>
+                {/* Hold progress bar */}
+                {holdProgress > 0 && (
+                  <div className="absolute bottom-0 left-0 h-1 rounded-b-lg bg-white/30 transition-all duration-100" style={{ width: `${holdProgress}%` }} />
+                )}
+              </div>
+              <p className="text-center text-[10px] text-muted-foreground/50">
+                {isAutoSpin
+                  ? "Hold 5s to stop auto-spin · Streak bonuses active"
+                  : "Tap to spin · Hold 5s to enable auto-spin"
+                }
+              </p>
             </div>
           )}
 
@@ -605,10 +737,10 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
         </div>
 
         {/* Spin cost info */}
-        {animState === "idle" && (
+        {animState === "idle" && !isAutoSpin && (
           <div className="px-5 pb-4 text-center">
             <p className="text-[10px] text-muted-foreground/50">
-              Fast 1.5 second instant reveal · All results server-determined
+              Fast 1.5s instant reveal · 🔥 Streak bonuses at 10, 30, and 50 spins
             </p>
           </div>
         )}
