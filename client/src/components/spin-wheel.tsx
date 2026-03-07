@@ -124,12 +124,12 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
     enabled: open,
   });
 
-  const { data: walletData } = useQuery<{ balance: string }>({
+  const { data: walletData } = useQuery<{ tokenBalance: string }>({
     queryKey: ["/api/rewards/wallet"],
     refetchInterval: open ? 10000 : false,
     enabled: open,
   });
-  const walletBalance = parseFloat(walletData?.balance || "0");
+  const walletBalance = parseFloat(walletData?.tokenBalance || "0");
   const spinCost = 100;
   const canAffordSpin = walletBalance >= spinCost || freeSpins.length > 0;
 
