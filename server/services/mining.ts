@@ -3,6 +3,7 @@ import { miningSessions, miningClaims, walletAccounts, reserveTransactions, trea
 import { eq, and, sql } from "drizzle-orm";
 import { treasuryService } from "./treasury";
 import { creditGenerosityFund } from "./generosityFund";
+import { getEasternDateStr } from "../utils/dateUtils";
 
 // Mining configuration - 1728 JCMOVES per 24 hours (0.02 per second)
 const MINING_CONFIG = {
@@ -170,14 +171,14 @@ export class MiningService {
     streakCount: number;
     streakBonus: number;
   }> {
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const today = getEasternDateStr(); // YYYY-MM-DD in Eastern time
     const lastClaimDate = session.lastClaimDate;
     
     let streakCount = session.streakCount || 0;
     
     if (lastClaimDate) {
-      // Calculate yesterday's date
-      const yesterday = new Date();
+      // Calculate yesterday's date in Eastern time
+      const yesterday = new Date(Date.now() - 5 * 60 * 60 * 1000);
       yesterday.setDate(yesterday.getDate() - 1);
       const yesterdayStr = yesterday.toISOString().split('T')[0];
       
@@ -247,7 +248,7 @@ export class MiningService {
 
         // Check daily claim limit (max 3 claims per day)
         const MAX_DAILY_CLAIMS = 3;
-        const todayDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+        const todayDate = getEasternDateStr(); // YYYY-MM-DD in Eastern time
         
         // Reset daily count if it's a new day
         let currentDailyCount = session.dailyClaimCount || 0;
@@ -502,7 +503,7 @@ export class MiningService {
   }> {
     const MAX_DAILY_CLAIMS = 3;
     const session = await this.getActiveSession(userId);
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getEasternDateStr(); // Eastern time so evening tasks don't bleed into next morning
     
     if (!session) {
       return {

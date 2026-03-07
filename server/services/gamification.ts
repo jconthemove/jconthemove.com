@@ -1,5 +1,6 @@
 import { storage } from "../storage";
 import { treasuryService } from "./treasury";
+import { getEasternDateStr, getEasternDayStart } from "../utils/dateUtils";
 import type { 
   EmployeeStats, 
   InsertEmployeeStats, 
@@ -65,11 +66,9 @@ export class GamificationService {
    */
   async performDailyCheckIn(userId: string): Promise<DailyCheckInResult> {
     try {
-      // Check if user already checked in today (calendar day — resets at midnight UTC)
-      const now = new Date();
-      const todayMidnightUTC = new Date(now.toISOString().split('T')[0] + 'T00:00:00.000Z');
-      
-      const recentCheckIn = await storage.getRecentCheckIn(userId, todayMidnightUTC);
+      // Check if user already checked in today (calendar day in Eastern time)
+      const todayEasternStart = getEasternDayStart();
+      const recentCheckIn = await storage.getRecentCheckIn(userId, todayEasternStart);
       
       if (recentCheckIn) {
         return {
@@ -271,15 +270,14 @@ export class GamificationService {
     // Get weekly rank
     const weeklyRank = await this.getWeeklyRank(userId);
     
-    // Check if can check in (once per calendar day — resets at midnight UTC)
-    const now = new Date();
-    const todayMidnightUTC = new Date(now.toISOString().split('T')[0] + 'T00:00:00.000Z');
-    const recentCheckIn = await storage.getRecentCheckIn(userId, todayMidnightUTC);
+    // Check if can check in (once per calendar day in Eastern time)
+    const todayEasternStart = getEasternDayStart();
+    const recentCheckIn = await storage.getRecentCheckIn(userId, todayEasternStart);
     const canCheckIn = !recentCheckIn;
 
-    // Next check-in is tomorrow midnight UTC
+    // Next check-in is tomorrow midnight Eastern
     const nextCheckInAt = recentCheckIn
-      ? new Date(todayMidnightUTC.getTime() + 24 * 60 * 60 * 1000)
+      ? new Date(todayEasternStart.getTime() + 24 * 60 * 60 * 1000)
       : null;
     
     // Get last check-in date  

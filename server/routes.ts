@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import crypto from "crypto";
+import { getEasternDateStr, getEasternDayStart, getEasternDayEnd } from "./utils/dateUtils";
 import { storage } from "./storage";
 import { insertLeadSchema, insertContactSchema, insertCashoutRequestSchema, insertShopItemSchema, insertReviewSchema } from "@shared/schema";
 import { sendEmail, generateLeadNotificationEmail, generateContactNotificationEmail } from "./services/email";
@@ -8930,10 +8931,9 @@ Thank you for your business!
           fitness: { pushups: 0, situps: 0 }
         });
       }
-      // Check if this user added a lead today
-      const today = new Date().toISOString().split('T')[0];
-      const todayStart = new Date(today + 'T00:00:00.000Z');
-      const todayEnd = new Date(today + 'T23:59:59.999Z');
+      // Check if this user added a lead today (Eastern time)
+      const todayStart = getEasternDayStart();
+      const todayEnd = getEasternDayEnd();
       const leadTodayRows = await db.select({ id: rewards.id })
         .from(rewards)
         .where(and(
@@ -8968,9 +8968,9 @@ Thank you for your business!
   app.post("/api/gamification/daily-tasks-bonus", isAuthenticated, async (req: any, res) => {
     try {
       const userId = (req.session as any).userId;
-      const today = new Date().toISOString().split('T')[0];
-      const todayStart = new Date(today + 'T00:00:00.000Z');
-      const todayEnd = new Date(today + 'T23:59:59.999Z');
+      const today = getEasternDateStr();
+      const todayStart = getEasternDayStart();
+      const todayEnd = getEasternDayEnd();
 
       // Check already claimed today
       const alreadyClaimed = await db.select({ id: rewards.id })
@@ -9036,10 +9036,10 @@ Thank you for your business!
         }).returning();
       }
 
-      const today = new Date().toISOString().split('T')[0];
+      const today = getEasternDateStr();
       const updateData: any = { fitnessLastUpdated: today };
 
-      // If it's a new day, reset counts; otherwise accumulate
+      // If it's a new day (Eastern time), reset counts; otherwise accumulate
       if (session.fitnessLastUpdated !== today) {
         updateData.pushupsCount = type === 'pushups' ? count : 0;
         updateData.situpsCount = type === 'situps' ? count : 0;
@@ -9088,12 +9088,12 @@ Thank you for your business!
   app.post("/api/mining/scripture-claim", isAuthenticated, async (req: any, res) => {
     try {
       const userId = (req.session as any).userId;
-      const today = new Date().toISOString().split('T')[0];
+      const today = getEasternDateStr(); // Eastern time — prevents evening claims bleeding into next morning
 
       // Check rewards table — no active session required
       const { rewards: rewardsTable } = await import("@shared/schema");
-      const todayStart = new Date(today + 'T00:00:00.000Z');
-      const todayEnd = new Date(today + 'T23:59:59.999Z');
+      const todayStart = getEasternDayStart();
+      const todayEnd = getEasternDayEnd();
       const alreadyClaimed = await db.select({ id: rewardsTable.id })
         .from(rewardsTable)
         .where(
@@ -9110,12 +9110,9 @@ Thank you for your business!
         return res.status(400).json({ error: "Already claimed today's scripture reward" });
       }
 
-      // Calculate streak from rewards table
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split('T')[0];
-      const ydayStart = new Date(yesterdayStr + 'T00:00:00.000Z');
-      const ydayEnd = new Date(yesterdayStr + 'T23:59:59.999Z');
+      // Calculate streak from rewards table (Eastern time — yesterday Eastern)
+      const ydayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
+      const ydayEnd = new Date(todayStart.getTime() - 1);
 
       const yesterdayClaim = await db.select({ metadata: rewardsTable.metadata })
         .from(rewardsTable)
