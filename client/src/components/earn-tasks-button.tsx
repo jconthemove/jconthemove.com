@@ -29,11 +29,21 @@ interface GamificationStats {
 
 function isToday(dateStr: string | null | undefined): boolean {
   if (!dateStr) return false;
-  const d = new Date(dateStr);
+  // Build today's local date string (YYYY-MM-DD) using local time — avoids UTC midnight timezone shift
   const now = new Date();
-  return d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate();
+  const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  // Normalize the stored value to a date string in local time
+  let storedDate: string;
+  if (dateStr.includes('T') || dateStr.includes('Z')) {
+    // Full timestamp — convert to local date
+    const d = new Date(dateStr);
+    storedDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  } else {
+    // Date-only string (e.g. "2026-03-07") — parse at local noon to avoid UTC midnight off-by-one
+    const d = new Date(dateStr + 'T12:00:00');
+    storedDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+  return storedDate === localToday;
 }
 
 export function EarnTasksButton() {
@@ -170,7 +180,7 @@ export function EarnTasksButton() {
       id: "checkin",
       label: "Daily Check-In",
       description: checkinDone
-        ? `Next: ${gamificationData?.data.nextCheckInAt ? new Date(gamificationData.data.nextCheckInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "tomorrow"}`
+        ? "Done for today! Resets tomorrow morning ✓"
         : "Check in to earn bonus tokens",
       reward: "+100",
       done: checkinDone,

@@ -61,20 +61,17 @@ export interface EmployeeGamificationData {
 
 export class GamificationService {
   /**
-   * Perform check-in for an employee (claimable 4 times per day - every 6 hours)
+   * Perform daily check-in (once per calendar day — resets at midnight UTC)
    */
   async performDailyCheckIn(userId: string): Promise<DailyCheckInResult> {
     try {
-      // Check if user already checked in within the last 6 hours
+      // Check if user already checked in today (calendar day — resets at midnight UTC)
       const now = new Date();
-      const sixHoursAgo = new Date(now.getTime() - (6 * 60 * 60 * 1000));
+      const todayMidnightUTC = new Date(now.toISOString().split('T')[0] + 'T00:00:00.000Z');
       
-      const recentCheckIn = await storage.getRecentCheckIn(userId, sixHoursAgo);
+      const recentCheckIn = await storage.getRecentCheckIn(userId, todayMidnightUTC);
       
       if (recentCheckIn) {
-        const nextClaimTime = new Date(recentCheckIn.createdAt.getTime() + (6 * 60 * 60 * 1000));
-        const hoursRemaining = Math.ceil((nextClaimTime.getTime() - now.getTime()) / (60 * 60 * 1000));
-        
         return {
           success: false,
           points: 0,
@@ -82,7 +79,7 @@ export class GamificationService {
           streak: recentCheckIn.streakCount || 1,
           isNewRecord: false,
           treasuryBalance: 0,
-          error: `Next check-in available in ${hoursRemaining} hour${hoursRemaining !== 1 ? 's' : ''}`
+          error: `Already checked in today! Come back tomorrow morning.`
         };
       }
 
@@ -274,15 +271,15 @@ export class GamificationService {
     // Get weekly rank
     const weeklyRank = await this.getWeeklyRank(userId);
     
-    // Check if can check in (6-hour intervals)
+    // Check if can check in (once per calendar day — resets at midnight UTC)
     const now = new Date();
-    const sixHoursAgo = new Date(now.getTime() - (6 * 60 * 60 * 1000));
-    const recentCheckIn = await storage.getRecentCheckIn(userId, sixHoursAgo);
+    const todayMidnightUTC = new Date(now.toISOString().split('T')[0] + 'T00:00:00.000Z');
+    const recentCheckIn = await storage.getRecentCheckIn(userId, todayMidnightUTC);
     const canCheckIn = !recentCheckIn;
-    
-    // Calculate next check-in time
-    const nextCheckInAt = recentCheckIn 
-      ? new Date(recentCheckIn.createdAt.getTime() + (6 * 60 * 60 * 1000))
+
+    // Next check-in is tomorrow midnight UTC
+    const nextCheckInAt = recentCheckIn
+      ? new Date(todayMidnightUTC.getTime() + 24 * 60 * 60 * 1000)
       : null;
     
     // Get last check-in date  
