@@ -13156,6 +13156,137 @@ Thank you for your business!
     }
   });
 
+  // ── Chatbot Quote Submission ──────────────────────────────────────────────
+  app.post("/api/chatbot-quote", async (req: any, res) => {
+    try {
+      const { answers, quote } = req.body;
+      if (!answers || !quote) return res.status(400).json({ error: "Missing answers or quote" });
+
+      const a = answers as Record<string, any>;
+      const name = (a.contactName || "").trim();
+      const phone = (a.contactPhone || "").trim();
+      const email = (a.contactEmail || "").trim();
+      if (!name || !phone || !email) return res.status(400).json({ error: "Contact info required" });
+
+      const [first, ...rest] = name.split(" ");
+      const last = rest.join(" ") || "";
+
+      // Build from/to address strings from zips
+      const fromAddress = a.fromZip ? `ZIP: ${a.fromZip}` : "Not provided";
+      const toAddress = a.toZip ? `ZIP: ${a.toZip}` : undefined;
+
+      // Determine service type label
+      const svcRaw: string = a.serviceType || "Local Move";
+      const serviceType = svcRaw.includes("Junk") ? "junk" : "residential";
+
+      // Store all chatbot Q&A in details as JSON
+      const detailsJson = JSON.stringify({ _source: "chatbot", answers, estimatedQuote: quote }, null, 2);
+
+      // Determine move date hint
+      const moveDateStr = a.moveDate || "";
+      let moveDate: string | null = null;
+      if (moveDateStr.includes("This week")) {
+        const d = new Date(); d.setDate(d.getDate() + 3);
+        moveDate = d.toISOString().split("T")[0];
+      } else if (moveDateStr.includes("Next week")) {
+        const d = new Date(); d.setDate(d.getDate() + 10);
+        moveDate = d.toISOString().split("T")[0];
+      }
+
+      const userId = (req.session as any)?.userId || null;
+
+      const [lead] = await db.insert(leads).values({
+        id: crypto.randomUUID(),
+        firstName: first,
+        lastName: last,
+        email,
+        phone,
+        serviceType,
+        fromAddress,
+        toAddress: toAddress || null,
+        propertySize: a.homeSize || null,
+        details: detailsJson,
+        moveDate: moveDate || null,
+        status: "chatbot_pending" as any,
+        crewSize: quote.crew || 2,
+        basePrice: String(quote.minPrice || 0),
+        totalPrice: String(quote.maxPrice || 0),
+        smsConsent: false,
+        createdByUserId: userId,
+        createdAt: new Date(),
+      }).returning();
+
+      // Notify admin via email if possible
+      try {
+        await sendEmail({
+          to: "upmichiganstatemovers@gmail.com",
+          subject: `🤖 New Chatbot Quote: ${name} — ${a.homeSize || svcRaw}`,
+          html: `<h2>New chatbot quote submitted</h2>
+            <p><strong>Name:</strong> ${name}</p>
+            <p><strong>Phone:</strong> ${phone}</p>
+            <p><strong>Email:</strong> ${email}</p>
+            <p><strong>Service:</strong> ${svcRaw}</p>
+            <p><strong>Home Size:</strong> ${a.homeSize || "N/A"}</p>
+            <p><strong>From ZIP:</strong> ${a.fromZip || "N/A"} → <strong>To ZIP:</strong> ${a.toZip || "N/A"}</p>
+            <p><strong>Move Date:</strong> ${moveDateStr}</p>
+            <p><strong>Estimated Range:</strong> $${quote.minPrice}–$${quote.maxPrice}</p>
+            <p><strong>Crew:</strong> ${quote.crew} movers, ${quote.minHrs}–${quote.maxHrs} hrs</p>
+            <p><a href="https://jconthemove.replit.app/admin/quote-review">Review at Admin Dashboard →</a></p>`,
+        });
+      } catch (_) {}
+
+      res.json({ leadId: lead.id, message: "Quote submitted for review" });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Admin: Chatbot Quote Review ────────────────────────────────────────────
+  app.get("/api/admin/chatbot-quotes", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser((req.session as any).userId);
+      if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
+      const rows = await db.select().from(leads)
+        .where(eq(leads.status, "chatbot_pending" as any))
+        .orderBy(desc(leads.createdAt))
+        .limit(100);
+      res.json(rows);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/admin/chatbot-quotes/:id/approve", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser((req.session as any).userId);
+      if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
+      const { basePrice, totalPrice, quoteNotes } = req.body;
+      await db.update(leads)
+        .set({
+          status: "quote_requested" as any,
+          basePrice: String(basePrice || ""),
+          totalPrice: String(totalPrice || ""),
+          quoteNotes: quoteNotes || null,
+          lastQuoteUpdatedAt: new Date(),
+        })
+        .where(eq(leads.id, req.params.id));
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/admin/chatbot-quotes/:id/dismiss", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser((req.session as any).userId);
+      if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
+      await db.update(leads).set({ status: "dismissed" as any }).where(eq(leads.id, req.params.id));
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

@@ -69,6 +69,7 @@ import CartPage from "@/pages/cart";
 import BitcoinPaymentPage from "@/pages/bitcoin-payment";
 import AdminBtcPaymentsPage from "@/pages/admin-btc-payments";
 import StakingPage from "@/pages/staking";
+import AdminQuoteReviewPage from "@/pages/admin-quote-review";
 import { CartProvider } from "@/hooks/useCart";
 import { NotificationPrompt } from "@/components/notification-prompt";
 
@@ -384,6 +385,11 @@ function Router() {
       <Route path="/bitcoin-payment" component={BitcoinPaymentPage} />
       <Route path="/admin/btc-payments" component={AdminBtcPaymentsPage} />
       <Route path="/staking" component={StakingPage} />
+      <Route path="/admin/quote-review">
+        <RouteGuard allowedRoles={['admin', 'business_owner']}>
+          <AdminQuoteReviewPage />
+        </RouteGuard>
+      </Route>
       
       {/* Authenticated vs unauthenticated routing */}
       <Route>

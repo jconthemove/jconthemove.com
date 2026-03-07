@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import {
   Users, Briefcase, Gem, Tag, Wallet, Star,
   Snowflake, Handshake, TrendingUp, Activity,
-  Coins, ChevronRight, Shield, FileText, Gift, Bitcoin
+  Coins, ChevronRight, Shield, FileText, Gift, Bitcoin, MessageSquare
 } from "lucide-react";
 
 export default function InGodWeTrustPage() {
@@ -142,6 +142,16 @@ export default function InGodWeTrustPage() {
       description: "Verify BTC job payments and send deposit confirmations",
       badge: pendingBtcCount > 0 ? `${pendingBtcCount} pending` : null,
       badgeColor: "bg-orange-500",
+    },
+    {
+      href: "/admin/quote-review",
+      icon: MessageSquare,
+      label: "Chatbot Quote Review",
+      description: "Review and approve quotes submitted by customers via the booking chatbot",
+      badge: null,
+      badgeColor: "bg-teal-500",
+      color: "from-teal-600 to-blue-600",
+      shadow: "shadow-teal-900/30",
     },
   ];
 
