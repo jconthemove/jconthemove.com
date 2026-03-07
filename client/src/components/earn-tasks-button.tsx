@@ -168,13 +168,9 @@ export function EarnTasksButton() {
           : "Start your daily mining session",
       reward: "+864",
       done: miningDone,
-      action: () => {
-        if (canClaim) { claimMutation.mutate(); }
-        else if (!miningStatus?.currentSession) { miningMutation.mutate(); }
-        else { setOpen(false); setLocation("/mining"); }
-      },
+      action: () => { setOpen(false); setLocation("/mining"); },
       actionLabel: canClaim ? "Claim Now" : miningStatus?.currentSession ? "View" : "Start",
-      isPending: miningMutation.isPending || claimMutation.isPending,
+      isPending: false,
     },
     {
       id: "checkin",
@@ -196,9 +192,9 @@ export function EarnTasksButton() {
         : scriptureStreak > 0 ? `🔥 ${scriptureStreak} day streak — claim to continue!` : "Read & claim daily scripture",
       reward: "+100",
       done: scriptureDone,
-      action: () => scriptureMutation.mutate(),
-      actionLabel: "Claim Now",
-      isPending: scriptureMutation.isPending,
+      action: () => { setOpen(false); setLocation("/mining"); },
+      actionLabel: scriptureDone ? "View" : "Read & Claim",
+      isPending: false,
       badge: scriptureStreak >= 6 ? "🔥 Almost!" : undefined,
     }] : []),
     {
