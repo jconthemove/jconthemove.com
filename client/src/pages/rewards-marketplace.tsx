@@ -17,7 +17,6 @@ import {
 } from "lucide-react";
 import { LOYALTY_TIERS, calculateJCMovesReward, getNextTier, formatTokens as fmtTokens, type LoyaltyTierKey } from "@/lib/loyalty";
 import { SpinWheelDialog } from "@/components/spin-wheel";
-import { LaborCalculatorDialog } from "@/components/labor-calculator-dialog";
 
 interface RewardCategory {
   id: number;
@@ -163,7 +162,6 @@ export default function RewardsMarketplacePage() {
   const [spinRedemptionId, setSpinRedemptionId] = useState<number | undefined>(undefined);
   const [directSpinOpen, setDirectSpinOpen] = useState(false);
   const [autoBookingLeadId, setAutoBookingLeadId] = useState<string | null>(null);
-  const [calcOpen, setCalcOpen] = useState(false);
   const [simOpen, setSimOpen] = useState(false);
   const [simAmount, setSimAmount] = useState("");
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
@@ -981,12 +979,6 @@ export default function RewardsMarketplacePage() {
         </DialogContent>
       </Dialog>
 
-      {/* Labor Calculator Dialog */}
-      <LaborCalculatorDialog
-        open={calcOpen}
-        onClose={() => setCalcOpen(false)}
-        walletBalance={walletBalance}
-      />
 
       {/* Spin Wheel — auto-launches after a Spin Wheel Entry redemption */}
       <SpinWheelDialog
