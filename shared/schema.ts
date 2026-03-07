@@ -1783,6 +1783,40 @@ export const spinConfig = pgTable("spin_config", {
 });
 export type SpinConfigRow = typeof spinConfig.$inferSelect;
 
+// ── Jackpot Wins ─────────────────────────────────────────────────────────────
+export const jackpotWins = pgTable("jackpot_wins", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  jackpotType: text("jackpot_type").notNull(), // 'mini' | 'major'
+  amount: integer("amount").notNull(),
+  spinResultId: integer("spin_result_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type JackpotWin = typeof jackpotWins.$inferSelect;
+
+// ── Activity Feed Events ──────────────────────────────────────────────────────
+export const activityFeedEvents = pgTable("activity_feed_events", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id"),
+  eventType: text("event_type").notNull(), // spin_win | jackpot_win | mystery_box | coupon_won | coffee_won | redemption
+  message: text("message").notNull(),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type ActivityFeedEvent = typeof activityFeedEvents.$inferSelect;
+
+// ── Mystery Box Results ───────────────────────────────────────────────────────
+export const mysteryBoxResults = pgTable("mystery_box_results", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  parentSpinResultId: integer("parent_spin_result_id"),
+  rewardType: text("reward_type").notNull(), // tokens | gift_card_coffee | coupon_10pct | free_spin
+  rewardValue: text("reward_value"),
+  couponCode: text("coupon_code"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type MysteryBoxResult = typeof mysteryBoxResults.$inferSelect;
+
 // ── Gift Card Inventory ──────────────────────────────────────────────────────
 export const giftCardInventory = pgTable("gift_card_inventory", {
   id: serial("id").primaryKey(),

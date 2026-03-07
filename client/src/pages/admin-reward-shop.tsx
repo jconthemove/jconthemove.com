@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import {
   Package, Plus, Edit2, Eye, EyeOff, CheckCircle2, Clock, XCircle,
   Coins, Star, Gift, Trash2, ChevronDown, ChevronUp, BarChart3, AlertTriangle,
-  Zap, RefreshCw, Users, TrendingUp, Flame, Crown, RotateCcw, Settings2
+  Zap, RefreshCw, Users, TrendingUp, Flame, Crown, RotateCcw, Settings2, Trophy
 } from "lucide-react";
 
 interface RewardCategory { id: number; name: string; icon: string; color: string; sortOrder: number; isActive: boolean; }
@@ -555,16 +555,17 @@ export default function AdminRewardShopPage() {
               </div>
             </div>
 
-            {/* Prize table reference */}
+            {/* Quantum Spin Prize Table */}
             <div>
-              <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
-                <Star className="h-4 w-4 text-yellow-400" /> Prize Table (Reference)
+              <h3 className="text-sm font-bold mb-1 flex items-center gap-2">
+                <Zap className="h-4 w-4 text-orange-400" /> Quantum Spin Prize Table
               </h3>
+              <p className="text-xs text-muted-foreground mb-3">12-prize table · total probability = 100%</p>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border text-xs text-muted-foreground">
-                      <th className="text-left py-2 pr-4 font-medium">#</th>
+                      <th className="text-left py-2 pr-4 font-medium">Idx</th>
                       <th className="text-left py-2 pr-4 font-medium">Prize</th>
                       <th className="text-left py-2 pr-4 font-medium">Type</th>
                       <th className="text-right py-2 font-medium">Probability</th>
@@ -572,30 +573,95 @@ export default function AdminRewardShopPage() {
                   </thead>
                   <tbody className="divide-y divide-border text-xs">
                     {[
-                      { label: "250 JCMOVES", type: "tokens", prob: "30%" },
-                      { label: "500 JCMOVES", type: "tokens", prob: "20%" },
-                      { label: "750 JCMOVES", type: "tokens", prob: "13%" },
-                      { label: "1,000 JCMOVES", type: "tokens", prob: "8%" },
-                      { label: "100 JCMOVES", type: "tokens", prob: "10%" },
-                      { label: "50 JCMOVES", type: "tokens", prob: "5%" },
-                      { label: "Nada", type: "tokens (0)", prob: "5%" },
-                      { label: "🎁 Mystery Box", type: "mystery", prob: "1%" },
-                      { label: "25% Off Coupon", type: "coupon_25pct", prob: "1%" },
-                      { label: "☕ $5 Coffee", type: "gift_card_coffee", prob: "2%" },
-                      { label: "10% Off Coupon", type: "coupon_10pct", prob: "5%" },
+                      { label: "25 JCMOVES",     type: "tokens",           prob: "20%", note: "" },
+                      { label: "75 JCMOVES",     type: "tokens",           prob: "20%", note: "" },
+                      { label: "100 JCMOVES",    type: "tokens",           prob: "18%", note: "" },
+                      { label: "125 JCMOVES",    type: "tokens",           prob: "15%", note: "" },
+                      { label: "150 JCMOVES",    type: "tokens",           prob: "10%", note: "" },
+                      { label: "250 JCMOVES",    type: "tokens",           prob: "5%",  note: "" },
+                      { label: "500 JCMOVES",    type: "tokens",           prob: "3%",  note: "" },
+                      { label: "2,000 JCMOVES",  type: "tokens",           prob: "1%",  note: "" },
+                      { label: "🎁 Mystery Box", type: "mystery",          prob: "1%",  note: "See mystery pool below" },
+                      { label: "☕ $5 Coffee",   type: "gift_card_coffee", prob: "2%",  note: "Promo code · 90 day expiry" },
+                      { label: "10% Off",        type: "coupon_10pct",     prob: "4%",  note: "Promo code · 90 day expiry" },
+                      { label: "25% Off",        type: "coupon_25pct",     prob: "1%",  note: "Promo code · 30 day expiry" },
                     ].map((p, i) => (
-                      <tr key={i}>
-                        <td className="py-2 pr-4 text-muted-foreground">{i}</td>
-                        <td className="py-2 pr-4 font-medium">{p.label}</td>
-                        <td className="py-2 pr-4 text-muted-foreground">{p.type}</td>
-                        <td className="py-2 text-right font-bold">{p.prob}</td>
+                      <tr key={i} className={p.type === "mystery" ? "bg-purple-950/20" : ""}>
+                        <td className="py-1.5 pr-4 text-muted-foreground">{i}</td>
+                        <td className="py-1.5 pr-4 font-medium">{p.label}</td>
+                        <td className="py-1.5 pr-4 text-muted-foreground">{p.type}</td>
+                        <td className="py-1.5 text-right font-bold">
+                          <span className="flex items-center justify-end gap-2">
+                            {p.prob}
+                            {p.note && <span className="text-[10px] text-muted-foreground/60 font-normal hidden sm:inline">{p.note}</span>}
+                          </span>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <p className="text-xs text-muted-foreground mt-2">Coupon prizes auto-generate promo codes with <strong>365-day expiry</strong>. Mystery box pays a random token bonus (250–5,000 JCMOVES).</p>
             </div>
+
+            {/* Mystery Box Pool */}
+            <div>
+              <h3 className="text-sm font-bold mb-1 flex items-center gap-2">
+                <Gift className="h-4 w-4 text-purple-400" /> Mystery Box Secondary Pool
+              </h3>
+              <p className="text-xs text-muted-foreground mb-3">Resolved server-side when Mystery Box is drawn</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-xs text-muted-foreground">
+                      <th className="text-left py-2 pr-4 font-medium">Reward</th>
+                      <th className="text-left py-2 pr-4 font-medium">Type</th>
+                      <th className="text-right py-2 font-medium">Weight</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border text-xs">
+                    {[
+                      { label: "300 JCMOVES",   type: "tokens",           weight: "35%" },
+                      { label: "500 JCMOVES",   type: "tokens",           weight: "25%" },
+                      { label: "1,000 JCMOVES", type: "tokens",           weight: "15%" },
+                      { label: "2,000 JCMOVES", type: "tokens",           weight: "10%" },
+                      { label: "☕ $5 Coffee",  type: "gift_card_coffee", weight: "5%"  },
+                      { label: "10% Off",       type: "coupon_10pct",     weight: "5%"  },
+                      { label: "🎰 Free Spin",  type: "free_spin",        weight: "5%"  },
+                    ].map((p, i) => (
+                      <tr key={i}>
+                        <td className="py-1.5 pr-4 font-medium">{p.label}</td>
+                        <td className="py-1.5 pr-4 text-muted-foreground">{p.type}</td>
+                        <td className="py-1.5 text-right font-bold">{p.weight}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">Free spin entitlements expire in 30 days. Coupons use coupon_expiry_days from Spin Settings.</p>
+            </div>
+
+            {/* Recent Jackpot Wins */}
+            {(spinAdminData?.recentJackpotWins ?? []).length > 0 && (
+              <div>
+                <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
+                  <Trophy className="h-4 w-4 text-yellow-400" /> Recent Jackpot Wins
+                </h3>
+                <div className="space-y-2">
+                  {(spinAdminData.recentJackpotWins as any[]).map((win: any) => (
+                    <div key={win.id} className="flex items-center justify-between bg-yellow-950/20 border border-yellow-500/20 rounded-lg px-3 py-2 text-xs">
+                      <div>
+                        <span className="font-bold text-yellow-400">{win.username || win.first_name || "User"}</span>
+                        <span className="text-muted-foreground ml-2">won {parseInt(win.amount).toLocaleString()} JCMOVES</span>
+                        <Badge className={`ml-2 text-[10px] py-0 ${win.jackpot_type === "major" ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" : "bg-orange-500/20 text-orange-400 border-orange-500/30"}`}>
+                          {win.jackpot_type}
+                        </Badge>
+                      </div>
+                      <span className="text-muted-foreground">{new Date(win.created_at).toLocaleDateString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

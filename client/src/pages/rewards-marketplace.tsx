@@ -441,51 +441,67 @@ export default function RewardsMarketplacePage() {
               </div>
             )}
 
-            {/* 🎰 Spin the Wheel Feature Card */}
+            {/* ⚡ Quantum Spin Feature Card */}
             {!search && !activeCat && (
-              <div className="mb-6 bg-gradient-to-r from-yellow-950/60 via-orange-950/40 to-yellow-950/60 border border-yellow-500/30 rounded-2xl overflow-hidden">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4">
-                  {/* Jackpot meters */}
-                  <div className="flex gap-3 flex-1">
-                    <div className="bg-orange-950/60 border border-orange-500/30 rounded-xl px-4 py-2 text-center min-w-[90px]">
-                      <div className="flex items-center justify-center gap-1 mb-0.5">
-                        <Flame className="h-3 w-3 text-orange-400" />
-                        <span className="text-[10px] font-bold text-orange-300 uppercase">Mini</span>
-                      </div>
-                      <div className="text-base font-black text-orange-400">
-                        {miniJackpot ? parseInt(miniJackpot.current_value).toLocaleString() : "5,000"}
-                      </div>
-                      <div className="text-[10px] text-orange-600">JCMOVES</div>
-                    </div>
-                    <div className="bg-yellow-950/60 border border-yellow-500/30 rounded-xl px-4 py-2 text-center min-w-[90px]">
-                      <div className="flex items-center justify-center gap-1 mb-0.5">
-                        <Crown className="h-3 w-3 text-yellow-400" />
-                        <span className="text-[10px] font-bold text-yellow-300 uppercase">Major</span>
-                      </div>
-                      <div className="text-base font-black text-yellow-400">
-                        {majorJackpot ? parseInt(majorJackpot.current_value).toLocaleString() : "50,000"}
-                      </div>
-                      <div className="text-[10px] text-yellow-600">JCMOVES</div>
-                    </div>
+              <div className="mb-6 relative overflow-hidden rounded-2xl border border-orange-500/25"
+                style={{ background: "linear-gradient(135deg, #0c0a09 0%, #1c0a00 50%, #0c0a09 100%)" }}>
+                {/* Background glow effect */}
+                <div className="absolute inset-0 opacity-30"
+                  style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(249,115,22,0.4) 0%, transparent 60%)" }} />
+                <div className="relative p-4">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                    {/* Left: title + description */}
                     <div className="flex-1">
-                      <div className="text-sm font-bold text-yellow-300 mb-0.5 flex items-center gap-1.5">
-                        <Sparkles className="h-4 w-4 text-yellow-400" /> Spin the Wheel
+                      <div className="flex items-center gap-2 mb-1">
+                        <Zap className="h-4 w-4 text-orange-400" />
+                        <span className="text-sm font-black text-white tracking-tight">Quantum Spin</span>
+                        <span className="text-[10px] bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded-full px-2 py-0.5 font-bold uppercase tracking-wider">NEW</span>
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        Win JCMOVES, coupons & jackpots every spin! Each spin builds the jackpot.
-                        <br />
-                        <span className="text-yellow-500 font-semibold">Coupons valid 1 full year.</span>
-                      </p>
+                      <p className="text-xs text-orange-300/70 mb-3 italic">Instant rewards. Fast reveal. Big jackpots.</p>
+                      {/* Jackpot meters */}
+                      <div className="flex gap-2">
+                        <div className="bg-orange-950/80 border border-orange-500/20 rounded-lg px-3 py-1.5 text-center min-w-[85px]">
+                          <div className="flex items-center justify-center gap-1 mb-0.5">
+                            <Flame className="h-2.5 w-2.5 text-orange-400" />
+                            <span className="text-[9px] font-bold text-orange-300 uppercase tracking-wider">Mini</span>
+                          </div>
+                          <div className="text-sm font-black text-orange-400 tabular-nums">
+                            {miniJackpot ? parseInt(String(miniJackpot.current_value)).toLocaleString() : "5,000"}
+                          </div>
+                        </div>
+                        <div className="bg-yellow-950/80 border border-yellow-500/20 rounded-lg px-3 py-1.5 text-center min-w-[85px]">
+                          <div className="flex items-center justify-center gap-1 mb-0.5">
+                            <Crown className="h-2.5 w-2.5 text-yellow-400" />
+                            <span className="text-[9px] font-bold text-yellow-300 uppercase tracking-wider">Major</span>
+                          </div>
+                          <div className="text-sm font-black text-yellow-400 tabular-nums">
+                            {majorJackpot ? parseInt(String(majorJackpot.current_value)).toLocaleString() : "50,000"}
+                          </div>
+                        </div>
+                        <div className="flex flex-col justify-center">
+                          <div className="text-[9px] text-muted-foreground/60">Spin cost</div>
+                          <div className="text-sm font-black text-orange-400">100</div>
+                          <div className="text-[9px] text-orange-600 font-bold">JCMOVES</div>
+                        </div>
+                      </div>
+                    </div>
+                    {/* Right: CTA */}
+                    <div className="flex flex-col items-center gap-1.5">
+                      <Button
+                        className="font-black text-black h-12 px-6 shrink-0"
+                        style={{
+                          background: "linear-gradient(135deg, #f97316, #eab308, #f97316)",
+                          boxShadow: "0 0 20px rgba(249,115,22,0.5)",
+                        }}
+                        onClick={() => setDirectSpinOpen(true)}
+                        disabled={!user}
+                      >
+                        <Zap className="h-4 w-4 mr-1.5" />
+                        Open Quantum Spin
+                      </Button>
+                      <p className="text-[10px] text-muted-foreground/50">Fast 1.5 second instant reveal</p>
                     </div>
                   </div>
-                  <Button
-                    className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-black font-bold shrink-0"
-                    onClick={() => setDirectSpinOpen(true)}
-                    disabled={!user}
-                  >
-                    <Sparkles className="h-4 w-4 mr-1.5" />
-                    Spin (100 JCMOVES)
-                  </Button>
                 </div>
               </div>
             )}

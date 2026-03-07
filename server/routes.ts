@@ -227,27 +227,30 @@ async function linkEmployeePromoCodes() {
 
 async function ensureJackpotsSeeded() {
   try {
-    // Seed jackpots table
+    // Seed jackpots table (contribution values set to Quantum Spin spec: 5/10)
     await pool.query(`
       INSERT INTO jackpots (type, current_value, starting_value, contribution_per_spin, win_probability_pct)
-      VALUES ('mini', 5000, 5000, 2, 0.0500000)
+      VALUES ('mini', 5000, 5000, 5, 0.0500000)
       ON CONFLICT (type) DO NOTHING;
 
       INSERT INTO jackpots (type, current_value, starting_value, contribution_per_spin, win_probability_pct)
-      VALUES ('major', 50000, 50000, 5, 0.0010000)
+      VALUES ('major', 50000, 50000, 10, 0.0010000)
       ON CONFLICT (type) DO NOTHING;
     `);
     // Seed spin_config table
     await pool.query(`
       INSERT INTO spin_config (setting_key, setting_value, description)
       VALUES
-        ('spin_cost_tokens',   '100',  'JCMOVES deducted per direct spin (no redemption entry)'),
-        ('spin_wheel_enabled', 'true', 'Whether the spin wheel is open to users'),
-        ('mini_jackpot_start', '5000', 'Starting value for mini jackpot after reset'),
-        ('major_jackpot_start','50000','Starting value for major jackpot after reset')
+        ('spin_cost_tokens',         '100',  'JCMOVES deducted per Quantum Spin'),
+        ('spin_wheel_enabled',       'true', 'Whether Quantum Spin is open to users'),
+        ('mini_jackpot_start',       '5000', 'Starting value for mini jackpot after reset'),
+        ('major_jackpot_start',      '50000','Starting value for major jackpot after reset'),
+        ('coupon_10pct_expiry_days',  '90',  '10%/$25 off coupon expiry in days'),
+        ('coupon_25pct_expiry_days',  '30',  '25% off coupon expiry in days'),
+        ('coffee_card_expiry_days',   '90',  'Coffee gift card expiry in days')
       ON CONFLICT (setting_key) DO NOTHING;
     `);
-    console.log('✅ Jackpots seeded');
+    console.log('✅ Quantum Spin jackpots seeded');
   } catch (err) {
     console.error('Failed to seed jackpots:', err);
   }
@@ -406,6 +409,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         is_active BOOLEAN NOT NULL DEFAULT TRUE,
         updated_at TIMESTAMP DEFAULT NOW()
       );
+      CREATE TABLE IF NOT EXISTS jackpot_wins (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR NOT NULL,
+        jackpot_type TEXT NOT NULL,
+        amount INTEGER NOT NULL,
+        spin_result_id INTEGER,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS activity_feed_events (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR,
+        event_type TEXT NOT NULL,
+        message TEXT NOT NULL,
+        metadata JSONB,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS mystery_box_results (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR NOT NULL,
+        parent_spin_result_id INTEGER,
+        reward_type TEXT NOT NULL,
+        reward_value TEXT,
+        coupon_code TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    // Upgrade jackpot contributions if still at old values
+    await pool.query(`
+      UPDATE jackpots SET contribution_per_spin = 5  WHERE type = 'mini'  AND contribution_per_spin < 5;
+      UPDATE jackpots SET contribution_per_spin = 10 WHERE type = 'major' AND contribution_per_spin < 10;
     `);
     console.log('✅ Jackpot tables ready');
   } catch (migErr) {
@@ -12344,56 +12377,74 @@ Thank you for your business!
     }
   });
 
-  // ── Spin wheel ──────────────────────────────────────────────────────────────
+  // ── Quantum Spin: perform spin ───────────────────────────────────────────────
   app.post("/api/reward-shop/spin", isAuthenticated, async (req: any, res) => {
     try {
       const userId = (req.session as any).userId;
-      const { redemptionId } = req.body;
+      const { redemptionId, useFreeSpinEntitlementId } = req.body;
 
-      // Check wheel is enabled
-      const { rows: cfgRows } = await pool.query(`SELECT setting_value FROM spin_config WHERE setting_key='spin_wheel_enabled'`);
-      if (cfgRows[0]?.setting_value === 'false') {
-        return res.status(403).json({ error: "Spin wheel is temporarily disabled." });
+      // Check enabled
+      const { rows: cfgRows } = await pool.query(`SELECT setting_key, setting_value FROM spin_config`);
+      const cfg: Record<string, string> = {};
+      for (const row of cfgRows) cfg[row.setting_key] = row.setting_value;
+      if (cfg['spin_wheel_enabled'] === 'false') {
+        return res.status(403).json({ error: "Quantum Spin is temporarily disabled." });
       }
 
-      // Direct spin: deduct 100 JCMOVES from wallet
-      if (!redemptionId) {
-        const { rows: costRows } = await pool.query(`SELECT setting_value FROM spin_config WHERE setting_key='spin_cost_tokens'`);
-        const spinCost = parseInt(costRows[0]?.setting_value || '100');
+      // Determine payment: free spin entitlement → marketplace redemption → wallet deduction
+      let usedFreeSpinId: number | null = null;
+      if (useFreeSpinEntitlementId) {
+        // Mark free spin entitlement as used
+        await pool.query(
+          `UPDATE reward_entitlements SET status='used', expires_at=NOW() WHERE id=$1 AND user_id=$2 AND entitlement_type='spin_credit' AND status='active'`,
+          [useFreeSpinEntitlementId, userId]
+        );
+        usedFreeSpinId = useFreeSpinEntitlementId;
+      } else if (!redemptionId) {
+        const spinCost = parseInt(cfg['spin_cost_tokens'] || '100');
         try {
           await storage.debitWalletTokens(userId, spinCost);
         } catch {
-          return res.status(400).json({ error: `Not enough JCMOVES. You need ${spinCost} to spin.` });
+          return res.status(400).json({ error: `You need ${spinCost} JCMOVES to spin.` });
         }
       }
 
-      // ── Prize table (indices must match frontend PRIZES array) ─────────────
+      // ── Quantum Spin prize table ───────────────────────────────────────────
+      // Total: 20+20+18+15+10+5+3+1+1+2+4+1 = 100
       const PRIZES = [
-        { label: "250",        tokens: 250,  probability: 30, type: "tokens"          },
-        { label: "500",        tokens: 500,  probability: 20, type: "tokens"          },
-        { label: "750",        tokens: 750,  probability: 13, type: "tokens"          },
-        { label: "1,000",      tokens: 1000, probability: 8,  type: "tokens"          },
-        { label: "100",        tokens: 100,  probability: 10, type: "tokens"          },
-        { label: "50",         tokens: 50,   probability: 5,  type: "tokens"          },
-        { label: "Nada",       tokens: 0,    probability: 5,  type: "tokens"          },
-        { label: "Mystery",    tokens: 0,    probability: 1,  type: "mystery"         },
-        { label: "25% Off",    tokens: 0,    probability: 1,  type: "coupon_25pct"    },
-        { label: "Coffee",     tokens: 0,    probability: 2,  type: "gift_card_coffee"},
-        { label: "10% Off",    tokens: 0,    probability: 5,  type: "coupon_10pct"    },
+        { label: "25",        tokens: 25,   probability: 20, type: "tokens"           },
+        { label: "75",        tokens: 75,   probability: 20, type: "tokens"           },
+        { label: "100",       tokens: 100,  probability: 18, type: "tokens"           },
+        { label: "125",       tokens: 125,  probability: 15, type: "tokens"           },
+        { label: "150",       tokens: 150,  probability: 10, type: "tokens"           },
+        { label: "250",       tokens: 250,  probability: 5,  type: "tokens"           },
+        { label: "500",       tokens: 500,  probability: 3,  type: "tokens"           },
+        { label: "2,000",     tokens: 2000, probability: 1,  type: "tokens"           },
+        { label: "Mystery Box",tokens: 0,   probability: 1,  type: "mystery"          },
+        { label: "$5 Coffee", tokens: 0,    probability: 2,  type: "gift_card_coffee" },
+        { label: "10% Off",   tokens: 0,    probability: 4,  type: "coupon_10pct"     },
+        { label: "25% Off",   tokens: 0,    probability: 1,  type: "coupon_25pct"     },
       ];
 
-      // Pick prize server-side
+      // Server-side weighted random pick
       const rand = Math.random() * 100;
-      let cumulative = 0;
-      let prizeIndex = 0;
+      let cumulative = 0, prizeIndex = 0;
       for (let i = 0; i < PRIZES.length; i++) {
         cumulative += PRIZES[i].probability;
         if (rand <= cumulative) { prizeIndex = i; break; }
       }
       const prize = PRIZES[prizeIndex];
 
+      // ── Load user info for activity feed ──────────────────────────────────
+      const [userRow] = await db.select({ firstName: users.firstName, lastName: users.lastName, username: users.username })
+        .from(users).where(eq(users.id, userId)).limit(1);
+      const displayName = userRow?.username
+        || (userRow?.firstName
+          ? `${userRow.firstName} ${(userRow.lastName || '').charAt(0)}.`
+          : 'Someone');
+
       // ── Jackpot contributions + win checks ─────────────────────────────────
-      const { rows: jRows } = await pool.query(`SELECT * FROM jackpots FOR UPDATE`);
+      const { rows: jRows } = await pool.query(`SELECT * FROM jackpots ORDER BY type`);
       let jackpotTypeWon: string | null = null;
       let jackpotAmountWon: number | null = null;
       let jackpotBonusTokens = 0;
@@ -12402,18 +12453,24 @@ Thank you for your business!
         const newVal = jp.current_value + jp.contribution_per_spin;
         const winRoll = Math.random() * 100;
         const winPct = parseFloat(jp.win_probability_pct);
-        const userWon = winRoll < winPct;
-
-        if (userWon) {
+        if (winRoll < winPct) {
           jackpotTypeWon = jp.type;
           jackpotAmountWon = newVal;
           jackpotBonusTokens += newVal;
-          const [userRow] = await db.select({ firstName: users.firstName, lastName: users.lastName, username: users.username })
-            .from(users).where(eq(users.id, userId)).limit(1);
           const winnerName = userRow?.username || `${userRow?.firstName || ''} ${userRow?.lastName || ''}`.trim() || 'Lucky Winner';
           await pool.query(
             `UPDATE jackpots SET current_value=$1, last_won_at=NOW(), last_winner_id=$2, last_winner_name=$3, last_won_amount=$4, updated_at=NOW() WHERE type=$5`,
             [jp.starting_value, userId, winnerName, newVal, jp.type]
+          );
+          // Log jackpot win
+          await pool.query(
+            `INSERT INTO jackpot_wins (user_id, jackpot_type, amount) VALUES ($1,$2,$3)`,
+            [userId, jp.type, newVal]
+          );
+          // Activity feed
+          await pool.query(
+            `INSERT INTO activity_feed_events (user_id, event_type, message, metadata) VALUES ($1,'jackpot_win',$2,$3)`,
+            [userId, `🏆 ${displayName} hit the ${jp.type === 'major' ? 'Major' : 'Mini'} Jackpot (${newVal.toLocaleString()} JCMOVES)!`, JSON.stringify({ type: jp.type, amount: newVal })]
           );
           console.log(`🏆 JACKPOT! ${jp.type.toUpperCase()} jackpot of ${newVal} JCMOVES won by ${winnerName}`);
         } else {
@@ -12421,101 +12478,227 @@ Thank you for your business!
         }
       }
 
-      // ── Coupon prize: auto-generate promo code ─────────────────────────────
+      // ── Coupon prizes ──────────────────────────────────────────────────────
       let couponCode: string | null = null;
-      let couponDescription = '';
-      const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000); // 1 year
+      let couponExpiry: Date | null = null;
+      const rand6 = () => Math.random().toString(36).substring(2, 8).toUpperCase();
 
-      if (prize.type === 'coupon_25pct' || prize.type === 'coupon_10pct') {
-        const codePrefix = prize.type === 'coupon_25pct' ? 'SPIN25' : 'SPIN10';
-        const rand6 = Math.random().toString(36).substring(2, 8).toUpperCase();
-        couponCode = `${codePrefix}-${rand6}`;
-        const discPct = prize.type === 'coupon_25pct' ? '25.00' : '10.00';
-        couponDescription = prize.type === 'coupon_25pct'
-          ? `25% off moving/junk services — spin wheel prize. Expires ${expiresAt.toLocaleDateString()}`
-          : `10% off moving/junk services — spin wheel prize. Expires ${expiresAt.toLocaleDateString()}`;
+      if (prize.type === 'coupon_10pct') {
+        const expiryDays = parseInt(cfg['coupon_10pct_expiry_days'] || '90');
+        couponExpiry = new Date(Date.now() + expiryDays * 86400000);
+        couponCode = `QS10-${rand6()}`;
         await pool.query(
           `INSERT INTO promo_codes (id, code, description, discount_percent, discount_percent_jewelry, reward_tokens, referral_reward_tokens, max_uses, is_active, expires_at)
-           VALUES (gen_random_uuid(), $1, $2, $3, '0.00', '0.00', '0.00', 1, true, $4)`,
-          [couponCode, couponDescription, discPct, expiresAt]
+           VALUES (gen_random_uuid(),$1,$2,'10.00','0.00','0.00','0.00',1,true,$3)`,
+          [couponCode, `10% off (max $25) — Quantum Spin prize. Min 2 movers 2hrs. Expires ${couponExpiry.toLocaleDateString()}`, couponExpiry]
+        );
+        await pool.query(
+          `INSERT INTO activity_feed_events (user_id, event_type, message, metadata) VALUES ($1,'coupon_won',$2,$3)`,
+          [userId, `🎫 ${displayName} unlocked a 10% Off coupon`, JSON.stringify({ couponCode })]
+        );
+      } else if (prize.type === 'coupon_25pct') {
+        const expiryDays = parseInt(cfg['coupon_25pct_expiry_days'] || '30');
+        couponExpiry = new Date(Date.now() + expiryDays * 86400000);
+        couponCode = `QS25-${rand6()}`;
+        await pool.query(
+          `INSERT INTO promo_codes (id, code, description, discount_percent, discount_percent_jewelry, reward_tokens, referral_reward_tokens, max_uses, is_active, expires_at)
+           VALUES (gen_random_uuid(),$1,$2,'25.00','0.00','0.00','0.00',1,true,$3)`,
+          [couponCode, `25% off labor (max 50K JCMOVES eq.) — Quantum Spin prize. Min 2 movers 2hrs. Expires ${couponExpiry.toLocaleDateString()}`, couponExpiry]
+        );
+        await pool.query(
+          `INSERT INTO activity_feed_events (user_id, event_type, message, metadata) VALUES ($1,'coupon_won',$2,$3)`,
+          [userId, `🎫 ${displayName} unlocked a 25% Off coupon`, JSON.stringify({ couponCode })]
         );
       } else if (prize.type === 'gift_card_coffee') {
-        const rand6 = Math.random().toString(36).substring(2, 8).toUpperCase();
-        couponCode = `COFFEE-${rand6}`;
-        couponDescription = `$5 coffee gift credit — spin wheel prize. Expires ${expiresAt.toLocaleDateString()}`;
+        const expiryDays = parseInt(cfg['coffee_card_expiry_days'] || '90');
+        couponExpiry = new Date(Date.now() + expiryDays * 86400000);
+        couponCode = `COFFEE-${rand6()}`;
         await pool.query(
           `INSERT INTO promo_codes (id, code, description, discount_percent, discount_percent_jewelry, reward_tokens, referral_reward_tokens, max_uses, is_active, expires_at)
-           VALUES (gen_random_uuid(), $1, $2, '0.00', '0.00', '0.00', '0.00', 1, true, $3)`,
-          [couponCode, couponDescription, expiresAt]
+           VALUES (gen_random_uuid(),$1,$2,'0.00','0.00','0.00','0.00',1,true,$3)`,
+          [couponCode, `$5 coffee gift card — Quantum Spin prize. Pending fulfillment. Expires ${couponExpiry.toLocaleDateString()}`, couponExpiry]
+        );
+        await pool.query(
+          `INSERT INTO activity_feed_events (user_id, event_type, message, metadata) VALUES ($1,'coffee_won',$2,$3)`,
+          [userId, `☕ ${displayName} won a $5 Coffee Gift Card`, JSON.stringify({ couponCode })]
         );
       }
 
-      // ── Mystery prize: award random token bonus ────────────────────────────
+      // ── Mystery Box: secondary server-side resolution ──────────────────────
+      let mysteryResult: any = null;
       let mysteryTokens = 0;
+      let mysteryExtra: any = {};
       if (prize.type === 'mystery') {
-        const MYSTERY_PRIZES = [
-          { tokens: 500, weight: 40 }, { tokens: 1000, weight: 25 }, { tokens: 2500, weight: 15 },
-          { tokens: 5000, weight: 10 }, { tokens: 250, weight: 10 },
+        const MYSTERY_POOL = [
+          { type: 'tokens',          value: 300,  weight: 35 },
+          { type: 'tokens',          value: 500,  weight: 25 },
+          { type: 'tokens',          value: 1000, weight: 15 },
+          { type: 'tokens',          value: 2000, weight: 10 },
+          { type: 'gift_card_coffee',value: 5,    weight: 5  },
+          { type: 'coupon_10pct',    value: 0,    weight: 5  },
+          { type: 'free_spin',       value: 1,    weight: 5  },
         ];
-        const total = MYSTERY_PRIZES.reduce((s, p) => s + p.weight, 0);
+        const total = MYSTERY_POOL.reduce((s, p) => s + p.weight, 0);
         let mRand = Math.random() * total;
-        let pick = MYSTERY_PRIZES[0];
-        for (const p of MYSTERY_PRIZES) { mRand -= p.weight; if (mRand <= 0) { pick = p; break; } }
-        mysteryTokens = pick.tokens;
+        let pick = MYSTERY_POOL[0];
+        for (const p of MYSTERY_POOL) { mRand -= p.weight; if (mRand <= 0) { pick = p; break; } }
+
+        mysteryResult = pick;
+        if (pick.type === 'tokens') {
+          mysteryTokens = pick.value;
+        } else if (pick.type === 'gift_card_coffee') {
+          const expiryDays = parseInt(cfg['coffee_card_expiry_days'] || '90');
+          const mCoffeeExpiry = new Date(Date.now() + expiryDays * 86400000);
+          const mCode = `MYSTERY-COFFEE-${rand6()}`;
+          await pool.query(
+            `INSERT INTO promo_codes (id, code, description, discount_percent, discount_percent_jewelry, reward_tokens, referral_reward_tokens, max_uses, is_active, expires_at)
+             VALUES (gen_random_uuid(),$1,$2,'0.00','0.00','0.00','0.00',1,true,$3)`,
+            [mCode, `$5 coffee gift card — Quantum Spin Mystery Box. Expires ${mCoffeeExpiry.toLocaleDateString()}`, mCoffeeExpiry]
+          );
+          mysteryExtra = { couponCode: mCode, couponExpiry: mCoffeeExpiry };
+        } else if (pick.type === 'coupon_10pct') {
+          const expiryDays = parseInt(cfg['coupon_10pct_expiry_days'] || '90');
+          const mCouponExpiry = new Date(Date.now() + expiryDays * 86400000);
+          const mCode = `MYSTERY10-${rand6()}`;
+          await pool.query(
+            `INSERT INTO promo_codes (id, code, description, discount_percent, discount_percent_jewelry, reward_tokens, referral_reward_tokens, max_uses, is_active, expires_at)
+             VALUES (gen_random_uuid(),$1,$2,'10.00','0.00','0.00','0.00',1,true,$3)`,
+            [mCode, `10% off (max $25) — Quantum Spin Mystery Box. Expires ${mCouponExpiry.toLocaleDateString()}`, mCouponExpiry]
+          );
+          mysteryExtra = { couponCode: mCode, couponExpiry: mCouponExpiry };
+        } else if (pick.type === 'free_spin') {
+          // Issue a free spin entitlement (expires in 30 days)
+          const freeSpinExpiry = new Date(Date.now() + 30 * 86400000);
+          await pool.query(
+            `INSERT INTO reward_entitlements (user_id, item_id, entitlement_type, value_json, status, expires_at)
+             VALUES ($1, 0, 'spin_credit', '{"spins":1}', 'active', $2)`,
+            [userId, freeSpinExpiry]
+          );
+          mysteryExtra = { freeSpin: true };
+        }
+
+        // Log mystery box result
+        const spinResultId = null; // Will be updated below
+        await pool.query(
+          `INSERT INTO mystery_box_results (user_id, reward_type, reward_value, coupon_code) VALUES ($1,$2,$3,$4)`,
+          [userId, pick.type, pick.value.toString(), mysteryExtra.couponCode || null]
+        );
+        // Activity feed
+        const mysteryMsg = pick.type === 'tokens'
+          ? `🎁 ${displayName} opened a Mystery Box and got ${pick.value} JCMOVES`
+          : pick.type === 'free_spin'
+          ? `🎁 ${displayName} opened a Mystery Box and got a Free Spin`
+          : `🎁 ${displayName} opened a Mystery Box and unlocked a special reward`;
+        await pool.query(
+          `INSERT INTO activity_feed_events (user_id, event_type, message, metadata) VALUES ($1,'mystery_box',$2,$3)`,
+          [userId, mysteryMsg, JSON.stringify({ type: pick.type, value: pick.value })]
+        );
       }
 
       // ── Credit all tokens ──────────────────────────────────────────────────
-      const totalTokensToCredit = (prize.tokens || 0) + mysteryTokens + jackpotBonusTokens;
-      if (totalTokensToCredit > 0) {
-        await storage.creditWalletTokens(userId, totalTokensToCredit);
+      const totalTokens = (prize.tokens || 0) + mysteryTokens + jackpotBonusTokens;
+      if (totalTokens > 0) {
+        await storage.creditWalletTokens(userId, totalTokens);
       }
 
-      // ── Mark redemption completed if provided ──────────────────────────────
+      // ── Mark marketplace redemption completed ──────────────────────────────
       if (redemptionId) {
         await db.update(rewardRedemptions)
-          .set({ status: "completed", fulfilledAt: new Date(), adminNotes: `Spin wheel: won ${prize.label}` })
+          .set({ status: "completed", fulfilledAt: new Date(), adminNotes: `Quantum Spin: ${prize.label}` })
           .where(and(eq(rewardRedemptions.id, parseInt(redemptionId)), eq(rewardRedemptions.userId, userId)));
       }
 
-      // ── Log spin result ────────────────────────────────────────────────────
-      await pool.query(
+      // ── Insert spin result record ──────────────────────────────────────────
+      const { rows: spinInsert } = await pool.query(
         `INSERT INTO spin_results (user_id, redemption_id, prize_index, prize_label, prize_tokens, prize_type, jackpot_type_won, jackpot_amount_won, coupon_code, fulfillment_status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'fulfilled')`,
-        [userId, redemptionId || null, prizeIndex, prize.label, totalTokensToCredit, prize.type, jackpotTypeWon, jackpotAmountWon, couponCode]
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'fulfilled') RETURNING id`,
+        [userId, redemptionId || null, prizeIndex, prize.label, totalTokens, prize.type, jackpotTypeWon, jackpotAmountWon, couponCode]
       );
+      const spinResultId = spinInsert[0]?.id;
 
-      // ── Log as reward record ───────────────────────────────────────────────
-      if (totalTokensToCredit > 0) {
+      // ── Reward record ──────────────────────────────────────────────────────
+      if (totalTokens > 0) {
         await db.insert(rewards).values({
           userId,
-          rewardType: jackpotTypeWon ? `${jackpotTypeWon}_jackpot_win` : "spin_wheel_win",
-          tokenAmount: totalTokensToCredit.toString(),
-          cashValue: (totalTokensToCredit * 0.00000508432).toFixed(4),
+          rewardType: jackpotTypeWon ? `${jackpotTypeWon}_jackpot_win` : "quantum_spin_win",
+          tokenAmount: totalTokens.toString(),
+          cashValue: (totalTokens * 0.00000508432).toFixed(4),
           status: "confirmed",
-          metadata: { prizeIndex, label: prize.label, prizeType: prize.type, jackpotTypeWon, jackpotAmountWon, couponCode },
+          metadata: { spinResultId, prizeIndex, label: prize.label, prizeType: prize.type, jackpotTypeWon },
         });
       }
 
-      console.log(`🎰 Spin: user ${userId} → ${prize.label} (${prize.type})${jackpotTypeWon ? ` + ${jackpotTypeWon} JACKPOT ${jackpotAmountWon}` : ''}`);
+      // ── Activity feed: token wins ──────────────────────────────────────────
+      if (prize.type === 'tokens' && prize.tokens > 0) {
+        await pool.query(
+          `INSERT INTO activity_feed_events (user_id, event_type, message, metadata) VALUES ($1,'spin_win',$2,$3)`,
+          [userId, `🔥 ${displayName} won ${prize.label} JCMOVES`, JSON.stringify({ tokens: prize.tokens })]
+        );
+      }
+
+      console.log(`⚡ Quantum Spin: ${displayName} → ${prize.label} (${prize.type})${jackpotTypeWon ? ` + ${jackpotTypeWon.toUpperCase()} JACKPOT ${jackpotAmountWon}` : ''}`);
 
       res.json({
         prizeIndex,
-        tokens: totalTokensToCredit,
+        tokens: totalTokens,
         label: prize.label,
         prizeType: prize.type,
         jackpotTypeWon,
         jackpotAmountWon,
-        couponCode,
-        couponExpiry: couponCode ? expiresAt.toISOString() : null,
-        mysteryTokens: mysteryTokens || null,
+        couponCode: couponCode || mysteryExtra?.couponCode || null,
+        couponExpiry: couponExpiry ? couponExpiry.toISOString() : null,
+        mysteryResult: mysteryResult ? { type: mysteryResult.type, value: mysteryResult.value, ...mysteryExtra } : null,
+        spinResultId,
+        usedFreeSpinId,
       });
     } catch (e: any) {
-      console.error("Spin wheel error:", e);
+      console.error("Quantum Spin error:", e);
       res.status(500).json({ error: e.message || "Spin failed" });
     }
   });
 
-  // ── Admin spin config endpoints ─────────────────────────────────────────────
+  // ── Activity feed (public) ──────────────────────────────────────────────────
+  app.get("/api/reward-shop/activity-feed", async (_req, res) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT id, event_type, message, metadata, created_at FROM activity_feed_events ORDER BY created_at DESC LIMIT 20`
+      );
+      res.json(rows);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Spin history (authenticated user) ──────────────────────────────────────
+  app.get("/api/reward-shop/spin-history", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { rows } = await pool.query(
+        `SELECT id, prize_label, prize_tokens, prize_type, jackpot_type_won, jackpot_amount_won, coupon_code, created_at
+         FROM spin_results WHERE user_id=$1 ORDER BY created_at DESC LIMIT 50`,
+        [userId]
+      );
+      res.json(rows);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Free spin entitlements ──────────────────────────────────────────────────
+  app.get("/api/reward-shop/free-spins", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { rows } = await pool.query(
+        `SELECT id, value_json, expires_at FROM reward_entitlements WHERE user_id=$1 AND entitlement_type='spin_credit' AND status='active' AND (expires_at IS NULL OR expires_at > NOW()) LIMIT 5`,
+        [userId]
+      );
+      res.json(rows);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Admin spin config ───────────────────────────────────────────────────────
   app.get("/api/admin/spin-config", isAuthenticated, async (req: any, res) => {
     try {
       if (!['admin', 'business_owner'].includes((req.session as any).userRole)) {
@@ -12523,7 +12706,8 @@ Thank you for your business!
       }
       const { rows: cfg } = await pool.query(`SELECT * FROM spin_config ORDER BY setting_key`);
       const { rows: jps } = await pool.query(`SELECT * FROM jackpots ORDER BY type`);
-      res.json({ config: cfg, jackpots: jps });
+      const { rows: recentWins } = await pool.query(`SELECT jw.*, u.username, u.first_name FROM jackpot_wins jw LEFT JOIN users u ON u.id=jw.user_id ORDER BY jw.created_at DESC LIMIT 10`);
+      res.json({ config: cfg, jackpots: jps, recentJackpotWins: recentWins });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -12536,10 +12720,7 @@ Thank you for your business!
       }
       const { key } = req.params;
       const { value } = req.body;
-      await pool.query(
-        `UPDATE spin_config SET setting_value=$1, updated_at=NOW() WHERE setting_key=$2`,
-        [String(value), key]
-      );
+      await pool.query(`UPDATE spin_config SET setting_value=$1, updated_at=NOW() WHERE setting_key=$2`, [String(value), key]);
       res.json({ ok: true });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
