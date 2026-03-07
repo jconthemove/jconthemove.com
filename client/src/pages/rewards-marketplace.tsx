@@ -167,6 +167,13 @@ export default function RewardsMarketplacePage() {
   const [simOpen, setSimOpen] = useState(false);
   const [simAmount, setSimAmount] = useState("");
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [shipOption, setShipOption] = useState<"pickup" | "ship">("pickup");
+  const [shipName, setShipName] = useState("");
+  const [shipStreet, setShipStreet] = useState("");
+  const [shipCity, setShipCity] = useState("");
+  const [shipState, setShipState] = useState("");
+  const [shipZip, setShipZip] = useState("");
+  const [shipPhone, setShipPhone] = useState("");
   const lastRedeemedItemRef = useRef<RewardItem | null>(null);
 
   const userTier = (((user as any)?.loyaltyTier) || 'bronze') as LoyaltyTierKey;
@@ -290,6 +297,9 @@ export default function RewardsMarketplacePage() {
     return Math.min(100, Math.round((walletBalance / cost) * 100));
   }
 
+  const needsShipping = (item: RewardItem | null) =>
+    item?.deliveryType === "manual" && !(item as any).createsInvoiceCredit && !(item as any).createsServiceCredit;
+
   function openRedeem(item: RewardItem) {
     if (!canAfford(item)) {
       const cost = item.salePriceTokens ?? item.tokenPrice;
@@ -297,7 +307,28 @@ export default function RewardsMarketplacePage() {
       toast({ title: "Not enough JCMOVES", description: `You need ${formatTokens(Math.ceil(need))} more tokens`, variant: "destructive" });
       return;
     }
+    // Pre-fill shipping from user profile
+    const fullName = [(user as any)?.firstName, (user as any)?.lastName].filter(Boolean).join(" ");
+    setShipName(fullName);
+    setShipPhone((user as any)?.phone || "");
+    setShipOption("pickup");
+    setShipStreet("");
+    setShipCity("");
+    setShipState("");
+    setShipZip("");
     setRedeemItem(item);
+  }
+
+  function buildRedemptionNotes(): string {
+    if (!needsShipping(redeemItem)) return userNotes;
+    let shippingLine = "";
+    if (shipOption === "pickup") {
+      shippingLine = "📍 DELIVERY: FREE Local Pickup — Ironwood, MI";
+    } else {
+      const addr = [shipStreet, shipCity, shipState, shipZip].filter(Boolean).join(", ");
+      shippingLine = `📦 DELIVERY: Ship to Home — ${shipName || "(no name)"}, ${addr || "(no address)"}, Phone: ${shipPhone || "(no phone)"}`;
+    }
+    return [shippingLine, userNotes.trim()].filter(Boolean).join("\n\n");
   }
 
   return (
@@ -815,7 +846,7 @@ export default function RewardsMarketplacePage() {
       </div>
 
       {/* Redeem confirmation dialog */}
-      <Dialog open={!!redeemItem} onOpenChange={open => !open && setRedeemItem(null)}>
+      <Dialog open={!!redeemItem} onOpenChange={open => { if (!open) { setRedeemItem(null); setUserNotes(""); setScheduledDate(""); setShipOption("pickup"); setShipStreet(""); setShipCity(""); setShipState(""); setShipZip(""); } }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -858,6 +889,94 @@ export default function RewardsMarketplacePage() {
                 </div>
               )}
 
+              {/* ── Shipping Options (for manual-delivery gift cards) ── */}
+              {needsShipping(redeemItem) && (
+                <div className="space-y-3">
+                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
+                    📦 How would you like to receive your reward?
+                  </label>
+
+                  {/* Radio buttons */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShipOption("pickup")}
+                      className={`rounded-xl border-2 px-3 py-2.5 text-left transition-all ${
+                        shipOption === "pickup"
+                          ? "border-green-500 bg-green-500/10"
+                          : "border-border bg-card hover:border-green-500/50"
+                      }`}
+                    >
+                      <div className="text-xs font-black text-green-400 mb-0.5">📍 Local Pickup</div>
+                      <div className="text-[10px] text-muted-foreground">FREE — Ironwood, MI</div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShipOption("ship")}
+                      className={`rounded-xl border-2 px-3 py-2.5 text-left transition-all ${
+                        shipOption === "ship"
+                          ? "border-blue-500 bg-blue-500/10"
+                          : "border-border bg-card hover:border-blue-500/50"
+                      }`}
+                    >
+                      <div className="text-xs font-black text-blue-400 mb-0.5">🚚 Ship to Me</div>
+                      <div className="text-[10px] text-muted-foreground">Fill in address below</div>
+                    </button>
+                  </div>
+
+                  {/* Shipping address form */}
+                  {shipOption === "ship" && (
+                    <div className="space-y-2 bg-blue-500/5 border border-blue-500/20 rounded-xl p-3">
+                      <p className="text-[10px] text-blue-400 font-bold uppercase tracking-wider mb-2">Shipping Details</p>
+                      <Input
+                        placeholder="Full Name *"
+                        value={shipName}
+                        onChange={e => setShipName(e.target.value)}
+                        className="h-8 text-sm bg-card border-border"
+                      />
+                      <Input
+                        placeholder="Street Address *"
+                        value={shipStreet}
+                        onChange={e => setShipStreet(e.target.value)}
+                        className="h-8 text-sm bg-card border-border"
+                      />
+                      <div className="grid grid-cols-5 gap-2">
+                        <Input
+                          placeholder="City *"
+                          value={shipCity}
+                          onChange={e => setShipCity(e.target.value)}
+                          className="h-8 text-sm col-span-2 bg-card border-border"
+                        />
+                        <Input
+                          placeholder="ST"
+                          value={shipState}
+                          onChange={e => setShipState(e.target.value.toUpperCase().slice(0, 2))}
+                          className="h-8 text-sm col-span-1 bg-card border-border"
+                          maxLength={2}
+                        />
+                        <Input
+                          placeholder="Zip *"
+                          value={shipZip}
+                          onChange={e => setShipZip(e.target.value.replace(/\D/g, "").slice(0, 5))}
+                          className="h-8 text-sm col-span-2 bg-card border-border"
+                          maxLength={5}
+                        />
+                      </div>
+                      <Input
+                        placeholder="Phone Number"
+                        value={shipPhone}
+                        onChange={e => setShipPhone(e.target.value)}
+                        className="h-8 text-sm bg-card border-border"
+                        type="tel"
+                      />
+                      <p className="text-[10px] text-muted-foreground/60 mt-1">
+                        Your info is sent directly to our team for fastest processing.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Schedule date for service/schedule items */}
               {(redeemItem.requiresSchedule || redeemItem.scheduleRequired || redeemItem.createsServiceCredit) ? (
                 <div>
@@ -867,7 +986,7 @@ export default function RewardsMarketplacePage() {
               ) : null}
 
               <div>
-                <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Notes for crew (optional)</label>
+                <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Additional notes (optional)</label>
                 <Textarea
                   placeholder="Any specific instructions or requests…"
                   value={userNotes}
@@ -879,10 +998,18 @@ export default function RewardsMarketplacePage() {
             </div>
           )}
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setRedeemItem(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setRedeemItem(null); setUserNotes(""); setScheduledDate(""); }}>Cancel</Button>
             <Button
               className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-black font-bold"
-              onClick={() => redeemMutation.mutate({ itemId: redeemItem!.id, userNotes: userNotes || undefined, scheduledDate: scheduledDate || undefined })}
+              onClick={() => {
+                const notes = buildRedemptionNotes();
+                const hasShipAddress = shipOption === "ship" && needsShipping(redeemItem);
+                if (hasShipAddress && (!shipName.trim() || !shipStreet.trim() || !shipCity.trim() || !shipZip.trim())) {
+                  toast({ title: "Address required", description: "Please fill in your full shipping address for home delivery.", variant: "destructive" });
+                  return;
+                }
+                redeemMutation.mutate({ itemId: redeemItem!.id, userNotes: notes || undefined, scheduledDate: scheduledDate || undefined });
+              }}
               disabled={redeemMutation.isPending}
             >
               {redeemMutation.isPending
