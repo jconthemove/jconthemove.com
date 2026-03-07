@@ -124,6 +124,15 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
     enabled: open,
   });
 
+  const { data: walletData } = useQuery<{ balance: string }>({
+    queryKey: ["/api/rewards/wallet"],
+    refetchInterval: open ? 10000 : false,
+    enabled: open,
+  });
+  const walletBalance = parseFloat(walletData?.balance || "0");
+  const spinCost = 100;
+  const canAffordSpin = walletBalance >= spinCost || freeSpins.length > 0;
+
   const mini = jackpots.find(j => j.type === "mini");
   const major = jackpots.find(j => j.type === "major");
 
@@ -142,8 +151,10 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
   }, [open, clearTimers]);
 
   const spinMutation = useMutation({
-    mutationFn: (payload: { redemptionId?: number; useFreeSpinEntitlementId?: number }) =>
-      apiRequest("POST", "/api/reward-shop/spin", payload),
+    mutationFn: async (payload: { redemptionId?: number; useFreeSpinEntitlementId?: number }) => {
+      const res = await apiRequest("POST", "/api/reward-shop/spin", payload);
+      return res.json() as Promise<SpinResult>;
+    },
     onSuccess: (data: SpinResult) => {
       // Phase 2: particles spiral in (0 → 1200ms already running), at 1200ms flash orb
       const t2 = setTimeout(() => setAnimState("flash"), 1200);
@@ -190,6 +201,17 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
   function handleClose() {
     if (animState === "animating" || animState === "deducting" || animState === "flash") return;
     onClose();
+  }
+
+  function handleSpinAgain() {
+    const freeSpin = freeSpins[0];
+    setResult(null);
+    setParticles(makeParticles(24));
+    setAnimState("animating");
+    spinMutation.mutate({
+      redemptionId,
+      useFreeSpinEntitlementId: freeSpin?.id,
+    });
   }
 
   // Compute display values for result card
@@ -261,6 +283,22 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
                 {major ? parseInt(String(major.current_value)).toLocaleString() : "50,000"}
               </div>
               <div className="text-[10px] text-yellow-700 font-medium">JCMOVES</div>
+            </div>
+          </div>
+
+          {/* Wallet balance */}
+          <div className={`mt-2 rounded-xl px-4 py-2.5 flex items-center justify-between ${canAffordSpin ? "bg-green-950/40 border border-green-500/20" : "bg-red-950/40 border border-red-500/20"}`}>
+            <div className="flex items-center gap-2">
+              <Coins className="h-4 w-4 text-yellow-400" />
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Your Balance</span>
+            </div>
+            <div className="text-right">
+              <div className={`text-lg font-black tabular-nums ${canAffordSpin ? "text-green-400" : "text-red-400"}`}>
+                {walletBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              </div>
+              <div className="text-[10px] text-muted-foreground font-medium">
+                JCMOVES {freeSpins.length > 0 ? "· 🎁 free spin!" : canAffordSpin ? `· ${Math.floor(walletBalance / spinCost)} spins` : "· not enough"}
+              </div>
             </div>
           </div>
         </div>
@@ -386,9 +424,10 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
                 </Badge>
               )}
               <Button
-                className="w-full h-14 text-base font-black bg-gradient-to-r from-orange-500 via-yellow-500 to-orange-500 hover:from-orange-600 hover:to-orange-600 text-black tracking-wide"
+                className="w-full h-14 text-base font-black bg-gradient-to-r from-orange-500 via-yellow-500 to-orange-500 hover:from-orange-600 hover:to-orange-600 text-black tracking-wide disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ boxShadow: "0 0 20px rgba(249,115,22,0.4)" }}
                 onClick={handleSpin}
+                disabled={!canAffordSpin}
               >
                 <Zap className="h-5 w-5 mr-2" />
                 {hasFreeSpinEntry ? "Spin — Free Entry!" : "Spin for 100 JCMOVES"}
@@ -453,9 +492,12 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
                       <CouponCodeRow code={result.mysteryResult.couponCode} onCopy={handleCopy} copied={copied} />
                     </div>
                   )}
-                  <Button className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold" onClick={handleClose}>
-                    Awesome!
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold" onClick={handleSpinAgain} disabled={!canAffordSpin}>
+                      Spin Again!
+                    </Button>
+                    <Button variant="outline" className="flex-1" onClick={handleClose}>Done</Button>
+                  </div>
                 </div>
               ) : isCoupon || isCoffee ? (
                 <div className="text-center bg-gradient-to-br from-blue-950/60 to-cyan-950/40 border border-blue-500/30 rounded-2xl p-5">
@@ -480,9 +522,12 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
                       )}
                     </div>
                   )}
-                  <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold" onClick={handleClose}>
-                    Got it!
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold" onClick={handleSpinAgain} disabled={!canAffordSpin}>
+                      Spin Again!
+                    </Button>
+                    <Button variant="outline" className="flex-1" onClick={handleClose}>Done</Button>
+                  </div>
                 </div>
               ) : resultTokens > 0 ? (
                 <div className="text-center bg-gradient-to-br from-orange-950/60 to-yellow-950/40 border border-orange-500/30 rounded-2xl p-5">
@@ -490,16 +535,24 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
                   <div className="text-sm font-black text-orange-300 uppercase tracking-widest mb-1">You Won!</div>
                   <div className="text-3xl font-black text-yellow-400 mb-0.5">{resultTokens.toLocaleString()}</div>
                   <div className="text-xs text-yellow-600 font-bold uppercase tracking-wider mb-3">JCMOVES added to wallet</div>
-                  <Button className="w-full bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-black font-black" onClick={handleClose}>
-                    Spin Again!
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button className="flex-1 bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-black font-black" onClick={handleSpinAgain} disabled={!canAffordSpin}>
+                      Spin Again!
+                    </Button>
+                    <Button variant="outline" className="flex-1" onClick={handleClose}>Done</Button>
+                  </div>
                 </div>
               ) : (
                 <div className="text-center bg-gray-900/60 border border-gray-700/30 rounded-2xl p-5">
                   <div className="text-4xl mb-2">🌌</div>
                   <div className="text-sm font-bold text-gray-400 mb-1">Quantum fluctuation...</div>
                   <p className="text-xs text-muted-foreground mb-3">No reward this time — jackpots grew!</p>
-                  <Button variant="outline" className="w-full" onClick={handleClose}>Try Again</Button>
+                  <div className="flex gap-2">
+                    <Button className="flex-1 bg-orange-500 hover:bg-orange-600 text-black font-black" onClick={handleSpinAgain} disabled={!canAffordSpin}>
+                      Try Again!
+                    </Button>
+                    <Button variant="outline" className="flex-1" onClick={handleClose}>Exit</Button>
+                  </div>
                 </div>
               )}
             </div>

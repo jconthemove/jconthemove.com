@@ -177,8 +177,8 @@ export class MiningService {
     let streakCount = session.streakCount || 0;
     
     if (lastClaimDate) {
-      // Calculate yesterday's date in Eastern time
-      const yesterday = new Date(Date.now() - 5 * 60 * 60 * 1000);
+      // Calculate yesterday's date in Central time (UTC-6)
+      const yesterday = new Date(Date.now() - 6 * 60 * 60 * 1000);
       yesterday.setDate(yesterday.getDate() - 1);
       const yesterdayStr = yesterday.toISOString().split('T')[0];
       

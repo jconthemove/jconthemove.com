@@ -9110,7 +9110,7 @@ Thank you for your business!
         return res.status(400).json({ error: "Already claimed today's scripture reward" });
       }
 
-      // Calculate streak from rewards table (Eastern time — yesterday Eastern)
+      // Calculate streak from rewards table (Central time — yesterday Central)
       const ydayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
       const ydayEnd = new Date(todayStart.getTime() - 1);
 
