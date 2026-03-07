@@ -12,7 +12,8 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Coins, Search, Filter, CheckCircle2, Clock, ChevronRight,
   Star, Zap, Trophy, Package, Gift, MapPin, Snowflake, Gamepad2,
-  Wrench, Crown, ShoppingBag, History, Calculator, Users, TrendingUp, Info, Flame, Sparkles
+  Wrench, Crown, ShoppingBag, History, Calculator, Users, TrendingUp, Info, Flame, Sparkles,
+  Copy, Check, Ticket, Coffee, Tag, CreditCard, ExternalLink
 } from "lucide-react";
 import { LOYALTY_TIERS, calculateJCMovesReward, getNextTier, formatTokens as fmtTokens, type LoyaltyTierKey } from "@/lib/loyalty";
 import { SpinWheelDialog } from "@/components/spin-wheel";
@@ -72,9 +73,16 @@ interface RedemptionRecord {
   createdAt: string;
   scheduledDate?: string | null;
   userNotes?: string | null;
+  couponCode?: string | null;
 }
 
 const CATEGORY_ICONS: Record<string, any> = {
+  "☕ Entry Tier":       Coffee,
+  "🎟️ Discount Coupons": Tag,
+  "🛠️ Service Credits":  Wrench,
+  "🎁 Gift Cards":       CreditCard,
+  "⚡ Quantum Spin":     Zap,
+  // legacy
   "Quick Rewards": Zap,
   "Service Credits": Wrench,
   "Premium Rewards": Crown,
@@ -124,6 +132,7 @@ function getCtaLabel(item: RewardItem): string {
 }
 
 function getFulfillmentBadge(item: RewardItem): { label: string; className: string } | null {
+  if ((item as any).createsCouponCode) return { label: "🎟️ Instant Coupon Code", className: "bg-purple-500/20 text-purple-400 border-purple-500/30" };
   if (item.createsSpinCredit) return { label: "Spin Wheel", className: "bg-pink-500/20 text-pink-400 border-pink-500/30" };
   if (item.usesMysteryPool) return { label: "Mystery", className: "bg-purple-500/20 text-purple-400 border-purple-500/30" };
   if (item.isBundle) return { label: "Bundle", className: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" };
@@ -157,6 +166,7 @@ export default function RewardsMarketplacePage() {
   const [calcOpen, setCalcOpen] = useState(false);
   const [simOpen, setSimOpen] = useState(false);
   const [simAmount, setSimAmount] = useState("");
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const lastRedeemedItemRef = useRef<RewardItem | null>(null);
 
   const userTier = (((user as any)?.loyaltyTier) || 'bronze') as LoyaltyTierKey;
@@ -705,23 +715,100 @@ export default function RewardsMarketplacePage() {
                 </Button>
               </div>
             ) : (
-              myRedemptions.map(r => (
-                <div key={r.id} className="bg-card border border-border rounded-xl p-4 flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-yellow-500/10 flex items-center justify-center shrink-0">
-                    <Gift className="h-5 w-5 text-yellow-500" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold truncate">{r.itemName}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {new Date(r.createdAt).toLocaleDateString()} • {r.tokenCost.toLocaleString()} JCMOVES
+              myRedemptions.map(r => {
+                const isCoupon = !!r.couponCode;
+                if (isCoupon) {
+                  // ── Physical Coupon Card ──
+                  const isCopied = copiedCode === r.couponCode;
+                  return (
+                    <div
+                      key={r.id}
+                      className="relative overflow-hidden rounded-2xl border-2 border-dashed border-purple-500/50"
+                      style={{
+                        background: "linear-gradient(135deg, #1e0a3c 0%, #0d0020 50%, #1a0030 100%)",
+                        boxShadow: "0 0 20px rgba(147,51,234,0.15)",
+                      }}
+                    >
+                      {/* Decorative perforations left */}
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-4 h-8 bg-background rounded-r-full" />
+                      {/* Decorative perforations right */}
+                      <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-8 bg-background rounded-l-full" />
+
+                      <div className="px-7 py-4">
+                        {/* Header row */}
+                        <div className="flex items-start justify-between gap-2 mb-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-9 h-9 rounded-xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center shrink-0">
+                              <Ticket className="h-4.5 w-4.5 text-purple-400" />
+                            </div>
+                            <div>
+                              <div className="text-xs font-black text-purple-300 uppercase tracking-wider">🎟️ Your Coupon</div>
+                              <div className="text-sm font-bold text-white leading-tight">{r.itemName}</div>
+                            </div>
+                          </div>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${STATUS_COLORS[r.status] ?? STATUS_COLORS.pending}`}>
+                            {STATUS_LABELS[r.status] ?? r.status}
+                          </span>
+                        </div>
+
+                        {/* Promo code box */}
+                        <div
+                          className="bg-black/40 border border-purple-500/30 rounded-xl px-4 py-3 mb-3 flex items-center justify-between gap-3 cursor-pointer hover:border-purple-500/60 transition-colors"
+                          onClick={() => {
+                            navigator.clipboard.writeText(r.couponCode!);
+                            setCopiedCode(r.couponCode!);
+                            setTimeout(() => setCopiedCode(null), 2500);
+                          }}
+                        >
+                          <div>
+                            <div className="text-[10px] text-purple-400 font-bold uppercase tracking-widest mb-0.5">Promo Code</div>
+                            <div className="text-xl font-black text-white tracking-widest font-mono">{r.couponCode}</div>
+                          </div>
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center border transition-all ${isCopied ? "bg-green-500/20 border-green-500/40" : "bg-purple-500/20 border-purple-500/30"}`}>
+                            {isCopied
+                              ? <Check className="h-4 w-4 text-green-400" />
+                              : <Copy className="h-4 w-4 text-purple-400" />
+                            }
+                          </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-[10px] text-purple-500/60">
+                            {new Date(r.createdAt).toLocaleDateString()} · {r.tokenCost.toLocaleString()} JCMOVES
+                          </div>
+                          <a
+                            href="/book"
+                            className="flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                            Book with this code
+                          </a>
+                        </div>
+                      </div>
                     </div>
-                    {r.userNotes && <div className="text-xs text-muted-foreground italic mt-0.5">"{r.userNotes}"</div>}
+                  );
+                }
+
+                // ── Standard Redemption Card ──
+                return (
+                  <div key={r.id} className="bg-card border border-border rounded-xl p-4 flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-full bg-yellow-500/10 flex items-center justify-center shrink-0">
+                      <Gift className="h-5 w-5 text-yellow-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold truncate">{r.itemName}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {new Date(r.createdAt).toLocaleDateString()} • {r.tokenCost.toLocaleString()} JCMOVES
+                      </div>
+                      {r.userNotes && <div className="text-xs text-muted-foreground italic mt-0.5">"{r.userNotes}"</div>}
+                    </div>
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${STATUS_COLORS[r.status] ?? STATUS_COLORS.pending}`}>
+                      {STATUS_LABELS[r.status] ?? r.status}
+                    </span>
                   </div>
-                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${STATUS_COLORS[r.status] ?? STATUS_COLORS.pending}`}>
-                    {STATUS_LABELS[r.status] ?? r.status}
-                  </span>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         )}

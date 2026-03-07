@@ -12078,6 +12078,37 @@ Thank you for your business!
         await db.execute(sql`INSERT INTO reward_entitlements (user_id, item_id, redemption_id, entitlement_type, value_json, status, expires_at) VALUES (${userId}, ${itemRow.id}, ${redemption.id}, 'spin_credit', '{"spins":1}', 'active', ${expiresAt})`);
       }
 
+      // Coupon code — auto-generate unique promo code and store it
+      if ((itemRow as any).createsCouponCode) {
+        try {
+          const pct = (itemRow as any).couponDiscountPct ?? 0;
+          const maxDisc = (itemRow as any).couponMaxDiscount ?? null;
+          // Generate a human-readable unique code  e.g. JC10OFF-A3K7
+          const suffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+          const generatedCode = `JC${pct}OFF-${suffix}`;
+          const couponExpiry = expiresAt ?? new Date(Date.now() + 365 * 86400000);
+
+          await db.insert(promoCodes).values({
+            code: generatedCode,
+            description: `${pct}% off any service (max $${maxDisc ?? "none"}) — earned via JCMOVES Rewards`,
+            discountPercent: pct.toString(),
+            maxUses: 1,
+            isActive: true,
+            expiresAt: couponExpiry,
+          });
+
+          // Store the code on the redemption record
+          await db.update(rewardRedemptions)
+            .set({ couponCode: generatedCode, status: "completed", adminNotes: `Auto-generated coupon: ${generatedCode} (${pct}% off, max $${maxDisc})` })
+            .where(eq(rewardRedemptions.id, redemption.id));
+          (redemption as any).couponCode = generatedCode;
+
+          console.log(`🎟️ Generated coupon code ${generatedCode} for redemption ${redemption.id}`);
+        } catch (couponErr) {
+          console.error("[Coupon] Code generation error:", couponErr);
+        }
+      }
+
       // Priority booking entitlement
       if (itemRow.name === "Priority Booking Upgrade") {
         await db.execute(sql`INSERT INTO reward_entitlements (user_id, item_id, redemption_id, entitlement_type, value_json, status, expires_at) VALUES (${userId}, ${itemRow.id}, ${redemption.id}, 'priority_booking', '{"priority":true}', 'active', ${expiresAt})`);

@@ -1695,6 +1695,9 @@ export const rewardItems = pgTable("reward_items", {
   createsSpinCredit: boolean("creates_spin_credit").notNull().default(false),       // grants spin wheel entry
   usesMysteryPool: boolean("uses_mystery_pool").notNull().default(false),            // triggers mystery prize resolution
   isBundle: boolean("is_bundle").notNull().default(false),             // hybrid bundle with sub-entitlements
+  createsCouponCode: boolean("creates_coupon_code").notNull().default(false),        // auto-generates promo code on redemption
+  couponDiscountPct: integer("coupon_discount_pct").default(0),                     // % discount (e.g. 10 = 10%)
+  couponMaxDiscount: decimal("coupon_max_discount", { precision: 10, scale: 2 }),   // max $ value (e.g. 25.00)
   fulfillmentNote: text("fulfillment_note"),                           // "How it works" text shown in modal
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -1714,6 +1717,7 @@ export const rewardRedemptions = pgTable("reward_redemptions", {
   scheduledDate: timestamp("scheduled_date"),
   userNotes: text("user_notes"),
   adminNotes: text("admin_notes"),
+  couponCode: text("coupon_code"),          // auto-generated promo code (for coupon-type rewards)
   fulfilledAt: timestamp("fulfilled_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
