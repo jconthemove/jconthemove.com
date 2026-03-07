@@ -71,6 +71,30 @@ export const REWARD_TYPES = {
   CUSTOMER_QUOTE_REWARD: 'customer_quote_reward', // 200 JCMOVES for customer's accepted/completed quotes
 } as const;
 
+// ── JCMOVES Loyalty Tier System ────────────────────────────────────────────
+// Earn 50 JCMOVES per $1 spent (10% of job value at 500 tokens/$1)
+// Higher tiers unlock multiplier bonuses for repeat customers
+export const LOYALTY_TIERS = {
+  bronze: { rate: 0.10, tokensPerDollar: 50,  minSpend: 0,    maxSpend: 999,    label: 'Bronze', emoji: '🥉', color: 'text-amber-600', bg: 'bg-amber-600/20' },
+  silver: { rate: 0.12, tokensPerDollar: 60,  minSpend: 1000, maxSpend: 2499,   label: 'Silver', emoji: '🥈', color: 'text-slate-300',  bg: 'bg-slate-400/20' },
+  gold:   { rate: 0.15, tokensPerDollar: 75,  minSpend: 2500, maxSpend: 4999,   label: 'Gold',   emoji: '🥇', color: 'text-yellow-400', bg: 'bg-yellow-500/20' },
+  vip:    { rate: 0.20, tokensPerDollar: 100, minSpend: 5000, maxSpend: Infinity, label: 'VIP',   emoji: '👑', color: 'text-purple-400', bg: 'bg-purple-500/20' },
+} as const;
+
+export type LoyaltyTier = keyof typeof LOYALTY_TIERS;
+
+export function calculateJCMovesReward(jobAmount: number, tier: string = 'bronze'): number {
+  const tierConfig = LOYALTY_TIERS[tier as LoyaltyTier] ?? LOYALTY_TIERS.bronze;
+  return Math.round(jobAmount * tierConfig.tokensPerDollar);
+}
+
+export function getTierFromSpend(totalSpend: number): LoyaltyTier {
+  if (totalSpend >= 5000) return 'vip';
+  if (totalSpend >= 2500) return 'gold';
+  if (totalSpend >= 1000) return 'silver';
+  return 'bronze';
+}
+
 export const FAUCET_CONFIG = {
   // Faucet operation mode - PRODUCTION MODE ENABLED!
   MODE: 'FAUCETPAY', // 'FAUCETPAY' | 'SELF_FUNDED' | 'DEMO'

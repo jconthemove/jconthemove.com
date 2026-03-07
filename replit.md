@@ -34,6 +34,9 @@ Preferred communication style: Simple, everyday language.
 - **Prize Wheel & Mystery Box**: Spin wheel auto-launches after Spin Wheel Entry redemption. Server-decided prize (tamper-proof). Mystery box uses weighted pool resolved server-side. All results logged to `spin_results`.
 - **Service & Invoice Credits**: Labor credit redemptions create `service_credit_balances` records (minutes). Invoice credit items create `invoice_credits` records ($). Both tracked separately from main redemption.
 - **Marketplace Artwork**: All 21 reward items have AI-generated premium dark-theme card images in `/client/public/rewards/*.png`.
+- **JCMOVES Loyalty Tier System**: 4-tier program (Bronze/Silver/Gold/VIP) with escalating token earn rates. Formula: `tokens = job_price × tokensPerDollar` (50/60/75/100 per tier). Tiers unlock at $0/$1,000/$2,500/$5,000 lifetime spend. `loyalty_tier` and `total_completed_spend` columns added to users table. All 3 job completion reward paths updated. Utility in `client/src/lib/loyalty.ts` and `server/constants.ts`.
+- **Earnings Simulator**: Dialog on Rewards Marketplace showing token projections at all tiers for any entered job price, with quick presets ($100/$250/$500/$1,000).
+- **Token Estimate on Booking**: "Book a Job" form has optional budget input with live JCMOVES preview. Post-submission confirmation banner shows estimated tokens earned and links to marketplace.
 - **AI Crew Assignment Assistant**: Algorithm for suggesting optimal employee job assignments based on various factors.
 - **Compliance**: Mandatory age verification (18+) and Terms of Service acceptance.
 

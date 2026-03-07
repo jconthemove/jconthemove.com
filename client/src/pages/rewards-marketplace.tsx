@@ -12,8 +12,9 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Coins, Search, Filter, CheckCircle2, Clock, ChevronRight,
   Star, Zap, Trophy, Package, Gift, MapPin, Snowflake, Gamepad2,
-  Wrench, Crown, ShoppingBag, History, Calculator, Users
+  Wrench, Crown, ShoppingBag, History, Calculator, Users, TrendingUp, Info
 } from "lucide-react";
+import { LOYALTY_TIERS, calculateJCMovesReward, getNextTier, formatTokens as fmtTokens, type LoyaltyTierKey } from "@/lib/loyalty";
 import { SpinWheelDialog } from "@/components/spin-wheel";
 import { LaborCalculatorDialog } from "@/components/labor-calculator-dialog";
 
@@ -153,7 +154,28 @@ export default function RewardsMarketplacePage() {
   const [spinRedemptionId, setSpinRedemptionId] = useState<number | undefined>(undefined);
   const [autoBookingLeadId, setAutoBookingLeadId] = useState<string | null>(null);
   const [calcOpen, setCalcOpen] = useState(false);
+  const [simOpen, setSimOpen] = useState(false);
+  const [simAmount, setSimAmount] = useState("");
   const lastRedeemedItemRef = useRef<RewardItem | null>(null);
+
+  const userTier = (((user as any)?.loyaltyTier) || 'bronze') as LoyaltyTierKey;
+  const totalSpend = parseFloat((user as any)?.totalCompletedSpend || '0');
+  const tierConfig = LOYALTY_TIERS[userTier];
+  const nextTierKey = getNextTier(userTier);
+  const nextTierConfig = nextTierKey ? LOYALTY_TIERS[nextTierKey] : null;
+  const tierProgress = nextTierConfig
+    ? Math.min(100, Math.round(((totalSpend - tierConfig.minSpend) / (nextTierConfig.minSpend - tierConfig.minSpend)) * 100))
+    : 100;
+  const simTokens = useMemo(() => {
+    const v = parseFloat(simAmount);
+    if (!v || v <= 0) return null;
+    return {
+      bronze: calculateJCMovesReward(v, 'bronze'),
+      silver: calculateJCMovesReward(v, 'silver'),
+      gold: calculateJCMovesReward(v, 'gold'),
+      vip: calculateJCMovesReward(v, 'vip'),
+    };
+  }, [simAmount]);
 
   const { data: shopData, isLoading } = useQuery<{ items: ItemRow[]; walletBalance: number }>({
     queryKey: ["/api/reward-shop/items"],
@@ -282,32 +304,68 @@ export default function RewardsMarketplacePage() {
       {/* Hero */}
       <div className="bg-gradient-to-br from-yellow-600/20 via-orange-600/10 to-background border-b border-border px-4 py-6">
         <div className="max-w-5xl mx-auto">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <Gift className="h-5 w-5 text-yellow-500" />
                 <h1 className="text-xl font-bold">JCMOVES Rewards Marketplace</h1>
               </div>
               <p className="text-sm text-muted-foreground">Spend your tokens on real local rewards, service credits & gift cards</p>
-            </div>
-            <div className="flex gap-3">
-              <div className="bg-card border border-border rounded-xl px-4 py-3 text-center min-w-[120px]">
-                <div className="text-xs text-muted-foreground mb-0.5">Your Balance</div>
-                <div className="flex items-center justify-center gap-1.5">
-                  <Coins className="h-4 w-4 text-yellow-500" />
-                  <span className="text-lg font-bold text-yellow-500">{formatTokens(Math.floor(walletBalance))}</span>
+              {/* Tier Progress */}
+              <div className={`mt-3 rounded-lg border ${tierConfig.border} ${tierConfig.bg} px-3 py-2 inline-flex flex-col gap-1.5 min-w-[220px]`}>
+                <div className="flex items-center justify-between gap-4">
+                  <span className={`text-xs font-semibold flex items-center gap-1 ${tierConfig.color}`}>
+                    {tierConfig.emoji} {tierConfig.label} Member
+                    <span className="text-[10px] font-normal text-muted-foreground ml-1">· {Math.round(tierConfig.rate * 100)}% back</span>
+                  </span>
+                  {nextTierConfig && (
+                    <span className="text-[10px] text-muted-foreground">{nextTierConfig.emoji} {nextTierConfig.label} at ${nextTierConfig.minSpend.toLocaleString()}</span>
+                  )}
                 </div>
-                <div className="text-[10px] text-muted-foreground">JCMOVES</div>
+                {nextTierConfig && (
+                  <>
+                    <Progress value={tierProgress} className="h-1.5" />
+                    <p className="text-[10px] text-muted-foreground">
+                      ${totalSpend.toFixed(0)} spent · ${(nextTierConfig.minSpend - totalSpend).toFixed(0)} more to unlock {nextTierConfig.label}
+                    </p>
+                  </>
+                )}
+                {!nextTierConfig && (
+                  <p className="text-[10px] text-purple-400">You're at the top tier — enjoy 100 JCMOVES per $1 spent!</p>
+                )}
               </div>
-              {nextGoal && (
-                <div className="bg-card border border-border rounded-xl px-4 py-3 text-center min-w-[140px]">
-                  <div className="text-xs text-muted-foreground mb-0.5">Almost There</div>
-                  <div className="text-xs font-semibold truncate max-w-[130px]">{nextGoal.item.name}</div>
-                  <div className="text-[10px] text-yellow-500 mt-0.5">
-                    {formatTokens(Math.ceil((nextGoal.item.salePriceTokens ?? nextGoal.item.tokenPrice) - walletBalance))} more needed
+            </div>
+            <div className="flex flex-col gap-3">
+              <div className="flex gap-3">
+                <div className="bg-card border border-border rounded-xl px-4 py-3 text-center min-w-[120px]">
+                  <div className="text-xs text-muted-foreground mb-0.5">Your Balance</div>
+                  <div className="flex items-center justify-center gap-1.5">
+                    <Coins className="h-4 w-4 text-yellow-500" />
+                    <span className="text-lg font-bold text-yellow-500">{formatTokens(Math.floor(walletBalance))}</span>
                   </div>
+                  <div className="text-[10px] text-muted-foreground">JCMOVES</div>
                 </div>
-              )}
+                {nextGoal && (
+                  <div className="bg-card border border-border rounded-xl px-4 py-3 min-w-[160px]">
+                    <div className="text-xs text-muted-foreground mb-1">Next Goal</div>
+                    <div className="text-xs font-semibold truncate max-w-[140px]">{nextGoal.item.name}</div>
+                    <Progress
+                      value={affordabilityPct(nextGoal.item)}
+                      className="h-1.5 mt-1.5 mb-1"
+                    />
+                    <div className="text-[10px] text-yellow-500">
+                      {formatTokens(Math.ceil((nextGoal.item.salePriceTokens ?? nextGoal.item.tokenPrice) - walletBalance))} more needed
+                    </div>
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => setSimOpen(true)}
+                className="flex items-center justify-center gap-2 text-xs bg-card border border-yellow-500/30 hover:border-yellow-500/60 text-yellow-400 hover:text-yellow-300 rounded-lg px-3 py-2 transition-colors"
+              >
+                <TrendingUp className="h-3.5 w-3.5" />
+                Earnings Simulator
+              </button>
             </div>
           </div>
 
@@ -692,6 +750,95 @@ export default function RewardsMarketplacePage() {
           setSpinRedemptionId(undefined);
         }}
       />
+
+      {/* Earnings Simulator Dialog */}
+      <Dialog open={simOpen} onOpenChange={setSimOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-yellow-400" />
+              JCMOVES Earnings Simulator
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              See how many JCMOVES tokens you'd earn on any job — and what higher tiers unlock for you.
+            </p>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+              <Input
+                type="number"
+                placeholder="Enter job price (e.g. 500)"
+                value={simAmount}
+                onChange={e => setSimAmount(e.target.value)}
+                className="pl-7"
+                min="0"
+              />
+            </div>
+
+            {simTokens ? (
+              <div className="space-y-2">
+                {(Object.keys(LOYALTY_TIERS) as LoyaltyTierKey[]).map(tier => {
+                  const t = LOYALTY_TIERS[tier];
+                  const tokens = simTokens[tier];
+                  const isCurrentTier = tier === userTier;
+                  return (
+                    <div
+                      key={tier}
+                      className={`flex items-center justify-between rounded-lg border px-3 py-2.5 transition-all ${isCurrentTier ? `${t.border} ${t.bg}` : 'border-border bg-card/50'}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">{t.emoji}</span>
+                        <div>
+                          <span className={`text-sm font-semibold ${isCurrentTier ? t.color : 'text-muted-foreground'}`}>
+                            {t.label}
+                          </span>
+                          <span className="text-xs text-muted-foreground ml-1.5">{Math.round(t.rate * 100)}% · {t.tokensPerDollar}/$ </span>
+                          {isCurrentTier && <Badge variant="outline" className="ml-1.5 text-[9px] px-1 py-0 h-4">YOU</Badge>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Coins className="h-3.5 w-3.5 text-yellow-500" />
+                        <span className={`font-bold text-sm ${isCurrentTier ? 'text-yellow-400' : 'text-foreground'}`}>
+                          {fmtTokens(tokens)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div className="rounded-lg bg-muted/40 border border-border px-3 py-2 mt-1">
+                  <p className="text-xs text-muted-foreground flex items-start gap-1.5">
+                    <Info className="h-3.5 w-3.5 mt-0.5 shrink-0 text-blue-400" />
+                    Tokens are awarded after the job is marked complete. Your tier upgrades automatically as you spend more with JC ON THE MOVE.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-border bg-card/50 px-4 py-6 text-center">
+                <Coins className="h-8 w-8 text-yellow-500/40 mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">Enter a job price above to see your estimated token earnings across all tiers.</p>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                  {[100, 250, 500, 1000].map(amt => (
+                    <button
+                      key={amt}
+                      onClick={() => setSimAmount(String(amt))}
+                      className="bg-muted/50 hover:bg-muted rounded-md px-2 py-1.5 transition-colors"
+                    >
+                      ${amt.toLocaleString()} job → {fmtTokens(calculateJCMovesReward(amt, userTier))} tokens
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSimOpen(false)}>Close</Button>
+            <Button className="bg-yellow-500 text-black hover:bg-yellow-400" onClick={() => { setSimOpen(false); setActiveTab("shop"); }}>
+              Browse Rewards
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

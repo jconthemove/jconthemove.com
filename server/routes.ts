@@ -19,11 +19,11 @@ import { insertFundingDepositSchema, insertFaucetConfigSchema, insertFaucetWalle
 import { z } from "zod";
 import { EncryptionService } from "./services/encryption";
 import { eq, desc, sql, and, gte, lte, or, ilike } from 'drizzle-orm';
-import { db } from './db';
+import { db, pool } from './db';
 import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, giftCards, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens, promoCodes, reviews, rewardCategories, rewardItems, rewardRedemptions, buybackFund, laborQuotes } from '@shared/schema';
 import { getFaucetPayService } from "./services/faucetpay";
 import { getAdvertisingService } from "./services/advertising";
-import { FAUCET_CONFIG } from "./constants";
+import { FAUCET_CONFIG, calculateJCMovesReward, getTierFromSpend, LOYALTY_TIERS } from "./constants";
 import { walletService } from "./services/wallet";
 import { solanaMonitor } from "./services/solana-monitor";
 import { crewSuggestionService } from "./services/crew-suggestions";
@@ -337,6 +337,17 @@ async function generateApprovalToken(userId: string, action: string): Promise<st
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Schema migration: add loyalty tier columns to users if not present
+  try {
+    await pool.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS loyalty_tier TEXT DEFAULT 'bronze';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS total_completed_spend DECIMAL(10,2) DEFAULT 0.00;
+    `);
+    console.log('✅ Loyalty tier columns ready');
+  } catch (migErr) {
+    console.error('⚠️ Loyalty tier migration error (non-fatal):', migErr);
+  }
+
   // Seed staking tiers and treasury user on startup (ensures production has them)
   await ensureStakingTiersSeeded();
   await ensureStakingTreasuryUser();
@@ -3838,23 +3849,37 @@ Thank you for your business!
           await storage.updateLeadQuote(id, { completionRewardedAt: new Date() });
           console.log(`✅ Marked job ${id} as rewarded at ${new Date().toISOString()}`);
 
-          // ── 3. CUSTOMER LOYALTY REWARD ───────────────────────────────────
+          // ── 3. CUSTOMER LOYALTY REWARD (tier-based: 50–100 JCMOVES per $1) ───
           try {
             const customerEmail = updatedLead.email || updatedLead.customerEmail;
             if (customerEmail) {
               const customer = await storage.getUserByEmail(customerEmail);
               if (customer) {
-                const LOYALTY_REWARD = TREASURY_CONFIG.LOYALTY_REWARD_TOKENS;
+                // Calculate reward from job value using tier multiplier
+                const jobPrice = parseFloat(updatedLead.totalPrice || updatedLead.basePrice || '0');
+                const currentTier = (customer as any).loyaltyTier || 'bronze';
+                const LOYALTY_REWARD = jobPrice > 0
+                  ? calculateJCMovesReward(jobPrice, currentTier)
+                  : TREASURY_CONFIG.LOYALTY_REWARD_TOKENS; // fallback if no price set
+
+                // Update total spend and recalculate tier
+                const prevSpend = parseFloat((customer as any).totalCompletedSpend || '0');
+                const newSpend = prevSpend + jobPrice;
+                const newTier = getTierFromSpend(newSpend);
+                await db.update(users)
+                  .set({ loyaltyTier: newTier, totalCompletedSpend: newSpend.toFixed(2) } as any)
+                  .where(eq(users.id, customer.id));
+
                 await storage.creditWalletTokens(customer.id, LOYALTY_REWARD);
                 await db.insert(rewards).values({
                   userId: customer.id,
                   rewardType: REWARD_TYPES.LOYALTY_BOOKING,
                   tokenAmount: LOYALTY_REWARD.toFixed(8),
-                  cashValue: (LOYALTY_REWARD * 0.01).toFixed(2),
+                  cashValue: (LOYALTY_REWARD * 0.00000508432).toFixed(6),
                   status: "confirmed",
-                  metadata: { jobId: id, serviceType: updatedLead.serviceType }
+                  metadata: { jobId: id, serviceType: updatedLead.serviceType, jobPrice, tier: currentTier, tokensPerDollar: LOYALTY_TIERS[currentTier as keyof typeof LOYALTY_TIERS]?.tokensPerDollar ?? 50 }
                 });
-                console.log(`🎁 Awarded ${LOYALTY_REWARD} JCMOVES loyalty reward to customer ${customer.email}`);
+                console.log(`🎁 Awarded ${LOYALTY_REWARD} JCMOVES (${currentTier} tier, $${jobPrice} job) to customer ${customer.email} — new tier: ${newTier}`);
 
                 if (customer.referredByUserId) {
                   const prevLoyalty = await db.select().from(rewards)
@@ -4035,22 +4060,30 @@ Thank you for your business!
                 await storage.updateLeadQuote(id, { completionRewardedAt: new Date() });
                 console.log(`✅ Marked job ${id} as rewarded at ${new Date().toISOString()}`);
 
-                // Customer loyalty reward
+                // Customer loyalty reward (tier-based)
                 try {
                   if (updatedLead.customerEmail) {
                     const customer = await storage.getUserByEmail(updatedLead.customerEmail);
                     if (customer) {
-                      const LOYALTY_REWARD = TREASURY_CONFIG.LOYALTY_REWARD_TOKENS;
+                      const jobPrice = parseFloat(updatedLead.totalPrice || updatedLead.basePrice || '0');
+                      const currentTier = (customer as any).loyaltyTier || 'bronze';
+                      const LOYALTY_REWARD = jobPrice > 0
+                        ? calculateJCMovesReward(jobPrice, currentTier)
+                        : TREASURY_CONFIG.LOYALTY_REWARD_TOKENS;
+                      const prevSpend = parseFloat((customer as any).totalCompletedSpend || '0');
+                      const newSpend = prevSpend + jobPrice;
+                      const newTier = getTierFromSpend(newSpend);
+                      await db.update(users).set({ loyaltyTier: newTier, totalCompletedSpend: newSpend.toFixed(2) } as any).where(eq(users.id, customer.id));
                       await storage.creditWalletTokens(customer.id, LOYALTY_REWARD);
                       await db.insert(rewards).values({
                         userId: customer.id,
                         rewardType: REWARD_TYPES.LOYALTY_BOOKING,
                         tokenAmount: LOYALTY_REWARD.toFixed(8),
-                        cashValue: (LOYALTY_REWARD * 0.01).toFixed(2),
+                        cashValue: (LOYALTY_REWARD * 0.00000508432).toFixed(6),
                         status: "confirmed",
-                        metadata: { jobId: id, serviceType: updatedLead.serviceType }
+                        metadata: { jobId: id, serviceType: updatedLead.serviceType, jobPrice, tier: currentTier }
                       });
-                      console.log(`🎁 Awarded ${LOYALTY_REWARD} JCMOVES loyalty reward to customer ${customer.email}`);
+                      console.log(`🎁 Awarded ${LOYALTY_REWARD} JCMOVES (${currentTier} tier, $${jobPrice} job) to customer ${customer.email}`);
 
                       // Referral bonus on first completed job
                       if (customer.referredByUserId) {
@@ -5216,23 +5249,31 @@ Thank you for your business!
         }
       }
 
-      // Customer loyalty reward: Award tokens when their job completes
+      // Customer loyalty reward: Award tokens when their job completes (tier-based)
       try {
         const { TREASURY_CONFIG, REWARD_TYPES } = await import('./constants');
         if (updatedLead.customerEmail) {
           const customer = await storage.getUserByEmail(updatedLead.customerEmail);
           if (customer) {
-            const LOYALTY_REWARD = TREASURY_CONFIG.LOYALTY_REWARD_TOKENS; // $15 worth
+            const jobPrice = parseFloat(updatedLead.totalPrice || updatedLead.basePrice || '0');
+            const currentTier = (customer as any).loyaltyTier || 'bronze';
+            const LOYALTY_REWARD = jobPrice > 0
+              ? calculateJCMovesReward(jobPrice, currentTier)
+              : TREASURY_CONFIG.LOYALTY_REWARD_TOKENS;
+            const prevSpend = parseFloat((customer as any).totalCompletedSpend || '0');
+            const newSpend = prevSpend + jobPrice;
+            const newTier = getTierFromSpend(newSpend);
+            await db.update(users).set({ loyaltyTier: newTier, totalCompletedSpend: newSpend.toFixed(2) } as any).where(eq(users.id, customer.id));
             await storage.creditWalletTokens(customer.id, LOYALTY_REWARD);
             await db.insert(rewards).values({
               userId: customer.id,
               rewardType: REWARD_TYPES.LOYALTY_BOOKING,
               tokenAmount: LOYALTY_REWARD.toFixed(8),
-              cashValue: (LOYALTY_REWARD * 0.01).toFixed(2),
+              cashValue: (LOYALTY_REWARD * 0.00000508432).toFixed(6),
               status: "confirmed",
-              metadata: { jobId: id, serviceType: updatedLead.serviceType }
+              metadata: { jobId: id, serviceType: updatedLead.serviceType, jobPrice, tier: currentTier }
             });
-            console.log(`🎁 Awarded ${LOYALTY_REWARD} JCMOVES ($${(LOYALTY_REWARD * 0.01).toFixed(2)}) loyalty reward to customer ${customer.email}`);
+            console.log(`🎁 Awarded ${LOYALTY_REWARD} JCMOVES (${currentTier} tier, $${jobPrice} job) to customer ${customer.email} — new tier: ${newTier}`);
 
             // Referral bonus: Award tokens to referrer on first completed job
             if (customer.referredByUserId) {

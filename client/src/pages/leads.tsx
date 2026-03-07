@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
-import { ArrowLeft, Home, Building, Trash2, Mail, Phone, CircleDot, MessageCircle, FileText, CheckCircle, Clock, Play, Activity, CheckCheck, Settings, MapPin, Calendar as CalendarIcon, ChevronRight } from "lucide-react";
+import { ArrowLeft, Home, Building, Trash2, Mail, Phone, CircleDot, MessageCircle, FileText, CheckCircle, Clock, Play, Activity, CheckCheck, Settings, MapPin, Calendar as CalendarIcon, ChevronRight, Coins, TrendingUp } from "lucide-react";
+import { calculateJCMovesReward, LOYALTY_TIERS, formatTokens, type LoyaltyTierKey } from "@/lib/loyalty";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -34,6 +35,15 @@ export default function LeadsPage() {
   const queryClient = useQueryClient();
   const { user: currentUser } = useAuth();
   const isStaff = ["admin", "business_owner", "employee"].includes(currentUser?.role || "");
+  const [estimatedBudget, setEstimatedBudget] = useState("");
+  const [bookingConfirmed, setBookingConfirmed] = useState<{ tokens: number; tier: LoyaltyTierKey } | null>(null);
+
+  const userTier = ((currentUser as any)?.loyaltyTier || 'bronze') as LoyaltyTierKey;
+  const estimatedTokens = useMemo(() => {
+    const val = parseFloat(estimatedBudget);
+    if (!val || val <= 0) return 0;
+    return calculateJCMovesReward(val, userTier);
+  }, [estimatedBudget, userTier]);
   const [selectedService, setSelectedService] = useState("");
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isQuickViewOpen, setIsQuickViewOpen] = useState(false);
@@ -84,12 +94,19 @@ export default function LeadsPage() {
       return response.json();
     },
     onSuccess: () => {
+      const tokens = estimatedTokens;
+      if (tokens > 0) {
+        setBookingConfirmed({ tokens, tier: userTier });
+      }
       toast({
-        title: "Lead added successfully!",
-        description: "The lead has been added to the system. You'll earn rewards when it's confirmed and completed.",
+        title: isStaff ? "Job created!" : "Booking submitted!",
+        description: tokens > 0
+          ? `You'll earn approximately ${formatTokens(tokens)} JCMOVES when the job completes.`
+          : "You'll earn JCMOVES tokens when the job is confirmed and completed.",
       });
       form.reset();
       setSelectedService("");
+      setEstimatedBudget("");
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
       queryClient.invalidateQueries({ queryKey: ["/api/leads/available"] });
     },
@@ -414,6 +431,27 @@ export default function LeadsPage() {
             </TabsContent>
 
             <TabsContent value="add">
+              {/* Booking Confirmation Banner */}
+              {bookingConfirmed && (
+                <div className="mb-4 rounded-xl border border-orange-500/30 bg-orange-500/10 p-4 flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <Coins className="h-6 w-6 text-yellow-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-semibold text-orange-400">Booking submitted — tokens on the way!</p>
+                      <p className="text-sm text-slate-300 mt-0.5">
+                        Once your job is confirmed and completed, you'll earn approximately{" "}
+                        <span className="font-bold text-yellow-400">{formatTokens(bookingConfirmed.tokens)} JCMOVES</span>{" "}
+                        <span className="text-slate-400">({LOYALTY_TIERS[bookingConfirmed.tier].emoji} {LOYALTY_TIERS[bookingConfirmed.tier].label} {Math.round(LOYALTY_TIERS[bookingConfirmed.tier].rate * 100)}% rate)</span>.
+                        Spend them on service credits, gift cards & local deals in the marketplace.
+                      </p>
+                      <Link href="/rewards" className="text-xs text-orange-400 hover:text-orange-300 mt-1 inline-block">
+                        Browse the Rewards Marketplace →
+                      </Link>
+                    </div>
+                  </div>
+                  <button onClick={() => setBookingConfirmed(null)} className="text-slate-500 hover:text-slate-300 shrink-0 text-lg leading-none">×</button>
+                </div>
+              )}
               <Card className="bg-slate-800/50 border-slate-700">
                 <CardHeader>
                   <CardTitle className="text-2xl text-white">
@@ -576,13 +614,51 @@ export default function LeadsPage() {
                       />
                     </div>
 
+                    {/* Estimated Budget + Token Preview */}
+                    <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-4 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4 text-yellow-400" />
+                        <span className="text-sm font-medium text-yellow-400">Estimate your JCMOVES earnings</span>
+                        <span className="text-xs text-slate-500">(optional)</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="relative flex-1">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                          <Input
+                            type="number"
+                            placeholder="e.g. 250"
+                            value={estimatedBudget}
+                            onChange={e => setEstimatedBudget(e.target.value)}
+                            className="pl-7 bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
+                            min="0"
+                          />
+                        </div>
+                        {estimatedTokens > 0 && (
+                          <div className="flex items-center gap-1.5 bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-3 py-2 whitespace-nowrap">
+                            <Coins className="h-4 w-4 text-yellow-400" />
+                            <span className="font-bold text-yellow-400">{formatTokens(estimatedTokens)}</span>
+                            <span className="text-xs text-slate-400">JCMOVES</span>
+                          </div>
+                        )}
+                      </div>
+                      {estimatedTokens > 0 ? (
+                        <p className="text-xs text-slate-400">
+                          {LOYALTY_TIERS[userTier].emoji} {LOYALTY_TIERS[userTier].label} tier — earn{" "}
+                          <strong className="text-slate-300">{LOYALTY_TIERS[userTier].tokensPerDollar} JCMOVES per $1</strong>{" "}
+                          ({Math.round(LOYALTY_TIERS[userTier].rate * 100)}% back in tokens)
+                        </p>
+                      ) : (
+                        <p className="text-xs text-slate-500">Enter an estimated job value to see how many JCMOVES you'll earn. Earn 50–100 tokens per $1 spent.</p>
+                      )}
+                    </div>
+
                     <Button
                       type="submit"
                       disabled={submitLead.isPending}
                       className="w-full"
                       data-testid="button-submit-lead"
                     >
-                      {submitLead.isPending ? "Submitting..." : "Add Lead"}
+                      {submitLead.isPending ? "Submitting..." : isStaff ? "Create Job" : "Submit Booking"}
                     </Button>
                   </form>
                 </CardContent>

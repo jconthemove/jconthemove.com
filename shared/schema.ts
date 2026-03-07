@@ -137,6 +137,8 @@ export const users = pgTable("users", {
   personalWalletAddress: text("personal_wallet_address"), // User's personal Phantom wallet address (if walletMode = 'personal')
   companyWalletId: varchar("company_wallet_id"), // Foreign key to userWallets for company-assigned wallet (if walletMode = 'company')
   rewardsEnrolled: boolean("rewards_enrolled").notNull().default(false),
+  loyaltyTier: text("loyalty_tier").default("bronze"), // 'bronze', 'silver', 'gold', 'vip'
+  totalCompletedSpend: decimal("total_completed_spend", { precision: 10, scale: 2 }).default("0.00"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
