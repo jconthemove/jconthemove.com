@@ -465,6 +465,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   await ensureStakingTiersSeeded();
   await ensureStakingTreasuryUser();
   await ensureMomsAccount();
+  const { ensureNomineesTable } = await import("./services/nominees");
+  await ensureNomineesTable();
   await ensureRewardSettingsSeeded();
   await seedDefaultPromoCodes();
   await linkEmployeePromoCodes();
@@ -12849,6 +12851,64 @@ Thank you for your business!
       res.json({ ok: true, heart: rows[0] });
     } catch (e: any) {
       console.error("Mom heart donation error:", e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── NOMINEES ─────────────────────────────────────────────────────────────
+  app.get("/api/nominees", async (_req, res) => {
+    try {
+      const { getActiveNominees } = await import("./services/nominees");
+      const nominees = await getActiveNominees();
+      res.json(nominees);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/nominees", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const sessionUser = await storage.getUser(userId);
+      if (!sessionUser || !["admin", "business_owner"].includes(sessionUser.role)) {
+        return res.status(403).json({ error: "Admin only" });
+      }
+      const { name, description } = req.body;
+      if (!name?.trim()) return res.status(400).json({ error: "Name required" });
+      const { addNominee } = await import("./services/nominees");
+      const nominee = await addNominee(name.trim(), description?.trim() || "", sessionUser.firstName || userId);
+      res.json(nominee);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/nominees/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const sessionUser = await storage.getUser(userId);
+      if (!sessionUser || !["admin", "business_owner"].includes(sessionUser.role)) {
+        return res.status(403).json({ error: "Admin only" });
+      }
+      const { toggleNominee } = await import("./services/nominees");
+      await toggleNominee(parseInt(req.params.id), req.body.is_active);
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/generosity-fund", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const sessionUser = await storage.getUser(userId);
+      if (!sessionUser || !["admin", "business_owner"].includes(sessionUser.role)) {
+        return res.status(403).json({ error: "Admin only" });
+      }
+      const { getGenerosityFundStats } = await import("./services/nominees");
+      const stats = await getGenerosityFundStats();
+      res.json(stats);
+    } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
   });

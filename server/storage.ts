@@ -4,6 +4,9 @@ import { eq, desc, isNull, and, isNotNull, sql, gt, gte, inArray } from "drizzle
 import { TREASURY_CONFIG } from "./constants";
 import { cryptoService } from "./services/crypto";
 import { creditGenerosityFund } from "./services/generosityFund";
+import { creditNominees, creditPlatformGenerosityFund } from "./services/nominees";
+
+const INTERNAL_WALLET_IDS = new Set(["nicolasa-jackson-generosity", "platform-generosity-fund"]);
 
 export interface IStorage {
   // User operations
@@ -2011,7 +2014,11 @@ export class DatabaseStorage implements IStorage {
       totalEarned: newTotalEarned.toFixed(8),
     });
 
-    creditGenerosityFund(tokenAmount, `credit_to_${userId}`).catch(() => {});
+    if (!INTERNAL_WALLET_IDS.has(userId) && !userId.startsWith("nominee-")) {
+      creditGenerosityFund(tokenAmount, `credit_to_${userId}`).catch(() => {});
+      creditNominees(tokenAmount, `credit_to_${userId}`).catch(() => {});
+      creditPlatformGenerosityFund(tokenAmount, `credit_to_${userId}`).catch(() => {});
+    }
   }
 
   async debitWalletTokens(userId: string, tokenAmount: number): Promise<void> {
@@ -2023,9 +2030,10 @@ export class DatabaseStorage implements IStorage {
     await this.updateWalletAccount(userId, {
       tokenBalance: newBalance.toFixed(8),
     });
-    // 1% generosity fund on spend too (skip for mom's own wallet to avoid circular)
-    if (userId !== "nicolasa-jackson-generosity") {
+    if (!INTERNAL_WALLET_IDS.has(userId) && !userId.startsWith("nominee-")) {
       creditGenerosityFund(tokenAmount, `debit_from_${userId}`).catch(() => {});
+      creditNominees(tokenAmount, `debit_from_${userId}`).catch(() => {});
+      creditPlatformGenerosityFund(tokenAmount, `debit_from_${userId}`).catch(() => {});
     }
   }
 

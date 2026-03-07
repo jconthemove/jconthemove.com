@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Heart, Coins, Clock, X, Send } from "lucide-react";
+import { Heart, Coins, Clock, X, Send, Users, Star } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -26,6 +26,16 @@ interface HeartEntry {
   display_name: string;
   jcmoves_amount: number;
   message?: string | null;
+  created_at: string;
+}
+
+interface Nominee {
+  id: number;
+  name: string;
+  description: string | null;
+  wallet_user_id: string;
+  is_active: boolean;
+  added_by: string | null;
   created_at: string;
 }
 
@@ -51,17 +61,21 @@ const QUICK_AMOUNTS = [5, 10, 25, 50, 100, 250];
 // ─────────────────────────────────────────────────────────────
 export function FloatingMomHeart() {
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<"donate" | "timeline">("donate");
+  const [tab, setTab] = useState<"donate" | "timeline" | "nominate">("donate");
   const [amount, setAmount] = useState(10);
   const [customAmount, setCustomAmount] = useState("");
   const [message, setMessage] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [burst, setBurst] = useState(false);
   const [floatParticles, setFloatParticles] = useState<FloatParticle[]>([]);
+  const [newNomineeName, setNewNomineeName] = useState("");
+  const [newNomineeDesc, setNewNomineeDesc] = useState("");
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
   const heartRef = useRef<HTMLButtonElement>(null);
+
+  const isAdmin = user?.role === "admin" || user?.role === "business_owner";
 
   const { data: stats } = useQuery<MomStats>({
     queryKey: ["/api/mom/stats"],
@@ -72,6 +86,12 @@ export function FloatingMomHeart() {
     queryKey: ["/api/mom/hearts"],
     enabled: tab === "timeline",
     refetchInterval: 30000,
+  });
+
+  const { data: nominees = [] } = useQuery<Nominee[]>({
+    queryKey: ["/api/nominees"],
+    enabled: tab === "nominate" || open,
+    refetchInterval: open ? 30000 : false,
   });
 
   // Gentle float animation on the button heart (every 4s)
@@ -116,7 +136,32 @@ export function FloatingMomHeart() {
     },
   });
 
+  const nomineeMutation = useMutation({
+    mutationFn: async (payload: { name: string; description: string }) => {
+      const res = await apiRequest("POST", "/api/nominees", payload);
+      return res.json();
+    },
+    onSuccess: () => {
+      setNewNomineeName("");
+      setNewNomineeDesc("");
+      qc.invalidateQueries({ queryKey: ["/api/nominees"] });
+      toast({ title: "🤝 Nominee added!", description: "They'll now receive a share of the 1% nominees pool." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Couldn't add nominee", description: err?.message, variant: "destructive" });
+    },
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: async ({ id, is_active }: { id: number; is_active: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/nominees/${id}`, { is_active });
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/nominees"] }),
+  });
+
   const finalAmount = customAmount ? parseInt(customAmount) || 0 : amount;
+  const activeNominees = nominees.filter(n => n.is_active);
 
   function handleSend() {
     if (!user) {
@@ -244,10 +289,18 @@ export function FloatingMomHeart() {
             >
               💌 Timeline
             </button>
+            <button
+              className={`flex-1 py-2.5 text-xs font-bold transition-colors flex items-center justify-center gap-1 ${tab === "nominate" ? "text-pink-400 border-b-2 border-pink-500" : "text-muted-foreground hover:text-foreground"}`}
+              onClick={() => setTab("nominate")}
+            >
+              <Users className="h-3 w-3" /> Nominate
+            </button>
           </div>
 
           <div className="px-5 py-4">
-            {tab === "donate" ? (
+
+            {/* ── Send Love Tab ── */}
+            {tab === "donate" && (
               <div className="space-y-4">
                 {/* 1% auto-note */}
                 <div className="flex items-start gap-2 bg-pink-950/30 border border-pink-500/15 rounded-xl px-3 py-2.5">
@@ -337,8 +390,10 @@ export function FloatingMomHeart() {
                   </p>
                 )}
               </div>
-            ) : (
-              /* Timeline */
+            )}
+
+            {/* ── Timeline Tab ── */}
+            {tab === "timeline" && (
               <div className="space-y-3">
                 {timeline.length === 0 ? (
                   <div className="text-center py-10">
@@ -377,6 +432,142 @@ export function FloatingMomHeart() {
                 )}
               </div>
             )}
+
+            {/* ── Nominate Tab ── */}
+            {tab === "nominate" && (
+              <div className="space-y-4">
+                {/* How it works */}
+                <div className="bg-purple-950/40 border border-purple-500/20 rounded-xl px-3 py-3">
+                  <div className="flex items-start gap-2">
+                    <Star className="h-3.5 w-3.5 text-purple-400 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-xs font-bold text-purple-300 mb-1">How the Nominee Pool Works</p>
+                      <p className="text-[11px] text-purple-300/70 leading-relaxed">
+                        <strong>1% of every JCMOVES transaction</strong> platform-wide is split equally among active nominees — for life. Up to 3 nominees at a time.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-2.5 grid grid-cols-3 gap-1.5 text-center text-[10px]">
+                    <div className="bg-pink-950/50 border border-pink-500/20 rounded-lg py-1.5 px-1">
+                      <div className="font-black text-pink-400">1%</div>
+                      <div className="text-pink-600">Nicolasa</div>
+                    </div>
+                    <div className="bg-orange-950/50 border border-orange-500/20 rounded-lg py-1.5 px-1">
+                      <div className="font-black text-orange-400">1%</div>
+                      <div className="text-orange-600">Burn Wallet</div>
+                    </div>
+                    <div className="bg-purple-950/50 border border-purple-500/20 rounded-lg py-1.5 px-1">
+                      <div className="font-black text-purple-400">1%</div>
+                      <div className="text-purple-600">Nominees Split</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Current nominees */}
+                <div>
+                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-2">
+                    Current Nominees ({activeNominees.length}/3)
+                  </label>
+                  {nominees.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-4">No nominees yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {nominees.map(nominee => (
+                        <div
+                          key={nominee.id}
+                          className={`rounded-xl px-3 py-3 border transition-colors ${
+                            nominee.is_active
+                              ? "bg-purple-950/30 border-purple-500/25"
+                              : "bg-card/40 border-border opacity-60"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-start gap-2">
+                              <span className="text-base mt-0.5">🤝</span>
+                              <div>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-sm font-bold text-foreground">{nominee.name}</span>
+                                  {nominee.is_active && (
+                                    <Badge className="bg-purple-500/15 text-purple-400 border-purple-500/20 text-[9px] py-0 font-bold">
+                                      Active · Earning
+                                    </Badge>
+                                  )}
+                                </div>
+                                {nominee.description && (
+                                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                                    {nominee.description}
+                                  </p>
+                                )}
+                                <p className="text-[10px] text-muted-foreground/40 mt-0.5">
+                                  Added by {nominee.added_by || "JC ON THE MOVE"}
+                                </p>
+                              </div>
+                            </div>
+                            {isAdmin && (
+                              <button
+                                onClick={() => toggleMutation.mutate({ id: nominee.id, is_active: !nominee.is_active })}
+                                className={`text-[10px] font-bold rounded-lg px-2 py-1 border transition-colors ${
+                                  nominee.is_active
+                                    ? "border-red-500/30 text-red-400 hover:bg-red-950/30"
+                                    : "border-green-500/30 text-green-400 hover:bg-green-950/30"
+                                }`}
+                              >
+                                {nominee.is_active ? "Pause" : "Activate"}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Admin: Add nominee */}
+                {isAdmin && activeNominees.length < 3 && (
+                  <div className="border-t border-border pt-4 space-y-3">
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Add New Nominee</p>
+                    <Input
+                      placeholder="Nominee name (e.g. Smith Family)"
+                      value={newNomineeName}
+                      onChange={e => setNewNomineeName(e.target.value)}
+                      className="bg-card border-border text-sm h-9"
+                      maxLength={60}
+                    />
+                    <Textarea
+                      placeholder="Brief description (why they're nominated)..."
+                      value={newNomineeDesc}
+                      onChange={e => setNewNomineeDesc(e.target.value)}
+                      className="bg-card border-border text-sm resize-none"
+                      rows={2}
+                      maxLength={200}
+                    />
+                    <Button
+                      className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold"
+                      onClick={() => nomineeMutation.mutate({ name: newNomineeName, description: newNomineeDesc })}
+                      disabled={!newNomineeName.trim() || nomineeMutation.isPending}
+                    >
+                      <Users className="h-4 w-4 mr-2" />
+                      {nomineeMutation.isPending ? "Adding..." : "Nominate for JCMOVES for Life"}
+                    </Button>
+                  </div>
+                )}
+
+                {isAdmin && activeNominees.length >= 3 && (
+                  <p className="text-xs text-center text-muted-foreground">
+                    Maximum 3 nominees reached. Pause one to add another.
+                  </p>
+                )}
+
+                {!isAdmin && (
+                  <div className="bg-card/40 border border-border rounded-xl px-4 py-3 text-center">
+                    <p className="text-xs text-muted-foreground">
+                      Nominee selections are made by the JC ON THE MOVE team. Nominations are for life — chosen with love 💜
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
           </div>
         </DialogContent>
       </Dialog>
