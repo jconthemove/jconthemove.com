@@ -87,7 +87,53 @@ function LandingPage() {
   );
 }
 
-// Error boundary to prevent blank screens on render crashes
+// Root error boundary — catches ANY crash in the entire app tree
+class RootErrorBoundary extends ReactComponent<
+  { children: ReactNode },
+  { hasError: boolean; error: string; stack: string }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: "", stack: "" };
+  }
+  static getDerivedStateFromError(error: any) {
+    return {
+      hasError: true,
+      error: error?.message || String(error) || "Unknown error",
+      stack: error?.stack || "",
+    };
+  }
+  componentDidCatch(error: any, info: any) {
+    console.error("[RootErrorBoundary] Caught crash:", error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ minHeight: "100vh", background: "#111", color: "#eee", display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem", fontFamily: "sans-serif" }}>
+          <div style={{ maxWidth: 520, width: "100%", textAlign: "center" }}>
+            <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>⚠️</div>
+            <h2 style={{ fontSize: "1.25rem", fontWeight: "bold", marginBottom: "0.5rem" }}>Something went wrong</h2>
+            <p style={{ color: "#aaa", fontSize: "0.875rem", marginBottom: "1rem", wordBreak: "break-word" }}>{this.state.error}</p>
+            {this.state.stack && (
+              <pre style={{ background: "#1e1e1e", color: "#f88", fontSize: "0.7rem", padding: "0.75rem", borderRadius: "0.5rem", textAlign: "left", overflowX: "auto", maxHeight: 200, marginBottom: "1rem" }}>
+                {this.state.stack.slice(0, 600)}
+              </pre>
+            )}
+            <button
+              style={{ padding: "0.5rem 1.5rem", background: "#f97316", color: "#fff", border: "none", borderRadius: "0.5rem", cursor: "pointer", fontWeight: "bold" }}
+              onClick={() => { this.setState({ hasError: false, error: "", stack: "" }); window.location.href = "/"; }}
+            >
+              Reload App
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// Page-level error boundary — shows friendly message and recovers per-page
 class PageErrorBoundary extends ReactComponent<
   { children: ReactNode },
   { hasError: boolean; error: string }
@@ -98,6 +144,9 @@ class PageErrorBoundary extends ReactComponent<
   }
   static getDerivedStateFromError(error: any) {
     return { hasError: true, error: error?.message || "Something went wrong" };
+  }
+  componentDidCatch(error: any, info: any) {
+    console.error("[PageErrorBoundary] Caught crash:", error, info);
   }
   render() {
     if (this.state.hasError) {
@@ -117,6 +166,27 @@ class PageErrorBoundary extends ReactComponent<
         </div>
       );
     }
+    return this.props.children;
+  }
+}
+
+// Silent error boundary — wraps floating/overlay components so they fail invisibly
+class SilentErrorBoundary extends ReactComponent<
+  { children: ReactNode; label?: string },
+  { hasError: boolean }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: any, info: any) {
+    console.error(`[SilentErrorBoundary:${(this as any).props.label ?? "?"}] Suppressed crash:`, error, info);
+  }
+  render() {
+    if (this.state.hasError) return null;
     return this.props.children;
   }
 }
@@ -403,21 +473,31 @@ function Router() {
 
 function App() {
   return (
-    <ThemeProvider>
-      <QueryClientProvider client={queryClient}>
-        <WalletProviderWrapper>
-          <CartProvider>
-            <TooltipProvider>
-              <Router />
-              <Toaster />
-              <PwaInstallPrompt />
-              <EarnTasksButton />
-              <FloatingMomHeart />
-            </TooltipProvider>
-          </CartProvider>
-        </WalletProviderWrapper>
-      </QueryClientProvider>
-    </ThemeProvider>
+    <RootErrorBoundary>
+      <ThemeProvider>
+        <QueryClientProvider client={queryClient}>
+          <WalletProviderWrapper>
+            <CartProvider>
+              <TooltipProvider>
+                <PageErrorBoundary>
+                  <Router />
+                </PageErrorBoundary>
+                <Toaster />
+                <SilentErrorBoundary label="PwaInstallPrompt">
+                  <PwaInstallPrompt />
+                </SilentErrorBoundary>
+                <SilentErrorBoundary label="EarnTasksButton">
+                  <EarnTasksButton />
+                </SilentErrorBoundary>
+                <SilentErrorBoundary label="FloatingMomHeart">
+                  <FloatingMomHeart />
+                </SilentErrorBoundary>
+              </TooltipProvider>
+            </CartProvider>
+          </WalletProviderWrapper>
+        </QueryClientProvider>
+      </ThemeProvider>
+    </RootErrorBoundary>
   );
 }
 
