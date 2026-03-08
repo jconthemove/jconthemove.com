@@ -7,7 +7,7 @@ export interface NotificationOptions {
   onClick?: () => void;
 }
 
-const VAPID_PUBLIC_KEY = 'BBKJUr1ejnQet-n_Wg5_2ObllV4Mx4o_wjzvcpleD1lSf5cBbAPP2vhSaoJA-_UBj9Y0Iv4Jt9F8br0p-B9R8KY';
+const VAPID_PUBLIC_KEY = 'BFveYlkHTlnZsPBa4mWnX1pN-iOQskYGQh_SPrRJPZTpEFMFI9jTlf5iokygJORfaMtIE62eLAAnKP8pExq4QVc';
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);

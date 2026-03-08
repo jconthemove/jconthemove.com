@@ -72,6 +72,7 @@ import StakingPage from "@/pages/staking";
 import AdminQuoteReviewPage from "@/pages/admin-quote-review";
 import { CartProvider } from "@/hooks/useCart";
 import { NotificationPrompt } from "@/components/notification-prompt";
+import { useMiningNotifications } from "@/hooks/useMiningNotifications";
 
 // Landing page for unauthenticated users
 function LandingPage() {
@@ -138,6 +139,7 @@ function PageWrapper({ component: Component }: { component: any }) {
 function AuthenticatedApp() {
   const { user, isPending } = useAuth();
   const [, setLocation] = useLocation();
+  useMiningNotifications();
   
   // Determine home page based on user role
   const HomePage = user?.role === 'customer' ? CustomerPortal : EmployeeHomePage;

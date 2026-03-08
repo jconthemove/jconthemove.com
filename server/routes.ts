@@ -3916,6 +3916,11 @@ Thank you for your business!
                   metadata: { jobId: id, serviceType: updatedLead.serviceType, flat: true }
                 });
                 console.log(`🏆 Awarded ${flatReward} JCMOVES (job completion flat reward) to ${memberUser.email}`);
+                // Push notification for employee job completion reward
+                try {
+                  const { notificationService: pushSvc } = await import('./services/notification');
+                  await pushSvc.notifyRewardAvailable(memberId, 'job completion', flatReward);
+                } catch (_) {}
               } catch (memberErr) {
                 console.error(`❌ Failed to award flat reward to crew member ${memberId}:`, memberErr);
               }
@@ -9172,6 +9177,19 @@ Thank you for your business!
       
       if (!result.success) {
         return res.status(400).json({ error: result.error || "Failed to claim tokens" });
+      }
+
+      // Push notification: mining session claimed
+      if (result.tokensEarned && result.tokensEarned > 0) {
+        try {
+          const { notificationService: pushSvc } = await import('./services/notification');
+          await pushSvc.sendPushNotification(userId, {
+            title: '⛏️ JCMOVES Claimed!',
+            body: `${Math.round(result.tokensEarned).toLocaleString()} JCMOVES added to your wallet.${result.streakBonus ? ` 🔥 Streak bonus included!` : ''}`,
+            tag: 'mining-claim',
+            data: { url: '/rewards' },
+          });
+        } catch (_) {}
       }
       
       res.json(result);

@@ -16,6 +16,12 @@ export function NotificationPrompt() {
     const currentPermission = notificationService.getPermissionStatus();
     setPermission(currentPermission);
 
+    // If already granted, silently ensure server push subscription is registered
+    if (currentPermission === 'granted') {
+      notificationService.subscribeToServerPush().catch(() => {});
+      return;
+    }
+
     const dismissed = localStorage.getItem('notification-prompt-dismissed');
     if (currentPermission === 'default' && !dismissed) {
       const timer = setTimeout(() => setShowPrompt(true), 3000);
@@ -29,6 +35,8 @@ export function NotificationPrompt() {
     setShowPrompt(false);
     if (result === 'granted') {
       localStorage.setItem('notifications-enabled', 'true');
+      // Register push subscription with server
+      await notificationService.subscribeToServerPush();
     }
   };
 

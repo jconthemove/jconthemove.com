@@ -53,6 +53,6 @@ defaultBucketID = "replit-objstore-a9baa404-581c-4bac-9fcf-ce0cab96dc69"
 
 [userenv.shared]
 SQUARE_ENVIRONMENT = "production"
-VAPID_PUBLIC_KEY = "BBKJUr1ejnQet-n_Wg5_2ObllV4Mx4o_wjzvcpleD1lSf5cBbAPP2vhSaoJA-_UBj9Y0Iv4Jt9F8br0p-B9R8KY"
-VAPID_PRIVATE_KEY = "5XjfPq1O4vgae_87VnWkcuES2Be8Sk_1PF9myRU_Fls"
+VAPID_PUBLIC_KEY = "BFveYlkHTlnZsPBa4mWnX1pN-iOQskYGQh_SPrRJPZTpEFMFI9jTlf5iokygJORfaMtIE62eLAAnKP8pExq4QVc"
+VAPID_PRIVATE_KEY = "VnFey6UBeVTU9aVTJZqcuLpaKnOIaxPNdJGiyPSabPE"
 VAPID_EMAIL = "mailto:upmichiganstatemovers@gmail.com"
