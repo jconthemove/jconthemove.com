@@ -7,6 +7,7 @@ import {
   ArrowLeft, Phone, Mail, Calendar, DollarSign, ExternalLink,
   AlertCircle, Truck, Copy, Check
 } from "lucide-react";
+import { getStatusColors } from "@/lib/job-status";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -141,17 +142,14 @@ function ReviewRequestButton({ job }: { job: any }) {
 // ─── Job Row ──────────────────────────────────────────────────────────────────
 function JobRow({ job, expanded, onToggle }: { job: any; expanded: boolean; onToggle: () => void }) {
   const completedStages = STAGES.filter((s) => job.stages[s.key]?.done).length;
-  const isComplete = job.stages.completed.done;
+  const sc = getStatusColors(job.status);
 
   return (
-    <div className={`rounded-xl border transition-all ${isComplete ? "border-green-800/50" : "border-slate-700/60"} bg-slate-900/80`}>
+    <div className={`rounded-xl border-l-4 ${sc.border} border-t border-r border-b border-slate-700/60 transition-all bg-slate-900/80`}>
       {/* ── Collapsed row ── */}
       <div className="flex items-center gap-3 px-4 py-3 cursor-pointer" onClick={onToggle}>
-        {/* Status dot */}
-        <div className={`w-2 h-2 rounded-full shrink-0 ${
-          job.status === "completed" ? "bg-green-500" :
-          job.status === "available" ? "bg-blue-500" : "bg-slate-500"
-        }`} />
+        {/* Traffic light dot */}
+        <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${sc.dot} shadow-md`} />
 
         {/* Name + service */}
         <div className="flex-1 min-w-0">
@@ -162,6 +160,7 @@ function JobRow({ job, expanded, onToggle }: { job: any; expanded: boolean; onTo
             <Badge variant="outline" className="text-xs border-slate-600 text-slate-400 py-0">
               {SERVICE_LABELS[job.serviceType] || job.serviceType}
             </Badge>
+            <Badge className={`text-xs py-0 ${sc.badgeBg}`}>{sc.label}</Badge>
             {job.assignedEmployee && (
               <Badge variant="outline" className="text-xs border-purple-600/50 text-purple-400 py-0">
                 👷 {job.assignedEmployee}

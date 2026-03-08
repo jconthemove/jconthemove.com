@@ -446,14 +446,26 @@ export default function EmployeeDashboard() {
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
+                            <span className={`inline-block w-2.5 h-2.5 rounded-full shrink-0 ${
+                              job.status === 'completed' ? 'bg-green-500 shadow shadow-green-500/60'
+                              : ['confirmed','accepted','in_progress'].includes(job.status) ? 'bg-yellow-400 shadow shadow-yellow-400/60'
+                              : 'bg-red-500 shadow shadow-red-500/60 animate-pulse'
+                            }`} />
                             <h4 className="font-semibold">
                               {job.firstName} {job.lastName}
                             </h4>
                             <Badge variant="outline" data-testid={`badge-service-${job.id}`}>
                               {job.serviceType}
                             </Badge>
-                            <Badge data-testid={`badge-status-${job.id}`}>
-                              {job.status}
+                            <Badge
+                              data-testid={`badge-status-${job.id}`}
+                              className={
+                                job.status === 'completed' ? 'bg-green-500/15 text-green-300 border border-green-500/30'
+                                : ['confirmed','accepted','in_progress'].includes(job.status) ? 'bg-yellow-500/15 text-yellow-300 border border-yellow-500/30'
+                                : 'bg-red-500/15 text-red-300 border border-red-500/30'
+                              }
+                            >
+                              {job.status.replace('_', ' ')}
                             </Badge>
                           </div>
                           {job.confirmedDate && (

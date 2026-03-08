@@ -353,11 +353,15 @@ export default function EmployeeHomePage() {
                   className={`text-[10px] px-1.5 py-0.5 rounded-md truncate font-medium ${
                     job.status === 'completed'
                       ? 'bg-green-500/20 text-green-300 border border-green-500/30'
-                      : job.confirmedDate
-                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                        : 'bg-amber-500/20 text-amber-300 border border-amber-500/30 border-dashed'
+                      : ['confirmed','accepted','in_progress'].includes(job.status)
+                        ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30'
+                        : 'bg-red-500/20 text-red-300 border border-red-500/30 border-dashed'
                   }`}
-                  title={job.confirmedDate ? 'Confirmed' : 'Tentative'}
+                  title={
+                    job.status === 'completed' ? 'Completed'
+                    : ['confirmed','accepted','in_progress'].includes(job.status) ? 'Confirmed'
+                    : 'Lead / Quote'
+                  }
                 >
                   {job.firstName}
                 </div>
@@ -368,11 +372,11 @@ export default function EmployeeHomePage() {
                   className={`text-[10px] px-1.5 py-0.5 rounded-md truncate font-medium ${
                     jobsOnDate[0].status === 'completed'
                       ? 'bg-green-500/20 text-green-300 border border-green-500/30'
-                      : jobsOnDate[0].confirmedDate
-                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                        : 'bg-amber-500/20 text-amber-300 border border-amber-500/30 border-dashed'
+                      : ['confirmed','accepted','in_progress'].includes(jobsOnDate[0].status)
+                        ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30'
+                        : 'bg-red-500/20 text-red-300 border border-red-500/30 border-dashed'
                   }`}
-                  title={`${jobsOnDate[0].firstName} - ${jobsOnDate[0].confirmedDate ? 'Confirmed' : 'Tentative'}`}
+                  title={`${jobsOnDate[0].firstName} - ${jobsOnDate[0].status}`}
                 >
                   {jobsOnDate[0].firstName}
                 </div>

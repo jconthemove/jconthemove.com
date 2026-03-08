@@ -175,34 +175,10 @@ export default function LeadsPage() {
 
   const getServiceBadgeColor = (serviceType: string) => {
     switch (serviceType) {
-      case "residential": return "bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200";
-      case "commercial": return "bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200";
-      case "junk": return "bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200";
-      default: return "bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200";
-    }
-  };
-
-  const getStatusBadgeVariant = (status: string) => {
-    switch (status) {
-      case "new": return "default";
-      case "contacted": return "secondary";
-      case "quoted": return "secondary";
-      case "confirmed": return "default";
-      default: return "secondary";
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case "new": return <CircleDot className="h-4 w-4 text-blue-500" />;
-      case "contacted": return <MessageCircle className="h-4 w-4 text-purple-500" />;
-      case "quoted": return <FileText className="h-4 w-4 text-amber-500" />;
-      case "confirmed": return <CheckCircle className="h-4 w-4 text-green-500" />;
-      case "available": return <Clock className="h-4 w-4 text-orange-500" />;
-      case "accepted": return <Play className="h-4 w-4 text-teal-500" />;
-      case "in_progress": return <Activity className="h-4 w-4 text-indigo-500" />;
-      case "completed": return <CheckCheck className="h-4 w-4 text-emerald-500" />;
-      default: return <CircleDot className="h-4 w-4 text-gray-500" />;
+      case "residential": return "bg-blue-500/15 text-blue-300 border border-blue-500/30";
+      case "commercial": return "bg-purple-500/15 text-purple-300 border border-purple-500/30";
+      case "junk": return "bg-orange-500/15 text-orange-300 border border-orange-500/30";
+      default: return "bg-slate-500/15 text-slate-300 border border-slate-500/30";
     }
   };
 
@@ -217,108 +193,97 @@ export default function LeadsPage() {
     setIsManageDialogOpen(true);
   };
 
-  const renderLeadCard = (lead: Lead) => (
-    <Card
-      key={lead.id}
-      className="border border-slate-700 hover:border-blue-500/60 hover:shadow-xl transition-all bg-slate-800/80 backdrop-blur-sm cursor-pointer group"
-      data-testid={`lead-card-${lead.id}`}
-      onClick={() => setLocation(`/lead/${lead.id}`)}
-    >
-      <CardContent className="p-5">
-        <div className="space-y-4">
-          {/* Header row with name and status */}
-          <div className="flex justify-between items-start flex-wrap gap-3">
-            <div className="flex items-center gap-3 flex-wrap">
-              {getStatusIcon(lead.status)}
-              <h3 className="font-bold text-lg text-white group-hover:text-blue-300 transition-colors">
+  const renderLeadCard = (lead: Lead) => {
+    const sc = getStatusColors(lead.status);
+    const serviceLabel = lead.serviceType === "residential" ? "Residential"
+      : lead.serviceType === "commercial" ? "Commercial"
+      : lead.serviceType === "junk" ? "Junk Removal"
+      : lead.serviceType.charAt(0).toUpperCase() + lead.serviceType.slice(1);
+
+    return (
+      <Card
+        key={lead.id}
+        className={`border-l-4 ${sc.border} border-t border-r border-b border-slate-700/60 hover:border-slate-600 hover:shadow-xl transition-all bg-slate-800/80 backdrop-blur-sm cursor-pointer group`}
+        data-testid={`lead-card-${lead.id}`}
+        onClick={() => setLocation(`/lead/${lead.id}`)}
+      >
+        <CardContent className="p-4">
+          {/* Header: traffic light + name + badges + actions */}
+          <div className="flex justify-between items-start flex-wrap gap-3 mb-3">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <span className={`inline-block w-3 h-3 rounded-full ${sc.dot} shadow-md animate-pulse shrink-0`} title={sc.label} />
+              <h3 className="font-bold text-base text-white group-hover:text-blue-300 transition-colors">
                 {lead.firstName} {lead.lastName}
               </h3>
-              <Badge className={getServiceBadgeColor(lead.serviceType)}>
-                {lead.serviceType === "residential" && "Residential"}
-                {lead.serviceType === "commercial" && "Commercial"}
-                {lead.serviceType === "junk" && "Junk Removal"}
-                {!["residential","commercial","junk"].includes(lead.serviceType) && lead.serviceType.charAt(0).toUpperCase() + lead.serviceType.slice(1)}
-              </Badge>
-              <Badge variant={getStatusBadgeVariant(lead.status)}>
-                {lead.status.charAt(0).toUpperCase() + lead.status.slice(1).replace("_", " ")}
-              </Badge>
+              <Badge className={getServiceBadgeColor(lead.serviceType)}>{serviceLabel}</Badge>
+              <Badge className={sc.badgeBg}>{sc.label}</Badge>
               {lead.redemptionId && (
-                <Badge className="bg-orange-500/20 text-orange-400 border border-orange-500/30">
-                  🎁 From Rewards
-                </Badge>
+                <Badge className="bg-orange-500/20 text-orange-400 border border-orange-500/30 text-xs">🎁 Rewards</Badge>
               )}
             </div>
-            <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-              <Button 
-                variant="default" 
-                size="sm" 
+            <div className="flex gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+              <Button variant="default" size="sm"
                 onClick={() => setLocation(`/lead/${lead.id}`)}
                 data-testid={`manage-button-${lead.id}`}
-                className="gap-1.5"
+                className="gap-1 h-8 text-xs"
               >
-                <ChevronRight className="h-3.5 w-3.5" />
-                Open
+                <ChevronRight className="h-3.5 w-3.5" /> Open
               </Button>
-              <Button 
-                variant="ghost" 
-                size="sm"
+              <Button variant="ghost" size="sm"
                 onClick={() => setLeadToDelete(lead)}
                 data-testid={`delete-button-${lead.id}`}
-                className="hover:text-destructive"
+                className="hover:text-red-400 h-8"
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
             </div>
           </div>
-          
-          {/* Contact info row */}
-          <div className="flex flex-wrap gap-4 text-sm" onClick={(e) => e.stopPropagation()}>
-            <Button variant="outline" size="sm" asChild data-testid={`email-button-${lead.id}`} className="h-8">
-              <a href={`mailto:${lead.email}`} className="flex items-center gap-2">
-                <Mail className="h-4 w-4" />
-                {lead.email}
+
+          {/* Contact */}
+          <div className="flex flex-wrap gap-2 mb-3" onClick={(e) => e.stopPropagation()}>
+            <Button variant="outline" size="sm" asChild data-testid={`phone-button-${lead.id}`}
+              className="h-7 text-xs border-slate-600 text-slate-300 hover:text-white hover:border-slate-500">
+              <a href={`tel:${lead.phone}`} className="flex items-center gap-1.5">
+                <Phone className="h-3.5 w-3.5" />{lead.phone}
               </a>
             </Button>
-            <Button variant="outline" size="sm" asChild data-testid={`phone-button-${lead.id}`} className="h-8">
-              <a href={`tel:${lead.phone}`} className="flex items-center gap-2">
-                <Phone className="h-4 w-4" />
-                {lead.phone}
+            <Button variant="outline" size="sm" asChild data-testid={`email-button-${lead.id}`}
+              className="h-7 text-xs border-slate-600 text-slate-300 hover:text-white hover:border-slate-500">
+              <a href={`mailto:${lead.email}`} className="flex items-center gap-1.5">
+                <Mail className="h-3.5 w-3.5" />{lead.email}
               </a>
             </Button>
           </div>
-          
-          {/* Location and date info */}
-          <div className="space-y-2 text-sm text-slate-300">
-            <div className="flex items-start gap-2">
-              <MapPin className="h-4 w-4 mt-0.5 text-slate-400 flex-shrink-0" />
-              <div className="space-y-1">
-                <p className="font-medium text-white">From: {lead.fromAddress}</p>
-                {lead.toAddress && <p className="font-medium text-white">To: {lead.toAddress}</p>}
-              </div>
+
+          {/* Address + date */}
+          <div className="space-y-1 text-xs text-slate-400">
+            <div className="flex items-start gap-1.5">
+              <MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              <span className="text-slate-300"><span className="text-slate-500">From:</span> {lead.fromAddress}
+                {lead.toAddress && <> &rarr; {lead.toAddress}</>}
+              </span>
             </div>
             {lead.moveDate && (
-              <div className="flex items-center gap-2">
-                <CalendarIcon className="h-4 w-4 text-slate-400" />
-                <p className="text-slate-300">Move Date: <span className="font-medium text-white">{lead.moveDate}</span></p>
+              <div className="flex items-center gap-1.5">
+                <CalendarIcon className="h-3.5 w-3.5 shrink-0" />
+                <span className="text-slate-300"><span className="text-slate-500">Date:</span> {lead.moveDate}</span>
               </div>
             )}
           </div>
-          
-          {/* Details section */}
+
           {lead.details && (
-            <div className="bg-slate-700/50 p-3 rounded-lg">
-              <p className="text-sm text-slate-300">{lead.details}</p>
+            <div className="mt-3 bg-slate-700/40 px-3 py-2 rounded-lg">
+              <p className="text-xs text-slate-300 line-clamp-2">{lead.details}</p>
             </div>
           )}
-          
-          {/* Footer with timestamp */}
-          <p className="text-xs text-slate-400 border-t border-slate-700 pt-2">
-            Posted: {new Date(lead.createdAt).toLocaleString()}
+
+          <p className="text-xs text-slate-600 border-t border-slate-700/50 pt-2 mt-3">
+            {new Date(lead.createdAt).toLocaleString()}
           </p>
-        </div>
-      </CardContent>
-    </Card>
-  );
+        </CardContent>
+      </Card>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
@@ -342,6 +307,14 @@ export default function LeadsPage() {
                 Back to Dashboard
               </Button>
             </div>
+          </div>
+
+          {/* Traffic Light Legend */}
+          <div className="flex items-center gap-4 flex-wrap bg-slate-800/50 border border-slate-700/50 rounded-xl px-4 py-2.5 mb-6 text-xs text-slate-400">
+            <span className="font-semibold text-slate-300 mr-1">Status Key:</span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block shadow shadow-red-500/60 animate-pulse" /> Lead / Quote Request</span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-yellow-400 inline-block shadow shadow-yellow-400/60" /> Confirmed Job</span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block shadow shadow-green-500/60" /> Completed</span>
           </div>
 
           <Tabs defaultValue="view" className="space-y-6">
