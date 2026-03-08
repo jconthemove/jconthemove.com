@@ -4,12 +4,9 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Coins, Crown, Flame, Copy, CheckCircle2, History, X, Zap } from "lucide-react";
+import { Coins, Crown, Flame, Copy, CheckCircle2, History, X, Zap, Square, Play } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-// ─────────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────────
 interface JackpotRow {
   type: string;
   current_value: number;
@@ -57,9 +54,6 @@ interface QuantumSpinProps {
   redemptionId?: number;
 }
 
-// ─────────────────────────────────────────────────────────────
-// Particle data
-// ─────────────────────────────────────────────────────────────
 function makeParticles(count: number) {
   return Array.from({ length: count }, (_, i) => {
     const angle = (i / count) * 360 + Math.random() * 15;
@@ -75,9 +69,6 @@ function makeParticles(count: number) {
   });
 }
 
-// ─────────────────────────────────────────────────────────────
-// Time ago helper
-// ─────────────────────────────────────────────────────────────
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const m = Math.floor(diff / 60000);
@@ -88,23 +79,51 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-// ─────────────────────────────────────────────────────────────
-// QuantumSpinDialog
-// ─────────────────────────────────────────────────────────────
+function prizeEmoji(prizeType: string): string {
+  if (prizeType === "mystery") return "🎁";
+  if (prizeType === "gift_card_coffee") return "☕";
+  if (prizeType === "coupon_10pct") return "🎫";
+  if (prizeType === "coupon_25pct") return "🎟️";
+  if (prizeType === "tokens") return "⚡";
+  return "🌌";
+}
+
+function prizeLabel(result: SpinResult): string {
+  if (result.jackpotTypeWon) return result.jackpotTypeWon === "major" ? "🏆 MAJOR JACKPOT!" : "🔥 MINI JACKPOT!";
+  if (result.prizeType === "mystery") return "Mystery Box";
+  if (result.prizeType === "gift_card_coffee") return "$5 Coffee Card";
+  if (result.prizeType === "coupon_10pct") return "10% Off Coupon";
+  if (result.prizeType === "coupon_25pct") return "25% Off Coupon";
+  if (result.prizeType === "tokens" && result.tokens > 0) return `+${result.tokens.toLocaleString()} JCMOVES`;
+  return "No prize";
+}
+
+function CouponCodeRow({ code, onCopy, copied }: { code: string; onCopy: (c: string) => void; copied: boolean }) {
+  return (
+    <div className="flex items-center gap-2 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2">
+      <span className="font-mono text-sm font-bold text-green-400 tracking-widest flex-1">{code}</span>
+      <button onClick={() => onCopy(code)} className="text-muted-foreground hover:text-green-400 transition-colors">
+        {copied ? <CheckCircle2 className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
+      </button>
+    </div>
+  );
+}
+
 export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProps) {
-  type AnimState = "idle" | "deducting" | "animating" | "flash" | "result";
+  type AnimState = "idle" | "animating" | "flash" | "result";
 
   const [animState, setAnimState] = useState<AnimState>("idle");
   const [result, setResult] = useState<SpinResult | null>(null);
+  const [lastAutoResult, setLastAutoResult] = useState<SpinResult | null>(null);
   const [particles, setParticles] = useState<ReturnType<typeof makeParticles>>([]);
   const [copied, setCopied] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [sessionSpinCount, setSessionSpinCount] = useState(0);
+  const [sessionEarned, setSessionEarned] = useState(0);
   const [claimedMilestones, setClaimedMilestones] = useState<Set<number>>(new Set());
   const [isAutoSpin, setIsAutoSpin] = useState(false);
-  const [holdProgress, setHoldProgress] = useState(0);
+  const spinCountRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const holdTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoSpinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { toast } = useToast();
 
@@ -116,7 +135,7 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
 
   const { data: feed = [] } = useQuery<ActivityEvent[]>({
     queryKey: ["/api/reward-shop/activity-feed"],
-    refetchInterval: open ? 8000 : false,
+    refetchInterval: open ? 10000 : false,
     enabled: open,
   });
 
@@ -130,14 +149,14 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
     enabled: open,
   });
 
-  const { data: walletData } = useQuery<{ tokenBalance: string }>({
+  const { data: walletData, refetch: refetchWallet } = useQuery<{ tokenBalance: string }>({
     queryKey: ["/api/rewards/wallet"],
-    refetchInterval: open ? 10000 : false,
+    refetchInterval: open ? 8000 : false,
     enabled: open,
   });
   const walletBalance = parseFloat(walletData?.tokenBalance || "0");
   const spinCost = 100;
-  const canAffordSpin = walletBalance >= spinCost || freeSpins.length > 0;
+  const canAffordSpin = walletBalance >= spinCost || (freeSpins?.length ?? 0) > 0;
 
   const mini = jackpots.find(j => j.type === "mini");
   const major = jackpots.find(j => j.type === "major");
@@ -156,9 +175,9 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
       queryClient.invalidateQueries({ queryKey: ["/api/rewards/wallet"] });
       queryClient.invalidateQueries({ queryKey: ["/api/reward-shop/activity-feed"] });
       const m = data.milestone;
-      if (m === 10) toast({ title: "🔥 10-Spin Streak!", description: `+100 JCMOVES bonus credited to your wallet!` });
-      else if (m === 30) toast({ title: "🔥🔥 30-Spin Streak!", description: `+500 JCMOVES streak bonus! You're on fire!` });
-      else if (m === 50) toast({ title: "🎁 50-Spin Mystery Bonus!", description: `Mystery box revealed! +${data.bonusTokens.toLocaleString()} JCMOVES!` });
+      if (m === 10) toast({ title: "🔥 10-Spin Streak!", description: `+100 JCMOVES bonus!` });
+      else if (m === 30) toast({ title: "🔥🔥 30-Spin Streak!", description: `+500 JCMOVES bonus!` });
+      else if (m === 50) toast({ title: "🎁 50-Spin Mystery!", description: `+${data.bonusTokens.toLocaleString()} JCMOVES!` });
     },
   });
 
@@ -166,14 +185,15 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
     if (!open) {
       clearTimers();
       if (autoSpinTimerRef.current) clearTimeout(autoSpinTimerRef.current);
-      if (holdTimerRef.current) clearInterval(holdTimerRef.current);
       setAnimState("idle");
       setResult(null);
+      setLastAutoResult(null);
       setParticles([]);
       setSessionSpinCount(0);
+      setSessionEarned(0);
+      spinCountRef.current = 0;
       setClaimedMilestones(new Set());
       setIsAutoSpin(false);
-      setHoldProgress(0);
     }
   }, [open, clearTimers]);
 
@@ -183,17 +203,25 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
       return res.json() as Promise<SpinResult>;
     },
     onSuccess: (data: SpinResult) => {
-      // Phase 2: particles spiral in (0 → 1200ms already running), at 1200ms flash orb
       const t2 = setTimeout(() => setAnimState("flash"), 1200);
-      // Phase 3: at 1500ms show result
       const t3 = setTimeout(() => {
         setResult(data);
         setAnimState("result");
-        queryClient.invalidateQueries({ queryKey: ["/api/rewards/wallet"] });
-        queryClient.invalidateQueries({ queryKey: ["/api/mining/status"] });
+
+        // Track tokens earned this session
+        const earnedThisSpin = data.tokens + (data.jackpotAmountWon || 0);
+        setSessionEarned(prev => prev + earnedThisSpin);
+
+        // Only refresh wallet every 5 spins to prevent flicker
+        spinCountRef.current += 1;
+        if (spinCountRef.current % 5 === 0) {
+          refetchWallet();
+        }
+
         queryClient.invalidateQueries({ queryKey: ["/api/reward-shop/jackpots"] });
         queryClient.invalidateQueries({ queryKey: ["/api/reward-shop/activity-feed"] });
         queryClient.invalidateQueries({ queryKey: ["/api/reward-shop/free-spins"] });
+
         // Streak tracking
         setSessionSpinCount(prev => {
           const newCount = prev + 1;
@@ -218,26 +246,30 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
       clearTimers();
       setAnimState("idle");
       setParticles([]);
+      setIsAutoSpin(false);
       toast({ title: "Spin failed", description: err?.message || "Please try again", variant: "destructive" });
     },
   });
 
-  // Auto-spin effect: fires next spin 700ms after a result lands
+  // Auto-spin: after result shows (1.5s delay), auto-fire next spin after showing result for 2 seconds
   useEffect(() => {
     if (animState === "result" && isAutoSpin && canAffordSpin) {
+      setLastAutoResult(result);
       autoSpinTimerRef.current = setTimeout(() => {
-        if (isAutoSpin) handleSpinCore();
-      }, 700);
+        if (isAutoSpin) {
+          setLastAutoResult(null);
+          handleSpinCore();
+        }
+      }, 2000);
     }
     return () => {
       if (autoSpinTimerRef.current) clearTimeout(autoSpinTimerRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [animState, isAutoSpin]);
 
   function handleSpinCore() {
     if (animState !== "idle" && animState !== "result") return;
-    const freeSpin = freeSpins[0];
+    const freeSpin = freeSpins?.[0];
     setResult(null);
     setParticles(makeParticles(24));
     setAnimState("animating");
@@ -252,35 +284,28 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
     handleSpinCore();
   }
 
-  function startHold() {
-    let elapsed = 0;
-    setHoldProgress(0);
-    holdTimerRef.current = setInterval(() => {
-      elapsed += 100;
-      const pct = Math.min(100, (elapsed / 5000) * 100);
-      setHoldProgress(pct);
-      if (elapsed >= 5000) {
-        clearInterval(holdTimerRef.current!);
-        holdTimerRef.current = null;
-        setHoldProgress(0);
-        setIsAutoSpin(prev => {
-          const next = !prev;
-          toast({
-            title: next ? "⚡ Auto-Spin ON" : "⏸ Auto-Spin OFF",
-            description: next ? "Spins will fire automatically. Hold again to stop." : "Auto-spin stopped.",
-          });
-          return next;
-        });
-      }
-    }, 100);
+  function toggleAutoSpin() {
+    const next = !isAutoSpin;
+    setIsAutoSpin(next);
+    if (next && (animState === "idle" || animState === "result")) {
+      handleSpinCore();
+    }
+    if (!next) {
+      if (autoSpinTimerRef.current) clearTimeout(autoSpinTimerRef.current);
+      // Refresh wallet on stop
+      refetchWallet();
+      queryClient.invalidateQueries({ queryKey: ["/api/rewards/wallet"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/mining/status"] });
+    }
   }
 
-  function cancelHold() {
-    if (holdTimerRef.current) {
-      clearInterval(holdTimerRef.current);
-      holdTimerRef.current = null;
-    }
-    setHoldProgress(0);
+  function stopAutoSpin() {
+    setIsAutoSpin(false);
+    if (autoSpinTimerRef.current) clearTimeout(autoSpinTimerRef.current);
+    refetchWallet();
+    queryClient.invalidateQueries({ queryKey: ["/api/rewards/wallet"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/mining/status"] });
+    toast({ title: "⏸ Auto-Spin Stopped", description: `Session: ${sessionSpinCount} spins · +${sessionEarned.toLocaleString()} JCMOVES earned` });
   }
 
   function handleCopy(code: string) {
@@ -291,24 +316,27 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
   }
 
   function handleClose() {
-    if (animState === "animating" || animState === "deducting" || animState === "flash") return;
+    if (animState === "animating" || animState === "flash") return;
+    if (isAutoSpin) stopAutoSpin();
+    // Final wallet refresh on exit
+    queryClient.invalidateQueries({ queryKey: ["/api/rewards/wallet"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/mining/status"] });
     onClose();
   }
 
   function handleSpinAgain() {
+    setIsAutoSpin(false);
     handleSpinCore();
   }
 
-  // Compute display values for result card
   const resultTokens = result?.tokens ?? 0;
   const isJackpot = !!result?.jackpotTypeWon;
   const isMystery = result?.prizeType === "mystery";
   const isCoupon = result?.prizeType === "coupon_10pct" || result?.prizeType === "coupon_25pct";
   const isCoffee = result?.prizeType === "gift_card_coffee";
   const displayCode = result?.couponCode || result?.mysteryResult?.couponCode || null;
-  const hasFreeSpinEntry = !!freeSpins.length;
+  const hasFreeSpinEntry = (freeSpins?.length ?? 0) > 0;
 
-  // ─── Orb glow class based on state ────────────────────────
   const orbGlow = animState === "flash"
     ? "0 0 80px 40px rgba(255,255,255,0.9), 0 0 160px 80px rgba(251,191,36,0.6)"
     : animState === "animating"
@@ -382,84 +410,93 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
                 {walletBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })}
               </div>
               <div className="text-[10px] text-muted-foreground font-medium">
-                JCMOVES {freeSpins.length > 0 ? "· 🎁 free spin!" : canAffordSpin ? `· ${Math.floor(walletBalance / spinCost)} spins` : "· not enough"}
+                JCMOVES {hasFreeSpinEntry ? "· 🎁 free spin!" : canAffordSpin ? `· ${Math.floor(walletBalance / spinCost)} spins` : "· not enough"}
               </div>
             </div>
           </div>
 
-          {/* Streak counter row */}
+          {/* Session stats row */}
           {sessionSpinCount > 0 && (
-            <div className="mt-2 flex items-center justify-between">
+            <div className="mt-2 flex items-center justify-between bg-gray-900/60 rounded-lg px-3 py-1.5">
               <div className="flex items-center gap-2">
                 <Flame className="h-3.5 w-3.5 text-orange-400" />
                 <span className="text-xs font-bold text-orange-300">
-                  {sessionSpinCount} spin{sessionSpinCount !== 1 ? "s" : ""} this session
+                  {sessionSpinCount} spin{sessionSpinCount !== 1 ? "s" : ""}
                 </span>
-                <div className="flex gap-1">
-                  {[10, 30, 50].map(m => (
-                    <span
-                      key={m}
-                      className={`text-[10px] font-black px-1.5 py-0.5 rounded ${claimedMilestones.has(m) ? "bg-green-500/20 text-green-400" : sessionSpinCount >= m * 0.7 ? "bg-orange-500/20 text-orange-400" : "bg-gray-800/60 text-gray-500"}`}
-                    >
-                      {claimedMilestones.has(m) ? "✓" : ""}{m}
-                    </span>
-                  ))}
-                </div>
+                {sessionEarned > 0 && (
+                  <span className="text-xs text-yellow-400 font-bold">
+                    · +{sessionEarned.toLocaleString()} earned
+                  </span>
+                )}
               </div>
-              {isAutoSpin && (
-                <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 text-[10px] py-0 px-2 animate-pulse">
-                  ⚡ AUTO
-                </Badge>
-              )}
+              <div className="flex gap-1">
+                {[10, 30, 50].map(m => (
+                  <span
+                    key={m}
+                    className={`text-[10px] font-black px-1.5 py-0.5 rounded ${claimedMilestones.has(m) ? "bg-green-500/20 text-green-400" : sessionSpinCount >= m * 0.7 ? "bg-orange-500/20 text-orange-400" : "bg-gray-800/60 text-gray-500"}`}
+                  >
+                    {claimedMilestones.has(m) ? "✓" : ""}{m}
+                  </span>
+                ))}
+              </div>
             </div>
           )}
         </div>
 
         {/* ── Main spin area ── */}
-        <div className="px-5 py-5 flex flex-col items-center gap-5">
+        <div className="px-5 py-5 flex flex-col items-center gap-4">
+
+          {/* Auto-spin last result banner */}
+          {isAutoSpin && lastAutoResult && animState === "animating" && (
+            <div className="w-full animate-in fade-in duration-200">
+              <div className={`rounded-xl px-4 py-2.5 flex items-center justify-between border ${
+                lastAutoResult.jackpotTypeWon ? "bg-yellow-950/60 border-yellow-500/40" :
+                lastAutoResult.tokens > 0 ? "bg-orange-950/50 border-orange-500/30" :
+                "bg-blue-950/50 border-blue-500/30"
+              }`}>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">{prizeEmoji(lastAutoResult.prizeType)}</span>
+                  <div>
+                    <p className="text-xs font-bold text-white">{prizeLabel(lastAutoResult)}</p>
+                    <p className="text-[10px] text-muted-foreground">Last spin result</p>
+                  </div>
+                </div>
+                {lastAutoResult.couponCode && (
+                  <span className="text-[10px] font-mono text-green-400 bg-green-950/40 px-2 py-1 rounded">
+                    {lastAutoResult.couponCode}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Orb + particles */}
           <div className="relative w-48 h-48 flex items-center justify-center select-none">
-            {/* Orbiting rings */}
             <div
               className="absolute inset-2 rounded-full border border-orange-500/20"
-              style={{
-                animation: animState === "animating" || animState === "flash"
-                  ? "spin 1s linear infinite" : "spin 4s linear infinite",
-              }}
+              style={{ animation: animState === "animating" || animState === "flash" ? "spin 1s linear infinite" : "spin 4s linear infinite" }}
             />
             <div
               className="absolute inset-6 rounded-full border border-yellow-500/15"
-              style={{
-                animation: animState === "animating" || animState === "flash"
-                  ? "spin 0.7s linear infinite reverse" : "spin 6s linear infinite reverse",
-              }}
+              style={{ animation: animState === "animating" || animState === "flash" ? "spin 0.7s linear infinite reverse" : "spin 6s linear infinite reverse" }}
             />
             <div
               className="absolute inset-10 rounded-full border border-blue-500/20"
-              style={{
-                animation: animState === "animating" || animState === "flash"
-                  ? "spin 0.5s linear infinite" : "spin 8s linear infinite",
-              }}
+              style={{ animation: animState === "animating" || animState === "flash" ? "spin 0.5s linear infinite" : "spin 8s linear infinite" }}
             />
 
-            {/* Particles */}
             {particles.map((p, i) => (
               <div
                 key={i}
                 className="absolute rounded-full pointer-events-none"
                 style={{
-                  width: p.size,
-                  height: p.size,
-                  background: p.color,
+                  width: p.size, height: p.size, background: p.color,
                   boxShadow: `0 0 ${p.size * 2}px ${p.color}`,
-                  left: "50%",
-                  top: "50%",
+                  left: "50%", top: "50%",
                   transform: `translate(-50%, -50%) translate(${p.x}px, ${p.y}px)`,
-                  transition: `transform ${1.2 - p.delay}s cubic-bezier(0.4, 0, 0.2, 1) ${p.delay}s, opacity 0.3s ease ${1.0 + p.delay}s`,
+                  transition: `transform ${1.2 - p.delay}s cubic-bezier(0.4,0,0.2,1) ${p.delay}s, opacity 0.3s ease ${1.0 + p.delay}s`,
                   ...(animState === "animating" || animState === "flash" || animState === "result"
-                    ? { transform: "translate(-50%, -50%) translate(0px, 0px)", opacity: 0 }
-                    : {}),
+                    ? { transform: "translate(-50%, -50%) translate(0px, 0px)", opacity: 0 } : {}),
                 }}
               />
             ))}
@@ -473,18 +510,11 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
                   : "radial-gradient(circle at 35% 35%, #1e293b, #0f172a, #030712)",
                 boxShadow: orbGlow,
                 border: "1px solid rgba(249,115,22,0.3)",
-                transition: "box-shadow 0.3s ease, background 0.2s ease",
               }}
             >
-              {/* Inner glow */}
-              <div
-                className="absolute inset-2 rounded-full opacity-60"
-                style={{
-                  background: "radial-gradient(circle at 30% 30%, rgba(249,115,22,0.3), transparent 60%)",
-                }}
-              />
+              <div className="absolute inset-2 rounded-full opacity-60"
+                style={{ background: "radial-gradient(circle at 30% 30%, rgba(249,115,22,0.3), transparent 60%)" }} />
 
-              {/* Orb content */}
               {animState === "idle" && (
                 <div className="text-center z-10 relative">
                   <div className="text-2xl font-black text-orange-400">⚡</div>
@@ -493,17 +523,14 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
               )}
               {(animState === "animating" || animState === "flash") && (
                 <div className="text-center z-10 relative">
-                  <div
-                    className="text-2xl font-black text-white"
-                    style={{ animation: "pulse 0.4s ease-in-out infinite" }}
-                  >
+                  <div className="text-2xl font-black text-white" style={{ animation: "pulse 0.4s ease-in-out infinite" }}>
                     {animState === "flash" ? "✦" : "◉"}
                   </div>
                 </div>
               )}
               {animState === "result" && !isJackpot && (
                 <div className="text-center z-10 relative px-2">
-                  {result?.prizeType === "tokens" && result.tokens > 0 && (
+                  {result?.prizeType === "tokens" && resultTokens > 0 && (
                     <>
                       <div className="text-base font-black text-yellow-300 leading-tight">{result.label}</div>
                       <div className="text-[9px] text-yellow-500 font-bold uppercase tracking-wider">JCMOVES</div>
@@ -512,84 +539,79 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
                   {result?.prizeType === "mystery" && <div className="text-2xl">🎁</div>}
                   {(result?.prizeType === "coupon_10pct" || result?.prizeType === "coupon_25pct") && <div className="text-2xl">🎫</div>}
                   {result?.prizeType === "gift_card_coffee" && <div className="text-2xl">☕</div>}
-                  {result?.prizeType === "tokens" && result.tokens === 0 && (
-                    <div className="text-2xl">🌌</div>
-                  )}
+                  {result?.prizeType === "tokens" && resultTokens === 0 && <div className="text-2xl">🌌</div>}
                 </div>
               )}
               {animState === "result" && isJackpot && (
                 <div className="text-center z-10 relative">
-                  <div className="text-2xl font-black text-yellow-300" style={{ animation: "pulse 0.6s ease-in-out infinite" }}>
-                    🏆
-                  </div>
+                  <div className="text-2xl font-black text-yellow-300" style={{ animation: "pulse 0.6s ease-in-out infinite" }}>🏆</div>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Spin button / result card */}
+          {/* ── CONTROLS ── */}
+
+          {/* Idle state: Spin button + auto-spin toggle */}
           {animState === "idle" && (
-            <div className="w-full space-y-2">
+            <div className="w-full space-y-3">
               {hasFreeSpinEntry && (
                 <Badge className="w-full justify-center bg-green-500/20 text-green-400 border-green-500/30 py-1">
                   🎁 You have a free spin!
                 </Badge>
               )}
-              {isAutoSpin && (
-                <Badge className="w-full justify-center bg-orange-500/20 text-orange-400 border-orange-500/30 py-1 animate-pulse">
-                  ⚡ Auto-Spin Active — Hold 5s to stop
-                </Badge>
-              )}
-              {/* Spin button with press-and-hold for auto-spin */}
-              <div className="relative">
-                <Button
-                  className={`w-full h-14 text-base font-black tracking-wide disabled:opacity-50 disabled:cursor-not-allowed select-none ${
-                    isAutoSpin
-                      ? "bg-gradient-to-r from-orange-600 via-red-500 to-orange-600 hover:from-orange-700 hover:to-orange-700 text-white"
-                      : "bg-gradient-to-r from-orange-500 via-yellow-500 to-orange-500 hover:from-orange-600 hover:to-orange-600 text-black"
-                  }`}
-                  style={{ boxShadow: isAutoSpin ? "0 0 24px rgba(249,115,22,0.7)" : "0 0 20px rgba(249,115,22,0.4)" }}
-                  onClick={handleSpin}
-                  onPointerDown={canAffordSpin ? startHold : undefined}
-                  onPointerUp={cancelHold}
-                  onPointerLeave={cancelHold}
-                  disabled={!canAffordSpin}
-                >
-                  <Zap className="h-5 w-5 mr-2" />
-                  {hasFreeSpinEntry ? "Spin — Free Entry!" : isAutoSpin ? "Auto-Spinning..." : "Spin for 100 JCMOVES"}
-                </Button>
-                {/* Hold progress bar */}
-                {holdProgress > 0 && (
-                  <div className="absolute bottom-0 left-0 h-1 rounded-b-lg bg-white/30 transition-all duration-100" style={{ width: `${holdProgress}%` }} />
-                )}
-              </div>
-              <p className="text-center text-[10px] text-muted-foreground/50">
-                {isAutoSpin
-                  ? "Hold 5s to stop auto-spin · Streak bonuses active"
-                  : "Tap to spin · Hold 5s to enable auto-spin"
-                }
-              </p>
+
+              <Button
+                className="w-full h-14 text-base font-black tracking-wide bg-gradient-to-r from-orange-500 via-yellow-500 to-orange-500 hover:from-orange-600 hover:to-orange-600 text-black disabled:opacity-50"
+                style={{ boxShadow: "0 0 20px rgba(249,115,22,0.4)" }}
+                onClick={handleSpin}
+                disabled={!canAffordSpin}
+              >
+                <Zap className="h-5 w-5 mr-2" />
+                {hasFreeSpinEntry ? "Spin — Free Entry!" : "Spin for 100 JCMOVES"}
+              </Button>
+
+              <Button
+                variant="outline"
+                className="w-full h-10 text-sm font-bold border-orange-500/40 text-orange-400 hover:bg-orange-500/10"
+                onClick={toggleAutoSpin}
+                disabled={!canAffordSpin}
+              >
+                <Play className="h-4 w-4 mr-2" />
+                Enable Auto-Spin
+              </Button>
             </div>
           )}
 
+          {/* Animating state: loading indicator */}
           {(animState === "animating" || animState === "flash") && (
-            <div className="w-full text-center space-y-2">
-              <div className="text-sm font-bold text-orange-400 animate-pulse">
-                {animState === "flash" ? "✦ Collapsing probabilities..." : "⚡ Quantum calculating..."}
+            <div className="w-full space-y-3">
+              <div className="text-center">
+                <div className="text-sm font-bold text-orange-400 animate-pulse">
+                  {animState === "flash" ? "✦ Collapsing probabilities..." : "⚡ Quantum calculating..."}
+                </div>
+                <div className="mt-2 h-1 w-full bg-gray-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-orange-500 to-yellow-400 rounded-full"
+                    style={{ width: animState === "flash" ? "90%" : "50%", transition: "width 0.8s ease", boxShadow: "0 0 8px rgba(249,115,22,0.6)" }}
+                  />
+                </div>
               </div>
-              <div className="h-1 w-full bg-gray-800 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-orange-500 to-yellow-400 rounded-full transition-all"
-                  style={{
-                    width: animState === "flash" ? "90%" : "50%",
-                    transition: "width 0.8s ease",
-                    boxShadow: "0 0 8px rgba(249,115,22,0.6)",
-                  }}
-                />
-              </div>
+
+              {/* Stop button visible during animation if auto-spin is on */}
+              {isAutoSpin && (
+                <Button
+                  className="w-full h-12 bg-red-600 hover:bg-red-700 text-white font-black text-sm"
+                  onClick={stopAutoSpin}
+                >
+                  <Square className="h-4 w-4 mr-2" />
+                  Stop Auto-Spin ({sessionSpinCount} spins · +{sessionEarned.toLocaleString()})
+                </Button>
+              )}
             </div>
           )}
 
+          {/* Result state */}
           {animState === "result" && result && (
             <div className="w-full animate-in fade-in zoom-in-95 duration-300">
               {isJackpot ? (
@@ -600,52 +622,66 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
                     {result.jackpotTypeWon === "major" ? "MAJOR" : "MINI"} JACKPOT!
                   </div>
                   <div className="text-3xl font-black text-yellow-400 mb-1">{(result.jackpotAmountWon || 0).toLocaleString()}</div>
-                  <div className="text-xs text-yellow-600 font-bold uppercase tracking-wider mb-3">JCMOVES added to wallet</div>
-                  <Button className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-black" onClick={handleClose}>
-                    Claim Victory!
-                  </Button>
+                  <div className="text-xs text-yellow-600 font-bold uppercase tracking-wider mb-4">JCMOVES added to wallet</div>
+                  <div className="space-y-2">
+                    <Button className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-black" onClick={handleSpinAgain} disabled={!canAffordSpin}>
+                      <Zap className="h-4 w-4 mr-2" />Spin Again
+                    </Button>
+                    <Button variant="outline" className="w-full" onClick={handleClose}>Exit</Button>
+                  </div>
                 </div>
               ) : isMystery ? (
-                <div className="text-center bg-gradient-to-br from-purple-950/60 to-indigo-950/40 border border-purple-500/30 rounded-2xl p-5">
-                  <div className="text-4xl mb-2">🎁</div>
-                  <div className="text-sm font-black text-purple-300 uppercase tracking-widest mb-1">Mystery Box!</div>
-                  {result.mysteryResult?.type === "tokens" && (
-                    <>
-                      <div className="text-2xl font-black text-purple-300 mb-0.5">{result.mysteryResult.value.toLocaleString()}</div>
-                      <div className="text-xs text-purple-500 font-bold uppercase tracking-wider mb-3">JCMOVES revealed</div>
-                    </>
-                  )}
-                  {result.mysteryResult?.type === "free_spin" && (
-                    <div className="text-sm text-green-400 font-bold mb-3">🎰 Free Spin added to your account!</div>
-                  )}
+                <div className="bg-gradient-to-br from-purple-950/60 to-indigo-950/40 border border-purple-500/30 rounded-2xl p-5">
+                  <div className="text-center mb-3">
+                    <div className="text-4xl mb-2">🎁</div>
+                    <div className="text-sm font-black text-purple-300 uppercase tracking-widest mb-1">Mystery Box!</div>
+                    {result.mysteryResult?.type === "tokens" && (
+                      <>
+                        <div className="text-2xl font-black text-purple-300">{result.mysteryResult.value.toLocaleString()}</div>
+                        <div className="text-xs text-purple-500 font-bold uppercase tracking-wider">JCMOVES revealed</div>
+                      </>
+                    )}
+                    {result.mysteryResult?.type === "free_spin" && (
+                      <div className="text-sm text-green-400 font-bold">🎰 Free Spin added to your account!</div>
+                    )}
+                  </div>
                   {result.mysteryResult?.couponCode && (
                     <div className="mb-3">
                       <p className="text-xs text-muted-foreground mb-1.5">Your reward code:</p>
                       <CouponCodeRow code={result.mysteryResult.couponCode} onCopy={handleCopy} copied={copied} />
                     </div>
                   )}
-                  <div className="flex gap-2">
-                    <Button className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold" onClick={handleSpinAgain} disabled={!canAffordSpin}>
-                      Spin Again!
+                  <div className="space-y-2">
+                    <Button className="w-full bg-purple-600 hover:bg-purple-700 text-white font-black" onClick={handleSpinAgain} disabled={!canAffordSpin}>
+                      <Zap className="h-4 w-4 mr-2" />Spin Again
                     </Button>
-                    <Button variant="outline" className="flex-1" onClick={handleClose}>Done</Button>
+                    {isAutoSpin ? (
+                      <Button className="w-full bg-red-600 hover:bg-red-700 text-white font-bold" onClick={stopAutoSpin}>
+                        <Square className="h-4 w-4 mr-2" />Stop Auto-Spin
+                      </Button>
+                    ) : (
+                      <Button variant="outline" className="w-full" onClick={handleClose}>Exit</Button>
+                    )}
                   </div>
                 </div>
               ) : isCoupon || isCoffee ? (
-                <div className="text-center bg-gradient-to-br from-blue-950/60 to-cyan-950/40 border border-blue-500/30 rounded-2xl p-5">
-                  <div className="text-4xl mb-2">{isCoffee ? "☕" : "🎫"}</div>
-                  <div className="text-sm font-black text-blue-300 uppercase tracking-widest mb-1">
-                    {isCoffee ? "$5 Coffee Card!" : result.prizeType === "coupon_25pct" ? "25% Off!" : "10% Off!"}
+                <div className="bg-gradient-to-br from-blue-950/60 to-cyan-950/40 border border-blue-500/30 rounded-2xl p-5">
+                  <div className="text-center mb-3">
+                    <div className="text-4xl mb-2">{isCoffee ? "☕" : "🎫"}</div>
+                    <div className="text-sm font-black text-blue-300 uppercase tracking-widest mb-1">
+                      {isCoffee ? "$5 Coffee Card!" : result.prizeType === "coupon_25pct" ? "25% Off!" : "10% Off!"}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {isCoffee
+                        ? "Saved to your redemptions — contact us to redeem"
+                        : result.prizeType === "coupon_25pct"
+                        ? "25% off labor · min 2 movers 2hrs · 30-day expiry"
+                        : "10% off (max $25) · 90-day expiry"}
+                    </p>
                   </div>
-                  <p className="text-xs text-muted-foreground mb-2">
-                    {isCoffee
-                      ? "Pending fulfillment — code added to your redemptions"
-                      : result.prizeType === "coupon_25pct"
-                      ? "25% off labor · min 2 movers 2hrs · expires in 30 days"
-                      : "10% off (max $25) · min 2 movers 2hrs · expires in 90 days"}
-                  </p>
                   {displayCode && (
                     <div className="mb-3">
+                      <p className="text-xs text-muted-foreground mb-1.5">Your promo code:</p>
                       <CouponCodeRow code={displayCode} onCopy={handleCopy} copied={copied} />
                       {result.couponExpiry && (
                         <p className="text-[10px] text-muted-foreground mt-1">
@@ -654,36 +690,61 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
                       )}
                     </div>
                   )}
-                  <div className="flex gap-2">
-                    <Button className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold" onClick={handleSpinAgain} disabled={!canAffordSpin}>
-                      Spin Again!
+                  <div className="space-y-2">
+                    <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black" onClick={handleSpinAgain} disabled={!canAffordSpin}>
+                      <Zap className="h-4 w-4 mr-2" />Spin Again
                     </Button>
-                    <Button variant="outline" className="flex-1" onClick={handleClose}>Done</Button>
+                    {isAutoSpin ? (
+                      <Button className="w-full bg-red-600 hover:bg-red-700 text-white font-bold" onClick={stopAutoSpin}>
+                        <Square className="h-4 w-4 mr-2" />Stop Auto-Spin
+                      </Button>
+                    ) : (
+                      <Button variant="outline" className="w-full" onClick={handleClose}>Exit</Button>
+                    )}
                   </div>
                 </div>
               ) : resultTokens > 0 ? (
-                <div className="text-center bg-gradient-to-br from-orange-950/60 to-yellow-950/40 border border-orange-500/30 rounded-2xl p-5">
-                  <Coins className="h-8 w-8 text-yellow-400 mx-auto mb-2" />
-                  <div className="text-sm font-black text-orange-300 uppercase tracking-widest mb-1">You Won!</div>
-                  <div className="text-3xl font-black text-yellow-400 mb-0.5">{resultTokens.toLocaleString()}</div>
-                  <div className="text-xs text-yellow-600 font-bold uppercase tracking-wider mb-3">JCMOVES added to wallet</div>
-                  <div className="flex gap-2">
-                    <Button className="flex-1 bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-black font-black" onClick={handleSpinAgain} disabled={!canAffordSpin}>
-                      Spin Again!
+                <div className="bg-gradient-to-br from-orange-950/60 to-yellow-950/40 border border-orange-500/30 rounded-2xl p-5">
+                  <div className="text-center mb-4">
+                    <Coins className="h-8 w-8 text-yellow-400 mx-auto mb-2" />
+                    <div className="text-sm font-black text-orange-300 uppercase tracking-widest mb-1">You Won!</div>
+                    <div className="text-3xl font-black text-yellow-400">{resultTokens.toLocaleString()}</div>
+                    <div className="text-xs text-yellow-600 font-bold uppercase tracking-wider">JCMOVES added to wallet</div>
+                    {sessionSpinCount > 1 && (
+                      <div className="mt-2 text-xs text-muted-foreground">
+                        Session total: +{sessionEarned.toLocaleString()} across {sessionSpinCount} spins
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Button className="w-full h-12 bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-black font-black" onClick={handleSpinAgain} disabled={!canAffordSpin}>
+                      <Zap className="h-4 w-4 mr-2" />Spin Again
                     </Button>
-                    <Button variant="outline" className="flex-1" onClick={handleClose}>Done</Button>
+                    {isAutoSpin ? (
+                      <Button className="w-full bg-red-600 hover:bg-red-700 text-white font-bold" onClick={stopAutoSpin}>
+                        <Square className="h-4 w-4 mr-2" />Stop Auto-Spin
+                      </Button>
+                    ) : (
+                      <Button variant="outline" className="w-full" onClick={handleClose}>Exit</Button>
+                    )}
                   </div>
                 </div>
               ) : (
                 <div className="text-center bg-gray-900/60 border border-gray-700/30 rounded-2xl p-5">
                   <div className="text-4xl mb-2">🌌</div>
                   <div className="text-sm font-bold text-gray-400 mb-1">Quantum fluctuation...</div>
-                  <p className="text-xs text-muted-foreground mb-3">No reward this time — jackpots grew!</p>
-                  <div className="flex gap-2">
-                    <Button className="flex-1 bg-orange-500 hover:bg-orange-600 text-black font-black" onClick={handleSpinAgain} disabled={!canAffordSpin}>
-                      Try Again!
+                  <p className="text-xs text-muted-foreground mb-4">No reward this time — jackpots grew!</p>
+                  <div className="space-y-2">
+                    <Button className="w-full bg-orange-500 hover:bg-orange-600 text-black font-black" onClick={handleSpinAgain} disabled={!canAffordSpin}>
+                      <Zap className="h-4 w-4 mr-2" />Try Again
                     </Button>
-                    <Button variant="outline" className="flex-1" onClick={handleClose}>Exit</Button>
+                    {isAutoSpin ? (
+                      <Button className="w-full bg-red-600 hover:bg-red-700 text-white font-bold" onClick={stopAutoSpin}>
+                        <Square className="h-4 w-4 mr-2" />Stop Auto-Spin
+                      </Button>
+                    ) : (
+                      <Button variant="outline" className="w-full" onClick={handleClose}>Exit</Button>
+                    )}
                   </div>
                 </div>
               )}
@@ -691,12 +752,12 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
           )}
 
           {/* Community Activity Feed */}
-          {animState === "idle" && feed.length > 0 && (
+          {animState === "idle" && !isAutoSpin && feed.length > 0 && (
             <div className="w-full">
               <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
                 <Flame className="h-3 w-3 text-orange-400" /> Community Activity
               </div>
-              <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+              <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
                 {feed.map(ev => (
                   <div key={ev.id} className="flex items-start justify-between gap-2 text-xs">
                     <span className="text-muted-foreground leading-tight">{ev.message}</span>
@@ -735,36 +796,7 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
             </div>
           )}
         </div>
-
-        {/* Spin cost info */}
-        {animState === "idle" && !isAutoSpin && (
-          <div className="px-5 pb-4 text-center">
-            <p className="text-[10px] text-muted-foreground/50">
-              Fast 1.5s instant reveal · 🔥 Streak bonuses at 10, 30, and 50 spins
-            </p>
-          </div>
-        )}
       </DialogContent>
-
-      {/* CSS animation keyframes via style tag */}
-      <style>{`
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.2); opacity: 0.7; } }
-      `}</style>
     </Dialog>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// Coupon code row
-// ─────────────────────────────────────────────────────────────
-function CouponCodeRow({ code, onCopy, copied }: { code: string; onCopy: (c: string) => void; copied: boolean }) {
-  return (
-    <div className="flex items-center gap-2 bg-gray-900 border border-blue-500/20 rounded-lg px-3 py-2">
-      <span className="font-mono font-bold text-blue-300 flex-1 text-sm tracking-wider">{code}</span>
-      <button onClick={() => onCopy(code)} className="text-muted-foreground hover:text-blue-400 transition-colors">
-        {copied ? <CheckCircle2 className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
-      </button>
-    </div>
   );
 }
