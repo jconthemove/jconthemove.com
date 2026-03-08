@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
@@ -173,6 +173,17 @@ export default function RewardsMarketplacePage() {
   const [shipZip, setShipZip] = useState("");
   const [shipPhone, setShipPhone] = useState("");
   const lastRedeemedItemRef = useRef<RewardItem | null>(null);
+
+  // Auto-open Quantum Spin when navigated from Daily Check-In task (?spin=1)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("spin") === "1") {
+      setDirectSpinOpen(true);
+      // Clean the URL param without reloading
+      const clean = window.location.pathname;
+      window.history.replaceState({}, "", clean);
+    }
+  }, []);
 
   const userTier = (((user as any)?.loyaltyTier) || 'bronze') as LoyaltyTierKey;
   const totalSpend = parseFloat((user as any)?.totalCompletedSpend || '0');

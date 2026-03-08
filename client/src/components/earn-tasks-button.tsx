@@ -83,6 +83,21 @@ export function EarnTasksButton() {
     },
   });
 
+  const checkinMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/gamification/checkin", {}),
+    onSuccess: (data: any) => {
+      afterTaskSuccess();
+      toast({ title: "⚡ Daily Spin Unlocked!", description: `+${(data as any)?.tokensAwarded || 100} JCMOVES bonus credited. Spinning now...` });
+      setOpen(false);
+      setLocation("/marketplace?spin=1");
+    },
+    onError: () => {
+      // Still open the spin even if already checked in
+      setOpen(false);
+      setLocation("/marketplace?spin=1");
+    },
+  });
+
   const miningMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/mining/start"),
     onSuccess: () => {
@@ -168,12 +183,15 @@ export function EarnTasksButton() {
       label: "Daily Quantum Spin",
       description: checkinDone
         ? "Spin complete for today! Come back tomorrow ✓"
-        : "Spin the wheel to earn daily bonus tokens",
+        : "Claim +100 JCMOVES bonus & open the spin wheel",
       reward: "+100",
       done: checkinDone,
-      action: () => { setOpen(false); setLocation("/marketplace"); },
-      actionLabel: "Spin Now",
-      isPending: false,
+      action: () => {
+        if (checkinDone) { setOpen(false); setLocation("/marketplace?spin=1"); }
+        else checkinMutation.mutate();
+      },
+      actionLabel: checkinDone ? "Spin Again" : "Check In + Spin",
+      isPending: checkinMutation.isPending,
     },
     ...(isEmployee ? [{
       id: "scripture",
@@ -310,12 +328,12 @@ export function EarnTasksButton() {
                 <Button
                   size="sm"
                   className={`shrink-0 text-xs px-3 h-8 font-semibold ${
-                    task.done && task.id !== 'pushups' && task.id !== 'situps' && task.id !== 'add_job'
+                    task.done && task.id !== 'pushups' && task.id !== 'situps' && task.id !== 'add_job' && task.id !== 'checkin'
                       ? "bg-muted text-muted-foreground cursor-not-allowed"
                       : "bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white"
                   }`}
                   onClick={task.action}
-                  disabled={task.isPending || (task.done && task.id !== 'pushups' && task.id !== 'situps' && task.id !== 'add_job')}
+                  disabled={task.isPending || (task.done && task.id !== 'pushups' && task.id !== 'situps' && task.id !== 'add_job' && task.id !== 'checkin')}
                 >
                   {task.isPending ? <Zap className="h-3 w-3 animate-spin" /> : (
                     <>{task.actionLabel}<ChevronRight className="h-3 w-3 ml-0.5" /></>
