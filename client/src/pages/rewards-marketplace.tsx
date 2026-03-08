@@ -651,18 +651,12 @@ export default function RewardsMarketplacePage() {
                           </div>
                         )}
 
-                        {/* Fulfillment type badge + expiry */}
-                        <div className="flex items-center justify-between mb-2">
-                          {(() => {
-                            const badge = getFulfillmentBadge(item);
-                            return badge ? (
-                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${badge.className}`}>{badge.label}</span>
-                            ) : <span />;
-                          })()}
-                          {item.expirationDays && (
-                            <span className="text-[10px] text-muted-foreground">{item.expirationDays}d expiry</span>
-                          )}
-                        </div>
+                        {/* Instant badge only — keeps cards clean */}
+                        {item.isInstant && (
+                          <div className="mb-2">
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-green-500/20 text-green-400 border-green-500/30">⚡ Instant</span>
+                          </div>
+                        )}
 
                         <Button
                           size="sm"
@@ -703,8 +697,12 @@ export default function RewardsMarketplacePage() {
                   Browse Rewards
                 </Button>
               </div>
-            ) : (
-              myRedemptions.map(r => {
+            ) : (() => {
+              const DONE = ["completed", "fulfilled", "refunded", "denied"];
+              const activeItems = myRedemptions.filter(r => !DONE.includes(r.status));
+              const doneItems = myRedemptions.filter(r => DONE.includes(r.status));
+              const allToShow = [...activeItems, ...doneItems];
+              return allToShow.map(r => {
                 const isCoupon = !!r.couponCode;
                 if (isCoupon) {
                   // ── Physical Coupon Card ──
@@ -798,7 +796,7 @@ export default function RewardsMarketplacePage() {
                   </div>
                 );
               })
-            )}
+            })()}
           </div>
         )}
       </div>
