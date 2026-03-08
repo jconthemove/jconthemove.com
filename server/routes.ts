@@ -12481,20 +12481,26 @@ Thank you for your business!
       }
 
       // ── Quantum Spin prize table ───────────────────────────────────────────
-      // Total: 20+20+18+15+10+5+3+1+1+2+4+1 = 100
+      // Strict house-favored table — avg payout ~26 JCMOVES per 100-JCMOVES spin
+      // Total: 55.62+12+8+6+5+4+3+2+1.50+0.80+0.30+0.10+0.03+0.30+0.90+0.40+0.05 = 100.00
       const PRIZES = [
-        { label: "25",        tokens: 25,   probability: 20, type: "tokens"           },
-        { label: "75",        tokens: 75,   probability: 20, type: "tokens"           },
-        { label: "100",       tokens: 100,  probability: 18, type: "tokens"           },
-        { label: "125",       tokens: 125,  probability: 15, type: "tokens"           },
-        { label: "150",       tokens: 150,  probability: 10, type: "tokens"           },
-        { label: "250",       tokens: 250,  probability: 5,  type: "tokens"           },
-        { label: "500",       tokens: 500,  probability: 3,  type: "tokens"           },
-        { label: "2,000",     tokens: 2000, probability: 1,  type: "tokens"           },
-        { label: "Mystery Box",tokens: 0,   probability: 1,  type: "mystery"          },
-        { label: "$5 Coffee", tokens: 0,    probability: 2,  type: "gift_card_coffee" },
-        { label: "10% Off",   tokens: 0,    probability: 4,  type: "coupon_10pct"     },
-        { label: "25% Off",   tokens: 0,    probability: 1,  type: "coupon_25pct"     },
+        { label: "10",        tokens: 10,   probability: 55.62, type: "tokens"           },
+        { label: "15",        tokens: 15,   probability: 12.00, type: "tokens"           },
+        { label: "20",        tokens: 20,   probability:  8.00, type: "tokens"           },
+        { label: "25",        tokens: 25,   probability:  6.00, type: "tokens"           },
+        { label: "40",        tokens: 40,   probability:  5.00, type: "tokens"           },
+        { label: "50",        tokens: 50,   probability:  4.00, type: "tokens"           },
+        { label: "75",        tokens: 75,   probability:  3.00, type: "tokens"           },
+        { label: "100",       tokens: 100,  probability:  2.00, type: "tokens"           },
+        { label: "150",       tokens: 150,  probability:  1.50, type: "tokens"           },
+        { label: "250",       tokens: 250,  probability:  0.80, type: "tokens"           },
+        { label: "500",       tokens: 500,  probability:  0.30, type: "tokens"           },
+        { label: "1,000",     tokens: 1000, probability:  0.10, type: "tokens"           },
+        { label: "2,000",     tokens: 2000, probability:  0.03, type: "tokens"           },
+        { label: "Mystery Box",tokens: 0,   probability:  0.30, type: "mystery"          },
+        { label: "$5 Coffee", tokens: 0,    probability:  0.90, type: "gift_card_coffee" },
+        { label: "10% Off",   tokens: 0,    probability:  0.40, type: "coupon_10pct"     },
+        { label: "25% Off",   tokens: 0,    probability:  0.05, type: "coupon_25pct"     },
       ];
 
       // Server-side weighted random pick
