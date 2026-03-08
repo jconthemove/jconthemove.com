@@ -19,8 +19,9 @@ function BusinessOwnerDashboard() {
 
   const stats = {
     allLeads: leads.length,
-    pendingQuotes: leads.filter(lead => lead.status === "quoted").length,
-    confirmedJobs: leads.filter(lead => lead.status === "confirmed").length,
+    openLeads: leads.filter(l => ["new","contacted","quoted","available"].includes(l.status)).length,
+    confirmedJobs: leads.filter(l => ["confirmed","accepted","in_progress"].includes(l.status)).length,
+    completedJobs: leads.filter(l => l.status === "completed").length,
     totalEmployees: employees.length,
   };
 
@@ -46,82 +47,105 @@ function BusinessOwnerDashboard() {
           </div>
         </div>
 
-        {/* Navigation Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        {/* Navigation Cards — Traffic Light System */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+          {/* All Leads — blue/neutral */}
           <Link href="/leads">
-            <Card 
-              data-testid="stat-all-leads" 
+            <Card data-testid="stat-all-leads"
               className="cursor-pointer transition-all hover:scale-[1.02] border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-sm shadow-xl hover:shadow-blue-900/20 hover:border-blue-500/50 group overflow-hidden"
             >
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-blue-600"></div>
-              <CardContent className="p-6">
-                <div className="flex items-center">
-                  <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white p-3 rounded-xl shadow-lg shadow-blue-500/25 group-hover:scale-110 transition-transform">
-                    <Users className="h-6 w-6" />
+              <div className="absolute top-0 left-0 w-full h-1 bg-blue-500"></div>
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3">
+                  <div className="bg-blue-500/20 text-blue-400 p-2.5 rounded-xl group-hover:bg-blue-500/30 transition-colors">
+                    <Users className="h-5 w-5" />
                   </div>
-                  <div className="ml-4">
-                    <p className="text-3xl font-black text-slate-100">{stats.allLeads}</p>
-                    <p className="text-slate-400 font-medium">All Leads</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
-          
-          <Link href="/pending-quotes">
-            <Card 
-              data-testid="stat-pending-quotes"
-              className="cursor-pointer transition-all hover:scale-[1.02] border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-sm shadow-xl hover:shadow-orange-900/20 hover:border-orange-500/50 group overflow-hidden"
-            >
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-orange-500 to-orange-600"></div>
-              <CardContent className="p-6">
-                <div className="flex items-center">
-                  <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white p-3 rounded-xl shadow-lg shadow-orange-500/25 group-hover:scale-110 transition-transform">
-                    <ClipboardList className="h-6 w-6" />
-                  </div>
-                  <div className="ml-4">
-                    <p className="text-3xl font-black text-slate-100">{stats.pendingQuotes}</p>
-                    <p className="text-slate-400 font-medium">Pending Quotes</p>
+                  <div>
+                    <p className="text-2xl font-black text-slate-100">{stats.allLeads}</p>
+                    <p className="text-xs text-slate-400 font-medium">All Leads</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
           </Link>
-          
+
+          {/* Open Leads — RED 🔴 */}
           <Link href="/leads">
-            <Card 
-              data-testid="stat-confirmed-jobs"
-              className="cursor-pointer transition-all hover:scale-[1.02] border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-sm shadow-xl hover:shadow-green-900/20 hover:border-green-500/50 group overflow-hidden"
+            <Card data-testid="stat-open-leads"
+              className="cursor-pointer transition-all hover:scale-[1.02] border border-red-900/40 bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-sm shadow-xl hover:shadow-red-900/30 hover:border-red-500/60 group overflow-hidden"
             >
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-green-500 to-green-600"></div>
-              <CardContent className="p-6">
-                <div className="flex items-center">
-                  <div className="bg-gradient-to-br from-green-500 to-green-600 text-white p-3 rounded-xl shadow-lg shadow-green-500/25 group-hover:scale-110 transition-transform">
-                    <CheckCircle className="h-6 w-6" />
+              <div className="absolute top-0 left-0 w-full h-1 bg-red-500"></div>
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3">
+                  <div className="bg-red-500/20 text-red-400 p-2.5 rounded-xl group-hover:bg-red-500/30 transition-colors relative">
+                    <ClipboardList className="h-5 w-5" />
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse shadow shadow-red-500/70" />
                   </div>
-                  <div className="ml-4">
-                    <p className="text-3xl font-black text-slate-100">{stats.confirmedJobs}</p>
-                    <p className="text-slate-400 font-medium">Confirmed Jobs</p>
+                  <div>
+                    <p className="text-2xl font-black text-red-300">{stats.openLeads}</p>
+                    <p className="text-xs text-slate-400 font-medium">Leads / Quotes</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
           </Link>
-          
+
+          {/* Confirmed Jobs — YELLOW 🟡 */}
+          <Link href="/leads">
+            <Card data-testid="stat-confirmed-jobs"
+              className="cursor-pointer transition-all hover:scale-[1.02] border border-yellow-900/40 bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-sm shadow-xl hover:shadow-yellow-900/30 hover:border-yellow-500/60 group overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 w-full h-1 bg-yellow-400"></div>
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3">
+                  <div className="bg-yellow-500/20 text-yellow-400 p-2.5 rounded-xl group-hover:bg-yellow-500/30 transition-colors relative">
+                    <CheckCircle className="h-5 w-5" />
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-yellow-400 rounded-full shadow shadow-yellow-400/70" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-black text-yellow-300">{stats.confirmedJobs}</p>
+                    <p className="text-xs text-slate-400 font-medium">Confirmed</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+
+          {/* Completed Jobs — GREEN 🟢 */}
+          <Link href="/leads">
+            <Card data-testid="stat-completed-jobs"
+              className="cursor-pointer transition-all hover:scale-[1.02] border border-green-900/40 bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-sm shadow-xl hover:shadow-green-900/30 hover:border-green-500/60 group overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 w-full h-1 bg-green-500"></div>
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3">
+                  <div className="bg-green-500/20 text-green-400 p-2.5 rounded-xl group-hover:bg-green-500/30 transition-colors relative">
+                    <CheckCircle className="h-5 w-5" />
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-green-500 rounded-full shadow shadow-green-500/70" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-black text-green-300">{stats.completedJobs}</p>
+                    <p className="text-xs text-slate-400 font-medium">Completed</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+
+          {/* Employees — purple */}
           <Link href="/employees">
-            <Card 
-              data-testid="stat-employees"
+            <Card data-testid="stat-employees"
               className="cursor-pointer transition-all hover:scale-[1.02] border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-sm shadow-xl hover:shadow-purple-900/20 hover:border-purple-500/50 group overflow-hidden"
             >
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 to-purple-600"></div>
-              <CardContent className="p-6">
-                <div className="flex items-center">
-                  <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white p-3 rounded-xl shadow-lg shadow-purple-500/25 group-hover:scale-110 transition-transform">
-                    <UserPlus className="h-6 w-6" />
+              <div className="absolute top-0 left-0 w-full h-1 bg-purple-500"></div>
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3">
+                  <div className="bg-purple-500/20 text-purple-400 p-2.5 rounded-xl group-hover:bg-purple-500/30 transition-colors">
+                    <UserPlus className="h-5 w-5" />
                   </div>
-                  <div className="ml-4">
-                    <p className="text-3xl font-black text-slate-100">{stats.totalEmployees}</p>
-                    <p className="text-slate-400 font-medium">Employees</p>
+                  <div>
+                    <p className="text-2xl font-black text-slate-100">{stats.totalEmployees}</p>
+                    <p className="text-xs text-slate-400 font-medium">Employees</p>
                   </div>
                 </div>
               </CardContent>
@@ -151,32 +175,6 @@ function BusinessOwnerDashboard() {
             </Card>
           </Link>
         </div>
-
-        {/* Quick Stats Summary */}
-        <Card className="mt-8 border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-sm shadow-xl overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-orange-500 to-blue-500"></div>
-          <CardContent className="p-6">
-            <h3 className="text-xl font-bold mb-6 text-slate-100">Quick Overview</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
-              <div className="p-4 rounded-xl bg-slate-800/50 border border-slate-700/50">
-                <p className="text-4xl font-black text-blue-400">{stats.allLeads}</p>
-                <p className="text-sm text-slate-400 font-medium mt-1">Total Leads</p>
-              </div>
-              <div className="p-4 rounded-xl bg-slate-800/50 border border-slate-700/50">
-                <p className="text-4xl font-black text-orange-400">{stats.pendingQuotes}</p>
-                <p className="text-sm text-slate-400 font-medium mt-1">Quoted</p>
-              </div>
-              <div className="p-4 rounded-xl bg-slate-800/50 border border-slate-700/50">
-                <p className="text-4xl font-black text-green-400">{stats.confirmedJobs}</p>
-                <p className="text-sm text-slate-400 font-medium mt-1">Confirmed</p>
-              </div>
-              <div className="p-4 rounded-xl bg-slate-800/50 border border-slate-700/50">
-                <p className="text-4xl font-black text-purple-400">{stats.totalEmployees}</p>
-                <p className="text-sm text-slate-400 font-medium mt-1">Team Members</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );
