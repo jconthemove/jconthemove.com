@@ -90,38 +90,49 @@ function LandingPage() {
 // Root error boundary — catches ANY crash in the entire app tree
 class RootErrorBoundary extends ReactComponent<
   { children: ReactNode },
-  { hasError: boolean; error: string; stack: string }
+  { hasError: boolean; error: string; stack: string; componentStack: string }
 > {
   constructor(props: any) {
     super(props);
-    this.state = { hasError: false, error: "", stack: "" };
+    this.state = { hasError: false, error: "", stack: "", componentStack: "" };
   }
   static getDerivedStateFromError(error: any) {
     return {
       hasError: true,
       error: error?.message || String(error) || "Unknown error",
       stack: error?.stack || "",
+      componentStack: "",
     };
   }
   componentDidCatch(error: any, info: any) {
     console.error("[RootErrorBoundary] Caught crash:", error, info);
+    this.setState({ componentStack: info?.componentStack || "" });
+    fetch("/api/client-error", {
+      method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+      body: JSON.stringify({ boundary: "RootErrorBoundary", error: error?.message, stack: error?.stack, componentStack: info?.componentStack }),
+    }).catch(() => {});
   }
   render() {
     if (this.state.hasError) {
       return (
         <div style={{ minHeight: "100vh", background: "#111", color: "#eee", display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem", fontFamily: "sans-serif" }}>
-          <div style={{ maxWidth: 520, width: "100%", textAlign: "center" }}>
+          <div style={{ maxWidth: 600, width: "100%", textAlign: "center" }}>
             <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>⚠️</div>
             <h2 style={{ fontSize: "1.25rem", fontWeight: "bold", marginBottom: "0.5rem" }}>Something went wrong</h2>
             <p style={{ color: "#aaa", fontSize: "0.875rem", marginBottom: "1rem", wordBreak: "break-word" }}>{this.state.error}</p>
+            {this.state.componentStack && (
+              <pre style={{ background: "#1e1e1e", color: "#8f8", fontSize: "0.65rem", padding: "0.75rem", borderRadius: "0.5rem", textAlign: "left", overflowX: "auto", maxHeight: 220, marginBottom: "0.5rem" }}>
+                {this.state.componentStack.slice(0, 1200)}
+              </pre>
+            )}
             {this.state.stack && (
-              <pre style={{ background: "#1e1e1e", color: "#f88", fontSize: "0.7rem", padding: "0.75rem", borderRadius: "0.5rem", textAlign: "left", overflowX: "auto", maxHeight: 200, marginBottom: "1rem" }}>
+              <pre style={{ background: "#1e1e1e", color: "#f88", fontSize: "0.65rem", padding: "0.75rem", borderRadius: "0.5rem", textAlign: "left", overflowX: "auto", maxHeight: 160, marginBottom: "1rem" }}>
                 {this.state.stack.slice(0, 600)}
               </pre>
             )}
             <button
               style={{ padding: "0.5rem 1.5rem", background: "#f97316", color: "#fff", border: "none", borderRadius: "0.5rem", cursor: "pointer", fontWeight: "bold" }}
-              onClick={() => { this.setState({ hasError: false, error: "", stack: "" }); window.location.href = "/"; }}
+              onClick={() => { this.setState({ hasError: false, error: "", stack: "", componentStack: "" }); window.location.href = "/"; }}
             >
               Reload App
             </button>
@@ -136,29 +147,39 @@ class RootErrorBoundary extends ReactComponent<
 // Page-level error boundary — shows friendly message and recovers per-page
 class PageErrorBoundary extends ReactComponent<
   { children: ReactNode },
-  { hasError: boolean; error: string }
+  { hasError: boolean; error: string; componentStack: string }
 > {
   constructor(props: any) {
     super(props);
-    this.state = { hasError: false, error: "" };
+    this.state = { hasError: false, error: "", componentStack: "" };
   }
   static getDerivedStateFromError(error: any) {
-    return { hasError: true, error: error?.message || "Something went wrong" };
+    return { hasError: true, error: error?.message || "Something went wrong", componentStack: "" };
   }
   componentDidCatch(error: any, info: any) {
     console.error("[PageErrorBoundary] Caught crash:", error, info);
+    this.setState({ componentStack: info?.componentStack || "" });
+    fetch("/api/client-error", {
+      method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+      body: JSON.stringify({ boundary: "PageErrorBoundary", error: error?.message, stack: error?.stack, componentStack: info?.componentStack }),
+    }).catch(() => {});
   }
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-8">
-          <div className="max-w-md w-full text-center space-y-4">
-            <div className="text-5xl">⚠️</div>
-            <h2 className="text-xl font-bold">Something went wrong</h2>
-            <p className="text-muted-foreground text-sm">{this.state.error}</p>
+        <div style={{ minHeight: "100vh", background: "#111", color: "#eee", display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem", fontFamily: "sans-serif" }}>
+          <div style={{ maxWidth: 600, width: "100%", textAlign: "center" }}>
+            <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>⚠️</div>
+            <h2 style={{ fontSize: "1.25rem", fontWeight: "bold", marginBottom: "0.5rem" }}>Something went wrong</h2>
+            <p style={{ color: "#aaa", fontSize: "0.875rem", marginBottom: "1rem", wordBreak: "break-word" }}>{this.state.error}</p>
+            {this.state.componentStack && (
+              <pre style={{ background: "#1e1e1e", color: "#8f8", fontSize: "0.65rem", padding: "0.75rem", borderRadius: "0.5rem", textAlign: "left", overflowX: "auto", maxHeight: 220, marginBottom: "1rem" }}>
+                {this.state.componentStack.slice(0, 1200)}
+              </pre>
+            )}
             <button
-              className="mt-4 px-6 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium"
-              onClick={() => { this.setState({ hasError: false, error: "" }); window.location.href = "/"; }}
+              style={{ padding: "0.5rem 1.5rem", background: "#f97316", color: "#fff", border: "none", borderRadius: "0.5rem", cursor: "pointer", fontWeight: "bold" }}
+              onClick={() => { this.setState({ hasError: false, error: "", componentStack: "" }); window.location.href = "/"; }}
             >
               Go Home
             </button>

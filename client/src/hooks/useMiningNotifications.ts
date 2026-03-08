@@ -12,6 +12,19 @@ interface MiningStatus {
   tokenBalance?: number;
 }
 
+interface RewardItem {
+  id: number;
+  rewardType: string;
+  tokenAmount: string;
+  createdAt: string;
+}
+
+interface RewardHistoryResponse {
+  rewards: RewardItem[];
+  total: number;
+  totalTokensEarned: string;
+}
+
 /**
  * Background hook that polls mining status and fires local push notifications when:
  * 1. Mining tokens become claimable (canClaim flips true)
@@ -26,7 +39,7 @@ export function useMiningNotifications() {
   const { data: miningStatus } = useQuery<MiningStatus>({
     queryKey: ["/api/mining/status"],
     enabled: !!user,
-    refetchInterval: 60_000, // poll every 60 seconds
+    refetchInterval: 60_000,
     staleTime: 55_000,
   });
 
@@ -38,11 +51,9 @@ export function useMiningNotifications() {
     const { canClaim, accumulatedTokens, isActive } = miningStatus;
     const now = Date.now();
 
-    // Notify when mining becomes claimable (edge: false → true)
     if (canClaim && !wasClaimable.current && isActive) {
       const cooldownKey = "mining-ready";
       const lastFired = notificationCooldown.current.get(cooldownKey) || 0;
-      // Respect 30-minute cooldown so we don't spam on every poll
       if (now - lastFired > 30 * 60 * 1000) {
         notificationService.notifyCanClaim(Math.round(accumulatedTokens));
         notificationCooldown.current.set(cooldownKey, now);
@@ -51,8 +62,7 @@ export function useMiningNotifications() {
     wasClaimable.current = canClaim;
   }, [miningStatus, user]);
 
-  // Also listen for reward history changes and notify on new rewards
-  const { data: rewardHistory } = useQuery<Array<{ id: number; rewardType: string; tokenAmount: string; createdAt: string }>>({
+  const { data: rewardHistoryData } = useQuery<RewardHistoryResponse>({
     queryKey: ["/api/rewards/history"],
     enabled: !!user,
     refetchInterval: 90_000,
@@ -61,8 +71,13 @@ export function useMiningNotifications() {
 
   useEffect(() => {
     if (!user) return;
-    if (!rewardHistory || rewardHistory.length === 0) return;
     if (Notification.permission !== "granted") return;
+
+    const rewardHistory: RewardItem[] = Array.isArray(rewardHistoryData)
+      ? rewardHistoryData
+      : (rewardHistoryData?.rewards ?? []);
+
+    if (rewardHistory.length === 0) return;
 
     const now = Date.now();
 
@@ -70,15 +85,12 @@ export function useMiningNotifications() {
       const rewardKey = String(reward.id);
       if (lastNotifiedRewards.current.has(rewardKey)) continue;
 
-      // Only notify for rewards created in the last 5 minutes that we haven't seen
       const createdAt = new Date(reward.createdAt).getTime();
       if (now - createdAt > 5 * 60 * 1000) {
-        // Mark as seen even if old — we don't want to notify for historical items on first load
         lastNotifiedRewards.current.add(rewardKey);
         continue;
       }
 
-      // Don't fire for mining_claim — the claim endpoint already handles that
       if (reward.rewardType === "mining_claim") {
         lastNotifiedRewards.current.add(rewardKey);
         continue;
@@ -99,5 +111,5 @@ export function useMiningNotifications() {
 
       lastNotifiedRewards.current.add(rewardKey);
     }
-  }, [rewardHistory, user]);
+  }, [rewardHistoryData, user]);
 }

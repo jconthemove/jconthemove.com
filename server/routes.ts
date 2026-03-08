@@ -483,6 +483,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
+  app.post("/api/client-error", (req, res) => {
+    const { boundary, error, stack, componentStack } = req.body || {};
+    console.error(`[CLIENT-ERROR] Boundary: ${boundary} | Error: ${error}`);
+    if (componentStack) console.error(`[CLIENT-ERROR] Component Stack:${componentStack}`);
+    if (stack) console.error(`[CLIENT-ERROR] JS Stack: ${String(stack).slice(0, 800)}`);
+    res.json({ received: true });
+  });
+
   app.get("/api/approve-user", async (req, res) => {
     try {
       const token = req.query.token as string;
