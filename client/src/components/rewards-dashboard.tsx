@@ -30,7 +30,10 @@ import {
   Wallet,
   History,
   ChevronRight,
-  X
+  ChevronDown,
+  X,
+  Sparkles,
+  Trophy
 } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
 import { LineChart, Line, ResponsiveContainer } from 'recharts';
@@ -272,6 +275,13 @@ export default function RewardsDashboard() {
 
   const [showPayoutConfirm, setShowPayoutConfirm] = useState(false);
   const [historyFilter, setHistoryFilter] = useState<string>('all');
+  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
+
+  const toggleSession = (id: string) => setExpandedSessions(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
 
   // Start mining mutation
   const startMiningMutation = useMutation({
@@ -550,7 +560,11 @@ export default function RewardsDashboard() {
       case 'jewelry_listing': return <span className="text-base">💎</span>;
       case 'shop_listing': return <span className="text-base">🛍️</span>;
       case 'shop_purchase': case 'shop_sale': case 'shop_sale_confirmed': return <span className="text-base">🛒</span>;
-      default: return <Coins className="h-4 w-4 text-slate-400" />;
+      case 'quantum_spin_win': return <Sparkles className="h-4 w-4 text-purple-400" />;
+      default:
+        if (type.includes('jackpot_win')) return <Trophy className="h-4 w-4 text-yellow-400" />;
+        if (type.includes('spin')) return <Sparkles className="h-4 w-4 text-purple-400" />;
+        return <Coins className="h-4 w-4 text-slate-400" />;
     }
   };
 
@@ -575,7 +589,14 @@ export default function RewardsDashboard() {
       'shop_purchase': 'Shop Purchase',
       'shop_sale': 'Shop Sale',
       'shop_sale_confirmed': 'Sale Confirmed',
+      'quantum_spin_win': 'Quantum Spin Win',
+      'mini_jackpot_win': '🎰 Mini Jackpot!',
+      'major_jackpot_win': '🏆 Major Jackpot!',
     };
+    if (type.includes('jackpot_win')) {
+      const prefix = type.replace('_jackpot_win', '');
+      return `🏆 ${prefix.charAt(0).toUpperCase() + prefix.slice(1)} Jackpot Win!`;
+    }
     return labels[type] || type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   };
 
