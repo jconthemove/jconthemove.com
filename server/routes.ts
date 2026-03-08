@@ -2075,7 +2075,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Not authenticated" });
       }
       const user = await storage.getUser(userId);
-      if (!user || (user.role !== 'employee' && user.role !== 'admin')) {
+      if (!user || (user.role !== 'employee' && user.role !== 'admin' && user.role !== 'business_owner')) {
         return res.status(403).json({ message: "Employee access required" });
       }
       req.currentUser = user;

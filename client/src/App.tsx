@@ -177,22 +177,22 @@ function AuthenticatedApp() {
             <PageWrapper component={HomePage} />
           </Route>
           <Route path="/dashboard">
-            <RouteGuard allowedRoles={['admin', 'employee']}>
+            <RouteGuard allowedRoles={['admin', 'employee', 'business_owner']}>
               <PageWrapper component={Dashboard} />
             </RouteGuard>
           </Route>
           <Route path="/employee/add-job">
-            <RouteGuard allowedRoles={['admin', 'employee']}>
+            <RouteGuard allowedRoles={['admin', 'employee', 'business_owner']}>
               <EmployeeAddJob />
             </RouteGuard>
           </Route>
           <Route path="/employee/dashboard">
-            <RouteGuard allowedRoles={['admin', 'employee']}>
+            <RouteGuard allowedRoles={['admin', 'employee', 'business_owner']}>
               <PageWrapper component={EmployeeDashboard} />
             </RouteGuard>
           </Route>
           <Route path="/leads">
-            <RouteGuard allowedRoles={['admin', 'employee']}>
+            <RouteGuard allowedRoles={['admin', 'employee', 'business_owner']}>
               <PageWrapper component={LeadsPage} />
             </RouteGuard>
           </Route>

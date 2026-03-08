@@ -23,7 +23,7 @@ interface EmployeeReviewsProps {
 
 export function EmployeeReviews({ employeeId, limit = 10, showStats = true }: EmployeeReviewsProps) {
   const { data: reviews = [], isLoading: reviewsLoading } = useQuery<Review[]>({
-    queryKey: ["/api/reviews", { employeeId, limit }],
+    queryKey: [`/api/reviews?employeeId=${employeeId}&limit=${limit}`],
   });
 
   const { data: stats, isLoading: statsLoading } = useQuery<{

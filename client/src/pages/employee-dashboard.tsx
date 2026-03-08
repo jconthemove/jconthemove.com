@@ -458,7 +458,14 @@ export default function EmployeeDashboard() {
                           </div>
                           {job.confirmedDate && (
                             <p className="text-sm text-muted-foreground mb-2">
-                              📅 {format(new Date(job.confirmedDate), 'EEEE, MMMM d, yyyy')}
+                              📅 {(() => {
+                                try {
+                                  const d = new Date(job.confirmedDate);
+                                  return isNaN(d.getTime()) ? job.confirmedDate : format(d, 'EEEE, MMMM d, yyyy');
+                                } catch {
+                                  return job.confirmedDate;
+                                }
+                              })()}
                             </p>
                           )}
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
