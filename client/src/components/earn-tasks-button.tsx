@@ -83,15 +83,6 @@ export function EarnTasksButton() {
     },
   });
 
-  const checkinMutation = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/gamification/checkin", {}),
-    onSuccess: (data: any) => {
-      afterTaskSuccess();
-      toast({ title: "Check-in complete!", description: `+${(data as any)?.tokensAwarded || 100} JCMOVES earned!` });
-    },
-    onError: () => toast({ title: "Check-in failed", variant: "destructive" }),
-  });
-
   const miningMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/mining/start"),
     onSuccess: () => {
@@ -174,15 +165,15 @@ export function EarnTasksButton() {
     },
     {
       id: "checkin",
-      label: "Daily Check-In",
+      label: "Daily Quantum Spin",
       description: checkinDone
-        ? "Done for today! Resets tomorrow morning ✓"
-        : "Check in to earn bonus tokens",
+        ? "Spin complete for today! Come back tomorrow ✓"
+        : "Spin the wheel to earn daily bonus tokens",
       reward: "+100",
       done: checkinDone,
-      action: () => checkinMutation.mutate(),
-      actionLabel: "Check In",
-      isPending: checkinMutation.isPending,
+      action: () => { setOpen(false); setLocation("/marketplace"); },
+      actionLabel: "Spin Now",
+      isPending: false,
     },
     ...(isEmployee ? [{
       id: "scripture",
