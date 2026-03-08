@@ -1,0 +1,124 @@
+2026-03-08 08:58:01.40
+82880d43
+User
+[AUTH CHECK] Path: /api/gamification/stats | Session ID: y6QLdm1B | Has cookie: true
+2026-03-08 08:58:01.53
+82880d43
+User
+1:58:01 PM [express] GET /api/mining/status 304 in 470ms :: {"currentSession":{"id":"b412d2e7-77a9-4…
+2026-03-08 08:58:01.70
+82880d43
+User
+[AUTH CHECK] ✅ User authenticated and approved: admin
+2026-03-08 08:58:02.08
+82880d43
+User
+[AUTH CHECK] ✅ User authenticated and approved: admin
+2026-03-08 08:58:02.18
+82880d43
+User
+[AUTH CHECK] ✅ User authenticated and approved: admin
+2026-03-08 08:58:02.32
+82880d43
+User
+1:58:02 PM [express] GET /api/users 304 in 1260ms :: [{"id":"28266757-8bc7-4493-a8b6-2c7c6869c016","…
+2026-03-08 08:58:02.34
+82880d43
+User
+📋 Found 27 leads
+2026-03-08 08:58:02.64
+82880d43
+User
+[AUTH CHECK] ✅ User authenticated and approved: admin
+2026-03-08 08:58:02.92
+82880d43
+User
+1:58:02 PM [express] GET /api/leads 304 in 1621ms :: [{"id":"b202b66a-2770-46b7-895e-c1cf436825fc","…
+2026-03-08 08:58:03.66
+82880d43
+User
+1:58:03 PM [express] GET /api/shop 304 in 2396ms :: [{"id":"5aa640e9-f495-4f80-9094-53afe4485532","p…
+2026-03-08 08:58:03.81
+82880d43
+User
+1:58:03 PM [express] GET /api/snow/logs 304 in 2739ms :: []
+2026-03-08 09:11:11.16
+82880d43
+User
+[COOKIE-IN] GET /api/auth/user | proto=https secure=true | jc.sid=true connect.sid=true | raw="connect.sid=s%3Am7opAMJw7ijcbYEK6S1EX-49scPKonIy.lVSpqcQ0sLyo34BSHRQdJGaDVFCv5ht30ndF1qUCi%2Bc; jc.sid=s%3Ay6QLdm1BUL7p5"
+2026-03-08 09:11:11.20
+82880d43
+User
+[AUTH CHECK] Path: /api/auth/user | Session ID: y6QLdm1B | Has cookie: true
+2026-03-08 09:11:12.21
+82880d43
+User
+✅ Authentication successful - Fetching user data for userId: 47798367
+2026-03-08 09:11:12.21
+82880d43
+User
+[AUTH CHECK] ✅ User authenticated (allow pending): admin status: approved
+2026-03-08 09:11:12.33
+82880d43
+User
+📤 Returning user data for upmichiganstatemovers@gmail.com
+2026-03-08 09:11:12.33
+82880d43
+User
+User data retrieved: found - upmichiganstatemovers@gmail.com with role admin
+2026-03-08 09:11:12.46
+82880d43
+User
+2:11:12 PM [express] GET /api/auth/user 304 in 1267ms :: {"id":"47798367","email":"upmichiganstatemo…
+2026-03-08 09:11:12.62
+82880d43
+User
+[COOKIE-IN] GET /api/snow/logs | proto=https secure=true | jc.sid=true connect.sid=true | raw="connect.sid=s%3Am7opAMJw7ijcbYEK6S1EX-49scPKonIy.lVSpqcQ0sLyo34BSHRQdJGaDVFCv5ht30ndF1qUCi%2Bc; jc.sid=s%3Ay6QLdm1BUL7p5"
+2026-03-08 09:11:12.67
+82880d43
+User
+📋 Fetching all leads...
+2026-03-08 09:11:12.81
+82880d43
+User
+[AUTH CHECK] ✅ User authenticated and approved: admin
+2026-03-08 09:11:12.82
+82880d43
+User
+[AUTH CHECK] Path: /api/notifications/subscribe | Session ID: y6QLdm1B | Has cookie: true
+2026-03-08 09:11:12.90
+82880d43
+User
+2:11:12 PM [express] GET /api/snow/logs 304 in 278ms :: []
+2026-03-08 09:11:12.93
+82880d43
+User
+[AUTH CHECK] Path: /api/gamification/stats | Session ID: y6QLdm1B | Has cookie: true
+2026-03-08 09:11:12.95
+82880d43
+User
+[AUTH CHECK] Path: /api/rewards/history | Session ID: y6QLdm1B | Has cookie: true
+2026-03-08 09:11:12.98
+82880d43
+User
+[AUTH CHECK] Path: /api/mining/status | Session ID: y6QLdm1B | Has cookie: true
+2026-03-08 09:11:12.98
+82880d43
+User
+[AUTH CHECK] Path: /api/users | Session ID: y6QLdm1B | Has cookie: true
+2026-03-08 09:11:13.09
+82880d43
+User
+[AUTH CHECK] ✅ User authenticated and approved: admin
+2026-03-08 09:11:13.45
+82880d43
+User
+2:11:13 PM [express] GET /api/gamification/stats 304 in 819ms :: {"success":true,"data":{"stats":{"i…
+2026-03-08 09:11:13.59
+82880d43
+User
+[AUTH CHECK] ✅ User authenticated and approved: admin
+2026-03-08 09:11:13.69
+82880d43
+User
+[AUTH CHECK] ✅ User authenticated and approved: admin
