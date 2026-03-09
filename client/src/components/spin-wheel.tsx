@@ -88,14 +88,19 @@ function prizeEmoji(prizeType: string): string {
   return "🌌";
 }
 
+function isNadaPrize(result: SpinResult): boolean {
+  return result.prizeType === "tokens" && result.tokens === 0 && !result.jackpotTypeWon;
+}
+
 function prizeLabel(result: SpinResult): string {
   if (result.jackpotTypeWon) return result.jackpotTypeWon === "major" ? "🏆 MAJOR JACKPOT!" : "🔥 MINI JACKPOT!";
   if (result.prizeType === "mystery") return "Mystery Box";
   if (result.prizeType === "gift_card_coffee") return "$5 Coffee Card";
   if (result.prizeType === "coupon_10pct") return "10% Off Coupon";
   if (result.prizeType === "coupon_25pct") return "25% Off Coupon";
+  if (result.prizeType === "tokens" && result.tokens === 100 && result.label === "Free Spin") return "🎰 Free Spin!";
   if (result.prizeType === "tokens" && result.tokens > 0) return `+${result.tokens.toLocaleString()} JCMOVES`;
-  return "No prize";
+  return "Nada — Better luck next time!";
 }
 
 function CouponCodeRow({ code, onCopy, copied }: { code: string; onCopy: (c: string) => void; copied: boolean }) {
@@ -451,13 +456,14 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
             <div className="w-full animate-in fade-in duration-200">
               <div className={`rounded-xl px-4 py-2.5 flex items-center justify-between border ${
                 lastAutoResult.jackpotTypeWon ? "bg-yellow-950/60 border-yellow-500/40" :
+                isNadaPrize(lastAutoResult) ? "bg-slate-900/80 border-slate-700/60" :
                 lastAutoResult.tokens > 0 ? "bg-orange-950/50 border-orange-500/30" :
                 "bg-blue-950/50 border-blue-500/30"
               }`}>
                 <div className="flex items-center gap-2">
-                  <span className="text-lg">{prizeEmoji(lastAutoResult.prizeType)}</span>
+                  <span className="text-lg">{isNadaPrize(lastAutoResult) ? "😬" : prizeEmoji(lastAutoResult.prizeType)}</span>
                   <div>
-                    <p className="text-xs font-bold text-white">{prizeLabel(lastAutoResult)}</p>
+                    <p className={`text-xs font-bold ${isNadaPrize(lastAutoResult) ? "text-slate-400" : "text-white"}`}>{prizeLabel(lastAutoResult)}</p>
                     <p className="text-[10px] text-muted-foreground">Last spin result</p>
                   </div>
                 </div>
@@ -730,10 +736,13 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
                   </div>
                 </div>
               ) : (
-                <div className="text-center bg-gray-900/60 border border-gray-700/30 rounded-2xl p-5">
-                  <div className="text-4xl mb-2">🌌</div>
-                  <div className="text-sm font-bold text-gray-400 mb-1">Quantum fluctuation...</div>
-                  <p className="text-xs text-muted-foreground mb-4">No reward this time — jackpots grew!</p>
+                <div className="text-center bg-slate-950/80 border border-slate-700/40 rounded-2xl p-5">
+                  <div className="text-4xl mb-2">😬</div>
+                  <div className="text-xl font-black text-slate-300 mb-1">Nada!</div>
+                  <p className="text-xs text-slate-500 mb-1">No tokens this time — but the jackpot grew!</p>
+                  {sessionSpinCount > 1 && (
+                    <p className="text-xs text-slate-600 mb-3">Session: +{sessionEarned.toLocaleString()} across {sessionSpinCount} spins</p>
+                  )}
                   <div className="space-y-2">
                     <Button className="w-full bg-orange-500 hover:bg-orange-600 text-black font-black" onClick={handleSpinAgain} disabled={!canAffordSpin}>
                       <Zap className="h-4 w-4 mr-2" />Try Again

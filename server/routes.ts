@@ -12481,27 +12481,30 @@ Thank you for your business!
       }
 
       // ── Quantum Spin prize table ───────────────────────────────────────────
-      // Strict Treasury Version — avg token return ~11.79 JCMOVES per 100-JCMOVES spin
-      // Coffee (2,500 JCMOVES value) rarer than 2,000 token prize. Coupons ultra-rare.
-      // Total: 95.637+1.800+0.900+0.500+0.350+0.250+0.200+0.120+0.080+0.060+0.040+0.025+0.010+0.008+0.012+0.005+0.003 = 100.000
+      // Diversified Treasury Version — avg token return ~62 JCMOVES per 100-JCMOVES spin
+      // Spread across 16 outcomes. "Nada" adds drama. Big prizes appear often enough to feel real.
+      // Total: 22.1+20+15+12+8+5+4+3.5+2.5+1.5+0.8+0.4+0.2+1.5+0.3+1.0+0.2+2.0 = 100.000
+      // EV (tokens): ~62 JCMOVES | House edge: ~38% | Treasury healthy.
       const PRIZES = [
-        { label: "10",        tokens: 10,   probability: 95.637, type: "tokens"           },
-        { label: "15",        tokens: 15,   probability:  1.800, type: "tokens"           },
-        { label: "20",        tokens: 20,   probability:  0.900, type: "tokens"           },
-        { label: "25",        tokens: 25,   probability:  0.500, type: "tokens"           },
-        { label: "40",        tokens: 40,   probability:  0.350, type: "tokens"           },
-        { label: "50",        tokens: 50,   probability:  0.250, type: "tokens"           },
-        { label: "75",        tokens: 75,   probability:  0.200, type: "tokens"           },
-        { label: "100",       tokens: 100,  probability:  0.120, type: "tokens"           },
-        { label: "150",       tokens: 150,  probability:  0.080, type: "tokens"           },
-        { label: "250",       tokens: 250,  probability:  0.060, type: "tokens"           },
-        { label: "500",       tokens: 500,  probability:  0.040, type: "tokens"           },
-        { label: "1,000",     tokens: 1000, probability:  0.025, type: "tokens"           },
-        { label: "2,000",     tokens: 2000, probability:  0.010, type: "tokens"           },
-        { label: "$5 Coffee", tokens: 0,    probability:  0.008, type: "gift_card_coffee" },
-        { label: "Mystery Box",tokens: 0,   probability:  0.012, type: "mystery"          },
-        { label: "10% Off",   tokens: 0,    probability:  0.005, type: "coupon_10pct"     },
-        { label: "25% Off",   tokens: 0,    probability:  0.003, type: "coupon_25pct"     },
+        { label: "Nada",       tokens: 0,     probability: 22.100, type: "tokens"           }, // no tokens — adds suspense
+        { label: "10",         tokens: 10,    probability: 20.000, type: "tokens"           },
+        { label: "25",         tokens: 25,    probability: 15.000, type: "tokens"           },
+        { label: "50",         tokens: 50,    probability: 12.000, type: "tokens"           },
+        { label: "75",         tokens: 75,    probability:  8.000, type: "tokens"           },
+        { label: "100",        tokens: 100,   probability:  5.000, type: "tokens"           },
+        { label: "150",        tokens: 150,   probability:  4.000, type: "tokens"           },
+        { label: "250",        tokens: 250,   probability:  3.500, type: "tokens"           },
+        { label: "500",        tokens: 500,   probability:  2.500, type: "tokens"           },
+        { label: "1,000",      tokens: 1000,  probability:  1.500, type: "tokens"           },
+        { label: "2,500",      tokens: 2500,  probability:  0.800, type: "tokens"           },
+        { label: "5,000",      tokens: 5000,  probability:  0.400, type: "tokens"           },
+        { label: "10,000",     tokens: 10000, probability:  0.200, type: "tokens"           },
+        { label: "Mystery Box",tokens: 0,     probability:  1.500, type: "mystery"          },
+        { label: "$5 Coffee",  tokens: 0,     probability:  0.300, type: "gift_card_coffee" },
+        { label: "10% Off",    tokens: 0,     probability:  1.000, type: "coupon_10pct"     },
+        { label: "25% Off",    tokens: 0,     probability:  0.200, type: "coupon_25pct"     },
+        { label: "Free Spin",  tokens: 100,   probability:  2.000, type: "tokens"           }, // refunds the spin cost
+        // Note: jackpot overlays (mini / major) apply independently on top of any prize
       ];
 
       // Server-side weighted random pick
