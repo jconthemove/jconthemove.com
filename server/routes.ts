@@ -12304,7 +12304,8 @@ Thank you for your business!
     try {
       const user = await storage.getUser((req.session as any).userId);
       if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
-      const [item] = await db.update(rewardItems).set({ ...req.body, updatedAt: new Date() }).where(eq(rewardItems.id, parseInt(req.params.id))).returning();
+      const { id, createdAt, updatedAt, ...safeBody } = req.body;
+      const [item] = await db.update(rewardItems).set({ ...safeBody, updatedAt: new Date() }).where(eq(rewardItems.id, parseInt(req.params.id))).returning();
       res.json(item);
     } catch (e: any) {
       res.status(500).json({ error: e.message || "Failed to update item" });
