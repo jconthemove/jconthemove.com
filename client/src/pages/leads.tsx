@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
-import { ArrowLeft, Home, Building, Trash2, Mail, Phone, MapPin, Calendar as CalendarIcon, ChevronRight, Coins, TrendingUp } from "lucide-react";
+import { ArrowLeft, Home, Building, Trash2, Mail, Phone, MapPin, Calendar as CalendarIcon, ChevronRight, Coins, TrendingUp, CheckCheck } from "lucide-react";
 import { getStatusColors } from "@/lib/job-status";
 import { calculateJCMovesReward, LOYALTY_TIERS, formatTokens, type LoyaltyTierKey } from "@/lib/loyalty";
 import { Button } from "@/components/ui/button";
