@@ -332,29 +332,29 @@ export default function HomePage() {
               </Card>
             </Link>
 
-            {/* Rewards */}
-            <Link href="/employee-login">
+            {/* Reward Shop */}
+            <Link href="/marketplace">
               <Card className="group cursor-pointer bg-gradient-to-br from-purple-700 to-purple-900 border border-purple-500/30 hover:border-purple-400 hover:shadow-lg hover:shadow-purple-500/20 transition-all duration-300" data-testid="card-rewards">
                 <CardContent className="p-3 md:p-4 text-center">
                   <div className="mb-2 flex justify-center">
                     <Gift className="h-6 w-6 md:h-8 md:w-8 text-purple-200" />
                   </div>
-                  <h3 className="text-xs md:text-sm font-semibold text-white">Rewards</h3>
+                  <h3 className="text-xs md:text-sm font-semibold text-white">Reward Shop</h3>
                 </CardContent>
               </Card>
             </Link>
 
-            {/* Shop */}
-            <a href="https://shop.jconthemove.com" target="_blank" rel="noopener noreferrer">
-              <Card className="group cursor-pointer bg-gradient-to-br from-pink-700 to-pink-900 border border-pink-500/30 hover:border-pink-400 hover:shadow-lg hover:shadow-pink-500/20 transition-all duration-300" data-testid="card-shop">
+            {/* Moving Shop */}
+            <Link href="/services">
+              <Card className="group cursor-pointer bg-gradient-to-br from-blue-700 to-blue-900 border border-blue-500/30 hover:border-blue-400 hover:shadow-lg hover:shadow-blue-500/20 transition-all duration-300" data-testid="card-shop">
                 <CardContent className="p-3 md:p-4 text-center">
                   <div className="mb-2 flex justify-center">
-                    <ShoppingBag className="h-6 w-6 md:h-8 md:w-8 text-pink-200" />
+                    <Truck className="h-6 w-6 md:h-8 md:w-8 text-blue-200" />
                   </div>
-                  <h3 className="text-xs md:text-sm font-semibold text-white">Shop</h3>
+                  <h3 className="text-xs md:text-sm font-semibold text-white">Moving Shop</h3>
                 </CardContent>
               </Card>
-            </a>
+            </Link>
 
             {/* Sponsors */}
             <Link href="/sponsors">

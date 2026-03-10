@@ -203,7 +203,7 @@ export default function Header() {
                     style={{ backgroundColor: '#800000' }}
                     data-testid="button-quotes-services"
                   >
-                    Quotes / Services
+                    Moving Shop
                   </Link>
                 </div>
               )}
@@ -430,7 +430,7 @@ export default function Header() {
                     data-testid="button-mobile-quotes-services"
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    Quotes / Services
+                    Moving Shop
                   </Link>
                   <div className="border-t border-border my-2" />
                   <Link 
