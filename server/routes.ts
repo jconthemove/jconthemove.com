@@ -7410,6 +7410,151 @@ Thank you for your business!
     }
   });
 
+  // Send one test email of every type to a target address
+  app.post("/api/admin/send-test-emails", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    const target = (req.body?.to as string) || process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
+    const from = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
+    const results: { type: string; ok: boolean }[] = [];
+
+    const send = async (type: string, subject: string, html: string, text: string) => {
+      try {
+        const ok = await sendEmail({ to: target, from, subject, html, text });
+        results.push({ type, ok });
+      } catch { results.push({ type, ok: false }); }
+    };
+
+    // 1 — Welcome / Account Approved
+    const welcome = buildApprovalWelcomeEmail("Test User");
+    await send("Welcome / Account Approved", welcome.subject, welcome.html, welcome.text);
+
+    // 2 — New Lead Notification
+    const leadData = { serviceType: "Residential Move", firstName: "Jane", lastName: "Doe", email: target, phone: "906-555-0100", fromAddress: "123 Oak St, Ironwood MI", toAddress: "456 Pine Ave, Bessemer MI", moveDate: "2026-03-20", propertySize: "2 bedroom", details: "Test lead from email preview" };
+    const leadEmail = generateLeadNotificationEmail(leadData);
+    await send("New Lead Notification", `New Residential Move Lead — Jane Doe`, leadEmail.html, leadEmail.text);
+
+    // 3 — Contact Form Notification
+    const contactEmail = generateContactNotificationEmail({ name: "John Smith", email: target, phone: "906-555-0200", message: "Hi, I need help with a local move in Ironwood next week. Do you have availability?" });
+    await send("Contact Form", `New Contact Form Submission — John Smith`, contactEmail.html, contactEmail.text);
+
+    // 4 — Service Review Request
+    await send("Service Review Request",
+      `How was your Residential Moving service with JC ON THE MOVE?`,
+      `<div style="background:#0f172a;color:#f1f5f9;font-family:Arial,sans-serif;padding:32px;max-width:600px;margin:0 auto;border-radius:12px;">
+        <h2 style="color:#10b981;">How did we do, Jane? ⭐</h2>
+        <p>Thanks for choosing JC ON THE MOVE for your recent <strong>Residential Moving</strong> job.</p>
+        <p>We'd love to hear your feedback! Leave us a quick review — it takes less than a minute and means the world to our small team.</p>
+        <a href="https://jconthemove.com/review/test-job-123" style="display:inline-block;background:#f59e0b;color:#000;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:bold;margin:16px 0;">Leave a Review ⭐</a>
+        <p style="color:#94a3b8;font-size:13px;">JC ON THE MOVE — Northwoods Moving & More | jconthemove.com</p>
+      </div>`,
+      `How did we do? Leave us a review at https://jconthemove.com/review/test-job-123`
+    );
+
+    // 5 — Account Recovery / Password Reset
+    await send("Account Recovery Code",
+      `JC ON THE MOVE — Account Recovery Code`,
+      `<div style="background:#0f172a;color:#f1f5f9;font-family:Arial,sans-serif;padding:32px;max-width:600px;margin:0 auto;border-radius:12px;">
+        <h2 style="color:#10b981;">🔑 Your Recovery Code</h2>
+        <p>We received a request to reset the password for your JC ON THE MOVE account.</p>
+        <div style="background:#1e293b;border:2px solid #f59e0b;border-radius:10px;padding:20px;text-align:center;margin:20px 0;">
+          <p style="font-size:36px;font-weight:900;letter-spacing:8px;color:#fbbf24;margin:0;">847291</p>
+          <p style="color:#94a3b8;font-size:12px;margin:8px 0 0;">Expires in 15 minutes</p>
+        </div>
+        <p>If you did not request this, you can safely ignore this email.</p>
+        <p style="color:#94a3b8;font-size:13px;">JC ON THE MOVE | jconthemove.com</p>
+      </div>`,
+      `Your JC ON THE MOVE recovery code is: 847291\nExpires in 15 minutes.`
+    );
+
+    // 6 — New Customer Registration (admin alert)
+    await send("New Customer Registration (Admin Alert)",
+      `🆕 New Customer Registration: Jane Doe`,
+      `<div style="background:#0f172a;color:#f1f5f9;font-family:Arial,sans-serif;padding:32px;max-width:600px;margin:0 auto;border-radius:12px;">
+        <h2 style="color:#3b82f6;">🆕 New Customer Registered</h2>
+        <p><strong>Name:</strong> Jane Doe</p>
+        <p><strong>Email:</strong> ${target}</p>
+        <p><strong>Phone:</strong> 906-555-0100</p>
+        <p><strong>Time:</strong> ${new Date().toLocaleString()}</p>
+        <p>Review and approve at <a href="https://jconthemove.com/admin" style="color:#3b82f6;">jconthemove.com/admin</a></p>
+      </div>`,
+      `New customer registered: Jane Doe | ${target} | 906-555-0100`
+    );
+
+    // 7 — Booking Confirmation
+    await send("Job Booking Confirmation",
+      `JC ON THE MOVE — Half Day Move Booking Confirmation`,
+      `<div style="background:#0f172a;color:#f1f5f9;font-family:Arial,sans-serif;padding:32px;max-width:600px;margin:0 auto;border-radius:12px;">
+        <h2 style="color:#10b981;">✅ Your Move is Booked!</h2>
+        <p>Hi Jane,</p>
+        <p>Your <strong>Half Day Moving Package</strong> is confirmed!</p>
+        <div style="background:#1e293b;border-radius:10px;padding:20px;margin:16px 0;">
+          <p style="margin:4px 0;"><strong>Date:</strong> March 20, 2026</p>
+          <p style="margin:4px 0;"><strong>Crew:</strong> 2 Movers + Truck</p>
+          <p style="margin:4px 0;"><strong>Duration:</strong> Up to 4 hours</p>
+          <p style="margin:4px 0;"><strong>Price:</strong> $350</p>
+          <p style="margin:4px 0;"><strong>JCMOVES Earned:</strong> ~17,500 tokens</p>
+        </div>
+        <p>Questions? Call or text: <strong>906-XXX-XXXX</strong></p>
+        <p style="color:#94a3b8;font-size:13px;">JC ON THE MOVE | jconthemove.com</p>
+      </div>`,
+      `Your Half Day Move is booked for March 20, 2026. 2 Movers + Truck. Price: $350. Questions? 906-XXX-XXXX`
+    );
+
+    // 8 — Reward Redemption
+    await send("Reward Redemption Confirmation",
+      `🎁 Reward Redeemed: $75 Off a Service`,
+      `<div style="background:#0f172a;color:#f1f5f9;font-family:Arial,sans-serif;padding:32px;max-width:600px;margin:0 auto;border-radius:12px;">
+        <h2 style="color:#a855f7;">🎁 Reward Redemption Confirmed!</h2>
+        <p>Hi Jane, you just redeemed:</p>
+        <div style="background:linear-gradient(135deg,#3b0764,#1e293b);border:1px solid #a855f7;border-radius:12px;padding:20px;text-align:center;margin:16px 0;">
+          <p style="font-size:22px;font-weight:800;color:#d8b4fe;margin:0;">$75 Off a Service</p>
+          <p style="color:#94a3b8;font-size:13px;margin:8px 0 0;">Cost: 30,000 JCMOVES</p>
+        </div>
+        <p>Our team will apply the $75 discount to your next invoice. Book anytime within 6 months!</p>
+        <p style="color:#94a3b8;font-size:13px;">JC ON THE MOVE | jconthemove.com</p>
+      </div>`,
+      `Reward redeemed: $75 Off a Service (30,000 JCMOVES). Discount applied to your next invoice within 6 months.`
+    );
+
+    // 9 — Bitcoin Payment Received
+    await send("Bitcoin Payment Received",
+      `₿ New Bitcoin Payment — Jane Doe — $325.00`,
+      `<div style="background:#0f172a;color:#f1f5f9;font-family:Arial,sans-serif;padding:32px;max-width:600px;margin:0 auto;border-radius:12px;">
+        <h2 style="color:#f59e0b;">₿ Bitcoin Payment Received</h2>
+        <p><strong>Customer:</strong> Jane Doe (${target})</p>
+        <div style="background:#1e293b;border:1px solid #f59e0b;border-radius:10px;padding:16px;margin:16px 0;">
+          <p style="margin:4px 0;"><strong>USD Amount:</strong> $325.00</p>
+          <p style="margin:4px 0;"><strong>BTC Amount:</strong> 0.00412 BTC</p>
+          <p style="margin:4px 0;"><strong>Status:</strong> Awaiting Confirmation</p>
+          <p style="margin:4px 0;"><strong>TX Hash:</strong> abc123...def456</p>
+        </div>
+        <p style="color:#94a3b8;font-size:13px;">JC ON THE MOVE | jconthemove.com</p>
+      </div>`,
+      `Bitcoin payment received: $325.00 / 0.00412 BTC from Jane Doe. Status: Awaiting Confirmation.`
+    );
+
+    // 10 — Labor Calculator Booking
+    await send("Labor Calculator Booking",
+      `🧮 Labor Calculator Booking — 2 Movers × 120 min`,
+      `<div style="background:#0f172a;color:#f1f5f9;font-family:Arial,sans-serif;padding:32px;max-width:600px;margin:0 auto;border-radius:12px;">
+        <h2 style="color:#06b6d4;">🧮 Labor Calculator Booking</h2>
+        <p>A new booking came in through the Labor Calculator!</p>
+        <div style="background:#1e293b;border-radius:10px;padding:16px;margin:16px 0;">
+          <p style="margin:4px 0;"><strong>Customer:</strong> Jane Doe</p>
+          <p style="margin:4px 0;"><strong>Email:</strong> ${target}</p>
+          <p style="margin:4px 0;"><strong>Crew:</strong> 2 Movers</p>
+          <p style="margin:4px 0;"><strong>Duration:</strong> 120 minutes</p>
+          <p style="margin:4px 0;"><strong>Estimated Total:</strong> $180</p>
+          <p style="margin:4px 0;"><strong>Service Type:</strong> Labor Only</p>
+        </div>
+        <p style="color:#94a3b8;font-size:13px;">JC ON THE MOVE | jconthemove.com</p>
+      </div>`,
+      `Labor Calculator Booking: Jane Doe | 2 Movers × 120 min | Est. $180 | Labor Only`
+    );
+
+    const allOk = results.every(r => r.ok);
+    res.json({ success: allOk, sent: results.filter(r => r.ok).length, total: results.length, results });
+  });
+
   // Public health check for environment configuration
   app.get("/api/health-check", (req, res) => {
     res.json({
