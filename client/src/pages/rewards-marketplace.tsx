@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { LOYALTY_TIERS, calculateJCMovesReward, getNextTier, formatTokens as fmtTokens, type LoyaltyTierKey } from "@/lib/loyalty";
 import { SpinWheelDialog } from "@/components/spin-wheel";
+import { ShopSwitcher } from "@/components/shop-switcher";
 
 interface RewardCategory {
   id: number;
@@ -341,7 +342,8 @@ export default function RewardsMarketplacePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background pb-28">
+      <ShopSwitcher />
       {/* Auto-Booking Confirmation Banner */}
       {autoBookingLeadId && (
         <div className="bg-orange-500/10 border-b border-orange-500/30 px-4 py-3">

@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ShopSwitcher } from "@/components/shop-switcher";
 import {
   Truck, Users, Clock, DollarSign, CheckCircle, Star,
   ChevronRight, ArrowLeft, Phone, Zap, Shield, Award,
@@ -78,7 +79,8 @@ export default function ServicesPage() {
     : `/quote?service=residential`;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white pb-20">
+    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white pb-28">
+      <ShopSwitcher />
 
       {/* ── HERO ──────────────────────────────────────────────────────────── */}
       <div className="relative overflow-hidden">
