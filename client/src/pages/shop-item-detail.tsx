@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -19,7 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ChevronLeft, ChevronRight, ArrowLeft, Eye, MessageCircle, DollarSign, X, Phone, Trash2, CheckCircle2, Pencil, ShoppingCart, Plus, Upload, ImageIcon, Coins, Bitcoin, Check, Gift, Tag, Package } from "lucide-react";
+import { ChevronLeft, ChevronRight, ArrowLeft, Eye, MessageCircle, DollarSign, X, Phone, Trash2, CheckCircle2, Pencil, ShoppingCart, Plus, Upload, ImageIcon, Coins, Bitcoin, Check, Gift, Tag, Package, ZoomIn, ZoomOut, RotateCcw, Maximize2 } from "lucide-react";
 import { type ShopItem } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -35,6 +35,13 @@ export function ShopItemDetailPage() {
   const { addItem, isInCart, removeItem, itemCount } = useCart();
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [isZoomOpen, setIsZoomOpen] = useState(false);
+  const [zoomScale, setZoomScale] = useState(1);
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStart = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
+  const pinchRef = useRef<number | null>(null);
+  const zoomImgRef = useRef<HTMLDivElement>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editTitle, setEditTitle] = useState("");
@@ -252,6 +259,81 @@ export function ShopItemDetailPage() {
     });
   };
 
+  const openZoom = () => {
+    setZoomScale(1);
+    setPanX(0);
+    setPanY(0);
+    setIsZoomOpen(true);
+  };
+
+  const resetZoom = () => { setZoomScale(1); setPanX(0); setPanY(0); };
+
+  const clampPan = useCallback((scale: number, dx: number, dy: number) => {
+    const el = zoomImgRef.current;
+    if (!el) return { x: dx, y: dy };
+    const maxPanX = Math.max(0, (el.clientWidth * (scale - 1)) / 2);
+    const maxPanY = Math.max(0, (el.clientHeight * (scale - 1)) / 2);
+    return { x: Math.min(maxPanX, Math.max(-maxPanX, dx)), y: Math.min(maxPanY, Math.max(-maxPanY, dy)) };
+  }, []);
+
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 0.15 : -0.15;
+    setZoomScale(prev => {
+      const next = Math.min(5, Math.max(1, prev + delta));
+      if (next === 1) { setPanX(0); setPanY(0); }
+      return next;
+    });
+  }, []);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (zoomScale <= 1) return;
+    setIsDragging(true);
+    dragStart.current = { x: e.clientX, y: e.clientY, panX, panY };
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !dragStart.current) return;
+    const dx = panX + (e.clientX - dragStart.current.x);
+    const dy = panY + (e.clientY - dragStart.current.y);
+    const clamped = clampPan(zoomScale, dx, dy);
+    setPanX(clamped.x);
+    setPanY(clamped.y);
+  };
+
+  const handleMouseUp = () => { setIsDragging(false); dragStart.current = null; };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      pinchRef.current = Math.sqrt(dx * dx + dy * dy);
+    } else if (e.touches.length === 1 && zoomScale > 1) {
+      dragStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, panX, panY };
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    e.preventDefault();
+    if (e.touches.length === 2 && pinchRef.current !== null) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const ratio = dist / pinchRef.current;
+      pinchRef.current = dist;
+      setZoomScale(prev => Math.min(5, Math.max(1, prev * ratio)));
+    } else if (e.touches.length === 1 && dragStart.current) {
+      const ndx = panX + (e.touches[0].clientX - dragStart.current.x);
+      const ndy = panY + (e.touches[0].clientY - dragStart.current.y);
+      const clamped = clampPan(zoomScale, ndx, ndy);
+      setPanX(clamped.x);
+      setPanY(clamped.y);
+      dragStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, panX: clamped.x, panY: clamped.y };
+    }
+  };
+
+  const handleTouchEnd = () => { pinchRef.current = null; dragStart.current = null; };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -284,34 +366,124 @@ export function ShopItemDetailPage() {
                     data-testid={`video-detail-${item.id}`}
                   />
                 ) : (
-                  <Dialog open={isZoomOpen} onOpenChange={setIsZoomOpen}>
-                    <DialogTrigger asChild>
+                  <div className="relative w-full group">
+                    <img
+                      src={currentMedia}
+                      alt={item.title}
+                      className="w-full max-h-[500px] object-contain cursor-zoom-in"
+                      data-testid={`img-detail-${item.id}`}
+                      onClick={openZoom}
+                    />
+                    {/* Zoom hint overlay */}
+                    <button
+                      onClick={openZoom}
+                      className="absolute bottom-3 right-3 bg-black/60 hover:bg-black/80 text-white rounded-full p-2 backdrop-blur-sm transition-all opacity-80 group-hover:opacity-100 shadow-lg"
+                      title="Click to zoom"
+                    >
+                      <ZoomIn className="h-5 w-5" />
+                    </button>
+                    <div className="absolute bottom-3 left-3 bg-black/50 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-80 transition-opacity pointer-events-none">
+                      Click to zoom
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Full-screen zoom lightbox ── */}
+                {isZoomOpen && !isVideo && (
+                  <div
+                    className="fixed inset-0 z-50 bg-black/95 flex flex-col"
+                    onClick={(e) => { if (e.target === e.currentTarget) { setIsZoomOpen(false); resetZoom(); } }}
+                  >
+                    {/* Toolbar */}
+                    <div className="flex items-center justify-between px-4 py-3 bg-black/80 shrink-0 z-10">
+                      <span className="text-white/60 text-sm font-medium truncate max-w-[200px]">{item.title}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-white/50 text-xs mr-1">{Math.round(zoomScale * 100)}%</span>
+                        <button
+                          onClick={() => setZoomScale(s => Math.min(5, +(s + 0.5).toFixed(1)))}
+                          className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
+                          title="Zoom in"
+                        >
+                          <ZoomIn className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => { const next = Math.max(1, +(zoomScale - 0.5).toFixed(1)); setZoomScale(next); if (next === 1) { setPanX(0); setPanY(0); } }}
+                          className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
+                          title="Zoom out"
+                        >
+                          <ZoomOut className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={resetZoom}
+                          className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
+                          title="Reset zoom"
+                        >
+                          <RotateCcw className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => { setIsZoomOpen(false); resetZoom(); }}
+                          className="w-8 h-8 rounded-full bg-white/10 hover:bg-red-500/60 text-white flex items-center justify-center transition-colors ml-1"
+                          title="Close"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Zoom canvas */}
+                    <div
+                      ref={zoomImgRef}
+                      className="flex-1 overflow-hidden flex items-center justify-center"
+                      style={{ cursor: zoomScale > 1 ? (isDragging ? "grabbing" : "grab") : "zoom-in" }}
+                      onWheel={handleWheel}
+                      onMouseDown={handleMouseDown}
+                      onMouseMove={handleMouseMove}
+                      onMouseUp={handleMouseUp}
+                      onMouseLeave={handleMouseUp}
+                      onTouchStart={handleTouchStart}
+                      onTouchMove={handleTouchMove}
+                      onTouchEnd={handleTouchEnd}
+                      onClick={(e) => { if (!isDragging && zoomScale === 1) setZoomScale(2); else if (!isDragging && zoomScale >= 4) resetZoom(); }}
+                    >
                       <img
                         src={currentMedia}
                         alt={item.title}
-                        className="w-full max-h-[500px] object-contain cursor-zoom-in"
-                        data-testid={`img-detail-${item.id}`}
+                        data-testid="img-zoomed"
+                        draggable={false}
+                        style={{
+                          transform: `scale(${zoomScale}) translate(${panX / zoomScale}px, ${panY / zoomScale}px)`,
+                          transition: isDragging ? "none" : "transform 0.15s ease",
+                          maxWidth: "100%",
+                          maxHeight: "100%",
+                          objectFit: "contain",
+                          userSelect: "none",
+                          WebkitUserSelect: "none",
+                        }}
                       />
-                    </DialogTrigger>
-                    <DialogContent className="max-w-[95vw] max-h-[95vh] p-2">
-                      <div className="relative w-full h-full flex items-center justify-center">
-                        <img
-                          src={currentMedia}
-                          alt={item.title}
-                          className="max-w-full max-h-[90vh] object-contain"
-                          data-testid="img-zoomed"
-                        />
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="absolute top-2 right-2"
-                          onClick={() => setIsZoomOpen(false)}
-                        >
-                          <X className="h-5 w-5" />
-                        </Button>
+                    </div>
+
+                    {/* Bottom hint */}
+                    <div className="text-center py-2 text-white/30 text-xs shrink-0">
+                      {zoomScale === 1
+                        ? "Scroll or click to zoom · Pinch on mobile"
+                        : "Drag to pan · Scroll to adjust zoom · Click reset to fit"}
+                    </div>
+
+                    {/* Thumbnail strip if multiple images */}
+                    {media.length > 1 && (
+                      <div className="flex justify-center gap-2 px-4 pb-3 shrink-0">
+                        {media.map((m, i) => (
+                          <button
+                            key={i}
+                            onClick={() => { setCurrentMediaIndex(i); resetZoom(); }}
+                            className={`w-12 h-12 rounded overflow-hidden border-2 transition-all ${i === currentMediaIndex ? "border-white scale-105" : "border-white/20 opacity-60 hover:opacity-100"}`}
+                          >
+                            <img src={m} alt="" className="w-full h-full object-cover" />
+                          </button>
+                        ))}
                       </div>
-                    </DialogContent>
-                  </Dialog>
+                    )}
+                  </div>
                 )}
 
                 {/* Navigation for multiple media */}
