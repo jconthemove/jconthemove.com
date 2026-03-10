@@ -12323,6 +12323,19 @@ Thank you for your business!
     }
   });
 
+  // ── Admin: Reset catalog to official 12-item list ────────────
+  app.post("/api/admin/reward-shop/reset-catalog", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser((req.session as any).userId);
+      if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
+      const { resetRewardCatalog } = await import('./seed-reward-shop');
+      const result = await resetRewardCatalog();
+      res.json({ success: true, ...result });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message || "Failed to reset catalog" });
+    }
+  });
+
   // ── Admin: Get all categories ─────────────────────────────────
   app.get("/api/admin/reward-shop/categories", isAuthenticated, async (req: any, res) => {
     try {

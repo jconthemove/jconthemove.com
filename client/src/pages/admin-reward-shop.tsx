@@ -143,6 +143,16 @@ export default function AdminRewardShopPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/reward-shop/items"] }),
   });
 
+  const resetCatalogMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/admin/reward-shop/reset-catalog", {}),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/reward-shop/items"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/reward-shop/stats"] });
+      toast({ title: "Catalog reset!", description: `Hid ${data.hidden} old items, loaded ${data.inserted} official items.` });
+    },
+    onError: (e: any) => toast({ title: "Reset failed", description: e.message, variant: "destructive" }),
+  });
+
   const redemptionActionMutation = useMutation({
     mutationFn: ({ id, status, adminNotes }: { id: number; status: string; adminNotes?: string }) =>
       apiRequest("PATCH", `/api/admin/reward-shop/redemptions/${id}`, { status, adminNotes }),
@@ -201,13 +211,29 @@ export default function AdminRewardShopPage() {
             <p className="text-xs text-muted-foreground">Manage the JCMOVES rewards catalog</p>
           </div>
           {activeTab === "items" && (
-            <Button
-              size="sm"
-              className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold"
-              onClick={() => { setIsNewItem(true); setEditItem({ ...BLANK_ITEM }); }}
-            >
-              <Plus className="h-4 w-4 mr-1" /> Add Item
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-red-500/40 text-red-400 hover:bg-red-500/10 text-xs"
+                disabled={resetCatalogMutation.isPending}
+                onClick={() => {
+                  if (confirm("This will hide ALL current reward items and reload the official 12-item catalog. Continue?")) {
+                    resetCatalogMutation.mutate();
+                  }
+                }}
+              >
+                <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                {resetCatalogMutation.isPending ? "Resetting…" : "Reset Catalog"}
+              </Button>
+              <Button
+                size="sm"
+                className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold"
+                onClick={() => { setIsNewItem(true); setEditItem({ ...BLANK_ITEM }); }}
+              >
+                <Plus className="h-4 w-4 mr-1" /> Add Item
+              </Button>
+            </div>
           )}
         </div>
       </div>
