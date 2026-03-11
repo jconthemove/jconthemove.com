@@ -46,7 +46,7 @@ export function useMiningNotifications() {
   useEffect(() => {
     if (!user) return;
     if (!miningStatus) return;
-    if (Notification.permission !== "granted") return;
+    if (typeof Notification === 'undefined' || Notification.permission !== "granted") return;
 
     const { canClaim, accumulatedTokens, isActive } = miningStatus;
     const now = Date.now();
@@ -71,7 +71,7 @@ export function useMiningNotifications() {
 
   useEffect(() => {
     if (!user) return;
-    if (Notification.permission !== "granted") return;
+    if (typeof Notification === 'undefined' || Notification.permission !== "granted") return;
 
     const rewardHistory: RewardItem[] = Array.isArray(rewardHistoryData)
       ? rewardHistoryData

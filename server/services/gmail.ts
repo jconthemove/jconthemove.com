@@ -48,12 +48,16 @@ async function getUncachableGmailClient() {
   return google.gmail({ version: 'v1', auth: oauth2Client });
 }
 
+function encodeSubject(subject: string): string {
+  return `=?UTF-8?B?${Buffer.from(subject, 'utf-8').toString('base64')}?=`;
+}
+
 function buildRawEmail(to: string, from: string, subject: string, html?: string, text?: string): string {
   const boundary = 'boundary_' + Date.now();
   const lines = [
     `From: JC ON THE MOVE <${from}>`,
     `To: ${to}`,
-    `Subject: ${subject}`,
+    `Subject: ${encodeSubject(subject)}`,
     'MIME-Version: 1.0',
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
     '',

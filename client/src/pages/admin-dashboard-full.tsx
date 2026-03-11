@@ -22,7 +22,8 @@ import {
   X,
   ChevronRight,
   Home,
-  Tag
+  Tag,
+  CheckCheck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "wouter";
@@ -444,6 +445,19 @@ export default function AdminDashboardFull() {
                 <div>
                   <p className="font-medium">Promo Codes</p>
                   <p className="text-sm text-muted-foreground">Create & manage discount codes</p>
+                </div>
+              </div>
+              <ChevronRight className="h-5 w-5 text-muted-foreground" />
+            </div>
+          </Link>
+
+          <Link href="/admin/system-check">
+            <div className="flex items-center justify-between p-4 hover:bg-muted/50 transition-colors cursor-pointer border-b last:border-0">
+              <div className="flex items-center gap-3">
+                <CheckCheck className="h-5 w-5 text-emerald-500" />
+                <div>
+                  <p className="font-medium">System Health Checklist</p>
+                  <p className="text-sm text-muted-foreground">Verify emails, rewards, spins & more</p>
                 </div>
               </div>
               <ChevronRight className="h-5 w-5 text-muted-foreground" />

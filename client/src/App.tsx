@@ -32,6 +32,7 @@ import AdminPromoCodesPage from "@/pages/admin-promo-codes";
 import AdminPipelinePage from "@/pages/admin-pipeline";
 import RewardsMarketplacePage from "@/pages/rewards-marketplace";
 import AdminRewardShopPage from "@/pages/admin-reward-shop";
+import AdminSystemCheckPage from "@/pages/admin-system-check";
 import NotFound from "@/pages/not-found";
 import MobileLeadManager from "@/components/mobile-lead-manager";
 import CustomerMobileInterface from "@/components/customer-mobile-interface";
@@ -356,6 +357,11 @@ function AuthenticatedApp() {
           <Route path="/admin/promo-codes">
             <RouteGuard allowedRoles={['admin', 'business_owner']}>
               <PageWrapper component={AdminPromoCodesPage} />
+            </RouteGuard>
+          </Route>
+          <Route path="/admin/system-check">
+            <RouteGuard allowedRoles={['admin', 'business_owner']}>
+              <PageWrapper component={AdminSystemCheckPage} />
             </RouteGuard>
           </Route>
           <Route path="/admin/marketplace">
