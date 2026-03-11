@@ -1,0 +1,1425 @@
+import { useState, useCallback, useRef, useEffect } from "react";
+import { Link, useLocation } from "wouter";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/hooks/useAuth";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { ArrowLeft, Gem, Leaf, Search, Plus, ChevronLeft, ChevronRight, Mail, Phone, ImagePlus, X, Heart, Pencil, Trash2, Video, Tag, RotateCcw, ShoppingCart, Check, CheckCircle2, Bitcoin, Bot, Send, RefreshCw } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
+import { useCart } from "@/hooks/useCart";
+import { FloatingCartButton } from "@/components/cart-button";
+
+const jewelryVideoSrc = "/jewelry-video.mp4";
+
+const isVideoUrl = (url: string) => /\.(mp4|webm|ogg|mov)$/i.test(url);
+
+function MediaItem({ src, alt, className }: { src: string; alt: string; className?: string }) {
+  if (isVideoUrl(src)) {
+    return (
+      <video
+        src={src}
+        className={className}
+        controls
+        playsInline
+        muted
+        loop
+      />
+    );
+  }
+  return <img src={src} alt={alt} className={className} />;
+}
+
+function MediaThumb({ src, alt, className }: { src: string; alt: string; className?: string }) {
+  if (isVideoUrl(src)) {
+    return (
+      <video
+        src={src}
+        className={className}
+        muted
+        playsInline
+        preload="metadata"
+      />
+    );
+  }
+  return <img src={src} alt={alt} className={className} />;
+}
+
+interface JewelryItem {
+  id: string;
+  postedBy?: string;
+  title: string;
+  description?: string;
+  shortDescription?: string;
+  price?: string;
+  category?: string;
+  materials?: string;
+  imageUrl?: string;
+  photos?: string[];
+  inStock?: boolean;
+  featured?: boolean;
+  status: string;
+  createdAt: string;
+}
+
+const categories = [
+  { value: "all", label: "All" },
+  { value: "earrings", label: "Earrings" },
+  { value: "necklaces", label: "Necklaces" },
+  { value: "bracelets", label: "Bracelets" },
+  { value: "rings", label: "Rings" },
+  { value: "custom", label: "Custom" },
+];
+
+function CartButtons({ item }: { item: JewelryItem; onCheckout?: () => void; checkoutLoading?: boolean }) {
+  const { addItem, removeItem, isInCart } = useCart();
+  const cartId = `jewelry-${item.id}`;
+  const inCart = isInCart(cartId);
+
+  if (!item.price || item.inStock === false) return null;
+
+  return (
+    <div className="pt-3 border-t space-y-2.5">
+      <Button
+        className={`w-full py-5 text-base font-semibold ${
+          inCart
+            ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+            : "bg-emerald-500 hover:bg-emerald-600 text-white"
+        }`}
+        onClick={() => {
+          if (inCart) {
+            removeItem(cartId);
+          } else {
+            addItem({
+              id: cartId,
+              name: item.title,
+              price: parseFloat(item.price!),
+              image: item.imageUrl || "",
+              type: "jewelry",
+            });
+          }
+        }}
+      >
+        {inCart ? (
+          <><Check className="h-5 w-5 mr-2" /> In Cart</>
+        ) : (
+          <><ShoppingCart className="h-5 w-5 mr-2" /> Add to Cart</>
+        )}
+      </Button>
+
+      <a href="/bitcoin-payment" className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-orange-500/40 bg-orange-500/10 hover:bg-orange-500/20 transition-colors">
+        <Bitcoin className="h-4 w-4 text-orange-400" />
+        <span className="text-orange-300 text-sm font-medium">Pay with Bitcoin</span>
+        <span className="inline-flex items-center bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">Save 10%</span>
+      </a>
+
+      {inCart && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-950/40 border border-orange-500/30">
+          <Bitcoin className="h-3.5 w-3.5 text-orange-400 flex-shrink-0" />
+          <p className="text-orange-300/90 text-xs">Added! Pay with Bitcoin at checkout to <span className="font-bold text-orange-300">save 10%</span></p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function NatureMadeJewls() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [selectedItem, setSelectedItem] = useState<JewelryItem | null>(null);
+  const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
+  const [newPhotoUrl, setNewPhotoUrl] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [hoveredItem, setHoveredItem] = useState<JewelryItem | null>(null);
+  const [hoverPos, setHoverPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (selectedItem) {
+      document.body.style.overflow = 'hidden';
+      const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelectedItem(null); };
+      window.addEventListener('keydown', handleEsc);
+      return () => { document.body.style.overflow = ''; window.removeEventListener('keydown', handleEsc); };
+    } else {
+      document.body.style.overflow = '';
+    }
+  }, [selectedItem]);
+
+  const [newItem, setNewItem] = useState({
+    title: "",
+    shortDescription: "",
+    description: "",
+    price: "",
+    category: "",
+    materials: "",
+    imageUrl: "",
+  });
+
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editItem, setEditItem] = useState<JewelryItem | null>(null);
+  const [editPhotoUrls, setEditPhotoUrls] = useState<string[]>([]);
+  const [editPhotoUrl, setEditPhotoUrl] = useState("");
+  const [isEditUploading, setIsEditUploading] = useState(false);
+  const editFileInputRef = useRef<HTMLInputElement>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<JewelryItem | null>(null);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+
+  // ── Chatbot listing assistant ──────────────────────────────────────────────
+  type ChatStep = 'photos' | 'title' | 'category' | 'price' | 'materials' | 'shortDesc' | 'description' | 'confirm' | 'done';
+  type ChatMsg = { role: 'bot' | 'user'; content: string };
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatStep, setChatStep] = useState<ChatStep>('photos');
+  const [chatMessages, setChatMessages] = useState<ChatMsg[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatUploading, setChatUploading] = useState(false);
+  const chatFileRef = useRef<HTMLInputElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const [chatData, setChatData] = useState({ photos: [] as string[], title: '', category: '', price: '', materials: '', shortDesc: '', description: '' });
+
+  const scrollChat = () => setTimeout(() => chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: 'smooth' }), 60);
+  const botSay = (content: string) => { setChatMessages(prev => [...prev, { role: 'bot', content }]); scrollChat(); };
+  const userSay = (content: string) => { setChatMessages(prev => [...prev, { role: 'user', content }]); scrollChat(); };
+
+  const chatCreateMutation = useMutation({
+    mutationFn: (item: any) => apiRequest("POST", "/api/jewelry", item),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jewelry"] });
+      botSay("🎉 It's live! Your piece has been added to the shop. Want to add another? Type \"yes\" to start over.");
+      setChatStep('done');
+    },
+    onError: (err: any) => botSay(`Something went wrong: ${err.message}. Try again?`),
+  });
+
+  useEffect(() => {
+    if (chatOpen && chatMessages.length === 0) {
+      setChatStep('photos');
+      setChatData({ photos: [], title: '', category: '', price: '', materials: '', shortDesc: '', description: '' });
+      botSay("Hey! I'm your jewelry listing assistant 💎\n\nLet's get a new piece added to the shop. Start by uploading a photo — tap the camera button below!");
+    }
+  }, [chatOpen]);
+
+  async function handleChatUpload(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setChatUploading(true);
+    const uploaded: string[] = [];
+    for (const file of Array.from(files)) {
+      try {
+        const fd = new FormData();
+        fd.append('photo', file);
+        const res = await fetch('/api/jewelry/upload-photo', { method: 'POST', body: fd, credentials: 'include' });
+        const data = await res.json();
+        if (data.url) uploaded.push(data.url);
+      } catch { /* skip */ }
+    }
+    setChatUploading(false);
+    if (uploaded.length === 0) { botSay("Hmm, that upload failed. Please try again."); return; }
+    setChatData(prev => ({ ...prev, photos: [...prev.photos, ...uploaded] }));
+    userSay(`📸 Uploaded ${uploaded.length} photo${uploaded.length > 1 ? 's' : ''}`);
+    setTimeout(() => {
+      botSay(`Got it! ${uploaded.length > 1 ? 'Beautiful shots.' : 'Nice photo.'} You can upload more or move on.\n\nWhat's the name of this piece?`);
+      setChatStep('title');
+    }, 400);
+  }
+
+  function handleChatSend() {
+    const text = chatInput.trim();
+    if (!text && chatStep !== 'done') return;
+    if (text) { userSay(text); setChatInput(''); }
+
+    if (chatStep === 'title') {
+      setChatData(d => ({ ...d, title: text }));
+      setTimeout(() => { botSay("Nice! What category does it fall under?"); setChatStep('category'); }, 400);
+    } else if (chatStep === 'price') {
+      const clean = text.replace(/[$,\s]/g, '');
+      if (isNaN(Number(clean))) { botSay("Just the number please — like 45 or 120."); return; }
+      setChatData(d => ({ ...d, price: clean }));
+      setTimeout(() => { botSay("Got it! What materials is it made from?\n(e.g. sterling silver, turquoise, copper wire)"); setChatStep('materials'); }, 400);
+    } else if (chatStep === 'materials') {
+      setChatData(d => ({ ...d, materials: text }));
+      setTimeout(() => { botSay("Love it! Now give me a short tagline — one or two punchy sentences customers will see first."); setChatStep('shortDesc'); }, 400);
+    } else if (chatStep === 'shortDesc') {
+      setChatData(d => ({ ...d, shortDesc: text }));
+      setTimeout(() => { botSay("Perfect. Any longer description — story behind it, sizing, care tips? Or type \"skip\" to leave it blank."); setChatStep('description'); }, 400);
+    } else if (chatStep === 'description') {
+      const desc = text.toLowerCase() === 'skip' ? '' : text;
+      const updated = { ...chatData, description: desc };
+      setChatData(updated);
+      const summary = `Here's your listing preview:\n\n📸 ${updated.photos.length} photo(s)\n✏️ Name: ${updated.title}\n🏷 Category: ${updated.category}\n💲 Price: $${updated.price}\n🔮 Materials: ${updated.materials}\n📝 Tagline: ${updated.shortDesc}${updated.description ? '\n📖 Description: ' + updated.description.slice(0, 80) + (updated.description.length > 80 ? '…' : '') : ''}\n\nReady to publish? Reply "yes" to list it or "no" to cancel.`;
+      setTimeout(() => { botSay(summary); setChatStep('confirm'); }, 400);
+    } else if (chatStep === 'confirm') {
+      if (text.toLowerCase().startsWith('y')) {
+        botSay("Listing it now…");
+        chatCreateMutation.mutate({ title: chatData.title, shortDescription: chatData.shortDesc, description: chatData.description, price: chatData.price, category: chatData.category, materials: chatData.materials, imageUrl: chatData.photos[0] || '', photos: chatData.photos.slice(1), inStock: true, featured: false, status: 'active' });
+      } else {
+        botSay("No problem! I've cleared everything. Type \"restart\" whenever you want to add a new piece.");
+        setChatStep('done');
+      }
+    } else if (chatStep === 'done') {
+      setChatMessages([]);
+      setChatData({ photos: [], title: '', category: '', price: '', materials: '', shortDesc: '', description: '' });
+      botSay("Let's add another piece! 💎 Upload a photo to get started.");
+      setChatStep('photos');
+    }
+  }
+  // ── end chatbot ────────────────────────────────────────────────────────────
+
+  const [, navigate] = useLocation();
+  const isAdmin = user?.role === 'admin' || user?.role === 'business_owner';
+  const canAdd = isAdmin || user?.role === 'employee';
+
+  const canEditItem = (item: JewelryItem) => {
+    if (!user) return false;
+    if (isAdmin) return true;
+    return item.postedBy === user.id;
+  };
+
+  const { data: items = [], isLoading } = useQuery<JewelryItem[]>({
+    queryKey: ["/api/jewelry", { category: selectedCategory !== "all" ? selectedCategory : undefined, search: searchQuery }],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (selectedCategory !== "all") params.append("category", selectedCategory);
+      if (searchQuery) params.append("search", searchQuery);
+      const res = await fetch(`/api/jewelry?${params.toString()}`, { credentials: 'include' });
+      if (!res.ok) throw new Error("Failed to fetch items");
+      return res.json();
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (item: any) => apiRequest("POST", "/api/jewelry", item),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jewelry"] });
+      setIsCreateOpen(false);
+      setNewItem({ title: "", shortDescription: "", description: "", price: "", category: "", materials: "", imageUrl: "" });
+      setPhotoUrls([]);
+      toast({ title: "Item added!" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => apiRequest("PATCH", `/api/jewelry/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jewelry"] });
+      setIsEditOpen(false);
+      setEditItem(null);
+      setSelectedItem(null);
+      toast({ title: "Item updated!" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/jewelry/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jewelry"] });
+      setSelectedItem(null);
+      setDeleteConfirmOpen(false);
+      setItemToDelete(null);
+      toast({ title: "Item deleted" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const soldMutation = useMutation({
+    mutationFn: async ({ id, sold }: { id: string; sold: boolean }) => {
+      return await apiRequest("PATCH", `/api/jewelry/${id}/sold`, { sold });
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jewelry"] });
+      if (selectedItem && selectedItem.id === variables.id) {
+        setSelectedItem({ ...selectedItem, inStock: !variables.sold, soldAt: variables.sold ? new Date().toISOString() : null, status: variables.sold ? 'sold' : 'active' } as any);
+      }
+      toast({ title: variables.sold ? "Item marked as sold" : "Item marked as available" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const handleCheckout = async (item: JewelryItem) => {
+    setCheckoutLoading(true);
+    try {
+      const res = await apiRequest("POST", "/api/square/create-checkout", { itemId: item.id });
+      const data = await res.json();
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      } else {
+        toast({ title: "Error", description: "Could not create checkout link", variant: "destructive" });
+      }
+    } catch (error: any) {
+      toast({ title: "Payment Error", description: error.message || "Failed to start checkout. Please try again.", variant: "destructive" });
+    } finally {
+      setCheckoutLoading(false);
+    }
+  };
+
+
+  const startEdit = (item: JewelryItem) => {
+    setEditItem({ ...item });
+    setEditPhotoUrls(getItemPhotos(item));
+    setSelectedItem(null);
+    setIsEditOpen(true);
+  };
+
+  const handleUpdate = () => {
+    if (!editItem) return;
+    const updateData = {
+      title: editItem.title,
+      shortDescription: editItem.shortDescription,
+      description: editItem.description,
+      price: editItem.price && editItem.price !== '' ? editItem.price : '0.00',
+      category: editItem.category,
+      materials: editItem.materials,
+      imageUrl: editPhotoUrls[0] || editItem.imageUrl,
+      photos: editPhotoUrls,
+    };
+    updateMutation.mutate({ id: editItem.id, data: updateData });
+  };
+
+  const handleEditFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const remaining = 10 - editPhotoUrls.length;
+    const filesToUpload = Array.from(files).slice(0, remaining);
+    setIsEditUploading(true);
+    try {
+      for (const file of filesToUpload) {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch('/api/jewelry/upload', {
+          method: 'POST',
+          credentials: 'include',
+          body: formData,
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || errData.error || `Server error ${res.status}`);
+        }
+        const { url } = await res.json();
+        setEditPhotoUrls(prev => [...prev, url]);
+      }
+      toast({ title: `${filesToUpload.length} file(s) uploaded` });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsEditUploading(false);
+      if (editFileInputRef.current) editFileInputRef.current.value = '';
+    }
+  };
+
+  const handleCreate = () => {
+    if (!newItem.title.trim()) {
+      toast({ title: "Title is required", variant: "destructive" });
+      return;
+    }
+    const itemData = {
+      ...newItem,
+      imageUrl: photoUrls[0] || newItem.imageUrl,
+      photos: photoUrls,
+    };
+    createMutation.mutate(itemData);
+  };
+
+  const addPhotoUrl = () => {
+    if (newPhotoUrl.trim() && photoUrls.length < 10) {
+      setPhotoUrls([...photoUrls, newPhotoUrl.trim()]);
+      setNewPhotoUrl("");
+    }
+  };
+
+  const removePhotoUrl = (index: number) => {
+    setPhotoUrls(photoUrls.filter((_, i) => i !== index));
+  };
+
+  const videoExts = ['mp4', 'webm', 'ogg', 'mov'];
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const remaining = 10 - photoUrls.length;
+    const filesToUpload = Array.from(files).slice(0, remaining);
+    setIsUploading(true);
+    try {
+      for (const file of filesToUpload) {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch('/api/jewelry/upload', {
+          method: 'POST',
+          credentials: 'include',
+          body: formData,
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || errData.error || `Server error ${res.status}`);
+        }
+        const { url } = await res.json();
+        setPhotoUrls(prev => [...prev, url]);
+      }
+      toast({ title: `${filesToUpload.length} file(s) uploaded` });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const getItemPhotos = (item: JewelryItem) => {
+    const photos: string[] = [];
+    if (item.imageUrl) photos.push(item.imageUrl);
+    if (item.photos && Array.isArray(item.photos)) {
+      photos.push(...item.photos.filter((p: string) => p && !photos.includes(p)));
+    }
+    return photos.length > 0 ? photos : [];
+  };
+
+  const nextPhoto = () => {
+    if (selectedItem) {
+      const photos = getItemPhotos(selectedItem);
+      setCurrentPhotoIndex((prev) => (prev + 1) % photos.length);
+    }
+  };
+
+  const prevPhoto = () => {
+    if (selectedItem) {
+      const photos = getItemPhotos(selectedItem);
+      setCurrentPhotoIndex((prev) => (prev - 1 + photos.length) % photos.length);
+    }
+  };
+
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+
+  const openItem = (item: JewelryItem) => {
+    if (isMobile) {
+      navigate(`/nature-made-jewls/${item.id}`);
+    } else {
+      setSelectedItem(item);
+      setCurrentPhotoIndex(0);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-400 via-purple-300 to-gray-500">
+      <header className="sticky top-0 z-50 bg-gradient-to-r from-slate-100/95 via-purple-50/95 to-slate-200/95 backdrop-blur border-b border-purple-200/50 shadow-sm">
+        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
+          <Link href="/">
+            <Button variant="ghost" size="sm" className="text-stone-600">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+          <div className="flex items-center gap-2">
+            <Leaf className="w-5 h-5 text-purple-600" />
+            <h1 className="font-serif text-xl font-bold bg-gradient-to-r from-slate-700 via-purple-700 to-slate-600 bg-clip-text text-transparent">Nature Made Jewls</h1>
+            <Gem className="w-5 h-5 text-slate-400" />
+          </div>
+          <div className="flex items-center gap-2">
+            {!user && (
+              <Link href="/employee-login?redirect=/nature-made-jewls">
+                <Button variant="ghost" size="sm" className="text-purple-600 font-semibold">
+                  Login
+                </Button>
+              </Link>
+            )}
+            <a href="mailto:upmichiganstatemovers@gmail.com">
+              <Button variant="ghost" size="sm"><Mail className="h-4 w-4 text-stone-600" /></Button>
+            </a>
+            <a href="tel:906-285-9312">
+              <Button variant="ghost" size="sm"><Phone className="h-4 w-4 text-stone-600" /></Button>
+            </a>
+          </div>
+        </div>
+      </header>
+
+      <div className="sticky top-14 z-40 bg-gradient-to-r from-slate-100/95 via-purple-50/95 to-slate-200/95 backdrop-blur border-b border-purple-200/50">
+        <div className="container mx-auto px-3 sm:px-4 py-2 sm:py-3">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-stone-400" />
+              <Input
+                placeholder="Search jewelry..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 bg-white/70 border-purple-200 h-9 sm:h-10 text-sm"
+              />
+            </div>
+            <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+              {categories.map((cat) => (
+                <Button
+                  key={cat.value}
+                  variant={selectedCategory === cat.value ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedCategory(cat.value)}
+                  className={selectedCategory === cat.value 
+                    ? "bg-gradient-to-r from-purple-600 to-slate-600 hover:from-purple-700 hover:to-slate-700 text-white whitespace-nowrap" 
+                    : "border-border text-white bg-background hover:bg-muted whitespace-nowrap"}
+                >
+                  {cat.label}
+                </Button>
+              ))}
+            </div>
+            {canAdd ? (
+              <div className="flex gap-2">
+                {isAdmin && (
+                  <Button
+                    onClick={() => setChatOpen(true)}
+                    className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 whitespace-nowrap shadow-lg"
+                  >
+                    <Bot className="h-4 w-4 mr-1" /> Chat to Add
+                  </Button>
+                )}
+              <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+                <DialogTrigger asChild>
+                  <Button className="bg-gradient-to-r from-purple-500 to-slate-600 hover:from-purple-600 hover:to-slate-700 whitespace-nowrap">
+                    <Plus className="h-4 w-4 mr-1" /> Add
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Add New Piece</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label>Title *</Label>
+                      <Input
+                        value={newItem.title}
+                        onChange={(e) => setNewItem({ ...newItem, title: e.target.value })}
+                        placeholder="e.g., Turquoise Drop Earrings"
+                      />
+                    </div>
+                    
+                    <div>
+                      <Label>Photos & Videos</Label>
+                      <div className="space-y-2">
+                        {photoUrls.map((url, index) => (
+                          <div key={index} className="flex gap-2 items-center">
+                            {isVideoUrl(url) ? (
+                              <div className="w-12 h-12 rounded bg-stone-200 flex items-center justify-center"><Video className="h-5 w-5 text-purple-600" /></div>
+                            ) : (
+                              <img src={url} alt="" className="w-12 h-12 object-cover rounded" />
+                            )}
+                            <span className="text-sm text-stone-600 truncate flex-1">{url.split('/').pop()}</span>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => removePhotoUrl(index)}>
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                        <div className="flex gap-2">
+                          <Input
+                            value={newPhotoUrl}
+                            onChange={(e) => setNewPhotoUrl(e.target.value)}
+                            placeholder="Paste image URL..."
+                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPhotoUrl(); } }}
+                            className="flex-1"
+                          />
+                          <Button type="button" variant="outline" onClick={addPhotoUrl} disabled={!newPhotoUrl.trim() || photoUrls.length >= 10} title="Add URL">
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                          <label
+                            className={`inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 cursor-pointer ${photoUrls.length >= 10 || isUploading ? 'opacity-50 pointer-events-none' : ''}`}
+                            title="Upload from device"
+                          >
+                            <input
+                              type="file"
+                              ref={fileInputRef}
+                              onChange={handleFileUpload}
+                              accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime"
+                              multiple
+                              className="sr-only"
+                            />
+                            {isUploading ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <ImagePlus className="h-4 w-4" />}
+                          </label>
+                        </div>
+                        <p className="text-xs text-stone-500">{photoUrls.length}/10 photos & videos</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label>Price</Label>
+                        <Input
+                          value={newItem.price}
+                          onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
+                          placeholder="25.00"
+                        />
+                      </div>
+                      <div>
+                        <Label>Category</Label>
+                        <Select value={newItem.category} onValueChange={(v) => setNewItem({ ...newItem, category: v })}>
+                          <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                          <SelectContent>
+                            {categories.filter(c => c.value !== "all").map((cat) => (
+                              <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label>Short Description</Label>
+                      <Input
+                        value={newItem.shortDescription}
+                        onChange={(e) => setNewItem({ ...newItem, shortDescription: e.target.value })}
+                        placeholder="One line for thumbnail"
+                      />
+                    </div>
+
+                    <div>
+                      <Label>Materials</Label>
+                      <Input
+                        value={newItem.materials}
+                        onChange={(e) => setNewItem({ ...newItem, materials: e.target.value })}
+                        placeholder="Sterling silver, turquoise..."
+                      />
+                    </div>
+
+                    <div>
+                      <Label>Full Description</Label>
+                      <Textarea
+                        value={newItem.description}
+                        onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
+                        placeholder="Tell the story of this piece..."
+                        rows={3}
+                      />
+                    </div>
+
+                    <Button onClick={handleCreate} disabled={createMutation.isPending} className="w-full bg-purple-600 hover:bg-purple-700">
+                      {createMutation.isPending ? "Adding..." : "Add Item"}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+              </div>
+            ) : (
+              <Link href="/employee-login?redirect=/nature-made-jewls">
+                <Button className="bg-gradient-to-r from-purple-500 to-slate-600 hover:from-purple-600 hover:to-slate-700 whitespace-nowrap">
+                  <Plus className="h-4 w-4 mr-1" /> Add
+                </Button>
+              </Link>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Slim Video Banner */}
+      <div className="w-full"
+        style={{ background: "linear-gradient(90deg, #0d0704 0%, #2d1a0f 25%, #1e1208 50%, #2d1a0f 75%, #0d0704 100%)" }}>
+        <div className="absolute inset-0 opacity-10 pointer-events-none"
+          style={{ backgroundImage: "repeating-linear-gradient(60deg, transparent, transparent 3px, rgba(180,100,30,0.12) 3px, rgba(180,100,30,0.12) 6px)" }} />
+        <div className="relative flex items-center justify-between px-4 py-2.5 max-w-5xl mx-auto gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex-shrink-0 w-10 h-10 rounded-lg overflow-hidden border border-amber-700/50 shadow">
+              <video
+                src={jewelryVideoSrc}
+                autoPlay
+                loop
+                muted
+                playsInline
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div className="min-w-0">
+              <p className="text-amber-400/80 text-[9px] uppercase tracking-widest leading-none mb-0.5">Handmade with love ♡</p>
+              <p className="text-amber-100 font-serif font-bold text-sm md:text-base leading-tight truncate"
+                style={{ fontFamily: "'Georgia', serif" }}>
+                Nature Made Jewls — Handmade Jewelry &amp; Custom Creations
+              </p>
+            </div>
+          </div>
+          <div className="hidden sm:flex items-center gap-4 flex-shrink-0">
+            <div className="flex items-center gap-2">
+              {["Copper Wire", "Natural Stone", "Custom Designs"].map(f => (
+                <span key={f} className="flex items-center gap-1 text-amber-100/70 text-[10px]">
+                  <CheckCircle2 className="h-2.5 w-2.5 text-amber-500" />{f}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="h-px bg-gradient-to-r from-transparent via-amber-700/50 to-transparent" />
+      </div>
+
+
+      <main className="container mx-auto px-2 sm:px-3 py-3 sm:py-6">
+        {isLoading ? (
+          <div className="text-center text-stone-500 py-16">Loading beautiful pieces...</div>
+        ) : items.length === 0 ? (
+          <div className="text-center py-16">
+            <Gem className="w-16 h-16 mx-auto text-stone-300 mb-4" />
+            <p className="text-stone-500 text-lg">No items found</p>
+            <p className="text-stone-400 text-sm mt-2">
+              {searchQuery ? "Try a different search" : "New pieces coming soon!"}
+            </p>
+            {canAdd && (
+              <Button 
+                onClick={() => setIsCreateOpen(true)}
+                className="mt-6 bg-gradient-to-r from-purple-500 to-slate-600 hover:from-purple-600 hover:to-slate-700"
+              >
+                <Plus className="h-4 w-4 mr-2" /> Add Your First Item
+              </Button>
+            )}
+            {!user && (
+              <div className="mt-6">
+                <Link href="/employee-login?redirect=/nature-made-jewls">
+                  <Button variant="outline" className="border-purple-600 text-purple-600">
+                    Login to Add Items
+                  </Button>
+                </Link>
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+          {/* Diverging offset gallery — items split into explicit columns with cascading offsets */}
+          {(() => {
+            const heights = ['aspect-[3/4]', 'aspect-[4/5]', 'aspect-square', 'aspect-[2/3]', 'aspect-[5/6]'];
+
+            const renderCard = (item: JewelryItem, origIdx: number) => {
+              const photos = getItemPhotos(item);
+              const itemHeight = heights[origIdx % heights.length];
+              return (
+                <Card
+                  key={item.id}
+                  className="overflow-hidden cursor-pointer group hover:shadow-xl transition-all duration-300 border-0 bg-white/90 backdrop-blur-sm shadow-md shadow-purple-100/50"
+                  onClick={() => openItem(item)}
+                  onMouseEnter={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const viewportW = window.innerWidth;
+                    const popupW = 320;
+                    let x = rect.right + 12;
+                    if (x + popupW > viewportW) x = rect.left - popupW - 12;
+                    if (x < 8) x = rect.left + rect.width / 2 - popupW / 2;
+                    let y = rect.top;
+                    if (y + 400 > window.innerHeight) y = window.innerHeight - 410;
+                    if (y < 8) y = 8;
+                    setHoverPos({ x, y });
+                    if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+                    hoverTimeout.current = setTimeout(() => setHoveredItem(item), 400);
+                  }}
+                  onMouseLeave={() => {
+                    if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+                    setHoveredItem(null);
+                  }}
+                >
+                  <div className={`${itemHeight} relative overflow-hidden bg-stone-100`}>
+                    {photos.length > 0 ? (
+                      <MediaThumb
+                        src={photos[0]}
+                        alt={item.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Gem className="w-10 h-10 text-stone-300" />
+                      </div>
+                    )}
+                    {photos.some(p => isVideoUrl(p)) && (
+                      <span className="absolute top-2 left-2 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                        <Video className="h-2.5 w-2.5" /> Video
+                      </span>
+                    )}
+                    {photos.length > 1 && (
+                      <span className="absolute top-2 right-2 bg-black/50 text-white text-[10px] px-1.5 py-0.5 rounded-full">
+                        +{photos.length - 1}
+                      </span>
+                    )}
+                    {item.featured && (
+                      <Heart className="absolute bottom-2 left-2 w-4 h-4 text-rose-500 fill-rose-500" />
+                    )}
+                    {!item.inStock && (
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                        <span className="bg-white text-stone-800 px-2 py-0.5 rounded-full text-xs font-medium">Sold</span>
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  </div>
+                  <div className="p-2 sm:p-3">
+                    <h3 className="font-medium text-stone-800 text-sm line-clamp-1">{item.title}</h3>
+                    <p className="text-stone-400 text-xs line-clamp-1">{item.shortDescription || item.category || "Handcrafted"}</p>
+                    {item.price && (
+                      <p className="text-purple-600 font-semibold text-sm mt-0.5">${item.price}</p>
+                    )}
+                  </div>
+                </Card>
+              );
+            };
+
+            /* Mobile/tablet: 2 explicit columns, right offset down */
+            const col0 = items.filter((_, i) => i % 2 === 0);
+            const col1 = items.filter((_, i) => i % 2 === 1);
+
+            /* Desktop (lg+): 4 columns with cascading offsets */
+            const lg0 = items.filter((_, i) => i % 4 === 0);
+            const lg1 = items.filter((_, i) => i % 4 === 1);
+            const lg2 = items.filter((_, i) => i % 4 === 2);
+            const lg3 = items.filter((_, i) => i % 4 === 3);
+
+            return (
+              <>
+                {/* Mobile + tablet: 2-column diverging */}
+                <div className="grid grid-cols-2 gap-2 sm:gap-3 items-start lg:hidden">
+                  <div className="flex flex-col gap-2 sm:gap-3">
+                    {col0.map((item, i) => renderCard(item, i * 2))}
+                  </div>
+                  <div className="flex flex-col gap-2 sm:gap-3 pt-12 sm:pt-16">
+                    {col1.map((item, i) => renderCard(item, i * 2 + 1))}
+                  </div>
+                </div>
+
+                {/* Desktop: 4-column cascading diverge */}
+                <div className="hidden lg:grid lg:grid-cols-4 lg:gap-3 items-start">
+                  <div className="flex flex-col gap-3">
+                    {lg0.map((item, i) => renderCard(item, i * 4))}
+                  </div>
+                  <div className="flex flex-col gap-3 pt-16">
+                    {lg1.map((item, i) => renderCard(item, i * 4 + 1))}
+                  </div>
+                  <div className="flex flex-col gap-3 pt-8">
+                    {lg2.map((item, i) => renderCard(item, i * 4 + 2))}
+                  </div>
+                  <div className="flex flex-col gap-3 pt-20">
+                    {lg3.map((item, i) => renderCard(item, i * 4 + 3))}
+                  </div>
+                </div>
+              </>
+            );
+          })()}
+
+          {hoveredItem && (
+            <div
+              className="fixed z-[100] pointer-events-none animate-in fade-in zoom-in-95 duration-200"
+              style={{ left: hoverPos.x, top: hoverPos.y }}
+            >
+              <div className="w-80 bg-white rounded-xl shadow-2xl shadow-purple-200/60 border border-purple-100 overflow-hidden">
+                {getItemPhotos(hoveredItem).length > 0 ? (
+                  <MediaThumb
+                    src={getItemPhotos(hoveredItem)[0]}
+                    alt={hoveredItem.title}
+                    className="w-full aspect-square object-cover"
+                  />
+                ) : (
+                  <div className="w-full aspect-square bg-stone-100 flex items-center justify-center">
+                    <Gem className="w-16 h-16 text-stone-300" />
+                  </div>
+                )}
+                <div className="p-4">
+                  <h3 className="font-serif font-bold text-stone-800 text-lg">{hoveredItem.title}</h3>
+                  {hoveredItem.category && (
+                    <p className="text-purple-600 text-sm capitalize">{hoveredItem.category}</p>
+                  )}
+                  {hoveredItem.price && (
+                    <p className="text-purple-700 font-bold text-xl mt-1">${hoveredItem.price}</p>
+                  )}
+                  {hoveredItem.shortDescription && (
+                    <p className="text-stone-500 text-sm mt-2 line-clamp-2">{hoveredItem.shortDescription}</p>
+                  )}
+                  <p className="text-purple-400 text-xs mt-3 italic">Click to view full details</p>
+                </div>
+              </div>
+            </div>
+          )}
+          </>
+        )}
+      </main>
+
+      {selectedItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedItem(null)} />
+          <div className="relative z-50 w-full h-full md:w-[95vw] md:max-w-5xl md:h-[90vh] md:rounded-xl bg-white overflow-hidden flex flex-col md:flex-row">
+            <button
+              onClick={() => setSelectedItem(null)}
+              className="absolute top-3 right-3 z-10 bg-black/50 hover:bg-black/70 text-white rounded-full p-2"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <div className="relative w-full md:w-3/5 h-[55vh] md:h-full bg-stone-100 flex-shrink-0">
+              {selectedItem.inStock === false && (
+                <div className="absolute top-4 left-4 z-20">
+                  <span className="bg-red-500 text-white font-bold text-sm px-4 py-1.5 rounded-full shadow-lg uppercase tracking-wider">
+                    Sold
+                  </span>
+                </div>
+              )}
+              {getItemPhotos(selectedItem).length > 0 ? (
+                <>
+                  <MediaItem
+                    src={getItemPhotos(selectedItem)[currentPhotoIndex]}
+                    alt={selectedItem.title}
+                    className="w-full h-full object-contain"
+                  />
+                  {getItemPhotos(selectedItem).length > 1 && (
+                    <>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); prevPhoto(); }}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white rounded-full p-2.5 shadow-lg"
+                      >
+                        <ChevronLeft className="h-6 w-6" />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); nextPhoto(); }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white rounded-full p-2.5 shadow-lg"
+                      >
+                        <ChevronRight className="h-6 w-6" />
+                      </button>
+                      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+                        {getItemPhotos(selectedItem).map((_, i) => (
+                          <button
+                            key={i}
+                            onClick={(e) => { e.stopPropagation(); setCurrentPhotoIndex(i); }}
+                            className={`w-3 h-3 rounded-full transition-colors shadow ${i === currentPhotoIndex ? 'bg-purple-500 scale-110' : 'bg-white/70'}`}
+                          />
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </>
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <Gem className="w-24 h-24 text-stone-300" />
+                </div>
+              )}
+            </div>
+
+            <div className="w-full md:w-2/5 flex-1 overflow-y-auto">
+              <div className="p-5 md:p-8 space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-2xl md:text-3xl font-serif font-bold text-stone-800">{selectedItem.title}</h2>
+                    {selectedItem.category && (
+                      <p className="text-purple-600 capitalize text-sm md:text-lg mt-0.5">{selectedItem.category}</p>
+                    )}
+                  </div>
+                  {selectedItem.price && (
+                    <p className="text-2xl md:text-3xl font-bold text-purple-600 whitespace-nowrap">${selectedItem.price}</p>
+                  )}
+                </div>
+
+                {selectedItem.materials && (
+                  <div className="bg-purple-50 rounded-lg p-3">
+                    <p className="text-xs font-medium text-purple-500 uppercase tracking-wide">Materials</p>
+                    <p className="text-stone-700 text-sm mt-0.5">{selectedItem.materials}</p>
+                  </div>
+                )}
+
+                {selectedItem.description && (
+                  <div>
+                    <p className="text-xs font-medium text-stone-400 uppercase tracking-wide">About this piece</p>
+                    <p className="text-stone-600 text-sm whitespace-pre-wrap mt-1">{selectedItem.description}</p>
+                  </div>
+                )}
+
+                <CartButtons item={selectedItem} />
+                {canEditItem(selectedItem) && (
+                    <div className="space-y-2 pt-2 border-t border-stone-200">
+                      <Button
+                        variant={selectedItem.inStock === false ? "outline" : "default"}
+                        size="sm"
+                        className={selectedItem.inStock === false
+                          ? "w-full border-green-400 text-green-600 hover:bg-green-50"
+                          : "w-full bg-amber-500 hover:bg-amber-600 text-white"}
+                        onClick={() => soldMutation.mutate({ id: selectedItem.id, sold: selectedItem.inStock !== false })}
+                        disabled={soldMutation.isPending}
+                      >
+                        {selectedItem.inStock === false ? (
+                          <><RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Mark Available</>
+                        ) : (
+                          <><Tag className="h-3.5 w-3.5 mr-1.5" /> Mark as Sold</>
+                        )}
+                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 border-purple-400 text-purple-600 hover:bg-purple-50"
+                          onClick={() => startEdit(selectedItem)}
+                        >
+                          <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                          Edit
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 border-red-300 text-red-600 hover:bg-red-50"
+                          onClick={() => { setItemToDelete(selectedItem); setDeleteConfirmOpen(true); }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                          Delete
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Item</DialogTitle>
+          </DialogHeader>
+          {editItem && (
+            <div className="space-y-4">
+              <div>
+                <Label>Title *</Label>
+                <Input
+                  value={editItem.title}
+                  onChange={(e) => setEditItem({ ...editItem, title: e.target.value })}
+                />
+              </div>
+
+              {/* ── Photos & Videos ── */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-semibold">Photos & Videos <span className="text-stone-400 font-normal text-xs">({editPhotoUrls.length}/10)</span></Label>
+                </div>
+
+                {/* Hidden file input — triggered by buttons below */}
+                <input
+                  type="file"
+                  ref={editFileInputRef}
+                  onChange={handleEditFileUpload}
+                  accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime"
+                  multiple
+                  className="sr-only"
+                />
+
+                {/* Thumbnail grid */}
+                {editPhotoUrls.length > 0 ? (
+                  <div className="grid grid-cols-3 gap-2">
+                    {editPhotoUrls.map((url, index) => (
+                      <div key={index} className="relative group aspect-square rounded-xl overflow-hidden bg-stone-100 border-2 border-stone-200">
+                        {isVideoUrl(url) ? (
+                          <div className="w-full h-full flex flex-col items-center justify-center gap-1 bg-purple-50">
+                            <Video className="h-7 w-7 text-purple-500" />
+                            <span className="text-[10px] text-stone-500">Video</span>
+                          </div>
+                        ) : (
+                          <img src={url} alt="" className="w-full h-full object-cover" />
+                        )}
+                        {/* Delete button — always visible */}
+                        <button
+                          type="button"
+                          onClick={() => setEditPhotoUrls(editPhotoUrls.filter((_, i) => i !== index))}
+                          className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-md z-10"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                        {index === 0 && (
+                          <span className="absolute bottom-1 left-1 bg-purple-600 text-white text-[9px] px-1.5 py-0.5 rounded-full font-medium">Cover</span>
+                        )}
+                      </div>
+                    ))}
+                    {/* Add more slot */}
+                    {editPhotoUrls.length < 10 && (
+                      <button
+                        type="button"
+                        onClick={() => editFileInputRef.current?.click()}
+                        disabled={isEditUploading}
+                        className="aspect-square rounded-xl border-2 border-dashed border-purple-300 bg-purple-50 hover:bg-purple-100 flex flex-col items-center justify-center gap-1 text-purple-500 transition-colors disabled:opacity-50"
+                      >
+                        {isEditUploading ? (
+                          <span className="h-5 w-5 animate-spin rounded-full border-2 border-purple-600 border-t-transparent" />
+                        ) : (
+                          <>
+                            <Plus className="h-6 w-6" />
+                            <span className="text-[10px] font-medium">Add</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  /* Empty state — full-width clickable zone */
+                  <button
+                    type="button"
+                    onClick={() => editFileInputRef.current?.click()}
+                    disabled={isEditUploading}
+                    className="w-full border-2 border-dashed border-purple-300 rounded-xl p-8 text-center bg-purple-50 hover:bg-purple-100 transition-colors disabled:opacity-50"
+                  >
+                    {isEditUploading ? (
+                      <div className="flex flex-col items-center gap-2 text-purple-500">
+                        <span className="h-6 w-6 animate-spin rounded-full border-2 border-purple-600 border-t-transparent" />
+                        <span className="text-sm font-medium">Uploading...</span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-2 text-purple-500">
+                        <ImagePlus className="h-8 w-8" />
+                        <span className="text-sm font-semibold">Tap to Add Photos or Videos</span>
+                        <span className="text-xs text-stone-400">JPG, PNG, MP4 · Up to 10 files</span>
+                      </div>
+                    )}
+                  </button>
+                )}
+
+                {/* Add more button (when photos exist) */}
+                {editPhotoUrls.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full border-purple-300 text-purple-700 hover:bg-purple-50"
+                    onClick={() => editFileInputRef.current?.click()}
+                    disabled={isEditUploading || editPhotoUrls.length >= 10}
+                  >
+                    {isEditUploading ? (
+                      <><span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-purple-600 border-t-transparent mr-2" />Uploading...</>
+                    ) : (
+                      <><ImagePlus className="h-3.5 w-3.5 mr-2" />Add More Photos/Videos</>
+                    )}
+                  </Button>
+                )}
+
+                {/* URL paste fallback */}
+                <div className="flex gap-2">
+                  <Input
+                    value={editPhotoUrl}
+                    onChange={(e) => setEditPhotoUrl(e.target.value)}
+                    placeholder="Or paste an image URL..."
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (editPhotoUrl.trim() && editPhotoUrls.length < 10) { setEditPhotoUrls([...editPhotoUrls, editPhotoUrl.trim()]); setEditPhotoUrl(""); } } }}
+                    className="flex-1 text-sm"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { if (editPhotoUrl.trim() && editPhotoUrls.length < 10) { setEditPhotoUrls([...editPhotoUrls, editPhotoUrl.trim()]); setEditPhotoUrl(""); } }}
+                    disabled={!editPhotoUrl.trim() || editPhotoUrls.length >= 10}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Price</Label>
+                  <Input
+                    value={editItem.price || ""}
+                    onChange={(e) => setEditItem({ ...editItem, price: e.target.value })}
+                    placeholder="25.00"
+                  />
+                </div>
+                <div>
+                  <Label>Category</Label>
+                  <Select value={editItem.category || ""} onValueChange={(v) => setEditItem({ ...editItem, category: v })}>
+                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectContent>
+                      {categories.filter(c => c.value !== "all").map((cat) => (
+                        <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div>
+                <Label>Short Description</Label>
+                <Input
+                  value={editItem.shortDescription || ""}
+                  onChange={(e) => setEditItem({ ...editItem, shortDescription: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <Label>Materials</Label>
+                <Input
+                  value={editItem.materials || ""}
+                  onChange={(e) => setEditItem({ ...editItem, materials: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <Label>Full Description</Label>
+                <Textarea
+                  value={editItem.description || ""}
+                  onChange={(e) => setEditItem({ ...editItem, description: e.target.value })}
+                  rows={3}
+                />
+              </div>
+
+              <Button onClick={handleUpdate} disabled={updateMutation.isPending} className="w-full bg-purple-600 hover:bg-purple-700">
+                {updateMutation.isPending ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this item?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove "{itemToDelete?.title}" from the shop. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => itemToDelete && deleteMutation.mutate(itemToDelete.id)}
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Jewelry Listing Chatbot Dialog ──────────────────────────── */}
+      {chatOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) { setChatOpen(false); setChatMessages([]); } }}>
+          <div className="w-full sm:max-w-md bg-slate-900 border border-purple-700/50 rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col" style={{ maxHeight: '90vh' }}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700/60 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600">
+                  <Bot className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <p className="font-bold text-white">Listing Assistant</p>
+                  <p className="text-xs text-slate-400">Chat to add a new piece</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="ghost" size="sm" onClick={() => { setChatMessages([]); setChatData({ photos: [], title: '', category: '', price: '', materials: '', shortDesc: '', description: '' }); }} className="text-slate-400 hover:text-white h-8 w-8 p-0" title="Restart">
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => { setChatOpen(false); setChatMessages([]); }} className="text-slate-400 hover:text-white h-8 w-8 p-0">
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Messages */}
+            <div ref={chatScrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4 min-h-0">
+              {chatMessages.map((msg, i) => (
+                <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  {msg.role === 'bot' ? (
+                    <div className="max-w-[85%] bg-slate-700/60 rounded-2xl rounded-tl-sm px-4 py-3 text-slate-100 text-sm whitespace-pre-wrap leading-relaxed">
+                      {msg.content}
+                    </div>
+                  ) : (
+                    <div className="max-w-[75%] bg-gradient-to-r from-emerald-600 to-teal-600 rounded-2xl rounded-tr-sm px-4 py-2.5 text-white text-sm">
+                      {msg.content}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {/* Category buttons — show when on category step */}
+              {chatStep === 'category' && (
+                <div className="flex flex-wrap gap-2 pl-1">
+                  {['earrings','necklaces','bracelets','rings','custom'].map(cat => (
+                    <button key={cat} onClick={() => { userSay(cat.charAt(0).toUpperCase() + cat.slice(1)); setChatData(d => ({ ...d, category: cat })); setTimeout(() => { botSay(`Perfect! What price will you list this for? (Just the number, e.g. 45)`); setChatStep('price'); }, 400); }} className="px-3 py-2 rounded-xl text-sm font-medium border border-purple-500/60 text-purple-300 bg-purple-900/30 hover:bg-purple-900/60 hover:border-purple-400 transition-all capitalize">
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Upload more photos button during title/later steps */}
+              {(chatStep === 'title' || chatStep === 'category' || chatStep === 'price') && chatData.photos.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1 flex-wrap">
+                    {chatData.photos.slice(0, 3).map((url, idx) => (
+                      <img key={idx} src={url} alt="" className="w-10 h-10 rounded-lg object-cover border border-slate-600" />
+                    ))}
+                    {chatData.photos.length > 3 && <div className="w-10 h-10 rounded-lg bg-slate-700 flex items-center justify-center text-xs text-slate-400">+{chatData.photos.length - 3}</div>}
+                  </div>
+                  <label className="text-xs text-teal-400 cursor-pointer hover:underline">
+                    <input type="file" className="sr-only" multiple accept="image/*" ref={chatFileRef} onChange={e => handleChatUpload(e.target.files)} />
+                    + more photos
+                  </label>
+                </div>
+              )}
+
+              {chatUploading && (
+                <div className="flex justify-start">
+                  <div className="bg-slate-700/60 rounded-2xl px-4 py-3 text-slate-400 text-sm flex items-center gap-2">
+                    <span className="h-4 w-4 rounded-full border-2 border-teal-400 border-t-transparent animate-spin" />
+                    Uploading photos…
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Input area */}
+            <div className="px-4 py-4 border-t border-slate-700/60 shrink-0">
+              {chatStep === 'photos' ? (
+                <label className="flex items-center justify-center gap-3 w-full py-4 rounded-2xl border-2 border-dashed border-teal-500/50 bg-teal-900/20 cursor-pointer hover:border-teal-400 hover:bg-teal-900/40 transition-all text-teal-300">
+                  <input type="file" className="sr-only" multiple accept="image/*" onChange={e => handleChatUpload(e.target.files)} disabled={chatUploading} />
+                  {chatUploading ? <span className="h-5 w-5 rounded-full border-2 border-teal-400 border-t-transparent animate-spin" /> : <ImagePlus className="h-5 w-5" />}
+                  <span className="font-medium">{chatUploading ? 'Uploading…' : 'Tap to upload photos'}</span>
+                </label>
+              ) : chatStep === 'category' ? (
+                <p className="text-center text-xs text-slate-500">Select a category above</p>
+              ) : chatStep === 'done' ? (
+                <Button onClick={handleChatSend} className="w-full bg-emerald-600 hover:bg-emerald-700">Add Another Piece</Button>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    value={chatInput}
+                    onChange={e => setChatInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleChatSend(); } }}
+                    placeholder={chatStep === 'price' ? 'e.g. 45' : chatStep === 'materials' ? 'e.g. sterling silver, turquoise' : chatStep === 'confirm' ? 'yes or no' : 'Type your answer…'}
+                    className="flex-1 bg-slate-800 border border-slate-600 rounded-xl px-4 py-2.5 text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-teal-500"
+                    autoFocus
+                  />
+                  <Button onClick={handleChatSend} disabled={!chatInput.trim()} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl px-3">
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <footer className="bg-gradient-to-r from-slate-800 via-purple-900 to-slate-800 border-t border-purple-700/50 py-8 mt-8">
+        <div className="container mx-auto px-4 text-center">
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <Leaf className="w-5 h-5 text-purple-300" />
+            <span className="font-serif font-bold text-white">Nature Made Jewls</span>
+            <Gem className="w-5 h-5 text-purple-300" />
+          </div>
+          <p className="text-slate-300 text-sm">Handcrafted in Michigan's Upper Peninsula</p>
+          <p className="text-slate-400 text-xs mt-2">
+            Part of the <Link href="/"><span className="text-purple-300 hover:underline">JC ON THE MOVE</span></Link> family
+          </p>
+        </div>
+      </footer>
+      <FloatingCartButton />
+    </div>
+  );
+}
