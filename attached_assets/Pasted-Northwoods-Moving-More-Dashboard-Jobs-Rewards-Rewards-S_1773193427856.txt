@@ -1,0 +1,200 @@
+Northwoods Moving & More
+Dashboard
+Jobs
+Rewards
+Rewards Shop
+More
+IGWT
+
+Profile
+
+Rewards Marketplace Admin
+Manage the JCMOVES rewards catalog
+
+Reset Catalog
+Add Item
+Active Items
+12
+Pending Redemptions
+3
+Tokens Burned (Month)
+5.9K
+Total Burned
+0
+Low Stock Alerts
+0
+Shop Items
+12
+Categories
+6
+Redemptions
+3
+🎰 Spin Wheel
+Search items…
+
+Item	Category	Token Price	Status	Featured	Stock	Actions
+10% Off Your Next Service
+Auto-generated coupon — up to $25 off any job
+🎟️ 🎟️ Discount Coupons	
+12.5K
+active		∞	Edit
+20% Off Your Next Service
+Auto-generated coupon — up to $50 off any job
+🎟️ 🎟️ Discount Coupons	
+20K
+active		∞	Edit
+$75 Off a Service
+Apply $75 directly off your next move or project
+🛠️ 🛠️ Service Credits	
+30K
+active		∞	Edit
+$100 Off a Job
+Get $100 off — let us take the stress off your back
+🛠️ 🛠️ Service Credits	
+40K
+active		∞	Edit
+$150 Off a Service
+Stack up 50,000 JCMOVES for $150 off any job
+🛠️ 🛠️ Service Credits	
+50K
+active		∞	Edit
+Free 2 Movers · 2 Hours (Local)
+100,000 JCMOVES = 2 movers, 2 hours — free labor
+🛠️ 🛠️ Service Credits	
+100K
+active		∞	Edit
+$20 Pizza Card (Domino's or Little Caesars)
+Domino's or Little Caesars — your choice
+🎁 🎁 Gift Cards	
+30K
+active		∞	Edit
+$35 Prepaid Visa
+Use it anywhere Visa is accepted
+🎁 🎁 Gift Cards	
+50K
+active		∞	Edit
+$35 Gas Card
+Fill up on us — 50,000 JCMOVES well spent
+🎁 🎁 Gift Cards	
+50K
+active		∞	Edit
+$75 Gas or Prepaid Visa (Customer Picks)
+Your choice — $75 to spend your way
+🎁 🎁 Gift Cards	
+100K
+active		∞	Edit
+Quantum Spin Entry
+One free spin on the Quantum Spin prize machine
+⚡ ⚡ Quantum Spin	
+100
+active		∞	Edit
+Copper Cup Coffee — $5 Gift Card
+A $5 gift card to Copper Cup Coffee in Ironwood, MI
+🏘️ Local Deals	
+5K
+active		5	Edit
+$50 Local Gift Card
+$50 gift card to a local business
+👑 Premium Rewards	
+50K
+hidden		∞	Edit
+Half-Day Moving Discount
+$75 off a half-day moving job
+👑 Premium Rewards	
+30K
+hidden		∞	Edit
+VIP Customer Bundle
+Priority booking + 1hr credit + gift card
+👑 Premium Rewards	
+100K
+hidden		∞	Edit
+Snow Removal Touch-Up
+One driveway/walkway snow clearing
+🌟 Seasonal Specials	
+7.5K
+hidden		∞	Edit
+$5 Coffee Gift Card
+Redeem for a $5 coffee gift card
+⚡ Quick Rewards	
+250
+hidden		∞	Edit
+Spin Wheel Entry
+One free spin on the JCMOVES prize wheel
+🎮 Digital & Fun	
+100
+hidden		∞	Edit
+Bonus Faucet Claim
+Extra JCMOVES faucet claim today
+🎮 Digital & Fun	
+200
+hidden		∞	Edit
+Mystery Reward Box
+Surprise reward — worth 500–5000 JCMOVES
+🎮 Digital & Fun	
+350
+hidden		∞	Edit
+Loyalty Tier Boost
+Accelerate your tier progress
+🎮 Digital & Fun	
+150
+hidden		∞	Edit
+Yard Debris Bag Pickup
+Curbside yard waste pickup service
+🌟 Seasonal Specials	
+3K
+hidden		∞	Edit
+Priority Support Text Line
+24-hour priority text support access
+⚡ Quick Rewards	
+300
+hidden		∞	Edit
+Moving Supply Discount
+10% off boxes, tape & packing supplies
+⚡ Quick Rewards	
+500
+hidden		∞	Edit
+Free Estimate Bonus
+Priority same-day estimate scheduling
+⚡ Quick Rewards	
+750
+hidden		∞	Edit
+15-Minute Labor Credit
+15 minutes of extra moving help
+🛠️ Service Credits	
+1K
+hidden		∞	Edit
+30-Minute Labor Credit
+Half hour of extra crew assistance
+🛠️ Service Credits	
+2.5K
+hidden		∞	Edit
+Junk Removal Add-On Discount
+$15 off your next junk removal job
+🛠️ Service Credits	
+1.3K
+hidden		∞	Edit
+Furniture Rearrange Visit
+In-home furniture repositioning session
+🛠️ Service Credits	
+10K
+hidden		∞	Edit
+Priority Booking Upgrade
+Move your service to priority scheduling
+🛠️ Service Credits	
+750
+hidden		∞	Edit
+$25 Off Moving Service
+$25 discount on any moving job
+🛠️ Service Credits	
+5K
+hidden		∞	Edit
+1-Hour Labor Credit
+Full hour of professional moving crew help
+👑 Premium Rewards	
+20K
+hidden		∞	Edit
+$25 Gas or Grocery Card
+$25 gift card for gas or groceries
+👑 Premium Rewards	
+12.5K
+hidden		∞	Edit
