@@ -201,7 +201,7 @@ export function EarnTasksButton() {
         : scriptureStreak > 0 ? `🔥 ${scriptureStreak} day streak — claim to continue!` : "Read & claim daily scripture",
       reward: "+100",
       done: scriptureDone,
-      action: () => { setOpen(false); setLocation("/mining"); },
+      action: () => { setOpen(false); setLocation("/"); setTimeout(() => { document.getElementById("daily-scripture")?.scrollIntoView({ behavior: "smooth" }); }, 400); },
       actionLabel: scriptureDone ? "View" : "Read & Claim",
       isPending: false,
       badge: scriptureStreak >= 6 ? "🔥 Almost!" : undefined,

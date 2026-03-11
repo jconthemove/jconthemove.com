@@ -227,6 +227,10 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
         queryClient.invalidateQueries({ queryKey: ["/api/reward-shop/activity-feed"] });
         queryClient.invalidateQueries({ queryKey: ["/api/reward-shop/free-spins"] });
 
+        // Silently mark daily quantum spin task done (check-in) so the daily checklist updates
+        apiRequest("POST", "/api/gamification/checkin", {}).catch(() => {})
+          .finally(() => queryClient.invalidateQueries({ queryKey: ["/api/gamification/stats"] }));
+
         // Streak tracking
         setSessionSpinCount(prev => {
           const newCount = prev + 1;

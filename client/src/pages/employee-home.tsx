@@ -428,7 +428,7 @@ export default function EmployeeHomePage() {
         </div>
 
         {/* Daily Scripture */}
-        <Card className="border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-sm shadow-xl shadow-blue-900/10 overflow-hidden relative">
+        <Card id="daily-scripture" className="border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-sm shadow-xl shadow-blue-900/10 overflow-hidden relative">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-orange-500 to-blue-500"></div>
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-3 text-slate-100">

@@ -35,6 +35,8 @@ export function useMiningNotifications() {
   const wasClaimable = useRef<boolean>(false);
   const lastNotifiedRewards = useRef<Set<string>>(new Set());
   const notificationCooldown = useRef<Map<string, number>>(new Map());
+  // Only fire notifications for rewards that arrive AFTER this hook mounted (not stale history on login)
+  const sessionStartTime = useRef<number>(Date.now());
 
   const { data: miningStatus } = useQuery<MiningStatus>({
     queryKey: ["/api/mining/status"],
@@ -86,6 +88,12 @@ export function useMiningNotifications() {
       if (lastNotifiedRewards.current.has(rewardKey)) continue;
 
       const createdAt = new Date(reward.createdAt).getTime();
+      // Skip rewards that existed before this session started (prevents stale login notifications)
+      if (createdAt < sessionStartTime.current) {
+        lastNotifiedRewards.current.add(rewardKey);
+        continue;
+      }
+      // Also skip if reward is older than 5 minutes from now
       if (now - createdAt > 5 * 60 * 1000) {
         lastNotifiedRewards.current.add(rewardKey);
         continue;
