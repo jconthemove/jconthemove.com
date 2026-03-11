@@ -296,33 +296,28 @@ export class MiningService {
       // Get current token price for treasury deduction
       const tokenPrice = await this.getCurrentTokenPrice();
 
-      // Check if treasury can distribute tokens
-      const canDistribute = await treasuryService.canDistributeTokens(tokensToClaim);
-      if (!canDistribute.canDistribute) {
-        return { 
-          success: false, 
-          tokensClaimed: "0", 
-          newBalance: "0", 
-          error: canDistribute.reason || "Insufficient treasury funds" 
-        };
+      // Attempt treasury distribution — soft-fail so a price-feed outage never blocks claims
+      let treasuryOk = false;
+      try {
+        const canDistribute = await treasuryService.canDistributeTokens(tokensToClaim);
+        if (canDistribute.canDistribute) {
+          const distributionResult = await treasuryService.distributeTokens(
+            tokensToClaim,
+            `Mining claim - ${claimType}`,
+            'mining_claim',
+            session.id
+          );
+          treasuryOk = distributionResult.success;
+          if (!distributionResult.success) {
+            console.warn(`[Mining] Treasury distribution soft-failed: ${distributionResult.error} — crediting internally`);
+          }
+        } else {
+          console.warn(`[Mining] Treasury check soft-failed: ${canDistribute.reason} — crediting internally`);
+        }
+      } catch (treasuryErr) {
+        console.warn("[Mining] Treasury check threw an error — crediting internally:", treasuryErr);
       }
-
-      // Distribute tokens from treasury
-      const distributionResult = await treasuryService.distributeTokens(
-        tokensToClaim,
-        `Mining claim - ${claimType}`,
-        'mining_claim',
-        session.id
-      );
-
-      if (!distributionResult.success) {
-        return { 
-          success: false, 
-          tokensClaimed: "0", 
-          newBalance: "0", 
-          error: distributionResult.error || "Failed to distribute tokens from treasury" 
-        };
-      }
+      // Always proceed to credit the user wallet regardless of treasury status
 
         // Credit user wallet (within transaction)
         const [wallet] = await tx

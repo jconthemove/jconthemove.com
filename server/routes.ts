@@ -9316,7 +9316,13 @@ Thank you for your business!
       res.json({ success: true, amount: rewardAmount, streak: newStreak, streakBonus });
     } catch (error: any) {
       console.error("Error claiming scripture reward:", error);
-      res.status(500).json({ error: error.message });
+      const msg = String(error?.message || "");
+      const friendly = msg.includes("duplicate") || msg.includes("unique")
+        ? "Already claimed today's scripture reward"
+        : msg.includes("connect") || msg.includes("network")
+          ? "Service temporarily unavailable — please try again in a moment"
+          : "Unable to claim reward right now — please try again";
+      res.status(500).json({ error: friendly });
     }
   });
 
@@ -9329,7 +9335,15 @@ Thank you for your business!
       const result = await miningService.claimTokens(userId, 'manual');
       
       if (!result.success) {
-        return res.status(400).json({ error: result.error || "Failed to claim tokens" });
+        const rawErr = result.error || "";
+        const friendly = rawErr.includes("No active mining session")
+          ? "Your mining session hasn't started yet — start a session on the Rewards page first"
+          : rawErr.includes("No tokens to claim yet")
+            ? "Your miner is still accumulating — come back in a few minutes"
+            : rawErr.includes("already claimed")
+              ? rawErr
+              : rawErr || "Unable to claim right now — please try again";
+        return res.status(400).json({ error: friendly });
       }
 
       // Push notification: mining session claimed
@@ -12244,9 +12258,12 @@ Thank you for your business!
         await db.execute(sql`INSERT INTO invoice_credits (user_id, redemption_id, item_id, credit_type, amount_cents, status, expires_at) VALUES (${userId}, ${redemption.id}, ${itemRow.id}, ${creditType}, ${cents}, 'active', ${expiresAt})`);
       }
 
-      // Spin credit — spins handled via SpinWheelDialog on frontend
+      // Spin credit — parse bundle size from item name (e.g. "Quantum Spin — 25 Pack" → 25)
       if ((itemRow as any).createsSpinCredit) {
-        await db.execute(sql`INSERT INTO reward_entitlements (user_id, item_id, redemption_id, entitlement_type, value_json, status, expires_at) VALUES (${userId}, ${itemRow.id}, ${redemption.id}, 'spin_credit', '{"spins":1}', 'active', ${expiresAt})`);
+        const packMatch = itemRow.name.match(/(\d+)\s*[Pp]ack/);
+        const spinCount = packMatch ? parseInt(packMatch[1]) : 1;
+        const spinJson = JSON.stringify({ spins: spinCount });
+        await db.execute(sql`INSERT INTO reward_entitlements (user_id, item_id, redemption_id, entitlement_type, value_json, status, expires_at) VALUES (${userId}, ${itemRow.id}, ${redemption.id}, 'spin_credit', ${spinJson}::jsonb, 'active', ${expiresAt})`);
       }
 
       // Coupon code — auto-generate unique promo code and store it
@@ -12305,7 +12322,7 @@ Thank you for your business!
           { label: "500 JCMOVES", tokens: 500, weight: 20 },
           { label: "1,000 JCMOVES", tokens: 1000, weight: 12 },
           { label: "2,500 JCMOVES", tokens: 2500, weight: 8 },
-          { label: "Bonus Faucet", tokens: 0, weight: 3 },
+          { label: "1,500 JCMOVES", tokens: 1500, weight: 3 },
           { label: "5,000 JCMOVES", tokens: 5000, weight: 2 },
         ];
         const total = MYSTERY_PRIZES.reduce((s, p) => s + p.weight, 0);
@@ -12400,7 +12417,15 @@ Thank you for your business!
       res.json({ success: true, redemption, newBalance: newBalance.toFixed(2), item: itemRow, autoCreatedLeadId });
     } catch (e: any) {
       console.error("Reward redemption error:", e);
-      res.status(500).json({ error: e.message || "Redemption failed" });
+      const raw = String(e?.message || "");
+      const friendly = raw.includes("duplicate") || raw.includes("unique")
+        ? "This reward was already redeemed. Check your Redemptions tab."
+        : raw.includes("connect") || raw.includes("network") || raw.includes("ECONNRESET")
+          ? "Service temporarily unavailable — please try again in a moment"
+          : raw.includes("tokenBalance") || raw.includes("Insufficient")
+            ? "Insufficient JCMOVES balance for this reward"
+            : "Redemption failed — please try again. If this keeps happening, contact support.";
+      res.status(500).json({ error: friendly });
     }
   });
 
