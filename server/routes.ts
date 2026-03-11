@@ -117,8 +117,8 @@ async function ensureRewardSettingsSeeded() {
       console.log("Seeding default reward settings...");
       const defaults = [
         { settingKey: "signup_bonus", label: "Sign Up Bonus", description: "Tokens awarded when a new user registers", tokenAmount: "250.00", isActive: true },
-        { settingKey: "customer_quote_accepted", label: "Quote Accepted", description: "Tokens awarded when customer's quote is accepted/confirmed", tokenAmount: "200.00", isActive: true },
-        { settingKey: "customer_quote_completed", label: "Job Completed", description: "Tokens awarded when a moving/junk job is fully completed", tokenAmount: "1500.00", isActive: true },
+        { settingKey: "customer_quote_accepted", label: "Job Booking Reward", description: "Flat JCMOVES awarded when a customer books (submits) a job", tokenAmount: "250.00", isActive: true },
+        { settingKey: "earn_rate_per_dollar", label: "Earn Rate (JCMOVES per $1)", description: "System-wide earn rate: tokens awarded per $1 of job value when a job completes. Applies to all customers.", tokenAmount: "50.00", isActive: true },
         { settingKey: "referral_confirmed", label: "Referral Confirmed", description: "Tokens awarded when a referred user signs up and activates", tokenAmount: "2500.00", isActive: true },
         { settingKey: "employee_job_completed", label: "Employee Job Reward", description: "Tokens awarded to each employee who completes a job", tokenAmount: "1000.00", isActive: true },
         { settingKey: "daily_checkin", label: "Daily Check-in", description: "Tokens awarded for daily app check-in", tokenAmount: "50.00", isActive: true },
@@ -128,6 +128,19 @@ async function ensureRewardSettingsSeeded() {
       ];
       await db.insert(rewardSettings).values(defaults);
       console.log("✅ Default reward settings seeded successfully");
+    } else {
+      // Ensure earn_rate_per_dollar exists for existing databases
+      const hasRate = existing.find(s => s.settingKey === 'earn_rate_per_dollar');
+      if (!hasRate) {
+        await db.insert(rewardSettings).values({ settingKey: "earn_rate_per_dollar", label: "Earn Rate (JCMOVES per $1)", description: "System-wide earn rate: tokens awarded per $1 of job value when a job completes.", tokenAmount: "50.00", isActive: true });
+        console.log("✅ earn_rate_per_dollar setting inserted");
+      }
+      // Update booking reward from 200 → 250 if still at old default
+      const bookingRow = existing.find(s => s.settingKey === 'customer_quote_accepted');
+      if (bookingRow && parseFloat(bookingRow.tokenAmount) === 200) {
+        await db.update(rewardSettings).set({ tokenAmount: "250.00", label: "Job Booking Reward" }).where(eq(rewardSettings.settingKey, 'customer_quote_accepted'));
+        console.log("✅ Booking reward updated 200 → 250 JCMOVES");
+      }
     }
   } catch (error) {
     console.error("Failed to seed reward settings:", error);
@@ -2007,7 +2020,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const settings = await db.select().from(rewardSettings).where(eq(rewardSettings.settingKey, 'customer_quote_accepted'));
         const bonusTokens = settings.length > 0 && settings[0].isActive
           ? parseFloat(settings[0].tokenAmount)
-          : 200; // Default 200 JCMOVES
+          : 250; // Default 250 JCMOVES
         
         // Find existing user by email or create placeholder for future registration
         let existingUser = await db.select().from(users).where(eq(users.email, lead.email)).limit(1);
@@ -3978,20 +3991,20 @@ Thank you for your business!
           await storage.updateLeadQuote(id, { completionRewardedAt: new Date() });
           console.log(`✅ Marked job ${id} as rewarded at ${new Date().toISOString()}`);
 
-          // ── 3. CUSTOMER LOYALTY REWARD (tier-based: 50–100 JCMOVES per $1) ───
+          // ── 3. CUSTOMER EARN REWARD (earn_rate_per_dollar × job price) ───
           try {
             const customerEmail = updatedLead.email || updatedLead.customerEmail;
             if (customerEmail) {
               const customer = await storage.getUserByEmail(customerEmail);
               if (customer) {
-                // Calculate reward from job value using tier multiplier
                 const jobPrice = parseFloat(updatedLead.totalPrice || updatedLead.basePrice || '0');
-                const currentTier = (customer as any).loyaltyTier || 'bronze';
-                const LOYALTY_REWARD = jobPrice > 0
-                  ? calculateJCMovesReward(jobPrice, currentTier)
-                  : TREASURY_CONFIG.LOYALTY_REWARD_TOKENS; // fallback if no price set
+                // Load system-wide earn rate from settings (default 50 JCMOVES per $1)
+                const rateSetting = await db.select().from(rewardSettings).where(eq(rewardSettings.settingKey, 'earn_rate_per_dollar')).limit(1);
+                const earnRate = rateSetting.length > 0 ? parseFloat(rateSetting[0].tokenAmount) : 50;
+                const LOYALTY_REWARD = jobPrice > 0 ? Math.round(jobPrice * earnRate) : 0;
+                if (LOYALTY_REWARD <= 0) throw new Error("No job price set — skipping earn reward");
 
-                // Update total spend and recalculate tier
+                // Update total spend
                 const prevSpend = parseFloat((customer as any).totalCompletedSpend || '0');
                 const newSpend = prevSpend + jobPrice;
                 const newTier = getTierFromSpend(newSpend);
@@ -4006,9 +4019,9 @@ Thank you for your business!
                   tokenAmount: LOYALTY_REWARD.toFixed(8),
                   cashValue: (LOYALTY_REWARD * 0.00000508432).toFixed(6),
                   status: "confirmed",
-                  metadata: { jobId: id, serviceType: updatedLead.serviceType, jobPrice, tier: currentTier, tokensPerDollar: LOYALTY_TIERS[currentTier as keyof typeof LOYALTY_TIERS]?.tokensPerDollar ?? 50 }
+                  metadata: { jobId: id, serviceType: updatedLead.serviceType, jobPrice, earnRate, tokensPerDollar: earnRate }
                 });
-                console.log(`🎁 Awarded ${LOYALTY_REWARD} JCMOVES (${currentTier} tier, $${jobPrice} job) to customer ${customer.email} — new tier: ${newTier}`);
+                console.log(`🎁 Awarded ${LOYALTY_REWARD} JCMOVES (${earnRate}/$ × $${jobPrice}) to customer ${customer.email}`);
 
                 if (customer.referredByUserId) {
                   const prevLoyalty = await db.select().from(rewards)
@@ -4189,16 +4202,16 @@ Thank you for your business!
                 await storage.updateLeadQuote(id, { completionRewardedAt: new Date() });
                 console.log(`✅ Marked job ${id} as rewarded at ${new Date().toISOString()}`);
 
-                // Customer loyalty reward (tier-based)
+                // Customer earn reward (earn_rate_per_dollar × job price)
                 try {
                   if (updatedLead.customerEmail) {
                     const customer = await storage.getUserByEmail(updatedLead.customerEmail);
                     if (customer) {
                       const jobPrice = parseFloat(updatedLead.totalPrice || updatedLead.basePrice || '0');
-                      const currentTier = (customer as any).loyaltyTier || 'bronze';
-                      const LOYALTY_REWARD = jobPrice > 0
-                        ? calculateJCMovesReward(jobPrice, currentTier)
-                        : TREASURY_CONFIG.LOYALTY_REWARD_TOKENS;
+                      const rateSetting2 = await db.select().from(rewardSettings).where(eq(rewardSettings.settingKey, 'earn_rate_per_dollar')).limit(1);
+                      const earnRate2 = rateSetting2.length > 0 ? parseFloat(rateSetting2[0].tokenAmount) : 50;
+                      const LOYALTY_REWARD = jobPrice > 0 ? Math.round(jobPrice * earnRate2) : 0;
+                      if (LOYALTY_REWARD <= 0) throw new Error("No job price — skipping earn reward");
                       const prevSpend = parseFloat((customer as any).totalCompletedSpend || '0');
                       const newSpend = prevSpend + jobPrice;
                       const newTier = getTierFromSpend(newSpend);
@@ -4210,9 +4223,9 @@ Thank you for your business!
                         tokenAmount: LOYALTY_REWARD.toFixed(8),
                         cashValue: (LOYALTY_REWARD * 0.00000508432).toFixed(6),
                         status: "confirmed",
-                        metadata: { jobId: id, serviceType: updatedLead.serviceType, jobPrice, tier: currentTier }
+                        metadata: { jobId: id, serviceType: updatedLead.serviceType, jobPrice, earnRate: earnRate2, tokensPerDollar: earnRate2 }
                       });
-                      console.log(`🎁 Awarded ${LOYALTY_REWARD} JCMOVES (${currentTier} tier, $${jobPrice} job) to customer ${customer.email}`);
+                      console.log(`🎁 Awarded ${LOYALTY_REWARD} JCMOVES (${earnRate2}/$ × $${jobPrice}) to customer ${customer.email}`);
 
                       // Referral bonus on first completed job
                       if (customer.referredByUserId) {
@@ -5378,17 +5391,17 @@ Thank you for your business!
         }
       }
 
-      // Customer loyalty reward: Award tokens when their job completes (tier-based)
+      // Customer earn reward: Award earn_rate_per_dollar × job price on completion
       try {
         const { TREASURY_CONFIG, REWARD_TYPES } = await import('./constants');
         if (updatedLead.customerEmail) {
           const customer = await storage.getUserByEmail(updatedLead.customerEmail);
           if (customer) {
             const jobPrice = parseFloat(updatedLead.totalPrice || updatedLead.basePrice || '0');
-            const currentTier = (customer as any).loyaltyTier || 'bronze';
-            const LOYALTY_REWARD = jobPrice > 0
-              ? calculateJCMovesReward(jobPrice, currentTier)
-              : TREASURY_CONFIG.LOYALTY_REWARD_TOKENS;
+            const rateSetting3 = await db.select().from(rewardSettings).where(eq(rewardSettings.settingKey, 'earn_rate_per_dollar')).limit(1);
+            const earnRate3 = rateSetting3.length > 0 ? parseFloat(rateSetting3[0].tokenAmount) : 50;
+            const LOYALTY_REWARD = jobPrice > 0 ? Math.round(jobPrice * earnRate3) : 0;
+            if (LOYALTY_REWARD <= 0) throw new Error("No job price — skipping earn reward");
             const prevSpend = parseFloat((customer as any).totalCompletedSpend || '0');
             const newSpend = prevSpend + jobPrice;
             const newTier = getTierFromSpend(newSpend);
@@ -5400,9 +5413,9 @@ Thank you for your business!
               tokenAmount: LOYALTY_REWARD.toFixed(8),
               cashValue: (LOYALTY_REWARD * 0.00000508432).toFixed(6),
               status: "confirmed",
-              metadata: { jobId: id, serviceType: updatedLead.serviceType, jobPrice, tier: currentTier }
+              metadata: { jobId: id, serviceType: updatedLead.serviceType, jobPrice, earnRate: earnRate3, tokensPerDollar: earnRate3 }
             });
-            console.log(`🎁 Awarded ${LOYALTY_REWARD} JCMOVES (${currentTier} tier, $${jobPrice} job) to customer ${customer.email} — new tier: ${newTier}`);
+            console.log(`🎁 Awarded ${LOYALTY_REWARD} JCMOVES (${earnRate3}/$ × $${jobPrice}) to customer ${customer.email}`);
 
             // Referral bonus: Award tokens to referrer on first completed job
             if (customer.referredByUserId) {

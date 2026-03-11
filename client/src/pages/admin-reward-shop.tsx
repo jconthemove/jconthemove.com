@@ -81,7 +81,9 @@ function formatTokens(n: number) {
 export default function AdminRewardShopPage() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<"items" | "categories" | "redemptions" | "spin_wheel">("items");
+  const [activeTab, setActiveTab] = useState<"items" | "categories" | "redemptions" | "spin_wheel" | "distribution">("items");
+  const [earnRate, setEarnRate] = useState<number>(50);
+  const [bookingReward, setBookingReward] = useState<number>(250);
   const [itemSearch, setItemSearch] = useState("");
   const [editItem, setEditItem] = useState<Partial<RewardItem> | null>(null);
   const [isNewItem, setIsNewItem] = useState(false);
@@ -103,6 +105,30 @@ export default function AdminRewardShopPage() {
   const { data: spinAdminData, refetch: refetchSpinConfig } = useQuery<{ config: any[]; jackpots: any[] }>({
     queryKey: ["/api/admin/spin-config"],
     enabled: !!user && activeTab === "spin_wheel",
+  });
+  const { data: rewardSettingsData } = useQuery<any[]>({
+    queryKey: ["/api/admin/reward-settings"],
+    enabled: !!user && activeTab === "distribution",
+    select: (data: any) => { return Array.isArray(data) ? data : data?.settings ?? []; },
+  });
+  // Sync local slider state when settings load
+  const [rateInitialized, setRateInitialized] = useState(false);
+  if (rewardSettingsData && !rateInitialized) {
+    const rateRow = rewardSettingsData.find((s: any) => s.settingKey === 'earn_rate_per_dollar');
+    const bookingRow = rewardSettingsData.find((s: any) => s.settingKey === 'customer_quote_accepted');
+    if (rateRow) { setEarnRate(parseFloat(rateRow.tokenAmount)); }
+    if (bookingRow) { setBookingReward(parseFloat(bookingRow.tokenAmount)); }
+    setRateInitialized(true);
+  }
+  const saveRateMutation = useMutation({
+    mutationFn: ({ key, value }: { key: string; value: string }) =>
+      apiRequest("PUT", `/api/admin/reward-settings/${key}`, { tokenAmount: value }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/reward-settings"] });
+      setRateInitialized(false);
+      toast({ title: "Rate saved!", description: "New earn rate is live immediately." });
+    },
+    onError: (e: any) => toast({ title: "Failed to save", description: e.message, variant: "destructive" }),
   });
   const spinConfigMutation = useMutation({
     mutationFn: ({ key, value }: { key: string; value: string }) =>
@@ -188,11 +214,14 @@ export default function AdminRewardShopPage() {
     !itemSearch || r.item.name.toLowerCase().includes(itemSearch.toLowerCase())
   );
 
+  const PREVIEW_JOBS = [50, 100, 200, 300, 500, 750, 1000, 1500, 2000, 3000];
+
   const tabs = [
     { id: "items", label: "Shop Items", count: stats?.activeItems },
     { id: "categories", label: "Categories", count: categories?.length },
     { id: "redemptions", label: "Redemptions", count: stats?.pendingRedemptions, alert: (stats?.pendingRedemptions ?? 0) > 0 },
     { id: "spin_wheel", label: "🎰 Spin Wheel" },
+    { id: "distribution", label: "📊 Distribution" },
   ] as const;
 
   if (!user || !["admin", "business_owner"].includes(user.role ?? "")) {
@@ -688,6 +717,137 @@ export default function AdminRewardShopPage() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Distribution Tab ── */}
+        {activeTab === "distribution" && (
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="bg-gradient-to-br from-yellow-950/30 to-orange-950/30 border border-yellow-500/20 rounded-xl p-5">
+              <h2 className="text-base font-bold flex items-center gap-2 mb-1">
+                <TrendingUp className="h-4 w-4 text-yellow-400" /> System-Wide Earn Rate
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                This single rate controls how many JCMOVES customers earn per $1 spent on any job. Start high to attract customers — dial it down gradually as volume grows.
+              </p>
+            </div>
+
+            {/* Booking Reward */}
+            <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-bold">Job Booking Reward (flat)</div>
+                  <div className="text-xs text-muted-foreground">Awarded instantly when a customer submits a booking request</div>
+                </div>
+                <div className="text-2xl font-black text-yellow-400">{bookingReward.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">JCMOVES</span></div>
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range" min={50} max={1000} step={25}
+                  value={bookingReward}
+                  onChange={e => setBookingReward(parseInt(e.target.value))}
+                  className="flex-1 accent-yellow-500"
+                />
+                <span className="text-sm font-bold w-20 text-right">{bookingReward} tokens</span>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {[100, 250, 500, 750, 1000].map(v => (
+                  <button key={v} onClick={() => setBookingReward(v)}
+                    className={`px-3 py-1 text-xs rounded-full border font-semibold transition-colors ${bookingReward === v ? "bg-yellow-500 text-black border-yellow-500" : "border-border text-muted-foreground hover:text-foreground"}`}>
+                    {v}
+                  </button>
+                ))}
+              </div>
+              <Button size="sm" className="bg-yellow-500 text-black hover:bg-yellow-400 font-bold"
+                disabled={saveRateMutation.isPending}
+                onClick={() => saveRateMutation.mutate({ key: 'customer_quote_accepted', value: bookingReward.toFixed(2) })}>
+                Save Booking Reward
+              </Button>
+            </div>
+
+            {/* Earn Rate Slider */}
+            <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-bold">Completion Earn Rate</div>
+                  <div className="text-xs text-muted-foreground">JCMOVES per $1 of job value when a job is marked complete</div>
+                </div>
+                <div className="text-2xl font-black text-orange-400">{earnRate} <span className="text-xs font-normal text-muted-foreground">/ $1</span></div>
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range" min={1} max={200} step={1}
+                  value={earnRate}
+                  onChange={e => setEarnRate(parseInt(e.target.value))}
+                  className="flex-1 accent-orange-500"
+                />
+                <span className="text-sm font-bold w-20 text-right">{earnRate}/dollar</span>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {[10, 25, 50, 75, 100, 150].map(v => (
+                  <button key={v} onClick={() => setEarnRate(v)}
+                    className={`px-3 py-1 text-xs rounded-full border font-semibold transition-colors ${earnRate === v ? "bg-orange-500 text-black border-orange-500" : "border-border text-muted-foreground hover:text-foreground"}`}>
+                    {v}x
+                  </button>
+                ))}
+              </div>
+              <Button size="sm" className="bg-orange-500 text-black hover:bg-orange-400 font-bold"
+                disabled={saveRateMutation.isPending}
+                onClick={() => saveRateMutation.mutate({ key: 'earn_rate_per_dollar', value: earnRate.toFixed(2) })}>
+                Save Earn Rate
+              </Button>
+            </div>
+
+            {/* Preview Table */}
+            <div className="bg-card border border-border rounded-xl p-5">
+              <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-blue-400" /> Payout Preview at {earnRate} JCMOVES / $1
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-xs text-muted-foreground">
+                      <th className="text-left py-2 pr-4 font-medium">Job Price</th>
+                      <th className="text-right py-2 pr-4 font-medium">Tokens Earned</th>
+                      <th className="text-right py-2 font-medium">Est. $ Value*</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border text-xs">
+                    {PREVIEW_JOBS.map(price => {
+                      const tokens = Math.round(price * earnRate);
+                      const dollarVal = (tokens * 0.01).toFixed(2);
+                      return (
+                        <tr key={price}>
+                          <td className="py-2 pr-4 font-semibold">${price.toLocaleString()}</td>
+                          <td className="py-2 pr-4 text-right font-bold text-yellow-400">{tokens.toLocaleString()} JCMOVES</td>
+                          <td className="py-2 text-right text-muted-foreground">${dollarVal}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-2">* Est. value at $0.01 per JCMOVES. Does not include booking reward (+{bookingReward} JCMOVES flat).</p>
+            </div>
+
+            {/* All Settings Reference */}
+            <div className="bg-card border border-border rounded-xl p-5">
+              <h3 className="text-sm font-bold mb-3">All Reward Settings</h3>
+              <div className="space-y-2">
+                {(rewardSettingsData ?? []).map((s: any) => (
+                  <div key={s.settingKey} className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0">
+                    <div>
+                      <div className="text-xs font-semibold">{s.label}</div>
+                      <div className="text-[10px] text-muted-foreground">{s.description}</div>
+                    </div>
+                    <div className={`text-sm font-bold ${s.isActive ? "text-yellow-400" : "text-muted-foreground line-through"}`}>
+                      {parseFloat(s.tokenAmount).toLocaleString()} JCMOVES
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </div>

@@ -25,7 +25,7 @@ export const TREASURY_CONFIG = {
   LEAD_CREATION_DAILY_CAP: 5, // Max 5 leads per day earn reward (prevents spam)
   
   // Customer reward amounts (1 JCMOVES = $0.01)
-  LOYALTY_REWARD_TOKENS: 1500, // $15 worth when customer's job completes
+  LOYALTY_REWARD_TOKENS: 0, // replaced by earn_rate_per_dollar × job price
   REFERRAL_REQUEST_TOKENS: 50, // $0.50 when someone uses your referral code
   REFERRAL_CONFIRMED_TOKENS: 2500, // $25 when referred user's first job completes
   CUSTOMER_QUOTE_REWARD_TOKENS: 200, // $2 worth when verified customer's quote is accepted/completed
