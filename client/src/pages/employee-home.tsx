@@ -83,15 +83,29 @@ export default function EmployeeHomePage() {
       });
     },
     onError: (error: any) => {
+      const raw = String(error?.message || "");
+      let description = "Please try again later";
+      try {
+        const jsonStart = raw.indexOf('{');
+        if (jsonStart >= 0) {
+          const parsed = JSON.parse(raw.slice(jsonStart));
+          description = parsed.error || description;
+        }
+      } catch (_) {}
+      const alreadyClaimed = description.toLowerCase().includes("already claimed");
+      if (alreadyClaimed) {
+        queryClient.invalidateQueries({ queryKey: ["/api/mining/status"] });
+      }
       toast({
-        title: "Claim Failed",
-        description: error.message || "Please try again later",
+        title: alreadyClaimed ? "Already Claimed" : "Claim Failed",
+        description: alreadyClaimed ? "You've already claimed your scripture reward today. Come back tomorrow!" : description,
         variant: "destructive",
       });
     },
   });
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  // Use Eastern time to match the server — avoids UTC midnight mismatch (e.g. 9:30 PM EST = next day UTC)
+  const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
   const hasClaimedScripture = miningStatus?.lastScriptureClaimDate === todayStr;
   const scriptureStreak = (miningStatus as any)?.scriptureStreak || 0;
   const streakToBonus = 7 - (scriptureStreak % 7);
@@ -457,7 +471,7 @@ export default function EmployeeHomePage() {
                 </p>
                 <Button
                   onClick={() => scriptureMutation.mutate()}
-                  disabled={hasClaimedScripture || scriptureMutation.isPending || !miningStatus?.currentSession}
+                  disabled={hasClaimedScripture || scriptureMutation.isPending}
                   className={`w-full font-bold shadow-lg transition-all ${
                     hasClaimedScripture 
                       ? "bg-slate-800 text-slate-500 cursor-not-allowed border-slate-700" 
@@ -475,9 +489,6 @@ export default function EmployeeHomePage() {
                     </>
                   )}
                 </Button>
-                {!miningStatus?.currentSession && !hasClaimedScripture && (
-                  <p className="text-[10px] text-slate-500 text-center">Activate mining to claim</p>
-                )}
                 {hasClaimedScripture && (
                   <p className="text-[10px] text-green-500/70 font-medium">Daily reward collected</p>
                 )}

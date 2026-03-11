@@ -27,23 +27,16 @@ interface GamificationStats {
   };
 }
 
+// Use Eastern time to match the server — avoids UTC midnight off-by-one (e.g. 9:30 PM EST = next day UTC)
+const easternToday = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+
 function isToday(dateStr: string | null | undefined): boolean {
   if (!dateStr) return false;
-  // Build today's local date string (YYYY-MM-DD) using local time — avoids UTC midnight timezone shift
-  const now = new Date();
-  const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  // Normalize the stored value to a date string in local time
-  let storedDate: string;
-  if (dateStr.includes('T') || dateStr.includes('Z')) {
-    // Full timestamp — convert to local date
-    const d = new Date(dateStr);
-    storedDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  } else {
-    // Date-only string (e.g. "2026-03-07") — parse at local noon to avoid UTC midnight off-by-one
-    const d = new Date(dateStr + 'T12:00:00');
-    storedDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  }
-  return storedDate === localToday;
+  // Normalize to date-only
+  const normalized = dateStr.includes('T') || dateStr.includes('Z')
+    ? new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date(dateStr))
+    : dateStr.split('T')[0];
+  return normalized === easternToday;
 }
 
 export function EarnTasksButton() {
@@ -127,10 +120,17 @@ export function EarnTasksButton() {
       });
     },
     onError: (err: any) => {
-      const msg = err?.message || "";
+      const raw = String(err?.message || "");
+      let description = "Something went wrong — please try again.";
+      try {
+        const jsonStart = raw.indexOf('{');
+        if (jsonStart >= 0) description = JSON.parse(raw.slice(jsonStart)).error || description;
+      } catch (_) {}
+      const alreadyClaimed = description.toLowerCase().includes("already claimed");
+      if (alreadyClaimed) queryClient.invalidateQueries({ queryKey: ["/api/mining/status"] });
       toast({
-        title: "Already claimed",
-        description: msg.includes("Already claimed") ? "You've already claimed your scripture reward today." : "Something went wrong.",
+        title: alreadyClaimed ? "Already Claimed Today" : "Claim Failed",
+        description: alreadyClaimed ? "You've already claimed your scripture reward today. Come back tomorrow!" : description,
         variant: "destructive",
       });
     },
