@@ -1,5 +1,5 @@
 import { Component as ReactComponent, ReactNode } from "react";
-import { Switch, Route, Redirect, useLocation } from "wouter";
+import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -228,7 +228,6 @@ function PageWrapper({ component: Component }: { component: any }) {
 // Main app for authenticated users - Unified routing for all devices
 function AuthenticatedApp() {
   const { user, isPending } = useAuth();
-  const [, setLocation] = useLocation();
   useMiningNotifications();
   
   // Determine home page based on user role
