@@ -35,7 +35,6 @@ function LeadStatusBadge({ status }: { status: string }) {
 }
 
 export default function TeamHub() {
-  const [, setLocation] = useLocation();
   const { user: currentUser } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
