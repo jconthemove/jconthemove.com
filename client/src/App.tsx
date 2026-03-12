@@ -13,7 +13,6 @@ import { EarnTasksButton } from "@/components/earn-tasks-button";
 import { FloatingMomHeart } from "@/components/floating-mom-heart";
 import Header from "@/components/header";
 import PwaInstallPrompt from "@/components/pwa-install-prompt";
-import Footer from "@/components/footer";
 import HomePage from "@/pages/home";
 import Dashboard from "@/pages/dashboard";
 import RewardsPage from "@/pages/rewards";
@@ -78,14 +77,11 @@ import { NotificationPrompt } from "@/components/notification-prompt";
 import { useMiningNotifications } from "@/hooks/useMiningNotifications";
 
 // Landing page for unauthenticated users
+// Note: home.tsx has its own built-in footer and dedication banner — no wrapper Footer needed
 function LandingPage() {
   return (
     <div className="min-h-screen bg-background text-foreground font-sans">
-      <Header />
-      <main>
-        <HomePage />
-      </main>
-      <Footer />
+      <HomePage />
     </div>
   );
 }
