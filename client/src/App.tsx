@@ -19,6 +19,8 @@ import Dashboard from "@/pages/dashboard";
 import RewardsPage from "@/pages/rewards";
 import ProfilePage from "@/pages/profile";
 import EmployeeHomePage from "@/pages/employee-home";
+import TeamHub from "@/pages/hub";
+import AdminControlPage from "@/pages/control";
 import EmployeeDashboard from "@/pages/employee-dashboard";
 import EmployeeAddJob from "@/pages/employee-add-job";
 import LeadsPage from "@/pages/leads";
@@ -234,7 +236,7 @@ function AuthenticatedApp() {
   useMiningNotifications();
   
   // Determine home page based on user role
-  const HomePage = user?.role === 'customer' ? CustomerPortal : EmployeeHomePage;
+  const HomePage = user?.role === 'customer' ? CustomerPortal : TeamHub;
   
   // Redirect pending users to pending-approval page
   if (isPending) {
@@ -328,6 +330,16 @@ function AuthenticatedApp() {
           </Route>
           <Route path="/pending-approval">
             <PendingApprovalPage />
+          </Route>
+          <Route path="/hub">
+            <RouteGuard allowedRoles={['admin', 'employee', 'business_owner']}>
+              <PageWrapper component={TeamHub} />
+            </RouteGuard>
+          </Route>
+          <Route path="/control">
+            <RouteGuard allowedRoles={['admin', 'business_owner']}>
+              <PageWrapper component={AdminControlPage} />
+            </RouteGuard>
           </Route>
           <Route path="/in-god-we-trust">
             <RouteGuard allowedRoles={['admin', 'business_owner']}>

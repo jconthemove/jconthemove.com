@@ -1,25 +1,24 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Link, useLocation } from "wouter";
-import { Package, Wallet, User, Coins, ShoppingBag, Gift, Users, CheckCircle, Zap, Clock, Loader2, Copy, Calendar, TrendingUp, ArrowUpRight, Briefcase, MapPin, Phone, Mail, ChevronRight } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
+import {
+  Briefcase, Wallet, Gift, User, Zap, Coins, Clock, Users, Copy,
+  Calendar, MapPin, ChevronRight, Loader2, Star,
+  TrendingUp, Lock, ArrowUpRight, Phone, Mail
+} from "lucide-react";
+import { Link, useLocation } from "wouter";
 import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-
-interface ShopItem {
-  id: string;
-  title: string;
-  description?: string;
-  price: string;
-  photos: string[];
-  status: string;
-}
+import { LOYALTY_TIERS } from "@/lib/loyalty";
+import QuoteForm from "@/components/QuoteForm";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface WalletAccount {
   id: string;
@@ -51,13 +50,7 @@ interface RewardHistory {
 interface ReferralStats {
   referralCount: number;
   totalEarned: number;
-  referredUsers: Array<{
-    id: string;
-    firstName?: string;
-    lastName?: string;
-    email?: string;
-    createdAt: string;
-  }>;
+  referredUsers: Array<{ id: string; firstName?: string; lastName?: string; email?: string; createdAt: string }>;
 }
 
 interface CustomerJob {
@@ -74,576 +67,629 @@ interface CustomerJob {
   createdAt: string;
 }
 
+interface StakingTier {
+  id: string;
+  name: string;
+  minAmount: string;
+  apr: string;
+  lockupDays: number;
+  color: string;
+}
+
+interface Stake {
+  id: string;
+  amount: string;
+  dailyRate: string;
+  endsAt: string;
+  status: string;
+  lastPayoutAt: string;
+  tier: StakingTier;
+}
+
+const REWARD_LABELS: Record<string, string> = {
+  mining: "Mining Reward",
+  daily_checkin: "Daily Check-in",
+  lead_creation: "Job Creation Bonus",
+  job_completion: "Job Completion",
+  loyalty_booking: "Loyalty Reward",
+  referral: "Referral Bonus",
+  referral_request: "Referral Code Applied",
+  referral_signup_bonus: "Referral Signup Bonus",
+  referral_confirmed: "Referral Confirmed",
+  signup_bonus: "Welcome Bonus",
+};
+
+function formatTokens(n: number) {
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function daysRemaining(endsAt: string) {
+  const diff = Math.max(0, Math.ceil((new Date(endsAt).getTime() - Date.now()) / 86400000));
+  return diff;
+}
+
+function pendingStakeRewards(stake: Stake) {
+  const daysSince = (Date.now() - new Date(stake.lastPayoutAt).getTime()) / 86400000;
+  return parseFloat(stake.amount) * parseFloat(stake.dailyRate) * daysSince;
+}
+
+function JobStatusBadge({ status }: { status: string }) {
+  const styles: Record<string, string> = {
+    completed:   "border-green-500 text-green-400 bg-green-500/10",
+    in_progress: "border-blue-500 text-blue-400 bg-blue-500/10",
+    confirmed:   "border-purple-500 text-purple-400 bg-purple-500/10",
+    cancelled:   "border-red-500 text-red-400 bg-red-500/10",
+    pending:     "border-amber-500 text-amber-400 bg-amber-500/10",
+  };
+  return (
+    <Badge variant="outline" className={`text-xs ${styles[status] || styles.pending}`}>
+      {status.replace(/_/g, " ").toUpperCase()}
+    </Badge>
+  );
+}
+
 export default function CustomerPortal() {
   const [location] = useLocation();
-  const urlParams = new URLSearchParams(location.split('?')[1] || '');
-  const initialTab = urlParams.get('tab') || 'mining';
-  const [activeTab, setActiveTab] = useState(initialTab);
+  const urlParams = new URLSearchParams(location.split("?")[1] || "");
+  const [activeTab, setActiveTab] = useState(urlParams.get("tab") || "jobs");
   const [animatedTokens, setAnimatedTokens] = useState(0);
+  const [quoteOpen, setQuoteOpen] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: shopItems = [] } = useQuery<ShopItem[]>({
-    queryKey: ["/api/shop"],
-  });
+  const { data: wallet } = useQuery<WalletAccount>({ queryKey: ["/api/rewards/wallet"] });
+  const { data: miningStatus } = useQuery<MiningStatus>({ queryKey: ["/api/mining/status"], refetchInterval: 5000 });
+  const { data: rewardsHistory } = useQuery<RewardHistory[]>({ queryKey: ["/api/rewards/history"] });
+  const { data: referralCode } = useQuery<{ referralCode: string }>({ queryKey: ["/api/referrals/my-code"] });
+  const { data: referralStats } = useQuery<ReferralStats>({ queryKey: ["/api/referrals/stats"] });
+  const { data: customerJobs = [], isLoading: jobsLoading } = useQuery<CustomerJob[]>({ queryKey: ["/api/leads/my-requests"] });
+  const { data: stakes = [] } = useQuery<Stake[]>({ queryKey: ["/api/staking/my-stakes"] });
 
-  const { data: wallet } = useQuery<WalletAccount>({
-    queryKey: ["/api/rewards/wallet"],
-  });
-
-  const { data: miningStatus } = useQuery<MiningStatus>({
-    queryKey: ["/api/mining/status"],
-    refetchInterval: 5000,
-  });
-
-  const { data: rewardsHistory } = useQuery<RewardHistory[]>({
-    queryKey: ["/api/rewards/history"],
-  });
-
-  const { data: referralCode } = useQuery<{ referralCode: string }>({
-    queryKey: ["/api/referrals/my-code"],
-  });
-
-  const { data: referralStats } = useQuery<ReferralStats>({
-    queryKey: ["/api/referrals/stats"],
-  });
-
-  const { data: customerJobs = [], isLoading: jobsLoading } = useQuery<CustomerJob[]>({
-    queryKey: ["/api/leads/my-requests"],
-  });
-
-  // Real-time animated token counter
   useEffect(() => {
-    if (!miningStatus?.currentSession) {
-      setAnimatedTokens(0);
-      return;
-    }
-
-    // Start from server value
-    const serverTokens = parseFloat(miningStatus?.accumulatedTokens || '0');
-    setAnimatedTokens(serverTokens);
-
-    // Update every 100ms for smooth animation (0.02 tokens/second = 0.002 per 100ms)
-    const TOKENS_PER_100MS = 0.002;
-    const miningSpeed = parseFloat(miningStatus?.miningSpeed || '1.00');
-    
-    const interval = setInterval(() => {
-      setAnimatedTokens(prev => prev + (TOKENS_PER_100MS * miningSpeed));
-    }, 100);
-
-    return () => clearInterval(interval);
+    if (!miningStatus?.currentSession) { setAnimatedTokens(0); return; }
+    const server = parseFloat(miningStatus.accumulatedTokens || "0");
+    setAnimatedTokens(server);
+    const speed = parseFloat(miningStatus.miningSpeed || "1");
+    const iv = setInterval(() => setAnimatedTokens(p => p + 0.0002 * speed), 100);
+    return () => clearInterval(iv);
   }, [miningStatus?.currentSession, miningStatus?.accumulatedTokens, miningStatus?.miningSpeed]);
 
-  // Calculate 24-hour cycle progress
   const cycleProgress = useMemo(() => {
     if (!miningStatus?.currentSession || !miningStatus?.timeRemaining) return 0;
-    const CYCLE_MS = 24 * 60 * 60 * 1000; // 24 hours
-    const elapsed = CYCLE_MS - miningStatus.timeRemaining;
-    return Math.min(100, Math.max(0, (elapsed / CYCLE_MS) * 100));
+    const CYCLE = 24 * 60 * 60 * 1000;
+    return Math.min(100, Math.max(0, ((CYCLE - miningStatus.timeRemaining) / CYCLE) * 100));
   }, [miningStatus?.timeRemaining, miningStatus?.currentSession]);
 
-  // Format time remaining
   const formatTimeRemaining = (ms: number) => {
-    const hours = Math.floor(ms / (1000 * 60 * 60));
-    const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
-    return `${hours}h ${minutes}m`;
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    return `${h}h ${m}m`;
   };
 
   const startMiningMutation = useMutation({
-    mutationFn: async () => {
-      return await apiRequest("POST", "/api/mining/start");
-    },
-    onSuccess: async () => {
+    mutationFn: () => apiRequest("POST", "/api/mining/start"),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/mining/status"] });
-      toast({
-        title: "Mining Started!",
-        description: "You're now earning tokens. Check back to claim them!",
-      });
+      toast({ title: "Mining Started!", description: "Tokens are accumulating — claim them any time!" });
     },
-    onError: (error: any) => {
-      // Don't show error for session expiration - redirect handles it
-      if (error.message?.includes("Session expired")) {
-        return;
-      }
-      toast({
-        title: "Failed to Start Mining",
-        description: error.message || "Please try again",
-        variant: "destructive",
-      });
-    },
+    onError: (e: any) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
   });
 
   const claimMutation = useMutation({
-    mutationFn: async () => {
-      return await apiRequest("POST", "/api/mining/claim");
-    },
-    onSuccess: async (response: any) => {
-      const data = await response.json();
+    mutationFn: () => apiRequest("POST", "/api/mining/claim"),
+    onSuccess: async (res: any) => {
+      const data = await res.json();
       queryClient.invalidateQueries({ queryKey: ["/api/mining/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/rewards/wallet"] });
       queryClient.invalidateQueries({ queryKey: ["/api/rewards/history"] });
-      toast({
-        title: "Tokens Claimed!",
-        description: `You've earned ${parseFloat(data.tokensClaimed).toFixed(2)} JCMOVES!`,
-      });
+      toast({ title: "Tokens Claimed!", description: `+${parseFloat(data.tokensClaimed || "0").toFixed(2)} JCMOVES` });
     },
-    onError: (error: any) => {
-      toast({
-        title: "Claim Failed",
-        description: error.message || "Please try again",
-        variant: "destructive",
-      });
-    },
+    onError: (e: any) => toast({ title: "Claim Failed", description: e.message, variant: "destructive" }),
   });
 
-  const activeShopItems = shopItems.filter(item => item.status === 'active');
-  const tokenBalance = parseFloat(wallet?.tokenBalance || '0');
-  const totalEarned = parseFloat(wallet?.totalEarned || '0');
-  const canClaim = miningStatus?.currentSession && parseFloat(miningStatus?.accumulatedTokens || '0') > 0;
+  const tokenBalance = parseFloat(wallet?.tokenBalance || "0");
+  const totalEarned = parseFloat(wallet?.totalEarned || "0");
+  const canClaim = !!miningStatus?.currentSession && parseFloat(miningStatus.accumulatedTokens || "0") > 0;
+  const activeStakes = stakes.filter((s: Stake) => s.status === "active");
 
-  const copyReferralCode = () => {
-    if (referralCode?.referralCode) {
-      navigator.clipboard.writeText(referralCode.referralCode);
-      toast({ title: "Copied!", description: "Referral code copied to clipboard" });
-    }
-  };
-
-  const getRewardTypeLabel = (type: string) => {
-    const labels: Record<string, string> = {
-      mining: 'Mining Reward',
-      daily_checkin: 'Daily Check-in',
-      lead_creation: 'Job Creation Bonus',
-      job_completion: 'Job Completion',
-      loyalty_booking: 'Loyalty Reward',
-      referral: 'Referral Bonus',
-      referral_request: 'Referral Code Applied',
-      referral_signup_bonus: 'Referral Signup Bonus',
-      referral_confirmed: 'Referral Confirmed',
-      signup_bonus: 'Welcome Bonus',
-    };
-    return labels[type] || type.replace(/_/g, ' ');
-  };
+  const userTierKey = ((user as any)?.loyaltyTier as keyof typeof LOYALTY_TIERS) || "bronze";
+  const tier = LOYALTY_TIERS[userTierKey] || LOYALTY_TIERS.bronze;
+  const tierGradient = { bronze: "from-amber-900/30 to-amber-800/20", silver: "from-slate-700/30 to-slate-600/20", gold: "from-yellow-800/30 to-amber-700/20", vip: "from-purple-900/30 to-purple-800/20" }[userTierKey] ?? "from-amber-900/30 to-amber-800/20";
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Welcome, {user?.firstName || 'Customer'}!</h1>
-          <p className="text-slate-400">Your rewards dashboard</p>
+    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white pb-8">
+      <div className="max-w-4xl mx-auto px-4 pt-8">
+
+        {/* ── Header ── */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-black text-white">
+              Welcome back, {user?.firstName || "Customer"} 👋
+            </h1>
+            <p className="text-slate-400 text-sm">{user?.email}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-slate-500">Balance</p>
+            <p className="text-xl font-black text-orange-400">{formatTokens(tokenBalance)}</p>
+            <p className="text-xs text-slate-500">JCMOVES</p>
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <Card className="bg-gradient-to-br from-orange-500/20 to-red-500/20 border-orange-500/30">
-            <CardContent className="p-4 text-center">
-              <p className="text-sm text-slate-300">Token Balance</p>
-              <p className="text-2xl font-black text-orange-400" data-testid="text-token-balance">
-                {tokenBalance.toFixed(2)} JCMOVES
-              </p>
-              <p className="text-xs text-slate-400">{tokenBalance.toFixed(0)} credits</p>
+        {/* ── Quick Stats ── */}
+        <div className="grid grid-cols-3 gap-3 mb-6">
+          <Card className="border-white/5 bg-white/[0.03]">
+            <CardContent className="p-3 text-center">
+              <p className="text-lg font-black text-orange-400">{formatTokens(tokenBalance)}</p>
+              <p className="text-slate-500 text-xs">Token Balance</p>
             </CardContent>
           </Card>
-          <Card className="bg-gradient-to-br from-green-500/20 to-emerald-500/20 border-green-500/30">
-            <CardContent className="p-4 text-center">
-              <p className="text-sm text-slate-300">Total Earned</p>
-              <p className="text-2xl font-black text-green-400" data-testid="text-total-earned">
-                {totalEarned.toFixed(2)}
-              </p>
-              <p className="text-xs text-slate-400">Lifetime earnings</p>
+          <Card className="border-white/5 bg-white/[0.03]">
+            <CardContent className="p-3 text-center">
+              <p className="text-lg font-black text-green-400">{customerJobs.length}</p>
+              <p className="text-slate-500 text-xs">Total Jobs</p>
+            </CardContent>
+          </Card>
+          <Card className={`border-white/5 bg-gradient-to-br ${tierGradient}`}>
+            <CardContent className="p-3 text-center">
+              <p className="text-lg font-black text-amber-400">{tier.label || userTierKey}</p>
+              <p className="text-slate-500 text-xs">Loyalty Tier</p>
             </CardContent>
           </Card>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-5 bg-slate-800/50 border border-slate-700">
-            <TabsTrigger value="mining" className="data-[state=active]:bg-orange-500/20 px-1" data-testid="tab-mining">
-              <Zap className="h-4 w-4 sm:mr-1" />
-              <span className="hidden sm:inline">Mining</span>
+        {/* ── Tabs ── */}
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="grid w-full grid-cols-4 bg-slate-800/50 border border-slate-700/50 mb-6">
+            <TabsTrigger value="jobs" className="data-[state=active]:bg-blue-600/20 data-[state=active]:text-blue-300 text-xs sm:text-sm">
+              <Briefcase className="h-4 w-4 sm:mr-1.5" /><span className="hidden sm:inline">My Jobs</span>
             </TabsTrigger>
-            <TabsTrigger value="jobs" className="data-[state=active]:bg-amber-500/20 px-1" data-testid="tab-jobs">
-              <Briefcase className="h-4 w-4 sm:mr-1" />
-              <span className="hidden sm:inline">Jobs</span>
+            <TabsTrigger value="wallet" className="data-[state=active]:bg-orange-600/20 data-[state=active]:text-orange-300 text-xs sm:text-sm">
+              <Wallet className="h-4 w-4 sm:mr-1.5" /><span className="hidden sm:inline">Wallet</span>
             </TabsTrigger>
-            <TabsTrigger value="referrals" className="data-[state=active]:bg-blue-500/20 px-1" data-testid="tab-referrals">
-              <Users className="h-4 w-4 sm:mr-1" />
-              <span className="hidden sm:inline">Referrals</span>
+            <TabsTrigger value="marketplace" className="data-[state=active]:bg-purple-600/20 data-[state=active]:text-purple-300 text-xs sm:text-sm">
+              <Gift className="h-4 w-4 sm:mr-1.5" /><span className="hidden sm:inline">Rewards</span>
             </TabsTrigger>
-            <TabsTrigger value="history" className="data-[state=active]:bg-green-500/20 px-1" data-testid="tab-history">
-              <Clock className="h-4 w-4 sm:mr-1" />
-              <span className="hidden sm:inline">History</span>
-            </TabsTrigger>
-            <TabsTrigger value="shop" className="data-[state=active]:bg-purple-500/20 px-1" data-testid="tab-shop">
-              <ShoppingBag className="h-4 w-4 sm:mr-1" />
-              <span className="hidden sm:inline">Shop</span>
+            <TabsTrigger value="profile" className="data-[state=active]:bg-slate-600/20 data-[state=active]:text-slate-200 text-xs sm:text-sm">
+              <User className="h-4 w-4 sm:mr-1.5" /><span className="hidden sm:inline">Profile</span>
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="mining" className="space-y-4 mt-4">
-            <Card className="border-slate-700 bg-slate-800/50">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-white">
-                  <Zap className="h-5 w-5 text-orange-400" />
-                  Daily Mining
+          {/* ══ MY JOBS TAB ══ */}
+          <TabsContent value="jobs" className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold text-white">My Service Requests</h2>
+              <Button
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-500 font-semibold"
+                onClick={() => setQuoteOpen(true)}
+              >
+                + Request Quote
+              </Button>
+            </div>
+
+            {jobsLoading ? (
+              <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-blue-400" /></div>
+            ) : customerJobs.length === 0 ? (
+              <Card className="border-white/5 bg-white/[0.03]">
+                <CardContent className="py-12 text-center">
+                  <Briefcase className="h-12 w-12 mx-auto text-slate-600 mb-4" />
+                  <p className="text-slate-400 mb-4">No service requests yet</p>
+                  <Button className="bg-blue-600 hover:bg-blue-500" onClick={() => setQuoteOpen(true)}>
+                    Request Your First Quote
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-3">
+                {customerJobs.map((job) => (
+                  <Card key={job.id} className="border-white/5 bg-white/[0.03]">
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <JobStatusBadge status={job.status} />
+                          <Badge variant="secondary" className="bg-slate-700/50 text-slate-300 text-xs">
+                            {job.serviceType}
+                          </Badge>
+                        </div>
+                        <span className="text-xs text-slate-500">{new Date(job.createdAt).toLocaleDateString()}</span>
+                      </div>
+                      <div className="space-y-1.5 text-sm">
+                        {job.pickupAddress && (
+                          <div className="flex items-start gap-2">
+                            <MapPin className="h-3.5 w-3.5 text-green-400 mt-0.5 flex-shrink-0" />
+                            <span className="text-slate-300">{job.pickupAddress}</span>
+                          </div>
+                        )}
+                        {job.dropoffAddress && (
+                          <div className="flex items-start gap-2">
+                            <MapPin className="h-3.5 w-3.5 text-red-400 mt-0.5 flex-shrink-0" />
+                            <span className="text-slate-300">{job.dropoffAddress}</span>
+                          </div>
+                        )}
+                        {job.moveDate && (
+                          <div className="flex items-center gap-2">
+                            <Calendar className="h-3.5 w-3.5 text-blue-400" />
+                            <span className="text-slate-300">{new Date(job.moveDate).toLocaleDateString()}</span>
+                          </div>
+                        )}
+                        {job.estimatedTotal && (
+                          <div className="pt-2 border-t border-white/5 flex items-center justify-between">
+                            <span className="text-slate-500 text-xs">Estimated</span>
+                            <span className="text-green-400 font-bold">${job.estimatedTotal}</span>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* ══ WALLET TAB ══ */}
+          <TabsContent value="wallet" className="space-y-4">
+
+            {/* Balance Summary */}
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: "Balance", value: formatTokens(tokenBalance), color: "text-orange-400" },
+                { label: "Total Earned", value: formatTokens(totalEarned), color: "text-green-400" },
+                { label: "Redeemed", value: formatTokens(parseFloat(wallet?.totalRedeemed || "0")), color: "text-blue-400" },
+              ].map(s => (
+                <Card key={s.label} className="border-white/5 bg-white/[0.03]">
+                  <CardContent className="p-3 text-center">
+                    <p className={`text-base font-black ${s.color}`}>{s.value}</p>
+                    <p className="text-slate-500 text-xs">{s.label}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            {/* Mining Section */}
+            <Card className="border-orange-500/20 bg-orange-950/20">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-white flex items-center gap-2 text-base">
+                  <Zap className="h-4 w-4 text-orange-400" /> Daily Mining
                 </CardTitle>
-                <CardDescription className="text-slate-400">
-                  Claim your daily tokens and build your streak!
-                </CardDescription>
+                <CardDescription className="text-slate-400 text-xs">Earn passive tokens every day — claim up to 3 times</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center justify-between p-4 bg-slate-900/50 rounded-lg border border-slate-700">
+                <div className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg border border-white/5">
                   <div>
-                    <p className="text-sm text-slate-400">Current Streak</p>
-                    <p className="text-2xl font-bold text-orange-400">{miningStatus?.streakCount || 0} days</p>
+                    <p className="text-xs text-slate-400">Streak</p>
+                    <p className="text-xl font-black text-orange-400">{miningStatus?.streakCount || 0} days</p>
                     {(miningStatus?.streakCount || 0) > 1 && (
-                      <p className="text-xs text-green-400">+{(miningStatus!.streakCount - 1)}% bonus active</p>
+                      <p className="text-xs text-green-400">+{miningStatus!.streakCount - 1}% bonus</p>
                     )}
                   </div>
                   <div className="text-right">
-                    <p className="text-sm text-slate-400">Available</p>
-                    <p className="text-xl font-bold text-green-400 tabular-nums" data-testid="text-animated-tokens">
-                      {miningStatus?.currentSession ? animatedTokens.toFixed(4) : '0.0000'} JCMOVES
+                    <p className="text-xs text-slate-400">Available</p>
+                    <p className="text-xl font-black text-green-400 tabular-nums">
+                      {miningStatus?.currentSession ? animatedTokens.toFixed(4) : "0.0000"}
                     </p>
+                    <p className="text-xs text-slate-500">JCMOVES</p>
                   </div>
                 </div>
 
-                {/* Animated Mining Progress Bar */}
                 {miningStatus?.currentSession && (
-                  <div className="space-y-2 p-4 bg-gradient-to-r from-orange-500/10 to-yellow-500/10 rounded-lg border border-orange-500/30">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-slate-300 flex items-center gap-2">
+                  <div className="space-y-1.5 p-3 bg-orange-500/10 rounded-lg border border-orange-500/20">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-300 flex items-center gap-1.5">
                         <span className="relative flex h-2 w-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500" />
                         </span>
-                        Mining in Progress
+                        Mining Active
                       </span>
-                      <span className="text-orange-400 font-medium">
-                        {formatTimeRemaining(miningStatus?.timeRemaining || 0)} remaining
-                      </span>
+                      <span className="text-orange-400">{formatTimeRemaining(miningStatus.timeRemaining)} left</span>
                     </div>
-                    <div className="relative">
-                      <Progress 
-                        value={cycleProgress} 
-                        className="h-3 bg-slate-700"
-                      />
-                      <div 
-                        className="absolute inset-0 h-3 rounded-full overflow-hidden"
-                        style={{
-                          background: `linear-gradient(90deg, transparent ${cycleProgress - 2}%, rgba(251, 146, 60, 0.5) ${cycleProgress}%, transparent ${cycleProgress + 2}%)`,
-                          animation: 'shimmer 2s infinite',
-                        }}
-                      />
-                    </div>
-                    <div className="flex justify-between text-xs text-slate-400">
-                      <span>0h</span>
-                      <span className="text-orange-400 font-medium">+{(0.02 * parseFloat(miningStatus?.miningSpeed || '1')).toFixed(4)}/sec</span>
-                      <span>24h</span>
-                    </div>
+                    <Progress value={cycleProgress} className="h-2 bg-slate-700" />
+                    <p className="text-xs text-slate-500 text-center">{miningStatus.claimsRemainingToday} of 3 claims remaining today</p>
                   </div>
                 )}
 
                 {!miningStatus?.currentSession ? (
                   <Button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      startMiningMutation.mutate();
-                    }}
+                    className="w-full bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 font-bold"
+                    onClick={() => startMiningMutation.mutate()}
                     disabled={startMiningMutation.isPending}
-                    className="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600"
-                    size="lg"
-                    data-testid="button-start-mining"
                   >
-                    {startMiningMutation.isPending ? (
-                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Starting...</>
-                    ) : (
-                      <><Zap className="h-4 w-4 mr-2" /> Start Mining</>
-                    )}
+                    {startMiningMutation.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Starting...</> : <><Zap className="h-4 w-4 mr-2" />Start Mining</>}
                   </Button>
                 ) : (
-                  <div className="space-y-2">
-                    <Button
-                      onClick={() => claimMutation.mutate()}
-                      disabled={!canClaim || claimMutation.isPending || (miningStatus?.claimsRemainingToday || 0) <= 0}
-                      className="w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
-                      size="lg"
-                      data-testid="button-claim-mining"
-                    >
-                      {claimMutation.isPending ? (
-                        <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Claiming...</>
-                      ) : (miningStatus?.claimsRemainingToday || 0) <= 0 ? (
-                        <><Clock className="h-4 w-4 mr-2" /> Max Claims Reached Today</>
-                      ) : canClaim ? (
-                        <><Coins className="h-4 w-4 mr-2" /> Claim Tokens</>
-                      ) : (
-                        <><Clock className="h-4 w-4 mr-2" /> Mining Active - Tokens Accumulating</>
-                      )}
-                    </Button>
-                    <div className="flex justify-center">
-                      <Badge variant="secondary" className="bg-slate-700 text-slate-300">
-                        {miningStatus?.claimsRemainingToday || 0} of 3 claims remaining today
-                      </Badge>
-                    </div>
-                  </div>
+                  <Button
+                    className="w-full bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 font-bold"
+                    onClick={() => claimMutation.mutate()}
+                    disabled={!canClaim || claimMutation.isPending || (miningStatus?.claimsRemainingToday || 0) <= 0}
+                  >
+                    {claimMutation.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Claiming...</> :
+                     (miningStatus?.claimsRemainingToday || 0) <= 0 ? <><Clock className="h-4 w-4 mr-2" />Max Claims Today</> :
+                     canClaim ? <><Coins className="h-4 w-4 mr-2" />Claim Tokens</> :
+                     <><Clock className="h-4 w-4 mr-2" />Accumulating...</>}
+                  </Button>
                 )}
-
-                <Separator className="bg-slate-700" />
-
-                <div>
-                  <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
-                    <Gift className="h-4 w-4 text-primary" />
-                    Ways to Earn More
-                  </h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between p-2 bg-slate-900/30 rounded">
-                      <span className="text-slate-300">Book a service</span>
-                      <span className="text-green-400 font-semibold">+1,500 JCMOVES</span>
-                    </div>
-                    <div className="flex justify-between p-2 bg-slate-900/30 rounded">
-                      <span className="text-slate-300">Refer a friend (signup)</span>
-                      <span className="text-blue-400 font-semibold">+50 JCMOVES</span>
-                    </div>
-                    <div className="flex justify-between p-2 bg-slate-900/30 rounded">
-                      <span className="text-slate-300">Referral completes job</span>
-                      <span className="text-purple-400 font-semibold">+2,500 JCMOVES</span>
-                    </div>
-                  </div>
-                </div>
               </CardContent>
             </Card>
-          </TabsContent>
 
-          <TabsContent value="jobs" className="space-y-4 mt-4">
-            <Card className="border-slate-700 bg-slate-800/50">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-white">
-                  <Briefcase className="h-5 w-5 text-amber-400" />
-                  My Service Requests
-                </CardTitle>
-                <CardDescription className="text-slate-400">
-                  Track your moving and junk removal requests
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {jobsLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-8 w-8 animate-spin text-amber-400" />
-                  </div>
-                ) : customerJobs.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Briefcase className="h-12 w-12 mx-auto text-slate-600 mb-4" />
-                    <p className="text-slate-400 mb-4">No service requests yet</p>
-                    <Link href="/quote">
-                      <Button className="bg-amber-500 hover:bg-amber-600">
-                        Request a Quote
-                      </Button>
-                    </Link>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {customerJobs.map((job) => (
-                      <div key={job.id} className="bg-slate-900/50 rounded-lg p-4 border border-slate-700">
-                        <div className="flex items-start justify-between mb-3">
-                          <div>
-                            <Badge 
-                              variant="outline" 
-                              className={
-                                job.status === 'completed' ? 'border-green-500 text-green-400' :
-                                job.status === 'in_progress' ? 'border-blue-500 text-blue-400' :
-                                job.status === 'confirmed' ? 'border-purple-500 text-purple-400' :
-                                job.status === 'cancelled' ? 'border-red-500 text-red-400' :
-                                'border-amber-500 text-amber-400'
-                              }
-                            >
-                              {job.status.replace('_', ' ').toUpperCase()}
-                            </Badge>
-                            <Badge variant="secondary" className="ml-2 bg-slate-700">
-                              {job.serviceType}
-                            </Badge>
-                          </div>
-                          <span className="text-xs text-slate-500">
-                            {new Date(job.createdAt).toLocaleDateString()}
-                          </span>
+            {/* Active Stakes */}
+            {activeStakes.length > 0 && (
+              <Card className="border-white/5 bg-white/[0.03]">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-white flex items-center gap-2 text-base">
+                    <Lock className="h-4 w-4 text-blue-400" /> Active Stakes
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {activeStakes.map((stake: Stake) => (
+                    <div key={stake.id} className="p-3 bg-slate-900/50 rounded-lg border border-white/5">
+                      <div className="flex justify-between items-start mb-1">
+                        <div>
+                          <p className="font-semibold text-white text-sm">{stake.tier?.name}</p>
+                          <p className="text-xs text-slate-400">{formatTokens(parseFloat(stake.amount))} JCMOVES staked</p>
                         </div>
-                        
-                        <div className="space-y-2 text-sm">
-                          <div className="flex items-start gap-2">
-                            <MapPin className="h-4 w-4 text-green-400 mt-0.5 flex-shrink-0" />
-                            <div>
-                              <p className="text-slate-400 text-xs">From</p>
-                              <p className="text-white">{job.pickupAddress || 'Not specified'}</p>
-                            </div>
-                          </div>
-                          {job.dropoffAddress && (
-                            <div className="flex items-start gap-2">
-                              <MapPin className="h-4 w-4 text-red-400 mt-0.5 flex-shrink-0" />
-                              <div>
-                                <p className="text-slate-400 text-xs">To</p>
-                                <p className="text-white">{job.dropoffAddress}</p>
-                              </div>
-                            </div>
-                          )}
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-blue-400" />
-                            <span className="text-white">
-                              {job.moveDate ? new Date(job.moveDate).toLocaleDateString() : 'Date TBD'}
-                            </span>
-                          </div>
-                          {job.estimatedTotal && (
-                            <div className="flex items-center gap-2 pt-2 border-t border-slate-700 mt-2">
-                              <span className="text-slate-400">Estimated:</span>
-                              <span className="text-green-400 font-bold">${job.estimatedTotal}</span>
-                            </div>
-                          )}
+                        <div className="text-right">
+                          <p className="text-green-400 text-sm font-bold">+{formatTokens(pendingStakeRewards(stake))}</p>
+                          <p className="text-xs text-slate-500">pending</p>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
+                      <div className="flex items-center gap-1 text-xs text-slate-500">
+                        <Clock className="h-3 w-3" />
+                        <span>{daysRemaining(stake.endsAt)} days remaining</span>
+                      </div>
+                    </div>
+                  ))}
+                  <Link href="/staking">
+                    <Button variant="outline" size="sm" className="w-full border-white/10 text-slate-400 hover:text-white mt-1">
+                      Manage Staking <ChevronRight className="h-3 w-3 ml-1" />
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            )}
 
-          <TabsContent value="referrals" className="space-y-4 mt-4">
-            <Card className="border-slate-700 bg-slate-800/50">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-white">
-                  <Users className="h-5 w-5 text-blue-400" />
-                  Your Referral Code
+            {activeStakes.length === 0 && (
+              <Card className="border-white/5 bg-white/[0.03]">
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="font-semibold text-white text-sm">Token Staking</p>
+                    <p className="text-slate-500 text-xs">Earn APR on your JCMOVES tokens</p>
+                  </div>
+                  <Link href="/staking">
+                    <Button size="sm" variant="outline" className="border-white/10 text-slate-300 hover:text-white">
+                      Stake <ChevronRight className="h-3 w-3 ml-1" />
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Referral Code */}
+            <Card className="border-blue-500/20 bg-blue-950/20">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-white flex items-center gap-2 text-base">
+                  <Users className="h-4 w-4 text-blue-400" /> Referral Program
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-3">
                 <div className="flex items-center gap-2">
-                  <div className="flex-1 p-3 bg-slate-900/50 rounded-lg border border-slate-700 font-mono text-lg text-center text-white">
-                    {referralCode?.referralCode || 'Loading...'}
+                  <div className="flex-1 p-3 bg-slate-900/50 rounded-lg border border-white/5 font-mono text-base text-center text-white tracking-widest">
+                    {referralCode?.referralCode || "Loading..."}
                   </div>
-                  <Button onClick={copyReferralCode} variant="outline" className="border-slate-600" data-testid="button-copy-referral">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-white/10"
+                    onClick={() => {
+                      if (referralCode?.referralCode) {
+                        navigator.clipboard.writeText(referralCode.referralCode);
+                        toast({ title: "Copied!", description: "Referral code copied to clipboard" });
+                      }
+                    }}
+                  >
                     <Copy className="h-4 w-4" />
                   </Button>
                 </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-slate-900/50 rounded-lg border border-slate-700 text-center">
-                    <p className="text-2xl font-bold text-blue-400">{referralStats?.referralCount || 0}</p>
-                    <p className="text-sm text-slate-400">Referrals</p>
+                <div className="grid grid-cols-2 gap-2 text-center">
+                  <div className="p-2 bg-slate-900/50 rounded-lg border border-white/5">
+                    <p className="text-blue-400 font-bold">{referralStats?.referralCount || 0}</p>
+                    <p className="text-xs text-slate-500">Referrals</p>
                   </div>
-                  <div className="p-4 bg-slate-900/50 rounded-lg border border-slate-700 text-center">
-                    <p className="text-2xl font-bold text-green-400">{referralStats?.totalEarned?.toFixed(0) || 0}</p>
-                    <p className="text-sm text-slate-400">Tokens Earned</p>
+                  <div className="p-2 bg-slate-900/50 rounded-lg border border-white/5">
+                    <p className="text-green-400 font-bold">{formatTokens(referralStats?.totalEarned || 0)}</p>
+                    <p className="text-xs text-slate-500">Earned</p>
                   </div>
                 </div>
-
-                <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-                  <p className="text-sm text-blue-200">
-                    Share your code with friends! You earn <span className="font-bold">50 JCMOVES</span> when they sign up, 
-                    and <span className="font-bold">2,500 JCMOVES</span> when their first job completes!
-                  </p>
+                <div className="space-y-1 text-xs text-slate-500">
+                  <div className="flex justify-between"><span>Friend signs up</span><span className="text-green-400">+50 JCMOVES</span></div>
+                  <div className="flex justify-between"><span>Friend completes a job</span><span className="text-green-400">+2,500 JCMOVES</span></div>
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
 
-          <TabsContent value="history" className="space-y-4 mt-4">
-            <Card className="border-slate-700 bg-slate-800/50">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-white">
-                  <TrendingUp className="h-5 w-5 text-green-400" />
-                  Reward History
+            {/* Token History */}
+            <Card className="border-white/5 bg-white/[0.03]">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-white flex items-center gap-2 text-base">
+                  <TrendingUp className="h-4 w-4 text-green-400" /> Earn History
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {rewardsHistory && rewardsHistory.length > 0 ? (
-                  <div className="space-y-2 max-h-96 overflow-y-auto">
-                    {rewardsHistory.slice(0, 20).map((reward) => (
-                      <div key={reward.id} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg border border-slate-700">
+                {!rewardsHistory?.length ? (
+                  <p className="text-slate-500 text-sm text-center py-4">No history yet — start mining or book a job!</p>
+                ) : (
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {rewardsHistory.slice(0, 20).map((r) => (
+                      <div key={r.id} className="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
                         <div>
-                          <p className="font-medium text-white text-sm">{getRewardTypeLabel(reward.rewardType)}</p>
-                          <p className="text-xs text-slate-400">
-                            {new Date(reward.earnedDate).toLocaleDateString()}
-                          </p>
+                          <p className="text-white text-sm">{REWARD_LABELS[r.rewardType] || r.rewardType}</p>
+                          <p className="text-slate-500 text-xs">{new Date(r.earnedDate).toLocaleDateString()}</p>
                         </div>
-                        <div className="text-right">
-                          <p className="font-bold text-green-400">+{parseFloat(reward.tokenAmount).toFixed(2)}</p>
-                          <Badge variant="outline" className="text-xs border-slate-600 text-slate-300">
-                            {reward.status}
-                          </Badge>
-                        </div>
+                        <Badge
+                          variant="outline"
+                          className={`text-xs ${r.status === "paid" || r.status === "completed"
+                            ? "border-green-500 text-green-400"
+                            : "border-slate-600 text-slate-400"}`}
+                        >
+                          +{parseFloat(r.tokenAmount).toFixed(2)}
+                        </Badge>
                       </div>
                     ))}
                   </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <Clock className="h-12 w-12 text-slate-500 mx-auto mb-4" />
-                    <p className="text-slate-400">No rewards yet</p>
-                    <p className="text-sm text-slate-500">Start mining to earn tokens!</p>
-                  </div>
                 )}
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="shop" className="space-y-4 mt-4">
-            <Card className="border-slate-700 bg-slate-800/50">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-white">
-                  <ShoppingBag className="h-5 w-5 text-purple-400" />
-                  Shop Marketplace
-                </CardTitle>
-                <CardDescription className="text-slate-400">Browse items available for purchase</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {activeShopItems.length === 0 ? (
-                  <div className="text-center py-12">
-                    <Package className="h-12 w-12 text-slate-500 mx-auto mb-4" />
-                    <p className="text-slate-400 mb-4">No items available at the moment</p>
-                    <p className="text-sm text-slate-500">Check back soon for new listings!</p>
+          {/* ══ MARKETPLACE TAB ══ */}
+          <TabsContent value="marketplace" className="space-y-4">
+            <div className="text-center py-4">
+              <div className="text-5xl mb-3">🎁</div>
+              <h2 className="text-2xl font-black text-white mb-2">Rewards Marketplace</h2>
+              <p className="text-slate-400 mb-2">You have <span className="text-orange-400 font-bold">{formatTokens(tokenBalance)} JCMOVES</span> to spend</p>
+              <p className="text-slate-500 text-sm mb-6">Redeem tokens for free labor, gift cards, service discounts, and more</p>
+              <Link href="/marketplace">
+                <Button className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 font-bold px-8 py-5 text-base">
+                  Browse Marketplace <ChevronRight className="ml-2 h-5 w-5" />
+                </Button>
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: "Free Labor", sub: "30 min – 1 hr of service", icon: "🔧", tokens: "500+" },
+                { label: "Gift Cards", sub: "Coffee, gas, grocery", icon: "🎁", tokens: "250+" },
+                { label: "Moving Discount", sub: "25% off your next move", icon: "🚛", tokens: "1,500+" },
+                { label: "Spin Wheel", sub: "Win tokens & prizes", icon: "🎡", tokens: "100" },
+              ].map((item) => (
+                <Card key={item.label} className="border-white/5 bg-white/[0.03]">
+                  <CardContent className="p-4 text-center">
+                    <div className="text-3xl mb-2">{item.icon}</div>
+                    <p className="font-bold text-white text-sm">{item.label}</p>
+                    <p className="text-slate-500 text-xs mb-2">{item.sub}</p>
+                    <Badge className="bg-orange-900/30 text-orange-300 border-orange-500/30 text-xs">{item.tokens} tokens</Badge>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            <Link href="/marketplace">
+              <Button variant="outline" className="w-full border-white/10 text-slate-300 hover:text-white">
+                See All Rewards <ArrowUpRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          </TabsContent>
+
+          {/* ══ PROFILE TAB ══ */}
+          <TabsContent value="profile" className="space-y-4">
+            <Card className="border-white/5 bg-white/[0.03]">
+              <CardContent className="p-5">
+                <div className="flex items-center gap-4 mb-5">
+                  <Avatar className="h-14 w-14 border-2 border-white/10">
+                    <AvatarImage src={user?.profileImageUrl || undefined} />
+                    <AvatarFallback className="bg-slate-700 text-white text-lg font-bold">
+                      {user?.firstName?.[0]}{user?.lastName?.[0]}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-bold text-white">{user?.firstName} {user?.lastName}</p>
+                    <p className="text-slate-400 text-sm">{user?.email}</p>
+                    <Badge className={`mt-1 bg-gradient-to-r ${tierGradient} text-white border-0 text-xs`}>
+                      {tier.label || userTierKey} Member
+                    </Badge>
                   </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {activeShopItems.slice(0, 4).map((item) => (
-                      <Link href={`/shop/${item.id}`} key={item.id}>
-                        <Card className="hover:shadow-lg transition-shadow cursor-pointer bg-slate-900/50 border-slate-700">
-                          {item.photos.length > 0 && (
-                            <div className="aspect-video overflow-hidden rounded-t-lg">
-                              <img
-                                src={item.photos[0]}
-                                alt={item.title}
-                                className="w-full h-full object-cover hover:scale-105 transition-transform"
-                              />
-                            </div>
-                          )}
-                          <CardContent className="p-4">
-                            <h4 className="font-semibold mb-1 line-clamp-1 text-white">{item.title}</h4>
-                            <p className="text-lg text-primary font-bold">${item.price}</p>
-                          </CardContent>
-                        </Card>
-                      </Link>
-                    ))}
+                </div>
+
+                <div className="space-y-3 text-sm">
+                  {user?.phone && (
+                    <div className="flex items-center gap-2 text-slate-400">
+                      <Phone className="h-4 w-4" />
+                      <span>{user.phone}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 text-slate-400">
+                    <Mail className="h-4 w-4" />
+                    <span>{user?.email}</span>
                   </div>
-                )}
-                {activeShopItems.length > 4 && (
-                  <div className="mt-4 text-center">
-                    <Link href="/shop">
-                      <Button variant="outline" className="border-slate-600" data-testid="button-view-all-shop">
-                        View All Items <ArrowUpRight className="h-4 w-4 ml-1" />
-                      </Button>
-                    </Link>
-                  </div>
-                )}
+                </div>
               </CardContent>
             </Card>
+
+            {/* Loyalty Tier Info */}
+            <Card className="border-white/5 bg-white/[0.03]">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-white text-base flex items-center gap-2">
+                  <Star className="h-4 w-4 text-amber-400" /> Loyalty Status
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400 text-sm">Current Tier</span>
+                  <Badge className={`bg-gradient-to-r ${tierGradient} text-white border-0`}>
+                    {tier.label || userTierKey}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400 text-sm">Earn Rate</span>
+                  <span className="text-green-400 font-semibold text-sm">{tier.tokensPerDollar || 50} tokens / $1 spent</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400 text-sm">Lifetime Spend</span>
+                  <span className="text-white font-semibold text-sm">${parseFloat(user?.totalCompletedSpend || "0").toFixed(2)}</span>
+                </div>
+                <Separator className="bg-white/5" />
+                <div className="space-y-1.5 text-xs text-slate-500">
+                  <div className="flex justify-between"><span>Bronze</span><span>$0 spend</span></div>
+                  <div className="flex justify-between"><span>Silver</span><span>$1,000 spend</span></div>
+                  <div className="flex justify-between"><span>Gold</span><span>$2,500 spend</span></div>
+                  <div className="flex justify-between"><span>VIP</span><span>$5,000 spend</span></div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Quick Links */}
+            <div className="space-y-2">
+              {[
+                { href: "/profile", label: "Edit Profile & Wallet Settings", icon: User },
+                { href: "/staking", label: "Manage Token Staking", icon: Lock },
+                { href: "/marketplace", label: "Browse Rewards Marketplace", icon: Gift },
+                { href: "/leave-review", label: "Leave a Review", icon: Star },
+              ].map(({ href, label, icon: Icon }) => (
+                <Link key={href} href={href}>
+                  <div className="flex items-center justify-between p-3 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] transition-colors cursor-pointer">
+                    <div className="flex items-center gap-3">
+                      <Icon className="h-4 w-4 text-slate-400" />
+                      <span className="text-slate-300 text-sm">{label}</span>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-slate-600" />
+                  </div>
+                </Link>
+              ))}
+            </div>
+
+            <Button
+              variant="outline"
+              className="w-full border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+              onClick={async () => {
+                await apiRequest("POST", "/api/auth/logout", {});
+                window.location.href = "/";
+              }}
+            >
+              Sign Out
+            </Button>
           </TabsContent>
         </Tabs>
-
-        <div className="mt-8 text-center">
-          <Link href="/customer">
-            <Button size="lg" className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600" data-testid="button-get-quote">
-              <Package className="h-5 w-5 mr-2" />
-              Request a New Quote
-            </Button>
-          </Link>
-        </div>
       </div>
+
+      {/* ── Quote Dialog ── */}
+      <Dialog open={quoteOpen} onOpenChange={setQuoteOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto bg-slate-950 border border-slate-700">
+          <DialogHeader>
+            <DialogTitle className="text-white">Request a Quote</DialogTitle>
+          </DialogHeader>
+          <QuoteForm variant="customer" onSuccess={() => { setQuoteOpen(false); queryClient.invalidateQueries({ queryKey: ["/api/leads/my-requests"] }); }} showRewardsInfo />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
