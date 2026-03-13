@@ -116,7 +116,7 @@ export default function PaymentSuccessPage() {
 
           <div className="space-y-3 pt-2">
             {shopItemIds.length > 0 ? (
-              <Link href="/shop">
+              <Link href="/marketplace">
                 <Button className="w-full bg-blue-600 hover:bg-blue-700 py-5">
                   <ShoppingBag className="h-5 w-5 mr-2" />
                   Back to Shop

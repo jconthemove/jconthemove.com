@@ -605,9 +605,9 @@ export default function EmployeeHomePage() {
                   </Link>
                 ))
               )}
-              <Link href="/shop">
+              <Link href="/marketplace">
                 <Button variant="outline" className="w-full border-slate-600 text-slate-300 hover:bg-blue-500/20 hover:border-blue-500/50 hover:text-blue-300" data-testid="button-view-all-shop">
-                  View All Items
+                  View Rewards
                 </Button>
               </Link>
             </CardContent>
@@ -710,12 +710,6 @@ export default function EmployeeHomePage() {
           <Link href="/staking">
             <Button className="w-full h-20 text-lg bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-400 hover:to-amber-500 shadow-lg shadow-yellow-900/30 border-0 text-white font-bold" data-testid="button-staking">
               Staking Treasury
-            </Button>
-          </Link>
-          <Link href="/shop/create">
-            <Button className="w-full h-20 text-lg bg-gradient-to-r from-gray-700 to-gray-800 hover:from-gray-600 hover:to-gray-700 border border-gray-600 text-gray-100 shadow-lg font-bold" data-testid="button-post-item">
-              <Plus className="h-6 w-6 mr-2" />
-              Post Shop Item
             </Button>
           </Link>
         </div>

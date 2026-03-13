@@ -37,9 +37,7 @@ import AdminSystemCheckPage from "@/pages/admin-system-check";
 import NotFound from "@/pages/not-found";
 import MobileLeadManager from "@/components/mobile-lead-manager";
 import CustomerMobileInterface from "@/components/customer-mobile-interface";
-import { ShopCatalogPage } from "@/pages/shop-catalog";
-import { CreateShopItemPage } from "@/pages/create-shop-item";
-import { ShopItemDetailPage } from "@/pages/shop-item-detail";
+
 import JobDetailPage from "@/pages/job-detail";
 import TermsOfService from "@/pages/terms";
 import PendingQuotesPage from "@/pages/pending-quotes";
@@ -395,19 +393,6 @@ function AuthenticatedApp() {
             <RouteGuard allowedRoles={['admin', 'employee']}>
               <MobileLeadManager />
             </RouteGuard>
-          </Route>
-          
-          {/* Shop routes */}
-          <Route path="/shop">
-            <PageWrapper component={ShopCatalogPage} />
-          </Route>
-          <Route path="/shop/create">
-            <RouteGuard allowedRoles={['admin', 'employee']}>
-              <PageWrapper component={CreateShopItemPage} />
-            </RouteGuard>
-          </Route>
-          <Route path="/shop/:id">
-            <ShopItemDetailPage />
           </Route>
           
           {/* Legacy admin routes - redirect to unified dashboard */}

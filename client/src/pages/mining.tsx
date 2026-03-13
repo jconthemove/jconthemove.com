@@ -405,7 +405,7 @@ export default function MiningPage() {
                 <p className="text-xs text-blue-300 font-medium">→</p>
               </div>
             </Link>
-            <Link href="/shop">
+            <Link href="/marketplace">
               <div className="flex items-center gap-3 p-3 rounded-xl bg-green-900/40 border border-green-700/40 hover:border-green-500/60 transition-colors cursor-pointer">
                 <ShoppingBag className="h-5 w-5 text-green-400 flex-shrink-0" />
                 <div className="flex-1">

@@ -125,15 +125,6 @@ export default function Header() {
                     {moreMenuOpen && (
                       <div className="absolute right-0 mt-1 w-48 bg-background border border-border rounded-lg shadow-lg py-1 z-50">
                         <Link
-                          href="/shop"
-                          className="flex items-center gap-2 px-4 py-2.5 text-sm text-muted-foreground hover:text-primary hover:bg-muted transition-colors"
-                          data-testid="button-shop"
-                          onClick={() => setMoreMenuOpen(false)}
-                        >
-                          <ShoppingBag className="h-4 w-4" />
-                          Shop
-                        </Link>
-                        <Link
                           href="/nature-made-jewls"
                           className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted"
                           data-testid="button-jewls"
@@ -331,15 +322,6 @@ export default function Header() {
                   <div className="border-t border-border my-1" />
                   <span className="px-3 py-1 text-xs text-muted-foreground/60 uppercase tracking-wider">Marketplace</span>
 
-                  <Link
-                    href="/shop"
-                    className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-muted-foreground hover:text-primary hover:bg-muted transition-colors"
-                    data-testid="button-mobile-shop"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <ShoppingBag className="h-4 w-4" />
-                    Shop
-                  </Link>
                   <Link
                     href="/nature-made-jewls"
                     className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-bold transition-colors hover:bg-muted"
