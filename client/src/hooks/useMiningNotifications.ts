@@ -99,7 +99,8 @@ export function useMiningNotifications() {
         continue;
       }
 
-      if (reward.rewardType === "mining_claim") {
+      // Skip types that fire their own notification at claim-time
+      if (reward.rewardType === "mining_claim" || reward.rewardType === "scripture_claim") {
         lastNotifiedRewards.current.add(rewardKey);
         continue;
       }

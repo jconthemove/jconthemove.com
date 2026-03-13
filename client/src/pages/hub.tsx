@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { notificationService } from "@/lib/notifications";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -123,6 +124,32 @@ export default function TeamHub() {
   const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
   const [visibleCount, setVisibleCount] = useState(10);
   const [quoteIdx, setQuoteIdx] = useState(getDayOfYear() % ALL_QUOTES.length);
+  const [scriptureClaimed, setScriptureClaimed] = useState(false);
+  const [scriptureReward, setScriptureReward] = useState<{ amount: number; streak: number } | null>(null);
+
+  const scriptureClaimMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/mining/scripture-claim", {});
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setScriptureClaimed(true);
+      setScriptureReward({ amount: data.amount, streak: data.streak });
+      queryClient.invalidateQueries({ queryKey: ["/api/rewards/wallet"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/rewards/history"] });
+      toast({ title: `🎉 +${data.amount} JCMOVES claimed!`, description: data.streakBonus ? `🔥 Day ${data.streak} streak — bonus included!` : `Day ${data.streak} streak. Keep it going!` });
+      notificationService.notifyNewReward("scripture claim", data.amount);
+    },
+    onError: (e: any) => {
+      const msg = e?.message || "";
+      if (msg.includes("Already claimed")) {
+        setScriptureClaimed(true);
+        toast({ title: "Already claimed today", description: "Come back tomorrow for your next scripture reward!" });
+      } else {
+        toast({ title: "Couldn't claim", description: msg || "Try again in a moment.", variant: "destructive" });
+      }
+    },
+  });
 
   // Greeting
   const hour = new Date().getHours();
@@ -300,7 +327,13 @@ export default function TeamHub() {
               "{ALL_QUOTES[quoteIdx].text}"
             </blockquote>
             <p className="text-indigo-400 text-sm font-semibold">— {ALL_QUOTES[quoteIdx].ref}</p>
-            <div className="flex gap-2 mt-4">
+            {scriptureReward && (
+              <div className="mt-3 bg-indigo-500/10 border border-indigo-500/20 rounded-lg px-3 py-2 flex items-center gap-2">
+                <span className="text-indigo-300 text-sm font-bold">+{scriptureReward.amount} JCMOVES</span>
+                <span className="text-indigo-400 text-xs">· Day {scriptureReward.streak} streak 🔥</span>
+              </div>
+            )}
+            <div className="flex gap-2 mt-4 flex-wrap">
               <Button
                 size="sm"
                 variant="outline"
@@ -322,6 +355,22 @@ export default function TeamHub() {
                 className="border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/10 h-8 text-xs"
               >
                 🙏 Share
+              </Button>
+              <Button
+                size="sm"
+                disabled={scriptureClaimed || scriptureClaimMutation.isPending}
+                onClick={() => scriptureClaimMutation.mutate()}
+                className={`h-8 text-xs font-bold border-0 ${
+                  scriptureClaimed
+                    ? "bg-green-600/20 text-green-400 cursor-default"
+                    : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/25"
+                }`}
+              >
+                {scriptureClaimMutation.isPending
+                  ? "Claiming..."
+                  : scriptureClaimed
+                  ? "✅ Claimed!"
+                  : "🪙 Claim Reward"}
               </Button>
             </div>
           </div>
