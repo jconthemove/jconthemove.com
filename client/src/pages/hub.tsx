@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,8 +12,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   FileText, Users, Plus, MapPin, Phone, Mail, Calendar,
-  Loader2, Search, ChevronRight, Trash2,
-  Briefcase, MessageSquare
+  Loader2, Search, ChevronRight, Trash2, MessageSquare,
+  Sun, Cloud, CloudSnow, CloudRain, Zap, Trophy, BookOpen,
+  RefreshCw, Coins, Star, Megaphone, Clock, Truck,
+  Camera, ClipboardList, DollarSign, Wind,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -23,7 +25,77 @@ import { getStatusColors } from "@/lib/job-status";
 import QuoteForm from "@/components/QuoteForm";
 import type { Lead, User } from "@shared/schema";
 
+// ─────────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────────
+
 const STATUS_OPTIONS = ["all", "new", "quoted", "confirmed", "in_progress", "completed", "cancelled"];
+
+const SCRIPTURES = [
+  { text: "Commit your work to the Lord, and your plans will be established.", ref: "Proverbs 16:3" },
+  { text: "Whatever you do, work heartily, as for the Lord and not for men.", ref: "Colossians 3:23" },
+  { text: "For I know the plans I have for you, declares the Lord, plans to prosper you.", ref: "Jeremiah 29:11" },
+  { text: "The Lord your God is with you, the Mighty Warrior who saves.", ref: "Zephaniah 3:17" },
+  { text: "I can do all things through Christ who strengthens me.", ref: "Philippians 4:13" },
+  { text: "Be strong and courageous. Do not be afraid; do not be discouraged.", ref: "Joshua 1:9" },
+  { text: "Trust in the Lord with all your heart and lean not on your own understanding.", ref: "Proverbs 3:5" },
+  { text: "The Lord is my shepherd; I shall not want.", ref: "Psalm 23:1" },
+  { text: "Ask and it will be given to you; seek and you will find.", ref: "Matthew 7:7" },
+  { text: "In all your ways submit to him, and he will make your paths straight.", ref: "Proverbs 3:6" },
+  { text: "Cast all your anxiety on him because he cares for you.", ref: "1 Peter 5:7" },
+  { text: "Give thanks in all circumstances; for this is God's will for you.", ref: "1 Thessalonians 5:18" },
+  { text: "The fruit of that righteousness will be peace; its effect will be quietness and confidence forever.", ref: "Isaiah 32:17" },
+  { text: "Do not be anxious about anything, but in every situation, by prayer, present your requests to God.", ref: "Philippians 4:6" },
+  { text: "And we know that in all things God works for the good of those who love him.", ref: "Romans 8:28" },
+  { text: "Let your light shine before others, that they may see your good deeds.", ref: "Matthew 5:16" },
+  { text: "Be kind and compassionate to one another, forgiving each other.", ref: "Ephesians 4:32" },
+  { text: "Blessed is the one who perseveres under trial.", ref: "James 1:12" },
+  { text: "With God all things are possible.", ref: "Matthew 19:26" },
+  { text: "The Lord bless you and keep you; the Lord make his face shine on you.", ref: "Numbers 6:24-25" },
+  { text: "Serve one another humbly in love.", ref: "Galatians 5:13" },
+  { text: "Love is patient, love is kind. It does not envy, it does not boast.", ref: "1 Corinthians 13:4" },
+  { text: "God is our refuge and strength, an ever-present help in trouble.", ref: "Psalm 46:1" },
+  { text: "The Lord will fight for you; you need only to be still.", ref: "Exodus 14:14" },
+  { text: "A generous person will prosper; whoever refreshes others will be refreshed.", ref: "Proverbs 11:25" },
+  { text: "Work with enthusiasm, as though you were working for the Lord rather than for people.", ref: "Ephesians 6:7" },
+  { text: "Let us not become weary in doing good, for at the proper time we will reap a harvest.", ref: "Galatians 6:9" },
+  { text: "Honor the Lord with your wealth, with the firstfruits of all your crops.", ref: "Proverbs 3:9" },
+  { text: "Whoever wants to become great among you must be your servant.", ref: "Matthew 20:26" },
+  { text: "And my God will meet all your needs according to the riches of his glory in Christ Jesus.", ref: "Philippians 4:19" },
+];
+
+const MOVER_QUOTES = [
+  { text: "Lift with your legs, not your ego.", ref: "Mover Wisdom" },
+  { text: "Every heavy load moved is a family's fresh start.", ref: "Crew Philosophy" },
+  { text: "The strongest crews aren't just muscles — they're heart.", ref: "JC ON THE MOVE" },
+  { text: "Show up early. Work hard. Go home proud.", ref: "Crew Code" },
+  { text: "One box at a time. That's how mountains move.", ref: "Mover Wisdom" },
+];
+
+const ALL_QUOTES = [...SCRIPTURES, ...MOVER_QUOTES];
+
+const ANNOUNCEMENTS = [
+  { id: 1, icon: "📢", text: "Always take before/after photos on every job for quality control.", date: "Team Policy" },
+  { id: 2, icon: "🚛", text: "Return all equipment to the truck at end of shift. Stair climber goes back in truck #2.", date: "Reminder" },
+  { id: 3, icon: "⭐", text: "5-star customer reviews earn bonus JCMOVES tokens. Ask every customer!", date: "Tip" },
+  { id: 4, icon: "❄️", text: "Snow removal season: check the weather widget daily for Ironwood & Iron River alerts.", date: "Seasonal" },
+];
+
+function getWeatherInfo(code: number): { label: string; Icon: any; color: string; isSnow: boolean } {
+  if (code === 0) return { label: "Clear Sky", Icon: Sun, color: "text-yellow-400", isSnow: false };
+  if (code <= 2) return { label: "Partly Cloudy", Icon: Cloud, color: "text-slate-300", isSnow: false };
+  if (code <= 45) return { label: "Foggy", Icon: Cloud, color: "text-slate-400", isSnow: false };
+  if (code <= 67) return { label: "Rainy", Icon: CloudRain, color: "text-blue-400", isSnow: false };
+  if (code <= 77) return { label: "Snowing", Icon: CloudSnow, color: "text-cyan-300", isSnow: true };
+  if (code <= 82) return { label: "Rain Showers", Icon: CloudRain, color: "text-blue-400", isSnow: false };
+  if (code <= 86) return { label: "Snow Showers", Icon: CloudSnow, color: "text-cyan-300", isSnow: true };
+  return { label: "Thunderstorm", Icon: Zap, color: "text-purple-400", isSnow: false };
+}
+
+function getDayOfYear(): number {
+  const now = new Date();
+  return Math.floor((now.getTime() - new Date(now.getFullYear(), 0, 0).getTime()) / 86400000);
+}
 
 function LeadStatusBadge({ status }: { status: string }) {
   const colors = getStatusColors(status);
@@ -34,25 +106,40 @@ function LeadStatusBadge({ status }: { status: string }) {
   );
 }
 
+// ─────────────────────────────────────────────────
+// MAIN COMPONENT
+// ─────────────────────────────────────────────────
+
 export default function TeamHub() {
   const { user: currentUser } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isAdmin = ["admin", "business_owner"].includes(currentUser?.role || "");
 
+  // Tab & filter state
   const [activeTab, setActiveTab] = useState("leads");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
   const [visibleCount, setVisibleCount] = useState(10);
+  const [quoteIdx, setQuoteIdx] = useState(getDayOfYear() % ALL_QUOTES.length);
 
+  // Greeting
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
+  const firstName = currentUser?.firstName || currentUser?.username || "Crew";
+
+  // Today string for schedule
+  const todayStr = new Date().toISOString().split("T")[0];
+
+  // ── Queries ──────────────────────────────────────
   const { data: leads = [], isLoading: leadsLoading } = useQuery<Lead[]>({
     queryKey: ["/api/leads"],
     staleTime: 0,
     refetchOnMount: true,
   });
 
-  const { data: employees = [], isLoading: employeesLoading } = useQuery<User[]>({
+  const { data: employees = [] } = useQuery<User[]>({
     queryKey: ["/api/employees"],
   });
 
@@ -65,6 +152,60 @@ export default function TeamHub() {
     enabled: isAdmin,
   });
 
+  const { data: wallet } = useQuery<{ balance: string; username: string }>({
+    queryKey: ["/api/rewards/wallet"],
+  });
+
+  const { data: weather } = useQuery({
+    queryKey: ["weather-ironwood"],
+    queryFn: async () => {
+      const res = await fetch(
+        "https://api.open-meteo.com/v1/forecast?latitude=46.4547&longitude=-90.1712&current=temperature_2m,weather_code,wind_speed_10m,precipitation&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch"
+      );
+      if (!res.ok) return null;
+      return res.json();
+    },
+    staleTime: 1000 * 60 * 30,
+    retry: false,
+  });
+
+  // ── Computed ─────────────────────────────────────
+  const activeLeads = leads.filter(l => ["new", "quoted", "confirmed", "in_progress"].includes(l.status));
+  const completedLeads = leads.filter(l => l.status === "completed");
+  const todayLeads = useMemo(() =>
+    leads
+      .filter(l => l.moveDate && l.moveDate.startsWith(todayStr))
+      .sort((a, b) => (a.moveDate || "").localeCompare(b.moveDate || "")),
+    [leads, todayStr]
+  );
+
+  const leaderboard = useMemo(() => {
+    const counts: Record<string, number> = {};
+    completedLeads.forEach(l => {
+      const key = l.createdByUserId || "";
+      if (key) counts[key] = (counts[key] || 0) + 1;
+    });
+    return employees
+      .filter(e => counts[e.id])
+      .map(e => ({ ...e, count: counts[e.id] }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+  }, [completedLeads, employees]);
+
+  const filteredLeads = useMemo(() => {
+    return leads.filter(l => {
+      const matchesStatus = statusFilter === "all" || l.status === statusFilter;
+      const q = search.toLowerCase();
+      const matchesSearch = !q ||
+        `${l.firstName} ${l.lastName}`.toLowerCase().includes(q) ||
+        (l.email?.toLowerCase().includes(q)) ||
+        (l.phone?.includes(q)) ||
+        (l.serviceType?.toLowerCase().includes(q));
+      return matchesStatus && matchesSearch;
+    });
+  }, [leads, statusFilter, search]);
+
+  // ── Mutations ─────────────────────────────────────
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
       const response = await apiRequest("PATCH", `/api/leads/${id}/status`, { status });
@@ -99,370 +240,597 @@ export default function TeamHub() {
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  const filteredLeads = useMemo(() => {
-    return leads.filter((l) => {
-      const matchesStatus = statusFilter === "all" || l.status === statusFilter;
-      const q = search.toLowerCase();
-      const matchesSearch = !q ||
-        `${l.firstName} ${l.lastName}`.toLowerCase().includes(q) ||
-        (l.email?.toLowerCase().includes(q)) ||
-        (l.phone?.includes(q)) ||
-        (l.serviceType?.toLowerCase().includes(q));
-      return matchesStatus && matchesSearch;
-    });
-  }, [leads, statusFilter, search]);
+  // ── Weather data ──────────────────────────────────
+  const wx = weather?.current;
+  const wxInfo = wx ? getWeatherInfo(wx.weather_code) : null;
+  const WxIcon = wxInfo?.Icon ?? Cloud;
 
-  const activeLeads = leads.filter(l => ["new", "quoted", "confirmed", "in_progress"].includes(l.status));
-  const completedToday = leads.filter(l => {
-    if (l.status !== "completed") return false;
-    const d = new Date(l.createdAt);
-    const today = new Date();
-    return d.toDateString() === today.toDateString();
-  });
+  // ── Token balance ─────────────────────────────────
+  const tokenBalance = wallet?.balance ? parseFloat(wallet.balance).toLocaleString(undefined, { maximumFractionDigits: 0 }) : "—";
 
+  // ── Medals ────────────────────────────────────────
+  const medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
+
+  // ─────────────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white pb-8">
-      <div className="max-w-5xl mx-auto px-4 pt-8">
+    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white pb-20">
+      <div className="max-w-5xl mx-auto px-4 pt-6 space-y-5">
 
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-black text-white">Team Hub</h1>
-            <p className="text-slate-400 text-sm">Welcome back, {currentUser?.firstName}</p>
-          </div>
-          <Badge className="bg-blue-600/20 text-blue-300 border-blue-500/30">
-            {currentUser?.role?.replace(/_/g, " ").toUpperCase()}
-          </Badge>
-        </div>
-
-        {/* Quick Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-          {[
-            { label: "Active Leads", value: activeLeads.length, color: "text-blue-400" },
-            { label: "Total Leads", value: adminStats?.totalLeads ?? leads.length, color: "text-white" },
-            { label: "Team Members", value: employees.length, color: "text-green-400" },
-            { label: "Pending Quotes", value: quotedLeads.length, color: "text-amber-400" },
-          ].map(s => (
-            <Card key={s.label} className="border-white/5 bg-white/[0.03]">
-              <CardContent className="p-3 text-center">
-                <p className={`text-xl font-black ${s.color}`}>{s.value}</p>
-                <p className="text-slate-500 text-xs">{s.label}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-4 bg-slate-800/50 border border-slate-700/50 mb-6">
-            <TabsTrigger value="leads" className="data-[state=active]:bg-blue-600/20 data-[state=active]:text-blue-300 text-xs sm:text-sm">
-              <FileText className="h-4 w-4 sm:mr-1.5" /><span className="hidden sm:inline">Leads</span>
-            </TabsTrigger>
-            <TabsTrigger value="add" className="data-[state=active]:bg-green-600/20 data-[state=active]:text-green-300 text-xs sm:text-sm">
-              <Plus className="h-4 w-4 sm:mr-1.5" /><span className="hidden sm:inline">Add Lead</span>
-            </TabsTrigger>
-            <TabsTrigger value="team" className="data-[state=active]:bg-purple-600/20 data-[state=active]:text-purple-300 text-xs sm:text-sm">
-              <Users className="h-4 w-4 sm:mr-1.5" /><span className="hidden sm:inline">Team</span>
-            </TabsTrigger>
-            <TabsTrigger value="quotes" className="data-[state=active]:bg-amber-600/20 data-[state=active]:text-amber-300 text-xs sm:text-sm">
-              <MessageSquare className="h-4 w-4 sm:mr-1.5" />
-              <span className="hidden sm:inline">Quotes</span>
-              {quotedLeads.length > 0 && (
-                <span className="ml-1 bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">{quotedLeads.length}</span>
-              )}
-            </TabsTrigger>
-          </TabsList>
-
-          {/* ══ LEADS TAB ══ */}
-          <TabsContent value="leads" className="space-y-4">
-            {/* Filters */}
-            <div className="flex gap-2 flex-wrap">
-              <div className="relative flex-1 min-w-48">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-                <Input
-                  placeholder="Search by name, email, phone..."
-                  value={search}
-                  onChange={e => { setSearch(e.target.value); setVisibleCount(10); }}
-                  className="pl-9 bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500"
-                />
+        {/* ══ HERO BANNER ══ */}
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-900/60 via-slate-800/80 to-slate-900 border border-blue-500/20 p-5">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(59,130,246,0.15),transparent_70%)]" />
+          <div className="relative">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <p className="text-blue-300 text-sm font-medium mb-0.5">{greeting} 👋</p>
+                <h1 className="text-3xl font-black text-white">{firstName}</h1>
+                <p className="text-slate-400 text-sm mt-1">🚛 Ready to move mountains today?</p>
               </div>
-              <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setVisibleCount(10); }}>
-                <SelectTrigger className="w-36 bg-slate-800/50 border-slate-700 text-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-700">
-                  {STATUS_OPTIONS.map(s => (
-                    <SelectItem key={s} value={s} className="text-white capitalize">
-                      {s === "all" ? "All Status" : s.replace(/_/g, " ")}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Badge className="bg-blue-600/20 text-blue-300 border-blue-500/30 text-xs">
+                {currentUser?.role?.replace(/_/g, " ").toUpperCase()}
+              </Badge>
             </div>
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: "Active Jobs", value: activeLeads.length, color: "text-blue-400", icon: "🔥" },
+                { label: "Total Leads", value: adminStats?.totalLeads ?? leads.length, color: "text-white", icon: "📋" },
+                { label: "Completed", value: completedLeads.length, color: "text-green-400", icon: "✅" },
+              ].map(s => (
+                <div key={s.label} className="bg-white/[0.04] rounded-xl p-3 text-center border border-white/5">
+                  <div className="text-lg">{s.icon}</div>
+                  <p className={`text-xl font-black ${s.color}`}>{s.value}</p>
+                  <p className="text-slate-500 text-[11px]">{s.label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
 
-            {leadsLoading ? (
-              <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-blue-400" /></div>
-            ) : filteredLeads.length === 0 ? (
-              <Card className="border-white/5 bg-white/[0.03]">
-                <CardContent className="py-12 text-center">
-                  <FileText className="h-10 w-10 mx-auto text-slate-600 mb-3" />
-                  <p className="text-slate-400">No leads found</p>
-                  <Button className="mt-4 bg-blue-600 hover:bg-blue-500" onClick={() => setActiveTab("add")}>
+        {/* ══ DAILY SCRIPTURE ══ */}
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-950/80 via-slate-900 to-slate-950 border border-indigo-500/20 p-5">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full -translate-y-8 translate-x-8" />
+          <div className="relative">
+            <div className="flex items-center gap-2 mb-3">
+              <BookOpen className="h-4 w-4 text-indigo-400" />
+              <span className="text-indigo-300 text-xs font-bold uppercase tracking-wider">Daily Inspiration</span>
+            </div>
+            <blockquote className="text-white text-base font-medium leading-relaxed mb-2 italic">
+              "{ALL_QUOTES[quoteIdx].text}"
+            </blockquote>
+            <p className="text-indigo-400 text-sm font-semibold">— {ALL_QUOTES[quoteIdx].ref}</p>
+            <div className="flex gap-2 mt-4">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setQuoteIdx(i => (i + 1) % ALL_QUOTES.length)}
+                className="border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/10 h-8 text-xs"
+              >
+                <RefreshCw className="h-3 w-3 mr-1.5" /> New Verse
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  navigator.share?.({
+                    text: `"${ALL_QUOTES[quoteIdx].text}" — ${ALL_QUOTES[quoteIdx].ref}`,
+                    title: "JC ON THE MOVE – Daily Inspiration",
+                  }).catch(() => {});
+                  toast({ title: "🙏 Shared with crew!" });
+                }}
+                className="border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/10 h-8 text-xs"
+              >
+                🙏 Share
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* ══ TODAY'S SCHEDULE ══ */}
+        <div className="rounded-2xl bg-slate-800/40 border border-slate-700/40 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-blue-400" />
+              <span className="font-bold text-white">Today's Schedule</span>
+              <Badge className="bg-blue-600/20 text-blue-300 border-blue-500/30 text-xs">{todayLeads.length} job{todayLeads.length !== 1 ? "s" : ""}</Badge>
+            </div>
+            <Link href="/leads">
+              <Button size="sm" variant="ghost" className="text-slate-400 hover:text-white h-7 text-xs">
+                Full Calendar <ChevronRight className="h-3 w-3 ml-1" />
+              </Button>
+            </Link>
+          </div>
+          {todayLeads.length === 0 ? (
+            <div className="text-center py-6 text-slate-500">
+              <Clock className="h-8 w-8 mx-auto mb-2 opacity-40" />
+              <p className="text-sm">No jobs scheduled for today</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {todayLeads.map((lead, i) => {
+                const icons: Record<string, string> = {
+                  residential: "🏠", junk: "🗑️", snow: "❄️", cleaning: "✨",
+                  handyman: "🔧", demolition: "⚒️", flooring: "🪵", painting: "🎨",
+                };
+                return (
+                  <div key={lead.id} className="flex items-center gap-3 bg-white/[0.03] rounded-xl p-3 border border-white/5">
+                    <div className="text-2xl w-8 text-center">{icons[lead.serviceType] ?? "🚛"}</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-sm font-semibold">{lead.firstName} {lead.lastName}</p>
+                      <p className="text-slate-400 text-xs truncate">{lead.fromAddress}</p>
+                    </div>
+                    <LeadStatusBadge status={lead.status} />
+                    <Link href={`/lead/${lead.id}`}>
+                      <Button size="icon" variant="ghost" className="h-7 w-7 text-slate-500 hover:text-white flex-shrink-0">
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </Link>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* ══ QUICK ACTIONS ══ */}
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <Zap className="h-4 w-4 text-amber-400" />
+            <span className="font-bold text-white">Quick Actions</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: "Add Lead", icon: ClipboardList, color: "from-blue-600 to-blue-700", href: null, action: () => setActiveTab("add") },
+              { label: "Job Map", icon: MapPin, color: "from-green-600 to-green-700", href: "/jobs", action: null },
+              { label: "Upload Photo", icon: Camera, color: "from-purple-600 to-purple-700", href: "/jobs", action: null },
+              { label: "Rewards", icon: Coins, color: "from-amber-500 to-orange-600", href: "/marketplace", action: null },
+              { label: "Leads List", icon: FileText, color: "from-slate-600 to-slate-700", href: null, action: () => setActiveTab("leads") },
+              { label: "Team", icon: Users, color: "from-teal-600 to-teal-700", href: null, action: () => setActiveTab("team") },
+              { label: "Quotes", icon: MessageSquare, color: "from-rose-600 to-rose-700", href: null, action: () => setActiveTab("quotes") },
+              { label: "Mining", icon: Star, color: "from-yellow-600 to-amber-600", href: "/mining", action: null },
+            ].map(btn => {
+              const content = (
+                <div
+                  key={btn.label}
+                  onClick={btn.action || undefined}
+                  className={`flex flex-col items-center justify-center gap-2 p-4 rounded-xl bg-gradient-to-br ${btn.color} text-white font-bold text-sm shadow-lg hover:opacity-90 active:scale-95 transition-all cursor-pointer select-none`}
+                >
+                  <btn.icon className="h-6 w-6" />
+                  <span className="text-xs text-center leading-tight">{btn.label}</span>
+                </div>
+              );
+              return btn.href ? <Link key={btn.label} href={btn.href}>{content}</Link> : <div key={btn.label}>{content}</div>;
+            })}
+          </div>
+        </div>
+
+        {/* ══ CREW LEADERBOARD ══ */}
+        <div className="rounded-2xl bg-gradient-to-br from-amber-950/40 via-slate-900 to-slate-950 border border-amber-500/20 p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Trophy className="h-4 w-4 text-amber-400" />
+            <span className="font-bold text-white">Crew Leaderboard</span>
+            <span className="text-slate-500 text-xs">(completed jobs)</span>
+          </div>
+          {leaderboard.length === 0 ? (
+            <p className="text-slate-500 text-sm text-center py-4">Complete jobs to appear on the leaderboard!</p>
+          ) : (
+            <div className="space-y-2">
+              {leaderboard.map((emp, i) => (
+                <div key={emp.id} className={`flex items-center gap-3 p-3 rounded-xl border ${i === 0 ? "bg-amber-500/10 border-amber-500/30" : "bg-white/[0.02] border-white/5"}`}>
+                  <span className="text-xl w-8 text-center">{medals[i]}</span>
+                  <div className="flex-1">
+                    <p className="text-white text-sm font-semibold">{emp.firstName || emp.username}</p>
+                    <p className="text-slate-400 text-xs capitalize">{emp.role?.replace(/_/g, " ")}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-amber-300 font-black text-lg">{emp.count}</p>
+                    <p className="text-slate-500 text-[10px]">jobs</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {employees.length > 0 && leaderboard.length === 0 && (
+            <p className="text-xs text-slate-600 text-center mt-2">Mark jobs as "completed" to track crew scores</p>
+          )}
+        </div>
+
+        {/* ══ CREW WALLET ══ */}
+        <div className="rounded-2xl bg-gradient-to-br from-purple-950/50 via-slate-900 to-slate-950 border border-purple-500/20 p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Coins className="h-4 w-4 text-purple-400" />
+              <span className="font-bold text-white">Crew Wallet</span>
+            </div>
+            <Link href="/mining">
+              <Button size="sm" variant="ghost" className="text-purple-400 hover:text-white h-7 text-xs">
+                Mine <ChevronRight className="h-3 w-3 ml-1" />
+              </Button>
+            </Link>
+          </div>
+          <div className="flex items-end gap-2 mb-4">
+            <span className="text-4xl font-black text-white">{tokenBalance}</span>
+            <span className="text-purple-400 font-bold mb-1">JCMOVES</span>
+          </div>
+          <div className="flex gap-2">
+            <Link href="/marketplace" className="flex-1">
+              <Button size="sm" className="w-full bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/30 text-purple-200 text-xs h-8">
+                🎁 Redeem Rewards
+              </Button>
+            </Link>
+            <Link href="/rewards" className="flex-1">
+              <Button size="sm" className="w-full bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/30 text-purple-200 text-xs h-8">
+                📊 History
+              </Button>
+            </Link>
+          </div>
+        </div>
+
+        {/* ══ WEATHER ══ */}
+        <div className={`rounded-2xl p-5 border ${wxInfo?.isSnow ? "bg-gradient-to-br from-cyan-950/60 via-slate-900 to-slate-950 border-cyan-500/30" : "bg-slate-800/40 border-slate-700/40"}`}>
+          <div className="flex items-center gap-2 mb-3">
+            <WxIcon className={`h-4 w-4 ${wxInfo?.color ?? "text-slate-400"}`} />
+            <span className="font-bold text-white">Ironwood, MI — Weather</span>
+            {wxInfo?.isSnow && (
+              <Badge className="bg-cyan-500/20 text-cyan-300 border-cyan-500/30 text-xs animate-pulse">❄️ SNOW ALERT</Badge>
+            )}
+          </div>
+          {wx ? (
+            <div className="flex items-center gap-4">
+              <div>
+                <p className={`text-5xl font-black ${wxInfo?.color ?? "text-white"}`}>{Math.round(wx.temperature_2m)}°F</p>
+                <p className="text-slate-400 text-sm mt-1">{wxInfo?.label}</p>
+              </div>
+              <div className="flex-1 space-y-1 text-sm">
+                <div className="flex items-center gap-2 text-slate-400">
+                  <Wind className="h-3.5 w-3.5" />
+                  <span>Wind: {Math.round(wx.wind_speed_10m)} mph</span>
+                </div>
+                {wx.precipitation > 0 && (
+                  <div className="flex items-center gap-2 text-slate-400">
+                    <CloudRain className="h-3.5 w-3.5" />
+                    <span>Precip: {wx.precipitation}" today</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <p className="text-slate-500 text-sm">Weather unavailable — check local forecast</p>
+          )}
+          {wxInfo?.isSnow && (
+            <div className="mt-3 bg-cyan-500/10 border border-cyan-500/20 rounded-lg p-3">
+              <p className="text-cyan-300 text-sm font-bold">🚨 Snow Crew Alert Active</p>
+              <p className="text-cyan-400/70 text-xs mt-0.5">Snow removal jobs may be incoming. Be ready to mobilize!</p>
+            </div>
+          )}
+        </div>
+
+        {/* ══ ANNOUNCEMENTS ══ */}
+        <div className="rounded-2xl bg-slate-800/30 border border-slate-700/30 p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Megaphone className="h-4 w-4 text-rose-400" />
+            <span className="font-bold text-white">Company Announcements</span>
+          </div>
+          <div className="space-y-2">
+            {ANNOUNCEMENTS.map(a => (
+              <div key={a.id} className="flex gap-3 p-3 bg-white/[0.02] rounded-xl border border-white/5">
+                <span className="text-xl flex-shrink-0">{a.icon}</span>
+                <div>
+                  <p className="text-white text-sm">{a.text}</p>
+                  <p className="text-slate-500 text-xs mt-0.5">{a.date}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ══ OPERATIONS TABS ══ */}
+        <div className="rounded-2xl bg-slate-900/60 border border-slate-700/40 p-4">
+          <div className="flex items-center gap-2 mb-4">
+            <Truck className="h-4 w-4 text-blue-400" />
+            <span className="font-bold text-white">Operations</span>
+          </div>
+
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="grid w-full grid-cols-4 bg-slate-800/50 border border-slate-700/50 mb-4">
+              <TabsTrigger value="leads" className="data-[state=active]:bg-blue-600/20 data-[state=active]:text-blue-300 text-xs sm:text-sm">
+                <FileText className="h-4 w-4 sm:mr-1.5" /><span className="hidden sm:inline">Leads</span>
+              </TabsTrigger>
+              <TabsTrigger value="add" className="data-[state=active]:bg-green-600/20 data-[state=active]:text-green-300 text-xs sm:text-sm">
+                <Plus className="h-4 w-4 sm:mr-1.5" /><span className="hidden sm:inline">Add Lead</span>
+              </TabsTrigger>
+              <TabsTrigger value="team" className="data-[state=active]:bg-purple-600/20 data-[state=active]:text-purple-300 text-xs sm:text-sm">
+                <Users className="h-4 w-4 sm:mr-1.5" /><span className="hidden sm:inline">Team</span>
+              </TabsTrigger>
+              <TabsTrigger value="quotes" className="data-[state=active]:bg-amber-600/20 data-[state=active]:text-amber-300 text-xs sm:text-sm">
+                <MessageSquare className="h-4 w-4 sm:mr-1.5" />
+                <span className="hidden sm:inline">Quotes</span>
+                {quotedLeads.length > 0 && (
+                  <span className="ml-1 bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">{quotedLeads.length}</span>
+                )}
+              </TabsTrigger>
+            </TabsList>
+
+            {/* ── LEADS TAB ── */}
+            <TabsContent value="leads" className="space-y-3">
+              <div className="flex gap-2 flex-wrap">
+                <div className="relative flex-1 min-w-48">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                  <Input
+                    placeholder="Search by name, email, phone..."
+                    value={search}
+                    onChange={e => { setSearch(e.target.value); setVisibleCount(10); }}
+                    className="pl-9 bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500"
+                  />
+                </div>
+                <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setVisibleCount(10); }}>
+                  <SelectTrigger className="w-36 bg-slate-800/50 border-slate-700 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-slate-700">
+                    {STATUS_OPTIONS.map(s => (
+                      <SelectItem key={s} value={s} className="text-white capitalize">
+                        {s === "all" ? "All Status" : s.replace(/_/g, " ")}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {leadsLoading ? (
+                <div className="flex justify-center py-10"><Loader2 className="h-7 w-7 animate-spin text-blue-400" /></div>
+              ) : filteredLeads.length === 0 ? (
+                <div className="text-center py-10 text-slate-500">
+                  <FileText className="h-10 w-10 mx-auto mb-3 opacity-40" />
+                  <p>No leads found</p>
+                  <Button className="mt-3 bg-blue-600 hover:bg-blue-500 text-sm" onClick={() => setActiveTab("add")}>
                     Add First Lead
                   </Button>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-2">
-                {filteredLeads.map((lead) => (
-                  <Card key={lead.id} className="border-white/5 bg-white/[0.03] hover:bg-white/[0.05] transition-colors">
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <p className="font-semibold text-white text-sm">{lead.firstName} {lead.lastName}</p>
-                            <LeadStatusBadge status={lead.status} />
-                            {lead.serviceType && (
-                              <Badge variant="secondary" className="bg-slate-700/50 text-slate-300 text-xs">{lead.serviceType}</Badge>
-                            )}
-                          </div>
-                          <div className="flex flex-wrap gap-3 text-xs text-slate-400 mt-1">
-                            {lead.phone && <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{lead.phone}</span>}
-                            {lead.email && <span className="flex items-center gap-1"><Mail className="h-3 w-3" />{lead.email}</span>}
-                            {lead.moveDate && <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{new Date(lead.moveDate).toLocaleDateString()}</span>}
-                          </div>
-                          {lead.fromAddress && (
-                            <div className="flex items-start gap-1 mt-1 text-xs text-slate-500">
-                              <MapPin className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                              <span className="truncate">{lead.fromAddress}</span>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    {filteredLeads.slice(0, visibleCount).map(lead => (
+                      <Card key={lead.id} className="border-white/5 bg-white/[0.03] hover:bg-white/[0.05] transition-colors">
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                <p className="font-semibold text-white text-sm">{lead.firstName} {lead.lastName}</p>
+                                <LeadStatusBadge status={lead.status} />
+                                {lead.serviceType && (
+                                  <Badge variant="secondary" className="bg-slate-700/50 text-slate-300 text-xs">{lead.serviceType}</Badge>
+                                )}
+                              </div>
+                              <div className="flex flex-wrap gap-3 text-xs text-slate-400">
+                                {lead.phone && <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{lead.phone}</span>}
+                                {lead.email && <span className="flex items-center gap-1"><Mail className="h-3 w-3" />{lead.email}</span>}
+                                {lead.moveDate && <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{new Date(lead.moveDate).toLocaleDateString()}</span>}
+                              </div>
+                              {lead.fromAddress && (
+                                <p className="flex items-start gap-1 mt-1 text-xs text-slate-500">
+                                  <MapPin className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                                  <span className="truncate">{lead.fromAddress}</span>
+                                </p>
+                              )}
                             </div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1.5 flex-shrink-0">
-                          <Select
-                            value={lead.status}
-                            onValueChange={(val) => updateStatusMutation.mutate({ id: lead.id, status: val })}
-                          >
-                            <SelectTrigger className="w-28 h-7 text-xs bg-slate-700/50 border-slate-600 text-white">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent className="bg-slate-800 border-slate-700">
-                              {STATUS_OPTIONS.filter(s => s !== "all").map(s => (
-                                <SelectItem key={s} value={s} className="text-white text-xs capitalize">
-                                  {s.replace(/_/g, " ")}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Link href={`/lead/${lead.id}`}>
-                            <Button size="icon" variant="ghost" className="h-7 w-7 text-slate-400 hover:text-white">
-                              <ChevronRight className="h-4 w-4" />
-                            </Button>
-                          </Link>
-                          {isAdmin && (
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-7 w-7 text-slate-600 hover:text-red-400"
-                              onClick={() => setLeadToDelete(lead)}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
+                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                              <Select
+                                value={lead.status}
+                                onValueChange={val => updateStatusMutation.mutate({ id: lead.id, status: val })}
+                              >
+                                <SelectTrigger className="w-28 h-7 text-xs bg-slate-700/50 border-slate-600 text-white">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent className="bg-slate-800 border-slate-700">
+                                  {STATUS_OPTIONS.filter(s => s !== "all").map(s => (
+                                    <SelectItem key={s} value={s} className="text-white text-xs capitalize">
+                                      {s.replace(/_/g, " ")}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <Link href={`/lead/${lead.id}`}>
+                                <Button size="icon" variant="ghost" className="h-7 w-7 text-slate-400 hover:text-white">
+                                  <ChevronRight className="h-4 w-4" />
+                                </Button>
+                              </Link>
+                              {isAdmin && (
+                                <Button
+                                  size="icon" variant="ghost"
+                                  className="h-7 w-7 text-slate-600 hover:text-red-400"
+                                  onClick={() => setLeadToDelete(lead)}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
 
-            {/* Quick action links */}
-            {isAdmin && (
-              <div className="flex gap-2 flex-wrap pt-2">
-                <Link href="/leads">
-                  <Button variant="outline" size="sm" className="border-white/10 text-slate-400 hover:text-white">
-                    Full Leads View <ChevronRight className="h-3 w-3 ml-1" />
-                  </Button>
-                </Link>
-                <Link href="/admin/pipeline">
-                  <Button variant="outline" size="sm" className="border-white/10 text-slate-400 hover:text-white">
-                    Pipeline View <ChevronRight className="h-3 w-3 ml-1" />
-                  </Button>
-                </Link>
-              </div>
-            )}
-          </TabsContent>
+                  {visibleCount < filteredLeads.length && (
+                    <Button
+                      variant="outline"
+                      className="w-full border-slate-700 text-slate-400 hover:text-white"
+                      onClick={() => setVisibleCount(c => c + 10)}
+                    >
+                      Show {Math.min(10, filteredLeads.length - visibleCount)} more ({filteredLeads.length - visibleCount} remaining)
+                    </Button>
+                  )}
 
-          {/* ══ ADD LEAD TAB ══ */}
-          <TabsContent value="add">
-            <div className="max-w-xl mx-auto">
-              <div className="mb-6">
-                <h2 className="text-xl font-bold text-white mb-1">Add New Lead</h2>
-                <p className="text-slate-400 text-sm">Create a new service request on behalf of a customer</p>
-              </div>
+                  {isAdmin && (
+                    <div className="flex gap-2 flex-wrap pt-1">
+                      <Link href="/leads">
+                        <Button variant="outline" size="sm" className="border-white/10 text-slate-400 hover:text-white">
+                          Full Leads View <ChevronRight className="h-3 w-3 ml-1" />
+                        </Button>
+                      </Link>
+                      <Link href="/admin/pipeline">
+                        <Button variant="outline" size="sm" className="border-white/10 text-slate-400 hover:text-white">
+                          Pipeline View <ChevronRight className="h-3 w-3 ml-1" />
+                        </Button>
+                      </Link>
+                    </div>
+                  )}
+                </>
+              )}
+            </TabsContent>
+
+            {/* ── ADD LEAD TAB ── */}
+            <TabsContent value="add">
               <QuoteForm
                 variant="employee"
                 onSuccess={() => {
                   queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
                   setActiveTab("leads");
-                  toast({ title: "Lead created!", description: "New service request has been added." });
+                  toast({ title: "✅ Lead added!", description: "Lead has been saved." });
                 }}
               />
-            </div>
-          </TabsContent>
+            </TabsContent>
 
-          {/* ══ TEAM TAB ══ */}
-          <TabsContent value="team" className="space-y-3">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="font-bold text-white">Team Members ({employees.length})</h2>
+            {/* ── TEAM TAB ── */}
+            <TabsContent value="team" className="space-y-3">
+              {employees.length === 0 ? (
+                <div className="text-center py-10 text-slate-500">
+                  <Users className="h-10 w-10 mx-auto mb-3 opacity-40" />
+                  <p>No team members found</p>
+                </div>
+              ) : (
+                employees.map(emp => (
+                  <Card key={emp.id} className="border-white/5 bg-white/[0.03]">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                          {(emp.firstName?.[0] || emp.username?.[0] || "?").toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-white text-sm">{emp.firstName} {emp.lastName || ""}</p>
+                          <p className="text-slate-400 text-xs">{emp.email}</p>
+                        </div>
+                        {isAdmin ? (
+                          <Select
+                            value={emp.role}
+                            onValueChange={val => updateRoleMutation.mutate({ id: emp.id, role: val })}
+                          >
+                            <SelectTrigger className="w-28 h-7 text-xs bg-slate-700/50 border-slate-600 text-white">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-slate-800 border-slate-700">
+                              {["employee", "admin", "business_owner"].map(r => (
+                                <SelectItem key={r} value={r} className="text-white text-xs capitalize">
+                                  {r.replace(/_/g, " ")}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Badge className="bg-slate-700/50 text-slate-300 border-slate-600 text-xs capitalize">
+                            {emp.role?.replace(/_/g, " ")}
+                          </Badge>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
               {isAdmin && (
-                <Link href="/employee-register">
-                  <Button size="sm" className="bg-blue-600 hover:bg-blue-500 font-semibold">
-                    <Plus className="h-4 w-4 mr-1" /> Add Member
+                <Link href="/admin/users">
+                  <Button variant="outline" size="sm" className="border-white/10 text-slate-400 hover:text-white">
+                    Manage All Users <ChevronRight className="h-3 w-3 ml-1" />
                   </Button>
                 </Link>
               )}
-            </div>
+            </TabsContent>
 
-            {employeesLoading ? (
-              <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-blue-400" /></div>
-            ) : employees.length === 0 ? (
-              <Card className="border-white/5 bg-white/[0.03]">
-                <CardContent className="py-8 text-center">
-                  <Users className="h-8 w-8 mx-auto text-slate-600 mb-2" />
-                  <p className="text-slate-400 text-sm">No team members yet</p>
-                </CardContent>
-              </Card>
-            ) : (
-              employees.map((emp) => (
-                <Card key={emp.id} className="border-white/5 bg-white/[0.03]">
-                  <CardContent className="p-4 flex items-center gap-4">
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center flex-shrink-0 text-white font-bold text-sm">
-                      {emp.firstName?.[0]}{emp.lastName?.[0]}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-white text-sm">{emp.firstName} {emp.lastName}</p>
-                      <p className="text-slate-400 text-xs">{emp.email}</p>
-                    </div>
-                    {isAdmin ? (
-                      <Select
-                        value={emp.role}
-                        onValueChange={(role) => updateRoleMutation.mutate({ id: emp.id, role })}
-                      >
-                        <SelectTrigger className="w-32 h-7 text-xs bg-slate-700/50 border-slate-600 text-white">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="bg-slate-800 border-slate-700">
-                          {["employee", "admin", "business_owner", "pending"].map(r => (
-                            <SelectItem key={r} value={r} className="text-white text-xs capitalize">{r.replace(/_/g, " ")}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <Badge variant="secondary" className="bg-slate-700/50 text-slate-300 text-xs capitalize">
-                        {emp.role.replace(/_/g, " ")}
-                      </Badge>
-                    )}
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </TabsContent>
-
-          {/* ══ QUOTES TAB ══ */}
-          <TabsContent value="quotes" className="space-y-3">
-            <h2 className="font-bold text-white mb-2">Pending Quotes ({quotedLeads.length})</h2>
-
-            {quotedLeads.length === 0 ? (
-              <Card className="border-white/5 bg-white/[0.03]">
-                <CardContent className="py-8 text-center">
-                  <MessageSquare className="h-8 w-8 mx-auto text-slate-600 mb-2" />
-                  <p className="text-slate-400 text-sm">No pending quotes</p>
-                </CardContent>
-              </Card>
-            ) : (
-              quotedLeads.map((lead) => (
-                <Card key={lead.id} className="border-amber-500/20 bg-amber-950/10">
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-white text-sm mb-0.5">{lead.firstName} {lead.lastName}</p>
-                        <div className="flex flex-wrap gap-2 text-xs text-slate-400">
-                          {lead.serviceType && <span className="capitalize">{lead.serviceType.replace(/_/g, " ")}</span>}
-                          {lead.phone && <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{lead.phone}</span>}
-                          {lead.moveDate && <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{new Date(lead.moveDate).toLocaleDateString()}</span>}
+            {/* ── QUOTES TAB ── */}
+            <TabsContent value="quotes" className="space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                <h3 className="font-bold text-white">Pending Quotes ({quotedLeads.length})</h3>
+              </div>
+              {quotedLeads.length === 0 ? (
+                <div className="text-center py-10 text-slate-500 border border-white/5 rounded-xl">
+                  <MessageSquare className="h-10 w-10 mx-auto mb-3 opacity-40" />
+                  <p>No pending quotes</p>
+                </div>
+              ) : (
+                quotedLeads.map(lead => (
+                  <Card key={lead.id} className="border-amber-500/20 bg-amber-500/5">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-semibold text-white">{lead.firstName} {lead.lastName}</p>
+                          <p className="text-slate-400 text-xs">{lead.serviceType} · {lead.phone}</p>
                         </div>
-                        {lead.fromAddress && (
-                          <p className="text-xs text-slate-500 mt-1 truncate">📍 {lead.fromAddress}</p>
-                        )}
-                      </div>
-                      <div className="flex gap-2">
                         <Link href={`/lead/${lead.id}`}>
-                          <Button size="sm" className="bg-amber-600 hover:bg-amber-500 text-white text-xs">
+                          <Button size="sm" className="bg-amber-600 hover:bg-amber-500 text-xs h-8">
                             Review <ChevronRight className="h-3 w-3 ml-1" />
                           </Button>
                         </Link>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
-            )}
-
-            <div className="pt-2 flex gap-2">
-              <Link href="/pending-quotes">
-                <Button variant="outline" size="sm" className="border-white/10 text-slate-400 hover:text-white">
-                  All Quotes <ChevronRight className="h-3 w-3 ml-1" />
-                </Button>
-              </Link>
-              {isAdmin && (
-                <Link href="/admin/quote-review">
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+              <div className="flex gap-2 flex-wrap">
+                <Link href="/leads">
+                  <Button variant="outline" size="sm" className="border-white/10 text-slate-400 hover:text-white">
+                    All Quotes <ChevronRight className="h-3 w-3 ml-1" />
+                  </Button>
+                </Link>
+                <Link href="/leads?filter=chatbot">
                   <Button variant="outline" size="sm" className="border-white/10 text-slate-400 hover:text-white">
                     Chatbot Quotes <ChevronRight className="h-3 w-3 ml-1" />
                   </Button>
                 </Link>
-              )}
-            </div>
-          </TabsContent>
-        </Tabs>
-
-        {/* Admin Quick Access */}
-        {isAdmin && (
-          <div className="mt-8 pt-6 border-t border-white/5">
-            <p className="text-slate-500 text-xs mb-3 uppercase tracking-wider">Admin Controls</p>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-              {[
-                { href: "/control", label: "Admin Control Center", icon: "🛡️" },
-                { href: "/admin/treasury", label: "Treasury", icon: "💰" },
-                { href: "/admin/users", label: "Users", icon: "👥" },
-                { href: "/admin/marketplace", label: "Marketplace Mgmt", icon: "🎁" },
-                { href: "/admin/promo-codes", label: "Promo Codes", icon: "🏷️" },
-                { href: "/admin/system-check", label: "System Check", icon: "⚙️" },
-              ].map(({ href, label, icon }) => (
-                <Link key={href} href={href}>
-                  <div className="flex items-center gap-2 p-2.5 rounded-lg border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] transition-colors cursor-pointer">
-                    <span className="text-base">{icon}</span>
-                    <span className="text-slate-300 text-xs font-medium">{label}</span>
+              </div>
+              {isAdmin && (
+                <div className="border-t border-white/5 pt-4">
+                  <p className="text-slate-500 text-xs uppercase tracking-wider mb-3 font-semibold">Admin Controls</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { label: "🛡️ Admin Control Center", href: "/control" },
+                      { label: "💰 Treasury", href: "/in-god-we-trust" },
+                      { label: "👥 Users", href: "/admin/users" },
+                      { label: "🎁 Marketplace Mgmt", href: "/admin/marketplace" },
+                      { label: "🏷️ Promo Codes", href: "/admin/promo-codes" },
+                      { label: "⚙️ System Check", href: "/admin/system-check" },
+                    ].map(item => (
+                      <Link key={item.href} href={item.href}>
+                        <Button variant="outline" size="sm" className="w-full border-white/10 text-slate-400 hover:text-white text-xs justify-start">
+                          {item.label}
+                        </Button>
+                      </Link>
+                    ))}
                   </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
+        </div>
+
+        {/* ══ FOOTER BRAND ══ */}
+        <div className="text-center py-4">
+          <p className="text-slate-700 text-xs font-semibold tracking-wide">🚛 JC ON THE MOVE LLC</p>
+          <p className="text-slate-800 text-xs">Northwoods Moving & More · Michigan & Wisconsin</p>
+        </div>
+
       </div>
 
-      {/* Delete Lead Confirmation */}
+      {/* ── DELETE CONFIRM ── */}
       <AlertDialog open={!!leadToDelete} onOpenChange={() => setLeadToDelete(null)}>
         <AlertDialogContent className="bg-slate-900 border-slate-700">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-white">Delete Lead</AlertDialogTitle>
+            <AlertDialogTitle className="text-white">Delete Lead?</AlertDialogTitle>
             <AlertDialogDescription className="text-slate-400">
-              Are you sure you want to delete {leadToDelete?.firstName} {leadToDelete?.lastName}? This cannot be undone.
+              This will permanently delete {leadToDelete?.firstName} {leadToDelete?.lastName}'s lead. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-slate-600 text-slate-300">Cancel</AlertDialogCancel>
+            <AlertDialogCancel className="bg-slate-800 border-slate-700 text-white hover:bg-slate-700">Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-red-600 hover:bg-red-500"
               onClick={() => leadToDelete && deleteLeadMutation.mutate(leadToDelete.id)}
