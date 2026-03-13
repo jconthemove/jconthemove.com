@@ -256,7 +256,7 @@ export function EarnTasksButton() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-24 right-6 z-50 bg-gradient-to-br from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-white p-3.5 rounded-full shadow-2xl transition-all duration-300 hover:scale-110 group"
+        className="fixed bottom-4 right-4 z-50 bg-gradient-to-br from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-white p-3.5 rounded-full shadow-2xl transition-all duration-300 hover:scale-110 group"
         aria-label="Earn JCMOVES tasks"
       >
         <Coins className="h-5 w-5" />

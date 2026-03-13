@@ -44,6 +44,7 @@ export default function TeamHub() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
+  const [visibleCount, setVisibleCount] = useState(10);
 
   const { data: leads = [], isLoading: leadsLoading } = useQuery<Lead[]>({
     queryKey: ["/api/leads"],
@@ -181,11 +182,11 @@ export default function TeamHub() {
                 <Input
                   placeholder="Search by name, email, phone..."
                   value={search}
-                  onChange={e => setSearch(e.target.value)}
+                  onChange={e => { setSearch(e.target.value); setVisibleCount(10); }}
                   className="pl-9 bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500"
                 />
               </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setVisibleCount(10); }}>
                 <SelectTrigger className="w-36 bg-slate-800/50 border-slate-700 text-white">
                   <SelectValue />
                 </SelectTrigger>

@@ -186,7 +186,7 @@ export function FloatingMomHeart() {
   return (
     <>
       {/* ── Floating button ── */}
-      <div className="fixed bottom-24 left-4 z-50 flex flex-col items-center pointer-events-none">
+      <div className="fixed bottom-4 left-4 z-50 flex flex-col items-center pointer-events-none">
         {/* Burst particles */}
         {floatParticles.map(p => (
           <div
