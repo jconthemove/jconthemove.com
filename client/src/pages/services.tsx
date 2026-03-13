@@ -1,23 +1,25 @@
 import { useState, useMemo } from "react";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { ShopSwitcher } from "@/components/shop-switcher";
+import { useAuth } from "@/hooks/useAuth";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import {
   Truck, Users, Clock, DollarSign, CheckCircle, Star,
   ChevronRight, ArrowLeft, Phone, Zap, Shield, Award,
-  Package, Layers, Wrench, Sparkles, Calculator, ChevronDown, ChevronUp
+  Package, Layers, Wrench, Sparkles, Calculator, ChevronDown, ChevronUp,
+  Settings, Save,
 } from "lucide-react";
 
-// ── Pricing ──────────────────────────────────────────────────────────────────
-const LABOR_RATES: Record<number, number> = { 1: 65, 2: 115, 3: 165, 4: 210, 5: 255 };
-const TRUCK_ADD = 60;
-const MIN_HOURS_LABOR = 2;
-const MIN_HOURS_TRUCK  = 3;
+// ─── Static data ──────────────────────────────────────────────────────────────
 
 const CREW_META: Record<number, { best: string; fits: string[]; popular?: boolean }> = {
   1: { best: "Small apartment / single items", fits: ["Studio / Single room", "Furniture only", "Appliance moves"] },
-  2: { best: "1–2 Bedroom apartments", fits: ["1–2 BR apartments", "Furniture rearranging", "U-Haul load / unload"], popular: false },
+  2: { best: "1–2 Bedroom apartments", fits: ["1–2 BR apartments", "Furniture rearranging", "U-Haul load / unload"] },
   3: { best: "2–3 Bedroom homes", fits: ["2–3 BR homes", "Medium-sized moves", "Full house packs"], popular: true },
   4: { best: "3–4 Bedroom homes", fits: ["3–4 BR homes", "Large furniture", "Tight timelines"] },
   5: { best: "Large estates / commercial", fits: ["4+ BR homes", "Office moves", "Same-day large moves"] },
@@ -49,8 +51,140 @@ const HOME_TYPES = [
   { label: "Office Move",   crew: 4 },
 ];
 
+// ─── Default pricing (fallback before API loads) ──────────────────────────────
+const DEFAULT_PRICING = {
+  ratePerMoverHour: 60,
+  truckAdd: 60,
+  minHours: { 1: 5, 2: 4, 3: 3, 4: 2, 5: 2 } as Record<number, number>,
+};
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface PricingConfig {
+  ratePerMoverHour: number;
+  truckAdd: number;
+  minHours: Record<number, number>;
+}
+
+// ─── Admin Pricing Editor ────────────────────────────────────────────────────
+function AdminPricingEditor({ pricing }: { pricing: PricingConfig }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [draft, setDraft] = useState({
+    rate_per_mover_hour: String(pricing.ratePerMoverHour),
+    truck_add: String(pricing.truckAdd),
+    min_hours_1: String(pricing.minHours[1]),
+    min_hours_2: String(pricing.minHours[2]),
+    min_hours_3: String(pricing.minHours[3]),
+    min_hours_4: String(pricing.minHours[4]),
+    min_hours_5: String(pricing.minHours[5]),
+  });
+  const [open, setOpen] = useState(false);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      await Promise.all(
+        Object.entries(draft).map(([key, value]) =>
+          apiRequest("PATCH", `/api/admin/pricing/${key}`, { value: parseFloat(value) })
+        )
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/pricing"] });
+      toast({ title: "✅ Pricing updated!", description: "Changes are live on the booking page." });
+      setOpen(false);
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  return (
+    <div className="rounded-2xl bg-slate-800/50 border border-amber-500/30 p-5 mt-4">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between text-left"
+      >
+        <div className="flex items-center gap-2">
+          <Settings className="h-4 w-4 text-amber-400" />
+          <span className="font-bold text-amber-300 text-sm">Admin: Edit Pricing</span>
+        </div>
+        {open ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+      </button>
+
+      {open && (
+        <div className="mt-4 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">Rate per mover/hr ($)</label>
+              <Input
+                type="number"
+                value={draft.rate_per_mover_hour}
+                onChange={e => setDraft(d => ({ ...d, rate_per_mover_hour: e.target.value }))}
+                className="bg-slate-900 border-slate-700 text-white h-9 text-sm"
+              />
+              <p className="text-xs text-slate-600 mt-0.5">$1/mover/min = $60/hr per mover</p>
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">Truck add-on/hr ($)</label>
+              <Input
+                type="number"
+                value={draft.truck_add}
+                onChange={e => setDraft(d => ({ ...d, truck_add: e.target.value }))}
+                className="bg-slate-900 border-slate-700 text-white h-9 text-sm"
+              />
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs text-slate-400 mb-2 font-semibold">Minimum Hours by Crew Size</p>
+            <div className="grid grid-cols-5 gap-2">
+              {([1, 2, 3, 4, 5] as const).map(n => {
+                const key = `min_hours_${n}` as keyof typeof draft;
+                return (
+                  <div key={n} className="text-center">
+                    <label className="text-xs text-slate-500 block mb-1">{n} Mover{n > 1 ? "s" : ""}</label>
+                    <Input
+                      type="number"
+                      value={draft[key]}
+                      onChange={e => setDraft(d => ({ ...d, [key]: e.target.value }))}
+                      className="bg-slate-900 border-slate-700 text-white h-9 text-sm text-center"
+                    />
+                    <p className="text-[10px] text-slate-600 mt-0.5">hrs min</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="bg-slate-900/50 rounded-lg p-3 text-xs text-slate-400">
+            <p className="font-semibold text-slate-300 mb-1">Preview (Labor Only):</p>
+            {([1, 2, 3, 4, 5] as const).map(n => {
+              const rate = n * parseFloat(draft.rate_per_mover_hour || "60");
+              const min = parseFloat(draft[`min_hours_${n}` as keyof typeof draft] || "2");
+              return (
+                <div key={n} className="flex justify-between">
+                  <span>{n} Mover{n > 1 ? "s" : ""}</span>
+                  <span className="text-white">${rate}/hr · ${rate * min} min ({min}hr)</span>
+                </div>
+              );
+            })}
+          </div>
+
+          <Button
+            onClick={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending}
+            className="w-full bg-amber-500 hover:bg-amber-400 text-black font-bold"
+          >
+            <Save className="h-4 w-4 mr-2" />
+            {saveMutation.isPending ? "Saving..." : "Save Pricing Changes"}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 export default function ServicesPage() {
-  const [, setLocation] = useLocation();
+  const { hasAdminAccess } = useAuth();
   const [serviceType, setServiceType]   = useState<"labor" | "truck">("labor");
   const [selectedCrew, setSelectedCrew] = useState<number | null>(null);
   const [addOns, setAddOns]             = useState<Record<string, boolean>>({});
@@ -59,12 +193,23 @@ export default function ServicesPage() {
   const toggleAddOn = (id: string) =>
     setAddOns(prev => ({ ...prev, [id]: !prev[id] }));
 
+  const { data: pricing = DEFAULT_PRICING } = useQuery<PricingConfig>({
+    queryKey: ["/api/pricing"],
+    staleTime: 1000 * 60 * 5,
+  });
+
   const hourlyRate = useMemo(() => {
     if (!selectedCrew) return 0;
-    return LABOR_RATES[selectedCrew] + (serviceType === "truck" ? TRUCK_ADD : 0);
-  }, [selectedCrew, serviceType]);
+    const base = selectedCrew * pricing.ratePerMoverHour;
+    return base + (serviceType === "truck" ? pricing.truckAdd : 0);
+  }, [selectedCrew, serviceType, pricing]);
 
-  const minHours = serviceType === "truck" ? MIN_HOURS_TRUCK : MIN_HOURS_LABOR;
+  const minHours = useMemo(() => {
+    if (!selectedCrew) return 2;
+    return serviceType === "truck"
+      ? Math.max((pricing.minHours[selectedCrew] ?? 2), 3)
+      : (pricing.minHours[selectedCrew] ?? 2);
+  }, [selectedCrew, serviceType, pricing]);
 
   const addOnTotal = useMemo(
     () => ADD_ONS.filter(a => addOns[a.id]).reduce((s, a) => s + a.price, 0),
@@ -82,7 +227,7 @@ export default function ServicesPage() {
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white pb-28">
       <ShopSwitcher />
 
-      {/* ── HERO ──────────────────────────────────────────────────────────── */}
+      {/* ── HERO ─────────────────────────────────────────────────────────── */}
       <div className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-blue-900/40 via-slate-950 to-orange-900/20 pointer-events-none" />
         <div className="max-w-4xl mx-auto px-4 pt-8 pb-12 relative">
@@ -102,7 +247,6 @@ export default function ServicesPage() {
             <p className="text-lg text-slate-300 mb-8 max-w-xl mx-auto">
               Pick your crew size, choose your services, and get an instant price estimate — no hidden fees.
             </p>
-
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <Button
                 size="lg"
@@ -112,14 +256,11 @@ export default function ServicesPage() {
                 <Users className="h-5 w-5 mr-2" /> Choose Your Crew
               </Button>
               <Link href="/moving-estimator">
-                <Button size="lg" variant="outline"
-                  className="border-slate-600 text-slate-200 hover:bg-slate-800 hover:text-white font-bold text-base">
+                <Button size="lg" variant="outline" className="border-slate-600 text-slate-200 hover:bg-slate-800 hover:text-white font-bold text-base">
                   <Calculator className="h-5 w-5 mr-2" /> Use Cost Calculator
                 </Button>
               </Link>
             </div>
-
-            {/* Trust pillars */}
             <div className="flex flex-wrap justify-center gap-6 mt-8 text-sm text-slate-400">
               {[
                 { icon: Shield, text: "Licensed & Insured" },
@@ -200,9 +341,12 @@ export default function ServicesPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {[1, 2, 3, 4, 5].map((count) => {
               const meta = CREW_META[count];
-              const rate = LABOR_RATES[count] + (serviceType === "truck" ? TRUCK_ADD : 0);
+              const baseRate = count * pricing.ratePerMoverHour;
+              const rate = baseRate + (serviceType === "truck" ? pricing.truckAdd : 0);
+              const crewMinHours = serviceType === "truck"
+                ? Math.max((pricing.minHours[count] ?? 2), 3)
+                : (pricing.minHours[count] ?? 2);
               const isSelected = selectedCrew === count;
-              const minHrs = serviceType === "truck" ? MIN_HOURS_TRUCK : MIN_HOURS_LABOR;
 
               return (
                 <div
@@ -226,7 +370,6 @@ export default function ServicesPage() {
                   )}
 
                   <div className="p-5">
-                    {/* Crew visual */}
                     <div className="flex items-center gap-2 mb-4">
                       {Array.from({ length: count }).map((_, i) => (
                         <div key={i} className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-black border-2 ${
@@ -242,7 +385,6 @@ export default function ServicesPage() {
                     </h3>
                     <p className="text-xs text-slate-400 mb-4">{meta.best}</p>
 
-                    {/* Fits */}
                     <ul className="space-y-1 mb-5">
                       {meta.fits.map(f => (
                         <li key={f} className="flex items-center gap-1.5 text-xs text-slate-300">
@@ -252,15 +394,14 @@ export default function ServicesPage() {
                       ))}
                     </ul>
 
-                    {/* Rate */}
                     <div className={`rounded-xl p-3 mb-4 ${isSelected ? "bg-blue-500/20 border border-blue-500/30" : "bg-slate-900/60 border border-slate-700"}`}>
                       <div className="flex items-baseline gap-1">
                         <span className={`text-2xl font-black ${isSelected ? "text-blue-300" : "text-white"}`}>${rate}</span>
                         <span className="text-slate-400 text-sm">/hr</span>
                       </div>
-                      <p className="text-[10px] text-slate-500 mt-0.5">{minHrs}-hour minimum · labor {serviceType === "truck" ? "+ truck" : "only"}</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">{crewMinHours}-hr minimum · {serviceType === "truck" ? "truck + labor" : "labor only"}</p>
                       <p className="text-xs text-slate-400 mt-1 font-medium">
-                        Est. min: <span className={isSelected ? "text-blue-300 font-bold" : "text-white font-bold"}>${rate * minHrs}</span>
+                        Est. min: <span className={isSelected ? "text-blue-300 font-bold" : "text-white font-bold"}>${rate * crewMinHours}</span>
                       </p>
                     </div>
 
@@ -279,6 +420,9 @@ export default function ServicesPage() {
               );
             })}
           </div>
+
+          {/* Admin pricing editor — only visible to admins */}
+          {hasAdminAccess && <AdminPricingEditor pricing={pricing} />}
         </div>
 
         {/* ── ADD-ONS ───────────────────────────────────────────────────── */}
@@ -332,7 +476,7 @@ export default function ServicesPage() {
               </div>
               <div className="bg-slate-800/60 rounded-lg p-3">
                 <p className="text-slate-400 text-xs mb-0.5">Service</p>
-                <p className="text-white font-bold capitalize">{serviceType === "truck" ? "Truck + Labor" : "Labor Only"}</p>
+                <p className="text-white font-bold">{serviceType === "truck" ? "Truck + Labor" : "Labor Only"}</p>
               </div>
               <div className="bg-slate-800/60 rounded-lg p-3">
                 <p className="text-slate-400 text-xs mb-0.5">Rate</p>

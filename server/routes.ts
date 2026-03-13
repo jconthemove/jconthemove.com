@@ -261,7 +261,14 @@ async function ensureJackpotsSeeded() {
         ('major_jackpot_start',      '50000','Starting value for major jackpot after reset'),
         ('coupon_10pct_expiry_days',  '90',  '10%/$25 off coupon expiry in days'),
         ('coupon_25pct_expiry_days',  '30',  '25% off coupon expiry in days'),
-        ('coffee_card_expiry_days',   '90',  'Coffee gift card expiry in days')
+        ('coffee_card_expiry_days',   '90',  'Coffee gift card expiry in days'),
+        ('pricing_rate_per_mover_hour', '60', 'Base labor rate per mover per hour ($)'),
+        ('pricing_truck_add',           '60', 'Additional hourly charge when truck is included ($)'),
+        ('pricing_min_hours_1',          '5', 'Minimum hours for 1-mover crew'),
+        ('pricing_min_hours_2',          '4', 'Minimum hours for 2-mover crew'),
+        ('pricing_min_hours_3',          '3', 'Minimum hours for 3-mover crew'),
+        ('pricing_min_hours_4',          '2', 'Minimum hours for 4-mover crew'),
+        ('pricing_min_hours_5',          '2', 'Minimum hours for 5-mover crew')
       ON CONFLICT (setting_key) DO NOTHING;
     `);
     console.log('✅ Quantum Spin jackpots seeded');
@@ -13031,6 +13038,49 @@ Thank you for your business!
       const { key } = req.params;
       const { value } = req.body;
       await pool.query(`UPDATE spin_config SET setting_value=$1, updated_at=NOW() WHERE setting_key=$2`, [String(value), key]);
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Public pricing config (used by services page) ──────────────────────────
+  app.get("/api/pricing", async (_req, res) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT setting_key, setting_value FROM spin_config WHERE setting_key LIKE 'pricing_%' ORDER BY setting_key`
+      );
+      const config: Record<string, number> = {};
+      for (const r of rows) config[r.setting_key] = parseFloat(r.setting_value);
+      res.json({
+        ratePerMoverHour: config['pricing_rate_per_mover_hour'] ?? 60,
+        truckAdd: config['pricing_truck_add'] ?? 60,
+        minHours: {
+          1: config['pricing_min_hours_1'] ?? 5,
+          2: config['pricing_min_hours_2'] ?? 4,
+          3: config['pricing_min_hours_3'] ?? 3,
+          4: config['pricing_min_hours_4'] ?? 2,
+          5: config['pricing_min_hours_5'] ?? 2,
+        },
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/admin/pricing/:key", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!['admin', 'business_owner'].includes((req.session as any).userRole)) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      const { key } = req.params;
+      const { value } = req.body;
+      const fullKey = `pricing_${key}`;
+      await pool.query(
+        `INSERT INTO spin_config (setting_key, setting_value, description) VALUES ($1, $2, $3)
+         ON CONFLICT (setting_key) DO UPDATE SET setting_value=$2, updated_at=NOW()`,
+        [fullKey, String(value), `Pricing config: ${key}`]
+      );
       res.json({ ok: true });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
