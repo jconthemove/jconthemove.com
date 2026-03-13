@@ -49,7 +49,6 @@ import { useOfflineStorage } from "@/hooks/use-offline-storage";
 import { PhotoCapture } from "@/components/photo-capture";
 import { NotificationBell } from "@/components/notification-bell";
 import { useAuth } from "@/hooks/useAuth";
-import { ShopPage } from "@/pages/ShopPage";
 
 // Helper function for ordinal suffixes (1st, 2nd, 3rd, etc.)
 function getOrdinalSuffix(num: number): string {
@@ -378,14 +377,14 @@ export default function MobileLeadManager() {
   
   
   // Initialize tab based on user permissions
-  const getInitialTab = (): "available" | "accepted" | "map" | "treasury" | "shop" | "rewards" | "wallets" | "settings" => {
+  const getInitialTab = (): "available" | "accepted" | "map" | "treasury" | "rewards" | "wallets" | "settings" => {
     return "available"; // Always start with available tab
   };
   
-  const [activeTab, setActiveTab] = useState<"available" | "accepted" | "map" | "treasury" | "shop" | "rewards" | "wallets" | "settings">(getInitialTab());
+  const [activeTab, setActiveTab] = useState<"available" | "accepted" | "map" | "treasury" | "rewards" | "wallets" | "settings">(getInitialTab());
   
   // Prevent employees from accessing treasury tab
-  const handleTabChange = (tab: "available" | "accepted" | "map" | "treasury" | "shop" | "rewards" | "wallets" | "settings") => {
+  const handleTabChange = (tab: "available" | "accepted" | "map" | "treasury" | "rewards" | "wallets" | "settings") => {
     if (tab === "treasury" && !canAccessTreasury && user?.role !== 'business_owner') {
       return; // Block access to treasury for employees
     }
@@ -869,11 +868,11 @@ export default function MobileLeadManager() {
                             variant="outline"
                             size="sm"
                             className="mt-1 text-blue-600 border-blue-600 hover:bg-blue-50"
-                            onClick={() => handleTabChange("shop")}
+                            onClick={() => window.open("/marketplace", "_self")}
                             data-testid="button-view-price-chart"
                           >
                             <TrendingUp className="h-3 w-3 mr-1" />
-                            View Live Chart
+                            View Rewards
                           </Button>
                           <p className="text-xs text-muted-foreground mt-1">
                             Real-time market data
@@ -912,8 +911,6 @@ export default function MobileLeadManager() {
               </div>
             )}
           </div>
-        ) : activeTab === "shop" ? (
-          <ShopPage />
         ) : activeTab === "wallets" ? (
           <WalletSection userId={user?.id} />
         ) : activeTab === "rewards" ? (
@@ -1269,18 +1266,6 @@ export default function MobileLeadManager() {
                   {availableJobs.length + myJobs.length}
                 </Badge>
               )}
-            </div>
-          </Button>
-          
-          <Button
-            variant={activeTab === "shop" ? "default" : "ghost"}
-            className="w-full px-2 py-2"
-            onClick={() => handleTabChange("shop")}
-            data-testid="tab-shop"
-          >
-            <div className="flex flex-col items-center gap-1">
-              <ShoppingBag className="h-4 w-4" />
-              <span className="text-xs">Shop</span>
             </div>
           </Button>
           
