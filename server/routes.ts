@@ -13063,6 +13063,8 @@ Thank you for your business!
       for (const r of rows) config[r.setting_key] = r.setting_value;
       let customItems: { id: string; name: string; value: number }[] = [];
       try { customItems = JSON.parse(config['pricing_custom_items'] || '[]'); } catch {}
+      let junkAddons: { id: string; name: string; value: number }[] = [];
+      try { junkAddons = JSON.parse(config['pricing_junk_addons'] || '[]'); } catch {}
       const n = (key: string, fallback: number) => parseFloat(config[key] ?? String(fallback));
       res.json({
         ratePerMoverHour: n('pricing_rate_per_mover_hour', 60),
@@ -13083,6 +13085,7 @@ Thank you for your business!
         junkLargeLow:  n('pricing_junk_large_low',   200),
         junkLargeHigh: n('pricing_junk_large_high',  600),
         customItems,
+        junkAddons,
       });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -13118,6 +13121,23 @@ Thank you for your business!
         `INSERT INTO spin_config (setting_key, setting_value, description) VALUES ($1, $2, $3)
          ON CONFLICT (setting_key) DO UPDATE SET setting_value=$2, updated_at=NOW()`,
         ['pricing_custom_items', JSON.stringify(items), 'Custom additional items/services JSON array']
+      );
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.put("/api/admin/pricing/junk-addons", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!['admin', 'business_owner'].includes((req.session as any).userRole)) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      const { items } = req.body;
+      await pool.query(
+        `INSERT INTO spin_config (setting_key, setting_value, description) VALUES ($1, $2, $3)
+         ON CONFLICT (setting_key) DO UPDATE SET setting_value=$2, updated_at=NOW()`,
+        ['pricing_junk_addons', JSON.stringify(items), 'Junk removal heavy item surcharges JSON array']
       );
       res.json({ ok: true });
     } catch (e: any) {

@@ -35,6 +35,7 @@ interface Pricing {
   junkLargeLow: number;
   junkLargeHigh: number;
   customItems: CustomItem[];
+  junkAddons: CustomItem[];
 }
 
 const DEFAULT_PRICING: Pricing = {
@@ -48,6 +49,7 @@ const DEFAULT_PRICING: Pricing = {
   junkLargeLow: 200,
   junkLargeHigh: 600,
   customItems: [],
+  junkAddons: [],
 };
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -291,6 +293,23 @@ function ResultCard({ sel, pricing }: { sel: Sel; pricing: Pricing }) {
             </>}
           </div>
         </div>
+        {pricing.junkAddons.length > 0 && (
+          <div className="rounded-xl border border-orange-500/40 overflow-hidden">
+            <div className="bg-orange-900/30 px-3 py-2.5 flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-orange-400 shrink-0" />
+              <span className="text-orange-200 text-xs font-semibold uppercase tracking-wide">Heavy Item Surcharges — Not Included in Estimate Above</span>
+            </div>
+            {pricing.junkAddons.map(item => (
+              <div key={item.id} className="border-t border-orange-500/20 px-3 py-2.5 flex justify-between items-center text-sm bg-orange-950/20">
+                <span className="text-slate-200">{item.name}</span>
+                <span className="text-orange-400 font-semibold">+${item.value.toLocaleString()}</span>
+              </div>
+            ))}
+            <div className="border-t border-orange-500/20 px-3 py-2 text-xs text-orange-300/70 bg-orange-950/10">
+              These items require extra labor and disposal fees. Please let us know when booking.
+            </div>
+          </div>
+        )}
         {pricing.customItems.length > 0 && (
           <div className="rounded-xl border border-slate-700/60 overflow-hidden">
             <div className="bg-slate-800/80 px-3 py-2 text-slate-400 text-xs uppercase tracking-wide font-medium">Additional Services</div>
@@ -672,6 +691,7 @@ export function MovingEstimatorChat() {
     junkLargeLow:     pricingData.junkLargeLow      ?? DEFAULT_PRICING.junkLargeLow,
     junkLargeHigh:    pricingData.junkLargeHigh     ?? DEFAULT_PRICING.junkLargeHigh,
     customItems:      pricingData.customItems       ?? [],
+    junkAddons:       pricingData.junkAddons        ?? [],
   } : DEFAULT_PRICING;
 
   const logic = useChatLogic(pricing);
@@ -685,13 +705,16 @@ function AdminPricingEditor({ pricing }: { pricing: Pricing }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [customItems, setCustomItems] = useState<CustomItem[]>(pricing.customItems);
+  const [junkAddons, setJunkAddons] = useState<CustomItem[]>(pricing.junkAddons);
   const [newName, setNewName] = useState("");
   const [newValue, setNewValue] = useState("");
+  const [newJunkName, setNewJunkName] = useState("");
+  const [newJunkValue, setNewJunkValue] = useState("");
 
   // Sync if pricing prop changes (after API refetch)
   const customItemsRef = customItems;
 
-  const fields: { key: string; label: string; field: keyof Omit<Pricing, "customItems">; prefix?: string; suffix?: string }[] = [
+  const fields: { key: string; label: string; field: keyof Omit<Pricing, "customItems" | "junkAddons">; prefix?: string; suffix?: string }[] = [
     { key: "rate_per_mover_hour", label: "Rate per mover/hr",      field: "ratePerMoverHour", prefix: "$", suffix: "/mover/hr" },
     { key: "short_job_rate",      label: "Short job flat rate",    field: "shortJobRate",     prefix: "$", suffix: "/hr" },
     { key: "short_job_full",      label: "Short job full price",   field: "shortJobFull",     prefix: "$" },
@@ -727,7 +750,44 @@ function AdminPricingEditor({ pricing }: { pricing: Pricing }) {
     onError: () => toast({ title: "Failed to save custom items", variant: "destructive" }),
   });
 
-  function getValue(field: keyof Omit<Pricing, "customItems">): string {
+  const saveJunkAddonsMutation = useMutation({
+    mutationFn: async (items: CustomItem[]) => {
+      const res = await apiRequest("PUT", "/api/admin/pricing/junk-addons", { items });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/pricing"] });
+      toast({ title: "✅ Junk add-ons saved" });
+    },
+    onError: () => toast({ title: "Failed to save junk add-ons", variant: "destructive" }),
+  });
+
+  function addJunkAddon() {
+    const name = newJunkName.trim();
+    const val = parseFloat(newJunkValue);
+    if (!name || isNaN(val)) return;
+    const updated = [...junkAddons, { id: Date.now().toString(), name, value: val }];
+    setJunkAddons(updated);
+    saveJunkAddonsMutation.mutate(updated);
+    setNewJunkName("");
+    setNewJunkValue("");
+  }
+
+  function removeJunkAddon(id: string) {
+    const updated = junkAddons.filter(i => i.id !== id);
+    setJunkAddons(updated);
+    saveJunkAddonsMutation.mutate(updated);
+  }
+
+  function updateJunkAddon(id: string, field: "name" | "value", raw: string) {
+    setJunkAddons(prev => prev.map(i => i.id === id ? { ...i, [field]: field === "value" ? (parseFloat(raw) || 0) : raw } : i));
+  }
+
+  function saveJunkAddon() {
+    saveJunkAddonsMutation.mutate(junkAddons);
+  }
+
+  function getValue(field: keyof Omit<Pricing, "customItems" | "junkAddons">): string {
     return draft[field] !== undefined ? draft[field] : String(pricing[field]);
   }
 
@@ -869,6 +929,74 @@ function AdminPricingEditor({ pricing }: { pricing: Pricing }) {
               </Button>
             </div>
           </div>
+
+          {/* ── Junk heavy item add-ons ── */}
+          <div className="space-y-3">
+            <p className="text-xs text-orange-400 font-semibold uppercase tracking-wide">Junk Removal — Heavy Item Surcharges</p>
+            <p className="text-xs text-slate-500">Shown as a disclosure on junk removal estimates (e.g. Mattress $75, TV $50, Refrigerator $100). These are NOT added to the base estimate — they're a heads-up to customers.</p>
+
+            {junkAddons.length === 0 && (
+              <p className="text-xs text-slate-600 italic">No heavy item surcharges yet — add one below.</p>
+            )}
+
+            {junkAddons.map(item => (
+              <div key={item.id} className="flex items-center gap-2 bg-orange-950/30 rounded-lg px-3 py-2 border border-orange-500/20">
+                <GripVertical className="h-4 w-4 text-slate-600 shrink-0" />
+                <Input
+                  value={item.name}
+                  onChange={e => updateJunkAddon(item.id, "name", e.target.value)}
+                  onBlur={() => saveJunkAddon()}
+                  onKeyDown={e => { if (e.key === "Enter") saveJunkAddon(); }}
+                  placeholder="Item name"
+                  className="bg-slate-900 border-slate-600 text-white h-8 text-sm flex-1 min-w-0"
+                />
+                <span className="text-slate-400 text-sm shrink-0">$</span>
+                <Input
+                  type="number"
+                  value={item.value}
+                  onChange={e => updateJunkAddon(item.id, "value", e.target.value)}
+                  onBlur={() => saveJunkAddon()}
+                  onKeyDown={e => { if (e.key === "Enter") saveJunkAddon(); }}
+                  className="bg-slate-900 border-slate-600 text-white h-8 text-sm w-24 shrink-0"
+                />
+                <button
+                  onClick={() => removeJunkAddon(item.id)}
+                  className="text-red-400 hover:text-red-300 shrink-0 p-1 rounded hover:bg-red-900/20 transition-colors"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+
+            {/* Add new junk add-on row */}
+            <div className="flex items-center gap-2 bg-orange-950/20 rounded-lg px-3 py-2 border border-dashed border-orange-600/40">
+              <Plus className="h-4 w-4 text-orange-400 shrink-0" />
+              <Input
+                value={newJunkName}
+                onChange={e => setNewJunkName(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") addJunkAddon(); }}
+                placeholder="e.g. Mattress, TV, Refrigerator…"
+                className="bg-slate-900 border-slate-600 text-white h-8 text-sm flex-1 min-w-0"
+              />
+              <span className="text-slate-400 text-sm shrink-0">$</span>
+              <Input
+                type="number"
+                value={newJunkValue}
+                onChange={e => setNewJunkValue(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") addJunkAddon(); }}
+                placeholder="0"
+                className="bg-slate-900 border-slate-600 text-white h-8 text-sm w-24 shrink-0"
+              />
+              <Button
+                size="sm"
+                onClick={addJunkAddon}
+                disabled={!newJunkName.trim() || !newJunkValue || saveJunkAddonsMutation.isPending}
+                className="bg-orange-700 hover:bg-orange-600 h-8 px-3 shrink-0 text-xs"
+              >
+                Add
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -892,6 +1020,7 @@ export default function MovingEstimator() {
     junkLargeLow:     pricingData.junkLargeLow      ?? DEFAULT_PRICING.junkLargeLow,
     junkLargeHigh:    pricingData.junkLargeHigh     ?? DEFAULT_PRICING.junkLargeHigh,
     customItems:      pricingData.customItems       ?? [],
+    junkAddons:       pricingData.junkAddons        ?? [],
   } : DEFAULT_PRICING;
 
   const logic = useChatLogic(pricing);
