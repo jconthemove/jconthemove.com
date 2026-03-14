@@ -276,7 +276,8 @@ async function ensureJackpotsSeeded() {
         ('pricing_junk_small_low',       '100', 'Junk removal small load estimate low ($)'),
         ('pricing_junk_small_high',      '200', 'Junk removal small load estimate high ($)'),
         ('pricing_junk_large_low',       '200', 'Junk removal full truckload estimate low ($)'),
-        ('pricing_junk_large_high',      '600', 'Junk removal full truckload estimate high ($)')
+        ('pricing_junk_large_high',      '600', 'Junk removal full truckload estimate high ($)'),
+        ('pricing_custom_items',         '[]',  'Custom additional items/services JSON array')
       ON CONFLICT (setting_key) DO NOTHING;
     `);
     console.log('✅ Quantum Spin jackpots seeded');
@@ -13058,26 +13059,30 @@ Thank you for your business!
       const { rows } = await pool.query(
         `SELECT setting_key, setting_value FROM spin_config WHERE setting_key LIKE 'pricing_%' ORDER BY setting_key`
       );
-      const config: Record<string, number> = {};
-      for (const r of rows) config[r.setting_key] = parseFloat(r.setting_value);
+      const config: Record<string, any> = {};
+      for (const r of rows) config[r.setting_key] = r.setting_value;
+      let customItems: { id: string; name: string; value: number }[] = [];
+      try { customItems = JSON.parse(config['pricing_custom_items'] || '[]'); } catch {}
+      const n = (key: string, fallback: number) => parseFloat(config[key] ?? String(fallback));
       res.json({
-        ratePerMoverHour: config['pricing_rate_per_mover_hour'] ?? 60,
-        truckAdd: config['pricing_truck_add'] ?? 60,
+        ratePerMoverHour: n('pricing_rate_per_mover_hour', 60),
+        truckAdd:         n('pricing_truck_add',           60),
         minHours: {
-          1: config['pricing_min_hours_1'] ?? 5,
-          2: config['pricing_min_hours_2'] ?? 4,
-          3: config['pricing_min_hours_3'] ?? 3,
-          4: config['pricing_min_hours_4'] ?? 2,
-          5: config['pricing_min_hours_5'] ?? 2,
+          1: n('pricing_min_hours_1', 5),
+          2: n('pricing_min_hours_2', 4),
+          3: n('pricing_min_hours_3', 3),
+          4: n('pricing_min_hours_4', 2),
+          5: n('pricing_min_hours_5', 2),
         },
-        shortJobRate:  config['pricing_short_job_rate']   ?? 150,
-        shortJobFull:  config['pricing_short_job_full']   ?? 300,
-        jc222Price:    config['pricing_jc222_price']      ?? 222,
-        driveSpeedMph: config['pricing_drive_speed_mph']  ?? 35,
-        junkSmallLow:  config['pricing_junk_small_low']   ?? 100,
-        junkSmallHigh: config['pricing_junk_small_high']  ?? 200,
-        junkLargeLow:  config['pricing_junk_large_low']   ?? 200,
-        junkLargeHigh: config['pricing_junk_large_high']  ?? 600,
+        shortJobRate:  n('pricing_short_job_rate',   150),
+        shortJobFull:  n('pricing_short_job_full',   300),
+        jc222Price:    n('pricing_jc222_price',      222),
+        driveSpeedMph: n('pricing_drive_speed_mph',   35),
+        junkSmallLow:  n('pricing_junk_small_low',   100),
+        junkSmallHigh: n('pricing_junk_small_high',  200),
+        junkLargeLow:  n('pricing_junk_large_low',   200),
+        junkLargeHigh: n('pricing_junk_large_high',  600),
+        customItems,
       });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -13096,6 +13101,23 @@ Thank you for your business!
         `INSERT INTO spin_config (setting_key, setting_value, description) VALUES ($1, $2, $3)
          ON CONFLICT (setting_key) DO UPDATE SET setting_value=$2, updated_at=NOW()`,
         [fullKey, String(value), `Pricing config: ${key}`]
+      );
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.put("/api/admin/pricing/custom-items", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!['admin', 'business_owner'].includes((req.session as any).userRole)) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      const { items } = req.body;
+      await pool.query(
+        `INSERT INTO spin_config (setting_key, setting_value, description) VALUES ($1, $2, $3)
+         ON CONFLICT (setting_key) DO UPDATE SET setting_value=$2, updated_at=NOW()`,
+        ['pricing_custom_items', JSON.stringify(items), 'Custom additional items/services JSON array']
       );
       res.json({ ok: true });
     } catch (e: any) {

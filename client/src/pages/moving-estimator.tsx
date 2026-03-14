@@ -9,9 +9,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import {
-  ArrowLeft, Truck, Package2, Users, Clock, DollarSign,
+  ArrowLeft, Truck, Package2, Users, Clock,
   RotateCcw, ChevronRight, Star, AlertCircle, MapPin,
-  Navigation, Send, Loader2, ChevronDown, ChevronUp, Settings
+  Navigation, Send, Loader2, ChevronDown, ChevronUp, Settings,
+  Plus, Trash2, GripVertical
 } from "lucide-react";
 
 // ── Fixed geo constants ─────────────────────────────────────────────────────
@@ -21,6 +22,8 @@ const BASE_LNG = -90.1715;
 const BASE_CITY = "Ironwood, MI";
 
 // ── Pricing type (mirrors /api/pricing response) ────────────────────────────
+interface CustomItem { id: string; name: string; value: number; }
+
 interface Pricing {
   ratePerMoverHour: number;
   shortJobRate: number;
@@ -31,6 +34,7 @@ interface Pricing {
   junkSmallHigh: number;
   junkLargeLow: number;
   junkLargeHigh: number;
+  customItems: CustomItem[];
 }
 
 const DEFAULT_PRICING: Pricing = {
@@ -43,6 +47,7 @@ const DEFAULT_PRICING: Pricing = {
   junkSmallHigh: 200,
   junkLargeLow: 200,
   junkLargeHigh: 600,
+  customItems: [],
 };
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -286,6 +291,17 @@ function ResultCard({ sel, pricing }: { sel: Sel; pricing: Pricing }) {
             </>}
           </div>
         </div>
+        {pricing.customItems.length > 0 && (
+          <div className="rounded-xl border border-slate-700/60 overflow-hidden">
+            <div className="bg-slate-800/80 px-3 py-2 text-slate-400 text-xs uppercase tracking-wide font-medium">Additional Services</div>
+            {pricing.customItems.map(item => (
+              <div key={item.id} className="border-t border-slate-700/40 px-3 py-2.5 flex justify-between items-center text-sm">
+                <span className="text-slate-200">{item.name}</span>
+                <span className="text-emerald-400 font-semibold">+${item.value.toLocaleString()}</span>
+              </div>
+            ))}
+          </div>
+        )}
         <Disclaimer pricing={pricing} drive={drive} />
       </div>
     );
@@ -347,6 +363,17 @@ function ResultCard({ sel, pricing }: { sel: Sel; pricing: Pricing }) {
             </div>
           </div>
         </div>
+        {pricing.customItems.length > 0 && (
+          <div className="rounded-xl border border-slate-700/60 overflow-hidden">
+            <div className="bg-slate-800/80 px-3 py-2 text-slate-400 text-xs uppercase tracking-wide font-medium">Additional Services</div>
+            {pricing.customItems.map(item => (
+              <div key={item.id} className="border-t border-slate-700/40 px-3 py-2.5 flex justify-between items-center text-sm">
+                <span className="text-slate-200">{item.name}</span>
+                <span className="text-emerald-400 font-semibold">+${item.value.toLocaleString()}</span>
+              </div>
+            ))}
+          </div>
+        )}
         <Disclaimer pricing={pricing} drive={drive} shortJob />
       </div>
     );
@@ -398,6 +425,17 @@ function ResultCard({ sel, pricing }: { sel: Sel; pricing: Pricing }) {
           );
         })}
       </div>
+      {pricing.customItems.length > 0 && (
+        <div className="rounded-xl border border-slate-700/60 overflow-hidden">
+          <div className="bg-slate-800/80 px-3 py-2 text-slate-400 text-xs uppercase tracking-wide font-medium">Additional Services</div>
+          {pricing.customItems.map(item => (
+            <div key={item.id} className="border-t border-slate-700/40 px-3 py-2.5 flex justify-between items-center text-sm">
+              <span className="text-slate-200">{item.name}</span>
+              <span className="text-emerald-400 font-semibold">+${item.value.toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+      )}
       <Disclaimer pricing={pricing} drive={drive} />
     </div>
   );
@@ -633,6 +671,7 @@ export function MovingEstimatorChat() {
     junkSmallHigh:    pricingData.junkSmallHigh     ?? DEFAULT_PRICING.junkSmallHigh,
     junkLargeLow:     pricingData.junkLargeLow      ?? DEFAULT_PRICING.junkLargeLow,
     junkLargeHigh:    pricingData.junkLargeHigh     ?? DEFAULT_PRICING.junkLargeHigh,
+    customItems:      pricingData.customItems       ?? [],
   } : DEFAULT_PRICING;
 
   const logic = useChatLogic(pricing);
@@ -645,17 +684,23 @@ function AdminPricingEditor({ pricing }: { pricing: Pricing }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<Record<string, string>>({});
+  const [customItems, setCustomItems] = useState<CustomItem[]>(pricing.customItems);
+  const [newName, setNewName] = useState("");
+  const [newValue, setNewValue] = useState("");
 
-  const fields: { key: string; label: string; field: keyof Pricing; prefix?: string; suffix?: string }[] = [
-    { key: "rate_per_mover_hour", label: "Rate per mover/hr",        field: "ratePerMoverHour", prefix: "$", suffix: "/mover/hr" },
-    { key: "short_job_rate",      label: "Short job flat rate",      field: "shortJobRate",     prefix: "$", suffix: "/hr" },
-    { key: "short_job_full",      label: "Short job full price",     field: "shortJobFull",     prefix: "$" },
-    { key: "jc222_price",         label: "JC222 promo price",        field: "jc222Price",       prefix: "$" },
-    { key: "drive_speed_mph",     label: "Drive speed average",      field: "driveSpeedMph",    suffix: " mph" },
-    { key: "junk_small_low",      label: "Junk small load (low)",    field: "junkSmallLow",     prefix: "$" },
-    { key: "junk_small_high",     label: "Junk small load (high)",   field: "junkSmallHigh",    prefix: "$" },
-    { key: "junk_large_low",      label: "Junk full load (low)",     field: "junkLargeLow",     prefix: "$" },
-    { key: "junk_large_high",     label: "Junk full load (high)",    field: "junkLargeHigh",    prefix: "$" },
+  // Sync if pricing prop changes (after API refetch)
+  const customItemsRef = customItems;
+
+  const fields: { key: string; label: string; field: keyof Omit<Pricing, "customItems">; prefix?: string; suffix?: string }[] = [
+    { key: "rate_per_mover_hour", label: "Rate per mover/hr",      field: "ratePerMoverHour", prefix: "$", suffix: "/mover/hr" },
+    { key: "short_job_rate",      label: "Short job flat rate",    field: "shortJobRate",     prefix: "$", suffix: "/hr" },
+    { key: "short_job_full",      label: "Short job full price",   field: "shortJobFull",     prefix: "$" },
+    { key: "jc222_price",         label: "JC222 promo price",      field: "jc222Price",       prefix: "$" },
+    { key: "drive_speed_mph",     label: "Drive speed average",    field: "driveSpeedMph",    suffix: " mph" },
+    { key: "junk_small_low",      label: "Junk small load (low)",  field: "junkSmallLow",     prefix: "$" },
+    { key: "junk_small_high",     label: "Junk small load (high)", field: "junkSmallHigh",    prefix: "$" },
+    { key: "junk_large_low",      label: "Junk full load (low)",   field: "junkLargeLow",     prefix: "$" },
+    { key: "junk_large_high",     label: "Junk full load (high)",  field: "junkLargeHigh",    prefix: "$" },
   ];
 
   const saveMutation = useMutation({
@@ -670,15 +715,52 @@ function AdminPricingEditor({ pricing }: { pricing: Pricing }) {
     onError: () => toast({ title: "Failed to save", variant: "destructive" }),
   });
 
-  function getValue(field: keyof Pricing): string {
+  const saveCustomMutation = useMutation({
+    mutationFn: async (items: CustomItem[]) => {
+      const res = await apiRequest("PUT", "/api/admin/pricing/custom-items", { items });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/pricing"] });
+      toast({ title: "✅ Custom items saved" });
+    },
+    onError: () => toast({ title: "Failed to save custom items", variant: "destructive" }),
+  });
+
+  function getValue(field: keyof Omit<Pricing, "customItems">): string {
     return draft[field] !== undefined ? draft[field] : String(pricing[field]);
   }
 
   function handleSave(f: typeof fields[0]) {
-    const val = draft[f.field];
+    const val = draft[f.field as string];
     if (val === undefined || val === String(pricing[f.field])) return;
     saveMutation.mutate({ key: f.key, value: val });
-    setDraft(d => { const n = { ...d }; delete n[f.field]; return n; });
+    setDraft(d => { const n = { ...d }; delete n[f.field as string]; return n; });
+  }
+
+  function addItem() {
+    const name = newName.trim();
+    const val = parseFloat(newValue);
+    if (!name || isNaN(val)) return;
+    const updated = [...customItemsRef, { id: Date.now().toString(), name, value: val }];
+    setCustomItems(updated);
+    saveCustomMutation.mutate(updated);
+    setNewName("");
+    setNewValue("");
+  }
+
+  function removeItem(id: string) {
+    const updated = customItemsRef.filter(i => i.id !== id);
+    setCustomItems(updated);
+    saveCustomMutation.mutate(updated);
+  }
+
+  function updateItem(id: string, field: "name" | "value", raw: string) {
+    setCustomItems(prev => prev.map(i => i.id === id ? { ...i, [field]: field === "value" ? (parseFloat(raw) || 0) : raw } : i));
+  }
+
+  function saveItem(id: string) {
+    saveCustomMutation.mutate(customItems);
   }
 
   return (
@@ -695,9 +777,12 @@ function AdminPricingEditor({ pricing }: { pricing: Pricing }) {
       </button>
 
       {open && (
-        <div className="px-5 pb-5 space-y-3 border-t border-amber-500/20 pt-4">
-          <p className="text-xs text-amber-400/70">Changes apply immediately to all estimates. Confirm at booking is always shown.</p>
-          <div className="grid grid-cols-1 gap-3">
+        <div className="px-5 pb-5 space-y-5 border-t border-amber-500/20 pt-4">
+          <p className="text-xs text-amber-400/70">Changes apply immediately to all estimates. Blur or press Enter to save each field.</p>
+
+          {/* ── Standard fields ── */}
+          <div className="space-y-3">
+            <p className="text-xs text-slate-400 font-semibold uppercase tracking-wide">Base Rates</p>
             {fields.map(f => (
               <div key={f.key} className="flex items-center gap-3">
                 <label className="text-slate-300 text-sm w-44 shrink-0">{f.label}</label>
@@ -716,7 +801,74 @@ function AdminPricingEditor({ pricing }: { pricing: Pricing }) {
               </div>
             ))}
           </div>
-          <p className="text-xs text-slate-500 mt-2">Blur a field or press Enter to save each value.</p>
+
+          {/* ── Custom items ── */}
+          <div className="space-y-3">
+            <p className="text-xs text-slate-400 font-semibold uppercase tracking-wide">Additional Items / Services</p>
+            <p className="text-xs text-slate-500">These appear as extra line items on every estimate (e.g. Piano Move, Storage Fee, Packing Supplies).</p>
+
+            {customItems.length === 0 && (
+              <p className="text-xs text-slate-600 italic">No custom items yet — add one below.</p>
+            )}
+
+            {customItems.map(item => (
+              <div key={item.id} className="flex items-center gap-2 bg-slate-800/60 rounded-lg px-3 py-2 border border-slate-700/40">
+                <GripVertical className="h-4 w-4 text-slate-600 shrink-0" />
+                <Input
+                  value={item.name}
+                  onChange={e => updateItem(item.id, "name", e.target.value)}
+                  onBlur={() => saveItem(item.id)}
+                  onKeyDown={e => { if (e.key === "Enter") saveItem(item.id); }}
+                  placeholder="Item name"
+                  className="bg-slate-900 border-slate-600 text-white h-8 text-sm flex-1 min-w-0"
+                />
+                <span className="text-slate-400 text-sm shrink-0">$</span>
+                <Input
+                  type="number"
+                  value={item.value}
+                  onChange={e => updateItem(item.id, "value", e.target.value)}
+                  onBlur={() => saveItem(item.id)}
+                  onKeyDown={e => { if (e.key === "Enter") saveItem(item.id); }}
+                  className="bg-slate-900 border-slate-600 text-white h-8 text-sm w-24 shrink-0"
+                />
+                <button
+                  onClick={() => removeItem(item.id)}
+                  className="text-red-400 hover:text-red-300 shrink-0 p-1 rounded hover:bg-red-900/20 transition-colors"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+
+            {/* Add new item row */}
+            <div className="flex items-center gap-2 bg-slate-800/40 rounded-lg px-3 py-2 border border-dashed border-slate-600/50">
+              <Plus className="h-4 w-4 text-teal-400 shrink-0" />
+              <Input
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") addItem(); }}
+                placeholder="New item name…"
+                className="bg-slate-900 border-slate-600 text-white h-8 text-sm flex-1 min-w-0"
+              />
+              <span className="text-slate-400 text-sm shrink-0">$</span>
+              <Input
+                type="number"
+                value={newValue}
+                onChange={e => setNewValue(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") addItem(); }}
+                placeholder="0"
+                className="bg-slate-900 border-slate-600 text-white h-8 text-sm w-24 shrink-0"
+              />
+              <Button
+                size="sm"
+                onClick={addItem}
+                disabled={!newName.trim() || !newValue || saveCustomMutation.isPending}
+                className="bg-teal-600 hover:bg-teal-700 h-8 px-3 shrink-0 text-xs"
+              >
+                Add
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -739,6 +891,7 @@ export default function MovingEstimator() {
     junkSmallHigh:    pricingData.junkSmallHigh     ?? DEFAULT_PRICING.junkSmallHigh,
     junkLargeLow:     pricingData.junkLargeLow      ?? DEFAULT_PRICING.junkLargeLow,
     junkLargeHigh:    pricingData.junkLargeHigh     ?? DEFAULT_PRICING.junkLargeHigh,
+    customItems:      pricingData.customItems       ?? [],
   } : DEFAULT_PRICING;
 
   const logic = useChatLogic(pricing);
