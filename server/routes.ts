@@ -268,7 +268,15 @@ async function ensureJackpotsSeeded() {
         ('pricing_min_hours_2',          '4', 'Minimum hours for 2-mover crew'),
         ('pricing_min_hours_3',          '3', 'Minimum hours for 3-mover crew'),
         ('pricing_min_hours_4',          '2', 'Minimum hours for 4-mover crew'),
-        ('pricing_min_hours_5',          '2', 'Minimum hours for 5-mover crew')
+        ('pricing_min_hours_5',          '2', 'Minimum hours for 5-mover crew'),
+        ('pricing_short_job_rate',       '150', 'Short job flat rate ($/hr, small truck load-only)'),
+        ('pricing_short_job_full',       '300', 'Short job full price before promo ($)'),
+        ('pricing_jc222_price',          '222', 'JC222 promo price for short jobs ($)'),
+        ('pricing_drive_speed_mph',       '35', 'Average drive speed for travel time calc (mph)'),
+        ('pricing_junk_small_low',       '100', 'Junk removal small load estimate low ($)'),
+        ('pricing_junk_small_high',      '200', 'Junk removal small load estimate high ($)'),
+        ('pricing_junk_large_low',       '200', 'Junk removal full truckload estimate low ($)'),
+        ('pricing_junk_large_high',      '600', 'Junk removal full truckload estimate high ($)')
       ON CONFLICT (setting_key) DO NOTHING;
     `);
     console.log('✅ Quantum Spin jackpots seeded');
@@ -13062,6 +13070,14 @@ Thank you for your business!
           4: config['pricing_min_hours_4'] ?? 2,
           5: config['pricing_min_hours_5'] ?? 2,
         },
+        shortJobRate:  config['pricing_short_job_rate']   ?? 150,
+        shortJobFull:  config['pricing_short_job_full']   ?? 300,
+        jc222Price:    config['pricing_jc222_price']      ?? 222,
+        driveSpeedMph: config['pricing_drive_speed_mph']  ?? 35,
+        junkSmallLow:  config['pricing_junk_small_low']   ?? 100,
+        junkSmallHigh: config['pricing_junk_small_high']  ?? 200,
+        junkLargeLow:  config['pricing_junk_large_low']   ?? 200,
+        junkLargeHigh: config['pricing_junk_large_high']  ?? 600,
       });
     } catch (e: any) {
       res.status(500).json({ error: e.message });

@@ -1,25 +1,49 @@
 import { useState, useRef, useEffect } from "react";
 import { Link } from "wouter";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import {
   ArrowLeft, Truck, Package2, Users, Clock, DollarSign,
   RotateCcw, ChevronRight, Star, AlertCircle, MapPin,
-  Navigation, Send, Loader2
+  Navigation, Send, Loader2, ChevronDown, ChevronUp, Settings
 } from "lucide-react";
 
-// ── Constants ──────────────────────────────────────────────────────────────
-const RATE = 50;                   // $ per mover per hour (3–4 hr jobs, 2–4 movers)
-const SHORT_JOB_RATE = 150;        // $ per hour flat for <3 hr / 2-mover small jobs
-const SHORT_JOB_FULL = 300;        // full price for short job (2 movers, 2 hrs)
-const JC222_PRICE = 222;           // JC222 promo discount price for short jobs
-const DRIVE_SPEED_MPH = 35;        // UP Michigan roads average
+// ── Fixed geo constants ─────────────────────────────────────────────────────
 const BASE_ZIP = "49938";
 const BASE_LAT = 46.4539;
 const BASE_LNG = -90.1715;
 const BASE_CITY = "Ironwood, MI";
+
+// ── Pricing type (mirrors /api/pricing response) ────────────────────────────
+interface Pricing {
+  ratePerMoverHour: number;
+  shortJobRate: number;
+  shortJobFull: number;
+  jc222Price: number;
+  driveSpeedMph: number;
+  junkSmallLow: number;
+  junkSmallHigh: number;
+  junkLargeLow: number;
+  junkLargeHigh: number;
+}
+
+const DEFAULT_PRICING: Pricing = {
+  ratePerMoverHour: 60,
+  shortJobRate: 150,
+  shortJobFull: 300,
+  jc222Price: 222,
+  driveSpeedMph: 35,
+  junkSmallLow: 100,
+  junkSmallHigh: 200,
+  junkLargeLow: 200,
+  junkLargeHigh: 600,
+};
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type Service = "moving" | "junk";
@@ -30,8 +54,8 @@ type JunkSize = "small" | "large";
 interface ZipInfo { zip: string; city: string; lat: number; lng: number; }
 interface DriveInfo {
   pickupMiles: number;
-  dropoffMiles: number;   // pickup → dropoff (0 if load-only)
-  returnMiles: number;    // last stop → base
+  dropoffMiles: number;
+  returnMiles: number;
   totalMiles: number;
   totalDriveHours: number;
 }
@@ -70,26 +94,21 @@ function haversine(lat1: number, lng1: number, lat2: number, lng2: number): numb
 
 function roundHalf(n: number) { return Math.ceil(n * 2) / 2; }
 
-function computeDrive(sel: Sel): DriveInfo | undefined {
+function computeDrive(sel: Sel, driveSpeedMph = 35): DriveInfo | undefined {
   if (!sel.pickup) return undefined;
   const p = sel.pickup;
-
   const pickupMiles = haversine(BASE_LAT, BASE_LNG, p.lat, p.lng);
-
   if (sel.loadType === "loadOnly" || !sel.dropoff) {
-    // base → pickup → base
     const total = pickupMiles * 2;
-    return { pickupMiles, dropoffMiles: 0, returnMiles: pickupMiles, totalMiles: total, totalDriveHours: roundHalf(total / DRIVE_SPEED_MPH) };
+    return { pickupMiles, dropoffMiles: 0, returnMiles: pickupMiles, totalMiles: total, totalDriveHours: roundHalf(total / driveSpeedMph) };
   }
-
   const d = sel.dropoff;
   const dropoffMiles = haversine(p.lat, p.lng, d.lat, d.lng);
   const returnMiles = haversine(d.lat, d.lng, BASE_LAT, BASE_LNG);
   const total = pickupMiles + dropoffMiles + returnMiles;
-  return { pickupMiles, dropoffMiles, returnMiles, totalMiles: total, totalDriveHours: roundHalf(total / DRIVE_SPEED_MPH) };
+  return { pickupMiles, dropoffMiles, returnMiles, totalMiles: total, totalDriveHours: roundHalf(total / driveSpeedMph) };
 }
 
-/** Small truck, load-only = short job → flat $300 rate (not $50/mover/hr) */
 function isShortJob(sel: Sel): boolean {
   return sel.service === "moving" && sel.truckSize === "small" && sel.loadType === "loadOnly";
 }
@@ -109,7 +128,6 @@ function getOptions(sel: Sel): Option[] {
 // ── Build chat message list ────────────────────────────────────────────────
 function buildMessages(sel: Sel): Msg[] {
   const msgs: Msg[] = [];
-
   msgs.push({
     role: "bot",
     text: "Hi! I'm your moving estimate assistant 🚛\n\nLet's figure out your crew, time, and drive cost. What service do you need?",
@@ -121,7 +139,6 @@ function buildMessages(sel: Sel): Msg[] {
   if (!sel.service) return msgs;
   msgs.push({ role: "user", text: sel.service === "moving" ? "🚛 Moving Help" : "♻️ Junk Removal" });
 
-  // ── Junk removal branch ────────────────────────────────────────────────
   if (sel.service === "junk") {
     msgs.push({
       role: "bot",
@@ -133,7 +150,6 @@ function buildMessages(sel: Sel): Msg[] {
     });
     if (!sel.junkSize) return msgs;
     msgs.push({ role: "user", text: sel.junkSize === "small" ? "📦 Small Load" : "🚛 Full Truckload" });
-
     msgs.push({
       role: "bot",
       text: "What's the zip code for the pickup location? (We'll calculate drive time from our Ironwood, MI base.)",
@@ -145,7 +161,6 @@ function buildMessages(sel: Sel): Msg[] {
     return msgs;
   }
 
-  // ── Moving branch ──────────────────────────────────────────────────────
   msgs.push({
     role: "bot",
     text: "What size truck will you need?",
@@ -201,24 +216,56 @@ function buildMessages(sel: Sel): Msg[] {
   return msgs;
 }
 
-// ── Result card ────────────────────────────────────────────────────────────
-function ResultCard({ sel }: { sel: Sel }) {
+// ── Sub-components ─────────────────────────────────────────────────────────
+function DriveBreakdown({ drive, sel }: { drive: DriveInfo; sel: Sel }) {
+  return (
+    <div className="rounded-xl border border-amber-500/30 bg-amber-900/15 p-3 space-y-2 text-sm">
+      <div className="flex items-center gap-2 font-semibold text-amber-300">
+        <Navigation className="h-4 w-4" />
+        Drive Time Breakdown
+      </div>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-400">
+        <span>From {BASE_CITY}</span>
+        <span className="text-slate-200">→ {sel.pickup?.city} ({Math.round(drive.pickupMiles)} mi)</span>
+        {sel.loadType === "loadUnload" && sel.dropoff && <>
+          <span>Pickup → Drop-off</span>
+          <span className="text-slate-200">→ {sel.dropoff.city} ({Math.round(drive.dropoffMiles)} mi)</span>
+        </>}
+        <span>Return to {BASE_CITY}</span>
+        <span className="text-slate-200">({Math.round(drive.returnMiles)} mi)</span>
+        <span className="font-semibold text-amber-300 pt-1 border-t border-amber-700/30">Total drive</span>
+        <span className="text-amber-300 font-semibold pt-1 border-t border-amber-700/30">
+          {Math.round(drive.totalMiles)} mi · {drive.totalDriveHours} hr{drive.totalDriveHours !== 1 ? "s" : ""}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function Disclaimer({ drive, shortJob, pricing }: { drive?: DriveInfo; shortJob?: boolean; pricing: Pricing }) {
+  return (
+    <p className="text-xs text-slate-400 flex items-start gap-1.5">
+      <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-yellow-400" />
+      {shortJob
+        ? `Short job flat rate $${pricing.shortJobRate}/hr ($${pricing.shortJobFull} total). Use code JC222 for $${pricing.jc222Price}.`
+        : `Standard rate $${pricing.ratePerMoverHour}/mover/hr for 3–4 hr jobs.`}
+      {drive ? ` Drive time at ${pricing.driveSpeedMph} mph avg.` : ""} Confirmed at booking.
+    </p>
+  );
+}
+
+function ResultCard({ sel, pricing }: { sel: Sel; pricing: Pricing }) {
   const drive = sel.driveInfo;
-  const driveCostNote = drive
-    ? `+$${(drive.totalDriveHours * RATE).toLocaleString()}–$${(drive.totalDriveHours * 4 * RATE).toLocaleString()} drive`
-    : "";
 
   if (sel.service === "junk") {
     const isSmall = sel.junkSize === "small";
-    const laborLow = isSmall ? 100 : 200;
-    const laborHigh = isSmall ? 200 : 600;
-    const driveCost = drive ? drive.totalDriveHours * 2 * RATE : 0;
+    const laborLow  = isSmall ? pricing.junkSmallLow  : pricing.junkLargeLow;
+    const laborHigh = isSmall ? pricing.junkSmallHigh : pricing.junkLargeHigh;
+    const driveCost = drive ? drive.totalDriveHours * 2 * pricing.ratePerMoverHour : 0;
     return (
       <div className="space-y-4">
         <p className="text-sm text-slate-300 font-semibold">Your junk removal estimate:</p>
-
-        {drive && <DriveBreakdown drive={drive} sel={sel} movers={2} />}
-
+        {drive && <DriveBreakdown drive={drive} sel={sel} />}
         <div className="rounded-xl overflow-hidden border border-emerald-500/40">
           <div className="bg-emerald-900/40 px-4 py-3 flex items-center gap-2">
             <Package2 className="h-4 w-4 text-emerald-400" />
@@ -239,7 +286,7 @@ function ResultCard({ sel }: { sel: Sel }) {
             </>}
           </div>
         </div>
-        <Disclaimer />
+        <Disclaimer pricing={pricing} drive={drive} />
       </div>
     );
   }
@@ -249,47 +296,39 @@ function ResultCard({ sel }: { sel: Sel }) {
 
   const shortJob = isShortJob(sel);
   const opt0 = options[0];
-  const driveCost0 = drive ? Math.round(drive.totalDriveHours * opt0.movers * RATE) : 0;
+  const driveCost0 = drive ? Math.round(drive.totalDriveHours * opt0.movers * pricing.ratePerMoverHour) : 0;
 
-  // ── Short job (small truck, load-only, 2 movers, 2 hrs) ─────────────────
   if (shortJob) {
-    const fullTotal = SHORT_JOB_FULL + driveCost0;
-    const promoTotal = JC222_PRICE + driveCost0;
+    const fullTotal  = pricing.shortJobFull + driveCost0;
+    const promoTotal = pricing.jc222Price   + driveCost0;
     return (
       <div className="space-y-4">
         <p className="text-sm text-slate-300 font-semibold">
           Your moving estimate{sel.stairs ? " (+1 mover for stairs)" : ""}:
         </p>
-
-        {drive && <DriveBreakdown drive={drive} sel={sel} movers={opt0.movers} />}
-
-        {/* Rate explanation */}
+        {drive && <DriveBreakdown drive={drive} sel={sel} />}
         <div className="rounded-xl border border-yellow-500/30 bg-yellow-900/15 p-3 text-xs text-yellow-200 space-y-1">
           <p className="font-semibold text-yellow-300 flex items-center gap-1.5">
             <AlertCircle className="h-3.5 w-3.5" /> Short Job Rate Applies
           </p>
-          <p className="text-yellow-200/80">Jobs under 3 hours with 2 movers are billed at <span className="font-semibold text-white">${SHORT_JOB_RATE}/hr flat</span> — to unlock the $50/mover/hr rate, book a large truck or a load & unload job.</p>
+          <p className="text-yellow-200/80">Jobs under 3 hours with 2 movers are billed at <span className="font-semibold text-white">${pricing.shortJobRate}/hr flat</span> — to unlock the ${pricing.ratePerMoverHour}/mover/hr rate, book a large truck or a load & unload job.</p>
         </div>
-
         <div className="rounded-xl overflow-hidden border border-slate-700/60">
-          {/* Regular price row */}
           <div className="px-4 py-3 flex items-center justify-between border-b border-slate-700/40">
             <div>
               <p className="text-slate-400 text-xs uppercase tracking-wide">Regular Price</p>
               <p className="text-sm text-slate-300 mt-0.5">
                 <Users className="h-3.5 w-3.5 inline text-teal-400 mr-1" />{opt0.movers} movers ·
                 <Clock className="h-3.5 w-3.5 inline text-blue-400 mx-1" />{opt0.hours} hrs ·
-                ${SHORT_JOB_RATE}/hr flat
+                ${pricing.shortJobRate}/hr flat
               </p>
             </div>
             <div className="text-right">
-              <p className="text-slate-500 line-through text-sm">${SHORT_JOB_FULL.toLocaleString()}</p>
+              <p className="text-slate-500 line-through text-sm">${pricing.shortJobFull.toLocaleString()}</p>
               {drive && <p className="text-amber-400 text-xs">+${driveCost0} drive</p>}
               <p className="text-slate-500 line-through text-sm font-bold">${fullTotal.toLocaleString()} total</p>
             </div>
           </div>
-
-          {/* JC222 promo row */}
           <div className="px-4 py-4 bg-gradient-to-r from-teal-900/40 to-emerald-900/30 flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2 mb-1">
@@ -301,34 +340,28 @@ function ResultCard({ sel }: { sel: Sel }) {
               <p className="text-xs text-slate-400">Use code <span className="font-mono text-teal-300 font-bold">JC222</span> at booking</p>
             </div>
             <div className="text-right">
-              <p className="text-emerald-400 font-black text-2xl">${JC222_PRICE}</p>
+              <p className="text-emerald-400 font-black text-2xl">${pricing.jc222Price}</p>
               {drive && <p className="text-amber-400 text-xs">+${driveCost0} drive</p>}
               <p className="text-emerald-300 font-bold text-base">${promoTotal.toLocaleString()} total</p>
               <p className="text-emerald-600 text-xs">Save ${fullTotal - promoTotal}</p>
             </div>
           </div>
         </div>
-
-        <Disclaimer drive={drive} shortJob />
+        <Disclaimer pricing={pricing} drive={drive} shortJob />
       </div>
     );
   }
 
-  // ── Standard rate jobs (3–4 hrs, qualifies for $50/mover/hr) ───────────
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-300 font-semibold">
         Your moving estimate{sel.stairs ? " (stairs: +1 mover)" : ""}:
       </p>
-
-      {drive && <DriveBreakdown drive={drive} sel={sel} movers={options[0]?.movers ?? 2} />}
-
-      {/* Standard rate badge */}
+      {drive && <DriveBreakdown drive={drive} sel={sel} />}
       <div className="flex items-center gap-2 text-xs text-teal-300">
         <Star className="h-3.5 w-3.5 text-teal-400" />
-        <span>Qualifies for <span className="font-bold">${RATE}/mover/hr</span> standard rate</span>
+        <span>Qualifies for <span className="font-bold">${pricing.ratePerMoverHour}/mover/hr</span> standard rate</span>
       </div>
-
       <div className="rounded-xl overflow-hidden border border-slate-700/60">
         <div className="bg-slate-800/80 px-3 py-2 grid grid-cols-5 text-slate-400 text-xs uppercase tracking-wide font-medium">
           <span>Movers</span>
@@ -338,8 +371,8 @@ function ResultCard({ sel }: { sel: Sel }) {
           <span>Total</span>
         </div>
         {options.map((opt, i) => {
-          const labor = opt.movers * opt.hours * RATE;
-          const driveCost = drive ? Math.round(drive.totalDriveHours * opt.movers * RATE) : 0;
+          const labor = opt.movers * opt.hours * pricing.ratePerMoverHour;
+          const driveCost = drive ? Math.round(drive.totalDriveHours * opt.movers * pricing.ratePerMoverHour) : 0;
           const total = labor + driveCost;
           return (
             <div key={i} className={`border-t border-slate-700/40 px-3 py-3 grid grid-cols-5 gap-1 items-center text-sm ${opt.tag === "Most Popular" ? "bg-teal-900/20" : ""}`}>
@@ -365,45 +398,8 @@ function ResultCard({ sel }: { sel: Sel }) {
           );
         })}
       </div>
-      <Disclaimer drive={drive} />
+      <Disclaimer pricing={pricing} drive={drive} />
     </div>
-  );
-}
-
-function DriveBreakdown({ drive, sel, movers }: { drive: DriveInfo; sel: Sel; movers: number }) {
-  return (
-    <div className="rounded-xl border border-amber-500/30 bg-amber-900/15 p-3 space-y-2 text-sm">
-      <div className="flex items-center gap-2 font-semibold text-amber-300">
-        <Navigation className="h-4 w-4" />
-        Drive Time Breakdown
-      </div>
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-400">
-        <span>From {BASE_CITY}</span>
-        <span className="text-slate-200">→ {sel.pickup?.city} ({Math.round(drive.pickupMiles)} mi)</span>
-        {sel.loadType === "loadUnload" && sel.dropoff && <>
-          <span>Pickup → Drop-off</span>
-          <span className="text-slate-200">→ {sel.dropoff.city} ({Math.round(drive.dropoffMiles)} mi)</span>
-        </>}
-        <span>Return to {BASE_CITY}</span>
-        <span className="text-slate-200">({Math.round(drive.returnMiles)} mi)</span>
-        <span className="font-semibold text-amber-300 pt-1 border-t border-amber-700/30">Total drive</span>
-        <span className="text-amber-300 font-semibold pt-1 border-t border-amber-700/30">
-          {Math.round(drive.totalMiles)} mi · {drive.totalDriveHours} hr{drive.totalDriveHours !== 1 ? "s" : ""}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function Disclaimer({ drive, shortJob }: { drive?: DriveInfo; shortJob?: boolean }) {
-  return (
-    <p className="text-xs text-slate-400 flex items-start gap-1.5">
-      <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-yellow-400" />
-      {shortJob
-        ? `Short job flat rate $${SHORT_JOB_RATE}/hr ($${SHORT_JOB_FULL} total). Use code JC222 for $${JC222_PRICE}.`
-        : `Standard rate $${RATE}/mover/hr for 3–4 hr jobs.`}
-      {drive ? ` Drive time at ${DRIVE_SPEED_MPH} mph avg.` : ""} Confirmed at booking.
-    </p>
   );
 }
 
@@ -421,8 +417,8 @@ async function fetchZip(zip: string): Promise<ZipInfo> {
   };
 }
 
-// ── Embeddable chat component (used in homepage dialog) ────────────────────
-export function MovingEstimatorChat() {
+// ── Shared chat logic hook ─────────────────────────────────────────────────
+function useChatLogic(pricing: Pricing) {
   const [sel, setSel] = useState<Sel>({});
   const [zipInput, setZipInput] = useState("");
   const [zipLoading, setZipLoading] = useState(false);
@@ -448,9 +444,7 @@ export function MovingEstimatorChat() {
   function getStepKey(msgIndex: number): string {
     const botChoiceMsgs = messages.slice(0, msgIndex + 1).filter(m => m.role === "bot" && m.choices);
     const idx = botChoiceMsgs.length - 1;
-    if (sel.service === "moving") {
-      return (["service", "truckSize", "loadType", "stairs"] as const)[idx] ?? "service";
-    }
+    if (sel.service === "moving") return (["service", "truckSize", "loadType", "stairs"] as const)[idx] ?? "service";
     return (["service", "junkSize"] as const)[idx] ?? "service";
   }
 
@@ -464,13 +458,13 @@ export function MovingEstimatorChat() {
       if (activeZipStep === "pickup") {
         setSel(s => {
           const updated = { ...s, pickup: info };
-          if (s.loadType !== "loadUnload") updated.driveInfo = computeDrive(updated);
+          if (s.loadType !== "loadUnload") updated.driveInfo = computeDrive(updated, pricing.driveSpeedMph);
           return updated;
         });
       } else if (activeZipStep === "dropoff") {
         setSel(s => {
           const updated = { ...s, dropoff: info };
-          updated.driveInfo = computeDrive(updated);
+          updated.driveInfo = computeDrive(updated, pricing.driveSpeedMph);
           return updated;
         });
       }
@@ -482,46 +476,73 @@ export function MovingEstimatorChat() {
     }
   }
 
+  function restart() { setSel({}); setZipInput(""); setZipError(""); }
+
+  return { sel, messages, activeZipStep, zipInput, setZipInput, zipLoading, zipError, setZipError, bottomRef, handleChoice, getStepKey, handleZipSubmit, restart };
+}
+
+// ── Chat UI (shared between embedded + full-page versions) ─────────────────
+function ChatUI({
+  logic,
+  pricing,
+  compact = false,
+}: {
+  logic: ReturnType<typeof useChatLogic>;
+  pricing: Pricing;
+  compact?: boolean;
+}) {
+  const { sel, messages, activeZipStep, zipInput, setZipInput, zipLoading, zipError, setZipError, bottomRef, handleChoice, getStepKey, handleZipSubmit, restart } = logic;
+
   return (
-    <div className="flex flex-col h-full min-h-0">
-      {/* Restart button */}
-      {Object.keys(sel).length > 0 && (
+    <div className={compact ? "flex flex-col h-full min-h-0" : "space-y-4"}>
+      {compact && Object.keys(sel).length > 0 && (
         <div className="flex justify-end mb-2 shrink-0">
-          <button
-            onClick={() => { setSel({}); setZipInput(""); setZipError(""); }}
-            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-teal-400 transition-colors"
-          >
+          <button onClick={restart} className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-teal-400 transition-colors">
             <RotateCcw className="h-3 w-3" /> Restart
           </button>
         </div>
       )}
 
-      {/* Chat messages — scrollable */}
-      <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+      <div className={compact ? "flex-1 overflow-y-auto space-y-4 pr-1" : "space-y-4"}>
         {messages.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
             {msg.role === "bot" && (
-              <div className="flex items-end gap-2 max-w-[90%]">
-                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-teal-500 to-blue-600 flex items-center justify-center shrink-0 mb-1">
-                  <Truck className="h-3.5 w-3.5 text-white" />
+              <div className={`flex items-end gap-2 ${compact ? "max-w-[90%]" : "max-w-[88%]"}`}>
+                <div className={`${compact ? "w-7 h-7" : "w-8 h-8"} rounded-full bg-gradient-to-br from-teal-500 to-blue-600 flex items-center justify-center shrink-0 mb-1`}>
+                  <Truck className={`${compact ? "h-3.5 w-3.5" : "h-4 w-4"} text-white`} />
                 </div>
                 <div className="space-y-2 flex-1">
                   {msg.isResult ? (
-                    <div className="bg-slate-800/80 border border-slate-700/60 rounded-2xl p-4">
-                      <ResultCard sel={sel} />
-                      <div className="mt-4 space-y-2">
-                        <Link href="/quote">
-                          <Button className="w-full bg-gradient-to-r from-teal-500 to-blue-600 hover:from-teal-600 hover:to-blue-700 font-semibold text-sm">
-                            Get My Free Official Quote <ChevronRight className="h-4 w-4 ml-1" />
+                    <div className={`${compact ? "bg-slate-800/80 border border-slate-700/60 rounded-2xl p-4" : ""}`}>
+                      {!compact && <Card className="bg-slate-800/80 border-slate-700/60 p-4">
+                        <ResultCard sel={sel} pricing={pricing} />
+                        <div className="mt-5 space-y-2">
+                          <Link href="/quote">
+                            <Button className="w-full bg-gradient-to-r from-teal-500 to-blue-600 hover:from-teal-600 hover:to-blue-700 font-semibold">
+                              Get My Free Official Quote <ChevronRight className="h-4 w-4 ml-1" />
+                            </Button>
+                          </Link>
+                          <Button variant="outline" onClick={restart} className="w-full border-slate-600 text-slate-300 hover:bg-slate-700 gap-2 text-sm">
+                            <RotateCcw className="h-3.5 w-3.5" /> Start Over
                           </Button>
-                        </Link>
-                        <Button variant="outline" size="sm" onClick={() => { setSel({}); setZipInput(""); setZipError(""); }} className="w-full border-slate-600 text-slate-300 hover:bg-slate-700 gap-1 text-xs">
-                          <RotateCcw className="h-3 w-3" /> Start Over
-                        </Button>
-                      </div>
+                        </div>
+                      </Card>}
+                      {compact && <>
+                        <ResultCard sel={sel} pricing={pricing} />
+                        <div className="mt-4 space-y-2">
+                          <Link href="/quote">
+                            <Button className="w-full bg-gradient-to-r from-teal-500 to-blue-600 hover:from-teal-600 hover:to-blue-700 font-semibold text-sm">
+                              Get My Free Official Quote <ChevronRight className="h-4 w-4 ml-1" />
+                            </Button>
+                          </Link>
+                          <Button variant="outline" size="sm" onClick={restart} className="w-full border-slate-600 text-slate-300 hover:bg-slate-700 gap-1 text-xs">
+                            <RotateCcw className="h-3 w-3" /> Start Over
+                          </Button>
+                        </div>
+                      </>}
                     </div>
                   ) : (
-                    <div className="bg-slate-700/60 rounded-2xl rounded-tl-sm px-3 py-2.5 text-slate-100 text-sm leading-relaxed whitespace-pre-wrap">
+                    <div className={`bg-slate-700/60 rounded-2xl rounded-tl-sm ${compact ? "px-3 py-2.5" : "px-4 py-3"} text-slate-100 text-sm leading-relaxed whitespace-pre-wrap`}>
                       {msg.text}
                       {msg.choices && (
                         <div className="mt-3 flex flex-wrap gap-2">
@@ -572,8 +593,7 @@ export function MovingEstimatorChat() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Zip input — inline at bottom when active */}
-      {activeZipStep && (
+      {activeZipStep && compact && (
         <div className="mt-3 shrink-0 bg-slate-900/90 border border-slate-700/60 rounded-xl px-3 py-3">
           <p className="text-xs text-slate-400 mb-2 flex items-center gap-1.5">
             <MapPin className="h-3.5 w-3.5 text-teal-400" />
@@ -589,11 +609,7 @@ export function MovingEstimatorChat() {
               className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 font-mono tracking-widest text-center"
               autoFocus
             />
-            <Button
-              onClick={handleZipSubmit}
-              disabled={zipLoading || zipInput.length !== 5}
-              className="bg-teal-600 hover:bg-teal-700 px-4 shrink-0"
-            >
+            <Button onClick={handleZipSubmit} disabled={zipLoading || zipInput.length !== 5} className="bg-teal-600 hover:bg-teal-700 px-4 shrink-0">
               {zipLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </Button>
           </div>
@@ -604,68 +620,129 @@ export function MovingEstimatorChat() {
   );
 }
 
+// ── Embeddable component (used in homepage dialog) ─────────────────────────
+export function MovingEstimatorChat() {
+  const { data: pricingData } = useQuery<any>({ queryKey: ["/api/pricing"], staleTime: 60000 });
+  const pricing: Pricing = pricingData ? {
+    ratePerMoverHour: pricingData.ratePerMoverHour ?? DEFAULT_PRICING.ratePerMoverHour,
+    shortJobRate:     pricingData.shortJobRate      ?? DEFAULT_PRICING.shortJobRate,
+    shortJobFull:     pricingData.shortJobFull      ?? DEFAULT_PRICING.shortJobFull,
+    jc222Price:       pricingData.jc222Price        ?? DEFAULT_PRICING.jc222Price,
+    driveSpeedMph:    pricingData.driveSpeedMph     ?? DEFAULT_PRICING.driveSpeedMph,
+    junkSmallLow:     pricingData.junkSmallLow      ?? DEFAULT_PRICING.junkSmallLow,
+    junkSmallHigh:    pricingData.junkSmallHigh     ?? DEFAULT_PRICING.junkSmallHigh,
+    junkLargeLow:     pricingData.junkLargeLow      ?? DEFAULT_PRICING.junkLargeLow,
+    junkLargeHigh:    pricingData.junkLargeHigh     ?? DEFAULT_PRICING.junkLargeHigh,
+  } : DEFAULT_PRICING;
+
+  const logic = useChatLogic(pricing);
+  return <ChatUI logic={logic} pricing={pricing} compact />;
+}
+
+// ── Admin Pricing Editor ───────────────────────────────────────────────────
+function AdminPricingEditor({ pricing }: { pricing: Pricing }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<Record<string, string>>({});
+
+  const fields: { key: string; label: string; field: keyof Pricing; prefix?: string; suffix?: string }[] = [
+    { key: "rate_per_mover_hour", label: "Rate per mover/hr",        field: "ratePerMoverHour", prefix: "$", suffix: "/mover/hr" },
+    { key: "short_job_rate",      label: "Short job flat rate",      field: "shortJobRate",     prefix: "$", suffix: "/hr" },
+    { key: "short_job_full",      label: "Short job full price",     field: "shortJobFull",     prefix: "$" },
+    { key: "jc222_price",         label: "JC222 promo price",        field: "jc222Price",       prefix: "$" },
+    { key: "drive_speed_mph",     label: "Drive speed average",      field: "driveSpeedMph",    suffix: " mph" },
+    { key: "junk_small_low",      label: "Junk small load (low)",    field: "junkSmallLow",     prefix: "$" },
+    { key: "junk_small_high",     label: "Junk small load (high)",   field: "junkSmallHigh",    prefix: "$" },
+    { key: "junk_large_low",      label: "Junk full load (low)",     field: "junkLargeLow",     prefix: "$" },
+    { key: "junk_large_high",     label: "Junk full load (high)",    field: "junkLargeHigh",    prefix: "$" },
+  ];
+
+  const saveMutation = useMutation({
+    mutationFn: async ({ key, value }: { key: string; value: string }) => {
+      const res = await apiRequest("PATCH", `/api/admin/pricing/${key}`, { value: parseFloat(value) });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/pricing"] });
+      toast({ title: "✅ Pricing updated" });
+    },
+    onError: () => toast({ title: "Failed to save", variant: "destructive" }),
+  });
+
+  function getValue(field: keyof Pricing): string {
+    return draft[field] !== undefined ? draft[field] : String(pricing[field]);
+  }
+
+  function handleSave(f: typeof fields[0]) {
+    const val = draft[f.field];
+    if (val === undefined || val === String(pricing[f.field])) return;
+    saveMutation.mutate({ key: f.key, value: val });
+    setDraft(d => { const n = { ...d }; delete n[f.field]; return n; });
+  }
+
+  return (
+    <div className="mt-8 rounded-2xl border border-amber-500/20 bg-amber-950/20 overflow-hidden">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-5 py-4 text-amber-300 hover:bg-amber-900/20 transition-colors"
+      >
+        <div className="flex items-center gap-2 font-semibold text-sm">
+          <Settings className="h-4 w-4" />
+          Admin: Edit Calculator Pricing
+        </div>
+        {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+      </button>
+
+      {open && (
+        <div className="px-5 pb-5 space-y-3 border-t border-amber-500/20 pt-4">
+          <p className="text-xs text-amber-400/70">Changes apply immediately to all estimates. Confirm at booking is always shown.</p>
+          <div className="grid grid-cols-1 gap-3">
+            {fields.map(f => (
+              <div key={f.key} className="flex items-center gap-3">
+                <label className="text-slate-300 text-sm w-44 shrink-0">{f.label}</label>
+                <div className="flex items-center gap-1 flex-1">
+                  {f.prefix && <span className="text-slate-400 text-sm">{f.prefix}</span>}
+                  <Input
+                    type="number"
+                    value={getValue(f.field)}
+                    onChange={e => setDraft(d => ({ ...d, [f.field]: e.target.value }))}
+                    onBlur={() => handleSave(f)}
+                    onKeyDown={e => { if (e.key === "Enter") handleSave(f); }}
+                    className="bg-slate-800 border-slate-600 text-white h-8 text-sm max-w-[100px]"
+                  />
+                  {f.suffix && <span className="text-slate-400 text-sm">{f.suffix}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-slate-500 mt-2">Blur a field or press Enter to save each value.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main page component ─────────────────────────────────────────────────────
 export default function MovingEstimator() {
-  const [sel, setSel] = useState<Sel>({});
-  const [zipInput, setZipInput] = useState("");
-  const [zipLoading, setZipLoading] = useState(false);
-  const [zipError, setZipError] = useState("");
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const { user } = useAuth();
+  const isAdmin = ["admin", "business_owner"].includes(user?.role || "");
 
-  const messages = buildMessages(sel);
-  const isComplete = messages.some(m => m.isResult);
-  const activeZipStep = !isComplete ? messages.findLast(m => m.isZipInput)?.isZipInput : undefined;
+  const { data: pricingData } = useQuery<any>({ queryKey: ["/api/pricing"], staleTime: 60000 });
+  const pricing: Pricing = pricingData ? {
+    ratePerMoverHour: pricingData.ratePerMoverHour ?? DEFAULT_PRICING.ratePerMoverHour,
+    shortJobRate:     pricingData.shortJobRate      ?? DEFAULT_PRICING.shortJobRate,
+    shortJobFull:     pricingData.shortJobFull      ?? DEFAULT_PRICING.shortJobFull,
+    jc222Price:       pricingData.jc222Price        ?? DEFAULT_PRICING.jc222Price,
+    driveSpeedMph:    pricingData.driveSpeedMph     ?? DEFAULT_PRICING.driveSpeedMph,
+    junkSmallLow:     pricingData.junkSmallLow      ?? DEFAULT_PRICING.junkSmallLow,
+    junkSmallHigh:    pricingData.junkSmallHigh     ?? DEFAULT_PRICING.junkSmallHigh,
+    junkLargeLow:     pricingData.junkLargeLow      ?? DEFAULT_PRICING.junkLargeLow,
+    junkLargeHigh:    pricingData.junkLargeHigh     ?? DEFAULT_PRICING.junkLargeHigh,
+  } : DEFAULT_PRICING;
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
-
-  function handleChoice(step: string, value: string) {
-    if (step === "service") setSel({ service: value as Service });
-    else if (step === "truckSize") setSel(s => ({ ...s, truckSize: value as TruckSize }));
-    else if (step === "loadType") setSel(s => ({ ...s, loadType: value as LoadType }));
-    else if (step === "stairs") setSel(s => ({ ...s, stairs: value === "yes" }));
-    else if (step === "junkSize") setSel(s => ({ ...s, junkSize: value as JunkSize }));
-  }
-
-  function getStepKey(msgIndex: number): string {
-    const botChoiceMsgs = messages.slice(0, msgIndex + 1).filter(m => m.role === "bot" && m.choices);
-    const idx = botChoiceMsgs.length - 1;
-    if (sel.service === "moving") {
-      return (["service", "truckSize", "loadType", "stairs"] as const)[idx] ?? "service";
-    }
-    return (["service", "junkSize"] as const)[idx] ?? "service";
-  }
-
-  async function handleZipSubmit() {
-    const zip = zipInput.trim().replace(/\D/g, "").slice(0, 5);
-    if (zip.length !== 5) { setZipError("Please enter a valid 5-digit zip code."); return; }
-    setZipLoading(true);
-    setZipError("");
-    try {
-      const info = await fetchZip(zip);
-      if (activeZipStep === "pickup") {
-        setSel(s => {
-          const updated = { ...s, pickup: info };
-          if (s.loadType !== "loadUnload") {
-            updated.driveInfo = computeDrive(updated);
-          }
-          return updated;
-        });
-      } else if (activeZipStep === "dropoff") {
-        setSel(s => {
-          const updated = { ...s, dropoff: info };
-          updated.driveInfo = computeDrive(updated);
-          return updated;
-        });
-      }
-      setZipInput("");
-    } catch {
-      setZipError("Zip code not found. Please check and try again.");
-    } finally {
-      setZipLoading(false);
-    }
-  }
+  const logic = useChatLogic(pricing);
+  const { sel, activeZipStep, zipInput, setZipInput, zipLoading, zipError, setZipError, handleZipSubmit, restart } = logic;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
@@ -688,75 +765,13 @@ export default function MovingEstimator() {
             </div>
           </div>
           {Object.keys(sel).length > 0 && (
-            <Button variant="ghost" size="sm" onClick={() => { setSel({}); setZipInput(""); setZipError(""); }} className="ml-auto text-slate-400 hover:text-white gap-1 text-xs">
+            <Button variant="ghost" size="sm" onClick={restart} className="ml-auto text-slate-400 hover:text-white gap-1 text-xs">
               <RotateCcw className="h-3.5 w-3.5" /> Restart
             </Button>
           )}
         </div>
 
-        {/* Chat messages */}
-        <div className="space-y-4">
-          {messages.map((msg, i) => (
-            <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-              {msg.role === "bot" && (
-                <div className="flex items-end gap-2 max-w-[88%]">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-teal-500 to-blue-600 flex items-center justify-center shrink-0 mb-1">
-                    <Truck className="h-4 w-4 text-white" />
-                  </div>
-                  <div className="space-y-2 flex-1">
-                    {msg.isResult ? (
-                      <Card className="bg-slate-800/80 border-slate-700/60 p-4">
-                        <ResultCard sel={sel} />
-                        <div className="mt-5 space-y-2">
-                          <Link href="/quote">
-                            <Button className="w-full bg-gradient-to-r from-teal-500 to-blue-600 hover:from-teal-600 hover:to-blue-700 font-semibold">
-                              Get My Free Official Quote <ChevronRight className="h-4 w-4 ml-1" />
-                            </Button>
-                          </Link>
-                          <Button variant="outline" onClick={() => { setSel({}); setZipInput(""); setZipError(""); }} className="w-full border-slate-600 text-slate-300 hover:bg-slate-700 gap-2 text-sm">
-                            <RotateCcw className="h-3.5 w-3.5" /> Start Over
-                          </Button>
-                        </div>
-                      </Card>
-                    ) : (
-                      <div className="bg-slate-700/60 rounded-2xl rounded-tl-sm px-4 py-3 text-slate-100 text-sm leading-relaxed whitespace-pre-wrap">
-                        {msg.text}
-                        {msg.choices && (
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {msg.choices.map((c) => {
-                              const isAnswered = i < messages.length - 1;
-                              return (
-                                <button
-                                  key={c.value}
-                                  disabled={isAnswered}
-                                  onClick={() => handleChoice(getStepKey(i), c.value)}
-                                  className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border transition-all
-                                    ${isAnswered
-                                      ? "border-slate-600/30 text-slate-600 bg-slate-800/20 cursor-default"
-                                      : "border-teal-500/60 text-teal-300 bg-teal-900/30 hover:bg-teal-900/60 hover:border-teal-400 active:scale-95"
-                                    }`}
-                                >
-                                  {c.icon && <span>{c.icon}</span>}{c.label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-              {msg.role === "user" && (
-                <div className="bg-gradient-to-r from-teal-600 to-blue-600 rounded-2xl rounded-tr-sm px-4 py-2.5 text-white text-sm font-medium max-w-[75%]">
-                  {msg.text}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-
-        <div ref={bottomRef} />
+        <ChatUI logic={logic} pricing={pricing} />
 
         {/* Tip shown at start */}
         {Object.keys(sel).length === 0 && (
@@ -772,10 +787,11 @@ export default function MovingEstimator() {
           </Card>
         )}
 
-        {/* Rate note */}
         <p className="text-center text-xs text-slate-500 mt-5">
-          ${RATE}/mover/hr · {DRIVE_SPEED_MPH} mph avg drive speed · Licensed & Insured
+          ${pricing.ratePerMoverHour}/mover/hr · {pricing.driveSpeedMph} mph avg drive speed · Licensed & Insured
         </p>
+
+        {isAdmin && <AdminPricingEditor pricing={pricing} />}
       </div>
 
       {/* Zip input — sticky at bottom when active */}
@@ -795,11 +811,7 @@ export default function MovingEstimator() {
               className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 text-lg font-mono tracking-widest text-center"
               autoFocus
             />
-            <Button
-              onClick={handleZipSubmit}
-              disabled={zipLoading || zipInput.length !== 5}
-              className="bg-teal-600 hover:bg-teal-700 px-5"
-            >
+            <Button onClick={handleZipSubmit} disabled={zipLoading || zipInput.length !== 5} className="bg-teal-600 hover:bg-teal-700 px-5">
               {zipLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </Button>
           </div>
