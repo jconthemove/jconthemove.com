@@ -91,6 +91,161 @@ const CATEGORY_ICONS: Record<string, any> = {
   "Digital & Fun": Gamepad2,
 };
 
+// ── Card animation CSS (injected once) ─────────────────────────────────────
+const CARD_ANIMATIONS = `
+  @keyframes jcmTruck    { 0%,100%{transform:translateX(-14px)} 50%{transform:translateX(14px)} }
+  @keyframes jcmSpin     { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+  @keyframes jcmTrash    { 0%,100%{opacity:1;transform:scale(1) translateY(0)} 50%{opacity:.35;transform:scale(.82) translateY(-7px)} }
+  @keyframes jcmStar     { 0%,100%{filter:drop-shadow(0 0 6px rgba(234,179,8,.8));transform:scale(1)} 50%{filter:drop-shadow(0 0 22px rgba(234,179,8,1));transform:scale(1.12)} }
+  @keyframes jcmBounce   { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-11px)} }
+  @keyframes jcmSparkle  { 0%,100%{transform:scale(1) rotate(0deg)} 50%{transform:scale(1.18) rotate(18deg)} }
+  @keyframes jcmPulse    { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.7;transform:scale(1.08)} }
+  @keyframes jcmFloat    { 0%,100%{transform:translateY(0) rotate(-3deg)} 50%{transform:translateY(-8px) rotate(3deg)} }
+
+  .jcm-truck   { animation: jcmTruck   3s ease-in-out infinite; display:inline-block; }
+  .jcm-spin    { animation: jcmSpin    2.2s linear infinite;    display:inline-block; }
+  .jcm-trash   { animation: jcmTrash   2.5s ease-in-out infinite; display:inline-block; }
+  .jcm-star    { animation: jcmStar    2.8s ease-in-out infinite; display:inline-block; }
+  .jcm-bounce  { animation: jcmBounce  2s ease-in-out infinite;  display:inline-block; }
+  .jcm-sparkle { animation: jcmSparkle 2.2s ease-in-out infinite; display:inline-block; }
+  .jcm-pulse   { animation: jcmPulse   2.5s ease-in-out infinite; display:inline-block; }
+  .jcm-float   { animation: jcmFloat   3s ease-in-out infinite;   display:inline-block; }
+
+  .jcm-particle {
+    position: absolute; pointer-events: none; select: none; user-select: none;
+    animation: jcmFloat 4s ease-in-out infinite;
+  }
+  .jcm-card-header { transition: transform .2s ease; }
+  .jcm-card:hover .jcm-card-header { transform: scale(1.02); }
+`;
+
+// ── Card visual theme per item ─────────────────────────────────────────────
+type CardTheme = {
+  gradient: string;
+  glow: string;
+  animClass: string;
+  animDuration: string;
+  particles: { emoji: string; x: number; y: number; delay: string; size: string }[];
+  accent: string;
+  borderColor: string;
+};
+
+function getCardTheme(item: RewardItem, category: RewardCategory | null): CardTheme {
+  const name = item.name.toLowerCase();
+  const cat = (category?.name ?? "").toLowerCase();
+
+  if (item.createsSpinCredit || cat.includes("spin") || name.includes("spin") || name.includes("wheel")) {
+    return {
+      gradient: "from-orange-950 via-amber-900/40 to-orange-950",
+      glow: "radial-gradient(ellipse at 50% 0%, rgba(249,115,22,.45) 0%, transparent 65%)",
+      animClass: "jcm-spin", animDuration: "2.2s",
+      particles: [
+        { emoji: "⚡", x: 15, y: 18, delay: "0s",    size: "text-lg" },
+        { emoji: "✨", x: 75, y: 12, delay: ".7s",   size: "text-base" },
+        { emoji: "🌟", x: 55, y: 65, delay: "1.4s",  size: "text-sm" },
+      ],
+      accent: "text-orange-400", borderColor: "border-orange-500/40",
+    };
+  }
+
+  if (name.includes("vip") || name.includes("premium") || name.includes("gold") || name.includes("platinum") || item.tokenPrice >= 40000) {
+    return {
+      gradient: "from-yellow-950 via-amber-900/50 to-yellow-950",
+      glow: "radial-gradient(ellipse at 50% 0%, rgba(234,179,8,.45) 0%, transparent 65%)",
+      animClass: "jcm-star", animDuration: "2.8s",
+      particles: [
+        { emoji: "👑", x: 12, y: 15, delay: "0s",   size: "text-base" },
+        { emoji: "⭐", x: 78, y: 10, delay: ".9s",  size: "text-sm" },
+        { emoji: "✨", x: 60, y: 68, delay: "1.6s", size: "text-xs" },
+        { emoji: "⭐", x: 25, y: 62, delay: ".4s",  size: "text-xs" },
+      ],
+      accent: "text-yellow-400", borderColor: "border-yellow-500/50",
+    };
+  }
+
+  if (name.includes("moving") || name.includes("truck") || name.includes("crew") || name.includes("hauling") || name.includes("travel") || name.includes("mile")) {
+    return {
+      gradient: "from-blue-950 via-indigo-900/40 to-blue-950",
+      glow: "radial-gradient(ellipse at 50% 0%, rgba(59,130,246,.35) 0%, transparent 65%)",
+      animClass: "jcm-truck", animDuration: "3s",
+      particles: [
+        { emoji: "📦", x: 72, y: 20, delay: "0s",   size: "text-base" },
+        { emoji: "📦", x: 82, y: 55, delay: ".5s",  size: "text-sm" },
+        { emoji: "✨", x: 18, y: 60, delay: "1.2s", size: "text-sm" },
+      ],
+      accent: "text-blue-400", borderColor: "border-blue-500/40",
+    };
+  }
+
+  if (name.includes("junk") || name.includes("trash") || name.includes("haul") || name.includes("clean") || name.includes("sweep") || name.includes("clutter") || name.includes("removal")) {
+    return {
+      gradient: "from-emerald-950 via-green-900/40 to-emerald-950",
+      glow: "radial-gradient(ellipse at 50% 0%, rgba(16,185,129,.35) 0%, transparent 65%)",
+      animClass: "jcm-trash", animDuration: "2.5s",
+      particles: [
+        { emoji: "♻️", x: 14, y: 14, delay: "0s",   size: "text-base" },
+        { emoji: "🌿", x: 76, y: 18, delay: ".8s",  size: "text-base" },
+        { emoji: "✨", x: 58, y: 66, delay: "1.5s", size: "text-sm" },
+      ],
+      accent: "text-emerald-400", borderColor: "border-emerald-500/40",
+    };
+  }
+
+  if (cat.includes("gift") || name.includes("gift") || name.includes("amazon") || name.includes("card") || name.includes("visa")) {
+    return {
+      gradient: "from-purple-950 via-violet-900/40 to-purple-950",
+      glow: "radial-gradient(ellipse at 50% 0%, rgba(139,92,246,.35) 0%, transparent 65%)",
+      animClass: "jcm-bounce", animDuration: "2s",
+      particles: [
+        { emoji: "🎀", x: 14, y: 18, delay: "0s",   size: "text-base" },
+        { emoji: "🎁", x: 75, y: 14, delay: ".6s",  size: "text-sm" },
+        { emoji: "✨", x: 55, y: 65, delay: "1.3s", size: "text-xs" },
+      ],
+      accent: "text-purple-400", borderColor: "border-purple-500/40",
+    };
+  }
+
+  if (name.includes("snow") || name.includes("winter") || name.includes("ice")) {
+    return {
+      gradient: "from-cyan-950 via-sky-900/40 to-cyan-950",
+      glow: "radial-gradient(ellipse at 50% 0%, rgba(6,182,212,.35) 0%, transparent 65%)",
+      animClass: "jcm-float", animDuration: "3s",
+      particles: [
+        { emoji: "❄️", x: 18, y: 15, delay: "0s",   size: "text-base" },
+        { emoji: "🌨️", x: 74, y: 20, delay: ".7s",  size: "text-sm" },
+        { emoji: "❄️", x: 50, y: 65, delay: "1.4s", size: "text-xs" },
+      ],
+      accent: "text-cyan-400", borderColor: "border-cyan-500/40",
+    };
+  }
+
+  // Service credits / discount / off
+  if (cat.includes("service") || name.includes("service") || name.includes("credit") || name.includes("discount") || name.includes(" off") || name.includes("coupon")) {
+    return {
+      gradient: "from-teal-950 via-cyan-900/30 to-teal-950",
+      glow: "radial-gradient(ellipse at 50% 0%, rgba(20,184,166,.35) 0%, transparent 65%)",
+      animClass: "jcm-sparkle", animDuration: "2.2s",
+      particles: [
+        { emoji: "💫", x: 15, y: 18, delay: "0s",   size: "text-base" },
+        { emoji: "🏷️", x: 75, y: 15, delay: ".9s",  size: "text-sm" },
+        { emoji: "⚡", x: 52, y: 64, delay: "1.6s", size: "text-sm" },
+      ],
+      accent: "text-teal-400", borderColor: "border-teal-500/40",
+    };
+  }
+
+  return {
+    gradient: "from-slate-900 via-slate-800/40 to-slate-900",
+    glow: "radial-gradient(ellipse at 50% 0%, rgba(148,163,184,.2) 0%, transparent 65%)",
+    animClass: "jcm-pulse", animDuration: "2.5s",
+    particles: [
+      { emoji: "✨", x: 16, y: 18, delay: "0s",  size: "text-sm" },
+      { emoji: "💰", x: 74, y: 16, delay: ".8s", size: "text-sm" },
+    ],
+    accent: "text-slate-300", borderColor: "border-slate-600/50",
+  };
+}
+
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
   pending_approval: "bg-orange-500/20 text-orange-400 border-orange-500/30",
@@ -174,6 +329,18 @@ export default function RewardsMarketplacePage() {
   const [shipZip, setShipZip] = useState("");
   const [shipPhone, setShipPhone] = useState("");
   const lastRedeemedItemRef = useRef<RewardItem | null>(null);
+
+  // Inject card animation CSS once
+  useEffect(() => {
+    const id = "jcm-card-animations";
+    if (!document.getElementById(id)) {
+      const el = document.createElement("style");
+      el.id = id;
+      el.textContent = CARD_ANIMATIONS;
+      document.head.appendChild(el);
+    }
+    return () => { /* keep styles alive — no cleanup */ };
+  }, []);
 
   // Auto-open Quantum Spin when navigated from Daily Check-In task (?spin=1)
   useEffect(() => {
@@ -525,20 +692,28 @@ export default function RewardsMarketplacePage() {
                   <Star className="h-3.5 w-3.5 text-yellow-500" /> Featured Rewards
                 </h2>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {featured.map(({ item, category }) => (
-                    <button
-                      key={item.id}
-                      onClick={() => openRedeem(item)}
-                      className="bg-gradient-to-br from-yellow-500/10 to-orange-500/5 border border-yellow-500/30 rounded-xl p-3 text-left hover:border-yellow-500/60 transition-all group"
-                    >
-                      <div className="text-2xl mb-2">{category?.icon ?? "🎁"}</div>
-                      <div className="text-xs font-bold leading-tight mb-1 group-hover:text-yellow-400 transition-colors">{item.name}</div>
-                      <div className="flex items-center gap-1">
-                        <Coins className="h-3 w-3 text-yellow-500" />
-                        <span className="text-xs font-bold text-yellow-500">{formatTokens(item.salePriceTokens ?? item.tokenPrice)}</span>
-                      </div>
-                    </button>
-                  ))}
+                  {featured.map(({ item, category }) => {
+                    const ft = getCardTheme(item, category);
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => openRedeem(item)}
+                        className={`relative overflow-hidden rounded-xl p-3 text-left border transition-all group bg-gradient-to-br ${ft.gradient} ${ft.borderColor} hover:scale-105 hover:shadow-lg`}
+                      >
+                        <div className="absolute inset-0 opacity-60 pointer-events-none" style={{ background: ft.glow }} />
+                        <div className="relative z-10">
+                          <span className={`text-3xl mb-2 block ${ft.animClass}`} style={{ animationDuration: ft.animDuration }}>
+                            {category?.icon ?? "🎁"}
+                          </span>
+                          <div className="text-xs font-black leading-tight mb-1.5 text-white">{item.name}</div>
+                          <div className="flex items-center gap-1">
+                            <Coins className="h-3 w-3 text-yellow-400" />
+                            <span className="text-xs font-black text-yellow-400">{formatTokens(item.salePriceTokens ?? item.tokenPrice)}</span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -609,84 +784,136 @@ export default function RewardsMarketplacePage() {
                   const onSale = !!item.salePriceTokens;
                   const outOfStock = item.inventory !== null && item.inventory === 0;
 
+                  const theme = getCardTheme(item, category);
+                  const icon = category?.icon ?? "🎁";
+
                   return (
                     <div
                       key={item.id}
-                      className={`bg-card border rounded-xl overflow-hidden flex flex-col transition-all group hover:shadow-lg hover:shadow-yellow-500/5 ${item.featured ? "border-yellow-500/40" : "border-border"} ${outOfStock ? "opacity-60" : ""}`}
+                      className={`jcm-card bg-card border rounded-2xl overflow-hidden flex flex-col transition-all hover:shadow-xl hover:-translate-y-0.5 ${theme.borderColor} ${outOfStock ? "opacity-55" : ""}`}
                     >
-                      {/* Card header */}
-                      <div className="relative h-24 bg-gradient-to-br from-card to-accent/30 flex items-center justify-center">
-                        {item.image ? (
-                          <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
-                        ) : (
-                          <span className="text-4xl">{category?.icon ?? "🎁"}</span>
-                        )}
-                        <div className="absolute top-2 left-2 flex gap-1 flex-wrap">
-                          {item.featured && <span className="bg-yellow-500 text-black text-[10px] font-bold px-1.5 py-0.5 rounded-full">★ Featured</span>}
-                          {item.promoBadge && <span className="bg-orange-500/90 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{item.promoBadge}</span>}
-                          {onSale && <span className="bg-red-500/90 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">SALE</span>}
-                          {outOfStock && <span className="bg-gray-500/90 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">Sold Out</span>}
-                          {item.isLimitedTime && <span className="bg-purple-500/90 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">⏰ Limited</span>}
-                          {item.tierRequired !== "none" && (
-                            <span className="bg-blue-500/90 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full capitalize">{item.tierRequired}+</span>
+                      {/* ── Animated illustration header ── */}
+                      <div
+                        className={`jcm-card-header relative overflow-hidden flex items-center justify-center bg-gradient-to-br ${theme.gradient}`}
+                        style={{ height: 148 }}
+                      >
+                        {/* Glow overlay */}
+                        <div className="absolute inset-0 opacity-100 pointer-events-none"
+                          style={{ background: theme.glow }} />
+
+                        {/* Floating particles */}
+                        {theme.particles.map((p, i) => (
+                          <span
+                            key={i}
+                            className={`jcm-particle ${p.size} opacity-30`}
+                            style={{ left: `${p.x}%`, top: `${p.y}%`, animationDelay: p.delay, animationDuration: "4s" }}
+                          >
+                            {p.emoji}
+                          </span>
+                        ))}
+
+                        {/* Main icon */}
+                        <div className="relative z-10 flex flex-col items-center gap-1">
+                          {item.image ? (
+                            <img src={item.image} alt={item.name} className="h-20 w-full object-contain drop-shadow-lg" />
+                          ) : (
+                            <span
+                              className={`text-6xl drop-shadow-lg ${theme.animClass}`}
+                              style={{ animationDuration: theme.animDuration }}
+                            >
+                              {icon}
+                            </span>
+                          )}
+                          {item.isInstant && (
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-green-500/30 text-green-300 border border-green-500/30 backdrop-blur-sm">⚡ Instant Reward</span>
                           )}
                         </div>
+
+                        {/* Cash value — top right */}
+                        {item.cashValue && (
+                          <div className="absolute top-2 right-2 bg-black/55 backdrop-blur-sm border border-white/15 rounded-lg px-2 py-1 text-center">
+                            <div className="text-[9px] text-white/60 uppercase tracking-wider leading-none mb-0.5">Value</div>
+                            <div className="text-xs font-black text-white leading-none">${item.cashValue}</div>
+                          </div>
+                        )}
+
+                        {/* Badges — top left */}
+                        <div className="absolute top-2 left-2 flex flex-col gap-1 items-start">
+                          {item.featured && <span className="bg-yellow-500 text-black text-[10px] font-black px-1.5 py-0.5 rounded-full shadow-lg">★ Featured</span>}
+                          {item.promoBadge && <span className="bg-orange-500/90 backdrop-blur-sm text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{item.promoBadge}</span>}
+                          {onSale && <span className="bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full shadow">🔥 SALE</span>}
+                          {outOfStock && <span className="bg-gray-600/90 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">Sold Out</span>}
+                          {item.isLimitedTime && <span className="bg-purple-600/90 backdrop-blur-sm text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">⏰ Limited</span>}
+                          {item.tierRequired !== "none" && (
+                            <span className="bg-blue-600/90 backdrop-blur-sm text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full capitalize">{item.tierRequired}+</span>
+                          )}
+                        </div>
+
+                        {/* Bottom fade into card body */}
+                        <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-card to-transparent pointer-events-none" />
                       </div>
 
-                      {/* Card body */}
+                      {/* ── Card body ── */}
                       <div className="p-3 flex-1 flex flex-col">
-                        <div className="text-xs text-muted-foreground mb-0.5">{category?.name ?? ""}</div>
-                        <h3 className="text-sm font-bold leading-tight mb-1 group-hover:text-yellow-400 transition-colors">{item.name}</h3>
-                        <p className="text-xs text-muted-foreground leading-relaxed flex-1 mb-2">{item.shortDesc}</p>
+                        {/* Category tag */}
+                        <div className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${theme.accent}`}>
+                          {category?.name ?? "Reward"}
+                        </div>
 
-                        {/* Price */}
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-1.5">
-                            <Coins className="h-3.5 w-3.5 text-yellow-500" />
-                            <span className="text-sm font-bold text-yellow-500">{formatTokens(cost)}</span>
-                            {onSale && (
-                              <span className="text-xs text-muted-foreground line-through">{formatTokens(item.tokenPrice)}</span>
-                            )}
+                        {/* Name */}
+                        <h3 className="text-sm font-black leading-tight mb-1.5 text-foreground">{item.name}</h3>
+
+                        {/* Short description */}
+                        <p className="text-xs text-muted-foreground leading-relaxed flex-1 mb-3">{item.shortDesc}</p>
+
+                        {/* Price row */}
+                        <div className="flex items-end justify-between mb-2">
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <Coins className="h-4 w-4 text-yellow-500 shrink-0" />
+                              <span className="text-base font-black text-yellow-500 tabular-nums">{formatTokens(cost)}</span>
+                              {onSale && (
+                                <span className="text-xs text-muted-foreground line-through">{formatTokens(item.tokenPrice)}</span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground/70 font-medium ml-0.5">JCMOVES tokens</div>
                           </div>
-                          {item.cashValue && (
-                            <span className="text-[10px] text-muted-foreground">(${item.cashValue} value)</span>
+                          {affordable && item.cashValue && (
+                            <div className="text-right">
+                              <div className="text-[10px] text-muted-foreground">Cash value</div>
+                              <div className="text-sm font-black text-green-400">${item.cashValue}</div>
+                            </div>
                           )}
                         </div>
 
                         {/* Affordability progress */}
                         {!affordable && (
-                          <div className="mb-2">
+                          <div className="mb-2.5">
                             <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
-                              <span>Progress</span>
-                              <span className="text-yellow-500">{formatTokens(Math.ceil(cost - walletBalance))} needed</span>
+                              <span>Progress to unlock</span>
+                              <span className={theme.accent}>{formatTokens(Math.ceil(cost - walletBalance))} more</span>
                             </div>
                             <Progress value={pct} className="h-1.5 bg-muted" />
                           </div>
                         )}
 
-                        {/* Instant badge only — keeps cards clean */}
-                        {item.isInstant && (
-                          <div className="mb-2">
-                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-green-500/20 text-green-400 border-green-500/30">⚡ Instant</span>
-                          </div>
-                        )}
-
+                        {/* CTA */}
                         <Button
                           size="sm"
-                          className={`w-full h-8 text-xs font-bold transition-all ${
+                          className={`w-full h-9 text-xs font-black rounded-xl transition-all ${
                             outOfStock
                               ? "bg-muted text-muted-foreground cursor-not-allowed"
                               : affordable
-                                ? "bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-black"
-                                : "bg-card border border-border text-muted-foreground"
+                                ? "bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-black shadow-lg shadow-yellow-500/20"
+                                : "bg-card border border-border text-muted-foreground hover:border-yellow-500/40"
                           }`}
                           disabled={outOfStock}
                           onClick={() => openRedeem(item)}
                         >
                           {outOfStock ? "Out of Stock" : affordable ? (
-                            <><Gift className="h-3 w-3 mr-1" />{getCtaLabel(item)}</>
+                            <><Gift className="h-3.5 w-3.5 mr-1.5" />{getCtaLabel(item)}</>
                           ) : (
-                            <><ChevronRight className="h-3 w-3 mr-1" />Need {formatTokens(Math.ceil(cost - walletBalance))} more</>
+                            <><ChevronRight className="h-3.5 w-3.5 mr-1" />Need {formatTokens(Math.ceil(cost - walletBalance))} more</>
                           )}
                         </Button>
                       </div>
