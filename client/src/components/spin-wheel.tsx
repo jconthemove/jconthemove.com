@@ -152,7 +152,11 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
   const { data: freeSpins = [] } = useQuery<any[]>({
     queryKey: ["/api/reward-shop/free-spins"],
     enabled: open,
+    refetchInterval: open ? 5000 : false,
   });
+
+  // Total free spins remaining across all active entitlements
+  const totalFreeSpinCount = freeSpins.reduce((sum: number, e: any) => sum + (e.value_json?.spins ?? 1), 0);
 
   const { data: walletData, refetch: refetchWallet } = useQuery<{ tokenBalance: string }>({
     queryKey: ["/api/rewards/wallet"],
@@ -161,7 +165,7 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
   });
   const walletBalance = parseFloat(walletData?.tokenBalance || "0");
   const spinCost = 100;
-  const canAffordSpin = walletBalance >= spinCost || (freeSpins?.length ?? 0) > 0;
+  const canAffordSpin = walletBalance >= spinCost || totalFreeSpinCount > 0;
 
   const mini = jackpots.find(j => j.type === "mini");
   const major = jackpots.find(j => j.type === "major");
@@ -344,7 +348,7 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
   const isCoupon = result?.prizeType === "coupon_10pct" || result?.prizeType === "coupon_25pct";
   const isCoffee = result?.prizeType === "gift_card_coffee";
   const displayCode = result?.couponCode || result?.mysteryResult?.couponCode || null;
-  const hasFreeSpinEntry = (freeSpins?.length ?? 0) > 0;
+  const hasFreeSpinEntry = totalFreeSpinCount > 0;
 
   const orbGlow = animState === "flash"
     ? "0 0 80px 40px rgba(255,255,255,0.9), 0 0 160px 80px rgba(251,191,36,0.6)"
@@ -419,7 +423,10 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
                 {walletBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })}
               </div>
               <div className="text-[10px] text-muted-foreground font-medium">
-                JCMOVES {hasFreeSpinEntry ? "· 🎁 free spin!" : canAffordSpin ? `· ${Math.floor(walletBalance / spinCost)} spins` : "· not enough"}
+                JCMOVES {hasFreeSpinEntry
+                  ? `· 🎁 ${totalFreeSpinCount} free spin${totalFreeSpinCount !== 1 ? "s" : ""}`
+                  : canAffordSpin ? `· ${Math.floor(walletBalance / spinCost)} spins`
+                  : "· not enough"}
               </div>
             </div>
           </div>
@@ -566,8 +573,8 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
           {animState === "idle" && (
             <div className="w-full space-y-3">
               {hasFreeSpinEntry && (
-                <Badge className="w-full justify-center bg-green-500/20 text-green-400 border-green-500/30 py-1">
-                  🎁 You have a free spin!
+                <Badge className="w-full justify-center bg-green-500/20 text-green-400 border-green-500/30 py-1 gap-1.5">
+                  🎁 {totalFreeSpinCount === 1 ? "1 free spin available!" : `${totalFreeSpinCount} free spins in pack!`}
                 </Badge>
               )}
 
@@ -578,7 +585,11 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
                 disabled={!canAffordSpin}
               >
                 <Zap className="h-5 w-5 mr-2" />
-                {hasFreeSpinEntry ? "Spin — Free Entry!" : "Spin for 100 JCMOVES"}
+                {hasFreeSpinEntry
+                  ? totalFreeSpinCount > 1
+                    ? `Spin — ${totalFreeSpinCount} Pack Spins Left!`
+                    : "Spin — Free Entry!"
+                  : "Spin for 100 JCMOVES"}
               </Button>
 
               <Button
@@ -720,6 +731,11 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
                     <div className="text-sm font-black text-orange-300 uppercase tracking-widest mb-1">You Won!</div>
                     <div className="text-3xl font-black text-yellow-400">{resultTokens.toLocaleString()}</div>
                     <div className="text-xs text-yellow-600 font-bold uppercase tracking-wider">JCMOVES added to wallet</div>
+                    {hasFreeSpinEntry && totalFreeSpinCount > 0 && (
+                      <div className="mt-2 inline-flex items-center gap-1.5 bg-green-950/60 border border-green-500/30 rounded-lg px-3 py-1">
+                        <span className="text-green-400 font-bold text-xs">🎁 {totalFreeSpinCount} pack spin{totalFreeSpinCount !== 1 ? "s" : ""} left!</span>
+                      </div>
+                    )}
                     {sessionSpinCount > 1 && (
                       <div className="mt-2 text-xs text-muted-foreground">
                         Session total: +{sessionEarned.toLocaleString()} across {sessionSpinCount} spins
@@ -744,6 +760,11 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
                   <div className="text-4xl mb-2">😬</div>
                   <div className="text-xl font-black text-slate-300 mb-1">Nada!</div>
                   <p className="text-xs text-slate-500 mb-1">No tokens this time — but the jackpot grew!</p>
+                  {hasFreeSpinEntry && totalFreeSpinCount > 0 && (
+                    <div className="mt-2 mb-1 inline-flex items-center gap-1.5 bg-green-950/60 border border-green-500/30 rounded-lg px-3 py-1">
+                      <span className="text-green-400 font-bold text-xs">🎁 {totalFreeSpinCount} pack spin{totalFreeSpinCount !== 1 ? "s" : ""} left!</span>
+                    </div>
+                  )}
                   {sessionSpinCount > 1 && (
                     <p className="text-xs text-slate-600 mb-3">Session: +{sessionEarned.toLocaleString()} across {sessionSpinCount} spins</p>
                   )}

@@ -113,9 +113,11 @@ export function FloatingMomHeart() {
   }, [open]);
 
   const donateMutation = useMutation({
-    mutationFn: (payload: { amount: number; message: string; displayName: string }) =>
-      apiRequest("POST", "/api/mom/hearts", payload),
-    onSuccess: () => {
+    mutationFn: async (payload: { amount: number; message: string; displayName: string }) => {
+      const res = await apiRequest("POST", "/api/mom/hearts", payload);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
       setBurst(true);
       setTimeout(() => setBurst(false), 1000);
       setMessage("");
@@ -125,10 +127,19 @@ export function FloatingMomHeart() {
       qc.invalidateQueries({ queryKey: ["/api/mom/hearts"] });
       qc.invalidateQueries({ queryKey: ["/api/rewards/wallet"] });
       qc.invalidateQueries({ queryKey: ["/api/mining/status"] });
+      qc.invalidateQueries({ queryKey: ["/api/reward-shop/free-spins"] });
       toast({
         title: "❤️ Love sent!",
         description: `${finalAmount} JCMOVES delivered to Nicolasa with love.`,
       });
+      if (data?.freeSpinsAwarded > 0) {
+        setTimeout(() => {
+          toast({
+            title: "🎰 +2 Free Quantum Spins!",
+            description: "Bonus spins added to your account for sending 100+ JCMOVES love!",
+          });
+        }, 800);
+      }
       setTab("timeline");
     },
     onError: (err: any) => {

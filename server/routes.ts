@@ -549,6 +549,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   await linkEmployeePromoCodes();
   await ensureJackpotsSeeded();
 
+  // Ensure the 600 JCMOVES Flash Sale spin pack exists in the reward catalog
+  try {
+    const { rows: cats } = await pool.query(`SELECT id FROM reward_categories WHERE name LIKE '%Quantum Spin%' LIMIT 1`);
+    if (cats.length > 0) {
+      const catId = cats[0].id;
+      const { rows: existing } = await pool.query(
+        `SELECT id FROM reward_items WHERE name='Quantum Spin — 10 Pack Flash Sale' LIMIT 1`
+      );
+      if (existing.length === 0) {
+        await pool.query(`
+          INSERT INTO reward_items (category_id, name, short_desc, full_desc, token_price, cash_value, status, featured,
+            delivery_type, creates_spin_credit, is_instant, max_per_user, max_per_month, promo_badge, fulfillment_note, admin_notes)
+          VALUES ($1,
+            'Quantum Spin — 10 Pack Flash Sale',
+            '10 spins for only 600 JCMOVES — limited-time 29% bundle deal',
+            'Stack your entries at our best-ever rate: 10 Quantum Spin entries for just 600 JCMOVES (normally 850). Flash sale bundle — spins added instantly, use anytime within 60 days. Jackpots grow every spin!',
+            600, '6.00', 'active', true,
+            'digital_code', true, true, 20, 5,
+            $2, '10 spin credits added instantly. Spins expire 60 days from purchase.', 'Auto-issue 10 spin credits via reward_entitlements. Flash-sale pricing.'
+          )
+        `, [catId, '🔥 Flash Sale']);
+        console.log('✅ Flash Sale 10-spin pack created');
+      } else {
+        console.log('✅ Flash Sale 10-spin pack already exists');
+      }
+    }
+  } catch (flashErr) {
+    console.error('⚠️ Flash sale spin pack upsert failed (non-fatal):', flashErr);
+  }
+
   // Public health check endpoint for deployment monitoring (MUST be before auth setup)
   // This endpoint is used by Replit Autoscale Deployments to verify the service is healthy
   app.get("/health", (req, res) => {
@@ -13171,9 +13201,21 @@ Thank you for your business!
       // Determine payment: free spin entitlement → marketplace redemption → wallet deduction
       let usedFreeSpinId: number | null = null;
       if (useFreeSpinEntitlementId) {
-        // Mark free spin entitlement as used
+        // Decrement spin count; only mark as 'used' when the last spin is consumed
         await pool.query(
-          `UPDATE reward_entitlements SET status='used', expires_at=NOW() WHERE id=$1 AND user_id=$2 AND entitlement_type='spin_credit' AND status='active'`,
+          `UPDATE reward_entitlements
+           SET value_json = CASE
+             WHEN (value_json->>'spins')::int <= 1
+               THEN value_json
+               ELSE jsonb_set(value_json, '{spins}', to_jsonb((value_json->>'spins')::int - 1))
+             END,
+             status = CASE
+               WHEN (value_json->>'spins')::int <= 1 THEN 'used' ELSE status
+             END,
+             expires_at = CASE
+               WHEN (value_json->>'spins')::int <= 1 THEN NOW() ELSE expires_at
+             END
+           WHERE id=$1 AND user_id=$2 AND entitlement_type='spin_credit' AND status='active'`,
           [useFreeSpinEntitlementId, userId]
         );
         usedFreeSpinId = useFreeSpinEntitlementId;
@@ -13784,8 +13826,26 @@ Thank you for your business!
         [userId, `❤️ ${senderName} sent ${tokens} JCMOVES love to Nicolasa`, JSON.stringify({ amount: tokens })]
       );
 
+      // Bonus: 100+ JCMOVES love → +2 free Quantum Spins
+      let freeSpinsAwarded = 0;
+      if (tokens >= 100) {
+        freeSpinsAwarded = 2;
+        const spinExpiry = new Date(Date.now() + 30 * 86400000).toISOString();
+        await pool.query(
+          `INSERT INTO reward_entitlements (user_id, entitlement_type, value_json, status, expires_at)
+           VALUES ($1,'spin_credit','{"spins":1}','active',$2),
+                  ($1,'spin_credit','{"spins":1}','active',$2)`,
+          [userId, spinExpiry]
+        );
+        await pool.query(
+          `INSERT INTO activity_feed_events (user_id, event_type, message, metadata) VALUES ($1,'spin_bonus',$2,$3)`,
+          [userId, `🎰 ${senderName} earned 2 free Quantum Spins for sending 100+ JCMOVES love!`, JSON.stringify({ spins: 2, reason: 'mom_love_100' })]
+        );
+        console.log(`🎰 Awarded 2 free spins to ${senderName} for 100+ JCMOVES Mom love`);
+      }
+
       console.log(`💝 ${senderName} sent ${tokens} JCMOVES love to Mom`);
-      res.json({ ok: true, heart: rows[0] });
+      res.json({ ok: true, heart: rows[0], freeSpinsAwarded });
     } catch (e: any) {
       console.error("Mom heart donation error:", e);
       res.status(500).json({ error: e.message });
