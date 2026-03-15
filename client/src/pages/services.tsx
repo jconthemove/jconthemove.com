@@ -12,7 +12,7 @@ import {
   Truck, Users, Clock, DollarSign, CheckCircle, Star,
   ChevronRight, ArrowLeft, Phone, Zap, Shield, Award,
   Package, Layers, Wrench, Sparkles, Calculator, ChevronDown, ChevronUp,
-  Settings, Save,
+  Settings, Save, Plus, Trash2, Pencil, X, Check,
 } from "lucide-react";
 
 // ─── Static data ──────────────────────────────────────────────────────────────
@@ -25,15 +25,12 @@ const CREW_META: Record<number, { best: string; fits: string[]; popular?: boolea
   5: { best: "Large estates / commercial", fits: ["4+ BR homes", "Office moves", "Same-day large moves"] },
 };
 
-const ADD_ONS = [
-  { id: "assembly",  label: "Furniture Assembly / Disassembly", price: 75,  unit: "flat",    icon: Wrench   },
-  { id: "packing",  label: "Packing Assistance",                price: 45,  unit: "/ room",  icon: Package  },
-  { id: "mattress", label: "Mattress Bag Protection",           price: 15,  unit: "each",    icon: Layers   },
-  { id: "shrink",   label: "Shrink Wrap Protection",            price: 15,  unit: "/ room",  icon: Sparkles },
-  { id: "stairs",   label: "Stair Carry Fee",                   price: 25,  unit: "flat",    icon: ChevronUp },
-  { id: "longcarry",label: "Long Carry Fee (100+ ft)",          price: 25,  unit: "flat",    icon: ChevronRight },
-  { id: "piano",    label: "Piano / Specialty Item",            price: 85,  unit: "flat",    icon: Award    },
-];
+interface ServiceAddon {
+  id: string;
+  label: string;
+  price: number;
+  unit: string;
+}
 
 const REVIEWS = [
   { name: "Sarah M.", rating: 5, text: "Fast, careful, and professional. They wrapped every piece of furniture and got us moved in under 3 hours!", location: "Ironwood, MI" },
@@ -185,10 +182,20 @@ function AdminPricingEditor({ pricing }: { pricing: PricingConfig }) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function ServicesPage() {
   const { hasAdminAccess } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [serviceType, setServiceType]   = useState<"labor" | "truck">("labor");
   const [selectedCrew, setSelectedCrew] = useState<number | null>(null);
   const [addOns, setAddOns]             = useState<Record<string, boolean>>({});
   const [showSuggestion, setShowSuggestion] = useState(false);
+
+  // Admin add-on editing state
+  const [addonEditId, setAddonEditId]   = useState<string | null>(null);
+  const [addonDraft, setAddonDraft]     = useState<Partial<ServiceAddon>>({});
+  const [newLabel, setNewLabel]         = useState("");
+  const [newPrice, setNewPrice]         = useState("");
+  const [newUnit, setNewUnit]           = useState("flat");
+  const [showAddForm, setShowAddForm]   = useState(false);
 
   const toggleAddOn = (id: string) =>
     setAddOns(prev => ({ ...prev, [id]: !prev[id] }));
@@ -197,6 +204,47 @@ export default function ServicesPage() {
     queryKey: ["/api/pricing"],
     staleTime: 1000 * 60 * 5,
   });
+
+  const { data: serviceAddons = [] } = useQuery<ServiceAddon[]>({
+    queryKey: ["/api/pricing/addons"],
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const saveAddonsMutation = useMutation({
+    mutationFn: async (items: ServiceAddon[]) => {
+      const res = await apiRequest("PUT", "/api/admin/pricing/addons", { items });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/pricing/addons"] });
+      toast({ title: "✅ Add-ons saved!" });
+      setAddonEditId(null);
+      setShowAddForm(false);
+    },
+    onError: () => toast({ title: "Failed to save", variant: "destructive" }),
+  });
+
+  function saveAddon(id: string) {
+    const updated = serviceAddons.map(a =>
+      a.id === id ? { ...a, ...addonDraft, price: Number(addonDraft.price ?? a.price) } : a
+    );
+    saveAddonsMutation.mutate(updated);
+  }
+
+  function deleteAddon(id: string) {
+    const updated = serviceAddons.filter(a => a.id !== id);
+    saveAddonsMutation.mutate(updated);
+    setAddOns(prev => { const n = { ...prev }; delete n[id]; return n; });
+  }
+
+  function addAddon() {
+    const label = newLabel.trim();
+    const price = parseFloat(newPrice);
+    if (!label || isNaN(price)) return;
+    const updated = [...serviceAddons, { id: Date.now().toString(), label, price, unit: newUnit }];
+    saveAddonsMutation.mutate(updated);
+    setNewLabel(""); setNewPrice(""); setNewUnit("flat");
+  }
 
   const hourlyRate = useMemo(() => {
     if (!selectedCrew) return 0;
@@ -212,8 +260,8 @@ export default function ServicesPage() {
   }, [selectedCrew, serviceType, pricing]);
 
   const addOnTotal = useMemo(
-    () => ADD_ONS.filter(a => addOns[a.id]).reduce((s, a) => s + a.price, 0),
-    [addOns]
+    () => serviceAddons.filter(a => addOns[a.id]).reduce((s, a) => s + a.price, 0),
+    [addOns, serviceAddons]
   );
 
   const estLow  = selectedCrew ? hourlyRate * minHours + addOnTotal : 0;
@@ -427,34 +475,135 @@ export default function ServicesPage() {
 
         {/* ── ADD-ONS ───────────────────────────────────────────────────── */}
         <div>
-          <h2 className="text-2xl font-black text-white mb-2">Add-On Services</h2>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-2xl font-black text-white">Add-On Services</h2>
+            {hasAdminAccess && (
+              <button
+                onClick={() => setShowAddForm(f => !f)}
+                className="flex items-center gap-1.5 text-xs text-amber-300 border border-amber-500/30 bg-amber-500/10 rounded-lg px-3 py-1.5 hover:bg-amber-500/20 transition-colors"
+              >
+                <Plus className="h-3.5 w-3.5" /> Add New
+              </button>
+            )}
+          </div>
           <p className="text-slate-400 text-sm mb-4">Optional upgrades to protect your belongings and save time</p>
+
+          {/* Admin: new add-on form */}
+          {hasAdminAccess && showAddForm && (
+            <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-950/20 p-4 space-y-3">
+              <p className="text-xs font-semibold text-amber-300 uppercase tracking-wide">New Add-On</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <Input
+                  placeholder="Label (e.g. Appliance Move)"
+                  value={newLabel}
+                  onChange={e => setNewLabel(e.target.value)}
+                  className="bg-slate-900 border-slate-700 text-white text-sm"
+                />
+                <Input
+                  placeholder="Price ($)"
+                  type="number"
+                  value={newPrice}
+                  onChange={e => setNewPrice(e.target.value)}
+                  className="bg-slate-900 border-slate-700 text-white text-sm"
+                />
+                <Input
+                  placeholder="Unit (e.g. flat, / room, each)"
+                  value={newUnit}
+                  onChange={e => setNewUnit(e.target.value)}
+                  className="bg-slate-900 border-slate-700 text-white text-sm"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={addAddon} disabled={saveAddonsMutation.isPending} className="bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs">
+                  <Check className="h-3.5 w-3.5 mr-1" /> Save Add-On
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setShowAddForm(false)} className="text-slate-400 text-xs">
+                  <X className="h-3.5 w-3.5 mr-1" /> Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {ADD_ONS.map(({ id, label, price, unit, icon: Icon }) => {
+            {serviceAddons.map(({ id, label, price, unit }) => {
               const active = !!addOns[id];
+              const isEditing = addonEditId === id;
               return (
-                <button
-                  key={id}
-                  onClick={() => toggleAddOn(id)}
-                  className={`flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all ${
-                    active
-                      ? "border-orange-500 bg-orange-500/10 shadow-[0_0_15px_rgba(249,115,22,0.15)]"
-                      : "border-slate-700 bg-slate-800/50 hover:border-slate-600"
-                  }`}
-                >
-                  <div className={`p-2 rounded-lg shrink-0 ${active ? "bg-orange-500/20 text-orange-400" : "bg-slate-700 text-slate-400"}`}>
-                    <Icon className="h-4 w-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-semibold ${active ? "text-orange-300" : "text-white"}`}>{label}</p>
-                    <p className="text-xs text-slate-500">${price} {unit}</p>
-                  </div>
-                  <div className={`w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center ${
-                    active ? "bg-orange-500 border-orange-500" : "border-slate-600"
-                  }`}>
-                    {active && <CheckCircle className="h-3.5 w-3.5 text-white" />}
-                  </div>
-                </button>
+                <div key={id} className={`rounded-xl border-2 transition-all ${
+                  active ? "border-orange-500 bg-orange-500/10" : "border-slate-700 bg-slate-800/50"
+                }`}>
+                  {isEditing && hasAdminAccess ? (
+                    <div className="p-3 space-y-2">
+                      <Input
+                        value={addonDraft.label ?? label}
+                        onChange={e => setAddonDraft(d => ({ ...d, label: e.target.value }))}
+                        className="bg-slate-900 border-slate-700 text-white text-sm h-8"
+                        placeholder="Label"
+                      />
+                      <div className="flex gap-2">
+                        <Input
+                          type="number"
+                          value={addonDraft.price ?? price}
+                          onChange={e => setAddonDraft(d => ({ ...d, price: parseFloat(e.target.value) || 0 }))}
+                          className="bg-slate-900 border-slate-700 text-white text-sm h-8"
+                          placeholder="Price"
+                        />
+                        <Input
+                          value={addonDraft.unit ?? unit}
+                          onChange={e => setAddonDraft(d => ({ ...d, unit: e.target.value }))}
+                          className="bg-slate-900 border-slate-700 text-white text-sm h-8"
+                          placeholder="Unit"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={() => saveAddon(id)} disabled={saveAddonsMutation.isPending} className="bg-green-600 hover:bg-green-500 text-white text-xs h-7 px-3">
+                          <Check className="h-3 w-3 mr-1" /> Save
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => { setAddonEditId(null); setAddonDraft({}); }} className="text-slate-400 text-xs h-7 px-3">
+                          <X className="h-3 w-3 mr-1" /> Cancel
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => deleteAddon(id)} className="text-red-400 hover:text-red-300 text-xs h-7 px-3 ml-auto">
+                          <Trash2 className="h-3 w-3 mr-1" /> Delete
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => toggleAddOn(id)}
+                      className="flex items-center gap-3 p-4 w-full text-left"
+                    >
+                      <div className={`p-2 rounded-lg shrink-0 ${active ? "bg-orange-500/20 text-orange-400" : "bg-slate-700 text-slate-400"}`}>
+                        <Package className="h-4 w-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-semibold ${active ? "text-orange-300" : "text-white"}`}>{label}</p>
+                        <p className="text-xs text-slate-500">${price} {unit}</p>
+                      </div>
+                      <div className={`w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center ${
+                        active ? "bg-orange-500 border-orange-500" : "border-slate-600"
+                      }`}>
+                        {active && <CheckCircle className="h-3.5 w-3.5 text-white" />}
+                      </div>
+                    </button>
+                  )}
+                  {/* Admin edit/delete controls (shown only when NOT in edit mode) */}
+                  {hasAdminAccess && !isEditing && (
+                    <div className="flex gap-1 px-2 pb-2">
+                      <button
+                        onClick={() => { setAddonEditId(id); setAddonDraft({ label, price, unit }); }}
+                        className="flex items-center gap-1 text-[10px] text-amber-400/70 hover:text-amber-300 transition-colors px-2 py-0.5 rounded"
+                      >
+                        <Pencil className="h-2.5 w-2.5" /> Edit
+                      </button>
+                      <button
+                        onClick={() => deleteAddon(id)}
+                        className="flex items-center gap-1 text-[10px] text-red-400/70 hover:text-red-300 transition-colors px-2 py-0.5 rounded"
+                      >
+                        <Trash2 className="h-2.5 w-2.5" /> Delete
+                      </button>
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -491,7 +640,7 @@ export default function ServicesPage() {
             {addOnTotal > 0 && (
               <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-3 mb-4">
                 <p className="text-xs text-orange-400 font-semibold mb-1">Add-ons selected</p>
-                {ADD_ONS.filter(a => addOns[a.id]).map(a => (
+                {serviceAddons.filter(a => addOns[a.id]).map(a => (
                   <div key={a.id} className="flex justify-between text-xs text-slate-300">
                     <span>{a.label}</span><span>+${a.price}</span>
                   </div>

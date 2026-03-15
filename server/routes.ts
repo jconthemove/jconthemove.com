@@ -13621,6 +13621,46 @@ Thank you for your business!
     }
   });
 
+  // ── Service Add-Ons (editable list shown to customers) ──
+  const DEFAULT_SERVICE_ADDONS = [
+    { id: "assembly",  label: "Furniture Assembly / Disassembly", price: 75,  unit: "flat"    },
+    { id: "packing",   label: "Packing Assistance",               price: 45,  unit: "/ room"  },
+    { id: "mattress",  label: "Mattress Bag Protection",          price: 15,  unit: "each"    },
+    { id: "shrink",    label: "Shrink Wrap Protection",           price: 15,  unit: "/ room"  },
+    { id: "stairs",    label: "Stair Carry Fee",                  price: 25,  unit: "flat"    },
+    { id: "longcarry", label: "Long Carry Fee (100+ ft)",         price: 25,  unit: "flat"    },
+    { id: "piano",     label: "Piano / Specialty Item",           price: 85,  unit: "flat"    },
+  ];
+
+  app.get("/api/pricing/addons", async (req, res) => {
+    try {
+      const { rows } = await pool.query(`SELECT setting_value FROM spin_config WHERE setting_key='pricing_service_addons' LIMIT 1`);
+      if (rows.length && rows[0].setting_value) {
+        try { return res.json(JSON.parse(rows[0].setting_value)); } catch {}
+      }
+      res.json(DEFAULT_SERVICE_ADDONS);
+    } catch (e: any) {
+      res.json(DEFAULT_SERVICE_ADDONS);
+    }
+  });
+
+  app.put("/api/admin/pricing/addons", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!['admin', 'business_owner'].includes((req.session as any).userRole)) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      const { items } = req.body;
+      await pool.query(
+        `INSERT INTO spin_config (setting_key, setting_value, description) VALUES ($1, $2, $3)
+         ON CONFLICT (setting_key) DO UPDATE SET setting_value=$2, updated_at=NOW()`,
+        ['pricing_service_addons', JSON.stringify(items), 'Service add-ons shown to customers']
+      );
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.put("/api/admin/pricing/junk-addons", isAuthenticated, async (req: any, res) => {
     try {
       if (!['admin', 'business_owner'].includes((req.session as any).userRole)) {

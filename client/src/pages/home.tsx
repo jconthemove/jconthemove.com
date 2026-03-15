@@ -42,13 +42,15 @@ const SERVICES = [
   { icon: PaintBucket, label: "Painting",      sub: "Interior & Exterior",   color: "from-violet-600 to-violet-800", value: "painting" },
 ];
 
-const ADD_ONS = [
-  { id: "assembly",  label: "Furniture Assembly / Disassembly", price: 75 },
-  { id: "packing",  label: "Packing Assistance",                price: 45 },
-  { id: "mattress", label: "Mattress Bag Protection",           price: 15 },
-  { id: "shrink",   label: "Shrink Wrap Protection",            price: 15 },
-  { id: "stairs",   label: "Stair Carry Fee (100+ ft)",         price: 25 },
-  { id: "piano",    label: "Piano / Specialty Item",            price: 85 },
+interface ServiceAddon { id: string; label: string; price: number; unit: string; }
+
+const DEFAULT_ADDONS: ServiceAddon[] = [
+  { id: "assembly",  label: "Furniture Assembly / Disassembly", price: 75, unit: "flat" },
+  { id: "packing",  label: "Packing Assistance",                price: 45, unit: "/ room" },
+  { id: "mattress", label: "Mattress Bag Protection",           price: 15, unit: "each" },
+  { id: "shrink",   label: "Shrink Wrap Protection",            price: 15, unit: "/ room" },
+  { id: "stairs",   label: "Stair Carry Fee (100+ ft)",         price: 25, unit: "flat" },
+  { id: "piano",    label: "Piano / Specialty Item",            price: 85, unit: "flat" },
 ];
 
 const CREW_META: Record<number, { best: string; popular?: boolean }> = {
@@ -156,9 +158,14 @@ export default function HomePage() {
     return LABOR_RATES[selectedCrew] + (serviceType === "truck" ? TRUCK_ADD : 0);
   }, [selectedCrew, serviceType]);
 
+  const { data: serviceAddons = DEFAULT_ADDONS } = useQuery<ServiceAddon[]>({
+    queryKey: ["/api/pricing/addons"],
+    staleTime: 1000 * 60 * 5,
+  });
+
   const addOnTotal = useMemo(
-    () => ADD_ONS.filter(a => addOns[a.id]).reduce((s, a) => s + a.price, 0),
-    [addOns]
+    () => serviceAddons.filter(a => addOns[a.id]).reduce((s, a) => s + a.price, 0),
+    [addOns, serviceAddons]
   );
 
   const driveInfo = useMemo(() => {
@@ -350,7 +357,7 @@ export default function HomePage() {
               <div>
                 <p className="text-sm font-semibold text-slate-300 mb-3">Add-Ons</p>
                 <div className="space-y-2">
-                  {ADD_ONS.map(a => (
+                  {serviceAddons.map(a => (
                     <button
                       key={a.id}
                       onClick={() => setAddOns(prev => ({ ...prev, [a.id]: !prev[a.id] }))}
