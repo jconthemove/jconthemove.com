@@ -19,6 +19,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { LOYALTY_TIERS } from "@/lib/loyalty";
 import QuoteForm from "@/components/QuoteForm";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { LotteryPanel } from "@/components/lottery-panel";
 
 interface WalletAccount {
   id: string;
@@ -134,6 +135,7 @@ export default function CustomerPortal() {
   const [activeTab, setActiveTab] = useState(urlParams.get("tab") || "jobs");
   const [animatedTokens, setAnimatedTokens] = useState(0);
   const [quoteOpen, setQuoteOpen] = useState(false);
+  const [lotteryOpen, setLotteryOpen] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -543,14 +545,44 @@ export default function CustomerPortal() {
 
           {/* ══ MARKETPLACE TAB ══ */}
           <TabsContent value="marketplace" className="space-y-4">
-            <div className="text-center py-4">
-              <div className="text-5xl mb-3">🎁</div>
-              <h2 className="text-2xl font-black text-white mb-2">Rewards Marketplace</h2>
-              <p className="text-slate-400 mb-2">You have <span className="text-orange-400 font-bold">{formatTokens(tokenBalance)} JCMOVES</span> to spend</p>
-              <p className="text-slate-500 text-sm mb-6">Redeem tokens for free labor, gift cards, service discounts, and more</p>
+            {/* Lottery Hero Card */}
+            <Card
+              className="border-yellow-500/30 bg-gradient-to-br from-yellow-950/60 via-amber-950/40 to-black cursor-pointer hover:border-yellow-500/60 transition-all"
+              onClick={() => setLotteryOpen(true)}
+            >
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="text-2xl">🎟️</div>
+                    <div>
+                      <p className="font-black text-white text-sm">JCMOVES Lottery</p>
+                      <p className="text-yellow-400/70 text-xs">Weekly & Monthly Mega draws</p>
+                    </div>
+                  </div>
+                  <Badge className="bg-yellow-500/20 text-yellow-300 border-yellow-500/30 text-xs">10 JCMOVES/ticket</Badge>
+                </div>
+                <div className="flex items-center justify-between mt-3">
+                  <div className="text-left">
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">Weekly Jackpot</p>
+                    <p className="text-xl font-black text-yellow-400">1,000+ JCMOVES</p>
+                  </div>
+                  <div className="text-left">
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">Mega Jackpot</p>
+                    <p className="text-xl font-black text-purple-400">10,000+ JCMOVES</p>
+                  </div>
+                  <Button size="sm" className="bg-yellow-500 hover:bg-yellow-400 text-black font-black text-xs">
+                    Enter <ChevronRight className="h-3 w-3 ml-0.5" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="text-center py-2">
+              <h2 className="text-xl font-black text-white mb-1">Rewards Marketplace</h2>
+              <p className="text-slate-400 text-sm mb-2">You have <span className="text-orange-400 font-bold">{formatTokens(tokenBalance)} JCMOVES</span> to spend</p>
               <Link href="/marketplace">
-                <Button className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 font-bold px-8 py-5 text-base">
-                  Browse Marketplace <ChevronRight className="ml-2 h-5 w-5" />
+                <Button className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 font-bold px-6">
+                  Browse Marketplace <ChevronRight className="ml-2 h-4 w-4" />
                 </Button>
               </Link>
             </div>
@@ -690,6 +722,9 @@ export default function CustomerPortal() {
           <QuoteForm variant="customer" onSuccess={() => { setQuoteOpen(false); queryClient.invalidateQueries({ queryKey: ["/api/leads/my-requests"] }); }} showRewardsInfo />
         </DialogContent>
       </Dialog>
+
+      {/* ── Lottery Panel ── */}
+      <LotteryPanel open={lotteryOpen} onClose={() => setLotteryOpen(false)} />
     </div>
   );
 }

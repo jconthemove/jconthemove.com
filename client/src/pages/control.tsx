@@ -139,6 +139,13 @@ const SECTIONS = [
         color: "from-pink-600 to-pink-700",
       },
       {
+        href: "/admin/lottery",
+        icon: Coins,
+        label: "Lottery Control",
+        description: "Weekly & Monthly Mega draws — rounds, winners, payouts",
+        color: "from-yellow-600 to-amber-700",
+      },
+      {
         href: "/marketplace",
         icon: BarChart3,
         label: "View Marketplace",

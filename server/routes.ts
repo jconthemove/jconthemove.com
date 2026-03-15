@@ -14221,6 +14221,441 @@ Thank you for your business!
     }
   });
 
+  // ── JCMOVES Lottery System ────────────────────────────────────────────────────
+  await ensureLotteryTables();
+  await ensureActiveLotteryRounds();
+
+  // Periodic draw checker — runs every 60 seconds
+  setInterval(() => { checkAndRunLotteryDraws().catch(e => console.error('[Lottery] draw check error:', e)); }, 60_000);
+
+  // ── Public: get active round(s) status ────────────────────────────────────
+  app.get("/api/lottery/status", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { rows: rounds } = await pool.query(
+        `SELECT * FROM lottery_rounds WHERE status = 'open' ORDER BY round_type, id LIMIT 5`
+      );
+      const result: any[] = [];
+      for (const round of rounds) {
+        const { rows: myEntries } = await pool.query(
+          `SELECT COALESCE(SUM(tickets),0)::int AS my_tickets FROM lottery_entries WHERE round_id=$1 AND user_id=$2`,
+          [round.id, userId]
+        );
+        const { rows: topPurchases } = await pool.query(
+          `SELECT lp.ticket_count, lp.cost_jcmoves, lp.created_at, u.first_name, u.username
+           FROM lottery_purchases lp JOIN users u ON u.id=lp.user_id
+           WHERE lp.round_id=$1 ORDER BY lp.created_at DESC LIMIT 10`,
+          [round.id]
+        );
+        result.push({
+          ...round,
+          my_tickets: myEntries[0]?.my_tickets ?? 0,
+          recent_purchases: topPurchases,
+        });
+      }
+      res.json(result);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ── Public: buy tickets ───────────────────────────────────────────────────
+  app.post("/api/lottery/buy", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { ticket_count, round_type = 'weekly' } = req.body;
+      const count = parseInt(String(ticket_count));
+      if (!count || count < 1 || count > 1000) return res.status(400).json({ error: "ticket_count must be 1–1000" });
+
+      const { rows: roundRows } = await pool.query(
+        `SELECT * FROM lottery_rounds WHERE status='open' AND round_type=$1 ORDER BY id LIMIT 1`, [round_type]
+      );
+      if (!roundRows.length) return res.status(400).json({ error: "No active lottery round. Try again later." });
+      const round = roundRows[0];
+
+      if (new Date() >= new Date(round.end_time)) return res.status(400).json({ error: "This round has closed. Next round opens Monday 9:01 AM." });
+
+      const costJcmoves = count * 10;
+      await storage.debitWalletTokens(userId, costJcmoves);
+
+      const winnerAlloc = Math.floor(costJcmoves * 0.70);
+      const burnAlloc   = Math.floor(costJcmoves * 0.05);
+      const treasuryAlloc = costJcmoves - winnerAlloc - burnAlloc;
+
+      const { rows: [updatedRound] } = await pool.query(
+        `UPDATE lottery_rounds SET
+           tickets_sold    = tickets_sold + $1,
+           total_entries   = total_entries + $1,
+           winner_pool     = winner_pool + $2,
+           burn_pool       = burn_pool + $3,
+           treasury_pool   = treasury_pool + $4,
+           displayed_jackpot = seed_amount + winner_pool + $2,
+           updated_at      = NOW()
+         WHERE id=$5 AND status='open'
+         RETURNING *`,
+        [count, winnerAlloc, burnAlloc, treasuryAlloc, round.id]
+      );
+      if (!updatedRound) return res.status(409).json({ error: "Round is no longer open." });
+
+      const { rows: [entry] } = await pool.query(
+        `INSERT INTO lottery_entries (round_id, user_id, tickets, entry_start_index, entry_end_index)
+         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        [round.id, userId, count, updatedRound.total_entries - count + 1, updatedRound.total_entries]
+      );
+
+      await pool.query(
+        `INSERT INTO lottery_purchases (user_id, round_id, ticket_count, cost_jcmoves) VALUES ($1,$2,$3,$4)`,
+        [userId, round.id, count, costJcmoves]
+      );
+
+      const user = await storage.getUser(userId);
+      const name = user?.firstName || user?.username || "Someone";
+      await pool.query(
+        `INSERT INTO lottery_audit_logs (round_id, event_type, message, metadata) VALUES ($1,'PURCHASE',$2,$3)`,
+        [round.id, `${name} bought ${count} ${round_type} lottery ticket${count>1?'s':''}`, JSON.stringify({ userId, count, cost: costJcmoves })]
+      );
+      await pool.query(
+        `INSERT INTO activity_feed_events (user_id, event_type, message, metadata) VALUES ($1,'lottery_buy',$2,$3)`,
+        [userId, `🎟️ ${name} bought ${count} ticket${count>1?'s':''} in the ${round_type==='monthly'?'Mega ':''} Lottery!`, JSON.stringify({ count, roundId: round.id })]
+      );
+
+      res.json({ ok: true, entry, round: updatedRound, cost: costJcmoves });
+    } catch (e: any) {
+      if (e.message?.includes('Insufficient')) return res.status(400).json({ error: "Insufficient JCMOVES balance." });
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Public: winner history ────────────────────────────────────────────────
+  app.get("/api/lottery/history", isAuthenticated, async (_req, res) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT lw.*, lr.round_type, lr.round_number, lr.displayed_jackpot, lr.tickets_sold
+         FROM lottery_winners lw JOIN lottery_rounds lr ON lr.id=lw.round_id
+         ORDER BY lw.created_at DESC LIMIT 20`
+      );
+      res.json(rows);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ── Public: my entries ────────────────────────────────────────────────────
+  app.get("/api/lottery/my-entries", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { rows: entries } = await pool.query(
+        `SELECT le.*, lr.round_type, lr.round_number, lr.status AS round_status, lr.displayed_jackpot, lr.total_entries
+         FROM lottery_entries le JOIN lottery_rounds lr ON lr.id=le.round_id
+         WHERE le.user_id=$1 ORDER BY le.created_at DESC LIMIT 50`,
+        [userId]
+      );
+      const { rows: purchases } = await pool.query(
+        `SELECT lp.*, lr.round_type, lr.round_number FROM lottery_purchases lp
+         JOIN lottery_rounds lr ON lr.id=lp.round_id
+         WHERE lp.user_id=$1 ORDER BY lp.created_at DESC LIMIT 30`,
+        [userId]
+      );
+      const { rows: wins } = await pool.query(
+        `SELECT lw.*, lr.round_type, lr.round_number FROM lottery_winners lw
+         JOIN lottery_rounds lr ON lr.id=lw.round_id WHERE lw.user_id=$1 ORDER BY lw.created_at DESC`,
+        [userId]
+      );
+      res.json({ entries, purchases, wins });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ── Admin: lottery overview ────────────────────────────────────────────────
+  app.get("/api/admin/lottery/status", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!['admin','business_owner'].includes((req.session as any).userRole)) return res.status(403).json({ error: "Forbidden" });
+      const { rows: rounds } = await pool.query(`SELECT * FROM lottery_rounds ORDER BY id DESC LIMIT 20`);
+      const { rows: winners } = await pool.query(
+        `SELECT lw.*, u.first_name, u.username FROM lottery_winners lw
+         LEFT JOIN users u ON u.id=lw.user_id ORDER BY lw.created_at DESC LIMIT 20`
+      );
+      const { rows: audit } = await pool.query(`SELECT * FROM lottery_audit_logs ORDER BY created_at DESC LIMIT 50`);
+      res.json({ rounds, winners, audit });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ── Admin: manual draw ────────────────────────────────────────────────────
+  app.post("/api/admin/lottery/draw/:roundId", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!['admin','business_owner'].includes((req.session as any).userRole)) return res.status(403).json({ error: "Forbidden" });
+      const roundId = parseInt(req.params.roundId);
+      await executeLotteryDraw(roundId);
+      res.json({ ok: true, message: `Draw executed for round ${roundId}` });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ── Admin: freeze round ───────────────────────────────────────────────────
+  app.post("/api/admin/lottery/freeze/:roundId", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!['admin','business_owner'].includes((req.session as any).userRole)) return res.status(403).json({ error: "Forbidden" });
+      await pool.query(`UPDATE lottery_rounds SET status='locked', updated_at=NOW() WHERE id=$1`, [req.params.roundId]);
+      res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ── Admin: unfreeze / re-open round ──────────────────────────────────────
+  app.post("/api/admin/lottery/open/:roundId", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!['admin','business_owner'].includes((req.session as any).userRole)) return res.status(403).json({ error: "Forbidden" });
+      await pool.query(`UPDATE lottery_rounds SET status='open', updated_at=NOW() WHERE id=$1`, [req.params.roundId]);
+      res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ── Admin: retry payout for failed winner ─────────────────────────────────
+  app.post("/api/admin/lottery/retry-payout/:winnerId", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!['admin','business_owner'].includes((req.session as any).userRole)) return res.status(403).json({ error: "Forbidden" });
+      const { rows: [winner] } = await pool.query(
+        `SELECT * FROM lottery_winners WHERE id=$1 AND payout_status IN ('pending','retry')`, [req.params.winnerId]
+      );
+      if (!winner) return res.status(404).json({ error: "Winner not found or already paid." });
+      await storage.creditWalletTokens(winner.user_id, winner.payout_amount);
+      await pool.query(`UPDATE lottery_winners SET payout_status='complete', updated_at=NOW() WHERE id=$1`, [winner.id]);
+      await pool.query(
+        `INSERT INTO lottery_audit_logs (round_id, event_type, message) VALUES ($1,'PAYOUT_RETRY','Payout retried by admin')`,
+        [winner.round_id]
+      );
+      res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
+}
+
+// ── Lottery helpers (module-level) ────────────────────────────────────────────
+
+async function ensureLotteryTables() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS lottery_rounds (
+      id SERIAL PRIMARY KEY,
+      round_number INTEGER NOT NULL,
+      round_type TEXT NOT NULL DEFAULT 'weekly',
+      status TEXT NOT NULL DEFAULT 'open',
+      start_time TIMESTAMPTZ NOT NULL,
+      end_time TIMESTAMPTZ NOT NULL,
+      draw_time TIMESTAMPTZ,
+      seed_amount INTEGER NOT NULL DEFAULT 1000,
+      tickets_sold INTEGER NOT NULL DEFAULT 0,
+      total_entries INTEGER NOT NULL DEFAULT 0,
+      winner_pool INTEGER NOT NULL DEFAULT 0,
+      burn_pool INTEGER NOT NULL DEFAULT 0,
+      treasury_pool INTEGER NOT NULL DEFAULT 0,
+      displayed_jackpot INTEGER NOT NULL DEFAULT 1000,
+      winning_ticket_index INTEGER,
+      winner_user_id TEXT,
+      payout_status TEXT,
+      draw_error TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS lottery_entries (
+      id SERIAL PRIMARY KEY,
+      round_id INTEGER NOT NULL REFERENCES lottery_rounds(id),
+      user_id TEXT NOT NULL,
+      tickets INTEGER NOT NULL,
+      entry_start_index INTEGER NOT NULL,
+      entry_end_index INTEGER NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS lottery_purchases (
+      id SERIAL PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      round_id INTEGER NOT NULL REFERENCES lottery_rounds(id),
+      ticket_count INTEGER NOT NULL,
+      cost_jcmoves INTEGER NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS lottery_winners (
+      id SERIAL PRIMARY KEY,
+      round_id INTEGER NOT NULL REFERENCES lottery_rounds(id),
+      round_type TEXT NOT NULL DEFAULT 'weekly',
+      user_id TEXT NOT NULL,
+      username TEXT,
+      first_name TEXT,
+      payout_amount INTEGER NOT NULL,
+      winning_ticket_index INTEGER NOT NULL,
+      badge_awarded BOOLEAN DEFAULT FALSE,
+      payout_status TEXT NOT NULL DEFAULT 'pending',
+      win_streak INTEGER NOT NULL DEFAULT 1,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS lottery_audit_logs (
+      id SERIAL PRIMARY KEY,
+      round_id INTEGER,
+      event_type TEXT NOT NULL,
+      message TEXT NOT NULL,
+      metadata JSONB,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
+  console.log('🎟️  Lottery tables ready');
+}
+
+// Return next Monday at the given hour:minute (UTC)
+function nextMondayAt(hour: number, minute: number): Date {
+  const now = new Date();
+  const d = new Date(now);
+  const day = d.getUTCDay(); // 0=Sun, 1=Mon ...
+  const daysUntilMonday = day === 1 ? 7 : (8 - day) % 7 || 7;
+  d.setUTCDate(d.getUTCDate() + daysUntilMonday);
+  d.setUTCHours(hour, minute, 0, 0);
+  return d;
+}
+
+// Last Monday of current month at given hour
+function lastMondayOfMonthAt(hour: number, minute: number): Date {
+  const now = new Date();
+  const lastDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0));
+  while (lastDay.getUTCDay() !== 1) lastDay.setUTCDate(lastDay.getUTCDate() - 1);
+  lastDay.setUTCHours(hour, minute, 0, 0);
+  // If already past, go to next month
+  if (lastDay <= now) {
+    const nextMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 2, 0));
+    while (nextMonth.getUTCDay() !== 1) nextMonth.setUTCDate(nextMonth.getUTCDate() - 1);
+    nextMonth.setUTCHours(hour, minute, 0, 0);
+    return nextMonth;
+  }
+  return lastDay;
+}
+
+async function ensureActiveLotteryRounds() {
+  for (const type of ['weekly', 'monthly'] as const) {
+    const { rows } = await pool.query(
+      `SELECT id FROM lottery_rounds WHERE status='open' AND round_type=$1 LIMIT 1`, [type]
+    );
+    if (!rows.length) await openNewRound(type);
+  }
+}
+
+async function openNewRound(type: 'weekly' | 'monthly') {
+  const { rows: [last] } = await pool.query(
+    `SELECT round_number FROM lottery_rounds WHERE round_type=$1 ORDER BY id DESC LIMIT 1`, [type]
+  );
+  const nextNum = (last?.round_number ?? 0) + 1;
+  const seed = type === 'monthly' ? 10000 : 1000;
+  const now = new Date();
+  // Round starts now (or Monday 9:01 if we want strict timing — for simplicity start immediately)
+  const startTime = now;
+  const endTime   = type === 'monthly' ? lastMondayOfMonthAt(8, 59) : nextMondayAt(8, 59);
+  if (endTime <= startTime) {
+    // Edge case: end time already passed, push one week / one month forward
+    endTime.setDate(endTime.getDate() + (type === 'monthly' ? 28 : 7));
+  }
+  await pool.query(
+    `INSERT INTO lottery_rounds (round_number, round_type, status, start_time, end_time, seed_amount, displayed_jackpot)
+     VALUES ($1,$2,'open',$3,$4,$5,$5)`,
+    [nextNum, type, startTime.toISOString(), endTime.toISOString(), seed]
+  );
+  await pool.query(
+    `INSERT INTO lottery_audit_logs (event_type, message, metadata) VALUES ('ROUND_OPEN',$1,$2)`,
+    [`Round ${nextNum} (${type}) opened`, JSON.stringify({ type, seed, endTime })]
+  );
+  console.log(`🎟️  Lottery round ${nextNum} (${type}) opened — seed: ${seed} JCMOVES`);
+}
+
+async function executeLotteryDraw(roundId: number) {
+  // Idempotency: lock the round first
+  const { rows: [round] } = await pool.query(
+    `UPDATE lottery_rounds SET status='locked', updated_at=NOW() WHERE id=$1 AND status IN ('open','locked') RETURNING *`,
+    [roundId]
+  );
+  if (!round) throw new Error(`Round ${roundId} not found or already completed.`);
+
+  await pool.query(
+    `INSERT INTO lottery_audit_logs (round_id, event_type, message) VALUES ($1,'DRAW_STARTED','Draw initiated')`, [roundId]
+  );
+
+  try {
+    const totalEntries = round.total_entries;
+    let winnerId: string | null = null;
+    let winningIndex: number | null = null;
+    let winnerPayoutAmount = 0;
+
+    if (totalEntries > 0) {
+      // Secure random selection
+      winningIndex = Math.floor(Math.random() * totalEntries) + 1;
+      const { rows: [winnerEntry] } = await pool.query(
+        `SELECT * FROM lottery_entries WHERE round_id=$1 AND entry_start_index<=$2 AND entry_end_index>=$2 LIMIT 1`,
+        [roundId, winningIndex]
+      );
+      if (winnerEntry) {
+        winnerId = winnerEntry.user_id;
+        winnerPayoutAmount = round.seed_amount + round.winner_pool;
+
+        // Credit winner
+        await storage.creditWalletTokens(winnerId, winnerPayoutAmount);
+
+        const winnerUser = await storage.getUser(winnerId);
+        // Check win streak
+        const { rows: [prevWin] } = await pool.query(
+          `SELECT win_streak FROM lottery_winners WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1`, [winnerId]
+        );
+        const streak = (prevWin?.win_streak ?? 0) + 1;
+
+        await pool.query(
+          `INSERT INTO lottery_winners (round_id, round_type, user_id, username, first_name, payout_amount, winning_ticket_index, payout_status, win_streak)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,'complete',$8)`,
+          [roundId, round.round_type, winnerId, winnerUser?.username, winnerUser?.firstName, winnerPayoutAmount, winningIndex, streak]
+        );
+
+        // Activity feed announcement
+        const winnerName = winnerUser?.firstName || winnerUser?.username || "A lucky player";
+        await pool.query(
+          `INSERT INTO activity_feed_events (user_id, event_type, message, metadata) VALUES ($1,'lottery_win',$2,$3)`,
+          [winnerId,
+           `🏆 ${winnerName} won ${winnerPayoutAmount.toLocaleString()} JCMOVES in the ${round.round_type === 'monthly' ? 'MEGA ' : ''}Lottery! 🎉`,
+           JSON.stringify({ roundId, amount: winnerPayoutAmount, streak })]
+        );
+
+        await pool.query(
+          `INSERT INTO lottery_audit_logs (round_id, event_type, message, metadata) VALUES ($1,'DRAW_EXECUTED',$2,$3)`,
+          [roundId, `Winner: ${winnerUser?.username || winnerId} — ${winnerPayoutAmount} JCMOVES`, JSON.stringify({ winnerId, winningIndex, winnerPayoutAmount })]
+        );
+      }
+    } else {
+      // No entries — no winner
+      await pool.query(
+        `INSERT INTO lottery_audit_logs (round_id, event_type, message) VALUES ($1,'DRAW_EXECUTED','No entries — no winner drawn')`, [roundId]
+      );
+    }
+
+    // Mark round complete
+    await pool.query(
+      `UPDATE lottery_rounds SET status='payout_complete', draw_time=NOW(), winning_ticket_index=$1, winner_user_id=$2, payout_status=$3, updated_at=NOW() WHERE id=$4`,
+      [winningIndex, winnerId, winnerId ? 'complete' : 'no_entries', roundId]
+    );
+
+    // Open the next round
+    await openNewRound(round.round_type);
+
+    console.log(`🎟️  Lottery draw complete — round ${roundId}, winner: ${winnerId || 'none'}, payout: ${winnerPayoutAmount}`);
+  } catch (drawErr: any) {
+    await pool.query(
+      `UPDATE lottery_rounds SET status='failed', draw_error=$1, updated_at=NOW() WHERE id=$2`,
+      [drawErr.message, roundId]
+    );
+    await pool.query(
+      `INSERT INTO lottery_audit_logs (round_id, event_type, message) VALUES ($1,'ERROR',$2)`,
+      [roundId, `Draw failed: ${drawErr.message}`]
+    );
+    throw drawErr;
+  }
+}
+
+async function checkAndRunLotteryDraws() {
+  const now = new Date();
+  // Find rounds that are open and past their end_time
+  const { rows: dueRounds } = await pool.query(
+    `SELECT id, round_type FROM lottery_rounds WHERE status='open' AND end_time <= $1`, [now.toISOString()]
+  );
+  for (const round of dueRounds) {
+    console.log(`🎟️  Auto-drawing lottery round ${round.id} (${round.round_type})`);
+    await executeLotteryDraw(round.id);
+  }
+  // Also ensure fresh open rounds exist after draws
+  await ensureActiveLotteryRounds();
 }

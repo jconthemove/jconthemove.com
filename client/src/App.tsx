@@ -28,6 +28,7 @@ import PendingApprovalPage from "@/pages/pending-approval";
 import InGodWeTrustPage from "@/pages/in-god-we-trust";
 import AdminTreasuryPage from "@/pages/admin-treasury";
 import AdminUsersPage from "@/pages/admin-users";
+import AdminLotteryPage from "@/pages/admin-lottery";
 import AdminTestimonialsPage from "@/pages/admin-testimonials";
 import AdminPromoCodesPage from "@/pages/admin-promo-codes";
 import AdminPipelinePage from "@/pages/admin-pipeline";
@@ -342,6 +343,11 @@ function AuthenticatedApp() {
           <Route path="/admin/treasury">
             <RouteGuard allowedRoles={['admin', 'business_owner']}>
               <PageWrapper component={AdminTreasuryPage} />
+            </RouteGuard>
+          </Route>
+          <Route path="/admin/lottery">
+            <RouteGuard allowedRoles={['admin', 'business_owner']}>
+              <PageWrapper component={AdminLotteryPage} />
             </RouteGuard>
           </Route>
           <Route path="/admin/users">
