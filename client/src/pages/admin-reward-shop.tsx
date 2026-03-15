@@ -20,7 +20,7 @@ import {
 interface RewardCategory { id: number; name: string; icon: string; color: string; sortOrder: number; isActive: boolean; }
 interface RewardItem {
   id: number; categoryId: number; name: string; shortDesc: string; fullDesc?: string; image?: string;
-  tokenPrice: number; salePriceTokens?: number | null; cashValue?: string | null; status: string;
+  tokenPrice: number; salePriceTokens?: number | null; status: string;
   featured: boolean; inventory?: number | null; maxPerUser: number; maxPerMonth: number;
   tierRequired: string; deliveryType: string; scheduleRequired: boolean; expirationDays?: number | null;
   promoBadge?: string | null; isLimitedTime: boolean; adminNotes?: string | null;
@@ -68,7 +68,7 @@ const REDEMPTION_STATUS_LABELS: Record<string, string> = {
 
 const BLANK_ITEM: Partial<RewardItem> = {
   categoryId: 0, name: "", shortDesc: "", fullDesc: "", image: "", tokenPrice: 1000,
-  cashValue: "", status: "active", featured: false, inventory: undefined, maxPerUser: 10,
+  status: "active", featured: false, inventory: undefined, maxPerUser: 10,
   maxPerMonth: 5, tierRequired: "none", deliveryType: "manual", scheduleRequired: false,
   expirationDays: undefined, promoBadge: "", isLimitedTime: false, adminNotes: "",
 };
@@ -892,7 +892,7 @@ export default function AdminRewardShopPage() {
               {/* Pricing */}
               <div className="border-t border-border pt-4">
                 <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3">Pricing</div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label className="text-xs font-semibold">Token Price *</Label>
                     <Input type="number" value={editItem.tokenPrice ?? 0} onChange={e => setEditItem(p => ({ ...p!, tokenPrice: parseInt(e.target.value) || 0 }))} className="mt-1 h-9 text-sm" />
@@ -900,10 +900,6 @@ export default function AdminRewardShopPage() {
                   <div>
                     <Label className="text-xs font-semibold">Sale Price (optional)</Label>
                     <Input type="number" value={editItem.salePriceTokens ?? ""} onChange={e => setEditItem(p => ({ ...p!, salePriceTokens: e.target.value ? parseInt(e.target.value) : null }))} className="mt-1 h-9 text-sm" placeholder="Leave blank" />
-                  </div>
-                  <div>
-                    <Label className="text-xs font-semibold">Cash Value (USD)</Label>
-                    <Input value={editItem.cashValue ?? ""} onChange={e => setEditItem(p => ({ ...p!, cashValue: e.target.value }))} className="mt-1 h-9 text-sm" placeholder="e.g. 25.00" />
                   </div>
                 </div>
                 <div className="mt-2">

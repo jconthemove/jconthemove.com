@@ -13040,11 +13040,25 @@ Thank you for your business!
   });
 
   // ── Admin: Create item ────────────────────────────────────────
+  // Sanitize reward item body: convert empty strings to null for numeric/optional fields
+  function sanitizeRewardItemBody(body: any) {
+    const numericFields = ["salePriceTokens", "cashValue", "inventory", "expirationDays", "maxPerUser", "maxPerMonth", "sortOrder"];
+    const cleaned = { ...body };
+    for (const field of numericFields) {
+      if (cleaned[field] === "" || cleaned[field] === undefined) cleaned[field] = null;
+    }
+    // Remove internal fields that should never be set by the client
+    delete cleaned.id;
+    delete cleaned.createdAt;
+    delete cleaned.updatedAt;
+    return cleaned;
+  }
+
   app.post("/api/admin/reward-shop/items", isAuthenticated, async (req: any, res) => {
     try {
       const user = await storage.getUser((req.session as any).userId);
       if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
-      const [item] = await db.insert(rewardItems).values(req.body).returning();
+      const [item] = await db.insert(rewardItems).values(sanitizeRewardItemBody(req.body)).returning();
       res.json(item);
     } catch (e: any) {
       res.status(500).json({ error: e.message || "Failed to create item" });
@@ -13056,7 +13070,7 @@ Thank you for your business!
     try {
       const user = await storage.getUser((req.session as any).userId);
       if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
-      const { id, createdAt, updatedAt, ...safeBody } = req.body;
+      const safeBody = sanitizeRewardItemBody(req.body);
       const [item] = await db.update(rewardItems).set({ ...safeBody, updatedAt: new Date() }).where(eq(rewardItems.id, parseInt(req.params.id))).returning();
       res.json(item);
     } catch (e: any) {
