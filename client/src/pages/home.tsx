@@ -1,4 +1,4 @@
-import { useRef, useState, useMemo } from "react";
+import { useRef, useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -61,6 +61,22 @@ const CREW_META: Record<number, { best: string; popular?: boolean }> = {
 
 const GALLERY_IMAGES = [img1, img2, img3, img4, img5, img6, img7, img8, img9, img10, img11, img12];
 
+// JC base location: Ironwood, MI
+const BASE_LAT = 46.4547;
+const BASE_LNG = -90.1712;
+const DRIVE_SPEED_MPH = 45;
+const DRIVE_RATE_PER_MOVER = 40; // $/hr per mover for drive time
+
+function haversineMiles(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const R = 3958.8; // Earth radius in miles
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 const FALLBACK_REVIEWS = [
   { id: "1", reviewerName: "Sarah M.", rating: 5, content: "Fast, careful, and professional. They wrapped every piece of furniture and got us moved in under 3 hours!", serviceType: "Moving", status: "approved" },
   { id: "2", reviewerName: "James R.", rating: 5, content: "Best moving crew I've ever hired. On time, hard working, and the price was exactly what they quoted.", serviceType: "Moving", status: "approved" },
@@ -93,6 +109,43 @@ export default function HomePage() {
   const [serviceType, setServiceType] = useState<"labor" | "truck">("labor");
   const [selectedCrew, setSelectedCrew] = useState<number | null>(null);
   const [addOns, setAddOns] = useState<Record<string, boolean>>({});
+  const [zipCode, setZipCode] = useState("");
+  const [zipCity, setZipCity] = useState<string | null>(null);
+  const [zipError, setZipError] = useState("");
+  const [zipLoading, setZipLoading] = useState(false);
+  const [driveMiles, setDriveMiles] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (zipCode.length !== 5 || !/^\d{5}$/.test(zipCode)) {
+      setZipCity(null);
+      setDriveMiles(null);
+      setZipError("");
+      return;
+    }
+    setZipLoading(true);
+    setZipError("");
+    fetch(`https://api.zippopotam.us/us/${zipCode}`)
+      .then(r => {
+        if (!r.ok) throw new Error("Zip not found");
+        return r.json();
+      })
+      .then((d: any) => {
+        const place = d.places?.[0];
+        if (!place) throw new Error("Zip not found");
+        const lat = parseFloat(place.latitude);
+        const lng = parseFloat(place.longitude);
+        const miles = haversineMiles(BASE_LAT, BASE_LNG, lat, lng);
+        setDriveMiles(miles);
+        setZipCity(`${place["place name"]}, ${place["state abbreviation"]}`);
+        setZipLoading(false);
+      })
+      .catch(() => {
+        setZipError("Zip code not found — please check and retry.");
+        setZipCity(null);
+        setDriveMiles(null);
+        setZipLoading(false);
+      });
+  }, [zipCode]);
 
   const { data: testimonials } = useQuery<Testimonial[]>({
     queryKey: ["/api/testimonials/public"],
@@ -107,6 +160,18 @@ export default function HomePage() {
     () => ADD_ONS.filter(a => addOns[a.id]).reduce((s, a) => s + a.price, 0),
     [addOns]
   );
+
+  const driveInfo = useMemo(() => {
+    if (!driveMiles || !selectedCrew) return null;
+    const oneWayHours = driveMiles / DRIVE_SPEED_MPH;
+    const roundTripHours = oneWayHours * 2;
+    const cost = Math.ceil(roundTripHours * DRIVE_RATE_PER_MOVER * selectedCrew);
+    return {
+      miles: Math.round(driveMiles),
+      roundTripHours: Math.round(roundTripHours * 10) / 10,
+      cost,
+    };
+  }, [driveMiles, selectedCrew]);
 
   const minHours = serviceType === "truck" ? 3 : 2;
 
@@ -301,6 +366,35 @@ export default function HomePage() {
                   ))}
                 </div>
               </div>
+
+              <div>
+                <p className="text-sm font-semibold text-slate-300 mb-1">Your Zip Code</p>
+                <p className="text-xs text-slate-500 mb-3">We calculate drive time from our Ironwood, MI base at 45 mph.</p>
+                <div className="relative">
+                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={5}
+                    placeholder="e.g. 54401"
+                    value={zipCode}
+                    onChange={e => setZipCode(e.target.value.replace(/\D/g, ""))}
+                    className="w-full pl-9 pr-4 py-3 rounded-xl border border-white/10 bg-white/[0.03] text-white placeholder-slate-600 text-sm focus:outline-none focus:border-blue-500 transition-colors"
+                  />
+                  {zipLoading && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500 animate-pulse">Looking up…</span>
+                  )}
+                </div>
+                {zipCity && driveMiles !== null && (
+                  <p className="mt-2 text-xs text-blue-300 flex items-center gap-1">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />
+                    {zipCity} — ~{Math.round(driveMiles)} mi from Ironwood
+                  </p>
+                )}
+                {zipError && (
+                  <p className="mt-2 text-xs text-red-400">{zipError}</p>
+                )}
+              </div>
             </div>
 
             <div className="flex flex-col gap-4">
@@ -323,9 +417,20 @@ export default function HomePage() {
                           <span className="text-white font-medium">+${addOnTotal}</span>
                         </div>
                       )}
+                      {driveInfo && (
+                        <div className="flex justify-between text-sm bg-amber-950/30 border border-amber-500/20 rounded-lg px-3 py-2">
+                          <span className="text-amber-300 flex items-center gap-1">
+                            <Truck className="h-3.5 w-3.5" />
+                            Drive ({driveInfo.miles} mi · {driveInfo.roundTripHours}h RT)
+                          </span>
+                          <span className="text-amber-200 font-medium">+${driveInfo.cost}</span>
+                        </div>
+                      )}
                       <div className="border-t border-white/10 pt-3 flex justify-between items-end">
                         <span className="text-slate-300 font-semibold">Starting From</span>
-                        <span className="text-2xl font-black text-blue-400">${hourlyRate * minHours + addOnTotal}</span>
+                        <span className="text-2xl font-black text-blue-400">
+                          ${hourlyRate * minHours + addOnTotal + (driveInfo?.cost ?? 0)}
+                        </span>
                       </div>
                       <p className="text-slate-500 text-xs">Final price based on actual hours worked + applicable fees.</p>
                     </div>
