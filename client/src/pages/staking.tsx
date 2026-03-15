@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, TrendingUp, Lock, Unlock, Coins, Clock, ArrowLeft, Sparkles, Diamond, PartyPopper, Shield, AlertTriangle, Activity, Gauge } from "lucide-react";
+import { Loader2, TrendingUp, Lock, Unlock, Coins, Clock, ArrowLeft, Sparkles, Diamond, PartyPopper, Shield, AlertTriangle, Activity, Gauge, Copy, CheckCheck, ExternalLink, Wallet, Percent, ChevronRight, AlertCircle, RefreshCw } from "lucide-react";
 import { Link } from "wouter";
 import type { StakingTier, Stake } from "@shared/schema";
 
@@ -49,9 +49,376 @@ function pendingRewards(stake: Stake & { tier: StakingTier }) {
   return amount * dailyRate * daysSince;
 }
 
+// ── ETH Staking types ──────────────────────────────────────────────────────
+interface EthConfig {
+  baseApy: number; validatorFeePct: number; userApy: number;
+  minAmount: number; treasuryAddress: string; enabled: boolean;
+}
+interface EthStakeRow {
+  id: number; amount: string; tx_hash: string | null; status: string;
+  apy: string; validator_fee_pct: string; total_earned: string;
+  last_payout_at: string; staked_at: string; unstake_requested_at: string | null;
+}
+
+function ethPending(stake: EthStakeRow): number {
+  const now = new Date();
+  const last = new Date(stake.last_payout_at);
+  const days = (now.getTime() - last.getTime()) / 86400000;
+  return parseFloat(stake.amount) * (parseFloat(stake.apy) / 100 / 365) * days;
+}
+
+function EthStakingView({ isAuthenticated }: { isAuthenticated: boolean }) {
+  const { toast } = useToast();
+  const [amount, setAmount] = useState("");
+  const [txHash, setTxHash] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [, setLiveTime] = useState(Date.now());
+
+  useEffect(() => {
+    const t = setInterval(() => setLiveTime(Date.now()), 5000);
+    return () => clearInterval(t);
+  }, []);
+
+  const { data: config } = useQuery<EthConfig>({
+    queryKey: ["/api/eth-staking/config"],
+    staleTime: 60000,
+  });
+
+  const { data: myStakes = [], refetch: refetchStakes } = useQuery<EthStakeRow[]>({
+    queryKey: ["/api/eth-staking/my-stakes"],
+    enabled: isAuthenticated,
+    staleTime: 0,
+    refetchInterval: 30000,
+  });
+
+  const stakeMutation = useMutation({
+    mutationFn: async (data: { amount: string; txHash: string }) => {
+      const res = await apiRequest("POST", "/api/eth-staking/stake", { amount: data.amount, txHash: data.txHash || null });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "⟠ Stake submitted!", description: "Our team will verify your transaction and activate your stake within 24 hours." });
+      setAmount(""); setTxHash("");
+      refetchStakes();
+    },
+    onError: (e: Error) => toast({ title: "Staking failed", description: e.message, variant: "destructive" }),
+  });
+
+  const claimMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("POST", `/api/eth-staking/${id}/claim`, {});
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Claim recorded!", description: data.message });
+      refetchStakes();
+    },
+    onError: (e: Error) => toast({ title: "Claim failed", description: e.message, variant: "destructive" }),
+  });
+
+  const unstakeMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("POST", `/api/eth-staking/${id}/unstake`, {});
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Unstake requested", description: data.message });
+      refetchStakes();
+    },
+    onError: (e: Error) => toast({ title: "Unstake failed", description: e.message, variant: "destructive" }),
+  });
+
+  const activeStakes = myStakes.filter(s => s.status === "active");
+  const pendingStakes = myStakes.filter(s => s.status === "pending");
+  const unstakingStakes = myStakes.filter(s => s.status === "unstaking");
+
+  const totalEth = activeStakes.reduce((s, x) => s + parseFloat(x.amount), 0);
+  const totalEarned = myStakes.reduce((s, x) => s + parseFloat(x.total_earned), 0);
+  const totalPending = activeStakes.reduce((s, x) => s + ethPending(x), 0);
+  const cfg = config ?? { baseApy: 5.0, validatorFeePct: 10, userApy: 4.50, minAmount: 0.01, treasuryAddress: "", enabled: true };
+
+  function copyAddress() {
+    if (!cfg.treasuryAddress) return;
+    navigator.clipboard.writeText(cfg.treasuryAddress).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  const statusBadge = (s: string) => {
+    const map: Record<string, string> = {
+      pending: "bg-yellow-500/20 text-yellow-300 border border-yellow-500/30",
+      active:  "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30",
+      unstaking: "bg-blue-500/20 text-blue-300 border border-blue-500/30",
+      completed: "bg-slate-500/20 text-slate-300 border border-slate-500/30",
+      rejected: "bg-red-500/20 text-red-300 border border-red-500/30",
+    };
+    return map[s] || "bg-slate-600/20 text-slate-300";
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Title */}
+      <div>
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-indigo-400 bg-clip-text text-transparent flex items-center gap-3">
+          ⟠ Ethereum Staking
+        </h1>
+        <p className="text-muted-foreground mt-1">JC ON THE MOVE acts as your validator — you earn ETH rewards daily</p>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: "ETH Staked", value: totalEth.toFixed(6), color: "blue", sub: "in active stakes" },
+          { label: "Total Earned", value: totalEarned.toFixed(8), color: "emerald", sub: "ETH lifetime" },
+          { label: "Pending Rewards", value: totalPending.toFixed(8), color: "purple", sub: "growing live" },
+          { label: "Your APY", value: `${cfg.userApy.toFixed(2)}%`, color: "amber", sub: "annual return" },
+        ].map(c => (
+          <Card key={c.label} className={`border-${c.color}-500/30 bg-gradient-to-br from-${c.color}-500/10 to-${c.color}-900/5`}>
+            <CardContent className="p-4 text-center">
+              <p className="text-xs text-muted-foreground">{c.label}</p>
+              <p className="text-xl font-bold mt-0.5">{c.value}</p>
+              <p className="text-xs text-muted-foreground">{c.sub}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* APY Breakdown */}
+      <Card className="border-blue-500/30 bg-gradient-to-br from-blue-950/40 to-indigo-950/20">
+        <CardContent className="p-5 space-y-4">
+          <div className="flex items-center gap-2 mb-1">
+            <Percent className="h-5 w-5 text-blue-400" />
+            <h3 className="font-bold text-lg text-blue-200">How Your Yield Works</h3>
+          </div>
+          <div className="grid grid-cols-3 gap-3 text-center">
+            <div className="bg-slate-800/60 rounded-xl p-3 border border-slate-700/40">
+              <p className="text-xs text-slate-400">Network Base APY</p>
+              <p className="text-2xl font-black text-white mt-1">{cfg.baseApy.toFixed(2)}%</p>
+              <p className="text-xs text-slate-500 mt-0.5">Ethereum PoS rate</p>
+            </div>
+            <div className="bg-red-950/30 rounded-xl p-3 border border-red-500/20 flex flex-col items-center justify-center">
+              <p className="text-xs text-red-400">JC Validator Fee</p>
+              <p className="text-2xl font-black text-red-300 mt-1">−{cfg.validatorFeePct.toFixed(0)}%</p>
+              <p className="text-xs text-red-400/70 mt-0.5">Funds JC Treasury</p>
+            </div>
+            <div className="bg-emerald-950/30 rounded-xl p-3 border border-emerald-500/30">
+              <p className="text-xs text-emerald-400">Your Net APY</p>
+              <p className="text-2xl font-black text-emerald-300 mt-1">{cfg.userApy.toFixed(2)}%</p>
+              <p className="text-xs text-emerald-500/80 mt-0.5">Paid to your wallet</p>
+            </div>
+          </div>
+          <p className="text-xs text-slate-500 border-t border-slate-700/40 pt-3">
+            Example: Stake 1 ETH → earn ~{(cfg.userApy / 100 / 365).toFixed(8)} ETH/day · {(cfg.userApy / 100 / 12).toFixed(6)} ETH/month · {(cfg.userApy / 100).toFixed(6)} ETH/year
+          </p>
+          <div className="flex items-start gap-2 bg-amber-950/30 border border-amber-500/20 rounded-xl p-3 text-xs text-amber-200">
+            <AlertCircle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+            <span>JC ON THE MOVE functions as your liquid staking provider. Your ETH is pooled in the JC Treasury to operate as an Ethereum validator. Staking rewards are tracked on-platform and paid out manually on claim requests.</span>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Stake form */}
+      {isAuthenticated && (
+        <Card className="border-indigo-500/30 bg-gradient-to-br from-indigo-950/30 to-blue-950/20">
+          <CardContent className="p-5 space-y-4">
+            <div className="flex items-center gap-2">
+              <Wallet className="h-5 w-5 text-indigo-400" />
+              <h3 className="font-bold text-lg text-indigo-200">Stake ETH</h3>
+            </div>
+
+            {cfg.treasuryAddress ? (
+              <div className="bg-slate-900/70 rounded-xl border border-slate-700/60 p-3 space-y-2">
+                <p className="text-xs text-slate-400 font-semibold uppercase tracking-wide">Step 1 — Send ETH to JC Treasury</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-xs text-blue-300 font-mono bg-slate-800/80 rounded-lg px-3 py-2 break-all border border-slate-700/40">
+                    {cfg.treasuryAddress}
+                  </code>
+                  <Button variant="ghost" size="icon" onClick={copyAddress} className="h-8 w-8 shrink-0 text-slate-400 hover:text-white">
+                    {copied ? <CheckCheck className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                  </Button>
+                  {cfg.treasuryAddress.startsWith("0x") && (
+                    <a href={`https://etherscan.io/address/${cfg.treasuryAddress}`} target="_blank" rel="noopener noreferrer">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-slate-400 hover:text-white">
+                        <ExternalLink className="h-4 w-4" />
+                      </Button>
+                    </a>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500">Minimum stake: {cfg.minAmount} ETH · Only send ETH (ERC-20 tokens not accepted)</p>
+              </div>
+            ) : (
+              <div className="bg-yellow-950/30 border border-yellow-500/30 rounded-xl p-3 text-xs text-yellow-200 flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-yellow-400 shrink-0" />
+                Treasury address not yet configured. Contact JC ON THE MOVE to get started.
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <p className="text-xs text-slate-400 font-semibold uppercase tracking-wide">Step 2 — Register Your Stake</p>
+              <p className="text-xs text-slate-500">After sending, submit your stake details below for verification.</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">ETH Amount Sent</label>
+                <Input
+                  type="number"
+                  placeholder={`e.g. 0.5 (min ${cfg.minAmount})`}
+                  value={amount}
+                  onChange={e => setAmount(e.target.value)}
+                  className="bg-slate-900 border-slate-600 text-white"
+                  step="0.000001"
+                  min={cfg.minAmount}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Transaction Hash (optional)</label>
+                <Input
+                  placeholder="0x..."
+                  value={txHash}
+                  onChange={e => setTxHash(e.target.value)}
+                  className="bg-slate-900 border-slate-600 text-white font-mono text-xs"
+                />
+              </div>
+            </div>
+
+            <Button
+              onClick={() => stakeMutation.mutate({ amount, txHash })}
+              disabled={!amount || parseFloat(amount) < cfg.minAmount || stakeMutation.isPending}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 font-semibold"
+            >
+              {stakeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Submit Stake — {amount ? `${amount} ETH` : "Enter Amount"}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Pending stakes awaiting verification */}
+      {pendingStakes.length > 0 && (
+        <Card className="border-yellow-500/30 bg-yellow-950/10">
+          <CardContent className="p-4 space-y-3">
+            <h3 className="font-semibold text-yellow-300 flex items-center gap-2"><Clock className="h-4 w-4" /> Pending Verification ({pendingStakes.length})</h3>
+            {pendingStakes.map(s => (
+              <div key={s.id} className="flex items-center justify-between bg-slate-900/50 rounded-xl px-4 py-3 border border-yellow-500/20">
+                <div>
+                  <p className="font-semibold text-white">{parseFloat(s.amount).toFixed(6)} ETH</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Submitted {new Date(s.staked_at).toLocaleDateString()}</p>
+                  {s.tx_hash && <p className="text-xs text-slate-500 font-mono mt-0.5">{s.tx_hash.slice(0, 20)}…</p>}
+                </div>
+                <Badge className="bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">Awaiting Verification</Badge>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Active stakes */}
+      {activeStakes.length > 0 && (
+        <Card className="border-emerald-500/30 bg-emerald-950/10">
+          <CardContent className="p-4 space-y-3">
+            <h3 className="font-semibold text-emerald-300 flex items-center gap-2"><TrendingUp className="h-4 w-4" /> Active Stakes ({activeStakes.length})</h3>
+            {activeStakes.map(s => {
+              const pending = ethPending(s);
+              return (
+                <div key={s.id} className="bg-slate-900/50 rounded-xl px-4 py-4 border border-emerald-500/20 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-bold text-white text-lg">{parseFloat(s.amount).toFixed(6)} ETH</p>
+                      <p className="text-xs text-slate-400">Staked {new Date(s.staked_at).toLocaleDateString()} · {parseFloat(s.apy).toFixed(2)}% APY</p>
+                    </div>
+                    <Badge className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">Active</Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="bg-slate-800/60 rounded-lg p-2.5">
+                      <p className="text-slate-400 text-xs">Total Earned</p>
+                      <p className="text-white font-semibold">{parseFloat(s.total_earned).toFixed(8)} ETH</p>
+                    </div>
+                    <div className="bg-purple-900/30 rounded-lg p-2.5 border border-purple-500/20">
+                      <p className="text-purple-400 text-xs flex items-center gap-1"><Sparkles className="h-3 w-3" /> Pending Now</p>
+                      <p className="text-purple-200 font-semibold">{pending.toFixed(8)} ETH</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => claimMutation.mutate(s.id)}
+                      disabled={pending < 0.0001 || claimMutation.isPending}
+                      className="flex-1 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/30"
+                    >
+                      {claimMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Coins className="h-3 w-3 mr-1" />}
+                      Claim Rewards
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => unstakeMutation.mutate(s.id)}
+                      disabled={unstakeMutation.isPending}
+                      className="flex-1 border-red-500/30 text-red-300 hover:bg-red-900/20"
+                    >
+                      {unstakeMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Unlock className="h-3 w-3 mr-1" />}
+                      Request Unstake
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Unstaking */}
+      {unstakingStakes.length > 0 && (
+        <Card className="border-blue-500/30 bg-blue-950/10">
+          <CardContent className="p-4 space-y-3">
+            <h3 className="font-semibold text-blue-300 flex items-center gap-2"><RefreshCw className="h-4 w-4" /> Unstaking ({unstakingStakes.length})</h3>
+            {unstakingStakes.map(s => (
+              <div key={s.id} className="flex items-center justify-between bg-slate-900/50 rounded-xl px-4 py-3 border border-blue-500/20">
+                <div>
+                  <p className="font-semibold text-white">{parseFloat(s.amount).toFixed(6)} ETH</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Requested {s.unstake_requested_at ? new Date(s.unstake_requested_at).toLocaleDateString() : "—"}</p>
+                </div>
+                <Badge className="bg-blue-500/20 text-blue-300 border border-blue-500/30">Processing 1–3 days</Badge>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Completed / empty state */}
+      {isAuthenticated && myStakes.length === 0 && (
+        <Card className="border-dashed border-slate-700/50">
+          <CardContent className="p-8 text-center text-slate-500">
+            <p className="text-4xl mb-3">⟠</p>
+            <p className="font-semibold text-slate-400">No ETH stakes yet</p>
+            <p className="text-sm mt-1">Send ETH to the treasury address above and submit your stake to start earning.</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Info */}
+      <Card className="border-dashed border-slate-700/40">
+        <CardContent className="p-4 space-y-2">
+          <h3 className="font-semibold text-slate-300">How ETH Staking Works</h3>
+          <ul className="text-sm text-muted-foreground space-y-1 list-none">
+            <li>1. JC ON THE MOVE pools staked ETH and runs Ethereum validator nodes on your behalf</li>
+            <li>2. The Ethereum network pays ~{cfg.baseApy.toFixed(1)}% APY in staking rewards to validators</li>
+            <li>3. JC takes a {cfg.validatorFeePct.toFixed(0)}% validator commission — this funds the JC Treasury for future business growth</li>
+            <li>4. You receive {cfg.userApy.toFixed(2)}% APY on your staked ETH, claimable any time</li>
+            <li>5. Claims are processed manually within 24 hours. Unstakes take 1–3 business days to process.</li>
+          </ul>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function StakingPage() {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
+  const [mode, setMode] = useState<"jcmoves" | "eth">("jcmoves");
   const [selectedTier, setSelectedTier] = useState<string | null>(null);
   const [stakeAmount, setStakeAmount] = useState("");
 
@@ -164,14 +531,38 @@ export default function StakingPage() {
           <Link href="/">
             <Button variant="ghost" size="icon"><ArrowLeft className="h-5 w-5" /></Button>
           </Link>
-          <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-yellow-500 to-orange-500 bg-clip-text text-transparent">
-              JCMOVES Staking Treasury
-            </h1>
-            <p className="text-muted-foreground">Stake your tokens and earn 5%-30% annual returns paid daily</p>
+          <div className="flex-1">
+            {/* Mode toggle — pill switch */}
+            <div className="inline-flex items-center bg-slate-900/80 border border-slate-700/60 rounded-xl p-1 gap-1">
+              <button
+                onClick={() => setMode("jcmoves")}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                  mode === "jcmoves"
+                    ? "bg-gradient-to-r from-yellow-500 to-orange-500 text-white shadow-md"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                🪙 JCMOVES Staking
+              </button>
+              <button
+                onClick={() => setMode("eth")}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 ${
+                  mode === "eth"
+                    ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                ⟠ Ethereum Staking
+              </button>
+            </div>
           </div>
         </div>
 
+        {mode === "eth" && (
+          <EthStakingView isAuthenticated={isAuthenticated} />
+        )}
+
+        {mode === "jcmoves" && (<>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card className="border-yellow-500/30 bg-gradient-to-br from-yellow-500/10 to-orange-500/10">
             <CardContent className="p-4 text-center">
@@ -718,6 +1109,7 @@ export default function StakingPage() {
             </ul>
           </CardContent>
         </Card>
+        </>)}
       </div>
     </div>
   );

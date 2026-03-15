@@ -1903,3 +1903,30 @@ export const recoveryTokens = pgTable("recovery_tokens", {
 });
 
 export type RecoveryToken = typeof recoveryTokens.$inferSelect;
+
+// ── ETH Staking (JC as Validator) ───────────────────────────────────────────
+export const ethStakes = pgTable("eth_stakes", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  amount: decimal("amount", { precision: 20, scale: 8 }).notNull(),
+  amountUsdAtEntry: decimal("amount_usd_at_entry", { precision: 20, scale: 2 }),
+  txHash: text("tx_hash"),
+  status: text("status").notNull().default("pending"), // pending | active | unstaking | completed | rejected
+  apy: decimal("apy", { precision: 8, scale: 4 }).notNull().default("4.50"),
+  validatorFeePct: decimal("validator_fee_pct", { precision: 8, scale: 4 }).notNull().default("0.50"),
+  dailyRate: decimal("daily_rate", { precision: 20, scale: 12 }).notNull().default("0.000123287"),
+  totalEarned: decimal("total_earned", { precision: 20, scale: 8 }).notNull().default("0"),
+  lastPayoutAt: timestamp("last_payout_at").notNull().defaultNow(),
+  stakedAt: timestamp("staked_at").notNull().defaultNow(),
+  unstakeRequestedAt: timestamp("unstake_requested_at"),
+  completedAt: timestamp("completed_at"),
+  adminNotes: text("admin_notes"),
+});
+
+export const insertEthStakeSchema = createInsertSchema(ethStakes).omit({
+  id: true, totalEarned: true, lastPayoutAt: true, stakedAt: true,
+  unstakeRequestedAt: true, completedAt: true, adminNotes: true,
+});
+
+export type EthStake = typeof ethStakes.$inferSelect;
+export type InsertEthStake = z.infer<typeof insertEthStakeSchema>;

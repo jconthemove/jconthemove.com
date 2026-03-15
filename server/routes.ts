@@ -490,6 +490,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('⚠️ Jackpot migration error (non-fatal):', migErr);
   }
 
+  // ETH Staking table
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS eth_stakes (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR NOT NULL,
+        amount DECIMAL(20, 8) NOT NULL,
+        amount_usd_at_entry DECIMAL(20, 2),
+        tx_hash TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        apy DECIMAL(8, 4) NOT NULL DEFAULT 4.50,
+        validator_fee_pct DECIMAL(8, 4) NOT NULL DEFAULT 0.50,
+        daily_rate DECIMAL(20, 12) NOT NULL DEFAULT 0.000123287,
+        total_earned DECIMAL(20, 8) NOT NULL DEFAULT 0,
+        last_payout_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        staked_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        unstake_requested_at TIMESTAMP,
+        completed_at TIMESTAMP,
+        admin_notes TEXT
+      );
+    `);
+    console.log('⟠  ETH staking table ready');
+  } catch (ethErr) {
+    console.error('⚠️ ETH staking table error (non-fatal):', ethErr);
+  }
+
   // Seed staking tiers and treasury user on startup (ensures production has them)
   await ensureStakingTiersSeeded();
   await ensureStakingTreasuryUser();
@@ -12119,6 +12145,181 @@ Thank you for your business!
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================================
+  // ETH STAKING (JC AS VALIDATOR)
+  // ============================================================
+
+  // Public config — APY, fee, treasury address, min amount
+  app.get("/api/eth-staking/config", async (_req, res) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT setting_key, setting_value FROM spin_config WHERE setting_key LIKE 'eth_staking_%' ORDER BY setting_key`
+      );
+      const cfg: Record<string, string> = {};
+      for (const r of rows) cfg[r.setting_key] = r.setting_value;
+      const n = (k: string, def: number) => parseFloat(cfg[k] ?? String(def));
+      res.json({
+        baseApy:          n('eth_staking_base_apy', 5.00),       // total network APY
+        validatorFeePct:  n('eth_staking_validator_fee_pct', 10.0), // JC's cut %
+        userApy:          n('eth_staking_user_apy', 4.50),       // what staker earns
+        minAmount:        n('eth_staking_min_amount', 0.01),
+        treasuryAddress:  cfg['eth_staking_treasury_address'] || '',
+        enabled:          (cfg['eth_staking_enabled'] ?? 'true') === 'true',
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Get current user's ETH stakes
+  app.get("/api/eth-staking/my-stakes", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { rows } = await pool.query(
+        `SELECT * FROM eth_stakes WHERE user_id = $1 ORDER BY staked_at DESC`,
+        [userId]
+      );
+      res.json(rows);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Submit a new ETH stake (pending verification)
+  app.post("/api/eth-staking/stake", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { amount, txHash, amountUsdAtEntry } = req.body;
+      const ethAmount = parseFloat(amount);
+      if (!ethAmount || ethAmount <= 0) return res.status(400).json({ error: "Invalid amount" });
+
+      // Get current config for APY
+      const { rows: cfgRows } = await pool.query(
+        `SELECT setting_key, setting_value FROM spin_config WHERE setting_key LIKE 'eth_staking_%'`
+      );
+      const cfg: Record<string, string> = {};
+      for (const r of cfgRows) cfg[r.setting_key] = r.setting_value;
+      const userApy = parseFloat(cfg['eth_staking_user_apy'] ?? '4.50');
+      const validatorFeePct = parseFloat(cfg['eth_staking_validator_fee_pct'] ?? '10.0');
+      const dailyRate = userApy / 100 / 365;
+
+      const { rows } = await pool.query(
+        `INSERT INTO eth_stakes (user_id, amount, amount_usd_at_entry, tx_hash, status, apy, validator_fee_pct, daily_rate, total_earned, last_payout_at)
+         VALUES ($1, $2, $3, $4, 'pending', $5, $6, $7, 0, NOW())
+         RETURNING *`,
+        [userId, ethAmount.toFixed(8), amountUsdAtEntry || null, txHash || null, userApy.toFixed(4), validatorFeePct.toFixed(4), dailyRate.toFixed(12)]
+      );
+      res.json(rows[0]);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Claim accrued ETH rewards (manual — triggers admin payout)
+  app.post("/api/eth-staking/:id/claim", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { id } = req.params;
+      const { rows } = await pool.query(
+        `SELECT * FROM eth_stakes WHERE id = $1 AND user_id = $2 AND status = 'active'`, [id, userId]
+      );
+      if (!rows.length) return res.status(404).json({ error: "Stake not found or not active" });
+      const stake = rows[0];
+      const now = new Date();
+      const lastPayout = new Date(stake.last_payout_at);
+      const daysSince = (now.getTime() - lastPayout.getTime()) / (1000 * 60 * 60 * 24);
+      const pending = parseFloat(stake.amount) * parseFloat(stake.daily_rate) * daysSince;
+      if (pending < 0.0001) return res.status(400).json({ error: "No meaningful rewards to claim yet (minimum 0.0001 ETH)" });
+
+      await pool.query(
+        `UPDATE eth_stakes SET total_earned = total_earned + $1, last_payout_at = NOW() WHERE id = $2`,
+        [pending.toFixed(8), id]
+      );
+      res.json({ claimed: pending, message: "Claim recorded — ETH will be sent to your wallet within 24 hrs." });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Request unstake
+  app.post("/api/eth-staking/:id/unstake", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { id } = req.params;
+      const { rows } = await pool.query(
+        `SELECT * FROM eth_stakes WHERE id = $1 AND user_id = $2 AND status = 'active'`, [id, userId]
+      );
+      if (!rows.length) return res.status(404).json({ error: "Active stake not found" });
+      await pool.query(
+        `UPDATE eth_stakes SET status = 'unstaking', unstake_requested_at = NOW() WHERE id = $1`,
+        [id]
+      );
+      res.json({ message: "Unstake requested. ETH will be returned within 1–3 business days." });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Admin: View all ETH stakes
+  app.get("/api/admin/eth-staking/stakes", isAuthenticated, requireBusinessOwner, async (_req, res) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT es.*, u.username, u.first_name, u.last_name, u.email
+         FROM eth_stakes es
+         JOIN users u ON es.user_id = u.id
+         ORDER BY es.staked_at DESC`
+      );
+      res.json(rows);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Admin: Update stake status (verify/reject/complete-unstake)
+  app.patch("/api/admin/eth-staking/:id/status", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status, adminNotes } = req.body;
+      const allowed = ['pending', 'active', 'unstaking', 'completed', 'rejected'];
+      if (!allowed.includes(status)) return res.status(400).json({ error: "Invalid status" });
+      const extra = status === 'completed' ? `, completed_at = NOW()` : '';
+      const { rows } = await pool.query(
+        `UPDATE eth_stakes SET status = $1, admin_notes = $2${extra} WHERE id = $3 RETURNING *`,
+        [status, adminNotes || null, id]
+      );
+      if (!rows.length) return res.status(404).json({ error: "Stake not found" });
+      res.json(rows[0]);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Admin: Update ETH staking config
+  app.patch("/api/admin/eth-staking/config", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const { baseApy, validatorFeePct, treasuryAddress, minAmount, enabled } = req.body;
+      const userApy = parseFloat(baseApy || 5) * (1 - parseFloat(validatorFeePct || 10) / 100);
+      const updates: [string, string][] = [
+        ['eth_staking_base_apy', String(baseApy ?? 5.00)],
+        ['eth_staking_validator_fee_pct', String(validatorFeePct ?? 10.0)],
+        ['eth_staking_user_apy', String(userApy.toFixed(4))],
+        ['eth_staking_min_amount', String(minAmount ?? 0.01)],
+        ['eth_staking_treasury_address', String(treasuryAddress ?? '')],
+        ['eth_staking_enabled', enabled === false ? 'false' : 'true'],
+      ];
+      for (const [k, v] of updates) {
+        await pool.query(
+          `INSERT INTO spin_config (setting_key, setting_value, description) VALUES ($1, $2, $3)
+           ON CONFLICT (setting_key) DO UPDATE SET setting_value=$2, updated_at=NOW()`,
+          [k, v, `ETH staking config: ${k}`]
+        );
+      }
+      res.json({ ok: true, userApy });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
     }
   });
 
