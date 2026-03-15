@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { LOYALTY_TIERS, calculateJCMovesReward, getNextTier, formatTokens as fmtTokens, type LoyaltyTierKey } from "@/lib/loyalty";
 import { SpinWheelDialog } from "@/components/spin-wheel";
+import { LotteryPanel } from "@/components/lottery-panel";
 import { ShopSwitcher } from "@/components/shop-switcher";
 
 interface RewardCategory {
@@ -317,6 +318,7 @@ export default function RewardsMarketplacePage() {
   const [spinWheelOpen, setSpinWheelOpen] = useState(false);
   const [spinRedemptionId, setSpinRedemptionId] = useState<number | undefined>(undefined);
   const [directSpinOpen, setDirectSpinOpen] = useState(false);
+  const [lotteryOpen, setLotteryOpen] = useState(false);
   const [autoBookingLeadId, setAutoBookingLeadId] = useState<string | null>(null);
   const [simOpen, setSimOpen] = useState(false);
   const [simAmount, setSimAmount] = useState("");
@@ -679,6 +681,66 @@ export default function RewardsMarketplacePage() {
                         Open Quantum Spin
                       </Button>
                       <p className="text-[10px] text-muted-foreground/50">Fast 1.5 second instant reveal</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 🎟️ Lottery Feature Card */}
+            {!search && !activeCat && (
+              <div
+                className="mb-6 relative overflow-hidden rounded-2xl border border-yellow-500/30 cursor-pointer"
+                style={{ background: "linear-gradient(135deg, #0a0800 0%, #1a1200 50%, #0a0800 100%)" }}
+                onClick={() => user && setLotteryOpen(true)}
+              >
+                <div className="absolute inset-0 opacity-30"
+                  style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(234,179,8,0.4) 0%, transparent 60%)" }} />
+                <div className="relative p-4">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Ticket className="h-4 w-4 text-yellow-400" />
+                        <span className="text-sm font-black text-white tracking-tight">JCMOVES Lottery</span>
+                        <span className="text-[10px] bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 rounded-full px-2 py-0.5 font-bold uppercase tracking-wider">LIVE</span>
+                      </div>
+                      <p className="text-xs text-yellow-300/70 mb-3 italic">Weekly &amp; Monthly Mega draws · 10 JCMOVES per ticket</p>
+                      <div className="flex gap-2">
+                        <div className="bg-yellow-950/80 border border-yellow-500/20 rounded-lg px-3 py-1.5 text-center min-w-[85px]">
+                          <div className="flex items-center justify-center gap-1 mb-0.5">
+                            <Zap className="h-2.5 w-2.5 text-yellow-400" />
+                            <span className="text-[9px] font-bold text-yellow-300 uppercase tracking-wider">Weekly</span>
+                          </div>
+                          <div className="text-sm font-black text-yellow-400 tabular-nums">1,000+</div>
+                        </div>
+                        <div className="bg-purple-950/80 border border-purple-500/20 rounded-lg px-3 py-1.5 text-center min-w-[85px]">
+                          <div className="flex items-center justify-center gap-1 mb-0.5">
+                            <Crown className="h-2.5 w-2.5 text-purple-400" />
+                            <span className="text-[9px] font-bold text-purple-300 uppercase tracking-wider">Mega</span>
+                          </div>
+                          <div className="text-sm font-black text-purple-400 tabular-nums">10,000+</div>
+                        </div>
+                        <div className="flex flex-col justify-center">
+                          <div className="text-[9px] text-muted-foreground/60">Per ticket</div>
+                          <div className="text-sm font-black text-yellow-400">10</div>
+                          <div className="text-[9px] text-yellow-600 font-bold">JCMOVES</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-center gap-1.5">
+                      <Button
+                        className="font-black text-black h-12 px-6 shrink-0"
+                        style={{
+                          background: "linear-gradient(135deg, #eab308, #ca8a04, #eab308)",
+                          boxShadow: "0 0 20px rgba(234,179,8,0.5)",
+                        }}
+                        onClick={e => { e.stopPropagation(); user && setLotteryOpen(true); }}
+                        disabled={!user}
+                      >
+                        <Ticket className="h-4 w-4 mr-1.5" />
+                        Enter Lottery
+                      </Button>
+                      <p className="text-[10px] text-muted-foreground/50">Draws every week &amp; month</p>
                     </div>
                   </div>
                 </div>
@@ -1233,6 +1295,9 @@ export default function RewardsMarketplacePage() {
         open={directSpinOpen}
         onClose={() => setDirectSpinOpen(false)}
       />
+
+      {/* Lottery panel */}
+      <LotteryPanel open={lotteryOpen} onClose={() => setLotteryOpen(false)} />
 
       {/* Earnings Simulator Dialog */}
       <Dialog open={simOpen} onOpenChange={setSimOpen}>

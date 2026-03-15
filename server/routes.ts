@@ -3407,8 +3407,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const { status } = req.body;
       
-      if (!status || !["quote_requested", "available", "completed"].includes(status)) {
-        return res.status(400).json({ error: "Invalid status" });
+      const VALID_LEAD_STATUSES = ["new", "contacted", "quoted", "confirmed", "available", "accepted", "in_progress", "completed", "cancelled", "quote_requested"];
+      if (!status || !VALID_LEAD_STATUSES.includes(status)) {
+        return res.status(400).json({ error: `Invalid status. Must be one of: ${VALID_LEAD_STATUSES.join(", ")}` });
       }
 
       const updatedLead = await storage.updateLeadStatus(id, status);
