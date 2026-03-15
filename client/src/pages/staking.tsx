@@ -27,7 +27,23 @@ interface HealthData {
   dailyObligations: number;
 }
 
-type EnrichedStake = Stake & { tier: StakingTier; diamondCelebration?: DiamondCelebration };
+type EnrichedStake = Stake & { tier: StakingTier; diamondCelebration?: DiamondCelebration; autoCompound?: boolean };
+
+interface PoolStats {
+  totalStakers: number;
+  totalActiveStaked: number;
+  totalRewardsPaid: number;
+  monthlyTreasuryInflow: number;
+  treasuryBonusPct: number;
+}
+
+interface YieldSource {
+  id: string;
+  label: string;
+  icon: string;
+  monthlyUsd: number;
+  enabled: boolean;
+}
 
 function formatNumber(n: number) {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
@@ -453,6 +469,34 @@ export default function StakingPage() {
     refetchInterval: 30000,
   });
 
+  const { data: poolStats } = useQuery<PoolStats>({
+    queryKey: ["/api/staking/pool-stats"],
+    staleTime: 60000,
+    refetchInterval: 60000,
+  });
+
+  const { data: yieldData } = useQuery<{ sources: YieldSource[]; treasuryBonusPct: number }>({
+    queryKey: ["/api/staking/yield-sources"],
+    staleTime: 60000,
+  });
+
+  const treasuryBonusPct = yieldData?.treasuryBonusPct ?? 0;
+  const yieldSources = yieldData?.sources ?? [];
+  const totalMonthlyInflow = yieldSources.filter(s => s.enabled).reduce((sum, s) => sum + (s.monthlyUsd || 0), 0);
+
+  const toggleCompoundMutation = useMutation({
+    mutationFn: async (stakeId: string) => {
+      const res = await apiRequest("POST", `/api/staking/${stakeId}/toggle-compound`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/staking/my-stakes"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Toggle failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const stakeMutation = useMutation({
     mutationFn: async ({ tierId, amount }: { tierId: string; amount: number }) => {
       const res = await apiRequest("POST", "/api/staking/stake", { tierId, amount });
@@ -476,7 +520,11 @@ export default function StakingPage() {
       return res.json();
     },
     onSuccess: (data) => {
-      toast({ title: "Rewards claimed!", description: `+${formatNumber(data.earned)} JCMOVES added to your wallet.` });
+      if (data.autoCompounded) {
+        toast({ title: "✨ Compounded!", description: data.message ?? `+${formatNumber(data.earned)} JCMOVES added back to your stake.` });
+      } else {
+        toast({ title: "Rewards claimed!", description: `+${formatNumber(data.earned)} JCMOVES added to your wallet.` });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/staking/my-stakes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/wallet/balance"] });
     },
@@ -563,6 +611,31 @@ export default function StakingPage() {
         )}
 
         {mode === "jcmoves" && (<>
+
+        {/* ── Pool Statistics ── */}
+        <div>
+          <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
+            <Activity className="h-4 w-4" /> Treasury Pool Statistics
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: "Total Stakers", value: poolStats?.totalStakers ?? "—", sub: "active participants", icon: "👥", color: "from-violet-500/10 to-purple-500/10 border-violet-500/30" },
+              { label: "Total Staked", value: poolStats ? `${formatNumber(poolStats.totalActiveStaked)} JCM` : "—", sub: "tokens locked", icon: "🔒", color: "from-yellow-500/10 to-orange-500/10 border-yellow-500/30" },
+              { label: "Rewards Paid", value: poolStats ? `${formatNumber(poolStats.totalRewardsPaid)} JCM` : "—", sub: "all time", icon: "💰", color: "from-emerald-500/10 to-green-500/10 border-emerald-500/30" },
+              { label: "Monthly Inflow", value: poolStats?.monthlyTreasuryInflow ? `$${poolStats.monthlyTreasuryInflow.toLocaleString()}` : "$0", sub: "from all sources", icon: "📈", color: "from-blue-500/10 to-cyan-500/10 border-blue-500/30" },
+            ].map(c => (
+              <Card key={c.label} className={`border bg-gradient-to-br ${c.color}`}>
+                <CardContent className="p-3 text-center">
+                  <p className="text-xl mb-0.5">{c.icon}</p>
+                  <p className="text-xs text-muted-foreground">{c.label}</p>
+                  <p className="text-lg font-bold mt-0.5 leading-tight">{c.value}</p>
+                  <p className="text-[10px] text-muted-foreground">{c.sub}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card className="border-yellow-500/30 bg-gradient-to-br from-yellow-500/10 to-orange-500/10">
             <CardContent className="p-4 text-center">
@@ -728,6 +801,83 @@ export default function StakingPage() {
           </Card>
         )}
 
+        {/* ── Treasury Yield Sources Dashboard ── */}
+        <Card className="border-emerald-500/20 bg-gradient-to-br from-emerald-950/20 to-slate-950/10">
+          <CardContent className="p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-lg flex items-center gap-2 text-emerald-300">
+                <TrendingUp className="h-5 w-5" /> Treasury Yield Sources
+              </h3>
+              {treasuryBonusPct > 0 && (
+                <Badge className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-sm font-bold">
+                  +{treasuryBonusPct.toFixed(2)}% Treasury Bonus Active
+                </Badge>
+              )}
+            </div>
+
+            {/* Dynamic APY breakdown */}
+            {treasuryBonusPct > 0 && (
+              <div className="grid grid-cols-3 gap-2 text-center text-sm">
+                <div className="bg-slate-800/60 rounded-xl p-3 border border-slate-700/40">
+                  <p className="text-xs text-slate-400">Base APR Range</p>
+                  <p className="text-xl font-black text-white">5–30%</p>
+                  <p className="text-xs text-slate-500">per tier</p>
+                </div>
+                <div className="bg-emerald-950/40 rounded-xl p-3 border border-emerald-500/20">
+                  <p className="text-xs text-emerald-400">Treasury Bonus</p>
+                  <p className="text-xl font-black text-emerald-300">+{treasuryBonusPct.toFixed(2)}%</p>
+                  <p className="text-xs text-emerald-500/70">from revenue</p>
+                </div>
+                <div className="bg-yellow-950/30 rounded-xl p-3 border border-yellow-500/20">
+                  <p className="text-xs text-yellow-400">Effective APR</p>
+                  <p className="text-xl font-black text-yellow-300">{(5 + treasuryBonusPct).toFixed(2)}–{(30 + treasuryBonusPct).toFixed(2)}%</p>
+                  <p className="text-xs text-yellow-500/70">total range</p>
+                </div>
+              </div>
+            )}
+
+            {/* Revenue source bars */}
+            <div className="space-y-2.5">
+              {yieldSources.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-3">Treasury yield sources will appear here as JC ON THE MOVE revenue grows.</p>
+              )}
+              {yieldSources.filter(s => s.enabled).map(src => {
+                const pct = totalMonthlyInflow > 0 ? Math.round((src.monthlyUsd / totalMonthlyInflow) * 100) : 0;
+                return (
+                  <div key={src.id} className="space-y-1">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="flex items-center gap-1.5 text-slate-300">
+                        <span className="text-base">{src.icon}</span>
+                        {src.label}
+                      </span>
+                      <span className="text-slate-400 font-medium">
+                        {src.monthlyUsd > 0 ? `$${src.monthlyUsd.toLocaleString()}/mo` : "Pending"}
+                        {src.monthlyUsd > 0 && <span className="text-slate-600 ml-1">({pct}%)</span>}
+                      </span>
+                    </div>
+                    <div className="h-1.5 bg-slate-800/80 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-500"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+              {yieldSources.length > 0 && totalMonthlyInflow > 0 && (
+                <div className="flex items-center justify-between pt-1 border-t border-slate-700/40 text-sm font-semibold">
+                  <span className="text-slate-300">Total Monthly Inflow</span>
+                  <span className="text-emerald-300">${totalMonthlyInflow.toLocaleString()}/mo</span>
+                </div>
+              )}
+            </div>
+
+            <p className="text-xs text-slate-500">
+              Revenue from moving services, digital products, ETH validator rewards, and token fees flows into the JC Treasury and funds staking rewards + treasury bonus APY.
+            </p>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -750,7 +900,8 @@ export default function StakingPage() {
               {tiers.map(tier => {
                 const aprMultiplier = healthData?.aprMultiplier ?? 1;
                 const effectiveApr = parseFloat(tier.annualRatePercent) * aprMultiplier;
-                const dailyRate = effectiveApr / 365;
+                const totalApy = effectiveApr + treasuryBonusPct;
+                const dailyRate = totalApy / 365;
                 const isSelected = selectedTier === tier.id;
                 const isFlexible = tier.durationDays === 0;
                 const isDiamondTier = tier.name === "Diamond";
@@ -784,13 +935,18 @@ export default function StakingPage() {
                         </Badge>
                       )}
                       <div className="text-xl font-bold text-yellow-500">
-                        {isAdjusted ? `${effectiveApr.toFixed(1)}%` : `${tier.annualRatePercent}%`}
+                        {totalApy.toFixed(1)}%
                       </div>
-                      <p className="text-[10px] text-muted-foreground">
-                        {isAdjusted ? (
-                          <span className="line-through opacity-50">{tier.annualRatePercent}%</span>
-                        ) : "APR"}
-                      </p>
+                      {isAdjusted ? (
+                        <p className="text-[10px] text-muted-foreground line-through opacity-50">{tier.annualRatePercent}%</p>
+                      ) : (
+                        <p className="text-[10px] text-muted-foreground">Base APR</p>
+                      )}
+                      {treasuryBonusPct > 0 && (
+                        <div className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 rounded-full px-1.5 py-0.5">
+                          +{treasuryBonusPct.toFixed(2)}% Bonus
+                        </div>
+                      )}
                       {isDiamondTier && (
                         <div className="text-[9px] font-bold text-cyan-400 bg-cyan-500/10 rounded-full px-2 py-0.5 flex items-center justify-center gap-1">
                           <PartyPopper className="h-3 w-3" /> +10% Bonus (90 days)
@@ -879,14 +1035,31 @@ export default function StakingPage() {
                   <div className="text-sm text-muted-foreground">
                     <p>Available: <span className="font-semibold text-foreground">{formatNumber(walletBalance)} JCMOVES</span></p>
                     {stakeAmount && parseFloat(stakeAmount) > 0 && (
-                      <p className="text-green-500 font-medium mt-1">
-                        Estimated daily earnings: ~{formatNumber(parseFloat(stakeAmount) * (parseFloat(selectedTierData.annualRatePercent) * (healthData?.aprMultiplier ?? 1)) / 365 / 100)} JCMOVES/day
-                        {healthData && healthData.aprMultiplier < 1 && (
-                          <span className="text-yellow-500 text-xs ml-1">(adjusted rate)</span>
+                      <div className="space-y-1 mt-1">
+                        <p className="text-green-500 font-medium">
+                          ~{formatNumber(parseFloat(stakeAmount) * (parseFloat(selectedTierData.annualRatePercent) * (healthData?.aprMultiplier ?? 1) + treasuryBonusPct) / 365 / 100)} JCMOVES/day
+                          {healthData && healthData.aprMultiplier < 1 && (
+                            <span className="text-yellow-500 text-xs ml-1">(adjusted)</span>
+                          )}
+                        </p>
+                        {treasuryBonusPct > 0 && (
+                          <p className="text-xs text-emerald-400">Includes +{treasuryBonusPct.toFixed(2)}% treasury bonus</p>
                         )}
-                      </p>
+                      </div>
                     )}
                   </div>
+
+                  {/* Auto-compound toggle */}
+                  <div className="flex items-start gap-3 p-3 rounded-xl border border-slate-700/60 bg-slate-900/50">
+                    <div className="flex-1 space-y-0.5">
+                      <p className="text-sm font-semibold text-slate-200 flex items-center gap-1.5">
+                        <Sparkles className="h-4 w-4 text-emerald-400" /> Auto-Compound Rewards
+                      </p>
+                      <p className="text-xs text-slate-500">When enabled, your daily rewards are automatically added back to your stake to maximize compounding growth.</p>
+                    </div>
+                    <p className="text-xs text-slate-500 italic mt-1">Enable per stake</p>
+                  </div>
+
                   <Button
                     onClick={() => stakeMutation.mutate({ tierId: selectedTier, amount: parseFloat(stakeAmount) })}
                     disabled={!stakeAmount || parseFloat(stakeAmount) <= 0 || stakeMutation.isPending}
@@ -991,7 +1164,10 @@ export default function StakingPage() {
                             <PartyPopper className="h-3 w-3 mr-0.5" /> +10% Bonus ({stake.diamondCelebration.daysLeft}d)
                           </Badge>
                         )}
-                        <span className={`font-bold text-sm ${style.accent}`}>{effectiveApr.toFixed(0)}% APR</span>
+                        <span className={`font-bold text-sm ${style.accent}`}>
+                          {(effectiveApr + treasuryBonusPct).toFixed(1)}% APR
+                          {treasuryBonusPct > 0 && <span className="text-emerald-400 text-xs ml-1">(+{treasuryBonusPct.toFixed(2)}% bonus)</span>}
+                        </span>
                       </div>
                     </div>
 
@@ -1030,6 +1206,30 @@ export default function StakingPage() {
                       </div>
                     </div>
 
+                    {/* Auto-compound toggle row */}
+                    <button
+                      type="button"
+                      onClick={() => toggleCompoundMutation.mutate(stake.id)}
+                      disabled={toggleCompoundMutation.isPending}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border transition-all text-sm ${
+                        stake.autoCompound
+                          ? "border-emerald-500/50 bg-emerald-950/40 text-emerald-300"
+                          : "border-slate-700/50 bg-slate-900/30 text-slate-400 hover:border-slate-600/70"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <Sparkles className={`h-3.5 w-3.5 ${stake.autoCompound ? "text-emerald-400" : "text-slate-500"}`} />
+                        Auto-Compound Rewards
+                      </span>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                        stake.autoCompound
+                          ? "bg-emerald-500/30 text-emerald-300"
+                          : "bg-slate-700/50 text-slate-500"
+                      }`}>
+                        {stake.autoCompound ? "ON" : "OFF"}
+                      </span>
+                    </button>
+
                     <div className="flex gap-2 pt-1">
                       <Button
                         size="sm"
@@ -1038,7 +1238,7 @@ export default function StakingPage() {
                         className="bg-green-600 hover:bg-green-700 text-white shadow-md"
                       >
                         {claimMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Coins className="h-3 w-3 mr-1" />}
-                        Claim {formatNumber(pending)}
+                        {stake.autoCompound ? `Compound ${formatNumber(pending)}` : `Claim ${formatNumber(pending)}`}
                       </Button>
                       {(() => {
                         const isLocked = !isFlexible && remaining > 0;

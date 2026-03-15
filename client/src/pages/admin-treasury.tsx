@@ -398,6 +398,38 @@ export default function AdminTreasuryPage() {
     queryKey: ["/api/staking/treasury"],
   });
 
+  const { data: yieldSourceData, refetch: refetchYieldSources } = useQuery<{
+    sources: Array<{ id: string; label: string; icon: string; monthlyUsd: number; enabled: boolean }>;
+    treasuryBonusPct: number;
+  }>({ queryKey: ["/api/staking/yield-sources"] });
+
+  const [yieldSources, setYieldSources] = useState<Array<{ id: string; label: string; icon: string; monthlyUsd: number; enabled: boolean }>>([]);
+  const [yieldBonusPct, setYieldBonusPct] = useState("0");
+  const [yieldSourcesLoaded, setYieldSourcesLoaded] = useState(false);
+
+  if (yieldSourceData && !yieldSourcesLoaded) {
+    setYieldSources(yieldSourceData.sources);
+    setYieldBonusPct(String(yieldSourceData.treasuryBonusPct));
+    setYieldSourcesLoaded(true);
+  }
+
+  const saveYieldSourcesMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PATCH", "/api/admin/staking/yield-sources", {
+        sources: yieldSources,
+        treasuryBonusPct: parseFloat(yieldBonusPct) || 0,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Yield sources saved!", description: "Treasury bonus and source data updated." });
+      queryClient.invalidateQueries({ queryKey: ["/api/staking/yield-sources"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/staking/pool-stats"] });
+      refetchYieldSources();
+    },
+    onError: (e: any) => toast({ title: "Save failed", description: e.message, variant: "destructive" }),
+  });
+
   // Swap requests query (admin only - uses requireBusinessOwner middleware)
   const { data: swapRequests, refetch: refetchSwapRequests } = useQuery<{ requests: any[] }>({
     queryKey: ["/api/swap-requests"],
@@ -2768,6 +2800,82 @@ export default function AdminTreasuryPage() {
                   <Loader2 className="h-8 w-8 animate-spin text-indigo-400" />
                 </div>
               )}
+            </Card>
+
+            {/* ── Treasury Yield Sources Editor ── */}
+            <Card className="border-emerald-500/30 bg-gradient-to-br from-emerald-950/20 to-slate-950/10">
+              <div className="p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-lg text-emerald-300 flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5" /> Treasury Yield Sources & Bonus
+                  </h3>
+                  <Button
+                    size="sm"
+                    onClick={() => saveYieldSourcesMutation.mutate()}
+                    disabled={saveYieldSourcesMutation.isPending}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  >
+                    {saveYieldSourcesMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                    Save Changes
+                  </Button>
+                </div>
+
+                <div className="flex items-center gap-3 p-3 rounded-xl border border-yellow-500/30 bg-yellow-950/20">
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-yellow-300">Treasury Bonus APR (%)</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Added on top of each tier's base APR. Shows as dynamic bonus on staking page.</p>
+                  </div>
+                  <Input
+                    type="number"
+                    value={yieldBonusPct}
+                    onChange={e => setYieldBonusPct(e.target.value)}
+                    className="w-24 bg-slate-900 border-yellow-500/40 text-yellow-300 text-center font-bold"
+                    step="0.01"
+                    min="0"
+                    max="50"
+                    placeholder="0.00"
+                  />
+                  <span className="text-yellow-400 font-bold">%</span>
+                </div>
+
+                <div className="space-y-3">
+                  <p className="text-sm font-semibold text-slate-300">Monthly Revenue Per Source (USD)</p>
+                  {yieldSources.map((src, i) => (
+                    <div key={src.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-900/50 border border-slate-700/50">
+                      <span className="text-xl">{src.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-slate-300 font-medium truncate">{src.label}</p>
+                      </div>
+                      <Switch
+                        checked={src.enabled}
+                        onCheckedChange={v => setYieldSources(prev => prev.map((s, j) => j === i ? { ...s, enabled: v } : s))}
+                      />
+                      <div className="flex items-center gap-1">
+                        <span className="text-slate-400 text-sm">$</span>
+                        <Input
+                          type="number"
+                          value={src.monthlyUsd}
+                          onChange={e => setYieldSources(prev => prev.map((s, j) => j === i ? { ...s, monthlyUsd: parseFloat(e.target.value) || 0 } : s))}
+                          className="w-28 bg-slate-800 border-slate-600 text-white text-right"
+                          step="100"
+                          min="0"
+                          placeholder="0"
+                        />
+                        <span className="text-slate-500 text-xs">/mo</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {yieldSources.length > 0 && (
+                  <div className="flex items-center justify-between p-3 rounded-xl border border-emerald-500/20 bg-emerald-950/20 text-sm font-semibold">
+                    <span className="text-slate-300">Total Monthly Treasury Inflow</span>
+                    <span className="text-emerald-300">
+                      ${yieldSources.filter(s => s.enabled).reduce((sum, s) => sum + s.monthlyUsd, 0).toLocaleString()}/mo
+                    </span>
+                  </div>
+                )}
+              </div>
             </Card>
           </TabsContent>
         </Tabs>

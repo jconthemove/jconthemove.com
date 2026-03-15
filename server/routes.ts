@@ -516,6 +516,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('⚠️ ETH staking table error (non-fatal):', ethErr);
   }
 
+  // Auto-compound column + yield source seed
+  try {
+    await pool.query(`ALTER TABLE stakes ADD COLUMN IF NOT EXISTS auto_compound BOOLEAN NOT NULL DEFAULT false`);
+    // Seed default yield sources if not set
+    const { rows: ysRows } = await pool.query(`SELECT setting_key FROM spin_config WHERE setting_key='staking_yield_sources' LIMIT 1`);
+    if (!ysRows.length) {
+      const defaultSources = JSON.stringify([
+        { id: "moving", label: "Moving Company Revenue", icon: "🚚", monthlyUsd: 0, enabled: true },
+        { id: "website", label: "Website Service Sales", icon: "🌐", monthlyUsd: 0, enabled: true },
+        { id: "token_fees", label: "Token Fees", icon: "🪙", monthlyUsd: 0, enabled: true },
+        { id: "eth_validator", label: "ETH Validator Rewards", icon: "⟠", monthlyUsd: 0, enabled: true },
+        { id: "arbitrage", label: "Arbitrage Trading", icon: "📈", monthlyUsd: 0, enabled: true },
+        { id: "pi_network", label: "Pi Network Revenue", icon: "π", monthlyUsd: 0, enabled: true },
+      ]);
+      await pool.query(`INSERT INTO spin_config (setting_key, setting_value, description) VALUES ('staking_yield_sources', $1, 'Treasury yield source breakdown') ON CONFLICT DO NOTHING`, [defaultSources]);
+      await pool.query(`INSERT INTO spin_config (setting_key, setting_value, description) VALUES ('staking_treasury_bonus_pct', '0', 'Dynamic treasury bonus % on top of base APR') ON CONFLICT DO NOTHING`);
+    }
+    console.log('✅ Staking treasury yield sources ready');
+  } catch (compoundErr) {
+    console.error('⚠️ Auto-compound migration error (non-fatal):', compoundErr);
+  }
+
   // Seed staking tiers and treasury user on startup (ensures production has them)
   await ensureStakingTiersSeeded();
   await ensureStakingTreasuryUser();
@@ -11972,13 +11994,20 @@ Thank you for your business!
       const userId = req.user?.id || req.session?.userId;
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
       const userStakes = await storage.getUserStakes(userId);
+      // Fetch auto_compound flags from raw SQL (column added via ALTER TABLE)
+      const { rows: acRows } = await pool.query(
+        `SELECT id, auto_compound FROM stakes WHERE user_id=$1`, [userId]
+      );
+      const acMap: Record<string, boolean> = {};
+      for (const r of acRows) acMap[r.id] = r.auto_compound;
       const enriched = userStakes.map((s: any) => {
+        const result = { ...s, autoCompound: acMap[s.id] ?? false };
         if (s.tier?.name === "Diamond") {
           const daysSinceStart = (Date.now() - new Date(s.startedAt).getTime()) / (1000 * 60 * 60 * 24);
           const celebrationDaysLeft = Math.max(0, Math.ceil(90 - daysSinceStart));
-          return { ...s, diamondCelebration: { active: celebrationDaysLeft > 0, daysLeft: celebrationDaysLeft, bonusPercent: 10 } };
+          return { ...result, diamondCelebration: { active: celebrationDaysLeft > 0, daysLeft: celebrationDaysLeft, bonusPercent: 10 } };
         }
-        return s;
+        return result;
       });
       res.json(enriched);
     } catch (error: any) {
@@ -12003,8 +12032,27 @@ Thank you for your business!
     try {
       const userId = req.user?.id || req.session?.userId;
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      // Check auto_compound flag before claiming
+      const { rows: acRows } = await pool.query(
+        `SELECT auto_compound FROM stakes WHERE id=$1 AND user_id=$2 AND status='active' LIMIT 1`,
+        [req.params.stakeId, userId]
+      );
+      const autoCompound = acRows[0]?.auto_compound === true;
       const result = await storage.claimStakingRewards(req.params.stakeId, userId);
-      res.json(result);
+      if (autoCompound && result.earned > 0) {
+        // Move earned amount back into the stake (compound) instead of leaving in wallet
+        await pool.query(
+          `UPDATE stakes SET amount = amount + $1 WHERE id=$2`,
+          [result.earned.toFixed(8), req.params.stakeId]
+        );
+        await pool.query(
+          `UPDATE wallet_accounts SET token_balance = GREATEST(0, token_balance - $1) WHERE user_id=$2`,
+          [result.earned.toFixed(8), userId]
+        );
+        res.json({ ...result, autoCompounded: true, message: `${result.earned.toFixed(4)} JCMOVES compounded into your stake!` });
+      } else {
+        res.json(result);
+      }
     } catch (error: any) {
       res.status(400).json({ error: error.message });
     }
@@ -12145,6 +12193,89 @@ Thank you for your business!
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ── Pool statistics (public) ─────────────────────────────────
+  app.get("/api/staking/pool-stats", async (_req, res) => {
+    try {
+      const { rows: stakerRows } = await pool.query(
+        `SELECT COUNT(DISTINCT user_id) AS total_stakers,
+                COALESCE(SUM(CASE WHEN status='active' THEN CAST(amount AS NUMERIC) ELSE 0 END),0) AS total_active_staked,
+                COALESCE(SUM(CAST(total_earned AS NUMERIC)),0) AS total_rewards_paid
+         FROM stakes`
+      );
+      const { rows: cfgRows } = await pool.query(
+        `SELECT setting_key, setting_value FROM spin_config WHERE setting_key IN ('staking_yield_sources','staking_treasury_bonus_pct')`
+      );
+      const cfg: Record<string,string> = {};
+      for (const r of cfgRows) cfg[r.setting_key] = r.setting_value;
+      const sources: Array<{monthlyUsd:number}> = cfg['staking_yield_sources'] ? JSON.parse(cfg['staking_yield_sources']) : [];
+      const monthlyInflow = sources.reduce((s,x) => s + (x.monthlyUsd || 0), 0);
+      res.json({
+        totalStakers: parseInt(stakerRows[0]?.total_stakers || '0'),
+        totalActiveStaked: parseFloat(stakerRows[0]?.total_active_staked || '0'),
+        totalRewardsPaid: parseFloat(stakerRows[0]?.total_rewards_paid || '0'),
+        monthlyTreasuryInflow: monthlyInflow,
+        treasuryBonusPct: parseFloat(cfg['staking_treasury_bonus_pct'] || '0'),
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Yield sources (public) ───────────────────────────────────
+  app.get("/api/staking/yield-sources", async (_req, res) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT setting_key, setting_value FROM spin_config WHERE setting_key IN ('staking_yield_sources','staking_treasury_bonus_pct')`
+      );
+      const cfg: Record<string,string> = {};
+      for (const r of rows) cfg[r.setting_key] = r.setting_value;
+      res.json({
+        sources: cfg['staking_yield_sources'] ? JSON.parse(cfg['staking_yield_sources']) : [],
+        treasuryBonusPct: parseFloat(cfg['staking_treasury_bonus_pct'] || '0'),
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Admin: Update yield sources + treasury bonus ─────────────
+  app.patch("/api/admin/staking/yield-sources", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const { sources, treasuryBonusPct } = req.body;
+      await pool.query(
+        `INSERT INTO spin_config (setting_key, setting_value, description) VALUES ('staking_yield_sources', $1, 'Treasury yield source breakdown')
+         ON CONFLICT (setting_key) DO UPDATE SET setting_value=$1, updated_at=NOW()`,
+        [JSON.stringify(sources)]
+      );
+      await pool.query(
+        `INSERT INTO spin_config (setting_key, setting_value, description) VALUES ('staking_treasury_bonus_pct', $1, 'Dynamic treasury bonus %')
+         ON CONFLICT (setting_key) DO UPDATE SET setting_value=$1, updated_at=NOW()`,
+        [String(treasuryBonusPct ?? 0)]
+      );
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Toggle auto-compound on a stake ─────────────────────────
+  app.post("/api/staking/:id/toggle-compound", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { id } = req.params;
+      const { rows } = await pool.query(
+        `UPDATE stakes SET auto_compound = NOT auto_compound
+         WHERE id = $1 AND user_id = $2 AND status = 'active'
+         RETURNING id, auto_compound`,
+        [id, userId]
+      );
+      if (!rows.length) return res.status(404).json({ error: "Active stake not found" });
+      res.json({ id: rows[0].id, autoCompound: rows[0].auto_compound });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
     }
   });
 
