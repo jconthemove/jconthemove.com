@@ -139,6 +139,7 @@ export const users = pgTable("users", {
   rewardsEnrolled: boolean("rewards_enrolled").notNull().default(false),
   loyaltyTier: text("loyalty_tier").default("bronze"), // 'bronze', 'silver', 'gold', 'vip'
   totalCompletedSpend: decimal("total_completed_spend", { precision: 10, scale: 2 }).default("0.00"),
+  tierPoints: integer("tier_points").default(0), // Activity-based tier progression points
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

@@ -24,7 +24,7 @@ import { db, pool } from './db';
 import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, giftCards, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens, promoCodes, reviews, rewardCategories, rewardItems, rewardRedemptions, buybackFund, laborQuotes } from '@shared/schema';
 import { getFaucetPayService } from "./services/faucetpay";
 import { getAdvertisingService } from "./services/advertising";
-import { FAUCET_CONFIG, calculateJCMovesReward, getTierFromSpend, LOYALTY_TIERS } from "./constants";
+import { FAUCET_CONFIG, calculateJCMovesReward, getTierFromSpend, getTierFromPoints, LOYALTY_TIERS, TIER_POINT_AWARDS, type TierPointActivity } from "./constants";
 import { walletService } from "./services/wallet";
 import { solanaMonitor } from "./services/solana-monitor";
 import { crewSuggestionService } from "./services/crew-suggestions";
@@ -395,6 +395,24 @@ async function generateApprovalToken(userId: string, action: string): Promise<st
     ON CONFLICT (token) DO NOTHING
   `);
   return token;
+}
+
+// ── Award tier points and update loyalty tier automatically ──────────────────
+async function awardTierPoints(userId: string, activity: TierPointActivity, multiplier = 1): Promise<void> {
+  try {
+    const pts = TIER_POINT_AWARDS[activity] * multiplier;
+    const [updated] = await db
+      .update(users)
+      .set({ tierPoints: sql`COALESCE(tier_points, 0) + ${pts}` } as any)
+      .where(eq(users.id, userId))
+      .returning({ tierPoints: (users as any).tierPoints });
+    if (updated) {
+      const newTier = getTierFromPoints(updated.tierPoints ?? 0);
+      await db.update(users).set({ loyaltyTier: newTier } as any).where(eq(users.id, userId));
+    }
+  } catch (e) {
+    console.error(`[tierPoints] Failed to award ${activity} for user ${userId}:`, e);
+  }
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {

@@ -87,15 +87,30 @@ export const TOKEN_ECONOMY = {
   MIN_LABOR_TOKENS: 15000,           // Minimum token portion of any labor job (30 min × 500 × 1 mover)
 } as const;
 
-// ── JCMOVES Loyalty Tier System ────────────────────────────────────────────
-// Earn 50 JCMOVES per $1 spent (10% of job value at 500 tokens/$1)
-// Higher tiers unlock multiplier bonuses for repeat customers
+// ── JCMOVES Loyalty Tier System ─────────────────────────────────────────────
+// Activity-based progression: earn points through daily engagement,
+// job activity, scripture, mining, referrals — not just spending.
 export const LOYALTY_TIERS = {
-  bronze: { rate: 0.10, tokensPerDollar: 50,  minSpend: 0,    maxSpend: 999,    label: 'Bronze', emoji: '🥉', color: 'text-amber-600', bg: 'bg-amber-600/20' },
-  silver: { rate: 0.12, tokensPerDollar: 60,  minSpend: 1000, maxSpend: 2499,   label: 'Silver', emoji: '🥈', color: 'text-slate-300',  bg: 'bg-slate-400/20' },
-  gold:   { rate: 0.15, tokensPerDollar: 75,  minSpend: 2500, maxSpend: 4999,   label: 'Gold',   emoji: '🥇', color: 'text-yellow-400', bg: 'bg-yellow-500/20' },
-  vip:    { rate: 0.20, tokensPerDollar: 100, minSpend: 5000, maxSpend: Infinity, label: 'VIP',   emoji: '👑', color: 'text-purple-400', bg: 'bg-purple-500/20' },
+  bronze:   { rate: 0.10, tokensPerDollar: 50,  minPoints: 0,    maxPoints: 499,    label: 'Bronze',   emoji: '🥉', color: 'text-amber-600',  bg: 'bg-amber-600/20'  },
+  silver:   { rate: 0.12, tokensPerDollar: 60,  minPoints: 500,  maxPoints: 1999,   label: 'Silver',   emoji: '🥈', color: 'text-slate-300',  bg: 'bg-slate-400/20'  },
+  gold:     { rate: 0.15, tokensPerDollar: 75,  minPoints: 2000, maxPoints: 5999,   label: 'Gold',     emoji: '🥇', color: 'text-yellow-400', bg: 'bg-yellow-500/20' },
+  vip:      { rate: 0.20, tokensPerDollar: 100, minPoints: 6000, maxPoints: Infinity, label: 'Platinum VIP', emoji: '👑', color: 'text-purple-400', bg: 'bg-purple-500/20' },
 } as const;
+
+// Points awarded per activity (updates loyaltyTier automatically)
+export const TIER_POINT_AWARDS = {
+  signup:                100,  // one-time on registration
+  daily_scripture:         5,  // per daily scripture read
+  daily_checkin:           3,  // per daily check-in
+  job_booked:             25,  // customer books a job
+  job_completed:         100,  // customer job fully completed
+  per_100_spent:          10,  // every $100 on a job (stackable)
+  referral_confirmed:    150,  // referred user joins & activates
+  employee_lead_created:  50,  // employee creates a new lead
+  employee_job_done:      75,  // employee completes a job
+} as const;
+
+export type TierPointActivity = keyof typeof TIER_POINT_AWARDS;
 
 export type LoyaltyTier = keyof typeof LOYALTY_TIERS;
 
@@ -104,6 +119,14 @@ export function calculateJCMovesReward(jobAmount: number, tier: string = 'bronze
   return Math.round(jobAmount * tierConfig.tokensPerDollar);
 }
 
+export function getTierFromPoints(points: number): LoyaltyTier {
+  if (points >= 6000) return 'vip';
+  if (points >= 2000) return 'gold';
+  if (points >= 500)  return 'silver';
+  return 'bronze';
+}
+
+// Legacy spend-based fallback (still used when tierPoints not set)
 export function getTierFromSpend(totalSpend: number): LoyaltyTier {
   if (totalSpend >= 5000) return 'vip';
   if (totalSpend >= 2500) return 'gold';
