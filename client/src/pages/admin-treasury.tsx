@@ -43,7 +43,11 @@ import {
   Trash2,
   Tag,
   ToggleLeft,
-  ToggleRight
+  ToggleRight,
+  PieChart,
+  Calculator,
+  Zap,
+  FlameKindling
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -402,6 +406,34 @@ export default function AdminTreasuryPage() {
     sources: Array<{ id: string; label: string; icon: string; monthlyUsd: number; enabled: boolean }>;
     treasuryBonusPct: number;
   }>({ queryKey: ["/api/staking/yield-sources"] });
+
+  const { data: tokenEconomy, refetch: refetchTokenEconomy, isLoading: economyLoading } = useQuery<{
+    activeWalletCount: number;
+    totalInUserWallets: number;
+    totalEverEarned: number;
+    totalEverRedeemed: number;
+    activeStaked: number;
+    pendingStaked: number;
+    unstakingStaked: number;
+    activeDailyObligation: number;
+    activeAccumulatedRewards: number;
+    totalLoyaltyRewards: number;
+    rewardsByType: Record<string, number>;
+    spinPrizesTotal: number;
+    spinJackpotsTotal: number;
+    spinCount: number;
+    obligation30d: number;
+    obligation90d: number;
+    obligation365d: number;
+    onChainBalance: number;
+    netCirculating: number;
+    coverageRatio: number;
+    sustainabilityDays: number;
+    totalDistributed: number;
+  }>({
+    queryKey: ["/api/staking/token-economy"],
+    staleTime: 120000,
+  });
 
   const [yieldSources, setYieldSources] = useState<Array<{ id: string; label: string; icon: string; monthlyUsd: number; enabled: boolean }>>([]);
   const [yieldBonusPct, setYieldBonusPct] = useState("0");
@@ -2800,6 +2832,155 @@ export default function AdminTreasuryPage() {
                   <Loader2 className="h-8 w-8 animate-spin text-indigo-400" />
                 </div>
               )}
+            </Card>
+
+            {/* ── Token Economy Calculator ── */}
+            <Card className="border-cyan-500/30 bg-gradient-to-br from-cyan-950/20 to-slate-950/10">
+              <div className="p-5 space-y-5">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-lg text-cyan-300 flex items-center gap-2">
+                    <Calculator className="h-5 w-5" /> Token Economy Calculator
+                  </h3>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => refetchTokenEconomy()}
+                    disabled={economyLoading}
+                    className="border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/20"
+                  >
+                    {economyLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <RefreshCw className="h-3.5 w-3.5 mr-1" />}
+                    Recalculate
+                  </Button>
+                </div>
+
+                {economyLoading && (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-cyan-400" />
+                  </div>
+                )}
+
+                {tokenEconomy && !economyLoading && (() => {
+                  const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+                  const coverageColor = tokenEconomy.coverageRatio > 100 ? "text-green-400" : tokenEconomy.coverageRatio > 20 ? "text-yellow-400" : "text-red-400";
+                  const coverageBg = tokenEconomy.coverageRatio > 100 ? "border-green-500/30 bg-green-950/20" : tokenEconomy.coverageRatio > 20 ? "border-yellow-500/30 bg-yellow-950/20" : "border-red-500/30 bg-red-950/20";
+                  const sustDays = tokenEconomy.sustainabilityDays;
+                  const sustColor = sustDays > 3650 ? "text-green-400" : sustDays > 365 ? "text-yellow-400" : "text-red-400";
+                  const sustLabel = sustDays > 9999 ? "∞ Unlimited" : sustDays > 3650 ? `${(sustDays / 365).toFixed(0)}+ years` : sustDays > 365 ? `${(sustDays / 365).toFixed(1)} years` : `${sustDays} days`;
+
+                  return (
+                    <>
+                      {/* Reserve Health Banner */}
+                      <div className={`rounded-xl border p-4 ${coverageBg}`}>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-1">Reserve Coverage Ratio</p>
+                            <p className={`text-4xl font-black ${coverageColor}`}>
+                              {tokenEconomy.coverageRatio > 999 ? "∞" : `${fmt(tokenEconomy.coverageRatio)}×`}
+                            </p>
+                            <p className="text-xs text-slate-400 mt-1">On-chain treasury ÷ total net exposure (circulating + 1yr obligations)</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-1">Sustainability</p>
+                            <p className={`text-2xl font-black ${sustColor}`}>{sustLabel}</p>
+                            <p className="text-xs text-slate-400 mt-1">at current daily rate</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Top stats row */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div className="p-3 rounded-xl border border-cyan-500/20 bg-cyan-950/20 text-center">
+                          <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">On-Chain Treasury</p>
+                          <p className="text-xl font-black text-cyan-300">{fmt(tokenEconomy.onChainBalance)}</p>
+                          <p className="text-[10px] text-slate-500">JCMOVES (live Solana)</p>
+                        </div>
+                        <div className="p-3 rounded-xl border border-purple-500/20 bg-purple-950/20 text-center">
+                          <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Net Circulating</p>
+                          <p className="text-xl font-black text-purple-300">{fmt(tokenEconomy.netCirculating)}</p>
+                          <p className="text-[10px] text-slate-500">wallets + stakes + accrued</p>
+                        </div>
+                        <div className="p-3 rounded-xl border border-orange-500/20 bg-orange-950/20 text-center">
+                          <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Daily Obligation</p>
+                          <p className="text-xl font-black text-orange-300">{fmt(tokenEconomy.activeDailyObligation)}</p>
+                          <p className="text-[10px] text-slate-500">JCMOVES/day staking</p>
+                        </div>
+                        <div className="p-3 rounded-xl border border-yellow-500/20 bg-yellow-950/20 text-center">
+                          <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Total Distributed</p>
+                          <p className="text-xl font-black text-yellow-300">{fmt(tokenEconomy.totalDistributed)}</p>
+                          <p className="text-[10px] text-slate-500">rewards + prizes + accrued</p>
+                        </div>
+                      </div>
+
+                      {/* Distribution Breakdown */}
+                      <div className="space-y-2">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                          <PieChart className="h-3.5 w-3.5" /> Distribution Breakdown
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          {[
+                            { label: "In User Wallets", val: tokenEconomy.totalInUserWallets, color: "text-blue-400", icon: "💼" },
+                            { label: "Actively Staked", val: tokenEconomy.activeStaked, color: "text-green-400", icon: "🔒" },
+                            { label: "Pending Stakes", val: tokenEconomy.pendingStaked, color: "text-yellow-400", icon: "⏳" },
+                            { label: "Unstaking", val: tokenEconomy.unstakingStaked, color: "text-orange-400", icon: "🔓" },
+                            { label: "Accrued Staking Rewards", val: tokenEconomy.activeAccumulatedRewards, color: "text-emerald-400", icon: "📈" },
+                            { label: "Total Loyalty Rewards Ever", val: tokenEconomy.totalEverEarned, color: "text-violet-400", icon: "🎖️" },
+                            { label: "Spin Prizes Paid", val: tokenEconomy.spinPrizesTotal, color: "text-amber-400", icon: "🎰" },
+                            { label: "Shop Redemptions", val: tokenEconomy.totalEverRedeemed, color: "text-red-400", icon: "🛍️" },
+                          ].map(row => (
+                            <div key={row.label} className="flex items-center justify-between px-3 py-2 rounded-lg border border-slate-700/50 bg-slate-800/30">
+                              <span className="text-xs text-slate-400 flex items-center gap-1.5">
+                                <span>{row.icon}</span> {row.label}
+                              </span>
+                              <span className={`text-sm font-bold tabular-nums ${row.color}`}>{fmt(row.val)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Obligation Projections */}
+                      <div className="space-y-2">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                          <FlameKindling className="h-3.5 w-3.5" /> Staking Obligation Projections
+                        </p>
+                        <div className="grid grid-cols-3 gap-3">
+                          {[
+                            { label: "30-Day Payout", val: tokenEconomy.obligation30d, pct: tokenEconomy.onChainBalance > 0 ? (tokenEconomy.obligation30d / tokenEconomy.onChainBalance * 100) : 0 },
+                            { label: "90-Day Payout", val: tokenEconomy.obligation90d, pct: tokenEconomy.onChainBalance > 0 ? (tokenEconomy.obligation90d / tokenEconomy.onChainBalance * 100) : 0 },
+                            { label: "365-Day Payout", val: tokenEconomy.obligation365d, pct: tokenEconomy.onChainBalance > 0 ? (tokenEconomy.obligation365d / tokenEconomy.onChainBalance * 100) : 0 },
+                          ].map(row => (
+                            <div key={row.label} className="p-3 rounded-xl border border-slate-600/40 bg-slate-800/30 text-center">
+                              <p className="text-[10px] text-slate-400 mb-1">{row.label}</p>
+                              <p className="text-lg font-black text-white">{fmt(row.val)}</p>
+                              <p className="text-[10px] text-slate-500 mt-0.5">
+                                <span className={row.pct < 1 ? "text-green-400" : row.pct < 5 ? "text-yellow-400" : "text-red-400"}>
+                                  {row.pct.toFixed(2)}% of treasury
+                                </span>
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Rewards by type if any */}
+                      {Object.keys(tokenEconomy.rewardsByType).length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <Zap className="h-3.5 w-3.5" /> Loyalty Rewards by Type
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {Object.entries(tokenEconomy.rewardsByType).map(([type, total]) => (
+                              <div key={type} className="px-3 py-1.5 rounded-full border border-violet-500/30 bg-violet-950/20 text-xs">
+                                <span className="text-slate-400 capitalize">{type.replace(/_/g, " ")}</span>
+                                <span className="text-violet-300 font-bold ml-1.5">{fmt(total as number)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
             </Card>
 
             {/* ── Treasury Yield Sources Editor ── */}

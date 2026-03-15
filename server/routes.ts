@@ -12240,6 +12240,151 @@ Thank you for your business!
     }
   });
 
+  // ── Token Economy Calculator (admin) ─────────────────────────
+  app.get("/api/staking/token-economy", isAuthenticated, requireBusinessOwner, async (_req, res) => {
+    try {
+      const SYSTEM_IDS = [
+        'staking-treasury-system',
+        'platform-generosity-fund',
+        'nicolasa-jackson-generosity',
+        'nominee-mewbourn-mom',
+      ];
+      const placeholders = SYSTEM_IDS.map((_, i) => `$${i + 1}`).join(',');
+
+      const [walletsQ, stakesQ, rewardsQ, spinQ, onChainBal] = await Promise.all([
+        // All real user wallet balances
+        pool.query(
+          `SELECT
+             COUNT(*) FILTER (WHERE CAST(token_balance AS NUMERIC) > 0) AS active_wallet_count,
+             COALESCE(SUM(CAST(token_balance AS NUMERIC)), 0) AS total_in_wallets,
+             COALESCE(SUM(CAST(total_earned AS NUMERIC)), 0) AS total_ever_earned,
+             COALESCE(SUM(CAST(total_redeemed AS NUMERIC)), 0) AS total_ever_redeemed
+           FROM wallet_accounts
+           WHERE user_id NOT IN (${placeholders})`,
+          SYSTEM_IDS
+        ),
+        // Active stakes + obligations
+        pool.query(`
+          SELECT
+            status,
+            COUNT(*) AS count,
+            COALESCE(SUM(CAST(amount AS NUMERIC)), 0) AS principal,
+            COALESCE(SUM(CAST(total_earned AS NUMERIC)), 0) AS accumulated_rewards,
+            COALESCE(SUM(CAST(daily_rate AS NUMERIC)), 0) AS daily_obligation
+          FROM stakes
+          GROUP BY status
+        `),
+        // Loyalty/job rewards issued
+        pool.query(`
+          SELECT
+            reward_type,
+            COUNT(*) AS count,
+            COALESCE(SUM(CAST(token_amount AS NUMERIC)), 0) AS total
+          FROM rewards
+          GROUP BY reward_type
+          ORDER BY total DESC
+        `),
+        // Quantum Spin prizes
+        pool.query(`
+          SELECT
+            COUNT(*) AS count,
+            COALESCE(SUM(CAST(prize_tokens AS NUMERIC)), 0) AS total_prizes,
+            COALESCE(SUM(CAST(jackpot_amount_won AS NUMERIC)) FILTER (WHERE jackpot_amount_won IS NOT NULL), 0) AS total_jackpots
+          FROM spin_results
+        `),
+        // On-chain balance (cached)
+        solanaTransferService.getTreasuryBalance().catch(() => ({ tokenBalance: 0, solBalance: 0 })),
+      ]);
+
+      const wallets = walletsQ.rows[0];
+      const spinRow = spinQ.rows[0];
+
+      // Parse stakes by status
+      let activeStaked = 0, pendingStaked = 0, unstakingStaked = 0;
+      let activeDailyObligation = 0, activeAccumulatedRewards = 0;
+      for (const row of stakesQ.rows) {
+        const principal = parseFloat(row.principal);
+        const daily = parseFloat(row.daily_obligation);
+        const accrued = parseFloat(row.accumulated_rewards);
+        if (row.status === 'active') {
+          activeStaked = principal;
+          activeDailyObligation = daily;
+          activeAccumulatedRewards = accrued;
+        } else if (row.status === 'pending') {
+          pendingStaked = principal;
+        } else if (row.status === 'unstaking') {
+          unstakingStaked = principal;
+        }
+      }
+
+      // Rewards breakdown
+      const rewardsByType: Record<string, number> = {};
+      let totalLoyaltyRewards = 0;
+      for (const row of rewardsQ.rows) {
+        rewardsByType[row.reward_type] = parseFloat(row.total);
+        totalLoyaltyRewards += parseFloat(row.total);
+      }
+
+      const spinPrizesTotal = parseFloat(spinRow.total_prizes || '0');
+      const spinJackpotsTotal = parseFloat(spinRow.total_jackpots || '0');
+      const totalInUserWallets = parseFloat(wallets.total_in_wallets);
+      const totalEverEarned = parseFloat(wallets.total_ever_earned);
+      const totalEverRedeemed = parseFloat(wallets.total_ever_redeemed);
+      const onChainBalance = onChainBal.tokenBalance;
+
+      // Projections based on current daily obligation
+      const obligation30d = activeDailyObligation * 30;
+      const obligation90d = activeDailyObligation * 90;
+      const obligation365d = activeDailyObligation * 365;
+
+      // Net circulating = everything in user hands (wallets + actively staked + accrued rewards)
+      const netCirculating = totalInUserWallets + activeStaked + pendingStaked + activeAccumulatedRewards;
+
+      // Reserve coverage = on-chain treasury / (net circulating + future obligations)
+      const totalExposure = netCirculating + obligation365d;
+      const coverageRatio = totalExposure > 0 ? onChainBalance / totalExposure : 999;
+
+      // Sustainability: how many days can we pay at current daily rate
+      const sustainabilityDays = activeDailyObligation > 0
+        ? Math.floor(onChainBalance / activeDailyObligation)
+        : 99999;
+
+      res.json({
+        // Wallet totals
+        activeWalletCount: parseInt(wallets.active_wallet_count),
+        totalInUserWallets,
+        totalEverEarned,
+        totalEverRedeemed,
+        // Staking
+        activeStaked,
+        pendingStaked,
+        unstakingStaked,
+        activeDailyObligation,
+        activeAccumulatedRewards,
+        // Distribution sources
+        totalLoyaltyRewards,
+        rewardsByType,
+        spinPrizesTotal,
+        spinJackpotsTotal,
+        spinCount: parseInt(spinRow.count || '0'),
+        // Projections
+        obligation30d,
+        obligation90d,
+        obligation365d,
+        // Reserve
+        onChainBalance,
+        netCirculating,
+        coverageRatio: parseFloat(coverageRatio.toFixed(4)),
+        sustainabilityDays,
+        // Summary
+        totalDistributed: totalLoyaltyRewards + spinPrizesTotal + activeAccumulatedRewards,
+      });
+    } catch (e: any) {
+      console.error('[token-economy]', e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // ── Yield sources (public) ───────────────────────────────────
   app.get("/api/staking/yield-sources", async (_req, res) => {
     try {
