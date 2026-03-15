@@ -122,7 +122,7 @@ async function ensureRewardSettingsSeeded() {
         { settingKey: "referral_confirmed", label: "Referral Confirmed", description: "Tokens awarded when a referred user signs up and activates", tokenAmount: "2500.00", isActive: true },
         { settingKey: "employee_job_completed", label: "Employee Job Reward", description: "Tokens awarded to each employee who completes a job", tokenAmount: "1000.00", isActive: true },
         { settingKey: "daily_checkin", label: "Daily Check-in", description: "Tokens awarded for daily app check-in", tokenAmount: "50.00", isActive: true },
-        { settingKey: "scripture_reward", label: "Daily Scripture", description: "Tokens awarded for reading the daily scripture", tokenAmount: "10.00", isActive: true },
+        { settingKey: "scripture_reward", label: "Daily Scripture", description: "Tokens awarded for reading the daily scripture", tokenAmount: "100.00", isActive: true },
         { settingKey: "shop_purchase", label: "Shop Purchase Reward", description: "Tokens awarded to buyer after a community shop purchase", tokenAmount: "100.00", isActive: true },
         { settingKey: "jewelry_purchase", label: "Jewelry Purchase Reward", description: "Tokens awarded after a Nature Made Jewls purchase", tokenAmount: "150.00", isActive: true },
       ];
