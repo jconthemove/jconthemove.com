@@ -15,6 +15,14 @@ interface JackpotRow {
   last_won_amount?: number | null;
 }
 
+interface SpinPackItem {
+  id: number;
+  name: string;
+  tokenPrice: number;
+  salePriceTokens?: number | null;
+  value_json?: { spins?: number } | null;
+}
+
 interface SpinResult {
   prizeIndex: number;
   tokens: number;
@@ -155,6 +163,17 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
     refetchInterval: open ? 5000 : false,
   });
 
+  const { data: shopData } = useQuery<{ items: { item: SpinPackItem }[] }>({
+    queryKey: ["/api/reward-shop/items"],
+    enabled: open,
+    staleTime: 60000,
+  });
+
+  const spinPackItems: SpinPackItem[] = (shopData?.items ?? [])
+    .map(r => r.item)
+    .filter((i: any) => i.createsSpinCredit)
+    .slice(0, 3);
+
   // Total free spins remaining across all active entitlements
   const totalFreeSpinCount = freeSpins.reduce((sum: number, e: any) => sum + (e.value_json?.spins ?? 1), 0);
 
@@ -261,6 +280,21 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
       setParticles([]);
       setIsAutoSpin(false);
       toast({ title: "Spin failed", description: err?.message || "Please try again", variant: "destructive" });
+    },
+  });
+
+  const buyPackMutation = useMutation({
+    mutationFn: async (itemId: number) => {
+      const res = await apiRequest("POST", "/api/reward-shop/redeem", { itemId });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/rewards/wallet"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reward-shop/free-spins"] });
+      toast({ title: "🎁 Pack purchased!", description: "Spin credits added to your account." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Purchase failed", description: err?.message || "Please try again", variant: "destructive" });
     },
   });
 
@@ -411,6 +445,40 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
               <div className="text-[10px] text-yellow-700 font-medium">JCMOVES</div>
             </div>
           </div>
+
+          {/* Major Jackpot Progress Meter */}
+          {major && (() => {
+            const triggerAt = 100000;
+            const current = parseInt(String(major.current_value));
+            const pct = Math.min(100, Math.round((current / triggerAt) * 100));
+            return (
+              <div className="mt-2 bg-yellow-950/30 border border-yellow-500/15 rounded-xl px-3 py-2">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[10px] font-bold text-yellow-400/80 uppercase tracking-wider flex items-center gap-1">
+                    <Crown className="h-2.5 w-2.5" /> Major Jackpot Meter
+                  </span>
+                  <span className="text-[10px] font-bold text-yellow-300 tabular-nums">{current.toLocaleString()} / {triggerAt.toLocaleString()}</span>
+                </div>
+                <div className="h-2 bg-yellow-950/80 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{
+                      width: `${pct}%`,
+                      background: pct > 75
+                        ? "linear-gradient(90deg, #eab308, #f97316)"
+                        : pct > 40
+                        ? "linear-gradient(90deg, #ca8a04, #eab308)"
+                        : "linear-gradient(90deg, #78350f, #ca8a04)",
+                      boxShadow: pct > 75 ? "0 0 8px rgba(234,179,8,0.6)" : undefined,
+                    }}
+                  />
+                </div>
+                <p className="text-[9px] text-yellow-700/70 mt-1 text-center">
+                  {pct >= 90 ? "🔥 Jackpot about to fire!" : pct >= 60 ? "⚡ Getting hot — keep spinning!" : "Every spin grows the jackpot"}
+                </p>
+              </div>
+            );
+          })()}
 
           {/* Wallet balance */}
           <div className={`mt-2 rounded-xl px-4 py-2.5 flex items-center justify-between ${canAffordSpin ? "bg-green-950/40 border border-green-500/20" : "bg-red-950/40 border border-red-500/20"}`}>
@@ -782,6 +850,36 @@ export function SpinWheelDialog({ open, onClose, redemptionId }: QuantumSpinProp
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Need more spins? Pack purchase section */}
+          {animState === "idle" && !isAutoSpin && spinPackItems.length > 0 && (
+            <div className="w-full">
+              <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <Zap className="h-3 w-3 text-orange-400" /> Need more spins?
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {spinPackItems.map(pack => {
+                  const cost = pack.salePriceTokens ?? pack.tokenPrice;
+                  const spinsLabel = pack.name.toLowerCase().includes("5 pack") ? "5 Spins"
+                    : pack.name.toLowerCase().includes("10 pack") ? "10 Spins"
+                    : pack.name.toLowerCase().includes("50 pack") ? "50 Spins"
+                    : "1 Spin";
+                  return (
+                    <button
+                      key={pack.id}
+                      disabled={walletBalance < cost || buyPackMutation.isPending}
+                      onClick={() => buyPackMutation.mutate(pack.id)}
+                      className="bg-orange-950/40 border border-orange-500/20 rounded-xl p-2.5 text-center hover:bg-orange-950/70 hover:border-orange-500/40 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <div className="text-sm font-black text-orange-400">{spinsLabel}</div>
+                      <div className="text-[11px] font-bold text-yellow-400 mt-0.5">{cost.toLocaleString()}</div>
+                      <div className="text-[9px] text-orange-700 font-medium">JCMOVES</div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
 

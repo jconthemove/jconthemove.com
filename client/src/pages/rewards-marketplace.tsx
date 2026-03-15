@@ -442,6 +442,8 @@ export default function RewardsMarketplacePage() {
 
   const filtered = useMemo(() => {
     let list = allItems;
+    // Spin pack items live inside the spin dialog — hide them from the main shop grid
+    if (!activeCat) list = list.filter(r => !r.item.createsSpinCredit);
     if (activeCat) list = list.filter(r => r.item.categoryId === activeCat);
     if (maxTokens) list = list.filter(r => r.item.tokenPrice <= maxTokens);
     if (search) {
@@ -451,7 +453,7 @@ export default function RewardsMarketplacePage() {
     return list.sort((a, b) => (b.item.featured ? 1 : 0) - (a.item.featured ? 1 : 0));
   }, [allItems, activeCat, maxTokens, search]);
 
-  const featured = useMemo(() => allItems.filter(r => r.item.featured).slice(0, 4), [allItems]);
+  const featured = useMemo(() => allItems.filter(r => r.item.featured && !r.item.createsSpinCredit).slice(0, 4), [allItems]);
 
   // Next item user is closest to affording
   const nextGoal = useMemo(() => {
@@ -665,6 +667,32 @@ export default function RewardsMarketplacePage() {
                           <div className="text-[9px] text-orange-600 font-bold">JCMOVES</div>
                         </div>
                       </div>
+                      {/* Major jackpot meter */}
+                      {majorJackpot && (() => {
+                        const triggerAt = 100000;
+                        const cur = parseInt(String(majorJackpot.current_value));
+                        const pct = Math.min(100, Math.round((cur / triggerAt) * 100));
+                        return (
+                          <div className="mt-2">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[9px] text-yellow-400/70 font-bold uppercase tracking-wider flex items-center gap-0.5">
+                                <Crown className="h-2 w-2" /> Major Meter
+                              </span>
+                              <span className="text-[9px] text-yellow-300 font-bold tabular-nums">{cur.toLocaleString()} / {triggerAt.toLocaleString()}</span>
+                            </div>
+                            <div className="h-1.5 bg-yellow-950/80 rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full transition-all duration-700"
+                                style={{
+                                  width: `${pct}%`,
+                                  background: pct > 75 ? "linear-gradient(90deg,#eab308,#f97316)" : "linear-gradient(90deg,#78350f,#ca8a04)",
+                                  boxShadow: pct > 75 ? "0 0 6px rgba(234,179,8,0.5)" : undefined,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                     {/* Right: CTA */}
                     <div className="flex flex-col items-center gap-1.5">
