@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Truck, Trash2, Snowflake, Sparkles, Wrench, HardHat, Layers, PaintBucket,
   Star, Phone, ChevronRight, Award,
-  CheckCircle2, Clock, Users, MapPin, ArrowDown, Quote as QuoteIcon
+  CheckCircle2, Clock, Users, MapPin, ArrowDown, Quote as QuoteIcon, LogIn
 } from "lucide-react";
 import { Link } from "wouter";
 import { BookingChatbot } from "@/components/booking-chatbot";
@@ -193,6 +193,14 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white">
+
+      {/* ── Fixed Login Button ── */}
+      <Link href="/customer-login">
+        <button className="fixed top-4 right-4 z-50 flex items-center gap-1.5 bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 hover:border-white/40 text-white text-sm font-semibold px-3 py-2 rounded-xl transition-all shadow-lg">
+          <LogIn className="h-4 w-4" />
+          <span>Login</span>
+        </button>
+      </Link>
 
       {/* ── Nature Made Jewls Dedication Banner ── */}
       <Link href="/nature-made-jewls">
