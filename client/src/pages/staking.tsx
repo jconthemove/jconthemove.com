@@ -640,7 +640,7 @@ export default function StakingPage() {
           <Card className="border-yellow-500/30 bg-gradient-to-br from-yellow-500/10 to-orange-500/10">
             <CardContent className="p-4 text-center">
               <p className="text-sm text-muted-foreground">Wallet Balance</p>
-              <p className="text-2xl font-bold">{formatNumber(walletBalance)}</p>
+              <p className="text-2xl font-bold">{healthData ? formatNumber(healthData.treasuryBalance) : formatNumber(walletBalance)}</p>
               <p className="text-xs text-muted-foreground">JCMOVES</p>
             </CardContent>
           </Card>
@@ -763,7 +763,7 @@ export default function StakingPage() {
               <div className="space-y-1.5">
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Treasury Reserve</span>
-                  <span className="font-medium">{formatNumber(healthData.treasuryBalance)} JCMOVES</span>
+                  <span className="font-medium">{formatNumber(walletBalance)} JCMOVES</span>
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Total Staked (all users)</span>
