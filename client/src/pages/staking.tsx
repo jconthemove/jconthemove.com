@@ -770,12 +770,6 @@ export default function StakingPage() {
 
               <div className="space-y-1.5">
                 <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Treasury Reserve</span>
-                  <span className="font-medium">
-                    {onChainData ? formatNumber(onChainData.tokenBalance) : formatNumber(healthData.treasuryBalance)} JCMOVES
-                  </span>
-                </div>
-                <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Total Staked (all users)</span>
                   <span className="font-medium text-green-400">{formatNumber(healthData.totalStaked)} JCMOVES</span>
                 </div>
