@@ -12224,6 +12224,22 @@ Thank you for your business!
     }
   });
 
+  // ── On-chain treasury wallet balance (live Solana RPC) ───────
+  let _onChainCache: { tokenBalance: number; fetchedAt: number } | null = null;
+  app.get("/api/staking/treasury-onchain", async (_req, res) => {
+    try {
+      const now = Date.now();
+      if (_onChainCache && now - _onChainCache.fetchedAt < 60_000) {
+        return res.json({ tokenBalance: _onChainCache.tokenBalance });
+      }
+      const bal = await solanaTransferService.getTreasuryBalance();
+      _onChainCache = { tokenBalance: bal.tokenBalance, fetchedAt: now };
+      res.json({ tokenBalance: bal.tokenBalance });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // ── Yield sources (public) ───────────────────────────────────
   app.get("/api/staking/yield-sources", async (_req, res) => {
     try {
