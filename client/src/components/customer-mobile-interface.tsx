@@ -27,7 +27,7 @@ export default function CustomerMobileInterface() {
             </p>
             <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-sm">
               <p className="text-blue-900 dark:text-blue-100">
-                Already have an account? <a href="/customer-login" className="font-semibold underline">Sign in</a> to track your quotes and manage your account.
+                Already have an account? <a href="/login" className="font-semibold underline">Sign in</a> to track your quotes and manage your account.
               </p>
             </div>
           </div>

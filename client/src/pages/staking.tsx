@@ -987,7 +987,7 @@ export default function StakingPage() {
             {selectedTier && selectedTierData && !isAuthenticated && (
               <div className="mt-6 p-4 rounded-lg border border-yellow-500/30 bg-yellow-500/5 text-center">
                 <p className="text-muted-foreground mb-3">Log in to start staking your JCMOVES tokens.</p>
-                <Link href="/employee-login">
+                <Link href="/login">
                   <Button className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white">
                     Log In to Stake
                   </Button>
@@ -1079,7 +1079,7 @@ export default function StakingPage() {
             {!isAuthenticated && (
               <div className="mt-6 p-4 rounded-lg border text-center">
                 <p className="text-muted-foreground mb-2">Log in to start staking your JCMOVES tokens</p>
-                <Link href="/employee-login">
+                <Link href="/login">
                   <Button>Log In</Button>
                 </Link>
               </div>

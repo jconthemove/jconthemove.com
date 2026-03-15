@@ -542,7 +542,7 @@ export default function NatureMadeJewls() {
           </div>
           <div className="flex items-center gap-2">
             {!user && (
-              <Link href="/employee-login?redirect=/nature-made-jewls">
+              <Link href="/login?redirect=/nature-made-jewls">
                 <Button variant="ghost" size="sm" className="text-purple-600 font-semibold">
                   Login
                 </Button>
@@ -719,7 +719,7 @@ export default function NatureMadeJewls() {
               </Dialog>
               </div>
             ) : (
-              <Link href="/employee-login?redirect=/nature-made-jewls">
+              <Link href="/login?redirect=/nature-made-jewls">
                 <Button className="bg-gradient-to-r from-purple-500 to-slate-600 hover:from-purple-600 hover:to-slate-700 whitespace-nowrap">
                   <Plus className="h-4 w-4 mr-1" /> Add
                 </Button>
@@ -788,7 +788,7 @@ export default function NatureMadeJewls() {
             )}
             {!user && (
               <div className="mt-6">
-                <Link href="/employee-login?redirect=/nature-made-jewls">
+                <Link href="/login?redirect=/nature-made-jewls">
                   <Button variant="outline" className="border-purple-600 text-purple-600">
                     Login to Add Items
                   </Button>

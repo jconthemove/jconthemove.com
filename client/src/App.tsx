@@ -47,6 +47,7 @@ import LeadDetailPage from "@/pages/lead-detail";
 import EmployeeRegister from "@/pages/employee-register";
 import EmployeeLogin from "@/pages/employee-login";
 import CustomerLogin from "@/pages/customer-login";
+import LoginPage from "@/pages/login";
 import ForgotAccessPage from "@/pages/forgot-access";
 import LeaveReviewPage from "@/pages/leave-review";
 import QuotePage from "@/pages/quote";
@@ -440,8 +441,9 @@ function Router() {
     <Switch>
       {/* Public Authentication Routes - No Replit account needed! */}
       <Route path="/employee-register" component={EmployeeRegister} />
-      <Route path="/employee-login" component={EmployeeLogin} />
-      <Route path="/customer-login" component={CustomerLogin} />
+      <Route path="/login" component={LoginPage} />
+      <Route path="/employee-login" component={LoginPage} />
+      <Route path="/customer-login" component={LoginPage} />
       <Route path="/forgot-access" component={ForgotAccessPage} />
       <Route path="/leave-review" component={LeaveReviewPage} />
       

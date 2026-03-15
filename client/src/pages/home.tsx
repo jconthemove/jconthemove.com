@@ -195,7 +195,7 @@ export default function HomePage() {
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white">
 
       {/* ── Fixed Login Button ── */}
-      <Link href="/customer-login">
+      <Link href="/login">
         <button className="fixed top-4 right-4 z-50 flex items-center gap-1.5 bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 hover:border-white/40 text-white text-sm font-semibold px-3 py-2 rounded-xl transition-all shadow-lg">
           <LogIn className="h-4 w-4" />
           <span>Login</span>
@@ -576,7 +576,7 @@ export default function HomePage() {
           <p className="text-slate-400 mb-6 max-w-xl mx-auto">
             Book a service, earn tokens. Redeem for free labor, gift cards, discounts, and more through our rewards marketplace.
           </p>
-          <Link href="/customer-login">
+          <Link href="/login">
             <Button className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 font-bold px-8 py-5">
               Join & Start Earning <ChevronRight className="ml-2 h-4 w-4" />
             </Button>
@@ -618,8 +618,8 @@ export default function HomePage() {
           <div className="border-t border-white/5 pt-6 flex flex-col sm:flex-row items-center justify-between gap-2">
             <p className="text-slate-600 text-xs">© {new Date().getFullYear()} JC ON THE MOVE LLC. All rights reserved.</p>
             <div className="flex items-center gap-4">
-              <Link href="/employee-login"><span className="text-slate-700 hover:text-slate-500 text-xs cursor-pointer transition-colors">Team Login</span></Link>
-              <Link href="/customer-login"><span className="text-slate-700 hover:text-slate-500 text-xs cursor-pointer transition-colors">Customer Login</span></Link>
+              <Link href="/login"><span className="text-slate-700 hover:text-slate-500 text-xs cursor-pointer transition-colors">Team Login</span></Link>
+              <Link href="/login"><span className="text-slate-700 hover:text-slate-500 text-xs cursor-pointer transition-colors">Customer Login</span></Link>
             </div>
           </div>
         </div>

@@ -262,7 +262,7 @@ export default function EmployeeRegister() {
               <Button
                 variant="link"
                 className="p-0 h-auto text-orange-400 hover:text-orange-300"
-                onClick={() => setLocation("/employee-login")}
+                onClick={() => setLocation("/login")}
                 type="button"
                 data-testid="link-login"
               >

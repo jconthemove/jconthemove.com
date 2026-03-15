@@ -60,7 +60,7 @@ export default function MobilePreviewPage() {
 
             <h3 className="text-white font-semibold mb-2">Preview Page</h3>
             <div className="space-y-1">
-              {["/", "/employee-login", "/customer-portal", "/mining", "/marketplace"].map((path) => (
+              {["/", "/login", "/customer-portal", "/mining", "/marketplace"].map((path) => (
                 <Button
                   key={path}
                   variant={previewPath === path ? "default" : "ghost"}

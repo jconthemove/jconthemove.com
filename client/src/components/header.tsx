@@ -238,7 +238,7 @@ export default function Header() {
                   </>
                 ) : (
                   <Link 
-                    href="/employee-login" 
+                    href="/login" 
                     className="text-white hover:opacity-90 px-5 py-2 rounded-full text-sm font-medium transition-all"
                     style={{ backgroundColor: '#800000' }}
                     data-testid="button-employee-login"
@@ -416,7 +416,7 @@ export default function Header() {
                   </Link>
                   <div className="border-t border-border my-2" />
                   <Link 
-                    href="/employee-login" 
+                    href="/login" 
                     className="text-white hover:opacity-90 px-6 py-2.5 rounded-full text-sm font-medium transition-all text-center"
                     style={{ backgroundColor: '#800000' }}
                     data-testid="button-mobile-employee-login"

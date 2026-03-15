@@ -155,7 +155,7 @@ export default function ForgotAccessPage() {
                   {loading ? "Sending..." : "Send Recovery Code"}
                 </Button>
                 <div className="text-center">
-                  <Link href="/employee-login" className="text-sm text-muted-foreground hover:text-primary transition-colors">
+                  <Link href="/login" className="text-sm text-muted-foreground hover:text-primary transition-colors">
                     <ArrowLeft className="inline h-3 w-3 mr-1" />Back to login
                   </Link>
                 </div>
@@ -258,10 +258,10 @@ export default function ForgotAccessPage() {
                 <p className="text-sm text-muted-foreground">
                   Your JCMOVES tokens, job history, and profile are exactly where you left them.
                 </p>
-                <Button className="w-full" onClick={() => navigate("/employee-login")}>
+                <Button className="w-full" onClick={() => navigate("/login")}>
                   Log In Now
                 </Button>
-                <Link href="/customer-login">
+                <Link href="/login">
                   <button className="text-sm text-muted-foreground hover:text-primary transition-colors">
                     Customer login instead
                   </button>

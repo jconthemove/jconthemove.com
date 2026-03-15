@@ -1138,6 +1138,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Unified login — works for customers, employees, and admins
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      if (!email || !password) return res.status(400).json({ error: "Email and password are required" });
+
+      const [user] = await db.select().from(users).where(eq(users.email, email.trim().toLowerCase())).limit(1);
+      if (!user || !user.passwordHash) return res.status(401).json({ error: "Invalid email or password" });
+
+      const match = await bcrypt.compare(password, user.passwordHash);
+      if (!match) return res.status(401).json({ error: "Invalid email or password" });
+
+      (req.session as any).userId = user.id;
+      (req.session as any).userEmail = user.email;
+      (req.session as any).userRole = user.role;
+
+      req.session.save((err) => {
+        if (err) return res.status(500).json({ error: "Login failed. Please try again." });
+        res.json({
+          success: true,
+          user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role, status: user.status }
+        });
+      });
+    } catch (e: any) {
+      console.error("Unified login error:", e);
+      res.status(500).json({ error: "Login failed. Please try again." });
+    }
+  });
+
   // Logout endpoint for all users (email/password)
   app.post("/api/auth/logout", (req, res) => {
     req.session.destroy((err) => {

@@ -18,7 +18,7 @@ export function RouteGuard({ children, allowedRoles, allowPending = false }: Rou
 
     // Not logged in — send to login
     if (!user) {
-      setLocation('/employee-login');
+      setLocation('/login');
       return;
     }
 
