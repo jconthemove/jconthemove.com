@@ -2,7 +2,9 @@ export type StatusCategory = "lead" | "confirmed" | "completed";
 
 export function getStatusCategory(status: string): StatusCategory {
   if (["completed", "paid"].includes(status)) return "completed";
-  if (["confirmed", "accepted", "in_progress", "scheduled"].includes(status)) return "confirmed";
+  // Yellow: job is booked, details confirmed, awaiting the move date
+  if (["confirmed", "available", "accepted", "in_progress", "scheduled"].includes(status)) return "confirmed";
+  // Red: new lead, needs quote/confirmation, or missing details
   return "lead";
 }
 

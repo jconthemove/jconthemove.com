@@ -351,12 +351,16 @@ export default function LeadsPage() {
                   <CardContent>
                     <div className="space-y-4">
                       {[...leads]
-                        .filter(l => l.status !== 'completed')
+                        .filter(l => !["completed", "cancelled", "paid"].includes(l.status))
                         .sort((a, b) => {
-                          const statusOrder = ["new", "contacted", "quoted", "confirmed", "available", "accepted", "in_progress"];
-                          const aIndex = statusOrder.indexOf(a.status);
-                          const bIndex = statusOrder.indexOf(b.status);
-                          if (aIndex !== bIndex) return aIndex - bIndex;
+                          // Red → Yellow → Green sort order
+                          const ORDER: Record<string, number> = {
+                            new: 0, contacted: 1, quote_requested: 2, quoted: 3,
+                            confirmed: 10, available: 11, accepted: 12, in_progress: 13,
+                          };
+                          const aIdx = ORDER[a.status] ?? 99;
+                          const bIdx = ORDER[b.status] ?? 99;
+                          if (aIdx !== bIdx) return aIdx - bIdx;
                           return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
                         })
                         .map(renderLeadCard)}

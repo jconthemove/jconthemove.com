@@ -129,7 +129,12 @@ export default function AdminRewardShopPage() {
   const { data: categories } = useQuery<RewardCategory[]>({ queryKey: ["/api/admin/reward-shop/categories"], enabled: !!user });
   const { data: redemptions } = useQuery<AdminRedemption[]>({
     queryKey: ["/api/admin/reward-shop/redemptions", redemptionFilter],
-    queryFn: () => fetch(`/api/admin/reward-shop/redemptions${redemptionFilter ? `?status=${redemptionFilter}` : ""}`, { credentials: "include" }).then(r => r.json()),
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/reward-shop/redemptions${redemptionFilter ? `?status=${redemptionFilter}` : ""}`, { credentials: "include" });
+      if (!res.ok) return [] as AdminRedemption[];
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    },
     enabled: !!user && activeTab === "redemptions",
   });
   const { data: spinAdminData, refetch: refetchSpinConfig } = useQuery<{ config: any[]; jackpots: any[] }>({

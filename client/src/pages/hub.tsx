@@ -30,7 +30,13 @@ import type { Lead, User } from "@shared/schema";
 // CONSTANTS
 // ─────────────────────────────────────────────────
 
-const STATUS_OPTIONS = ["all", "new", "quoted", "confirmed", "in_progress", "completed", "cancelled"];
+const STATUS_OPTIONS = ["all", "new", "contacted", "quote_requested", "quoted", "confirmed", "available", "accepted", "in_progress", "completed", "cancelled"];
+// Sort order: red (needs action) → yellow (all set) → green (done)
+const STATUS_SORT: Record<string, number> = {
+  new: 0, contacted: 1, quote_requested: 2, quoted: 3,
+  confirmed: 10, available: 11, accepted: 12, in_progress: 13,
+  completed: 20, paid: 21, cancelled: 30,
+};
 
 const SCRIPTURES = [
   { text: "Commit your work to the Lord, and your plans will be established.", ref: "Proverbs 16:3" },
@@ -197,7 +203,7 @@ export default function TeamHub() {
   });
 
   // ── Computed ─────────────────────────────────────
-  const activeLeads = leads.filter(l => ["new", "quoted", "confirmed", "in_progress"].includes(l.status));
+  const activeLeads = leads.filter(l => !["completed", "cancelled", "paid"].includes(l.status));
   const completedLeads = leads.filter(l => l.status === "completed");
   const todayLeads = useMemo(() =>
     leads
@@ -220,16 +226,22 @@ export default function TeamHub() {
   }, [completedLeads, employees]);
 
   const filteredLeads = useMemo(() => {
-    return leads.filter(l => {
-      const matchesStatus = statusFilter === "all" || l.status === statusFilter;
-      const q = search.toLowerCase();
-      const matchesSearch = !q ||
-        `${l.firstName} ${l.lastName}`.toLowerCase().includes(q) ||
-        (l.email?.toLowerCase().includes(q)) ||
-        (l.phone?.includes(q)) ||
-        (l.serviceType?.toLowerCase().includes(q));
-      return matchesStatus && matchesSearch;
-    });
+    return leads
+      .filter(l => {
+        const matchesStatus = statusFilter === "all" || l.status === statusFilter;
+        const q = search.toLowerCase();
+        const matchesSearch = !q ||
+          `${l.firstName} ${l.lastName}`.toLowerCase().includes(q) ||
+          (l.email?.toLowerCase().includes(q)) ||
+          (l.phone?.includes(q)) ||
+          (l.serviceType?.toLowerCase().includes(q));
+        return matchesStatus && matchesSearch;
+      })
+      .sort((a, b) => {
+        const aOrder = STATUS_SORT[a.status] ?? 99;
+        const bOrder = STATUS_SORT[b.status] ?? 99;
+        return aOrder - bOrder;
+      });
   }, [leads, statusFilter, search]);
 
   // ── Mutations ─────────────────────────────────────
@@ -640,8 +652,10 @@ export default function TeamHub() {
               ) : (
                 <>
                   <div className="space-y-2">
-                    {filteredLeads.slice(0, visibleCount).map(lead => (
-                      <Card key={lead.id} className="border-white/5 bg-white/[0.03] hover:bg-white/[0.05] transition-colors">
+                    {filteredLeads.slice(0, visibleCount).map(lead => {
+                      const sc = getStatusColors(lead.status);
+                      return (
+                      <Card key={lead.id} className={`border-l-4 ${sc.border} border-t border-r border-b border-slate-700/40 bg-white/[0.03] hover:bg-white/[0.05] transition-colors`}>
                         <CardContent className="p-4">
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex-1 min-w-0">
@@ -698,7 +712,8 @@ export default function TeamHub() {
                           </div>
                         </CardContent>
                       </Card>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {visibleCount < filteredLeads.length && (
