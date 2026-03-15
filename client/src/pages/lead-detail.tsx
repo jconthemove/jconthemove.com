@@ -113,6 +113,14 @@ export default function LeadDetailPage() {
 
   const form = useForm({
     defaultValues: {
+      firstName: "",
+      lastName: "",
+      email: "",
+      phone: "",
+      moveDate: "",
+      details: "",
+      fromAddress: "",
+      toAddress: "",
       basePrice: "",
       crewSize: 2,
       confirmedDate: "",
@@ -126,6 +134,14 @@ export default function LeadDetailPage() {
   useEffect(() => {
     if (lead) {
       form.reset({
+        firstName: lead.firstName || "",
+        lastName: lead.lastName || "",
+        email: lead.email || "",
+        phone: lead.phone || "",
+        moveDate: lead.moveDate || "",
+        details: lead.details || "",
+        fromAddress: lead.fromAddress || "",
+        toAddress: lead.toAddress || "",
         basePrice: lead.basePrice || "",
         crewSize: lead.crewSize || 2,
         confirmedDate: lead.confirmedDate || lead.moveDate || "",
@@ -433,7 +449,7 @@ export default function LeadDetailPage() {
               )}
               {!isEditing ? (
                 <Button onClick={() => setIsEditing(true)} data-testid="button-edit">
-                  Edit Quote
+                  Edit Details
                 </Button>
               ) : (
                 <>
@@ -639,62 +655,102 @@ export default function LeadDetailPage() {
                 <CardTitle>Customer Information</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="flex items-center gap-3">
-                    <Mail className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="text-sm text-muted-foreground">Email</p>
-                      <a href={`mailto:${lead.email}`} className="text-sm font-medium hover:underline" data-testid="link-email">
-                        {lead.email}
-                      </a>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Phone className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="text-sm text-muted-foreground">Phone</p>
-                      <a href={`tel:${lead.phone}`} className="text-sm font-medium hover:underline" data-testid="link-phone">
-                        {lead.phone}
-                      </a>
-                    </div>
-                  </div>
-                </div>
-                
-                <Separator />
-                
-                <div className="space-y-3">
-                  <div className="flex items-start gap-3">
-                    <MapPin className="h-5 w-5 text-muted-foreground mt-0.5" />
-                    <div className="flex-1">
-                      <p className="text-sm text-muted-foreground">From</p>
-                      <p className="text-sm font-medium">{lead.fromAddress}</p>
-                    </div>
-                  </div>
-                  {lead.toAddress && (
-                    <div className="flex items-start gap-3">
-                      <MapPin className="h-5 w-5 text-muted-foreground mt-0.5" />
-                      <div className="flex-1">
-                        <p className="text-sm text-muted-foreground">To</p>
-                        <p className="text-sm font-medium">{lead.toAddress}</p>
+                {isEditing ? (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label>First Name</Label>
+                        <Input {...form.register("firstName")} data-testid="input-first-name" />
+                      </div>
+                      <div>
+                        <Label>Last Name</Label>
+                        <Input {...form.register("lastName")} data-testid="input-last-name" />
                       </div>
                     </div>
-                  )}
-                  <div className="flex items-center gap-3">
-                    <Calendar className="h-5 w-5 text-muted-foreground" />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label>Email</Label>
+                        <Input type="email" {...form.register("email")} data-testid="input-email" />
+                      </div>
+                      <div>
+                        <Label>Phone</Label>
+                        <Input type="tel" {...form.register("phone")} data-testid="input-phone" />
+                      </div>
+                    </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">Requested Move Date</p>
-                      <p className="text-sm font-medium">{lead.moveDate || "Not specified"}</p>
+                      <Label>From Address</Label>
+                      <Input {...form.register("fromAddress")} data-testid="input-from-address" />
+                    </div>
+                    <div>
+                      <Label>To Address</Label>
+                      <Input {...form.register("toAddress")} data-testid="input-to-address" />
+                    </div>
+                    <div>
+                      <Label>Requested Move Date</Label>
+                      <Input type="date" {...form.register("moveDate")} data-testid="input-move-date" />
+                    </div>
+                    <div>
+                      <Label>Additional Details / Notes</Label>
+                      <Textarea rows={3} {...form.register("details")} data-testid="input-details" />
                     </div>
                   </div>
-                </div>
-
-                {lead.details && (
+                ) : (
                   <>
-                    <Separator />
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-2">Additional Details</p>
-                      <p className="text-sm bg-muted p-3 rounded">{lead.details}</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex items-center gap-3">
+                        <Mail className="h-5 w-5 text-muted-foreground" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Email</p>
+                          <a href={`mailto:${lead.email}`} className="text-sm font-medium hover:underline" data-testid="link-email">
+                            {lead.email}
+                          </a>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Phone className="h-5 w-5 text-muted-foreground" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Phone</p>
+                          <a href={`tel:${lead.phone}`} className="text-sm font-medium hover:underline" data-testid="link-phone">
+                            {lead.phone || "Not provided"}
+                          </a>
+                        </div>
+                      </div>
                     </div>
+                    <Separator />
+                    <div className="space-y-3">
+                      <div className="flex items-start gap-3">
+                        <MapPin className="h-5 w-5 text-muted-foreground mt-0.5" />
+                        <div className="flex-1">
+                          <p className="text-sm text-muted-foreground">From</p>
+                          <p className="text-sm font-medium">{lead.fromAddress}</p>
+                        </div>
+                      </div>
+                      {lead.toAddress && (
+                        <div className="flex items-start gap-3">
+                          <MapPin className="h-5 w-5 text-muted-foreground mt-0.5" />
+                          <div className="flex-1">
+                            <p className="text-sm text-muted-foreground">To</p>
+                            <p className="text-sm font-medium">{lead.toAddress}</p>
+                          </div>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-3">
+                        <Calendar className="h-5 w-5 text-muted-foreground" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Requested Move Date</p>
+                          <p className="text-sm font-medium">{lead.moveDate || "Not specified"}</p>
+                        </div>
+                      </div>
+                    </div>
+                    {lead.details && (
+                      <>
+                        <Separator />
+                        <div>
+                          <p className="text-sm text-muted-foreground mb-2">Additional Details</p>
+                          <p className="text-sm bg-muted p-3 rounded">{lead.details}</p>
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
               </CardContent>
