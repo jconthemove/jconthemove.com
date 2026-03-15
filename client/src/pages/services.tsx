@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,11 +8,13 @@ import { ShopSwitcher } from "@/components/shop-switcher";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useCart } from "@/hooks/useCart";
 import {
   Truck, Users, Clock, DollarSign, CheckCircle, Star,
   ChevronRight, ArrowLeft, Phone, Zap, Shield, Award,
   Package, Layers, Wrench, Sparkles, Calculator, ChevronDown, ChevronUp,
   Settings, Save, Plus, Trash2, Pencil, X, Check,
+  Bitcoin, Gem, ShoppingCart, AlertCircle, ChevronsUp,
 } from "lucide-react";
 
 // ─── Static data ──────────────────────────────────────────────────────────────
@@ -47,6 +49,16 @@ const HOME_TYPES = [
   { label: "5+ Bedroom",    crew: 5 },
   { label: "Office Move",   crew: 4 },
 ];
+
+// ─── Job time rubric ──────────────────────────────────────────────────────────
+const JOB_TIME: Record<string, { base: number; stairs: number; label: string }> = {
+  small:  { base: 1, stairs: 1, label: "Small Truck (box / cargo van)" },
+  medium: { base: 2, stairs: 1, label: "Medium Truck (16–20 ft)" },
+  large:  { base: 3, stairs: 1, label: "Large Truck (24–26 ft)" },
+};
+
+// Minimum crew recommended per truck size
+const TRUCK_MIN_CREW: Record<string, number> = { small: 1, medium: 2, large: 3 };
 
 // ─── Default pricing (fallback before API loads) ──────────────────────────────
 const DEFAULT_PRICING = {
@@ -184,10 +196,19 @@ export default function ServicesPage() {
   const { hasAdminAccess } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [, navigate] = useLocation();
+  const { addItem: addToCart, isInCart, breakdown } = useCart();
+
   const [serviceType, setServiceType]   = useState<"labor" | "truck">("labor");
   const [selectedCrew, setSelectedCrew] = useState<number | null>(null);
   const [addOns, setAddOns]             = useState<Record<string, boolean>>({});
   const [showSuggestion, setShowSuggestion] = useState(false);
+
+  // Job time estimator
+  const [truckSize, setTruckSize]         = useState<"small" | "medium" | "large" | null>(null);
+  const [serviceMode, setServiceMode]     = useState<"load" | "unload" | "both">("both");
+  const [loadStairs, setLoadStairs]       = useState(false);
+  const [unloadStairs, setUnloadStairs]   = useState(false);
 
   // Admin add-on editing state
   const [addonEditId, setAddonEditId]   = useState<string | null>(null);
@@ -270,6 +291,42 @@ export default function ServicesPage() {
   const bookUrl = selectedCrew
     ? `/quote?service=residential&crew=${selectedCrew}&type=${serviceType}`
     : `/quote?service=residential`;
+
+  // ── Job time & crew recommendation ──────────────────────────────────────
+  const estimatedJobHours = useMemo(() => {
+    if (!truckSize) return null;
+    const { base, stairs } = JOB_TIME[truckSize];
+    let hrs = 0;
+    if (serviceMode === "load" || serviceMode === "both")
+      hrs += base + (loadStairs ? stairs : 0);
+    if (serviceMode === "unload" || serviceMode === "both")
+      hrs += base + (unloadStairs ? stairs : 0);
+    return hrs;
+  }, [truckSize, serviceMode, loadStairs, unloadStairs]);
+
+  const recommendedCrew = useMemo(() => {
+    if (!truckSize) return null;
+    let base = TRUCK_MIN_CREW[truckSize];
+    const stairCount = (loadStairs ? 1 : 0) + (unloadStairs ? 1 : 0);
+    base += stairCount;
+    return Math.min(base, 5) as number;
+  }, [truckSize, loadStairs, unloadStairs]);
+
+  // Travel waiver: if estimated job hours ≥ minimum booking hours, waive travel
+  const travelWaived = useMemo(() => {
+    if (!estimatedJobHours || !selectedCrew) return false;
+    return estimatedJobHours >= minHours;
+  }, [estimatedJobHours, selectedCrew, minHours]);
+
+  // ── Book Now handler ─────────────────────────────────────────────────────
+  function handleBookNow() {
+    if (!selectedCrew) return;
+    const cartId = `service-move-${selectedCrew}-${serviceType}`;
+    const label = `Moving Labor${serviceType === "truck" ? " + Truck" : ""} · ${selectedCrew} Mover${selectedCrew > 1 ? "s" : ""} (min ${minHours} hrs)`;
+    addToCart({ id: cartId, name: label, price: estLow, image: "", type: "service", bookNow: true });
+    toast({ title: "⚡ Crew reserved!", description: "5% instant-book discount applied. Stack more at checkout!" });
+    navigate("/cart");
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white pb-28">
@@ -609,6 +666,123 @@ export default function ServicesPage() {
           </div>
         </div>
 
+        {/* ── JOB TIME ESTIMATOR ────────────────────────────────────────── */}
+        <div className="rounded-2xl border border-slate-700/60 bg-slate-800/30 p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-amber-400" />
+            <h3 className="text-sm font-bold text-white">Estimate Your Job Time</h3>
+            <span className="text-[11px] text-slate-500 ml-1">optional · helps us recommend the right crew</span>
+          </div>
+
+          {/* Service mode */}
+          <div>
+            <p className="text-xs text-slate-400 mb-2 font-medium">What do you need help with?</p>
+            <div className="flex gap-2">
+              {(["load","unload","both"] as const).map(m => (
+                <button
+                  key={m}
+                  onClick={() => setServiceMode(m)}
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border transition-all capitalize ${
+                    serviceMode === m
+                      ? "border-blue-500 bg-blue-500/20 text-blue-300"
+                      : "border-slate-700 bg-slate-800/40 text-slate-400 hover:border-slate-600"
+                  }`}
+                >
+                  {m === "both" ? "Load & Unload" : m === "load" ? "Load Only" : "Unload Only"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Truck size */}
+          <div>
+            <p className="text-xs text-slate-400 mb-2 font-medium">Truck size</p>
+            <div className="grid grid-cols-3 gap-2">
+              {(["small","medium","large"] as const).map(sz => (
+                <button
+                  key={sz}
+                  onClick={() => setTruckSize(sz)}
+                  className={`py-2.5 px-2 rounded-xl text-xs font-bold border transition-all text-center ${
+                    truckSize === sz
+                      ? "border-orange-500 bg-orange-500/20 text-orange-300"
+                      : "border-slate-700 bg-slate-800/40 text-slate-400 hover:border-slate-600"
+                  }`}
+                >
+                  <Truck className="h-4 w-4 mx-auto mb-1 opacity-70" />
+                  <span className="capitalize">{sz}</span>
+                  <p className="text-[9px] font-normal text-slate-500 mt-0.5 leading-tight">
+                    {sz === "small" ? "Van / box" : sz === "medium" ? "16–20 ft" : "24–26 ft"}
+                  </p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Stairs toggles */}
+          <div className="flex gap-3">
+            {[
+              { label: "Loading location has stairs", val: loadStairs, set: setLoadStairs, show: serviceMode !== "unload" },
+              { label: "Unloading location has stairs", val: unloadStairs, set: setUnloadStairs, show: serviceMode !== "load" },
+            ].filter(s => s.show).map(({ label, val, set }) => (
+              <button
+                key={label}
+                onClick={() => set(!val)}
+                className={`flex-1 flex items-center gap-2 py-2.5 px-3 rounded-xl border text-xs font-medium transition-all ${
+                  val
+                    ? "border-purple-500 bg-purple-500/20 text-purple-300"
+                    : "border-slate-700 bg-slate-800/40 text-slate-400 hover:border-slate-600"
+                }`}
+              >
+                <ChevronsUp className="h-3.5 w-3.5 shrink-0" />
+                {label}
+                {val && <Check className="h-3 w-3 ml-auto text-purple-400" />}
+              </button>
+            ))}
+          </div>
+
+          {/* Results */}
+          {truckSize && estimatedJobHours !== null && (
+            <div className="bg-slate-900/60 rounded-xl border border-slate-700 p-4 space-y-2.5">
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-slate-400">Estimated job time</span>
+                <span className="text-white font-black text-base">~{estimatedJobHours} hrs</span>
+              </div>
+
+              {recommendedCrew && (
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-400">Recommended crew</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-blue-300 font-bold">{recommendedCrew} movers</span>
+                    {recommendedCrew !== selectedCrew && (
+                      <button
+                        onClick={() => setSelectedCrew(recommendedCrew)}
+                        className="text-[10px] bg-blue-500/20 border border-blue-500/40 text-blue-300 px-2 py-0.5 rounded-full hover:bg-blue-500/30 transition-colors"
+                      >
+                        Switch ↗
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {travelWaived ? (
+                <div className="flex items-start gap-2 bg-green-500/10 border border-green-500/20 rounded-lg p-2.5 text-xs text-green-300">
+                  <CheckCircle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-green-400" />
+                  <span>
+                    <span className="font-bold">Travel fee may be waived</span> — your job fits within the minimum booking window.
+                    If any travel charge applies, you'll receive JCMOVES tokens as in-house reimbursement.
+                  </span>
+                </div>
+              ) : estimatedJobHours !== null && selectedCrew && estimatedJobHours < minHours ? (
+                <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/20 rounded-lg p-2.5 text-xs text-amber-300">
+                  <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                  <span>Travel charge applies · {minHours - estimatedJobHours} hr gap between job time and minimum booking</span>
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
+
         {/* ── LIVE ESTIMATE ─────────────────────────────────────────────── */}
         {selectedCrew ? (
           <div className="rounded-2xl border-2 border-blue-500/50 bg-gradient-to-br from-blue-900/30 to-slate-900 p-6 shadow-[0_0_40px_rgba(59,130,246,0.15)] sticky bottom-4">
@@ -648,7 +822,7 @@ export default function ServicesPage() {
               </div>
             )}
 
-            <div className="border-t border-slate-700 pt-4 mb-5">
+            <div className="border-t border-slate-700 pt-4 mb-4">
               <p className="text-slate-400 text-sm mb-1">Estimated Total Range</p>
               <p className="text-3xl font-black text-white">
                 ${estLow.toLocaleString()} – <span className="text-blue-300">${estHigh.toLocaleString()}</span>
@@ -656,12 +830,67 @@ export default function ServicesPage() {
               <p className="text-xs text-slate-500 mt-1">Based on {minHours}–{minHours + 2} hrs · Final price depends on actual time</p>
             </div>
 
-            <Link href={bookUrl}>
-              <Button className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-black text-base h-12 shadow-lg shadow-orange-500/25 border-0">
-                Reserve Your Crew <ChevronRight className="h-5 w-5 ml-1" />
+            {/* ── Discount Stack Preview ──────────────────────────────── */}
+            <div className="bg-slate-900/60 border border-slate-700 rounded-xl p-4 mb-4 space-y-2">
+              <p className="text-xs font-bold text-slate-300 mb-3 flex items-center gap-1.5">
+                <Zap className="h-3.5 w-3.5 text-yellow-400" />
+                Savings you can stack
+              </p>
+
+              {[
+                { label: "⚡ Book Now",            pct: 5,  active: true,  note: "instant discount" },
+                { label: "💎 Add 1 Jewls item",    pct: 5,  active: breakdown.jewelsCount >= 1, note: "from Nature Made Jewls" },
+                { label: "💎 Add 2 Jewls items",   pct: 10, active: breakdown.jewelsCount >= 2, note: "max jewels bonus" },
+                { label: "📦 Book 2 services",     pct: 10, active: breakdown.multiService, note: "applied to both jobs" },
+                { label: "₿ Pay with Bitcoin",     pct: 10, active: false, note: "at checkout" },
+              ].map(({ label, pct, active, note }) => (
+                <div key={label} className={`flex items-center justify-between text-xs ${active ? "text-green-300" : "text-slate-500"}`}>
+                  <span className="flex items-center gap-1.5">
+                    {active
+                      ? <Check className="h-3 w-3 text-green-400 shrink-0" />
+                      : <div className="h-3 w-3 rounded-full border border-slate-600 shrink-0" />}
+                    {label}
+                    <span className={`text-[10px] ${active ? "text-green-500/70" : "text-slate-600"}`}>· {note}</span>
+                  </span>
+                  <span className={`font-bold ${active ? "text-green-400" : "text-slate-600"}`}>-{pct}%</span>
+                </div>
+              ))}
+
+              <div className="border-t border-slate-700 pt-2 mt-1 flex justify-between text-xs">
+                <span className="text-slate-400">Max stackable savings</span>
+                <span className="text-green-400 font-black">up to 25% off</span>
+              </div>
+            </div>
+
+            {/* ── Action Buttons ──────────────────────────────────────── */}
+            <div className="space-y-2.5">
+              <Button
+                onClick={handleBookNow}
+                className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-black text-base h-13 shadow-lg shadow-green-500/25 border-0 flex items-center justify-between px-5"
+              >
+                <span className="flex items-center gap-2">
+                  <ShoppingCart className="h-5 w-5" />
+                  Book Now — Save 5%
+                </span>
+                <span className="text-xs font-medium opacity-80 bg-white/20 px-2 py-0.5 rounded-full">
+                  Save ${Math.round(estLow * 0.05)}
+                </span>
               </Button>
-            </Link>
-            <p className="text-center text-xs text-slate-500 mt-2">No payment required to reserve · Cancel anytime</p>
+
+              <Link href={bookUrl}>
+                <Button
+                  variant="outline"
+                  className="w-full border-slate-600 text-slate-200 hover:bg-slate-800 hover:text-white font-bold h-11"
+                >
+                  Request Quote — Free, No Commitment
+                  <ChevronRight className="h-4 w-4 ml-auto" />
+                </Button>
+              </Link>
+            </div>
+
+            <p className="text-center text-xs text-slate-500 mt-3">
+              Book Now locks in 5% · Add Jewls items, 2nd service, or pay with Bitcoin to stack up to 25% off
+            </p>
           </div>
         ) : (
           <div className="rounded-2xl border-2 border-dashed border-slate-700 p-8 text-center">
@@ -670,6 +899,41 @@ export default function ServicesPage() {
             <p className="text-slate-600 text-sm mt-1">Choose 1–5 movers to unlock pricing</p>
           </div>
         )}
+
+        {/* ── HALF DAY PACKAGE PROMO ────────────────────────────────────── */}
+        <div className="rounded-2xl border border-orange-500/40 bg-gradient-to-br from-orange-950/40 via-slate-900 to-amber-950/20 p-5 relative overflow-hidden">
+          <div className="absolute top-0 right-0 bg-orange-500 text-white text-[10px] font-black px-3 py-1 rounded-bl-xl">
+            BEST VALUE
+          </div>
+          <div className="flex items-center gap-2 mb-3">
+            <Zap className="h-5 w-5 text-orange-400" />
+            <h3 className="text-base font-black text-white">Half Day Special Package</h3>
+          </div>
+          <p className="text-slate-300 text-sm mb-3">
+            5 movers · 3 hours · travel included — perfect for large homes or tight deadlines.
+          </p>
+          <div className="flex items-end gap-3 mb-4">
+            <div>
+              <p className="text-xs text-slate-500 line-through">$1,200</p>
+              <p className="text-3xl font-black text-orange-400">$1,020</p>
+              <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
+                <Bitcoin className="h-3 w-3 text-orange-400" />
+                with Bitcoin payment · <span className="text-orange-400 font-bold">15% off</span>
+              </p>
+            </div>
+            <div className="ml-auto text-right">
+              <div className="inline-flex flex-col gap-1 text-[11px]">
+                <span className="bg-green-500/20 text-green-300 border border-green-500/30 rounded-full px-2 py-0.5">⚡ Book Now -5%</span>
+                <span className="bg-orange-500/20 text-orange-300 border border-orange-500/30 rounded-full px-2 py-0.5">₿ Bitcoin -10%</span>
+              </div>
+            </div>
+          </div>
+          <Link href="/promo-half-day">
+            <Button className="w-full bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 font-black border-0 shadow-lg shadow-orange-500/20">
+              View Package &amp; Book <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </Link>
+        </div>
 
         {/* ── OTHER SERVICES ────────────────────────────────────────────── */}
         <div>

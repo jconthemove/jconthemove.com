@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { useCart } from "@/hooks/useCart";
 import { Link, useLocation } from "wouter";
-import { ArrowLeft, Trash2, ShoppingCart, Percent, Shield, Loader2, CreditCard, Gem, Truck, Plus, MapPin, CalendarDays, Heart, Building2, Trophy, Check, Bitcoin, Tag, X, CheckCircle2, Package, Home, DollarSign } from "lucide-react";
+import { ArrowLeft, Trash2, ShoppingCart, Percent, Shield, Loader2, CreditCard, Gem, Truck, Plus, MapPin, CalendarDays, Heart, Building2, Trophy, Check, Bitcoin, Tag, X, CheckCircle2, Package, Home, DollarSign, Zap } from "lucide-react";
 
 interface PromoResult {
   valid: boolean;
@@ -23,7 +23,7 @@ interface PromoResult {
 export default function CartPage() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
-  const { items, addItem, removeItem, clearCart, subtotal, discount, total, hasMultipleItems, isInCart, itemCount } = useCart();
+  const { items, addItem, removeItem, clearCart, subtotal, discount, total, hasMultipleItems, isInCart, itemCount, breakdown } = useCart();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isBtcSubmitting, setIsBtcSubmitting] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
@@ -283,9 +283,9 @@ export default function CartPage() {
         <h1 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
           <ShoppingCart className="h-7 w-7 text-emerald-400" />
           Your Cart
-          {hasMultipleItems && (
+          {discount > 0 && (
             <span className="text-sm bg-emerald-600/30 text-emerald-300 px-3 py-1 rounded-full font-medium">
-              10% Stacking Discount!
+              {breakdown.totalPct}% Savings!
             </span>
           )}
         </h1>
@@ -322,13 +322,31 @@ export default function CartPage() {
               <span>Subtotal ({items.length} item{items.length > 1 ? "s" : ""})</span>
               <span>${subtotal.toFixed(2)}</span>
             </div>
-            {hasMultipleItems && (
+            {breakdown.instantBookDiscount > 0 && (
               <div className="flex justify-between text-emerald-400 font-medium">
                 <span className="flex items-center gap-1">
-                  <Percent className="h-3 w-3" />
-                  10% Stacking Discount (items #2+)
+                  <Zap className="h-3 w-3" />
+                  Instant Book (5% off services)
                 </span>
-                <span>-${discount.toFixed(2)}</span>
+                <span>-${breakdown.instantBookDiscount.toFixed(2)}</span>
+              </div>
+            )}
+            {breakdown.jewelsDiscount > 0 && (
+              <div className="flex justify-between text-purple-400 font-medium">
+                <span className="flex items-center gap-1">
+                  <Gem className="h-3 w-3" />
+                  Jewls Bonus ({Math.min(breakdown.jewelsCount, 2) * 5}% off services)
+                </span>
+                <span>-${breakdown.jewelsDiscount.toFixed(2)}</span>
+              </div>
+            )}
+            {breakdown.multiServiceDiscount > 0 && (
+              <div className="flex justify-between text-blue-400 font-medium">
+                <span className="flex items-center gap-1">
+                  <Package className="h-3 w-3" />
+                  Multi-Service Bundle (10% off each job)
+                </span>
+                <span>-${breakdown.multiServiceDiscount.toFixed(2)}</span>
               </div>
             )}
             {promoApplied && promoResult && promoDiscountAmount > 0 && (
@@ -535,11 +553,18 @@ export default function CartPage() {
           </Card>
         )}
 
-        {/* Add More Items */}
+        {/* Add More Items / Discount Stack Nudge */}
         <Card className="bg-emerald-900/20 border-emerald-500/30 border-dashed mb-6">
           <CardContent className="py-4">
-            <p className="text-emerald-200 text-sm text-center mb-3">
-              {hasMultipleItems ? "10% stacking discount applied to items #2 and beyond!" : "Add another item to unlock 10% stacking discount on additional items!"}
+            <p className="text-emerald-300 text-xs font-bold text-center mb-1">Stack your savings</p>
+            <p className="text-emerald-200 text-xs text-center mb-3">
+              {breakdown.hasInstantBook && breakdown.jewelsCount === 0
+                ? "💎 Add a Jewls item → save an extra 5% on your service!"
+                : breakdown.jewelsCount === 1
+                ? "💎 Add a 2nd Jewls item → save 5% more on your service!"
+                : breakdown.multiService
+                ? `🎉 ${breakdown.totalPct}% savings applied — pay with Bitcoin for 10% more!`
+                : "Book Now (5%) · Add Jewls items (5–10%) · Book 2 services (10%) · Bitcoin (10%)"}
             </p>
             <div className="flex gap-2 justify-center flex-wrap">
               <Link href="/nature-made-jewls">

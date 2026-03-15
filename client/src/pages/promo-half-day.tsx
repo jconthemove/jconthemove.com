@@ -28,6 +28,7 @@ export default function PromoHalfDayPage() {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [addOns, setAddOns] = useState<AddOnItem[]>([]);
   const [showJewelry, setShowJewelry] = useState(false);
+  const [payWithBtc, setPayWithBtc] = useState(false);
   const { addItem: addToCart, isInCart, removeItem: removeFromCart, itemCount: cartCount } = useCart();
   const promoCartId = "promo-half-day";
   const promoInCart = isInCart(promoCartId);
@@ -53,10 +54,12 @@ export default function PromoHalfDayPage() {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
-  const basePrice = 600;
+  const basePrice = 1200;
+  const btcPrice = 1020;   // 15% off with Bitcoin payment
   const addOnsSubtotal = addOns.reduce((sum, item) => sum + item.price, 0);
   const discount = addOns.length > 0 ? Math.round(addOnsSubtotal * 0.1 * 100) / 100 : 0;
-  const totalPrice = basePrice + addOnsSubtotal - discount;
+  const serviceBase = payWithBtc ? btcPrice : basePrice;
+  const totalPrice = serviceBase + addOnsSubtotal - discount;
 
   const toggleAddOn = (item: AddOnItem) => {
     setAddOns((prev) => {
@@ -146,29 +149,57 @@ export default function PromoHalfDayPage() {
           />
         </div>
 
-        <div className="grid md:grid-cols-3 gap-4 mb-6">
+        <div className="grid md:grid-cols-3 gap-4 mb-4">
           <Card className="bg-blue-900/40 border-blue-500/30 text-center">
             <CardContent className="pt-5 pb-4">
               <Users className="h-8 w-8 text-blue-300 mx-auto mb-2" />
-              <p className="text-white font-bold text-lg">3 Movers</p>
-              <p className="text-blue-200 text-sm">Professional crew</p>
+              <p className="text-white font-bold text-lg">5 Movers</p>
+              <p className="text-blue-200 text-sm">Full professional crew</p>
             </CardContent>
           </Card>
           <Card className="bg-amber-900/40 border-amber-500/30 text-center">
             <CardContent className="pt-5 pb-4">
               <Clock className="h-8 w-8 text-amber-300 mx-auto mb-2" />
-              <p className="text-white font-bold text-lg">4 Hours</p>
-              <p className="text-amber-200 text-sm">Travel time included</p>
+              <p className="text-white font-bold text-lg">3 Hours</p>
+              <p className="text-amber-200 text-sm">Travel included</p>
             </CardContent>
           </Card>
-          <Card className="bg-green-900/40 border-green-500/30 text-center">
+          <Card className={`text-center transition-all ${payWithBtc ? "bg-orange-900/50 border-orange-400/50" : "bg-green-900/40 border-green-500/30"}`}>
             <CardContent className="pt-5 pb-4">
-              <Truck className="h-8 w-8 text-green-300 mx-auto mb-2" />
-              <p className="text-white font-bold text-lg">$600 Flat</p>
-              <p className="text-green-200 text-sm">No hidden fees</p>
+              <Truck className={`h-8 w-8 mx-auto mb-2 ${payWithBtc ? "text-orange-300" : "text-green-300"}`} />
+              {payWithBtc ? (
+                <>
+                  <p className="text-slate-400 text-sm line-through">${basePrice}</p>
+                  <p className="text-orange-400 font-black text-xl">${btcPrice}</p>
+                  <p className="text-orange-300 text-xs">₿ Bitcoin · 15% off</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-white font-bold text-lg">${basePrice} Flat</p>
+                  <p className="text-green-200 text-sm">No hidden fees</p>
+                </>
+              )}
             </CardContent>
           </Card>
         </div>
+
+        {/* BTC toggle banner */}
+        <button
+          onClick={() => setPayWithBtc(p => !p)}
+          className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border mb-6 transition-all text-sm ${
+            payWithBtc
+              ? "border-orange-500 bg-orange-500/20 text-orange-300"
+              : "border-orange-500/30 bg-orange-950/20 text-orange-400 hover:bg-orange-950/30"
+          }`}
+        >
+          <span className="flex items-center gap-2 font-bold">
+            <Bitcoin className="h-4 w-4" />
+            Pay with Bitcoin — Save 15% (${basePrice - btcPrice} off)
+          </span>
+          <span className={`text-xs font-black px-2.5 py-1 rounded-full ${payWithBtc ? "bg-orange-500 text-white" : "bg-orange-500/30 text-orange-300"}`}>
+            {payWithBtc ? "✓ Selected" : "Tap to select"}
+          </span>
+        </button>
 
         {/* Add-On Items Section */}
         <Card className="bg-gradient-to-br from-purple-950/80 to-indigo-950/70 border-purple-500/40 shadow-xl mb-6">
@@ -308,8 +339,17 @@ export default function PromoHalfDayPage() {
                   </div>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between text-slate-300">
-                      <span>Half Day Move</span>
-                      <span className="text-white font-medium">${basePrice.toFixed(2)}</span>
+                      <span>Half Day Move (5 Movers · 3 hrs)</span>
+                      <span className="font-medium">
+                        {payWithBtc ? (
+                          <>
+                            <span className="line-through text-slate-500 mr-1">${basePrice}</span>
+                            <span className="text-orange-400">${btcPrice}</span>
+                          </>
+                        ) : (
+                          <span className="text-white">${basePrice}</span>
+                        )}
+                      </span>
                     </div>
                     {addOns.map((item) => (
                       <div key={item.id} className="flex justify-between items-center text-slate-300">
@@ -532,8 +572,8 @@ export default function PromoHalfDayPage() {
                   } else {
                     addToCart({
                       id: promoCartId,
-                      name: "Half Day Loading/Unloading - 3 Movers, 4 Hours",
-                      price: 600,
+                      name: `Half Day Package — 5 Movers · 3 Hours${payWithBtc ? " (₿ BTC -15%)" : ""}`,
+                      price: serviceBase,
                       image: promoImage,
                       type: "promo",
                     });

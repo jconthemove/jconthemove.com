@@ -7,6 +7,17 @@ export interface CartItem {
   image: string;
   type: "service" | "jewelry" | "promo" | "sponsor" | "shop" | "tip";
   quantity: number;
+  bookNow?: boolean;
+}
+
+export interface DiscountBreakdown {
+  instantBookDiscount: number;
+  jewelsDiscount: number;
+  multiServiceDiscount: number;
+  jewelsCount: number;
+  hasInstantBook: boolean;
+  multiService: boolean;
+  totalPct: number;
 }
 
 interface CartContextType {
@@ -20,6 +31,7 @@ interface CartContextType {
   discount: number;
   total: number;
   hasMultipleItems: boolean;
+  breakdown: DiscountBreakdown;
 }
 
 const CartContext = createContext<CartContextType | null>(null);
@@ -41,15 +53,52 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const clearCart = useCallback(() => setItems([]), []);
 
-  const isInCart = useCallback((id: string) => items.some((i) => i.id === id), [items]);
+  const isInCart = useCallback(
+    (id: string) => items.some((i) => i.id === id),
+    [items]
+  );
 
   const subtotal = items.reduce((sum, item) => sum + item.price, 0);
   const hasMultipleItems = items.length > 1;
-  const nonPromoItems = items.filter(i => i.type !== "promo");
-  const discountableItems = nonPromoItems.slice(1);
-  const discountableSubtotal = discountableItems.reduce((sum, item) => sum + item.price, 0);
-  const discount = hasMultipleItems ? Math.round(discountableSubtotal * 0.1 * 100) / 100 : 0;
-  const total = subtotal - discount;
+
+  const serviceItems = items.filter(
+    (i) => i.type === "service" || i.type === "promo"
+  );
+  const jewelryItems = items.filter((i) => i.type === "jewelry");
+  const serviceSubtotal = serviceItems.reduce((s, i) => s + i.price, 0);
+
+  const hasInstantBook = serviceItems.some((i) => i.bookNow);
+  const multiService = serviceItems.length >= 2;
+  const jewelsCount = jewelryItems.length;
+
+  const instantBookDiscount = hasInstantBook
+    ? Math.round(serviceSubtotal * 0.05 * 100) / 100
+    : 0;
+  const jewelsDiscount =
+    jewelsCount > 0
+      ? Math.round(serviceSubtotal * (Math.min(jewelsCount, 2) * 0.05) * 100) / 100
+      : 0;
+  const multiServiceDiscount = multiService
+    ? Math.round(serviceSubtotal * 0.1 * 100) / 100
+    : 0;
+
+  const discount = instantBookDiscount + jewelsDiscount + multiServiceDiscount;
+  const total = Math.max(0, subtotal - discount);
+
+  const totalPct =
+    (hasInstantBook ? 5 : 0) +
+    Math.min(jewelsCount, 2) * 5 +
+    (multiService ? 10 : 0);
+
+  const breakdown: DiscountBreakdown = {
+    instantBookDiscount,
+    jewelsDiscount,
+    multiServiceDiscount,
+    jewelsCount,
+    hasInstantBook,
+    multiService,
+    totalPct,
+  };
 
   return (
     <CartContext.Provider
@@ -64,6 +113,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         discount,
         total,
         hasMultipleItems,
+        breakdown,
       }}
     >
       {children}
@@ -73,8 +123,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
 export function useCart() {
   const context = useContext(CartContext);
-  if (!context) {
-    throw new Error("useCart must be used within a CartProvider");
-  }
+  if (!context) throw new Error("useCart must be used within a CartProvider");
   return context;
 }
