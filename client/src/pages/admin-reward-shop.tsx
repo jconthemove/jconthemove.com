@@ -78,6 +78,36 @@ function formatTokens(n: number) {
   return n.toLocaleString();
 }
 
+function AllSettingRow({ setting, saveRateMutation }: { setting: any; saveRateMutation: any }) {
+  const [val, setVal] = useState<string>(parseFloat(setting.tokenAmount).toString());
+  const [dirty, setDirty] = useState(false);
+  const handleChange = (v: string) => { setVal(v); setDirty(true); };
+  const handleSave = () => saveRateMutation.mutate({ key: setting.settingKey, value: val });
+  return (
+    <div className="flex items-center gap-3 py-2 border-b border-border/40 last:border-0">
+      <div className="flex-1 min-w-0">
+        <div className="text-xs font-semibold truncate">{setting.label}</div>
+        {setting.description && <div className="text-[10px] text-muted-foreground truncate">{setting.description}</div>}
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <Input
+          type="number" min={0} step={1}
+          value={val}
+          onChange={e => handleChange(e.target.value)}
+          className="h-8 w-24 text-right text-xs font-bold text-yellow-400 bg-background border-border"
+        />
+        <span className="text-[10px] text-muted-foreground">JCMOVES</span>
+        <Button
+          size="sm" variant={dirty ? "default" : "outline"}
+          className={dirty ? "h-7 text-xs bg-yellow-500 text-black hover:bg-yellow-400 font-bold" : "h-7 text-xs"}
+          disabled={!dirty || saveRateMutation.isPending}
+          onClick={handleSave}
+        >Save</Button>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminRewardShopPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -831,20 +861,13 @@ export default function AdminRewardShopPage() {
               <p className="text-[10px] text-muted-foreground mt-2">* Est. value at $0.01 per JCMOVES. Does not include booking reward (+{bookingReward} JCMOVES flat).</p>
             </div>
 
-            {/* All Settings Reference */}
+            {/* All Settings — Editable */}
             <div className="bg-card border border-border rounded-xl p-5">
-              <h3 className="text-sm font-bold mb-3">All Reward Settings</h3>
-              <div className="space-y-2">
+              <h3 className="text-sm font-bold mb-1">All Reward Settings</h3>
+              <p className="text-[10px] text-muted-foreground mb-4">Edit any value and hit Save to update it live across the entire system.</p>
+              <div className="space-y-3">
                 {(rewardSettingsData ?? []).map((s: any) => (
-                  <div key={s.settingKey} className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0">
-                    <div>
-                      <div className="text-xs font-semibold">{s.label}</div>
-                      <div className="text-[10px] text-muted-foreground">{s.description}</div>
-                    </div>
-                    <div className={`text-sm font-bold ${s.isActive ? "text-yellow-400" : "text-muted-foreground line-through"}`}>
-                      {parseFloat(s.tokenAmount).toLocaleString()} JCMOVES
-                    </div>
-                  </div>
+                  <AllSettingRow key={s.settingKey} setting={s} saveRateMutation={saveRateMutation} />
                 ))}
               </div>
             </div>

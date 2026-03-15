@@ -6018,10 +6018,12 @@ Thank you for your business!
   app.put("/api/admin/reward-settings/:key", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
     try {
       const { key } = req.params;
-      const { tokenAmount, isActive } = req.body;
+      const { tokenAmount: rawAmount, isActive } = req.body;
       const userId = (req.session as any).userId;
-      
-      if (typeof tokenAmount !== 'number' || tokenAmount < 0) {
+
+      // Accept both number and numeric string from the client
+      const tokenAmount = typeof rawAmount === 'string' ? parseFloat(rawAmount) : Number(rawAmount);
+      if (isNaN(tokenAmount) || tokenAmount < 0) {
         return res.status(400).json({ error: "Token amount must be a positive number" });
       }
 
