@@ -783,120 +783,134 @@ export default function ServicesPage() {
           )}
         </div>
 
-        {/* ── LIVE ESTIMATE ─────────────────────────────────────────────── */}
-        {selectedCrew ? (
-          <div className="rounded-2xl border-2 border-blue-500/50 bg-gradient-to-br from-blue-900/30 to-slate-900 p-6 shadow-[0_0_40px_rgba(59,130,246,0.15)] sticky bottom-4">
-            <div className="flex items-center gap-2 mb-4">
-              <DollarSign className="h-5 w-5 text-blue-400" />
-              <h3 className="text-lg font-black text-white">Your Estimate</h3>
-              <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30 text-xs ml-auto">LIVE PREVIEW</Badge>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
-              <div className="bg-slate-800/60 rounded-lg p-3">
-                <p className="text-slate-400 text-xs mb-0.5">Crew</p>
-                <p className="text-white font-bold">{selectedCrew} Mover{selectedCrew > 1 ? "s" : ""}</p>
-              </div>
-              <div className="bg-slate-800/60 rounded-lg p-3">
-                <p className="text-slate-400 text-xs mb-0.5">Service</p>
-                <p className="text-white font-bold">{serviceType === "truck" ? "Truck + Labor" : "Labor Only"}</p>
-              </div>
-              <div className="bg-slate-800/60 rounded-lg p-3">
-                <p className="text-slate-400 text-xs mb-0.5">Rate</p>
-                <p className="text-white font-bold">${hourlyRate}/hr</p>
-              </div>
-              <div className="bg-slate-800/60 rounded-lg p-3">
-                <p className="text-slate-400 text-xs mb-0.5">Minimum</p>
-                <p className="text-white font-bold">{minHours} hours</p>
-              </div>
-            </div>
-
-            {addOnTotal > 0 && (
-              <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-3 mb-4">
-                <p className="text-xs text-orange-400 font-semibold mb-1">Add-ons selected</p>
-                {serviceAddons.filter(a => addOns[a.id]).map(a => (
-                  <div key={a.id} className="flex justify-between text-xs text-slate-300">
-                    <span>{a.label}</span><span>+${a.price}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="border-t border-slate-700 pt-4 mb-4">
-              <p className="text-slate-400 text-sm mb-1">Estimated Total Range</p>
-              <p className="text-3xl font-black text-white">
-                ${estLow.toLocaleString()} – <span className="text-blue-300">${estHigh.toLocaleString()}</span>
-              </p>
-              <p className="text-xs text-slate-500 mt-1">Based on {minHours}–{minHours + 2} hrs · Final price depends on actual time</p>
-            </div>
-
-            {/* ── Discount Stack Preview ──────────────────────────────── */}
-            <div className="bg-slate-900/60 border border-slate-700 rounded-xl p-4 mb-4 space-y-2">
-              <p className="text-xs font-bold text-slate-300 mb-3 flex items-center gap-1.5">
-                <Zap className="h-3.5 w-3.5 text-yellow-400" />
-                Savings you can stack
-              </p>
-
-              {[
-                { label: "⚡ Book Now",            pct: 5,  active: true,  note: "instant discount" },
-                { label: "💎 Add 1 Jewls item",    pct: 5,  active: breakdown.jewelsCount >= 1, note: "from Nature Made Jewls" },
-                { label: "💎 Add 2 Jewls items",   pct: 10, active: breakdown.jewelsCount >= 2, note: "max jewels bonus" },
-                { label: "📦 Book 2 services",     pct: 10, active: breakdown.multiService, note: "applied to both jobs" },
-                { label: "₿ Pay with Bitcoin",     pct: 10, active: false, note: "at checkout" },
-              ].map(({ label, pct, active, note }) => (
-                <div key={label} className={`flex items-center justify-between text-xs ${active ? "text-green-300" : "text-slate-500"}`}>
-                  <span className="flex items-center gap-1.5">
-                    {active
-                      ? <Check className="h-3 w-3 text-green-400 shrink-0" />
-                      : <div className="h-3 w-3 rounded-full border border-slate-600 shrink-0" />}
-                    {label}
-                    <span className={`text-[10px] ${active ? "text-green-500/70" : "text-slate-600"}`}>· {note}</span>
-                  </span>
-                  <span className={`font-bold ${active ? "text-green-400" : "text-slate-600"}`}>-{pct}%</span>
-                </div>
-              ))}
-
-              <div className="border-t border-slate-700 pt-2 mt-1 flex justify-between text-xs">
-                <span className="text-slate-400">Max stackable savings</span>
-                <span className="text-green-400 font-black">up to 25% off</span>
-              </div>
-            </div>
-
-            {/* ── Action Buttons ──────────────────────────────────────── */}
-            <div className="space-y-2.5">
-              <Button
-                onClick={handleBookNow}
-                className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-black text-base h-13 shadow-lg shadow-green-500/25 border-0 flex items-center justify-between px-5"
-              >
-                <span className="flex items-center gap-2">
-                  <ShoppingCart className="h-5 w-5" />
-                  Book Now — Save 5%
-                </span>
-                <span className="text-xs font-medium opacity-80 bg-white/20 px-2 py-0.5 rounded-full">
-                  Save ${Math.round(estLow * 0.05)}
-                </span>
-              </Button>
-
-              <Link href={bookUrl}>
-                <Button
-                  variant="outline"
-                  className="w-full border-slate-600 text-slate-200 hover:bg-slate-800 hover:text-white font-bold h-11"
-                >
-                  Request Quote — Free, No Commitment
-                  <ChevronRight className="h-4 w-4 ml-auto" />
-                </Button>
-              </Link>
-            </div>
-
-            <p className="text-center text-xs text-slate-500 mt-3">
-              Book Now locks in 5% · Add Jewls items, 2nd service, or pay with Bitcoin to stack up to 25% off
-            </p>
-          </div>
-        ) : (
+        {/* ── PLACEHOLDER when no crew selected ─────────────────────────── */}
+        {!selectedCrew && (
           <div className="rounded-2xl border-2 border-dashed border-slate-700 p-8 text-center">
             <Users className="h-10 w-10 text-slate-600 mx-auto mb-3" />
             <p className="text-slate-400 font-semibold">Select a crew above to see your instant estimate</p>
             <p className="text-slate-600 text-sm mt-1">Choose 1–5 movers to unlock pricing</p>
+          </div>
+        )}
+
+        {/* ── LIVE ESTIMATE — fixed solid bottom sheet ───────────────────── */}
+        {selectedCrew && (
+          <div className="fixed bottom-0 left-0 right-0 z-50 max-h-[88vh] overflow-y-auto shadow-[0_-8px_40px_rgba(0,0,0,0.8)]">
+            {/* solid opaque container */}
+            <div className="bg-slate-950 border-t-2 border-blue-500 w-full max-w-2xl mx-auto px-5 pt-4 pb-6 rounded-t-2xl">
+
+              {/* header row */}
+              <div className="flex items-center gap-2 mb-4">
+                <DollarSign className="h-5 w-5 text-blue-400 shrink-0" />
+                <h3 className="text-lg font-black text-white">Your Estimate</h3>
+                <Badge className="bg-blue-500/20 text-blue-300 border border-blue-500/30 text-xs ml-2">LIVE PREVIEW</Badge>
+                <button
+                  onClick={() => setSelectedCrew(null)}
+                  className="ml-auto p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+                  aria-label="Close estimate"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* crew details grid */}
+              <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
+                <div className="bg-slate-800 rounded-lg p-3">
+                  <p className="text-slate-400 text-xs mb-0.5">Crew</p>
+                  <p className="text-white font-bold">{selectedCrew} Mover{selectedCrew > 1 ? "s" : ""}</p>
+                </div>
+                <div className="bg-slate-800 rounded-lg p-3">
+                  <p className="text-slate-400 text-xs mb-0.5">Service</p>
+                  <p className="text-white font-bold">{serviceType === "truck" ? "Truck + Labor" : "Labor Only"}</p>
+                </div>
+                <div className="bg-slate-800 rounded-lg p-3">
+                  <p className="text-slate-400 text-xs mb-0.5">Rate</p>
+                  <p className="text-white font-bold">${hourlyRate}/hr</p>
+                </div>
+                <div className="bg-slate-800 rounded-lg p-3">
+                  <p className="text-slate-400 text-xs mb-0.5">Minimum</p>
+                  <p className="text-white font-bold">{minHours} hours</p>
+                </div>
+              </div>
+
+              {addOnTotal > 0 && (
+                <div className="bg-orange-950 border border-orange-500/40 rounded-lg p-3 mb-4">
+                  <p className="text-xs text-orange-400 font-semibold mb-1">Add-ons selected</p>
+                  {serviceAddons.filter(a => addOns[a.id]).map(a => (
+                    <div key={a.id} className="flex justify-between text-xs text-slate-300">
+                      <span>{a.label}</span><span>+${a.price}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* total */}
+              <div className="border-t border-slate-700 pt-4 mb-4">
+                <p className="text-slate-400 text-sm mb-1">Estimated Total Range</p>
+                <p className="text-3xl font-black text-white">
+                  ${estLow.toLocaleString()} – <span className="text-blue-300">${estHigh.toLocaleString()}</span>
+                </p>
+                <p className="text-xs text-slate-500 mt-1">Based on {minHours}–{minHours + 2} hrs · Final price depends on actual time</p>
+              </div>
+
+              {/* ── Discount Stack Preview ──────────────────────────────── */}
+              <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 mb-4 space-y-2">
+                <p className="text-xs font-bold text-slate-300 mb-3 flex items-center gap-1.5">
+                  <Zap className="h-3.5 w-3.5 text-yellow-400" />
+                  Savings you can stack
+                </p>
+                {[
+                  { label: "⚡ Book Now",            pct: 5,  active: true,  note: "instant discount" },
+                  { label: "💎 Add 1 Jewls item",    pct: 5,  active: breakdown.jewelsCount >= 1, note: "from Nature Made Jewls" },
+                  { label: "💎 Add 2 Jewls items",   pct: 10, active: breakdown.jewelsCount >= 2, note: "max jewels bonus" },
+                  { label: "📦 Book 2 services",     pct: 10, active: breakdown.multiService, note: "applied to both jobs" },
+                  { label: "₿ Pay with Bitcoin",     pct: 10, active: false, note: "at checkout" },
+                ].map(({ label, pct, active, note }) => (
+                  <div key={label} className={`flex items-center justify-between text-xs ${active ? "text-green-300" : "text-slate-500"}`}>
+                    <span className="flex items-center gap-1.5">
+                      {active
+                        ? <Check className="h-3 w-3 text-green-400 shrink-0" />
+                        : <div className="h-3 w-3 rounded-full border border-slate-600 shrink-0" />}
+                      {label}
+                      <span className={`text-[10px] ${active ? "text-green-500/70" : "text-slate-600"}`}>· {note}</span>
+                    </span>
+                    <span className={`font-bold ${active ? "text-green-400" : "text-slate-600"}`}>-{pct}%</span>
+                  </div>
+                ))}
+                <div className="border-t border-slate-700 pt-2 mt-1 flex justify-between text-xs">
+                  <span className="text-slate-400">Max stackable savings</span>
+                  <span className="text-green-400 font-black">up to 25% off</span>
+                </div>
+              </div>
+
+              {/* ── Action Buttons ──────────────────────────────────────── */}
+              <div className="space-y-2.5">
+                <Button
+                  onClick={handleBookNow}
+                  className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-black text-base h-13 shadow-lg shadow-green-500/25 border-0 flex items-center justify-between px-5"
+                >
+                  <span className="flex items-center gap-2">
+                    <ShoppingCart className="h-5 w-5" />
+                    Book Now — Save 5%
+                  </span>
+                  <span className="text-xs font-medium opacity-80 bg-white/20 px-2 py-0.5 rounded-full">
+                    Save ${Math.round(estLow * 0.05)}
+                  </span>
+                </Button>
+                <Link href={bookUrl}>
+                  <Button
+                    variant="outline"
+                    className="w-full border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700 hover:text-white font-bold h-11"
+                  >
+                    Request Quote — Free, No Commitment
+                    <ChevronRight className="h-4 w-4 ml-auto" />
+                  </Button>
+                </Link>
+              </div>
+
+              <p className="text-center text-xs text-slate-500 mt-3">
+                Book Now locks in 5% · Add Jewls items, 2nd service, or pay with Bitcoin to stack up to 25% off
+              </p>
+            </div>
           </div>
         )}
 
