@@ -219,6 +219,39 @@ export default function LeadDetailPage() {
     },
   });
 
+  const advanceToStep = useMutation({
+    mutationFn: async (targetStep: number) => {
+      let newStatus = lead?.status;
+      let updateData: any = {};
+      switch (targetStep) {
+        case 2:
+          newStatus = "available";
+          if (tokenAllocation) updateData.tokenAllocation = parseFloat(tokenAllocation);
+          break;
+        case 3:
+          newStatus = "completed";
+          updateData.completedAt = new Date().toISOString();
+          break;
+      }
+      updateData = { ...updateData, status: newStatus };
+      return await apiRequest("PATCH", `/api/leads/${params?.id}`, updateData);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      toast({ title: "Step completed", description: "Job workflow advanced successfully" });
+      setIsCheckingIn(false);
+    },
+  });
+
+  const sendReminder = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("POST", `/api/leads/${params?.id}/reminder`, {});
+    },
+    onSuccess: () => {
+      toast({ title: "Reminder sent", description: "Customer has been notified about tomorrow's move" });
+    },
+  });
+
   const handleSave = () => {
     const formData = form.getValues();
     updateLead.mutate({
@@ -342,52 +375,6 @@ export default function LeadDetailPage() {
   };
 
   const currentStep = getCurrentStep();
-
-  const advanceToStep = useMutation({
-    mutationFn: async (targetStep: number) => {
-      let newStatus = lead?.status;
-      let updateData: any = {};
-
-      switch (targetStep) {
-        case 2:
-          newStatus = "available";
-          // Persist token allocation when making job available
-          if (tokenAllocation) {
-            updateData.tokenAllocation = parseFloat(tokenAllocation);
-          }
-          break;
-        case 3:
-          newStatus = "completed";
-          // Record completion timestamp
-          updateData.completedAt = new Date().toISOString();
-          break;
-      }
-
-      updateData = { ...updateData, status: newStatus };
-      return await apiRequest("PATCH", `/api/leads/${params?.id}`, updateData);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
-      toast({
-        title: "Step completed",
-        description: "Job workflow advanced successfully",
-      });
-      setIsCheckingIn(false);
-    },
-  });
-
-  const sendReminder = useMutation({
-    mutationFn: async () => {
-      // This would integrate with email/SMS service
-      return await apiRequest("POST", `/api/leads/${params?.id}/reminder`, {});
-    },
-    onSuccess: () => {
-      toast({
-        title: "Reminder sent",
-        description: "Customer has been notified about tomorrow's move",
-      });
-    },
-  });
 
   const requestReview = (platform: string) => {
     const customerEmail = lead?.email;
