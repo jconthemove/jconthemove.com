@@ -664,16 +664,42 @@ export default function CartPage() {
                 </Card>
               )}
 
-              <div className="flex items-start space-x-3">
-                <Checkbox
-                  id="rewards-enroll"
-                  checked={form.enrollRewards}
-                  onCheckedChange={(checked) => setForm(prev => ({ ...prev, enrollRewards: checked === true }))}
-                  className="mt-1 border-emerald-500 data-[state=checked]:bg-emerald-600"
-                />
-                <label htmlFor="rewards-enroll" className="text-sm text-emerald-300 cursor-pointer leading-relaxed">
-                  Enroll in <span className="font-bold text-emerald-400">JCMOVES Rewards</span> to earn tokens on this order!
-                </label>
+              {/* JCMOVES Rewards Enrollment */}
+              <div
+                className={`rounded-xl border transition-all cursor-pointer ${form.enrollRewards ? "border-emerald-500/50 bg-emerald-950/40" : "border-slate-600/40 bg-slate-800/40"}`}
+                onClick={() => setForm(prev => ({ ...prev, enrollRewards: !prev.enrollRewards }))}
+              >
+                <div className="p-3">
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      id="rewards-enroll"
+                      checked={form.enrollRewards}
+                      onCheckedChange={(checked) => setForm(prev => ({ ...prev, enrollRewards: checked === true }))}
+                      className="mt-0.5 border-emerald-500 data-[state=checked]:bg-emerald-600 shrink-0"
+                      onClick={e => e.stopPropagation()}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-bold text-emerald-300">Join JCMOVES Rewards — free</span>
+                        <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full px-2 py-0.5 font-bold uppercase tracking-wider">Earn on every order</span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">50 JCMOVES per $1 spent · redeem for discounts, prizes &amp; lottery tickets</p>
+                      {finalTotal > 0 && (
+                        <div className="mt-2 flex items-center gap-1.5">
+                          <Zap className="h-3.5 w-3.5 text-yellow-400 shrink-0" />
+                          <span className="text-sm font-black text-yellow-400">{Math.round(finalTotal * 50).toLocaleString()} JCMOVES</span>
+                          <span className="text-xs text-slate-400">earned on this order</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {form.enrollRewards && (
+                    <div className="mt-2 pt-2 border-t border-emerald-500/20 flex items-center gap-1.5">
+                      <Check className="h-3 w-3 text-emerald-400 shrink-0" />
+                      <p className="text-xs text-emerald-400">Your rewards account will be created with this order. Tokens credited after service completion.</p>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-start space-x-3">

@@ -499,6 +499,36 @@ export default function QuoteForm({
           </p>
         </div>
       )}
+
+      {!isEmployee && (
+        <div className="mx-6 mb-6 rounded-xl overflow-hidden border border-orange-500/25"
+          style={{ background: "linear-gradient(135deg,#0c0a09 0%,#1a1000 60%,#0c0a09 100%)" }}>
+          <div className="px-4 pt-3 pb-1 flex items-center gap-2 border-b border-orange-500/15">
+            <span className="text-base">🏆</span>
+            <span className="text-sm font-black text-white tracking-tight">Earn JCMOVES on This Service</span>
+          </div>
+          <div className="px-4 py-3 space-y-2">
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-black text-yellow-400">50</span>
+              <span className="text-sm text-orange-300/80 font-medium">JCMOVES per $1 spent</span>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Every dollar you spend on moving, junk removal, or any service earns JCMOVES tokens — redeemable for discounts, Quantum Spin prizes, and lottery tickets. Free to join.
+            </p>
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {["10% off coupons", "Quantum Spin prizes", "Lottery tickets", "Cash-back credits"].map(b => (
+                <span key={b} className="text-[10px] bg-orange-950/60 text-orange-300 border border-orange-500/20 rounded-full px-2 py-0.5 font-medium">{b}</span>
+              ))}
+            </div>
+            <a
+              href="/login"
+              className="mt-2 flex items-center justify-center gap-2 w-full py-2 rounded-lg bg-orange-500/15 border border-orange-500/30 text-orange-400 text-xs font-bold hover:bg-orange-500/25 transition-colors"
+            >
+              <span>Create a free account to start earning →</span>
+            </a>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }
