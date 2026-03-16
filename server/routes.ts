@@ -1022,6 +1022,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           metadata: { reason: 'New employee welcome bonus' }
         });
         console.log(`🎉 Awarded ${WELCOME_BONUS} JCMOVES welcome bonus to new employee ${newUser.email}`);
+        await awardTierPoints(newUser.id, 'signup');
       } catch (bonusErr) {
         console.error('Welcome bonus error (non-blocking):', bonusErr);
       }
@@ -1367,6 +1368,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           metadata: { reason: 'New customer welcome bonus' }
         });
         console.log(`🎉 Awarded ${CUSTOMER_WELCOME_BONUS} JCMOVES welcome bonus to new customer ${newUser.email}`);
+        await awardTierPoints(newUser.id, 'signup');
       } catch (bonusErr) {
         console.error('Welcome bonus error (non-blocking):', bonusErr);
       }
@@ -3263,6 +3265,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           rewardMessage = ` You earned ${bonusTokens} JCMOVES for creating this job!`;
           console.log(`🎁 Awarded ${bonusTokens} JCMOVES to ${employeeId} for lead creation (${todayRewards.length + 1}/${dailyCap} today)`);
+          await awardTierPoints(employeeId, 'employee_lead_created');
         } else {
           rewardMessage = ` (Daily reward cap reached - ${dailyCap} leads)`;
           console.log(`⚠️ Employee ${employeeId} hit daily lead creation cap (${dailyCap})`);
@@ -4079,6 +4082,7 @@ Thank you for your business!
                   metadata: { jobId: id, serviceType: updatedLead.serviceType, flat: true }
                 });
                 console.log(`🏆 Awarded ${flatReward} JCMOVES (job completion flat reward) to ${memberUser.email}`);
+                await awardTierPoints(memberId, 'employee_job_done');
                 // Push notification for employee job completion reward
                 try {
                   const { notificationService: pushSvc } = await import('./services/notification');
@@ -4164,6 +4168,10 @@ Thank you for your business!
                   metadata: { jobId: id, serviceType: updatedLead.serviceType, jobPrice, earnRate, tokensPerDollar: earnRate }
                 });
                 console.log(`🎁 Awarded ${LOYALTY_REWARD} JCMOVES (${earnRate}/$ × $${jobPrice}) to customer ${customer.email}`);
+                // Tier points: job completion + spending bonus
+                await awardTierPoints(customer.id, 'job_completed');
+                const spentHundreds = Math.floor(jobPrice / 100);
+                if (spentHundreds > 0) await awardTierPoints(customer.id, 'per_100_spent', spentHundreds);
 
                 if (customer.referredByUserId) {
                   const prevLoyalty = await db.select().from(rewards)
@@ -4368,6 +4376,10 @@ Thank you for your business!
                         metadata: { jobId: id, serviceType: updatedLead.serviceType, jobPrice, earnRate: earnRate2, tokensPerDollar: earnRate2 }
                       });
                       console.log(`🎁 Awarded ${LOYALTY_REWARD} JCMOVES (${earnRate2}/$ × $${jobPrice}) to customer ${customer.email}`);
+                      // Tier points: job completion + spending bonus
+                      await awardTierPoints(customer.id, 'job_completed');
+                      const spentHundreds2 = Math.floor(jobPrice / 100);
+                      if (spentHundreds2 > 0) await awardTierPoints(customer.id, 'per_100_spent', spentHundreds2);
 
                       // Referral bonus on first completed job
                       if (customer.referredByUserId) {
@@ -5558,6 +5570,10 @@ Thank you for your business!
               metadata: { jobId: id, serviceType: updatedLead.serviceType, jobPrice, earnRate: earnRate3, tokensPerDollar: earnRate3 }
             });
             console.log(`🎁 Awarded ${LOYALTY_REWARD} JCMOVES (${earnRate3}/$ × $${jobPrice}) to customer ${customer.email}`);
+            // Tier points: job completion + spending bonus
+            await awardTierPoints(customer.id, 'job_completed');
+            const spentHundreds3 = Math.floor(jobPrice / 100);
+            if (spentHundreds3 > 0) await awardTierPoints(customer.id, 'per_100_spent', spentHundreds3);
 
             // Referral bonus: Award tokens to referrer on first completed job
             if (customer.referredByUserId) {
@@ -6124,6 +6140,9 @@ Thank you for your business!
             metadata: { referrerUserId: result.referrerId, referralCode }
           });
           console.log(`🎁 Awarded ${REFERRAL_SIGNUP_BONUS} JCMOVES referral signup bonus to new user ${userId}`);
+          // Award tier points to both the referrer and new user
+          await awardTierPoints(result.referrerId, 'referral_confirmed');
+          await awardTierPoints(userId, 'signup');
         } catch (rewardError) {
           console.error("Error awarding referral bonus:", rewardError);
         }
@@ -7813,6 +7832,7 @@ Thank you for your business!
       const result = await gamificationService.performDailyCheckIn(userId);
       
       if (result.success) {
+        await awardTierPoints(userId, 'daily_checkin');
         res.json({
           success: true,
           points: result.points,
@@ -9469,6 +9489,9 @@ Thank you for your business!
           .set({ lastScriptureClaimDate: today, scriptureStreak: newStreak })
           .where(eq(miningSessions.id, session.id));
       }
+
+      // Award tier points for daily scripture
+      await awardTierPoints(userId, 'daily_scripture');
 
       res.json({ success: true, amount: rewardAmount, streak: newStreak, streakBonus });
     } catch (error: any) {

@@ -15,7 +15,7 @@ import {
   Wrench, Crown, ShoppingBag, History, Calculator, Users, TrendingUp, Info, Flame, Sparkles,
   Copy, Check, Ticket, Coffee, Tag, CreditCard, ExternalLink
 } from "lucide-react";
-import { LOYALTY_TIERS, calculateJCMovesReward, getNextTier, formatTokens as fmtTokens, type LoyaltyTierKey } from "@/lib/loyalty";
+import { LOYALTY_TIERS, calculateJCMovesReward, getNextTier, getTierProgress, TIER_POINT_WAYS, formatTokens as fmtTokens, type LoyaltyTierKey } from "@/lib/loyalty";
 import { SpinWheelDialog } from "@/components/spin-wheel";
 import { LotteryPanel } from "@/components/lottery-panel";
 import { ShopSwitcher } from "@/components/shop-switcher";
@@ -356,13 +356,11 @@ export default function RewardsMarketplacePage() {
   }, []);
 
   const userTier = (((user as any)?.loyaltyTier) || 'bronze') as LoyaltyTierKey;
-  const totalSpend = parseFloat((user as any)?.totalCompletedSpend || '0');
+  const tierPoints = parseInt((user as any)?.tierPoints || '0', 10);
   const tierConfig = LOYALTY_TIERS[userTier];
   const nextTierKey = getNextTier(userTier);
   const nextTierConfig = nextTierKey ? LOYALTY_TIERS[nextTierKey] : null;
-  const tierProgress = nextTierConfig
-    ? Math.min(100, Math.round(((totalSpend - tierConfig.minSpend) / (nextTierConfig.minSpend - tierConfig.minSpend)) * 100))
-    : 100;
+  const tierProgress = getTierProgress(tierPoints, userTier);
   const simTokens = useMemo(() => {
     const v = parseFloat(simAmount);
     if (!v || v <= 0) return null;
@@ -542,29 +540,50 @@ export default function RewardsMarketplacePage() {
                 <h1 className="text-xl font-bold">JCMOVES Rewards Marketplace</h1>
               </div>
               <p className="text-sm text-muted-foreground">Spend your tokens on real local rewards, service credits & gift cards</p>
-              {/* Tier Progress */}
-              <div className={`mt-3 rounded-lg border ${tierConfig.border} ${tierConfig.bg} px-3 py-2 inline-flex flex-col gap-1.5 min-w-[220px]`}>
+              {/* Tier Progress — activity-based */}
+              <div className={`mt-3 rounded-lg border ${tierConfig.border} ${tierConfig.bg} px-3 py-2.5 flex flex-col gap-1.5 max-w-sm`}>
                 <div className="flex items-center justify-between gap-4">
-                  <span className={`text-xs font-semibold flex items-center gap-1 ${tierConfig.color}`}>
+                  <span className={`text-xs font-bold flex items-center gap-1 ${tierConfig.color}`}>
                     {tierConfig.emoji} {tierConfig.label} Member
                     <span className="text-[10px] font-normal text-muted-foreground ml-1">· {Math.round(tierConfig.rate * 100)}% back</span>
                   </span>
                   {nextTierConfig && (
-                    <span className="text-[10px] text-muted-foreground">{nextTierConfig.emoji} {nextTierConfig.label} at ${nextTierConfig.minSpend.toLocaleString()}</span>
+                    <span className={`text-[10px] font-medium ${nextTierConfig.color}`}>{nextTierConfig.emoji} {nextTierConfig.label} at {nextTierConfig.minPoints.toLocaleString()} pts</span>
                   )}
                 </div>
                 {nextTierConfig && (
                   <>
                     <Progress value={tierProgress} className="h-1.5" />
                     <p className="text-[10px] text-muted-foreground">
-                      ${totalSpend.toFixed(0)} spent · ${(nextTierConfig.minSpend - totalSpend).toFixed(0)} more to unlock {nextTierConfig.label}
+                      {tierPoints.toLocaleString()} pts · {(nextTierConfig.minPoints - tierPoints).toLocaleString()} more to unlock {nextTierConfig.label}
                     </p>
                   </>
                 )}
                 {!nextTierConfig && (
-                  <p className="text-[10px] text-purple-400">You're at the top tier — enjoy 100 JCMOVES per $1 spent!</p>
+                  <p className="text-[10px] text-purple-400 font-medium">👑 Max tier reached — enjoy 100 JCMOVES per $1!</p>
                 )}
               </div>
+
+              {/* How to earn tier points */}
+              <details className="mt-2 max-w-sm">
+                <summary className="text-[11px] text-muted-foreground cursor-pointer hover:text-foreground flex items-center gap-1 select-none">
+                  <TrendingUp className="h-3 w-3" /> How to level up your tier
+                </summary>
+                <div className="mt-2 grid grid-cols-1 gap-1 bg-card border border-border rounded-lg p-3">
+                  {TIER_POINT_WAYS.map(w => (
+                    <div key={w.activity} className="flex items-center justify-between py-0.5">
+                      <span className="text-[10px] text-muted-foreground">{w.icon} {w.label}</span>
+                      <span className="text-[10px] font-bold text-yellow-400">+{w.points} pts</span>
+                    </div>
+                  ))}
+                  <div className="border-t border-border/50 mt-1 pt-1">
+                    <div className="flex justify-between text-[10px]">
+                      <span className="text-muted-foreground">Your points</span>
+                      <span className="font-bold text-yellow-400">{tierPoints.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+              </details>
             </div>
             <div className="flex flex-col gap-3">
               <div className="flex gap-3">

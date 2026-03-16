@@ -16,7 +16,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { LOYALTY_TIERS } from "@/lib/loyalty";
+import { LOYALTY_TIERS, getTierProgress, getNextTier } from "@/lib/loyalty";
 import QuoteForm from "@/components/QuoteForm";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { LotteryPanel } from "@/components/lottery-panel";
@@ -198,6 +198,10 @@ export default function CustomerPortal() {
   const userTierKey = ((user as any)?.loyaltyTier as keyof typeof LOYALTY_TIERS) || "bronze";
   const tier = LOYALTY_TIERS[userTierKey] || LOYALTY_TIERS.bronze;
   const tierGradient = { bronze: "from-amber-900/30 to-amber-800/20", silver: "from-slate-700/30 to-slate-600/20", gold: "from-yellow-800/30 to-amber-700/20", vip: "from-purple-900/30 to-purple-800/20" }[userTierKey] ?? "from-amber-900/30 to-amber-800/20";
+  const tierPts = parseInt((user as any)?.tierPoints || '0', 10);
+  const nextTierKeyPortal = getNextTier(userTierKey as any);
+  const nextTierPortal = nextTierKeyPortal ? LOYALTY_TIERS[nextTierKeyPortal] : null;
+  const tierProgressPortal = getTierProgress(tierPts, userTierKey as any);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white pb-8">
@@ -658,7 +662,7 @@ export default function CustomerPortal() {
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400 text-sm">Current Tier</span>
                   <Badge className={`bg-gradient-to-r ${tierGradient} text-white border-0`}>
-                    {tier.label || userTierKey}
+                    {tier.emoji} {tier.label || userTierKey}
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between">
@@ -666,15 +670,29 @@ export default function CustomerPortal() {
                   <span className="text-green-400 font-semibold text-sm">{tier.tokensPerDollar || 50} tokens / $1 spent</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-400 text-sm">Lifetime Spend</span>
-                  <span className="text-white font-semibold text-sm">${parseFloat(user?.totalCompletedSpend || "0").toFixed(2)}</span>
+                  <span className="text-slate-400 text-sm">Tier Points</span>
+                  <span className="text-yellow-400 font-bold text-sm">⭐ {tierPts.toLocaleString()} pts</span>
                 </div>
+                {nextTierPortal && (
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs text-slate-400">
+                      <span>Progress to {nextTierPortal.emoji} {nextTierPortal.label}</span>
+                      <span>{tierProgressPortal}%</span>
+                    </div>
+                    <div className="w-full bg-white/10 rounded-full h-1.5">
+                      <div className={`h-1.5 rounded-full bg-gradient-to-r ${tierGradient.replace('/30', '').replace('/20', '')}`} style={{ width: `${tierProgressPortal}%` }} />
+                    </div>
+                    <p className="text-[10px] text-slate-500">{(nextTierPortal.minPoints - tierPts).toLocaleString()} pts to unlock {nextTierPortal.label}</p>
+                  </div>
+                )}
                 <Separator className="bg-white/5" />
                 <div className="space-y-1.5 text-xs text-slate-500">
-                  <div className="flex justify-between"><span>Bronze</span><span>$0 spend</span></div>
-                  <div className="flex justify-between"><span>Silver</span><span>$1,000 spend</span></div>
-                  <div className="flex justify-between"><span>Gold</span><span>$2,500 spend</span></div>
-                  <div className="flex justify-between"><span>VIP</span><span>$5,000 spend</span></div>
+                  <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider mb-1">Tier Milestones</p>
+                  {(Object.entries(LOYALTY_TIERS) as [string, typeof LOYALTY_TIERS.bronze][]).map(([key, t]) => (
+                    <div key={key} className={`flex justify-between ${key === userTierKey ? 'text-yellow-400 font-medium' : ''}`}>
+                      <span>{t.emoji} {t.label}</span><span>{t.minPoints.toLocaleString()} pts</span>
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>
