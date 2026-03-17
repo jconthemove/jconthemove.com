@@ -178,6 +178,8 @@ export const rewards = pgTable("rewards", {
   index("idx_rewards_user_type").on(table.userId, table.rewardType),
   // Partial unique index: only one signup_bonus per user (allows multiple of other types)
   uniqueIndex("uq_signup_bonus_per_user").on(table.userId, table.rewardType).where(sql`${table.rewardType} = 'signup_bonus'`),
+  // Idempotency guard: one row per (user, reward type, job/reference) when reference_id is set
+  uniqueIndex("uq_reward_per_user_per_ref").on(table.userId, table.rewardType, table.referenceId).where(sql`${table.referenceId} IS NOT NULL`),
 ]);
 
 // DEPRECATED: Daily check-ins replaced by unified mining system with streak tracking
