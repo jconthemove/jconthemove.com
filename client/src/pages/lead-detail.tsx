@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Mail, Phone, MapPin, Calendar, Truck, Users, DollarSign, Award, TrendingUp, CheckCircle, Circle, Clock, Star, ExternalLink, Sparkles, Send, FileText, Loader2, Bitcoin, Copy, Check, Zap, ShoppingBag } from "lucide-react";
+import { ArrowLeft, Mail, Phone, MapPin, Calendar, Truck, Users, DollarSign, Award, TrendingUp, CheckCircle, Circle, Clock, Star, ExternalLink, Sparkles, Send, FileText, Loader2, Bitcoin, Copy, Check, Zap, ShoppingBag, AlertTriangle, UserCheck } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { CrewSuggestionsDialog } from "@/components/crew-suggestions-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import { JobOrderBuilder } from "@/components/JobOrderBuilder";
 
 interface OrderLineItem {
@@ -98,6 +99,15 @@ interface DisbursementRecord {
   cash_value?: string;
   earned_date?: string;
   metadata?: Record<string, unknown>;
+}
+
+interface Employee {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  isApproved: boolean;
+  status: string;
 }
 
 function DisbursementSummaryCard({ lead }: { lead: Lead }) {
@@ -196,6 +206,8 @@ export default function LeadDetailPage() {
   const [btcAmount, setBtcAmount] = useState("");
   const [btcPaymentLink, setBtcPaymentLink] = useState<string | null>(null);
   const [copiedBtcLink, setCopiedBtcLink] = useState(false);
+  const [selectedCrewMembers, setSelectedCrewMembers] = useState<string[]>([]);
+  const [bonusMover, setBonusMover] = useState(false);
   const { hasAdminAccess } = useAuth();
 
   const { data: lead, isLoading, isError, error } = useQuery<Lead>({
@@ -215,6 +227,11 @@ export default function LeadDetailPage() {
 
   const { data: rewards = [] } = useQuery<Reward[]>({
     queryKey: ["/api/rewards"],
+  });
+
+  const { data: employees = [] } = useQuery<Employee[]>({
+    queryKey: ["/api/employees"],
+    enabled: hasAdminAccess,
   });
 
   const form = useForm({
@@ -255,6 +272,10 @@ export default function LeadDetailPage() {
         confirmedToAddress: lead.confirmedToAddress || lead.toAddress || "",
         quoteNotes: lead.quoteNotes || "",
       });
+      const members = lead.crewMembers || [];
+      setSelectedCrewMembers(members);
+      const inferredBonus = members.length > 0 && (lead.crewSize ?? 0) > members.length;
+      setBonusMover(inferredBonus);
     }
   }, [lead, form]);
 
@@ -366,6 +387,8 @@ export default function LeadDetailPage() {
         case 2:
           newStatus = "available";
           if (tokenAllocation) updateData.tokenAllocation = parseFloat(tokenAllocation);
+          updateData.crewMembers = selectedCrewMembers;
+          updateData.crewSize = computeEffectiveCrewSize();
           break;
         case 3:
           newStatus = "completed";
@@ -391,11 +414,15 @@ export default function LeadDetailPage() {
     },
   });
 
+  const computeEffectiveCrewSize = () => selectedCrewMembers.length + (bonusMover ? 1 : 0);
+
   const handleSave = () => {
     const formData = form.getValues();
     updateLead.mutate({
       ...formData,
       status: lead?.status,
+      crewMembers: selectedCrewMembers,
+      crewSize: computeEffectiveCrewSize(),
     });
   };
 
@@ -609,7 +636,13 @@ export default function LeadDetailPage() {
                 </Button>
               ) : (
                 <>
-                  <Button variant="outline" onClick={() => setIsEditing(false)} data-testid="button-cancel">
+                  <Button variant="outline" onClick={() => {
+                    setIsEditing(false);
+                    const members = lead?.crewMembers || [];
+                    setSelectedCrewMembers(members);
+                    const inferredBonus = members.length > 0 && (lead?.crewSize ?? 0) > members.length;
+                    setBonusMover(inferredBonus);
+                  }} data-testid="button-cancel">
                     Cancel
                   </Button>
                   <Button onClick={handleSave} disabled={updateLead.isPending} data-testid="button-save">
@@ -711,12 +744,18 @@ export default function LeadDetailPage() {
                         />
                       </div>
                     </div>
+                    {hasAdminAccess && selectedCrewMembers.length === 0 && (
+                      <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-md px-3 py-2">
+                        <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                        <span>No crew members assigned. Please assign crew before activating.</span>
+                      </div>
+                    )}
                     <Button 
                       onClick={() => advanceToStep.mutate(2)} 
-                      disabled={!lead?.basePrice}
+                      disabled={!lead?.basePrice || advanceToStep.isPending}
                       data-testid="button-make-available"
                     >
-                      Make Job Available
+                      {advanceToStep.isPending ? "Activating..." : "Make Job Available"}
                     </Button>
                   </div>
                 )}
@@ -1052,6 +1091,118 @@ export default function LeadDetailPage() {
                         data-testid="input-base-price"
                       />
                     </div>
+                  </div>
+                )}
+
+                {hasAdminAccess && (
+                  <div className="space-y-3 pt-2">
+                    <Separator />
+                    <div className="flex items-center justify-between">
+                      <Label className="flex items-center gap-2">
+                        <Users className="h-4 w-4 text-muted-foreground" />
+                        Crew Assignment
+                      </Label>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <span>
+                          {selectedCrewMembers.length + (bonusMover ? 1 : 0)} mover{selectedCrewMembers.length + (bonusMover ? 1 : 0) !== 1 ? "s" : ""}
+                        </span>
+                        {bonusMover && (
+                          <Badge className="bg-amber-600/20 text-amber-400 border-amber-500/30 text-[10px]">
+                            +1 Bonus
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+
+                    {isEditing ? (
+                      <>
+                        <div
+                          className="max-h-48 overflow-y-auto space-y-1.5 border rounded-md p-2 bg-muted/20"
+                          data-testid="crew-member-list"
+                        >
+                          {employees.filter(e => e.isApproved || e.status === "approved").length === 0 ? (
+                            <p className="text-xs text-muted-foreground text-center py-2">No approved employees found</p>
+                          ) : (
+                            employees
+                              .filter(emp => emp.isApproved || emp.status === "approved")
+                              .map((emp) => {
+                              const isSelected = selectedCrewMembers.includes(emp.id);
+                              const toggleMember = () => {
+                                setSelectedCrewMembers(prev =>
+                                  prev.includes(emp.id)
+                                    ? prev.filter(id => id !== emp.id)
+                                    : [...prev, emp.id]
+                                );
+                              };
+                              return (
+                                <div
+                                  key={emp.id}
+                                  role="option"
+                                  aria-selected={isSelected}
+                                  tabIndex={0}
+                                  className="flex items-center gap-2 p-1.5 rounded hover:bg-muted/50 cursor-pointer"
+                                  onClick={() => toggleMember()}
+                                  onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); toggleMember(); } }}
+                                  data-testid={`crew-checkbox-${emp.id}`}
+                                >
+                                  <Checkbox
+                                    checked={isSelected}
+                                    tabIndex={-1}
+                                    className="h-4 w-4 pointer-events-none"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <p className={`text-sm font-medium leading-none ${isSelected ? "text-primary" : ""}`}>
+                                      {emp.firstName} {emp.lastName}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground truncate">{emp.email}</p>
+                                  </div>
+                                  {isSelected && <UserCheck className="h-3.5 w-3.5 text-primary flex-shrink-0" />}
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between py-1">
+                          <Label htmlFor="bonus-mover-toggle" className="flex items-center gap-2 cursor-pointer">
+                            <span className="text-sm">Bonus Mover</span>
+                            <span className="text-xs text-muted-foreground">(+1 crew, +25% payout)</span>
+                          </Label>
+                          <Switch
+                            id="bonus-mover-toggle"
+                            checked={bonusMover}
+                            onCheckedChange={setBonusMover}
+                            data-testid="toggle-bonus-mover"
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      selectedCrewMembers.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5" data-testid="crew-member-badges">
+                          {selectedCrewMembers.map((memberId) => {
+                            const emp = employees.find(e => e.id === memberId);
+                            return (
+                              <Badge
+                                key={memberId}
+                                variant="secondary"
+                                className="text-xs"
+                                data-testid={`crew-badge-${memberId}`}
+                              >
+                                <UserCheck className="h-3 w-3 mr-1" />
+                                {emp ? `${emp.firstName} ${emp.lastName}` : memberId.slice(0, 8) + "…"}
+                              </Badge>
+                            );
+                          })}
+                          {bonusMover && (
+                            <Badge className="text-xs bg-amber-600/20 text-amber-400 border-amber-500/30">
+                              +1 Bonus Mover
+                            </Badge>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground italic">No crew assigned yet</p>
+                      )
+                    )}
                   </div>
                 )}
               </CardContent>
