@@ -897,6 +897,7 @@ export default function LeadDetailPage() {
             {hasAdminAccess && (
               <JobOrderBuilder
                 lead={lead}
+                leadId={lead.id}
                 disabled={updateLead.isPending}
                 onApply={handleOrderApply}
               />

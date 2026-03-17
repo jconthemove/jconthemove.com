@@ -11146,6 +11146,76 @@ Thank you for your business!
     }
   });
 
+  // ── Square: Create Order on Build (admin only) ─────────────────────────────
+  // Called by JobOrderBuilder "Apply Order" — creates a Square Order immediately.
+  // Uses catalog variation IDs from mappings where available; falls back to ad-hoc line items.
+  app.post("/api/square/create-order/:leadId", isAuthenticated, requireAdmin, async (req: any, res) => {
+    const { leadId } = req.params;
+    try {
+      const lead = await storage.getLead(leadId);
+      if (!lead) return res.status(404).json({ error: "Lead not found" });
+
+      const lineItems: Array<{ id?: string; name: string; qty: number; unitPrice: number; total: number }> = req.body.lineItems || [];
+      if (!lineItems.length) return res.status(400).json({ error: "No line items provided" });
+
+      const squareToken = process.env.SQUARE_ACCESS_TOKEN;
+      if (!squareToken) {
+        // Square not configured: just save totals with no square order
+        return res.json({ success: true, squareOrderId: null, note: "Square not configured — order saved locally" });
+      }
+
+      const { squareInvoiceService } = await import("./services/square-invoice");
+      const catalogMappings = await squareInvoiceService.getCatalogMappings();
+
+      const { SquareClient, SquareEnvironment } = await import("square");
+      const client = new SquareClient({
+        token: squareToken,
+        environment: process.env.SQUARE_ENVIRONMENT === "production"
+          ? SquareEnvironment.Production
+          : SquareEnvironment.Sandbox,
+      });
+
+      const locationId = await squareInvoiceService.getLocationId();
+
+      const squareLineItems = lineItems.map(li => {
+        const catalogVariationId = li.id ? catalogMappings[li.id] : undefined;
+        if (catalogVariationId) {
+          return { catalogObjectId: catalogVariationId, quantity: String(li.qty) };
+        }
+        return {
+          name: li.name,
+          quantity: String(li.qty),
+          basePriceMoney: {
+            amount: BigInt(Math.round(li.unitPrice * 100)),
+            currency: "USD" as const,
+          },
+        };
+      });
+
+      const orderResponse = await client.orders.create({
+        order: {
+          locationId,
+          lineItems: squareLineItems,
+          state: "OPEN",
+        },
+        idempotencyKey: `order-${leadId}-${Date.now()}`,
+      });
+
+      const squareOrderId = orderResponse.order?.id ?? null;
+
+      // Persist the Square order ID on the lead
+      if (squareOrderId) {
+        await storage.updateLeadQuote(leadId, { squareOrderId });
+      }
+
+      res.json({ success: true, squareOrderId, orderState: orderResponse.order?.state });
+    } catch (err: any) {
+      console.error("Error creating Square order:", err);
+      // Non-fatal — order totals already saved locally on lead; return gracefully
+      res.json({ success: false, squareOrderId: null, error: err.message });
+    }
+  });
+
   // ── Square Catalog proxy (admin only) ──────────────────────────────────────
   app.get("/api/square/catalog", isAuthenticated, requireAdmin, async (req: any, res) => {
     const squareToken = process.env.SQUARE_ACCESS_TOKEN;
@@ -11198,11 +11268,11 @@ Thank you for your business!
       let result: { invoiceId: string; invoiceUrl: string; squareInvoiceId: string };
 
       if (lineItems && lineItems.length > 0) {
-        result = await squareInvoiceService.createItemizedInvoiceForLead(lead as any, lineItems, dueDate);
+        result = await squareInvoiceService.createItemizedInvoiceForLead(lead, lineItems, dueDate);
       } else {
         const amount = parseFloat(lead.totalPrice || lead.basePrice || "0");
         if (!amount) return res.status(400).json({ error: "No price set on lead and no lineItems provided" });
-        result = await squareInvoiceService.createInvoiceForLead(lead as any, amount, undefined, dueDate);
+        result = await squareInvoiceService.createInvoiceForLead(lead, amount, undefined, dueDate);
       }
 
       res.json({ success: true, ...result });
@@ -13912,6 +13982,80 @@ Thank you for your business!
     { id: "longcarry", label: "Long Carry Fee (100+ ft)",         price: 25,  unit: "flat"    },
     { id: "piano",     label: "Piano / Specialty Item",           price: 85,  unit: "flat"    },
   ];
+
+  // ── Canonical catalog definitions (server-side source of truth for JobOrderBuilder) ──
+  // Moving packages, junk packages, moving add-ons, junk add-ons, and special items.
+  // Admin can override via PUT /api/admin/pricing/catalog-definitions.
+  const DEFAULT_CATALOG_DEFINITIONS = {
+    movingPackages: [
+      { id: "moving_2m_2h", movers: 2, hours: 2, label: "JC222 Special", tag: "Best Deal", isJc222: true },
+      { id: "moving_2m_3h", movers: 2, hours: 3, label: "2 Movers × 3 hrs", tag: "Short Move" },
+      { id: "moving_2m_4h", movers: 2, hours: 4, label: "2 Movers × 4 hrs" },
+      { id: "moving_3m_3h", movers: 3, hours: 3, label: "3 Movers × 3 hrs", tag: "Most Popular" },
+      { id: "moving_3m_4h", movers: 3, hours: 4, label: "3 Movers × 4 hrs" },
+      { id: "moving_4m_3h", movers: 4, hours: 3, label: "4 Movers × 3 hrs", tag: "Fastest" },
+      { id: "moving_4m_4h", movers: 4, hours: 4, label: "4 Movers × 4 hrs", tag: "Heavy Move" },
+      { id: "moving_2m_6h", movers: 2, hours: 6, label: "2 Movers × 6 hrs", tag: "Full Day" },
+      { id: "moving_3m_6h", movers: 3, hours: 6, label: "3 Movers × 6 hrs" },
+    ],
+    junkPackages: [
+      { id: "junk_single_item", label: "Single Item", desc: "1–2 large items", low: 75, high: 150, tag: "Quick" },
+      { id: "junk_quarter",     label: "¼ Truck Load",  desc: "Small cleanout",           low: 100, high: 200 },
+      { id: "junk_half",        label: "½ Truck Load",  desc: "One room / garage cleanout", low: 150, high: 300, tag: "Popular" },
+      { id: "junk_full",        label: "Full Truck Load", desc: "Estate cleanout / full demo", low: 300, high: 600, tag: "Best Value" },
+    ],
+    movingAddons: [
+      { id: "mattress_bag",     name: "Mattress Bag(s)",               unitPrice: 20,  category: "supplies", qtyOptions: [1,2,3,4] },
+      { id: "wardrobe_boxes",   name: "Wardrobe Boxes",                unitPrice: 25,  category: "supplies", qtyOptions: [1,2,3,4] },
+      { id: "packing_supplies", name: "Packing Tape & Supplies",       unitPrice: 40,  category: "supplies", qtyOptions: [1] },
+      { id: "long_carry",       name: "Long Carry (>75 ft)",           unitPrice: 50,  category: "access",   qtyOptions: [1] },
+      { id: "stairs",           name: "Stairs / Flights",              unitPrice: 25,  category: "access",   qtyOptions: [1,2,3,4] },
+      { id: "elevator",         name: "Elevator Fee",                  unitPrice: 30,  category: "access",   qtyOptions: [1] },
+      { id: "assembly",         name: "Furniture Assembly/Disassembly", unitPrice: 75, category: "labor",    qtyOptions: [1] },
+      { id: "appliance_connect", name: "Appliance Connection",         unitPrice: 50,  category: "labor",    qtyOptions: [1] },
+    ],
+    junkAddons: [
+      { id: "appliance_recycle", name: "Appliance Recycling Fee",     unitPrice: 35, qtyOptions: [1,2,3] },
+      { id: "hazmat",            name: "Hazardous Surcharge",         unitPrice: 50, qtyOptions: [1] },
+      { id: "extra_labor",       name: "Extra Labor Hour",            unitPrice: 70, qtyOptions: [1,2] },
+      { id: "dumpster_bag",      name: "Cleanout Dumpster Bag",       unitPrice: 100, qtyOptions: [1,2] },
+      { id: "teardown",          name: "Light Demolition / Teardown", unitPrice: 150, qtyOptions: [1] },
+    ],
+    specialItems: [
+      { id: "hot_tub",    name: "Hot Tub",            baseFee: 250, key: "hasHotTub",    feeKey: "hotTubFee" },
+      { id: "piano",      name: "Piano",               baseFee: 200, key: "hasPiano",     feeKey: "pianoFee" },
+      { id: "heavy_safe", name: "Heavy Safe (300+ lbs)", baseFee: 175, key: "hasHeavySafe", feeKey: "heavySafeFee" },
+      { id: "pool_table", name: "Pool Table",          baseFee: 200, key: "hasPoolTable", feeKey: "poolTableFee" },
+    ],
+  };
+
+  app.get("/api/pricing/catalog-definitions", async (_req, res) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT setting_value FROM spin_config WHERE setting_key='pricing_catalog_definitions' LIMIT 1`
+      );
+      if (rows.length && rows[0].setting_value) {
+        try { return res.json(JSON.parse(rows[0].setting_value)); } catch {}
+      }
+      res.json(DEFAULT_CATALOG_DEFINITIONS);
+    } catch {
+      res.json(DEFAULT_CATALOG_DEFINITIONS);
+    }
+  });
+
+  app.put("/api/admin/pricing/catalog-definitions", isAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const definitions = req.body;
+      await pool.query(
+        `INSERT INTO spin_config (setting_key, setting_value, description) VALUES ($1, $2, $3)
+         ON CONFLICT (setting_key) DO UPDATE SET setting_value=$2, updated_at=NOW()`,
+        ["pricing_catalog_definitions", JSON.stringify(definitions), "Canonical catalog package/addon definitions"]
+      );
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
 
   app.get("/api/pricing/addons", async (req, res) => {
     try {

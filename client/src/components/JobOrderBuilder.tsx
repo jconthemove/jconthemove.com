@@ -80,6 +80,7 @@ interface OrderSummary {
 
 interface JobOrderBuilderProps {
   lead: Lead;
+  leadId?: string;
   disabled?: boolean;
   onApply: (summary: {
     basePrice: string;
@@ -249,13 +250,27 @@ function JunkPackageCard({ pkg, selected, onSelect }: {
   );
 }
 
-export function JobOrderBuilder({ lead, disabled, onApply }: JobOrderBuilderProps) {
+export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBuilderProps) {
   const isMoving = !["junk", "junk_removal"].includes(lead.serviceType?.toLowerCase() ?? "");
   const isJunk = !isMoving;
 
   const { data: pricing, isLoading: pricingLoading } = useQuery<Pricing>({
     queryKey: ["/api/pricing"],
   });
+
+  const { data: catalogDefs } = useQuery<{
+    movingPackages: typeof MOVING_PACKAGES;
+    junkPackages: typeof JUNK_PACKAGES;
+    movingAddons: typeof MOVING_ADDONS;
+    junkAddons: typeof JUNK_ADDONS;
+    specialItems: typeof MOVING_SPECIAL_ITEMS;
+  }>({ queryKey: ["/api/pricing/catalog-definitions"] });
+
+  const movingPackages = catalogDefs?.movingPackages ?? MOVING_PACKAGES;
+  const junkPackages = catalogDefs?.junkPackages ?? JUNK_PACKAGES;
+  const movingAddons = catalogDefs?.movingAddons ?? MOVING_ADDONS;
+  const junkAddons = catalogDefs?.junkAddons ?? JUNK_ADDONS;
+  const specialItemsDefs = catalogDefs?.specialItems ?? MOVING_SPECIAL_ITEMS;
 
   const [selectedPkg, setSelectedPkg] = useState<number | null>(null);
   const [selectedJunkPkg, setSelectedJunkPkg] = useState<number | null>(null);
@@ -303,17 +318,17 @@ export function JobOrderBuilder({ lead, disabled, onApply }: JobOrderBuilderProp
     if (pricing && !selectedPkg && !selectedJunkPkg) {
       if (isMoving && lead.crewSize && lead.basePrice) {
         const hours = Math.round(parseFloat(lead.basePrice) / (pricing.ratePerMoverHour * (lead.crewSize ?? 2)));
-        const idx = MOVING_PACKAGES.findIndex(p => p.movers === lead.crewSize && p.hours === hours);
+        const idx = movingPackages.findIndex(p => p.movers === lead.crewSize && p.hours === hours);
         if (idx >= 0) setSelectedPkg(idx);
       }
     }
-  }, [pricing, lead.crewSize, lead.basePrice, isMoving]);
+  }, [pricing, lead.crewSize, lead.basePrice, isMoving, movingPackages]);
 
   const driveLineItem = useMemo((): LineItem | null => {
     const miles = parseFloat(driveMiles);
     if (!miles || miles <= 0 || !pricing) return null;
     const DRIVE_RATE = 40; // $40/hr/mover
-    const crewSize = selectedPkg !== null ? MOVING_PACKAGES[selectedPkg]?.movers ?? 2 : 2;
+    const crewSize = selectedPkg !== null ? movingPackages[selectedPkg]?.movers ?? 2 : 2;
     const roundTripMiles = miles * 2;
     const driveHours = Math.ceil(roundTripMiles / (pricing.driveSpeedMph || 45) * 2) / 2; // round to 0.5
     const fee = Math.round(driveHours * crewSize * DRIVE_RATE);
@@ -334,7 +349,7 @@ export function JobOrderBuilder({ lead, disabled, onApply }: JobOrderBuilderProp
 
     if (isMoving) {
       if (selectedPkg === null) return null;
-      const pkg = MOVING_PACKAGES[selectedPkg];
+      const pkg = movingPackages[selectedPkg];
       const laborTotal = pkg.isJc222 ? pricing.jc222Price : pkg.movers * pkg.hours * pricing.ratePerMoverHour;
 
       lineItems.push({
@@ -348,7 +363,7 @@ export function JobOrderBuilder({ lead, disabled, onApply }: JobOrderBuilderProp
 
       if (driveLineItem) lineItems.push(driveLineItem);
 
-      MOVING_ADDONS.forEach(addon => {
+      movingAddons.forEach(addon => {
         const qty = addonQty[addon.id] ?? 0;
         if (qty > 0) {
           lineItems.push({
@@ -362,7 +377,7 @@ export function JobOrderBuilder({ lead, disabled, onApply }: JobOrderBuilderProp
         }
       });
 
-      MOVING_SPECIAL_ITEMS.forEach(item => {
+      specialItemsDefs.forEach(item => {
         if (specialItems[item.key]) {
           const fee = specialFees[item.feeKey] ?? item.baseFee;
           lineItems.push({
@@ -396,7 +411,7 @@ export function JobOrderBuilder({ lead, disabled, onApply }: JobOrderBuilderProp
       let laborTotal = 0;
       let packageLabel = "Junk Removal";
       if (selectedJunkPkg !== null) {
-        const pkg = JUNK_PACKAGES[selectedJunkPkg];
+        const pkg = junkPackages[selectedJunkPkg];
         laborTotal = parseFloat(junkCustomPrice) || Math.round((pkg.low + pkg.high) / 2);
         packageLabel = pkg.label;
         lineItems.push({
@@ -423,7 +438,7 @@ export function JobOrderBuilder({ lead, disabled, onApply }: JobOrderBuilderProp
 
       if (driveLineItem) lineItems.push(driveLineItem);
 
-      JUNK_ADDONS.forEach(addon => {
+      junkAddons.forEach(addon => {
         const qty = addonQty[addon.id] ?? 0;
         if (qty > 0) {
           lineItems.push({
@@ -454,12 +469,12 @@ export function JobOrderBuilder({ lead, disabled, onApply }: JobOrderBuilderProp
     }
 
     return null;
-  }, [pricing, selectedPkg, selectedJunkPkg, addonQty, specialItems, specialFees, junkCustomPrice, isMoving, isJunk, driveLineItem]);
+  }, [pricing, selectedPkg, selectedJunkPkg, addonQty, specialItems, specialFees, junkCustomPrice, isMoving, isJunk, driveLineItem, movingPackages, junkPackages, movingAddons, junkAddons, specialItemsDefs]);
 
-  const handleApply = () => {
+  const handleApply = async () => {
     if (!summary) return;
 
-    const specialItemsFee = MOVING_SPECIAL_ITEMS.reduce((acc, item) => {
+    const specialItemsFee = specialItemsDefs.reduce((acc, item) => {
       return acc + (specialItems[item.key] ? (specialFees[item.feeKey] ?? item.baseFee) : 0);
     }, 0);
 
@@ -489,6 +504,20 @@ export function JobOrderBuilder({ lead, disabled, onApply }: JobOrderBuilderProp
       totalSpecialItemsFee: specialItemsFee.toFixed(2),
       lineItems: summary.lineItems,
     });
+
+    // Immediately create a Square Order (non-blocking, best-effort)
+    if (leadId) {
+      try {
+        await fetch(`/api/square/create-order/${leadId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lineItems: summary.lineItems }),
+          credentials: "include",
+        });
+      } catch (_) {
+        // Non-fatal: order totals already saved to lead locally
+      }
+    }
   };
 
   if (pricingLoading) {
@@ -503,7 +532,7 @@ export function JobOrderBuilder({ lead, disabled, onApply }: JobOrderBuilderProp
 
   if (!pricing) return null;
 
-  const activeAddons = isMoving ? MOVING_ADDONS : JUNK_ADDONS;
+  const activeAddons = isMoving ? movingAddons : junkAddons;
 
   return (
     <Card className="border-blue-500/30 bg-gradient-to-br from-slate-900/80 to-slate-800/60">
@@ -535,7 +564,7 @@ export function JobOrderBuilder({ lead, disabled, onApply }: JobOrderBuilderProp
                 2 movers, 2 hrs — perfect for small/studio moves or load-only jobs. Use code JC222 to lock it in.
               </div>
               <div className="space-y-2">
-                {MOVING_PACKAGES.map((pkg, i) => (
+                {movingPackages.map((pkg, i) => (
                   <PackageCard
                     key={i}
                     pkg={pkg}
@@ -550,7 +579,7 @@ export function JobOrderBuilder({ lead, disabled, onApply }: JobOrderBuilderProp
 
           {isJunk && (
             <div className="space-y-2">
-              {JUNK_PACKAGES.map((pkg, i) => (
+              {junkPackages.map((pkg, i) => (
                 <JunkPackageCard
                   key={i}
                   pkg={pkg}
@@ -694,7 +723,7 @@ export function JobOrderBuilder({ lead, disabled, onApply }: JobOrderBuilderProp
                 <AlertTriangle className="h-3.5 w-3.5 text-amber-400" /> Specialty / Heavy Items
               </p>
               <div className="space-y-2">
-                {MOVING_SPECIAL_ITEMS.map(item => {
+                {specialItemsDefs.map(item => {
                   const checked = specialItems[item.key] ?? false;
                   return (
                     <div

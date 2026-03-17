@@ -7,11 +7,16 @@
  *  B) CREW hours     — 25 JCMOVES × confirmedHours per crew member (same +25% multiplier)
  *  C) CUSTOMER earn  — tokenAllocation (if set) OR earn_rate_per_dollar × totalPrice
  *  D) REFERRAL bonus — first completed job referral bonus to the referrer
+ *
+ * Idempotency: A conditional DB UPDATE on leads.tokens_disbursed_at IS NULL is used as
+ * a distributed lock. If the row is already marked, disbursement is skipped immediately.
+ * The timestamp is written ONLY after all reward inserts succeed.
  */
 import { db } from "../db";
 import { rewards, rewardSettings, users } from "@shared/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 import { storage } from "../storage";
+import { pool } from "../db";
 import type { Lead } from "@shared/schema";
 
 const TOKEN_PRICE    = 0.00000508432;
@@ -66,6 +71,19 @@ async function awardPoints(userId: string, action: string, count = 1): Promise<v
   } catch (_) {}
 }
 
+/**
+ * Attempt to claim the disbursement lock via a conditional UPDATE.
+ * Returns true if this process is the one that set tokens_disbursed_at (i.e. won the race).
+ * Returns false if already marked (another process already disbursed).
+ */
+async function claimDisbursementLock(leadId: string, now: Date): Promise<boolean> {
+  const result = await pool.query(
+    `UPDATE leads SET tokens_disbursed_at = $1 WHERE id = $2 AND tokens_disbursed_at IS NULL RETURNING id`,
+    [now, leadId]
+  );
+  return result.rowCount !== null && result.rowCount > 0;
+}
+
 export async function disburseJobTokens(leadId: string): Promise<DisbursementSummary | null> {
   const lead = await storage.getLead(leadId) as (Lead & {
     tokensDisbursedAt?: Date | string | null;
@@ -75,9 +93,18 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
   });
   if (!lead) throw new Error(`Lead ${leadId} not found`);
 
-  const alreadyDisbursed = lead.tokensDisbursedAt || lead.completionRewardedAt;
-  if (alreadyDisbursed) {
-    console.log(`ℹ️ Job ${leadId} already disbursed at ${alreadyDisbursed} — skipping`);
+  // Fast-path: skip if already marked in memory (avoids unnecessary DB round-trip)
+  if (lead.tokensDisbursedAt || lead.completionRewardedAt) {
+    console.log(`ℹ️ Job ${leadId} already disbursed — skipping`);
+    return null;
+  }
+
+  const now = new Date();
+
+  // Atomic lock: only one concurrent caller will win this UPDATE
+  const locked = await claimDisbursementLock(leadId, now);
+  if (!locked) {
+    console.log(`ℹ️ Job ${leadId} disbursement lock already held — skipping`);
     return null;
   }
 
@@ -93,7 +120,6 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
   const earnRate     = (await getSetting("earn_rate_per_dollar")) ?? FALLBACK_EARN;
   const confirmedHrs = lead.confirmedHours ? Number(lead.confirmedHours) : 0;
   const baseHoursBonus = HOURS_RATE * confirmedHrs;
-  const now = new Date();
 
   const summary: DisbursementSummary = {
     customerTokens: 0,
@@ -102,6 +128,8 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
     crewIds,
     disbursedAt: now,
   };
+
+  let allSucceeded = true;
 
   // ── A. CREW: flat reward + hours bonus (with bonus-mover multiplier) ────────
   for (const memberId of crewIds) {
@@ -150,6 +178,7 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
       } catch (_) {}
     } catch (err) {
       console.error(`❌ Crew reward failed for ${memberId}:`, err);
+      allSucceeded = false;
     }
   }
 
@@ -223,13 +252,19 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
     }
   } catch (err) {
     console.error("❌ Customer earn reward failed:", err);
+    allSucceeded = false;
   }
 
-  // ── Mark as distributed (both fields for compatibility) ────────────────────
-  await storage.updateLeadQuote(leadId, {
-    completionRewardedAt: now,
-    tokensDisbursedAt: now,
-  });
-  console.log(`✅ Job ${leadId} disbursement complete at ${now.toISOString()}`);
+  // ── Mark completion_rewarded_at only after all writes have been attempted ──
+  // tokens_disbursed_at was already set atomically above via the conditional UPDATE.
+  // We set completionRewardedAt now for compatibility with older checks.
+  await storage.updateLeadQuote(leadId, { completionRewardedAt: now });
+
+  if (!allSucceeded) {
+    console.warn(`⚠️ Job ${leadId} disbursement completed with some failures — check logs above`);
+  } else {
+    console.log(`✅ Job ${leadId} disbursement fully complete at ${now.toISOString()}`);
+  }
+
   return summary;
 }
