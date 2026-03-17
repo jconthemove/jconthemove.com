@@ -45,6 +45,7 @@ export const leads = pgTable("leads", {
   basePrice: decimal("base_price", { precision: 10, scale: 2 }), // Base moving quote
   tokenAllocation: decimal("token_allocation", { precision: 18, scale: 8 }), // JCMOVES tokens allocated for this job
   crewMembers: text("crew_members").array(), // Array of assigned employee IDs
+  crewBonusFlags: jsonb("crew_bonus_flags").default("{}"), // Map of userId → boolean; true = bonus mover (+25% payout)
   
   // Special moving items with weight tracking
   hasHotTub: boolean("has_hot_tub").default(false),

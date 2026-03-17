@@ -13769,32 +13769,60 @@ Thank you for your business!
 
   // ── Public pricing config (used by services page) ──────────────────────────
   // ── Drive distance auto-estimate via OpenStreetMap Nominatim ──────────────
+  // Calculates total one-way drive miles for a job:
+  //   Moving: base→pickup + pickup→dropoff (we return pickup→dropoff + base→pickup)
+  //   Load-only/Junk: base→pickup only (round trip handled by driveLineItem × 2)
   app.get("/api/utility/estimate-drive-miles", async (req, res) => {
-    const address = req.query.address as string;
-    if (!address || address.trim().length < 4) {
-      return res.json({ miles: 0, error: "No address" });
+    const pickupAddr = req.query.pickup as string || req.query.address as string;
+    const dropoffAddr = req.query.dropoff as string;
+    if (!pickupAddr || pickupAddr.trim().length < 4) {
+      return res.json({ miles: 0, error: "No pickup address" });
     }
-    const BASE_LAT = 46.4539;
+    const BASE_LAT = 46.4539; // Ironwood, MI
     const BASE_LNG = -90.1715;
 
     function haversine(lat1: number, lng1: number, lat2: number, lng2: number) {
-      const R = 3958.8;
+      const R = 3958.8; // Earth radius in miles
       const dLat = ((lat2 - lat1) * Math.PI) / 180;
       const dLng = ((lng2 - lng1) * Math.PI) / 180;
-      const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
       return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
+    async function geocode(addr: string): Promise<{ lat: number; lon: number } | null> {
+      try {
+        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(addr)}&format=json&limit=1&countrycodes=us`;
+        const r = await fetch(url, { headers: { "User-Agent": "JCOnTheMove/1.0 contact@jcontmove.com" } });
+        if (!r.ok) return null;
+        const data: Array<{ lat: string; lon: string }> = await r.json() as any;
+        if (!data.length) return null;
+        return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+      } catch { return null; }
+    }
+
     try {
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1&countrycodes=us`;
-      const response = await fetch(url, { headers: { "User-Agent": "JCOnTheMove/1.0 contact@jcontmove.com" } });
-      if (!response.ok) return res.json({ miles: 0, error: "Geocoding unavailable" });
-      const data: any[] = await response.json() as any[];
-      if (!data.length) return res.json({ miles: 0, note: "Address not found" });
-      const { lat, lon } = data[0];
-      const straight = haversine(BASE_LAT, BASE_LNG, parseFloat(lat), parseFloat(lon));
-      const estimated = Math.ceil(straight * 1.25);
-      return res.json({ miles: estimated, straight: Math.round(straight), lat, lon });
+      const pickup = await geocode(pickupAddr);
+      if (!pickup) return res.json({ miles: 0, note: "Pickup address not found" });
+
+      // base→pickup segment (always included)
+      const baseToPickup = haversine(BASE_LAT, BASE_LNG, pickup.lat, pickup.lon);
+      let totalOneWay = baseToPickup;
+      let route = `base→pickup(${Math.round(baseToPickup)}mi)`;
+
+      // pickup→dropoff segment (moving jobs with a destination)
+      if (dropoffAddr && dropoffAddr.trim().length >= 4) {
+        const dropoff = await geocode(dropoffAddr);
+        if (dropoff) {
+          const pickupToDropoff = haversine(pickup.lat, pickup.lon, dropoff.lat, dropoff.lon);
+          totalOneWay += pickupToDropoff;
+          route += `+dropoff(${Math.round(pickupToDropoff)}mi)`;
+        }
+      }
+
+      const estimated = Math.ceil(totalOneWay * 1.25); // road-factor multiplier
+      return res.json({ miles: estimated, straight: Math.round(totalOneWay), route });
     } catch (err: any) {
       return res.json({ miles: 0, error: err.message });
     }

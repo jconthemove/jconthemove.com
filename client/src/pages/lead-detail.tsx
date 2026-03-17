@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, Mail, Phone, MapPin, Calendar, Truck, Users, DollarSign, Award, TrendingUp, CheckCircle, Circle, Clock, Star, ExternalLink, Sparkles, Send, FileText, Loader2, Bitcoin, Copy, Check, Zap, ShoppingBag } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -41,6 +42,7 @@ interface Lead {
   confirmedFromAddress?: string;
   confirmedToAddress?: string;
   crewMembers?: string[];
+  crewBonusFlags?: Record<string, boolean>;
   hasHotTub?: boolean;
   hotTubWeight?: number;
   hotTubFee?: string;
@@ -255,6 +257,18 @@ export default function LeadDetailPage() {
         description: "Failed to update lead",
         variant: "destructive",
       });
+    },
+  });
+
+  const toggleBonusMover = useMutation({
+    mutationFn: async ({ memberId, isBonus }: { memberId: string; isBonus: boolean }) => {
+      const current: Record<string, boolean> = (lead as any).crewBonusFlags ?? {};
+      const updated = { ...current, [memberId]: isBonus };
+      return await apiRequest("PATCH", `/api/leads/${params?.id}`, { crewBonusFlags: updated });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      toast({ title: "Updated", description: "Bonus mover flag saved." });
     },
   });
 
@@ -919,10 +933,33 @@ export default function LeadDetailPage() {
                     </div>
                   )}
                   {lead.crewSize && (
-                    <div className="flex items-center gap-2 text-xs text-slate-400 pt-1">
-                      <Users className="h-3.5 w-3.5" />
-                      {lead.crewSize} movers
-                      {lead.confirmedHours ? <><Clock className="h-3.5 w-3.5 ml-2" />{lead.confirmedHours} hrs</> : null}
+                    <div className="pt-1 space-y-1.5">
+                      <div className="flex items-center gap-2 text-xs text-slate-400">
+                        <Users className="h-3.5 w-3.5" />
+                        {lead.crewSize} movers
+                        {lead.confirmedHours ? <><Clock className="h-3.5 w-3.5 ml-2" />{lead.confirmedHours} hrs</> : null}
+                      </div>
+                      {hasAdminAccess && lead.crewMembers && lead.crewMembers.length > 0 && (
+                        <div className="space-y-1">
+                          <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide">Bonus Mover (+25% payout)</p>
+                          {lead.crewMembers.map((mid: string) => {
+                            const isBonus = (lead as any).crewBonusFlags?.[mid] === true;
+                            return (
+                              <div key={mid} className="flex items-center gap-2 text-xs">
+                                <Checkbox
+                                  checked={isBonus}
+                                  onCheckedChange={(v) => toggleBonusMover.mutate({ memberId: mid, isBonus: !!v })}
+                                  disabled={toggleBonusMover.isPending}
+                                  className="h-3.5 w-3.5"
+                                />
+                                <span className={isBonus ? "text-amber-400 font-medium" : "text-slate-400"}>
+                                  {mid.slice(0, 8)}… {isBonus ? "(+25%)" : ""}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   )}
                   {lead.totalPrice && (

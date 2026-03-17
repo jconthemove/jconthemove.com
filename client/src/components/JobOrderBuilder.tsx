@@ -282,19 +282,22 @@ export function JobOrderBuilder({ lead, disabled, onApply }: JobOrderBuilderProp
   const [showAddons, setShowAddons] = useState(true);
 
   const pickupAddr = lead.confirmedFromAddress || lead.fromAddress;
+  const dropoffAddr = lead.confirmedToAddress || lead.toAddress;
 
   useEffect(() => {
     if (!pickupAddr || driveMiles) return;
-    fetch(`/api/utility/estimate-drive-miles?address=${encodeURIComponent(pickupAddr)}`)
+    const params = new URLSearchParams({ pickup: pickupAddr });
+    if (dropoffAddr) params.set("dropoff", dropoffAddr);
+    fetch(`/api/utility/estimate-drive-miles?${params}`)
       .then(r => r.json())
-      .then(data => {
+      .then((data: { miles?: number; route?: string }) => {
         if (data.miles && data.miles > 0) {
           setDriveMiles(String(data.miles));
           setDriveAutoCalc(true);
         }
       })
       .catch(() => {});
-  }, [pickupAddr]);
+  }, [pickupAddr, dropoffAddr]);
 
   useEffect(() => {
     if (pricing && !selectedPkg && !selectedJunkPkg) {
