@@ -77,6 +77,7 @@ export const leads = pgTable("leads", {
   
   // Token distribution tracking
   completionRewardedAt: timestamp("completion_rewarded_at"), // Timestamp when job completion tokens were distributed (idempotency flag)
+  tokensDisbursedAt: timestamp("tokens_disbursed_at"), // Alias for completionRewardedAt — set by disburseJobTokens service
   
   // Promo code for discounts
   promoCode: text("promo_code"), // Customer-entered promo code for discounts

@@ -4386,6 +4386,26 @@ Thank you for your business!
   });
 
   // Get crew assignment suggestions for a job (business owner only)
+  // GET /api/leads/:id/disbursement-summary — shows actual reward records for a completed job
+  app.get("/api/leads/:id/disbursement-summary", isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { rows } = await pool.query(
+        `SELECT r.id, r.user_id, r.amount, r.reward_type, r.metadata, r.created_at,
+                u.username, u.first_name, u.last_name, u.role
+         FROM rewards r
+         LEFT JOIN users u ON u.id = r.user_id
+         WHERE r.metadata->>'leadId' = $1
+         ORDER BY r.created_at ASC`,
+        [id]
+      );
+      res.json({ records: rows });
+    } catch (err: any) {
+      console.error("Error fetching disbursement summary:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/leads/:id/crew-suggestions", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
       const { id } = req.params;
@@ -11092,6 +11112,35 @@ Thank you for your business!
       console.error("Error creating Square checkout:", error);
       const errorMsg = error?.errors?.[0]?.detail || error.message || "Failed to create checkout link";
       res.status(500).json({ error: errorMsg });
+    }
+  });
+
+  // ── Square Catalog ID mappings (admin only) ─────────────────────────────
+  app.get("/api/square/catalog-mappings", isAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const { rows } = await pool.query(`SELECT setting_value FROM spin_config WHERE setting_key='square_catalog_mappings' LIMIT 1`);
+      const mappings = rows.length > 0 ? JSON.parse(rows[0].setting_value) : {};
+      res.json({ mappings });
+    } catch (err: any) {
+      console.error("Error fetching catalog mappings:", err);
+      res.json({ mappings: {} });
+    }
+  });
+
+  app.put("/api/square/catalog-mappings", isAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const mappings = req.body.mappings || {};
+      const json = JSON.stringify(mappings);
+      await pool.query(
+        `INSERT INTO spin_config (setting_key, setting_value, description)
+         VALUES ('square_catalog_mappings', $1, 'Package name → Square Catalog variation ID mappings')
+         ON CONFLICT (setting_key) DO UPDATE SET setting_value=$1, updated_at=now()`,
+        [json]
+      );
+      res.json({ success: true, mappings });
+    } catch (err: any) {
+      console.error("Error saving catalog mappings:", err);
+      res.status(500).json({ error: err.message });
     }
   });
 

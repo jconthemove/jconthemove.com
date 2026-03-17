@@ -79,6 +79,86 @@ interface Reward {
   metadata?: any;
 }
 
+function DisbursementSummaryCard({ lead }: { lead: any }) {
+  const { data, isLoading } = useQuery<{ records: any[] }>({
+    queryKey: ["/api/leads", lead.id, "disbursement-summary"],
+    enabled: !!lead.completionRewardedAt,
+  });
+
+  const records = data?.records ?? [];
+  const totalDisburse = records.reduce((s, r) => s + parseFloat(r.amount || "0"), 0);
+  const crewRecords = records.filter((r) => r.reward_type === "worker_job_completion_bonus" || r.reward_type === "worker_hours_bonus");
+  const customerRecords = records.filter((r) => r.reward_type === "loyalty_booking");
+  const referralRecords = records.filter((r) => r.reward_type === "referral_confirmed");
+
+  return (
+    <Card className="border-amber-500/30 bg-gradient-to-br from-amber-950/30 to-slate-900/60">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-amber-400">
+          <Zap className="h-5 w-5" />
+          JCMOVES Disbursement
+          <Badge className="ml-auto bg-green-600/30 text-green-300 border-green-500/30 text-[10px]">Complete</Badge>
+        </CardTitle>
+        <CardDescription className="text-amber-300/60 text-xs">
+          Distributed at {new Date(lead.completionRewardedAt).toLocaleString()}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {isLoading ? (
+          <div className="flex items-center gap-2 text-sm text-slate-400">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading records…
+          </div>
+        ) : records.length === 0 ? (
+          <p className="text-xs text-slate-500">No reward records found in database for this lead.</p>
+        ) : (
+          <>
+            {crewRecords.length > 0 && (
+              <div>
+                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Crew</p>
+                {crewRecords.map((r) => (
+                  <div key={r.id} className="flex justify-between text-sm">
+                    <span className="text-slate-400 truncate max-w-[60%]">
+                      {r.first_name || r.username || `User #${r.user_id}`}{" "}
+                      <span className="text-[10px] text-slate-600">({r.reward_type})</span>
+                    </span>
+                    <span className="text-amber-300 font-bold">{parseFloat(r.amount).toLocaleString()} JC</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {customerRecords.length > 0 && (
+              <div className="pt-1">
+                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Customer</p>
+                {customerRecords.map((r) => (
+                  <div key={r.id} className="flex justify-between text-sm">
+                    <span className="text-slate-400">{r.first_name || r.username || `User #${r.user_id}`}</span>
+                    <span className="text-amber-300 font-bold">{parseFloat(r.amount).toLocaleString()} JC</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {referralRecords.length > 0 && (
+              <div className="pt-1">
+                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Referral Bonus</p>
+                {referralRecords.map((r) => (
+                  <div key={r.id} className="flex justify-between text-sm">
+                    <span className="text-slate-400">{r.first_name || r.username || `User #${r.user_id}`}</span>
+                    <span className="text-amber-300 font-bold">{parseFloat(r.amount).toLocaleString()} JC</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="pt-2 border-t border-amber-500/20 flex justify-between text-sm font-semibold">
+              <span className="text-slate-400">Total Disbursed</span>
+              <span className="text-amber-300">{totalDisburse.toLocaleString()} JCMOVES</span>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function LeadDetailPage() {
   const [, params] = useRoute("/lead/:id");
   const [, setLocation] = useLocation();
@@ -971,42 +1051,7 @@ export default function LeadDetailPage() {
 
             {/* ── JCMOVES Disbursement Summary (shows after completion rewards are distributed) ── */}
             {lead.completionRewardedAt && hasAdminAccess && (
-              <Card className="border-amber-500/30 bg-gradient-to-br from-amber-950/30 to-slate-900/60">
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 text-amber-400">
-                    <Zap className="h-5 w-5" />
-                    JCMOVES Disbursement
-                    <Badge className="ml-auto bg-green-600/30 text-green-300 border-green-500/30 text-[10px]">Complete</Badge>
-                  </CardTitle>
-                  <CardDescription className="text-amber-300/60 text-xs">
-                    Distributed at {new Date(lead.completionRewardedAt).toLocaleString()}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {lead.totalPrice && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-slate-400">Customer earn ({Math.round(parseFloat(lead.totalPrice) * 50).toLocaleString()} JCMOVES)</span>
-                      <span className="text-amber-300 font-bold">${parseFloat(lead.totalPrice).toFixed(2)} × 50/$ </span>
-                    </div>
-                  )}
-                  {lead.crewSize && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-slate-400">Crew flat reward (×{lead.crewMembers?.length || lead.crewSize})</span>
-                      <span className="text-amber-300 font-bold">500 JCMOVES each</span>
-                    </div>
-                  )}
-                  {lead.confirmedHours && (lead.crewMembers?.length || lead.crewSize) ? (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-slate-400">Hours bonus ({lead.confirmedHours}h × 25)</span>
-                      <span className="text-amber-300 font-bold">{(lead.confirmedHours * 25).toLocaleString()} JCMOVES each</span>
-                    </div>
-                  ) : null}
-                  <div className="pt-2 border-t border-amber-500/20 flex justify-between text-xs text-slate-500">
-                    <span>Token price</span>
-                    <span>≈ $0.00000508 / JCMOVES</span>
-                  </div>
-                </CardContent>
-              </Card>
+              <DisbursementSummaryCard lead={lead} />
             )}
 
             {/* Bitcoin Payment - Admin Only */}
@@ -1218,6 +1263,20 @@ export default function LeadDetailPage() {
                 placeholder="Service description"
               />
             </div>
+            {lead.orderLineItems && lead.orderLineItems.length > 0 && (
+              <div className="p-3 bg-emerald-950/20 border border-emerald-500/20 rounded-lg text-xs space-y-1">
+                <p className="font-semibold text-emerald-400 mb-1.5">Itemized order ({lead.orderLineItems.length} line items):</p>
+                {lead.orderLineItems.map((li: any, i: number) => (
+                  <div key={i} className="flex justify-between text-slate-400">
+                    <span>{li.name}{li.qty > 1 ? ` × ${li.qty}` : ""}</span>
+                    <span>${li.total?.toFixed(2)}</span>
+                  </div>
+                ))}
+                <p className="text-[10px] text-slate-500 pt-1 border-t border-emerald-500/10">
+                  Invoice will use Square order line items.
+                </p>
+              </div>
+            )}
             <div className="p-3 bg-muted rounded-lg text-sm space-y-1">
               <p className="font-medium">Payment methods accepted:</p>
               <p className="text-muted-foreground">Credit/Debit Card, Bank Transfer, Cash App Pay</p>

@@ -177,6 +177,13 @@ const SECTIONS = [
     title: "System",
     items: [
       {
+        href: "/admin/square-catalog",
+        icon: Settings,
+        label: "Square Catalog Mapping",
+        description: "Map order package names to Square catalog variation IDs",
+        color: "from-emerald-600 to-teal-700",
+      },
+      {
         href: "/admin/system-check",
         icon: Settings,
         label: "System Check",

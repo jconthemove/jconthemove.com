@@ -264,9 +264,17 @@ export class SquareInvoiceService {
     };
   }
 
+  async getCatalogMappings(): Promise<Record<string, string>> {
+    try {
+      const { pool } = await import("../db");
+      const { rows } = await pool.query(`SELECT setting_value FROM spin_config WHERE setting_key='square_catalog_mappings' LIMIT 1`);
+      return rows.length > 0 ? JSON.parse(rows[0].setting_value) : {};
+    } catch (_) { return {}; }
+  }
+
   async createItemizedInvoiceForLead(
     lead: Lead,
-    lineItems: Array<{ name: string; qty: number; unitPrice: number; total: number }>,
+    lineItems: Array<{ id?: string; name: string; qty: number; unitPrice: number; total: number }>,
     dueDate?: string
   ): Promise<{ invoiceId: string; invoiceUrl: string; squareInvoiceId: string }> {
     const client = getSquareClient();
@@ -274,14 +282,25 @@ export class SquareInvoiceService {
     const customerName = `${lead.firstName} ${lead.lastName}`;
     const customerId = await this.createOrGetCustomer(lead.email, customerName, lead.phone || undefined);
 
-    const squareLineItems = lineItems.map(li => ({
-      name: li.name,
-      quantity: String(li.qty),
-      basePriceMoney: {
-        amount: BigInt(Math.round(li.unitPrice * 100)),
-        currency: "USD" as const,
-      },
-    }));
+    const catalogMappings = await this.getCatalogMappings();
+
+    const squareLineItems = lineItems.map(li => {
+      const catalogVariationId = li.id ? catalogMappings[li.id] : undefined;
+      if (catalogVariationId) {
+        return {
+          catalogObjectId: catalogVariationId,
+          quantity: String(li.qty),
+        };
+      }
+      return {
+        name: li.name,
+        quantity: String(li.qty),
+        basePriceMoney: {
+          amount: BigInt(Math.round(li.unitPrice * 100)),
+          currency: "USD" as const,
+        },
+      };
+    });
 
     const totalAmount = lineItems.reduce((s, li) => s + li.total, 0);
 

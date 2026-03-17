@@ -11,7 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   Users, Clock, DollarSign, Truck, Package2, Zap, AlertTriangle,
   CheckCircle2, Star, ShoppingCart, ChevronDown, ChevronUp, Sparkles,
-  Wrench, Sofa
+  Wrench, Sofa, Navigation
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -275,6 +275,7 @@ export function JobOrderBuilder({ lead, disabled, onApply }: JobOrderBuilderProp
     poolTableFee: parseFloat(lead.poolTableFee ?? "0") || 200,
   });
 
+  const [driveMiles, setDriveMiles] = useState<string>("");
   const [confirmedDate, setConfirmedDate] = useState(lead.confirmedFromAddress ?? "");
   const [quoteNotes, setQuoteNotes] = useState(lead.quoteNotes ?? "");
   const [showAddons, setShowAddons] = useState(true);
@@ -288,6 +289,24 @@ export function JobOrderBuilder({ lead, disabled, onApply }: JobOrderBuilderProp
       }
     }
   }, [pricing, lead.crewSize, lead.basePrice, isMoving]);
+
+  const driveLineItem = useMemo((): LineItem | null => {
+    const miles = parseFloat(driveMiles);
+    if (!miles || miles <= 0 || !pricing) return null;
+    const DRIVE_RATE = 40; // $40/hr/mover
+    const crewSize = selectedPkg !== null ? MOVING_PACKAGES[selectedPkg]?.movers ?? 2 : 2;
+    const roundTripMiles = miles * 2;
+    const driveHours = Math.ceil(roundTripMiles / (pricing.driveSpeedMph || 45) * 2) / 2; // round to 0.5
+    const fee = Math.round(driveHours * crewSize * DRIVE_RATE);
+    return {
+      id: "drive_time",
+      name: `Drive Time — ${miles} mi × 2 (round trip) ÷ ${pricing.driveSpeedMph || 45}mph × ${crewSize} movers @ $${DRIVE_RATE}/hr`,
+      qty: 1,
+      unitPrice: fee,
+      total: fee,
+      category: "drive",
+    };
+  }, [driveMiles, pricing, selectedPkg]);
 
   const summary = useMemo((): OrderSummary | null => {
     if (!pricing) return null;
@@ -307,6 +326,8 @@ export function JobOrderBuilder({ lead, disabled, onApply }: JobOrderBuilderProp
         total: laborTotal,
         category: "labor",
       });
+
+      if (driveLineItem) lineItems.push(driveLineItem);
 
       MOVING_ADDONS.forEach(addon => {
         const qty = addonQty[addon.id] ?? 0;
@@ -381,6 +402,8 @@ export function JobOrderBuilder({ lead, disabled, onApply }: JobOrderBuilderProp
         return null;
       }
 
+      if (driveLineItem) lineItems.push(driveLineItem);
+
       JUNK_ADDONS.forEach(addon => {
         const qty = addonQty[addon.id] ?? 0;
         if (qty > 0) {
@@ -412,7 +435,7 @@ export function JobOrderBuilder({ lead, disabled, onApply }: JobOrderBuilderProp
     }
 
     return null;
-  }, [pricing, selectedPkg, selectedJunkPkg, addonQty, specialItems, specialFees, junkCustomPrice, isMoving, isJunk]);
+  }, [pricing, selectedPkg, selectedJunkPkg, addonQty, specialItems, specialFees, junkCustomPrice, isMoving, isJunk, driveLineItem]);
 
   const handleApply = () => {
     if (!summary) return;
@@ -532,6 +555,40 @@ export function JobOrderBuilder({ lead, disabled, onApply }: JobOrderBuilderProp
                 </div>
               </div>
             </div>
+          )}
+        </div>
+
+        <Separator className="bg-slate-700/50" />
+
+        {/* ── Drive Time ── */}
+        <div>
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+            <Navigation className="h-3.5 w-3.5 text-blue-400" /> Drive Time (optional)
+          </p>
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1">
+              <Input
+                type="number"
+                min="0"
+                step="1"
+                placeholder="One-way miles from Ironwood, MI"
+                className="bg-slate-800 border-slate-600 text-white pr-12"
+                value={driveMiles}
+                onChange={e => setDriveMiles(e.target.value)}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">mi</span>
+            </div>
+            {driveLineItem && (
+              <div className="flex-shrink-0 text-right">
+                <p className="text-emerald-400 font-bold text-sm">${driveLineItem.total}</p>
+                <p className="text-slate-500 text-[10px]">drive fee</p>
+              </div>
+            )}
+          </div>
+          {driveLineItem && (
+            <p className="text-[11px] text-slate-500 mt-1">
+              {driveMiles} mi × 2 (round trip) ÷ {pricing.driveSpeedMph || 45}mph × {driveLineItem && driveLineItem.name.match(/(\d+) movers/)?.[1] || "?"} movers @ $40/hr
+            </p>
           )}
         </div>
 
