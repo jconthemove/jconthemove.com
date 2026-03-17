@@ -264,6 +264,83 @@ export class SquareInvoiceService {
     };
   }
 
+  async createItemizedInvoiceForLead(
+    lead: Lead,
+    lineItems: Array<{ name: string; qty: number; unitPrice: number; total: number }>,
+    dueDate?: string
+  ): Promise<{ invoiceId: string; invoiceUrl: string; squareInvoiceId: string }> {
+    const client = getSquareClient();
+    const locationId = await this.getLocationId();
+    const customerName = `${lead.firstName} ${lead.lastName}`;
+    const customerId = await this.createOrGetCustomer(lead.email, customerName, lead.phone || undefined);
+
+    const squareLineItems = lineItems.map(li => ({
+      name: li.name,
+      quantity: String(li.qty),
+      basePriceMoney: {
+        amount: BigInt(Math.round(li.unitPrice * 100)),
+        currency: "USD" as const,
+      },
+    }));
+
+    const totalAmount = lineItems.reduce((s, li) => s + li.total, 0);
+
+    const orderResponse = await client.orders.create({
+      idempotencyKey: `order-itemized-${lead.id}-${Date.now()}`,
+      order: {
+        locationId,
+        customerId,
+        lineItems: squareLineItems,
+      },
+    });
+
+    const orderId = orderResponse.order!.id!;
+
+    const invoiceResponse = await client.invoices.create({
+      idempotencyKey: `invoice-itemized-${lead.id}-${Date.now()}`,
+      invoice: {
+        orderId,
+        locationId,
+        primaryRecipient: { customerId },
+        paymentRequests: [{ requestType: "BALANCE", dueDate: dueDate || this.getDefaultDueDate() }],
+        deliveryMethod: "EMAIL",
+        acceptedPaymentMethods: { card: true, bankAccount: true, squareGiftCard: false, buyNowPayLater: false, cashAppPay: true },
+        title: `Invoice - JC ON THE MOVE`,
+        description: `Moving service for ${customerName}`,
+      },
+    });
+
+    const squareInvoice = invoiceResponse.invoice!;
+    const publishResponse = await client.invoices.publish({
+      invoiceId: squareInvoice.id!,
+      version: squareInvoice.version!,
+      idempotencyKey: `publish-itemized-${squareInvoice.id}-${Date.now()}`,
+    });
+    const publishedInvoice = publishResponse.invoice!;
+
+    const invoiceData: InsertSquareInvoice = {
+      leadId: lead.id,
+      squareInvoiceId: publishedInvoice.id!,
+      squareOrderId: orderId,
+      customerId,
+      customerEmail: lead.email,
+      customerName,
+      amount: totalAmount.toFixed(2),
+      currency: "USD",
+      description: `Itemized order — ${lineItems.length} line item(s)`,
+      status: "sent",
+      invoiceUrl: publishedInvoice.publicUrl,
+      dueDate: dueDate || this.getDefaultDueDate(),
+    };
+
+    const savedInvoice = await storage.createSquareInvoice(invoiceData);
+    return {
+      invoiceId: savedInvoice.id,
+      invoiceUrl: publishedInvoice.publicUrl || "",
+      squareInvoiceId: publishedInvoice.id!,
+    };
+  }
+
   async getInvoiceStatus(squareInvoiceId: string): Promise<string> {
     try {
       const client = getSquareClient();

@@ -182,6 +182,11 @@ export default function LeadDetailPage() {
     mutationFn: async () => {
       const amount = parseFloat(invoiceAmount);
       if (!amount || amount <= 0) throw new Error("Please enter a valid amount");
+      if (lead?.orderLineItems && lead.orderLineItems.length > 0) {
+        return await apiRequest("POST", `/api/square/invoice-lead/${params?.id}`, {
+          lineItems: lead.orderLineItems,
+        });
+      }
       return await apiRequest("POST", `/api/invoices/lead/${params?.id}`, {
         amount,
         description: invoiceDescription || `${lead?.serviceType} - ${lead?.firstName} ${lead?.lastName}`,

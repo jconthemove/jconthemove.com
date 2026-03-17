@@ -4111,8 +4111,7 @@ Thank you for your business!
   });
 
   // General update lead endpoint (admin or employee)
-  // TEMPORARY: Authentication temporarily disabled for debugging
-  app.patch("/api/leads/:id", async (req, res) => {
+  app.patch("/api/leads/:id", isAuthenticated, async (req, res) => {
     try {
       const { id } = req.params;
       const updateData = req.body;
@@ -4144,176 +4143,8 @@ Thank you for your business!
 
       if (isStatusChangingToCompleted && !rewardsAlreadyDistributed) {
         try {
-          const TOKEN_PRICE = 0.00000508432;
-
-          // ── Determine who gets rewarded ──────────────────────────────────
-          // Use crew_members if set, otherwise fall back to assignedToUserId
-          const crewIds: string[] = (updatedLead.crewMembers && updatedLead.crewMembers.length > 0)
-            ? updatedLead.crewMembers
-            : (updatedLead.assignedToUserId ? [updatedLead.assignedToUserId] : []);
-
-          // ── 1. FLAT PER-EMPLOYEE REWARD (employee_job_completed setting) ─
-          // Fires for every crew member / assigned employee regardless of tokenAllocation
-          if (crewIds.length > 0) {
-            const empSetting = await db.select().from(rewardSettings).where(eq(rewardSettings.settingKey, 'employee_job_completed')).limit(1);
-            const flatReward = empSetting.length > 0 && empSetting[0].isActive
-              ? parseFloat(empSetting[0].tokenAmount)
-              : 500; // fallback 500 JCMOVES
-
-            for (const memberId of crewIds) {
-              try {
-                const memberUser = await storage.getUser(memberId).catch(() => null);
-                if (!memberUser) { console.log(`⚠️ Crew member ${memberId} not found in DB — skipping flat reward`); continue; }
-                await storage.creditWalletTokens(memberId, flatReward);
-                await db.insert(rewards).values({
-                  userId: memberId,
-                  rewardType: 'employee_job_completed',
-                  tokenAmount: flatReward.toFixed(8),
-                  cashValue: (flatReward * TOKEN_PRICE).toFixed(6),
-                  status: 'confirmed',
-                  referenceId: id,
-                  metadata: { jobId: id, serviceType: updatedLead.serviceType, flat: true }
-                });
-                console.log(`🏆 Awarded ${flatReward} JCMOVES (job completion flat reward) to ${memberUser.email}`);
-                await awardTierPoints(memberId, 'employee_job_done');
-                // Push notification for employee job completion reward
-                try {
-                  const { notificationService: pushSvc } = await import('./services/notification');
-                  await pushSvc.notifyRewardAvailable(memberId, 'job completion', flatReward);
-                } catch (_) {}
-              } catch (memberErr) {
-                console.error(`❌ Failed to award flat reward to crew member ${memberId}:`, memberErr);
-              }
-            }
-          } else {
-            console.log(`⚠️ Job ${id} has no crew members or assigned employee — skipping employee flat reward`);
-          }
-
-          // ── 2. HOURS-WORKED BONUS (25 JCMOVES × confirmedHours per crew member) ──
-          const confirmedHours = updatedLead.confirmedHours ? parseInt(String(updatedLead.confirmedHours)) : 0;
-          if (confirmedHours > 0 && crewIds.length > 0) {
-            const HOURS_RATE = 25; // JCMOVES per hour
-            const hoursBonus = HOURS_RATE * confirmedHours;
-            for (const memberId of crewIds) {
-              try {
-                const memberUser = await storage.getUser(memberId).catch(() => null);
-                if (!memberUser) continue;
-                await storage.creditWalletTokens(memberId, hoursBonus);
-                await db.insert(rewards).values({
-                  userId: memberId,
-                  rewardType: 'employee_hours_bonus',
-                  tokenAmount: hoursBonus.toFixed(8),
-                  cashValue: (hoursBonus * TOKEN_PRICE).toFixed(6),
-                  status: 'confirmed',
-                  referenceId: id,
-                  metadata: { jobId: id, confirmedHours, ratePerHour: HOURS_RATE }
-                });
-                console.log(`⏱️ Awarded ${hoursBonus} JCMOVES (${confirmedHours}h × ${HOURS_RATE}/hr) to ${memberUser.email}`);
-              } catch (hErr) {
-                console.error(`❌ Failed hours bonus for ${memberId}:`, hErr);
-              }
-            }
-          }
-
-          // ── 3. TOKEN ALLOCATION DISTRIBUTION (bonus from job budget) ────
-          // Only runs when tokenAllocation is explicitly set and > 0
-          if (updatedLead.tokenAllocation && crewIds.length > 0) {
-            const totalTokens = parseFloat(updatedLead.tokenAllocation);
-            if (!isNaN(totalTokens) && totalTokens > 0) {
-              const creatorUserId = currentLead.createdByUserId;
-              const isCreatorInCrew = creatorUserId && crewIds.includes(creatorUserId);
-
-              let crewAllocation = totalTokens;
-              if (creatorUserId && !isCreatorInCrew) {
-                const creatorBonus = totalTokens * 0.1;
-                crewAllocation = totalTokens * 0.9;
-                await storage.creditWalletTokens(creatorUserId, creatorBonus);
-                await db.insert(rewards).values({
-                  userId: creatorUserId,
-                  rewardType: 'job_creation_bonus',
-                  tokenAmount: creatorBonus.toFixed(8),
-                  cashValue: (creatorBonus * TOKEN_PRICE).toFixed(6),
-                  status: 'confirmed',
-                  referenceId: id,
-                  metadata: { totalAllocation: totalTokens, percentage: '10%', jobId: id }
-                });
-                console.log(`💰 Awarded ${creatorBonus} JCMOVES (10% creation fee) to creator ${creatorUserId}`);
-              }
-
-              const tokensPerWorker = crewAllocation / crewIds.length;
-              for (const crewMemberId of crewIds) {
-                try {
-                  await gamificationService.awardJobCompletion(crewMemberId, id, tokensPerWorker.toFixed(8), { onTime: true, customerRating: 5 });
-                  console.log(`✅ Awarded ${tokensPerWorker} JCMOVES (allocation share) to crew member ${crewMemberId}`);
-                } catch (memberErr) {
-                  console.error(`❌ Failed to award allocation share to crew member ${crewMemberId}:`, memberErr);
-                }
-              }
-            }
-          }
-
-          // ── Mark rewards as distributed ──────────────────────────────────
-          await storage.updateLeadQuote(id, { completionRewardedAt: new Date() });
-          console.log(`✅ Marked job ${id} as rewarded at ${new Date().toISOString()}`);
-
-          // ── 3. CUSTOMER EARN REWARD (earn_rate_per_dollar × job price) ───
-          try {
-            const customerEmail = updatedLead.email || updatedLead.customerEmail;
-            if (customerEmail) {
-              const customer = await storage.getUserByEmail(customerEmail);
-              if (customer) {
-                const jobPrice = parseFloat(updatedLead.totalPrice || updatedLead.basePrice || '0');
-                // Load system-wide earn rate from settings (default 50 JCMOVES per $1)
-                const rateSetting = await db.select().from(rewardSettings).where(eq(rewardSettings.settingKey, 'earn_rate_per_dollar')).limit(1);
-                const earnRate = rateSetting.length > 0 ? parseFloat(rateSetting[0].tokenAmount) : 50;
-                const LOYALTY_REWARD = jobPrice > 0 ? Math.round(jobPrice * earnRate) : 0;
-                if (LOYALTY_REWARD <= 0) throw new Error("No job price set — skipping earn reward");
-
-                // Update total spend
-                const prevSpend = parseFloat((customer as any).totalCompletedSpend || '0');
-                const newSpend = prevSpend + jobPrice;
-                const newTier = getTierFromSpend(newSpend);
-                await db.update(users)
-                  .set({ loyaltyTier: newTier, totalCompletedSpend: newSpend.toFixed(2) } as any)
-                  .where(eq(users.id, customer.id));
-
-                await storage.creditWalletTokens(customer.id, LOYALTY_REWARD);
-                await db.insert(rewards).values({
-                  userId: customer.id,
-                  rewardType: REWARD_TYPES.LOYALTY_BOOKING,
-                  tokenAmount: LOYALTY_REWARD.toFixed(8),
-                  cashValue: (LOYALTY_REWARD * 0.00000508432).toFixed(6),
-                  status: "confirmed",
-                  metadata: { jobId: id, serviceType: updatedLead.serviceType, jobPrice, earnRate, tokensPerDollar: earnRate }
-                });
-                console.log(`🎁 Awarded ${LOYALTY_REWARD} JCMOVES (${earnRate}/$ × $${jobPrice}) to customer ${customer.email}`);
-                // Tier points: job completion + spending bonus
-                await awardTierPoints(customer.id, 'job_completed');
-                const spentHundreds = Math.floor(jobPrice / 100);
-                if (spentHundreds > 0) await awardTierPoints(customer.id, 'per_100_spent', spentHundreds);
-
-                if (customer.referredByUserId) {
-                  const prevLoyalty = await db.select().from(rewards)
-                    .where(and(eq(rewards.userId, customer.id), eq(rewards.rewardType, REWARD_TYPES.LOYALTY_BOOKING)));
-                  if (prevLoyalty.length === 1) {
-                    const REFERRAL_BONUS = TREASURY_CONFIG.REFERRAL_CONFIRMED_TOKENS;
-                    await storage.creditWalletTokens(customer.referredByUserId, REFERRAL_BONUS);
-                    await db.insert(rewards).values({
-                      userId: customer.referredByUserId,
-                      rewardType: REWARD_TYPES.REFERRAL_CONFIRMED,
-                      tokenAmount: REFERRAL_BONUS.toFixed(8),
-                      cashValue: (REFERRAL_BONUS * 0.01).toFixed(2),
-                      status: "confirmed",
-                      metadata: { referredUserId: customer.id, jobId: id }
-                    });
-                    console.log(`🎉 Awarded ${REFERRAL_BONUS} JCMOVES referral bonus to ${customer.referredByUserId}`);
-                  }
-                }
-              }
-            }
-          } catch (customerRewardError) {
-            console.error("Error awarding customer rewards:", customerRewardError);
-          }
+          const { disburseJobTokens } = await import('./services/disburse-job-tokens');
+          await disburseJobTokens(id);
         } catch (tokenError) {
           console.error("Error distributing job completion tokens:", tokenError);
           // Don't fail the request if token distribution fails
@@ -11261,6 +11092,72 @@ Thank you for your business!
       console.error("Error creating Square checkout:", error);
       const errorMsg = error?.errors?.[0]?.detail || error.message || "Failed to create checkout link";
       res.status(500).json({ error: errorMsg });
+    }
+  });
+
+  // ── Square Catalog proxy (admin only) ──────────────────────────────────────
+  app.get("/api/square/catalog", isAuthenticated, requireAdmin, async (req: any, res) => {
+    const squareToken = process.env.SQUARE_ACCESS_TOKEN;
+    if (!squareToken) {
+      return res.status(200).json({ items: [], note: "Square not configured" });
+    }
+    try {
+      const { SquareClient, SquareEnvironment } = await import("square");
+      const client = new SquareClient({
+        token: squareToken,
+        environment: process.env.SQUARE_ENVIRONMENT === "production"
+          ? SquareEnvironment.Production
+          : SquareEnvironment.Sandbox,
+      });
+      const response = await client.catalog.list({ types: "ITEM" });
+      const objects = response.objects || [];
+      const items = objects
+        .filter((o: any) => o.type === "ITEM" && o.itemData)
+        .map((o: any) => ({
+          id: o.id,
+          name: o.itemData.name,
+          description: o.itemData.description,
+          variations: (o.itemData.variations || []).map((v: any) => ({
+            id: v.id,
+            name: v.itemVariationData?.name,
+            priceMoney: v.itemVariationData?.priceMoney,
+          })),
+        }));
+      res.json({ items });
+    } catch (err: any) {
+      console.error("Square catalog error:", err);
+      res.status(200).json({ items: [], error: err.message });
+    }
+  });
+
+  // ── Square itemized invoice for a lead (admin only) ─────────────────────
+  app.post("/api/square/invoice-lead/:leadId", isAuthenticated, requireAdmin, async (req: any, res) => {
+    const { leadId } = req.params;
+    try {
+      const lead = await storage.getLead(leadId);
+      if (!lead) return res.status(404).json({ error: "Lead not found" });
+
+      const { lineItems, dueDate } = req.body as {
+        lineItems?: Array<{ name: string; qty: number; unitPrice: number; total: number }>;
+        dueDate?: string;
+      };
+
+      const { squareInvoiceService } = await import("./services/square-invoice");
+
+      let result: { invoiceId: string; invoiceUrl: string; squareInvoiceId: string };
+
+      if (lineItems && lineItems.length > 0) {
+        result = await squareInvoiceService.createItemizedInvoiceForLead(lead as any, lineItems, dueDate);
+      } else {
+        const amount = parseFloat(lead.totalPrice || lead.basePrice || "0");
+        if (!amount) return res.status(400).json({ error: "No price set on lead and no lineItems provided" });
+        result = await squareInvoiceService.createInvoiceForLead(lead as any, amount, undefined, dueDate);
+      }
+
+      res.json({ success: true, ...result });
+    } catch (err: any) {
+      console.error("Error creating itemized invoice:", err);
+      res.status(500).json({ error: err.message });
     }
   });
 
