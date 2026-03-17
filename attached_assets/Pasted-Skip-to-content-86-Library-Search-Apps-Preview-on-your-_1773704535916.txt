@@ -1,0 +1,800 @@
+Skip to content
+
+86%
+Library
+Search
+Apps
+Preview on your phone
+Test on a mobile device to experience touch gestures and native features.
+1
+Download Expo Go
+A free app that lets you run your project instantly.
+2
+Scan the QR code
+Use your camera to scan the code and launch Expo Go.
+Shake your device to open Expo Go's menu, then tap Reload to see your changes.
+Ready to publish to App Store?
+Go live with your app and landing page, then submit to App Store.
+Update branding and refine transaction history display
+Mobile
+Year-1 Growth Targets
+
+Realistic targets with 5 contractors.
+
+Monthly job example:
+
+30 jobs/month
+avg job $250
+
+Monthly volume:
+
+$7,500
+
+Year volume:
+
+$90,000
+
+But realistically with growth:
+
+$150k–$300k service volume
+
+Platform revenue example:
+
+15% platform fee
+
+Result:
+
+$22k–$45k revenue
+What You DO NOT Build Yet
+
+Avoid these in Year 1:
+
+staking
+jackpot
+DAO
+complex crypto tokenomics
+
+Those only make sense when you have:
+
+hundreds of users
+What Success Looks Like
+
+End of Year 1:
+
+5 contractors
+200+ customers
+150–300 jobs completed
+
+The platform becomes the default local service hub.
+
+Year-2 Expansion
+
+Then you scale.
+
+Add towns:
+
+Ashland
+Hurley
+Bessemer
+Wakefield
+Iron River
+
+Contractors grow:
+
+5 → 20
+
+Now the system becomes:
+
+Northwoods Service Network
+The Big Advantage You Have
+
+Most marketplaces fail because they start with:
+
+0 workers
+0 customers
+
+You already have:
+
+moving crews
+local reputation
+existing customers
+
+So your marketplace seed already exists.
+
+✅ If you want, I can also show you something extremely useful next:
+
+The simplest possible database structure for this entire platform (only about 6 tables) so your developers can build it very quickly.
+
+The simplest possible database structure for this entire platform (only about 6 tables) so your developers can build it very quickly.
+
+Below is the simplest possible database structure for your Northwoods Network / JC ON THE MOVE service platform.
+
+It uses only 6 core tables, which is ideal for an MVP. Most marketplace systems begin with a small relational schema connecting users, jobs, and transactions so the platform can manage profiles, listings, and interactions efficiently.
+
+This design will work perfectly with your Node + PostgreSQL + React stack.
+
+Minimal Database Structure (6 Tables)
+users
+contractors
+jobs
+job_assignments
+reviews
+token_rewards
+
+That’s it.
+
+Everything else can be added later.
+
+1️⃣ USERS TABLE
+
+Stores all platform users.
+
+Customers and contractors both exist here.
+
+users
+
+Columns:
+
+id (PK)
+name
+email
+password_hash
+phone
+role
+created_at
+
+Example:
+
+id: 101
+name: John Doe
+role: customer
+
+Role values:
+
+customer
+contractor
+admin
+2️⃣ CONTRACTORS TABLE
+
+Stores contractor-specific info.
+
+contractors
+
+Columns:
+
+id (PK)
+user_id (FK → users.id)
+business_name
+service_type
+service_area
+rating
+jobs_completed
+is_active
+
+Example:
+
+Joe's Moving Crew
+service_area: Ironwood
+rating: 4.8
+3️⃣ JOBS TABLE
+
+Stores all service requests.
+
+jobs
+
+Columns:
+
+id (PK)
+customer_id (FK → users.id)
+title
+description
+service_type
+location
+price
+status
+created_at
+
+Status values:
+
+open
+accepted
+in_progress
+completed
+cancelled
+
+Example:
+
+Moving job
+Ironwood MI
+$350
+status: open
+4️⃣ JOB_ASSIGNMENTS TABLE
+
+Tracks which contractor accepted the job.
+
+job_assignments
+
+Columns:
+
+id (PK)
+job_id (FK → jobs.id)
+contractor_id (FK → contractors.id)
+accepted_at
+completed_at
+payment_amount
+
+Example:
+
+job_id: 42
+contractor_id: 5
+payment: $320
+5️⃣ REVIEWS TABLE
+
+Stores ratings and feedback.
+
+reviews
+
+Columns:
+
+id (PK)
+job_id (FK → jobs.id)
+customer_id (FK → users.id)
+contractor_id (FK → contractors.id)
+rating
+comment
+created_at
+
+Example:
+
+rating: 5
+comment: Great service
+6️⃣ TOKEN_REWARDS TABLE
+
+Tracks JCMOVES rewards without blockchain yet.
+
+token_rewards
+
+Columns:
+
+id (PK)
+user_id (FK → users.id)
+source
+amount
+created_at
+
+Source examples:
+
+job_completed
+referral
+review_bonus
+
+Example:
+
++100 tokens
+source: job_completed
+Database Relationship Diagram
+users
+│
+├── contractors
+│
+├── jobs
+│ │
+│ └── job_assignments
+│
+├── reviews
+│
+└── token_rewards
+
+This simple relational structure lets you manage users, jobs, and rewards while keeping the schema easy to extend later.
+
+Example Job Flow in Database
+
+Customer posts job
+jobs.status = open
+Contractor accepts job
+job_assignments created
+jobs.status = accepted
+Job completed
+jobs.status = completed
+Reward issued
+token_rewards +100
+Estimated Database Size Year 1
+With your 5 contractors and local launch:
+
+users: ~300
+jobs: ~300
+reviews: ~200
+rewards: ~1000
+
+That is tiny for PostgreSQL.
+
+Future Tables (Year 2+)
+
+Add later when needed:
+
+payments
+staking
+jackpot_entries
+treasury_transactions
+contractor_availability
+referrals
+
+But you do not need them now.
+
+Developer Setup (Very Simple)
+
+Your developer can implement this with:
+
+PostgreSQL
+Drizzle ORM
+Node API
+
+Tables can be created in under 30 minutes.
+
+Here is the clean backend folder structure I recommend for your JC ON THE MOVE / Northwoods Network platform.
+
+This structure follows common Node.js + Express best practices where responsibilities are separated into routes, controllers, models, and services so the codebase stays modular and scalable.
+
+The key idea is separation of concerns:
+
+routes → define API endpoints
+
+controllers → handle request/response
+
+services → business logic
+
+models → database layer
+
+This keeps the backend easy to expand as your marketplace grows.
+
+Recommended Backend Folder Structure
+northwoods-platform
+│
+├── server.js
+├── package.json
+├── .env
+│
+├── src
+│ ├── config
+│ │ ├── db.js
+│ │ └── env.js
+│ │
+│ ├── routes
+│ │ ├── users.routes.js
+│ │ ├── jobs.routes.js
+│ │ ├── contractors.routes.js
+│ │ └── rewards.routes.js
+│ │
+│ ├── controllers
+│ │ ├── users.controller.js
+│ │ ├── jobs.controller.js
+│ │ ├── contractors.controller.js
+│ │ └── rewards.controller.js
+│ │
+│ ├── services
+│ │ ├── job.service.js
+│ │ ├── contractor.service.js
+│ │ ├── reward.service.js
+│ │ └── map.service.js
+│ │
+│ ├── models
+│ │ ├── user.model.js
+│ │ ├── contractor.model.js
+│ │ ├── job.model.js
+│ │ ├── review.model.js
+│ │ └── reward.model.js
+│ │
+│ ├── middleware
+│ │ ├── auth.js
+│ │ └── errorHandler.js
+│ │
+│ └── utils
+│ ├── logger.js
+│ └── tokenCalculator.js
+What Each Folder Does
+config
+
+Environment and database connections.
+
+Example:
+
+src/config/db.js
+
+Handles:
+
+PostgreSQL connection
+Drizzle ORM setup
+routes
+
+Defines API endpoints.
+
+Example:
+
+POST /jobs
+GET /jobs
+POST /jobs/:id/accept
+
+Example file:
+
+jobs.routes.js
+router.post("/create", createJob)
+router.get("/open", getOpenJobs)
+router.post("/:id/accept", acceptJob)
+controllers
+
+Controllers handle HTTP logic.
+
+Example:
+
+jobs.controller.js
+export async function createJob(req,res){
+const job = await jobService.create(req.body)
+res.json(job)
+}
+
+Controllers stay thin and delegate business logic to services.
+
+services
+
+Services contain the real logic.
+
+Example:
+
+job.service.js
+
+Handles things like:
+
+assign contractor
+calculate rewards
+update job status
+
+Example:
+
+async function completeJob(jobId){
+await db.jobs.update(jobId,{status:"completed"})
+await rewardService.giveReward(jobId)
+}
+models
+
+Database models.
+
+These match the 6 tables we designed earlier.
+
+Example:
+
+user.model.js
+contractor.model.js
+job.model.js
+review.model.js
+reward.model.js
+middleware
+
+Reusable backend logic.
+
+Examples:
+
+authentication
+logging
+error handling
+
+Example:
+
+auth.js
+if(!req.user){
+return res.status(401)
+}
+utils
+
+Helper functions.
+
+Examples:
+
+reward calculations
+distance calculations
+map helpers
+Example API Flow (Real Example)
+Customer posts job
+POST /jobs/create
+
+Route → Controller → Service
+
+routes/jobs.routes.js
+↓
+controllers/jobs.controller.js
+↓
+services/job.service.js
+↓
+models/job.model.js
+Example Feature: Accept Job
+POST /jobs/:id/accept
+
+Flow:
+
+Route
+↓
+Controller
+↓
+Job Service
+↓
+Database
+↓
+Reward Service
+Minimal server.js
+
+Your main backend entry file:
+
+import express from "express"
+import jobRoutes from "./src/routes/jobs.routes.js"
+
+const app = express()
+
+app.use(express.json())
+
+app.use("/api/jobs", jobRoutes)
+
+app.listen(3000, ()=>{
+console.log("Server running")
+})
+Why This Structure Works
+
+Benefits:
+
+easy for multiple developers
+easy to add new features
+clean separation of logic
+scales to large apps
+
+Organizing code this way makes large Node applications easier to maintain and extend because each module has a single responsibility.
+
+What Your Backend Will Support
+
+With this structure your platform can support:
+
+user accounts
+contractor accounts
+job marketplace
+reviews
+token rewards
+map system
+
+All with only ~10 backend files initially.
+
+Estimated Code Size (MVP)
+Routes: ~300 lines
+Controllers: ~400 lines
+Services: ~700 lines
+Models: ~300 lines
+
+Total backend:
+
+~1,700 lines
+
+Very manageable.
+
+Here is the deployment architecture I would use for your JC ON THE MOVE / Northwoods Network platform so it stays cheap in Year-1 but can scale to thousands of users later.
+
+This is based on serverless architecture, which automatically scales resources depending on traffic and removes the need to manage servers.
+
+Recommended Deployment Architecture
+Users
+↓
+Vercel (Frontend + API functions)
+↓
+PostgreSQL Database
+↓
+External Services
+(Map / Email / Payments)
+
+The system stays simple but scalable.
+
+Architecture Diagram
+Internet Users
+│
+▼
+┌───────────────────────┐
+│ Vercel Frontend │
+│ (React / Next.js) │
+└───────────────────────┘
+│
+▼
+┌───────────────────────┐
+│ Vercel API Functions │
+│ Node / Express │
+└───────────────────────┘
+│
+▼
+┌───────────────────────┐
+│ PostgreSQL Database │
+│ (Neon / Supabase) │
+└───────────────────────┘
+│
+▼
+External APIs
+Maps • Email • Payments
+Why This Architecture Works
+1️⃣ Vercel Frontend
+
+Hosts the website.
+
+React / Next.js
+
+Benefits:
+
+CDN caching
+
+global edge network
+
+fast loading
+
+Platforms like Vercel automatically deploy and distribute apps across a global edge network for speed and reliability.
+
+2️⃣ Serverless API Functions
+
+Your backend runs as Vercel Functions.
+
+Example endpoints:
+
+/api/jobs
+/api/users
+/api/contractors
+/api/rewards
+
+Serverless functions automatically scale depending on traffic instead of running a fixed server.
+
+That means:
+
+10 users → tiny cost
+10,000 users → auto scale
+3️⃣ PostgreSQL Database
+
+Use a managed database:
+
+Recommended options:
+
+Neon
+Supabase
+Railway
+
+Why:
+
+automatic backups
+auto scaling
+cheap
+
+Estimated cost:
+
+$0–$25/month early
+4️⃣ External Services
+
+You will integrate small APIs for specific features.
+
+Example stack:
+
+Mapbox / Google Maps → job map
+SendGrid → email notifications
+Stripe → payments
+
+These connect through API calls.
+
+Folder Deployment Structure
+
+Example repo layout:
+
+northwoods-platform
+
+frontend/
+React app
+
+api/
+jobs.js
+contractors.js
+users.js
+rewards.js
+
+database/
+schema.sql
+
+Vercel automatically turns anything in /api into serverless functions.
+
+Example API Function
+
+Example file:
+
+/api/jobs.js
+export default async function handler(req,res){
+
+if(req.method === "GET"){
+const jobs = await db.jobs.findMany()
+return res.json(jobs)
+}
+
+if(req.method === "POST"){
+const job = await db.jobs.create(req.body)
+return res.json(job)
+}
+}
+
+That file becomes:
+
+https://jconthemove.com/api/jobs
+Cost Estimate (Year 1)
+
+For your $40K launch plan this architecture is extremely cheap.
+
+Vercel hosting $0–$20/mo
+Database $0–$25/mo
+Map API $0–$50/mo
+Email service $0–$15/mo
+
+Total infrastructure:
+
+~$20–$100 per month
+Performance Scaling
+
+If the platform grows:
+
+100 users/day
+→ no changes needed
+
+1,000 users/day
+→ still fine
+
+10,000 users/day
+→ add caching + DB scaling
+
+Serverless infrastructure automatically scales with traffic bursts.
+
+When You Would Upgrade
+
+Later you may add:
+
+Redis cache
+background workers
+queue processing
+
+But that happens only if you reach:
+
+50k+ users
+Final System Overview
+
+Your entire stack would be:
+
+Frontend
+React / Next.js
+(Vercel)
+
+Backend
+Node / Express
+(Vercel Functions)
+
+Database
+PostgreSQL
+(Neon / Supabase)
+
+Map
+Mapbox
+
+Payments
+Stripe
+
+This architecture can handle:
+
+thousands of users
+thousands of jobs
+minimal DevOps work
+
+JC ON THE MOVE
+Mobile
+Ready to share? Go live with a shareable link, then submit to the App Store.
+the profile tab shows up white , is it freezing, also
+
+ok great platform , now lets build, can we remove test data and ensure we have a way to add back approriate fields. also the transaction history i want as clickable option for a popup or alternative page, i dont want an immediate list that overwhelmes. the crew tab could be renamed with find my crew or hire my crew. also i like the JC ON THE MOVE LLC part under can we have Northwoods' Most Trusted Local Service.
+
+download my code
+
+You have reached your free quota limit
+
+
+Scroll to latest
+
+Make, test, iterate…
