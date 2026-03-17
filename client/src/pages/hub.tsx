@@ -12,11 +12,14 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
+import {
   FileText, Users, Plus, MapPin, Phone, Mail, Calendar,
   Loader2, Search, ChevronRight, Trash2, MessageSquare,
   Sun, Cloud, CloudSnow, CloudRain, Zap, Trophy, BookOpen,
-  RefreshCw, Coins, Star, Megaphone, Clock, Truck,
-  Camera, ClipboardList, DollarSign, Wind,
+  RefreshCw, Coins, Star, Megaphone, Truck,
+  Camera, ClipboardList, DollarSign, Wind, ChevronLeft, History,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -133,6 +136,12 @@ export default function TeamHub() {
   const [scriptureClaimed, setScriptureClaimed] = useState(false);
   const [scriptureReward, setScriptureReward] = useState<{ amount: number; streak: number } | null>(null);
 
+  // Calendar state
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
+  const [calendarSelectedDate, setCalendarSelectedDate] = useState<Date | null>(null);
+  const [calendarDialogOpen, setCalendarDialogOpen] = useState(false);
+  const [historyExpanded, setHistoryExpanded] = useState(false);
+
   const scriptureClaimMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/mining/scripture-claim", {});
@@ -161,9 +170,6 @@ export default function TeamHub() {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
   const firstName = currentUser?.firstName || currentUser?.username || "Crew";
-
-  // Today string for schedule
-  const todayStr = new Date().toISOString().split("T")[0];
 
   // ── Queries ──────────────────────────────────────
   const { data: leads = [], isLoading: leadsLoading } = useQuery<Lead[]>({
@@ -205,13 +211,6 @@ export default function TeamHub() {
   // ── Computed ─────────────────────────────────────
   const activeLeads = leads.filter(l => !["completed", "cancelled", "paid"].includes(l.status));
   const completedLeads = leads.filter(l => l.status === "completed");
-  const todayLeads = useMemo(() =>
-    leads
-      .filter(l => l.moveDate && l.moveDate.startsWith(todayStr))
-      .sort((a, b) => (a.moveDate || "").localeCompare(b.moveDate || "")),
-    [leads, todayStr]
-  );
-
   const leaderboard = useMemo(() => {
     const counts: Record<string, number> = {};
     completedLeads.forEach(l => {
@@ -243,6 +242,61 @@ export default function TeamHub() {
         return aOrder - bOrder;
       });
   }, [leads, statusFilter, search]);
+
+  // ── Calendar computed ─────────────────────────────
+  const SERVICE_ICONS: Record<string, string> = {
+    residential: "🏠", junk: "🗑️", snow: "❄️", cleaning: "✨",
+    handyman: "🔧", demolition: "⚒️", flooring: "🪵", painting: "🎨",
+  };
+  const getServiceIcon = (serviceType: string) => SERVICE_ICONS[serviceType] ?? "🚛";
+
+  const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+  const calJobsByDate = useMemo(() => {
+    const year = calendarMonth.getFullYear();
+    const month = calendarMonth.getMonth();
+    const monthStart = new Date(year, month, 1);
+    const monthEnd = new Date(year, month + 1, 0, 23, 59, 59, 999);
+    return leads
+      .filter(l => {
+        const dateStr = l.confirmedDate || l.moveDate;
+        if (!dateStr) return false;
+        const parts = dateStr.split("T")[0].split("-");
+        const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        return d >= monthStart && d <= monthEnd;
+      })
+      .reduce((acc, l) => {
+        const dateStr = (l.confirmedDate || l.moveDate)!;
+        const parts = dateStr.split("T")[0].split("-");
+        const key = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])).toDateString();
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(l);
+        return acc;
+      }, {} as Record<string, Lead[]>);
+  }, [leads, calendarMonth]);
+
+  const calSelectedJobs = calendarSelectedDate
+    ? calJobsByDate[calendarSelectedDate.toDateString()] || []
+    : [];
+
+  const historyLeads = useMemo(() => {
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    return leads
+      .filter(l => {
+        if (l.status !== "completed") return false;
+        const dateStr = l.confirmedDate || l.moveDate;
+        if (!dateStr) return false;
+        const parts = dateStr.split("T")[0].split("-");
+        const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        return d <= today;
+      })
+      .sort((a, b) => {
+        const aDate = (a.confirmedDate || a.moveDate || "");
+        const bDate = (b.confirmedDate || b.moveDate || "");
+        return bDate.localeCompare(aDate);
+      });
+  }, [leads]);
 
   // ── Mutations ─────────────────────────────────────
   const updateStatusMutation = useMutation({
@@ -388,48 +442,153 @@ export default function TeamHub() {
           </div>
         </div>
 
-        {/* ══ TODAY'S SCHEDULE ══ */}
-        <div className="rounded-2xl bg-slate-800/40 border border-slate-700/40 p-5">
-          <div className="flex items-center justify-between mb-4">
+        {/* ══ MONTHLY CALENDAR ══ */}
+        <div className="rounded-2xl bg-slate-800/40 border border-slate-700/40 overflow-hidden">
+          {/* Calendar header */}
+          <div className="flex items-center justify-between px-5 pt-5 pb-3">
             <div className="flex items-center gap-2">
               <Calendar className="h-4 w-4 text-blue-400" />
-              <span className="font-bold text-white">Today's Schedule</span>
-              <Badge className="bg-blue-600/20 text-blue-300 border-blue-500/30 text-xs">{todayLeads.length} job{todayLeads.length !== 1 ? "s" : ""}</Badge>
+              <span className="font-bold text-white">{MONTH_NAMES[calendarMonth.getMonth()]} {calendarMonth.getFullYear()}</span>
             </div>
-            <Link href="/leads">
-              <Button size="sm" variant="ghost" className="text-slate-400 hover:text-white h-7 text-xs">
-                Full Calendar <ChevronRight className="h-3 w-3 ml-1" />
+            <div className="flex items-center gap-1">
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7 text-slate-400 hover:text-white"
+                onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1))}
+              >
+                <ChevronLeft className="h-4 w-4" />
               </Button>
-            </Link>
-          </div>
-          {todayLeads.length === 0 ? (
-            <div className="text-center py-6 text-slate-500">
-              <Clock className="h-8 w-8 mx-auto mb-2 opacity-40" />
-              <p className="text-sm">No jobs scheduled for today</p>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs text-blue-400 hover:text-blue-300 px-2"
+                onClick={() => setCalendarMonth(new Date())}
+              >
+                Today
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7 text-slate-400 hover:text-white"
+                onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1))}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
-          ) : (
-            <div className="space-y-2">
-              {todayLeads.map((lead, i) => {
-                const icons: Record<string, string> = {
-                  residential: "🏠", junk: "🗑️", snow: "❄️", cleaning: "✨",
-                  handyman: "🔧", demolition: "⚒️", flooring: "🪵", painting: "🎨",
-                };
-                return (
-                  <div key={lead.id} className="flex items-center gap-3 bg-white/[0.03] rounded-xl p-3 border border-white/5">
-                    <div className="text-2xl w-8 text-center">{icons[lead.serviceType] ?? "🚛"}</div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-white text-sm font-semibold">{lead.firstName} {lead.lastName}</p>
-                      <p className="text-slate-400 text-xs truncate">{lead.fromAddress}</p>
+          </div>
+
+          {/* Day-of-week headers */}
+          <div className="grid grid-cols-7 px-3 mb-1">
+            {["Su","Mo","Tu","We","Th","Fr","Sa"].map(d => (
+              <div key={d} className="text-center text-[10px] font-bold text-slate-500 uppercase py-1 tracking-wider">{d}</div>
+            ))}
+          </div>
+
+          {/* Day cells */}
+          <div className="grid grid-cols-7 gap-0.5 px-3 pb-4">
+            {(() => {
+              const year = calendarMonth.getFullYear();
+              const month = calendarMonth.getMonth();
+              const firstDay = new Date(year, month, 1).getDay();
+              const daysInMonth = new Date(year, month + 1, 0).getDate();
+              const today = new Date();
+              const isToday = (d: number) =>
+                today.getDate() === d && today.getMonth() === month && today.getFullYear() === year;
+
+              const cells = [];
+              for (let i = 0; i < firstDay; i++) {
+                cells.push(<div key={`e-${i}`} className="h-14 sm:h-16" />);
+              }
+              for (let day = 1; day <= daysInMonth; day++) {
+                const date = new Date(year, month, day);
+                const jobsOnDay = calJobsByDate[date.toDateString()] || [];
+                const showIcons = jobsOnDay.slice(0, 3);
+                const overflow = jobsOnDay.length - 3;
+                cells.push(
+                  <div
+                    key={day}
+                    className={`h-14 sm:h-16 rounded-lg p-1 cursor-pointer transition-all border ${
+                      isToday(day)
+                        ? "border-orange-500 bg-orange-500/10 shadow-md shadow-orange-500/20"
+                        : "border-slate-700/30 bg-slate-800/50 hover:bg-slate-700/50 hover:border-slate-600"
+                    }`}
+                    onClick={() => {
+                      setCalendarSelectedDate(date);
+                      setCalendarDialogOpen(true);
+                    }}
+                  >
+                    <div className={`text-xs font-bold leading-none mb-1 ${isToday(day) ? "text-orange-400" : "text-slate-300"}`}>{day}</div>
+                    <div className="flex flex-wrap gap-0.5">
+                      {showIcons.map(job => (
+                        <Link
+                          key={job.id}
+                          href={`/lead/${job.id}`}
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <span
+                            className="text-sm leading-none hover:opacity-70 transition-opacity"
+                            title={`${job.firstName} ${job.lastName} — ${job.serviceType}`}
+                          >
+                            {getServiceIcon(job.serviceType)}
+                          </span>
+                        </Link>
+                      ))}
+                      {overflow > 0 && (
+                        <span className="text-[9px] text-blue-300 font-bold leading-none self-end">+{overflow}</span>
+                      )}
                     </div>
-                    <LeadStatusBadge status={lead.status} />
-                    <Link href={`/lead/${lead.id}`}>
-                      <Button size="icon" variant="ghost" className="h-7 w-7 text-slate-500 hover:text-white flex-shrink-0">
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </Link>
                   </div>
                 );
-              })}
+              }
+              return cells;
+            })()}
+          </div>
+        </div>
+
+        {/* ══ HISTORY SECTION ══ */}
+        <div className="rounded-2xl bg-slate-800/40 border border-slate-700/40 overflow-hidden">
+          <button
+            className="w-full flex items-center justify-between px-5 py-4 text-left"
+            onClick={() => setHistoryExpanded(h => !h)}
+          >
+            <div className="flex items-center gap-2">
+              <History className="h-4 w-4 text-slate-400" />
+              <span className="font-bold text-white">Completed Jobs History</span>
+              <Badge className="bg-green-600/20 text-green-300 border-green-500/30 text-xs">{historyLeads.length}</Badge>
+            </div>
+            <ChevronRight className={`h-4 w-4 text-slate-400 transition-transform ${historyExpanded ? "rotate-90" : ""}`} />
+          </button>
+          {historyExpanded && (
+            <div className="px-4 pb-4 space-y-2">
+              {historyLeads.length === 0 ? (
+                <p className="text-slate-500 text-sm text-center py-4">No completed jobs yet</p>
+              ) : (
+                historyLeads.map(lead => {
+                  const dateStr = lead.confirmedDate || lead.moveDate;
+                  const displayDate = dateStr
+                    ? (() => {
+                        const parts = dateStr.split("T")[0].split("-");
+                        return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]))
+                          .toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                      })()
+                    : "—";
+                  return (
+                    <div key={lead.id} className="flex items-center gap-3 bg-white/[0.03] rounded-xl p-3 border border-white/5">
+                      <div className="text-xl w-7 text-center flex-shrink-0">{getServiceIcon(lead.serviceType)}</div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white text-sm font-semibold truncate">{lead.firstName} {lead.lastName}</p>
+                        <p className="text-slate-500 text-xs">{displayDate}</p>
+                      </div>
+                      <Link href={`/lead/${lead.id}`}>
+                        <Button size="icon" variant="ghost" className="h-7 w-7 text-slate-500 hover:text-white flex-shrink-0">
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </Link>
+                    </div>
+                  );
+                })
+              )}
             </div>
           )}
         </div>
@@ -883,6 +1042,66 @@ export default function TeamHub() {
         </div>
 
       </div>
+
+      {/* ── CALENDAR DAY DIALOG ── */}
+      <Dialog open={calendarDialogOpen} onOpenChange={setCalendarDialogOpen}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-md max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-white">
+              {calendarSelectedDate?.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
+              {calSelectedJobs.length === 0
+                ? "No jobs scheduled — tap below to add one."
+                : `${calSelectedJobs.length} job${calSelectedJobs.length > 1 ? "s" : ""} scheduled`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 mt-2">
+            {calSelectedJobs.length === 0 ? (
+              <div className="text-center py-6 space-y-4">
+                <p className="text-slate-500 text-sm">Nothing scheduled for this day.</p>
+                <Link href={`/leads${calendarSelectedDate ? `?tab=add&date=${calendarSelectedDate.toISOString().split("T")[0]}` : "?tab=add"}`}>
+                  <Button
+                    className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white border-0 w-full"
+                    onClick={() => setCalendarDialogOpen(false)}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add a Job
+                  </Button>
+                </Link>
+              </div>
+            ) : (
+              <>
+                {calSelectedJobs.map(job => (
+                  <div key={job.id} className="flex items-center gap-3 bg-white/[0.04] rounded-xl p-3 border border-white/10">
+                    <div className="text-2xl w-8 text-center flex-shrink-0">{getServiceIcon(job.serviceType)}</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-sm font-semibold truncate">{job.firstName} {job.lastName}</p>
+                      <p className="text-slate-400 text-xs truncate">{job.fromAddress}</p>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <LeadStatusBadge status={job.status} />
+                      <Link href={`/lead/${job.id}`}>
+                        <Button size="icon" variant="ghost" className="h-7 w-7 text-slate-500 hover:text-white" onClick={() => setCalendarDialogOpen(false)}>
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+                <div className="pt-2 border-t border-white/10">
+                  <Link href={`/leads${calendarSelectedDate ? `?tab=add&date=${calendarSelectedDate.toISOString().split("T")[0]}` : "?tab=add"}`}>
+                    <Button variant="outline" className="w-full border-white/10 text-slate-300 hover:text-white hover:bg-white/5" onClick={() => setCalendarDialogOpen(false)}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Another Job
+                    </Button>
+                  </Link>
+                </div>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ── DELETE CONFIRM ── */}
       <AlertDialog open={!!leadToDelete} onOpenChange={() => setLeadToDelete(null)}>
