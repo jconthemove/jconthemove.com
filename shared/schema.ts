@@ -88,6 +88,9 @@ export const leads = pgTable("leads", {
   redemptionId: integer("redemption_id"), // Linked reward_redemptions.id if this job was created by a redemption
   appliedCreditNote: text("applied_credit_note"), // Human-readable summary of discount/credit applied from redemption
 
+  // Customer-selected package from service-packages page
+  selectedPackageId: text("selected_package_id"), // e.g. "moving_3m_3h", "junk_half"
+
   // Review/tip link token (so customers can leave a review without logging in)
   reviewToken: varchar("review_token").unique(),
   reviewRequestSentAt: timestamp("review_request_sent_at"),

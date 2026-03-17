@@ -427,6 +427,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('⚠️ Loyalty tier migration error (non-fatal):', migErr);
   }
 
+  // Schema migration: add customer-selected package column to leads
+  try {
+    await pool.query(`
+      ALTER TABLE leads ADD COLUMN IF NOT EXISTS selected_package_id TEXT;
+    `);
+    console.log('✅ Leads selected_package_id column ready');
+  } catch (migErr) {
+    console.error('⚠️ Leads selected_package_id migration error (non-fatal):', migErr);
+  }
+
   // Schema migration: spin_results extended columns + jackpots + spin_config tables
   try {
     await pool.query(`

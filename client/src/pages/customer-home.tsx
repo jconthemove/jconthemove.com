@@ -135,7 +135,7 @@ export default function CustomerHomePage() {
 
         {/* Services */}
         <h2 className="font-bold text-zinc-900 dark:text-white text-base mb-3">Our Services</h2>
-        <div className="flex gap-3 overflow-x-auto pb-3 mb-5 scrollbar-hide">
+        <div className="flex gap-3 overflow-x-auto pb-3 mb-3 scrollbar-hide">
           {SERVICES.map(svc => {
             const Icon = svc.icon;
             return (
@@ -153,6 +153,23 @@ export default function CustomerHomePage() {
             );
           })}
         </div>
+
+        {/* View Packages CTA */}
+        <button
+          onClick={() => setLocation("/packages")}
+          className="w-full flex items-center justify-between bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 px-4 py-3 mb-5 shadow-sm active:scale-[0.98] transition-all"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
+              <Package className="h-4 w-4 text-blue-600" />
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-bold text-zinc-900 dark:text-white">View Packages & Pricing</p>
+              <p className="text-[11px] text-zinc-400">Browse moving & junk removal packages</p>
+            </div>
+          </div>
+          <ChevronRight className="h-4 w-4 text-zinc-400" />
+        </button>
 
         <div className="space-y-3 mb-5">
           <EarnTasksButton embedded />

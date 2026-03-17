@@ -18,6 +18,7 @@ import OnboardingPage from "@/pages/onboarding";
 import CustomerHomePage from "@/pages/customer-home";
 import MyJobsPage from "@/pages/my-jobs";
 import PostJobPage from "@/pages/post-job";
+import ServicePackagesPage from "@/pages/service-packages";
 import CrewJobsPage from "@/pages/crew-jobs";
 import CustomerRewardsPage from "@/pages/customer-rewards";
 import CustomerProfilePage from "@/pages/customer-profile";
@@ -256,6 +257,9 @@ function CustomerApp() {
           </Route>
           <Route path="/post-job">
             <PostJobPage />
+          </Route>
+          <Route path="/packages">
+            <ServicePackagesPage />
           </Route>
           <Route path="/crew-jobs">
             <CrewJobsPage />
