@@ -8,23 +8,24 @@
  *  C) CUSTOMER earn  — tokenAllocation (if set) OR earn_rate_per_dollar × totalPrice
  *  D) REFERRAL bonus — first completed job referral bonus to the referrer
  *
- * Idempotency (multi-level, no double-credit possible under any failure scenario):
+ * Idempotency (multi-level):
  *
- *  Level 1 — Job fast-path: skip if tokens_disbursed_at already set on lead.
+ *  Level 1 — Job fast-path: skip immediately if tokens_disbursed_at is already set.
  *
  *  Level 2 — Concurrency guard: PostgreSQL advisory lock (pg_try_advisory_lock)
- *            prevents two concurrent calls from both proceeding.
+ *            ensures only ONE caller can proceed for a given lead at a time.
+ *            All other concurrent calls receive null immediately.
  *
- *  Level 3 — DB-level unique constraint: `uq_reward_per_user_per_ref` on
- *            (user_id, reward_type, reference_id WHERE reference_id IS NOT NULL).
- *            Each payout uses `INSERT ... ON CONFLICT DO NOTHING RETURNING id`.
- *            Wallet credit runs ONLY IF the insert returned a row (new insert).
- *            If the reward row already existed the wallet is untouched.
- *            This makes the reward insert + wallet credit effectively atomic:
- *            a partial failure between them cannot cause double-credit on retry.
+ *  Level 3 — Per-recipient guard: before each wallet credit, SELECT the rewards
+ *            table to check if a row already exists for (leadId, userId, rewardType).
+ *            The advisory lock ensures no concurrent call can insert between our
+ *            SELECT and INSERT, so double-credit is impossible.
+ *            Order: SELECT → INSERT reward row → credit wallet.
+ *            If wallet credit fails after INSERT, the reward row acts as a sentinel:
+ *            the next retry finds the row and skips both operations.
  *
- *  Level 4 — Completion stamp: tokens_disbursed_at written after all payouts
- *            either succeed or are confirmed already-done (fast exit on retry).
+ *  Level 4 — Completion stamp: tokens_disbursed_at is written only after all
+ *            per-recipient operations either succeed or are confirmed already-done.
  */
 import { db, pool } from "../db";
 import { rewards, rewardSettings, users } from "@shared/schema";
@@ -85,34 +86,22 @@ async function awardPoints(userId: string, action: string, count = 1): Promise<v
 }
 
 /**
- * Inserts a reward row using DB-level idempotency (ON CONFLICT DO NOTHING).
- * Returns true if a new row was inserted, false if it already existed.
- * The caller should ONLY credit the wallet when this returns true.
- *
- * Relies on the `uq_reward_per_user_per_ref` unique index on
- * (user_id, reward_type, reference_id) WHERE reference_id IS NOT NULL.
+ * Checks if a reward row already exists for (leadId, userId, rewardType).
+ * Used as a per-recipient idempotency guard under the advisory lock.
+ * Safe from TOCTOU races because the advisory lock prevents concurrent callers.
  */
-async function insertRewardIfNew(
+async function rewardAlreadyExists(
+  leadId: string,
   userId: string,
-  rewardType: string,
-  referenceId: string,
-  tokenAmount: number,
-  cashValue: number,
-  metadata: Record<string, unknown>
+  rewardType: string
 ): Promise<boolean> {
   const { rows } = await pool.query(
-    `INSERT INTO rewards (id, user_id, reward_type, token_amount, cash_value, status, reference_id, metadata)
-     VALUES (gen_random_uuid(), $1, $2, $3, $4, 'confirmed', $5, $6)
-     ON CONFLICT DO NOTHING
-     RETURNING id`,
-    [
-      userId,
-      rewardType,
-      tokenAmount.toFixed(8),
-      cashValue.toFixed(6),
-      referenceId,
-      JSON.stringify(metadata),
-    ]
+    `SELECT 1 FROM rewards
+     WHERE user_id = $1
+       AND reward_type = $2
+       AND reference_id = $3
+     LIMIT 1`,
+    [userId, rewardType, leadId]
   );
   return rows.length > 0;
 }
@@ -135,22 +124,22 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
   });
   if (!lead) throw new Error(`Lead ${leadId} not found`);
 
-  // Level 1 — fast-path idempotency: job already fully stamped
+  // Level 1 — fast-path: skip if already fully disbursed
   if (lead.tokensDisbursedAt || lead.completionRewardedAt) {
     console.log(`ℹ️ Job ${leadId} already disbursed — skipping`);
     return null;
   }
 
-  // Level 2 — concurrency guard: advisory lock prevents parallel invocations
+  // Level 2 — concurrency guard: advisory lock (only one caller proceeds at a time)
   const lockKey = leadIdToLockKey(leadId);
   const lockResult = await pool.query("SELECT pg_try_advisory_lock($1) AS acquired", [lockKey]);
   if (!lockResult.rows[0]?.acquired) {
-    console.log(`ℹ️ Job ${leadId} disbursement already in-progress (advisory lock held) — skipping`);
+    console.log(`ℹ️ Job ${leadId} disbursement in-progress elsewhere — skipping`);
     return null;
   }
 
   try {
-    // Re-check after acquiring lock (concurrent call may have just stamped)
+    // Re-check after acquiring lock (a concurrent caller may have just stamped)
     const freshLead = await storage.getLead(leadId) as typeof lead;
     if (freshLead?.tokensDisbursedAt || freshLead?.completionRewardedAt) {
       console.log(`ℹ️ Job ${leadId} disbursed by concurrent caller — skipping`);
@@ -181,11 +170,11 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
 
     let allSucceeded = true;
 
-    // ── A. CREW: flat reward + hours bonus ───────────────────────────────────
-    // For each crew member:
-    //   1. insertRewardIfNew() attempts INSERT ... ON CONFLICT DO NOTHING RETURNING id
-    //   2. If a new row was inserted (true) → credit wallet
-    //   3. If row already existed (false) → skip credit (idempotent, no double-credit)
+    // ── A. CREW: flat reward + hours bonus ────────────────────────────────────
+    // For each member:
+    //   1. SELECT to check if reward row already exists (idempotency check)
+    //   2. If not: INSERT reward row, THEN credit wallet
+    //   3. The advisory lock guarantees no concurrent caller interleaves here
     for (const memberId of crewIds) {
       try {
         const member = await storage.getUser(memberId).catch(() => null);
@@ -199,16 +188,18 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
         const flatReward = Math.round(baseFlatReward * multiplier);
         const hoursBonus = Math.round(baseHoursBonus * multiplier);
 
-        // Flat reward — Level 3 idempotency via DB unique constraint
-        const flatInserted = await insertRewardIfNew(
-          memberId,
-          "worker_job_completion_bonus",
-          `${leadId}::flat`,
-          flatReward,
-          flatReward * TOKEN_PRICE,
-          { jobId: leadId, type: "flat", flatReward, isBonusMover: isBonus, multiplier }
-        );
-        if (flatInserted) {
+        // Flat reward
+        const flatExists = await rewardAlreadyExists(leadId, memberId, "worker_job_completion_bonus");
+        if (!flatExists) {
+          await db.insert(rewards).values({
+            userId: memberId,
+            rewardType: "worker_job_completion_bonus",
+            tokenAmount: flatReward.toFixed(8),
+            cashValue: (flatReward * TOKEN_PRICE).toFixed(6),
+            status: "confirmed",
+            referenceId: leadId,
+            metadata: { jobId: leadId, type: "flat", flatReward, isBonusMover: isBonus, multiplier },
+          });
           await storage.creditWalletTokens(memberId, flatReward);
           await awardPoints(memberId, "employee_job_done");
           console.log(`🏆 Crew ${member.email}: flat=${flatReward} JCMOVES${isBonus ? " (+25%)" : ""}`);
@@ -216,16 +207,19 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
           console.log(`ℹ️ Crew ${member.email}: flat reward already exists — skipping`);
         }
 
+        // Hours bonus
         if (hoursBonus > 0) {
-          const hoursInserted = await insertRewardIfNew(
-            memberId,
-            "worker_hours_bonus",
-            `${leadId}::hours`,
-            hoursBonus,
-            hoursBonus * TOKEN_PRICE,
-            { jobId: leadId, type: "hours", confirmedHours: confirmedHrs, ratePerHour: HOURS_RATE, isBonusMover: isBonus, multiplier }
-          );
-          if (hoursInserted) {
+          const hoursExists = await rewardAlreadyExists(leadId, memberId, "worker_hours_bonus");
+          if (!hoursExists) {
+            await db.insert(rewards).values({
+              userId: memberId,
+              rewardType: "worker_hours_bonus",
+              tokenAmount: hoursBonus.toFixed(8),
+              cashValue: (hoursBonus * TOKEN_PRICE).toFixed(6),
+              status: "confirmed",
+              referenceId: leadId,
+              metadata: { jobId: leadId, type: "hours", confirmedHours: confirmedHrs, ratePerHour: HOURS_RATE, isBonusMover: isBonus, multiplier },
+            });
             await storage.creditWalletTokens(memberId, hoursBonus);
             console.log(`🕐 Crew ${member.email}: hours=${hoursBonus} JCMOVES${isBonus ? " (+25%)" : ""}`);
           } else {
@@ -243,7 +237,7 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
       }
     }
 
-    // ── B. CUSTOMER earn reward ──────────────────────────────────────────────
+    // ── B. CUSTOMER earn reward ───────────────────────────────────────────────
     try {
       const customerEmail = lead.email;
       if (customerEmail) {
@@ -256,21 +250,8 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
             : (jobPrice > 0 ? Math.round(jobPrice * earnRate) : 0);
 
           if (customerTokens > 0) {
-            const customerInserted = await insertRewardIfNew(
-              customer.id,
-              "loyalty_booking",
-              `${leadId}::earn`,
-              customerTokens,
-              customerTokens * TOKEN_PRICE,
-              {
-                jobId: leadId,
-                jobPrice,
-                earnRate: explicitAlloc > 0 ? "override" : earnRate,
-                source: explicitAlloc > 0 ? "tokenAllocation" : "formula",
-              }
-            );
-
-            if (customerInserted) {
+            const earnExists = await rewardAlreadyExists(leadId, customer.id, "loyalty_booking");
+            if (!earnExists) {
               const prevSpend = parseFloat(customer.totalCompletedSpend || "0");
               const newSpend  = prevSpend + jobPrice;
               const newTier   = getTierFromSpend(newSpend);
@@ -280,6 +261,20 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
                 .set({ loyaltyTier: newTier, totalCompletedSpend: newSpend.toFixed(2) })
                 .where(eq(users.id, customer.id));
 
+              await db.insert(rewards).values({
+                userId: customer.id,
+                rewardType: "loyalty_booking",
+                tokenAmount: customerTokens.toFixed(8),
+                cashValue: (customerTokens * TOKEN_PRICE).toFixed(6),
+                status: "confirmed",
+                referenceId: leadId,
+                metadata: {
+                  jobId: leadId,
+                  jobPrice,
+                  earnRate: explicitAlloc > 0 ? "override" : earnRate,
+                  source: explicitAlloc > 0 ? "tokenAllocation" : "formula",
+                },
+              });
               await storage.creditWalletTokens(customer.id, customerTokens);
               await awardPoints(customer.id, "job_completed");
               const spentHundreds = Math.floor(jobPrice / 100);
@@ -289,23 +284,26 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
               summary.customerId = customer.id;
               console.log(`🎁 Customer ${customer.email}: ${customerTokens} JCMOVES`);
 
-              // ── C. REFERRAL BONUS (first completed job only) ─────────────
+              // ── C. REFERRAL BONUS (first completed job only) ──────────────
               if (customer.referredByUserId) {
                 const prevJobs = await db
                   .select()
                   .from(rewards)
                   .where(and(eq(rewards.userId, customer.id), eq(rewards.rewardType, "loyalty_booking")));
-                // Only award referral bonus if this is the customer's first earn reward
                 if (prevJobs.length === 1) {
-                  const referralInserted = await insertRewardIfNew(
-                    customer.referredByUserId,
-                    "referral_confirmed",
-                    `${leadId}::referral`,
-                    REFERRAL_BONUS,
-                    REFERRAL_BONUS * TOKEN_PRICE,
-                    { referredUserId: customer.id, jobId: leadId }
+                  const referralExists = await rewardAlreadyExists(
+                    leadId, customer.referredByUserId, "referral_confirmed"
                   );
-                  if (referralInserted) {
+                  if (!referralExists) {
+                    await db.insert(rewards).values({
+                      userId: customer.referredByUserId,
+                      rewardType: "referral_confirmed",
+                      tokenAmount: REFERRAL_BONUS.toFixed(8),
+                      cashValue: (REFERRAL_BONUS * TOKEN_PRICE).toFixed(6),
+                      status: "confirmed",
+                      referenceId: leadId,
+                      metadata: { referredUserId: customer.id, jobId: leadId },
+                    });
                     await storage.creditWalletTokens(customer.referredByUserId, REFERRAL_BONUS);
                     console.log(`🎉 Referral ${REFERRAL_BONUS} JCMOVES → ${customer.referredByUserId}`);
                   }
@@ -322,16 +320,15 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
       allSucceeded = false;
     }
 
-    // Stamp completion timestamps only after all payouts succeed or are confirmed already-done.
-    // DB-level unique constraint guarantees no double-credit under any retry scenario.
+    // Stamp completion timestamps only after all payouts succeed or are confirmed already-done
     if (allSucceeded) {
       await storage.updateLeadQuote(leadId, {
         completionRewardedAt: now,
         tokensDisbursedAt: now,
       });
-      console.log(`✅ Job ${leadId} disbursement fully complete at ${now.toISOString()}`);
+      console.log(`✅ Job ${leadId} disbursement complete at ${now.toISOString()}`);
     } else {
-      console.warn(`⚠️ Job ${leadId} had partial failures — tokens_disbursed_at NOT stamped; retries are safe (unique constraint prevents double-credit)`);
+      console.warn(`⚠️ Job ${leadId} had partial failures — not stamped; retry is safe`);
     }
 
     return summary;
