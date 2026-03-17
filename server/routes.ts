@@ -13257,6 +13257,34 @@ Thank you for your business!
     }
   });
 
+  // ── Admin: Permanently delete hidden items and duplicates ─────
+  app.post("/api/admin/reward-shop/cleanup", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser((req.session as any).userId);
+      if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
+
+      // 1. Delete all hidden items permanently
+      const { rows: hiddenDeleted } = await pool.query(
+        `DELETE FROM reward_items WHERE status = 'hidden' RETURNING id`
+      );
+
+      // 2. Delete duplicate items — keep the lowest ID per name, delete the rest
+      const { rows: dupDeleted } = await pool.query(
+        `DELETE FROM reward_items
+         WHERE id NOT IN (
+           SELECT MIN(id) FROM reward_items GROUP BY name
+         )
+         RETURNING id`
+      );
+
+      const removed = hiddenDeleted.length + dupDeleted.length;
+      console.log(`🧹 Shop cleanup: removed ${hiddenDeleted.length} hidden + ${dupDeleted.length} duplicates`);
+      res.json({ success: true, hiddenRemoved: hiddenDeleted.length, duplicatesRemoved: dupDeleted.length, totalRemoved: removed });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message || "Cleanup failed" });
+    }
+  });
+
   // ── Admin: Reset catalog to official 12-item list ────────────
   app.post("/api/admin/reward-shop/reset-catalog", isAuthenticated, async (req: any, res) => {
     try {

@@ -220,6 +220,20 @@ export default function AdminRewardShopPage() {
     onError: (e: any) => toast({ title: "Reset failed", description: e.message, variant: "destructive" }),
   });
 
+  const cleanupMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/admin/reward-shop/cleanup", {}),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/reward-shop/items"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/reward-shop/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reward-shop/items"] });
+      toast({
+        title: "Shop cleaned up!",
+        description: `Removed ${data.hiddenRemoved} hidden items and ${data.duplicatesRemoved} duplicates.`,
+      });
+    },
+    onError: (e: any) => toast({ title: "Cleanup failed", description: e.message, variant: "destructive" }),
+  });
+
   const redemptionActionMutation = useMutation({
     mutationFn: ({ id, status, adminNotes }: { id: number; status: string; adminNotes?: string }) =>
       apiRequest("PATCH", `/api/admin/reward-shop/redemptions/${id}`, { status, adminNotes }),
@@ -282,6 +296,20 @@ export default function AdminRewardShopPage() {
           </div>
           {activeTab === "items" && (
             <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-orange-500/40 text-orange-400 hover:bg-orange-500/10 text-xs"
+                disabled={cleanupMutation.isPending}
+                onClick={() => {
+                  if (confirm("This will permanently DELETE all hidden items and duplicates. This cannot be undone. Continue?")) {
+                    cleanupMutation.mutate();
+                  }
+                }}
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-1" />
+                {cleanupMutation.isPending ? "Cleaning…" : "Delete Hidden & Dupes"}
+              </Button>
               <Button
                 size="sm"
                 variant="outline"
