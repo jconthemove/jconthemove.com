@@ -427,6 +427,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('⚠️ Loyalty tier migration error (non-fatal):', migErr);
   }
 
+  // Schema migration: rewards disbursement idempotency index
+  // Applied at startup (not via Drizzle auto-migration) so existing duplicate
+  // rows can be deduplicated before the unique constraint is enforced.
+  try {
+    // Step 1: Remove duplicate rows keeping the lowest (first) id per group
+    await pool.query(`
+      DELETE FROM rewards
+      WHERE reference_id IS NOT NULL
+        AND id NOT IN (
+          SELECT MIN(id)
+          FROM rewards
+          WHERE reference_id IS NOT NULL
+          GROUP BY user_id, reward_type, reference_id
+        )
+    `);
+    // Step 2: Create the partial unique index (idempotent — IF NOT EXISTS)
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_reward_per_user_per_ref
+        ON rewards (user_id, reward_type, reference_id)
+        WHERE reference_id IS NOT NULL
+    `);
+    console.log('✅ Rewards idempotency index ready');
+  } catch (migErr) {
+    console.error('⚠️ Rewards idempotency index migration error (non-fatal):', migErr);
+  }
+
   // Schema migration: spin_results extended columns + jackpots + spin_config tables
   try {
     await pool.query(`
