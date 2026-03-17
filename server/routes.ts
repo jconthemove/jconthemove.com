@@ -4387,7 +4387,7 @@ Thank you for your business!
 
   // Get crew assignment suggestions for a job (business owner only)
   // GET /api/leads/:id/disbursement-summary — shows actual reward records for a completed job
-  app.get("/api/leads/:id/disbursement-summary", isAuthenticated, requireAdmin, async (req, res) => {
+  app.get("/api/leads/:id/disbursement-summary", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
       const { id } = req.params;
       const { rows } = await pool.query(
@@ -11118,7 +11118,7 @@ Thank you for your business!
   });
 
   // ── Square Catalog ID mappings (admin only) ─────────────────────────────
-  app.get("/api/square/catalog-mappings", isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.get("/api/square/catalog-mappings", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
     try {
       const { rows } = await pool.query(`SELECT setting_value FROM spin_config WHERE setting_key='square_catalog_mappings' LIMIT 1`);
       const mappings = rows.length > 0 ? JSON.parse(rows[0].setting_value) : {};
@@ -11129,7 +11129,7 @@ Thank you for your business!
     }
   });
 
-  app.put("/api/square/catalog-mappings", isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.put("/api/square/catalog-mappings", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
     try {
       const mappings = req.body.mappings || {};
       const json = JSON.stringify(mappings);
@@ -11149,7 +11149,7 @@ Thank you for your business!
   // ── Square: Create Order on Build (admin only) ─────────────────────────────
   // Called by JobOrderBuilder "Apply Order" — creates a Square Order immediately.
   // Uses catalog variation IDs from mappings where available; falls back to ad-hoc line items.
-  app.post("/api/square/create-order/:leadId", isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.post("/api/square/create-order/:leadId", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
     const { leadId } = req.params;
     try {
       const lead = await storage.getLead(leadId);
@@ -11217,7 +11217,7 @@ Thank you for your business!
   });
 
   // ── Square Catalog proxy (admin only) ──────────────────────────────────────
-  app.get("/api/square/catalog", isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.get("/api/square/catalog", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
     const squareToken = process.env.SQUARE_ACCESS_TOKEN;
     if (!squareToken) {
       return res.status(200).json({ items: [], note: "Square not configured" });
@@ -11252,7 +11252,7 @@ Thank you for your business!
   });
 
   // ── Square itemized invoice for a lead (admin only) ─────────────────────
-  app.post("/api/square/invoice-lead/:leadId", isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.post("/api/square/invoice-lead/:leadId", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
     const { leadId } = req.params;
     try {
       const lead = await storage.getLead(leadId);
@@ -14043,7 +14043,7 @@ Thank you for your business!
     }
   });
 
-  app.put("/api/admin/pricing/catalog-definitions", isAuthenticated, requireAdmin, async (req: any, res) => {
+  app.put("/api/admin/pricing/catalog-definitions", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
     try {
       const definitions = req.body;
       await pool.query(

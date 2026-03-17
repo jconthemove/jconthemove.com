@@ -8,15 +8,17 @@
  *  C) CUSTOMER earn  — tokenAllocation (if set) OR earn_rate_per_dollar × totalPrice
  *  D) REFERRAL bonus — first completed job referral bonus to the referrer
  *
- * Idempotency: A conditional DB UPDATE on leads.tokens_disbursed_at IS NULL is used as
- * a distributed lock. If the row is already marked, disbursement is skipped immediately.
- * The timestamp is written ONLY after all reward inserts succeed.
+ * Idempotency + concurrency:
+ *  - Pre-check: skip if tokens_disbursed_at is already set on the lead.
+ *  - Concurrency guard: PostgreSQL advisory lock (pg_try_advisory_lock) prevents two
+ *    concurrent calls for the same lead from both proceeding.
+ *  - tokens_disbursed_at is written ONLY after all reward inserts succeed. If any
+ *    required write fails, the timestamp is NOT written so retries remain possible.
  */
-import { db } from "../db";
+import { db, pool } from "../db";
 import { rewards, rewardSettings, users } from "@shared/schema";
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { storage } from "../storage";
-import { pool } from "../db";
 import type { Lead } from "@shared/schema";
 
 const TOKEN_PRICE    = 0.00000508432;
@@ -71,17 +73,13 @@ async function awardPoints(userId: string, action: string, count = 1): Promise<v
   } catch (_) {}
 }
 
-/**
- * Attempt to claim the disbursement lock via a conditional UPDATE.
- * Returns true if this process is the one that set tokens_disbursed_at (i.e. won the race).
- * Returns false if already marked (another process already disbursed).
- */
-async function claimDisbursementLock(leadId: string, now: Date): Promise<boolean> {
-  const result = await pool.query(
-    `UPDATE leads SET tokens_disbursed_at = $1 WHERE id = $2 AND tokens_disbursed_at IS NULL RETURNING id`,
-    [now, leadId]
-  );
-  return result.rowCount !== null && result.rowCount > 0;
+/** Convert a leadId string to a stable 32-bit integer for use as advisory lock key. */
+function leadIdToLockKey(leadId: string): number {
+  let h = 0;
+  for (let i = 0; i < leadId.length; i++) {
+    h = (Math.imul(31, h) + leadId.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
 }
 
 export async function disburseJobTokens(leadId: string): Promise<DisbursementSummary | null> {
@@ -93,178 +91,193 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
   });
   if (!lead) throw new Error(`Lead ${leadId} not found`);
 
-  // Fast-path: skip if already marked in memory (avoids unnecessary DB round-trip)
+  // Fast-path idempotency check (in-memory read)
   if (lead.tokensDisbursedAt || lead.completionRewardedAt) {
     console.log(`ℹ️ Job ${leadId} already disbursed — skipping`);
     return null;
   }
 
-  const now = new Date();
-
-  // Atomic lock: only one concurrent caller will win this UPDATE
-  const locked = await claimDisbursementLock(leadId, now);
-  if (!locked) {
-    console.log(`ℹ️ Job ${leadId} disbursement lock already held — skipping`);
+  // Concurrency guard: acquire a PostgreSQL advisory lock for this lead.
+  // Auto-released when the connection is returned to the pool (or on process exit).
+  const lockKey = leadIdToLockKey(leadId);
+  const lockResult = await pool.query("SELECT pg_try_advisory_lock($1) AS acquired", [lockKey]);
+  if (!lockResult.rows[0]?.acquired) {
+    console.log(`ℹ️ Job ${leadId} disbursement already in-progress (advisory lock held) — skipping`);
     return null;
   }
 
-  const crewIds: string[] = (lead.crewMembers && lead.crewMembers.length > 0)
-    ? lead.crewMembers
-    : (lead.assignedToUserId ? [lead.assignedToUserId] : []);
+  try {
+    // Re-check after acquiring lock (another caller may have finished while we waited)
+    const freshLead = await storage.getLead(leadId) as typeof lead;
+    if (freshLead?.tokensDisbursedAt || freshLead?.completionRewardedAt) {
+      console.log(`ℹ️ Job ${leadId} disbursed by concurrent caller — skipping`);
+      return null;
+    }
 
-  const bonusFlags: Record<string, boolean> = (lead.crewBonusFlags as Record<string, boolean>) ?? {};
+    const crewIds: string[] = (lead.crewMembers && lead.crewMembers.length > 0)
+      ? lead.crewMembers
+      : (lead.assignedToUserId ? [lead.assignedToUserId] : []);
 
-  const baseFlatReward = (await getSetting("worker_job_completion_bonus"))
-    ?? (await getSetting("employee_job_completed"))
-    ?? FALLBACK_FLAT;
-  const earnRate     = (await getSetting("earn_rate_per_dollar")) ?? FALLBACK_EARN;
-  const confirmedHrs = lead.confirmedHours ? Number(lead.confirmedHours) : 0;
-  const baseHoursBonus = HOURS_RATE * confirmedHrs;
+    const bonusFlags: Record<string, boolean> = (lead.crewBonusFlags as Record<string, boolean>) ?? {};
 
-  const summary: DisbursementSummary = {
-    customerTokens: 0,
-    perCrewFlatTokens: baseFlatReward,
-    perCrewHoursTokens: baseHoursBonus,
-    crewIds,
-    disbursedAt: now,
-  };
+    const baseFlatReward = (await getSetting("worker_job_completion_bonus"))
+      ?? (await getSetting("employee_job_completed"))
+      ?? FALLBACK_FLAT;
+    const earnRate     = (await getSetting("earn_rate_per_dollar")) ?? FALLBACK_EARN;
+    const confirmedHrs = lead.confirmedHours ? Number(lead.confirmedHours) : 0;
+    const baseHoursBonus = HOURS_RATE * confirmedHrs;
+    const now = new Date();
 
-  let allSucceeded = true;
+    const summary: DisbursementSummary = {
+      customerTokens: 0,
+      perCrewFlatTokens: baseFlatReward,
+      perCrewHoursTokens: baseHoursBonus,
+      crewIds,
+      disbursedAt: now,
+    };
 
-  // ── A. CREW: flat reward + hours bonus (with bonus-mover multiplier) ────────
-  for (const memberId of crewIds) {
-    try {
-      const member = await storage.getUser(memberId).catch(() => null);
-      if (!member) {
-        console.log(`⚠️ Crew member ${memberId} not found — skipping`);
-        continue;
-      }
+    // Track whether all required writes succeeded so we can decide to stamp the timestamp
+    let allSucceeded = true;
 
-      const isBonus = bonusFlags[memberId] === true;
-      const multiplier = isBonus ? BONUS_MULTIPLIER : 1;
-      const flatReward = Math.round(baseFlatReward * multiplier);
-      const hoursBonus = Math.round(baseHoursBonus * multiplier);
+    // ── A. CREW: flat reward + hours bonus (with bonus-mover multiplier) ────────
+    for (const memberId of crewIds) {
+      try {
+        const member = await storage.getUser(memberId).catch(() => null);
+        if (!member) {
+          console.log(`⚠️ Crew member ${memberId} not found — skipping`);
+          continue;
+        }
 
-      await storage.creditWalletTokens(memberId, flatReward);
-      await db.insert(rewards).values({
-        userId: memberId,
-        rewardType: "worker_job_completion_bonus",
-        tokenAmount: flatReward.toFixed(8),
-        cashValue: (flatReward * TOKEN_PRICE).toFixed(6),
-        status: "confirmed",
-        referenceId: leadId,
-        metadata: { jobId: leadId, type: "flat", flatReward, isBonusMover: isBonus, multiplier },
-      });
-      await awardPoints(memberId, "employee_job_done");
+        const isBonus = bonusFlags[memberId] === true;
+        const multiplier = isBonus ? BONUS_MULTIPLIER : 1;
+        const flatReward = Math.round(baseFlatReward * multiplier);
+        const hoursBonus = Math.round(baseHoursBonus * multiplier);
 
-      if (hoursBonus > 0) {
-        await storage.creditWalletTokens(memberId, hoursBonus);
+        await storage.creditWalletTokens(memberId, flatReward);
         await db.insert(rewards).values({
           userId: memberId,
-          rewardType: "worker_hours_bonus",
-          tokenAmount: hoursBonus.toFixed(8),
-          cashValue: (hoursBonus * TOKEN_PRICE).toFixed(6),
+          rewardType: "worker_job_completion_bonus",
+          tokenAmount: flatReward.toFixed(8),
+          cashValue: (flatReward * TOKEN_PRICE).toFixed(6),
           status: "confirmed",
           referenceId: leadId,
-          metadata: { jobId: leadId, type: "hours", confirmedHours: confirmedHrs, ratePerHour: HOURS_RATE, isBonusMover: isBonus, multiplier },
+          metadata: { jobId: leadId, type: "flat", flatReward, isBonusMover: isBonus, multiplier },
         });
-      }
+        await awardPoints(memberId, "employee_job_done");
 
-      console.log(`🏆 Crew ${member.email}: flat=${flatReward} + hours=${hoursBonus} JCMOVES${isBonus ? " (+25% bonus)" : ""}`);
-
-      try {
-        const { notificationService } = await import("./notification");
-        await notificationService.notifyRewardAvailable(memberId, "job completion", flatReward + hoursBonus);
-      } catch (_) {}
-    } catch (err) {
-      console.error(`❌ Crew reward failed for ${memberId}:`, err);
-      allSucceeded = false;
-    }
-  }
-
-  // ── B. CUSTOMER earn reward ──────────────────────────────────────────────
-  try {
-    const customerEmail = lead.email;
-    if (customerEmail) {
-      const customer = await storage.getUserByEmail(customerEmail);
-      if (customer) {
-        const jobPrice = parseFloat(lead.totalPrice || lead.basePrice || "0");
-
-        const explicitAlloc = lead.tokenAllocation ? parseFloat(lead.tokenAllocation) : 0;
-        const customerTokens = explicitAlloc > 0
-          ? Math.round(explicitAlloc)
-          : (jobPrice > 0 ? Math.round(jobPrice * earnRate) : 0);
-
-        if (customerTokens > 0) {
-          const prevSpend = parseFloat(customer.totalCompletedSpend || "0");
-          const newSpend  = prevSpend + jobPrice;
-          const newTier   = getTierFromSpend(newSpend);
-
-          await db
-            .update(users)
-            .set({ loyaltyTier: newTier, totalCompletedSpend: newSpend.toFixed(2) })
-            .where(eq(users.id, customer.id));
-
-          await storage.creditWalletTokens(customer.id, customerTokens);
+        if (hoursBonus > 0) {
+          await storage.creditWalletTokens(memberId, hoursBonus);
           await db.insert(rewards).values({
-            userId: customer.id,
-            rewardType: "loyalty_booking",
-            tokenAmount: customerTokens.toFixed(8),
-            cashValue: (customerTokens * TOKEN_PRICE).toFixed(6),
+            userId: memberId,
+            rewardType: "worker_hours_bonus",
+            tokenAmount: hoursBonus.toFixed(8),
+            cashValue: (hoursBonus * TOKEN_PRICE).toFixed(6),
             status: "confirmed",
-            metadata: {
-              jobId: leadId,
-              jobPrice,
-              earnRate: explicitAlloc > 0 ? "override" : earnRate,
-              source: explicitAlloc > 0 ? "tokenAllocation" : "formula",
-            },
+            referenceId: leadId,
+            metadata: { jobId: leadId, type: "hours", confirmedHours: confirmedHrs, ratePerHour: HOURS_RATE, isBonusMover: isBonus, multiplier },
           });
+        }
 
-          await awardPoints(customer.id, "job_completed");
-          const spentHundreds = Math.floor(jobPrice / 100);
-          if (spentHundreds > 0) await awardPoints(customer.id, "per_100_spent", spentHundreds);
+        console.log(`🏆 Crew ${member.email}: flat=${flatReward} + hours=${hoursBonus} JCMOVES${isBonus ? " (+25% bonus)" : ""}`);
 
-          summary.customerTokens = customerTokens;
-          summary.customerId = customer.id;
-          console.log(`🎁 Customer ${customer.email}: ${customerTokens} JCMOVES`);
+        try {
+          const { notificationService } = await import("./notification");
+          await notificationService.notifyRewardAvailable(memberId, "job completion", flatReward + hoursBonus);
+        } catch (_) {}
+      } catch (err) {
+        console.error(`❌ Crew reward failed for ${memberId}:`, err);
+        allSucceeded = false;
+      }
+    }
 
-          // ── C. REFERRAL BONUS (first completed job only) ────────────────
-          if (customer.referredByUserId) {
-            const prevJobs = await db
-              .select()
-              .from(rewards)
-              .where(and(eq(rewards.userId, customer.id), eq(rewards.rewardType, "loyalty_booking")));
-            if (prevJobs.length === 1) {
-              await storage.creditWalletTokens(customer.referredByUserId, REFERRAL_BONUS);
-              await db.insert(rewards).values({
-                userId: customer.referredByUserId,
-                rewardType: "referral_confirmed",
-                tokenAmount: REFERRAL_BONUS.toFixed(8),
-                cashValue: (REFERRAL_BONUS * TOKEN_PRICE).toFixed(6),
-                status: "confirmed",
-                metadata: { referredUserId: customer.id, jobId: leadId },
-              });
-              console.log(`🎉 Referral ${REFERRAL_BONUS} JCMOVES → ${customer.referredByUserId}`);
+    // ── B. CUSTOMER earn reward ──────────────────────────────────────────────
+    try {
+      const customerEmail = lead.email;
+      if (customerEmail) {
+        const customer = await storage.getUserByEmail(customerEmail);
+        if (customer) {
+          const jobPrice = parseFloat(lead.totalPrice || lead.basePrice || "0");
+
+          const explicitAlloc = lead.tokenAllocation ? parseFloat(lead.tokenAllocation) : 0;
+          const customerTokens = explicitAlloc > 0
+            ? Math.round(explicitAlloc)
+            : (jobPrice > 0 ? Math.round(jobPrice * earnRate) : 0);
+
+          if (customerTokens > 0) {
+            const prevSpend = parseFloat(customer.totalCompletedSpend || "0");
+            const newSpend  = prevSpend + jobPrice;
+            const newTier   = getTierFromSpend(newSpend);
+
+            await db
+              .update(users)
+              .set({ loyaltyTier: newTier, totalCompletedSpend: newSpend.toFixed(2) })
+              .where(eq(users.id, customer.id));
+
+            await storage.creditWalletTokens(customer.id, customerTokens);
+            await db.insert(rewards).values({
+              userId: customer.id,
+              rewardType: "loyalty_booking",
+              tokenAmount: customerTokens.toFixed(8),
+              cashValue: (customerTokens * TOKEN_PRICE).toFixed(6),
+              status: "confirmed",
+              metadata: {
+                jobId: leadId,
+                jobPrice,
+                earnRate: explicitAlloc > 0 ? "override" : earnRate,
+                source: explicitAlloc > 0 ? "tokenAllocation" : "formula",
+              },
+            });
+
+            await awardPoints(customer.id, "job_completed");
+            const spentHundreds = Math.floor(jobPrice / 100);
+            if (spentHundreds > 0) await awardPoints(customer.id, "per_100_spent", spentHundreds);
+
+            summary.customerTokens = customerTokens;
+            summary.customerId = customer.id;
+            console.log(`🎁 Customer ${customer.email}: ${customerTokens} JCMOVES`);
+
+            // ── C. REFERRAL BONUS (first completed job only) ────────────────
+            if (customer.referredByUserId) {
+              const prevJobs = await db
+                .select()
+                .from(rewards)
+                .where(and(eq(rewards.userId, customer.id), eq(rewards.rewardType, "loyalty_booking")));
+              if (prevJobs.length === 1) {
+                await storage.creditWalletTokens(customer.referredByUserId, REFERRAL_BONUS);
+                await db.insert(rewards).values({
+                  userId: customer.referredByUserId,
+                  rewardType: "referral_confirmed",
+                  tokenAmount: REFERRAL_BONUS.toFixed(8),
+                  cashValue: (REFERRAL_BONUS * TOKEN_PRICE).toFixed(6),
+                  status: "confirmed",
+                  metadata: { referredUserId: customer.id, jobId: leadId },
+                });
+                console.log(`🎉 Referral ${REFERRAL_BONUS} JCMOVES → ${customer.referredByUserId}`);
+              }
             }
           }
         }
       }
+    } catch (err) {
+      console.error("❌ Customer earn reward failed:", err);
+      allSucceeded = false;
     }
-  } catch (err) {
-    console.error("❌ Customer earn reward failed:", err);
-    allSucceeded = false;
+
+    // ── Stamp completion timestamps ONLY after all writes have been attempted ──
+    // If allSucceeded is false, we skip stamping so the job can be retried.
+    if (allSucceeded) {
+      await storage.updateLeadQuote(leadId, {
+        completionRewardedAt: now,
+        tokensDisbursedAt: now,
+      });
+      console.log(`✅ Job ${leadId} disbursement fully complete at ${now.toISOString()}`);
+    } else {
+      console.warn(`⚠️ Job ${leadId} had partial failures — tokens_disbursed_at NOT stamped; retries are still possible`);
+    }
+
+    return summary;
+  } finally {
+    // Always release the advisory lock so subsequent calls can proceed
+    await pool.query("SELECT pg_advisory_unlock($1)", [lockKey]).catch(() => {});
   }
-
-  // ── Mark completion_rewarded_at only after all writes have been attempted ──
-  // tokens_disbursed_at was already set atomically above via the conditional UPDATE.
-  // We set completionRewardedAt now for compatibility with older checks.
-  await storage.updateLeadQuote(leadId, { completionRewardedAt: now });
-
-  if (!allSucceeded) {
-    console.warn(`⚠️ Job ${leadId} disbursement completed with some failures — check logs above`);
-  } else {
-    console.log(`✅ Job ${leadId} disbursement fully complete at ${now.toISOString()}`);
-  }
-
-  return summary;
 }

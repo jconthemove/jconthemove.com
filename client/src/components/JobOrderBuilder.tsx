@@ -292,7 +292,7 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
 
   const [driveMiles, setDriveMiles] = useState<string>("");
   const [driveAutoCalc, setDriveAutoCalc] = useState(false);
-  const [confirmedDate, setConfirmedDate] = useState(lead.confirmedFromAddress ?? "");
+
   const [quoteNotes, setQuoteNotes] = useState(lead.quoteNotes ?? "");
   const [showAddons, setShowAddons] = useState(true);
 
