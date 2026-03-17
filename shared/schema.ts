@@ -67,6 +67,8 @@ export const leads = pgTable("leads", {
   totalPrice: decimal("total_price", { precision: 10, scale: 2 }), // Base + special items
   
   // Quote management fields
+  confirmedHours: integer("confirmed_hours"), // Confirmed job hours (from order builder package selection)
+  orderLineItems: jsonb("order_line_items").default("[]"), // Itemized order line items from order builder
   quoteNotes: text("quote_notes"), // Project-specific notes and updates
   lastQuoteUpdatedAt: timestamp("last_quote_updated_at"), // Track when quote was last modified
   

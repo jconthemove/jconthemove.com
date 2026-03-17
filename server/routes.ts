@@ -4189,7 +4189,33 @@ Thank you for your business!
             console.log(`⚠️ Job ${id} has no crew members or assigned employee — skipping employee flat reward`);
           }
 
-          // ── 2. TOKEN ALLOCATION DISTRIBUTION (bonus from job budget) ────
+          // ── 2. HOURS-WORKED BONUS (25 JCMOVES × confirmedHours per crew member) ──
+          const confirmedHours = updatedLead.confirmedHours ? parseInt(String(updatedLead.confirmedHours)) : 0;
+          if (confirmedHours > 0 && crewIds.length > 0) {
+            const HOURS_RATE = 25; // JCMOVES per hour
+            const hoursBonus = HOURS_RATE * confirmedHours;
+            for (const memberId of crewIds) {
+              try {
+                const memberUser = await storage.getUser(memberId).catch(() => null);
+                if (!memberUser) continue;
+                await storage.creditWalletTokens(memberId, hoursBonus);
+                await db.insert(rewards).values({
+                  userId: memberId,
+                  rewardType: 'employee_hours_bonus',
+                  tokenAmount: hoursBonus.toFixed(8),
+                  cashValue: (hoursBonus * TOKEN_PRICE).toFixed(6),
+                  status: 'confirmed',
+                  referenceId: id,
+                  metadata: { jobId: id, confirmedHours, ratePerHour: HOURS_RATE }
+                });
+                console.log(`⏱️ Awarded ${hoursBonus} JCMOVES (${confirmedHours}h × ${HOURS_RATE}/hr) to ${memberUser.email}`);
+              } catch (hErr) {
+                console.error(`❌ Failed hours bonus for ${memberId}:`, hErr);
+              }
+            }
+          }
+
+          // ── 3. TOKEN ALLOCATION DISTRIBUTION (bonus from job budget) ────
           // Only runs when tokenAllocation is explicitly set and > 0
           if (updatedLead.tokenAllocation && crewIds.length > 0) {
             const totalTokens = parseFloat(updatedLead.tokenAllocation);

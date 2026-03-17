@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Mail, Phone, MapPin, Calendar, Truck, Users, DollarSign, Award, TrendingUp, CheckCircle, Circle, Clock, Star, ExternalLink, Sparkles, Send, FileText, Loader2, Bitcoin, Copy, Check } from "lucide-react";
+import { ArrowLeft, Mail, Phone, MapPin, Calendar, Truck, Users, DollarSign, Award, TrendingUp, CheckCircle, Circle, Clock, Star, ExternalLink, Sparkles, Send, FileText, Loader2, Bitcoin, Copy, Check, Zap, ShoppingBag } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { CrewSuggestionsDialog } from "@/components/crew-suggestions-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { JobOrderBuilder } from "@/components/JobOrderBuilder";
 
 interface Lead {
   id: string;
@@ -56,6 +57,9 @@ interface Lead {
   quoteNotes?: string;
   lastQuoteUpdatedAt?: string;
   tokenAllocation?: number;
+  confirmedHours?: number;
+  orderLineItems?: any[];
+  completionRewardedAt?: string;
   checkedInAt?: string;
   completedAt?: string;
   createdAt: string;
@@ -86,6 +90,7 @@ export default function LeadDetailPage() {
   const [showInvoiceDialog, setShowInvoiceDialog] = useState(false);
   const [invoiceAmount, setInvoiceAmount] = useState("");
   const [invoiceDescription, setInvoiceDescription] = useState("");
+  const [orderApplied, setOrderApplied] = useState(false);
   const [showBtcDialog, setShowBtcDialog] = useState(false);
   const [btcAmount, setBtcAmount] = useState("");
   const [btcPaymentLink, setBtcPaymentLink] = useState<string | null>(null);
@@ -273,6 +278,39 @@ export default function LeadDetailPage() {
     updateLead.mutate({
       ...formData,
       status: lead?.status,
+    });
+  };
+
+  const handleOrderApply = (orderData: {
+    basePrice: string;
+    totalPrice: string;
+    crewSize: number;
+    confirmedHours: number;
+    quoteNotes: string;
+    hasHotTub: boolean;
+    hotTubFee: string;
+    hasHeavySafe: boolean;
+    heavySafeFee: string;
+    hasPoolTable: boolean;
+    poolTableFee: string;
+    hasPiano: boolean;
+    pianoFee: string;
+    totalSpecialItemsFee: string;
+    lineItems: any[];
+  }) => {
+    updateLead.mutate({
+      ...orderData,
+      orderLineItems: orderData.lineItems,
+      status: lead?.status,
+      lastQuoteUpdatedAt: new Date().toISOString(),
+    }, {
+      onSuccess: () => {
+        setOrderApplied(true);
+        const price = orderData.totalPrice;
+        setInvoiceAmount(price ? parseFloat(price).toString() : "");
+        setInvoiceDescription(`${lead?.serviceType} - ${lead?.firstName} ${lead?.lastName}`);
+        toast({ title: "Order applied!", description: `$${parseFloat(orderData.totalPrice).toFixed(2)} total saved to job.` });
+      }
     });
   };
 
@@ -756,47 +794,72 @@ export default function LeadDetailPage() {
               </CardContent>
             </Card>
 
-            {/* Quote & Scheduling */}
+            {/* ── Order Builder ── */}
+            {hasAdminAccess && (
+              <JobOrderBuilder
+                lead={lead}
+                disabled={updateLead.isPending}
+                onApply={handleOrderApply}
+              />
+            )}
+
+            {/* ── Current Order Summary (if an order has been built) ── */}
+            {(lead.totalPrice || lead.basePrice) && (
+              <Card className="border-emerald-500/30 bg-slate-900/60">
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-base text-emerald-400">
+                    <ShoppingBag className="h-4 w-4" />
+                    Active Order
+                    {orderApplied && <Badge className="ml-1 bg-emerald-600/30 text-emerald-300 border-emerald-500/30 text-[10px]">Just applied</Badge>}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {lead.orderLineItems && lead.orderLineItems.length > 0 ? (
+                    <div className="space-y-1">
+                      {lead.orderLineItems.map((li: any, i: number) => (
+                        <div key={i} className="flex justify-between text-sm text-slate-300">
+                          <span>{li.name}{li.qty > 1 ? ` × ${li.qty}` : ""}</span>
+                          <span className="font-medium">${li.total?.toFixed(2) ?? "0.00"}</span>
+                        </div>
+                      ))}
+                      <div className="flex justify-between font-bold text-white pt-2 border-t border-slate-600/50">
+                        <span>Total</span>
+                        <span className="text-emerald-400">${parseFloat(lead.totalPrice || lead.basePrice || "0").toFixed(2)}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">Quote Total</span>
+                      <span className="font-bold text-emerald-400">${parseFloat(lead.totalPrice || lead.basePrice || "0").toFixed(2)}</span>
+                    </div>
+                  )}
+                  {lead.crewSize && (
+                    <div className="flex items-center gap-2 text-xs text-slate-400 pt-1">
+                      <Users className="h-3.5 w-3.5" />
+                      {lead.crewSize} movers
+                      {lead.confirmedHours ? <><Clock className="h-3.5 w-3.5 ml-2" />{lead.confirmedHours} hrs</> : null}
+                    </div>
+                  )}
+                  {lead.totalPrice && (
+                    <div className="flex items-center gap-1.5 text-xs text-amber-400/80 pt-0.5">
+                      <Zap className="h-3.5 w-3.5" />
+                      Customer earns ~{Math.round(parseFloat(lead.totalPrice) * 50).toLocaleString()} JCMOVES on completion
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* ── Schedule Details (editable separately) ── */}
             <Card>
               <CardHeader>
-                <CardTitle>Quote & Scheduling</CardTitle>
-                <CardDescription>Configure pricing, crew, and schedule details</CardDescription>
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  Schedule & Addresses
+                </CardTitle>
+                <CardDescription>Confirm the date, pickup, and delivery locations</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="basePrice">Base Price</Label>
-                    <div className="relative">
-                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="basePrice"
-                        type="number"
-                        step="0.01"
-                        className="pl-9"
-                        disabled={!isEditing}
-                        {...form.register("basePrice")}
-                        data-testid="input-base-price"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <Label htmlFor="crewSize">Crew Size</Label>
-                    <div className="relative">
-                      <Users className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="crewSize"
-                        type="number"
-                        min="1"
-                        max="10"
-                        className="pl-9"
-                        disabled={!isEditing}
-                        {...form.register("crewSize", { valueAsNumber: true })}
-                        data-testid="input-crew-size"
-                      />
-                    </div>
-                  </div>
-                </div>
-
                 <div>
                   <Label htmlFor="confirmedDate">Confirmed Move Date</Label>
                   <div className="relative">
@@ -832,17 +895,23 @@ export default function LeadDetailPage() {
                   />
                 </div>
 
-                <div>
-                  <Label htmlFor="quoteNotes">Quote Notes</Label>
-                  <Textarea
-                    id="quoteNotes"
-                    rows={4}
-                    placeholder="Add notes about this quote..."
-                    disabled={!isEditing}
-                    {...form.register("quoteNotes")}
-                    data-testid="input-quote-notes"
-                  />
-                </div>
+                {!hasAdminAccess && (
+                  <div>
+                    <Label htmlFor="basePrice">Base Price</Label>
+                    <div className="relative">
+                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="basePrice"
+                        type="number"
+                        step="0.01"
+                        className="pl-9"
+                        disabled={!isEditing}
+                        {...form.register("basePrice")}
+                        data-testid="input-base-price"
+                      />
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -891,6 +960,46 @@ export default function LeadDetailPage() {
                     <Send className="h-4 w-4 mr-2" />
                     Send Invoice via Square
                   </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* ── JCMOVES Disbursement Summary (shows after completion rewards are distributed) ── */}
+            {lead.completionRewardedAt && hasAdminAccess && (
+              <Card className="border-amber-500/30 bg-gradient-to-br from-amber-950/30 to-slate-900/60">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-amber-400">
+                    <Zap className="h-5 w-5" />
+                    JCMOVES Disbursement
+                    <Badge className="ml-auto bg-green-600/30 text-green-300 border-green-500/30 text-[10px]">Complete</Badge>
+                  </CardTitle>
+                  <CardDescription className="text-amber-300/60 text-xs">
+                    Distributed at {new Date(lead.completionRewardedAt).toLocaleString()}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {lead.totalPrice && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">Customer earn ({Math.round(parseFloat(lead.totalPrice) * 50).toLocaleString()} JCMOVES)</span>
+                      <span className="text-amber-300 font-bold">${parseFloat(lead.totalPrice).toFixed(2)} × 50/$ </span>
+                    </div>
+                  )}
+                  {lead.crewSize && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">Crew flat reward (×{lead.crewMembers?.length || lead.crewSize})</span>
+                      <span className="text-amber-300 font-bold">500 JCMOVES each</span>
+                    </div>
+                  )}
+                  {lead.confirmedHours && (lead.crewMembers?.length || lead.crewSize) ? (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">Hours bonus ({lead.confirmedHours}h × 25)</span>
+                      <span className="text-amber-300 font-bold">{(lead.confirmedHours * 25).toLocaleString()} JCMOVES each</span>
+                    </div>
+                  ) : null}
+                  <div className="pt-2 border-t border-amber-500/20 flex justify-between text-xs text-slate-500">
+                    <span>Token price</span>
+                    <span>≈ $0.00000508 / JCMOVES</span>
+                  </div>
                 </CardContent>
               </Card>
             )}
