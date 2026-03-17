@@ -3429,9 +3429,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Protected routes - Get all leads (business owner only)
-  // TEMPORARY: Authentication temporarily disabled for debugging
-  app.get("/api/leads", async (req, res) => {
+  // Get all leads (business owner only)
+  app.get("/api/leads", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
       console.log('📋 Fetching all leads...');
       const leads = await storage.getLeads();
@@ -3494,9 +3493,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get single lead by ID 
-  // TEMPORARY: Authentication temporarily disabled for debugging
-  app.get("/api/leads/:id", async (req, res) => {
+  // Get single lead by ID (business owner only)
+  app.get("/api/leads/:id", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
       const { id } = req.params;
       console.log(`📋 Fetching lead ${id}...`);
@@ -3572,6 +3570,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Notify when job is completed
         if (status === 'completed') {
+          // Disburse JCMOVES tokens idempotently on every completion path
+          try {
+            const { disburseJobTokens } = await import('./services/disburse-job-tokens');
+            await disburseJobTokens(id);
+          } catch (disbursementError) {
+            console.error("Error distributing job completion tokens via status endpoint:", disbursementError);
+            // Don't fail the status update if token distribution fails
+          }
+
           // Send SMS to admin
           try {
             const assignedUser = updatedLead.assignedToUserId 
