@@ -1,0 +1,35 @@
+i want to build a mobile app for customers to post jobs and find help with various task. they will be rewarded with JCMOVES tokens from the JC ON THE MOVE LLC company treasury. Workers would then sign up and be able to accept these jobs. they too would earn JCMOVES. customers and workers need a simple account Name Email Phone Address then proceed to their corresponding homepage. on customer homepage we can showcase a worker and their rating. if only one worker is available showcase them. customers post a job with service type (pick one or more) moving help / furniture delivery , seasonal yard care , junk removal , property maintence , light demolition / remodeling , other then title: location: description: Budget (or get quote) + add a photo button (upto 5 pictures and 2 video) post job (button) workers homepage should have available jobs displayed on a monthly calendar. customers should have a crews available tab that shows available crews. each user would need a company generated wallet to hold and earn / spend JCMOVES when a crew sees a job they click for details and either see a called button checked or need to call and check when done. is there a way to slightly zoom in on only the current day on the monthly calendar to put focus on the daily. can you make jobs get assigned with a crew size for the project and we can assign crew members that would also earn JCMOVES. once a worker calls the customer and confirms they finalize booking details time and date , crew and size , pick up truck (trailer additional)or uhaul or just labor ,phone number , location , $ amount and the system auto generates 15 JCMOVES per dollar spent. once job is marked complete payment of JCMOVES will be issued to workers and customers. whoever creates the job recieves 100 JCMOVES whoever calls the customer and checks the box get 100 JCMOVES when all required data is entered to move the job from quote to activated. activated is everything confirmed, just waiting for the day of the project so we can then mark the job completed at the appropiate time. when a job is completed we need to ask for a simple 1 - 5 star review and a comment (optional) from the customer to the worker. customer get 150 JCMOVES for leaving a review and workers each get 150 JCMOVES for 4 star reviews and 250 JCMOVES for 5 star reviews. can display completed job count on workers profile along with their ratings. this should be enough to build a small eco system , unless im missing anything?
+
+Reading .local/skills/expo/SKILL.md.
+
+Loaded expo skill
+Reading references for expo skill.
+
+This is a rich, well-thought-out app concept. Let me outline what I'll build before diving in:
+
+JC ON THE MOVE - Mobile App
+
+Here's the full system I'll build:
+
+Customer app: Registration/login, post jobs (with service types, photos/video, budget), view available crews, track job status, wallet with JCMOVES tokens, leave reviews
+Worker app: Registration/login, monthly calendar view with jobs (zoomed on today), job details, call/confirm flow, crew assignment, complete jobs
+JCMOVES token system: Auto-generated wallets, earning rules (100 for posting, 100 for calling/confirming, 15 per dollar, 150/250 for reviews), spending/balance tracking
+Job lifecycle: Quote → Activated → Completed, with crew size, truck type, pricing, auto-JCMOVES calculation
+Let me start building now.
+
+Now let me start building the entire app. First, let me set up the database, OpenAPI spec, and write all the core files simultaneously.
+
+Now let me write the full OpenAPI spec and all database schemas simultaneously.
+
+Codegen done. Now let me write the database schema and all backend routes simultaneously.
+
+Now let me push the database schema and write all backend routes:
+
+Now let me write all backend route files:
+
+Good. Now let me start the API server and build the entire mobile app. Let me start the backend workflow and build all the mobile screens simultaneously.
+
+Now let me build the complete mobile app. I'll write all the files:
+
+Now let me build all the context, components, and screens for the mobile app:
+
