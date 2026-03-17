@@ -61,6 +61,8 @@ export default {
           border: "var(--sidebar-border)",
           ring: "var(--sidebar-ring)",
         },
+        "jc-orange": "#E86329",
+        "jc-cream": "#F5F0EB",
       },
       fontFamily: {
         sans: ["var(--font-sans)"],

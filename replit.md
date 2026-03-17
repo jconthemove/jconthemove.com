@@ -15,7 +15,9 @@ Preferred communication style: Simple, everyday language.
 - **Styling**: Tailwind CSS with CSS variables.
 - **State Management**: TanStack Query for server state.
 - **Forms**: React Hook Form with Zod validation.
-- **UI/UX Decisions**: Modern, responsive design with dark mode toggle. Features include live price cards, a unified mining dashboard, and a consolidated "IN GOD WE TRUST" admin dashboard with tabbed navigation. Emphasizes intuitive navigation and visual prominence for key features.
+- **UI/UX Decisions**: Mobile-first design with orange (#E86329) + cream (#F5F0EB) color palette. Customer experience features a bottom tab bar (Home, Jobs, Post, Rewards, Profile), splash screen, clean onboarding flow, and card-based job feed. Admin/employee views retain the existing TeamHub/Dashboard interface with header navigation. Dark mode toggle supported throughout.
+- **Mobile-First Customer Flow**: Splash page → Onboarding (name, email, phone) → Home feed with job cards → Post a Job (multi-step) → Rewards tab → Profile tab. Bottom tab bar replaces header for customer role.
+- **Role-Based Routing**: Customers get the new mobile-first experience (`CustomerApp` with `BottomTabBar`). Employees/admins land on existing TeamHub/Dashboard with `Header` navigation.
 
 ## Backend Architecture
 - **Server**: Express.js with TypeScript.

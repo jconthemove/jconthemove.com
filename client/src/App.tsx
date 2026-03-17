@@ -12,8 +12,17 @@ import { ComplianceCheck } from "@/components/compliance-check";
 import { EarnTasksButton } from "@/components/earn-tasks-button";
 import { FloatingMomHeart } from "@/components/floating-mom-heart";
 import Header from "@/components/header";
+import BottomTabBar from "@/components/bottom-tab-bar";
 import PwaInstallPrompt from "@/components/pwa-install-prompt";
 import HomePage from "@/pages/home";
+import SplashPage from "@/pages/splash";
+import OnboardingPage from "@/pages/onboarding";
+import CustomerHomePage from "@/pages/customer-home";
+import MyJobsPage from "@/pages/my-jobs";
+import PostJobPage from "@/pages/post-job";
+import CrewJobsPage from "@/pages/crew-jobs";
+import CustomerRewardsPage from "@/pages/customer-rewards";
+import CustomerProfilePage from "@/pages/customer-profile";
 import Dashboard from "@/pages/dashboard";
 import RewardsPage from "@/pages/rewards";
 import ProfilePage from "@/pages/profile";
@@ -76,9 +85,17 @@ import { CartProvider } from "@/hooks/useCart";
 import { NotificationPrompt } from "@/components/notification-prompt";
 import { useMiningNotifications } from "@/hooks/useMiningNotifications";
 
-// Landing page for unauthenticated users
-// Note: home.tsx has its own built-in footer and dedication banner — no wrapper Footer needed
+// Landing page for unauthenticated users — now uses the splash page
 function LandingPage() {
+  return (
+    <div className="min-h-screen bg-background text-foreground font-sans">
+      <SplashPage />
+    </div>
+  );
+}
+
+// Original home page (public-facing marketing page)
+function PublicHomePage() {
   return (
     <div className="min-h-screen bg-background text-foreground font-sans">
       <HomePage />
@@ -225,13 +242,58 @@ function PageWrapper({ component: Component }: { component: any }) {
   );
 }
 
+// Customer app with bottom tab navigation
+function CustomerApp() {
+  return (
+    <ComplianceCheck>
+      <div className="min-h-screen bg-background text-foreground font-sans">
+        <NotificationPrompt />
+        <Switch>
+          <Route path="/">
+            <CustomerHomePage />
+          </Route>
+          <Route path="/my-jobs">
+            <MyJobsPage />
+          </Route>
+          <Route path="/post-job">
+            <PostJobPage />
+          </Route>
+          <Route path="/crew-jobs">
+            <CrewJobsPage />
+          </Route>
+          <Route path="/rewards">
+            <CustomerRewardsPage />
+          </Route>
+          <Route path="/profile">
+            <CustomerProfilePage />
+          </Route>
+          <Route path="/customer-portal">
+            <CustomerPortal />
+          </Route>
+          <Route path="/staking">
+            <PageWrapper component={StakingPage} />
+          </Route>
+          <Route path="/marketplace">
+            <PageWrapper component={RewardsMarketplacePage} />
+          </Route>
+          <Route path="/mining">
+            <PageWrapper component={MiningPage} />
+          </Route>
+          <Route path="/pending-approval">
+            <PendingApprovalPage />
+          </Route>
+          <Route component={NotFound} />
+        </Switch>
+        <BottomTabBar />
+      </div>
+    </ComplianceCheck>
+  );
+}
+
 // Main app for authenticated users - Unified routing for all devices
 function AuthenticatedApp() {
   const { user, isPending } = useAuth();
   useMiningNotifications();
-  
-  // Determine home page based on user role
-  const HomePage = user?.role === 'customer' ? CustomerPortal : TeamHub;
   
   // Redirect pending users to pending-approval page
   if (isPending) {
@@ -256,6 +318,11 @@ function AuthenticatedApp() {
     );
   }
   
+  // Customers get the new mobile-first experience with bottom tabs
+  if (user?.role === 'customer') {
+    return <CustomerApp />;
+  }
+  
   return (
     <ComplianceCheck>
       <div className="min-h-screen bg-background text-foreground font-sans">
@@ -263,7 +330,7 @@ function AuthenticatedApp() {
         <Switch>
           {/* Primary routes - accessible on all devices */}
           <Route path="/">
-            <PageWrapper component={HomePage} />
+            <PageWrapper component={TeamHub} />
           </Route>
           <Route path="/dashboard">
             <RouteGuard allowedRoles={['admin', 'employee', 'business_owner']}>
@@ -401,6 +468,13 @@ function AuthenticatedApp() {
               <MobileLeadManager />
             </RouteGuard>
           </Route>
+
+          {/* Crew job board for employees */}
+          <Route path="/crew-jobs">
+            <RouteGuard allowedRoles={['admin', 'employee', 'business_owner']}>
+              <PageWrapper component={CrewJobsPage} />
+            </RouteGuard>
+          </Route>
           
           {/* Legacy admin routes - redirect to unified dashboard */}
           <Route path="/treasury">
@@ -439,6 +513,12 @@ function Router() {
 
   return (
     <Switch>
+      {/* Onboarding / Get Started */}
+      <Route path="/get-started" component={OnboardingPage} />
+
+      {/* Public site (original marketing page) */}
+      <Route path="/home">{() => <PublicHomePage />}</Route>
+
       {/* Public Authentication Routes - No Replit account needed! */}
       <Route path="/employee-register" component={EmployeeRegister} />
       <Route path="/login" component={LoginPage} />

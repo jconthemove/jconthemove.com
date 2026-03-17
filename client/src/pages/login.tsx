@@ -15,7 +15,7 @@ function roleDestination(role: string, status: string): string {
   if (status === "pending") return "/pending-approval";
   if (role === "admin" || role === "business_owner") return "/control";
   if (role === "employee") return "/hub";
-  return "/customer-portal";
+  return "/";
 }
 
 export default function LoginPage() {
@@ -64,7 +64,7 @@ export default function LoginPage() {
         setShowWelcome(true);
       } else {
         toast({ title: "Account created!", description: `Welcome, ${data.user.firstName}!` });
-        setLocation("/customer-portal");
+        setLocation("/");
       }
     },
     onError: (e: any) => toast({ title: "Registration failed", description: e.message || "Could not create account.", variant: "destructive" }),
@@ -83,7 +83,7 @@ export default function LoginPage() {
         open={showWelcome}
         firstName={welcomeFirstName}
         bonus={250}
-        onClose={() => { setShowWelcome(false); setLocation("/customer-portal"); }}
+        onClose={() => { setShowWelcome(false); setLocation("/"); }}
       />
 
       <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center p-4">

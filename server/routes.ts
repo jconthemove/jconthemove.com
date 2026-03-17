@@ -2198,6 +2198,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/leads/marketplace", isAuthenticatedAllowPending, async (req: any, res) => {
+    try {
+      const leadData = insertLeadSchema.parse(req.body);
+      const lead = await storage.createLead(leadData);
+
+      await storage.updateLeadStatus(lead.id, "available");
+      const updatedLead = await storage.getLead(lead.id);
+
+      const emailContent = generateLeadNotificationEmail(lead);
+      const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
+      await sendEmail({
+        to: companyEmail,
+        from: companyEmail,
+        subject: `New Marketplace ${lead.serviceType} Job - ${lead.firstName} ${lead.lastName}`,
+        text: emailContent.text,
+        html: emailContent.html,
+      });
+
+      try {
+        await smsService.notifyNewQuote({
+          customerName: `${lead.firstName} ${lead.lastName}`,
+          serviceType: lead.serviceType,
+          phone: lead.phone || undefined,
+          moveDate: lead.moveDate || undefined
+        });
+      } catch (smsError) {
+        console.error("Admin SMS notification failed:", smsError);
+      }
+
+      let rewardMessage = "";
+      try {
+        const settings = await db.select().from(rewardSettings).where(eq(rewardSettings.settingKey, 'customer_quote_accepted'));
+        const bonusTokens = settings.length > 0 && settings[0].isActive
+          ? parseFloat(settings[0].tokenAmount)
+          : 250;
+
+        const existingUser = await db.select().from(users).where(eq(users.email, lead.email)).limit(1);
+        if (existingUser.length > 0) {
+          await storage.creditWalletTokens(existingUser[0].id, bonusTokens);
+          await db.insert(rewards).values({
+            userId: existingUser[0].id,
+            rewardType: 'booking_request',
+            tokenAmount: bonusTokens.toFixed(8),
+            cashValue: (bonusTokens * 0.01).toFixed(2),
+            status: 'confirmed',
+            earnedDate: new Date(),
+            referenceId: lead.id,
+            metadata: { leadId: lead.id, source: 'marketplace_post' }
+          });
+          rewardMessage = ` Earned ${bonusTokens} JCMOVES!`;
+          console.log(`🎁 Awarded ${bonusTokens} JCMOVES to customer ${lead.email} for marketplace job post`);
+        }
+      } catch (rewardErr) {
+        console.error("Marketplace reward error:", rewardErr);
+      }
+
+      console.log(`🏪 Marketplace job created: ${lead.id} (available)`);
+      res.status(201).json({ ...updatedLead, rewardMessage });
+    } catch (error) {
+      console.error("Error creating marketplace lead:", error);
+      res.status(400).json({ error: "Invalid lead data" });
+    }
+  });
+
   // Customer quote tracking - REMOVED for security
   // This endpoint was a security vulnerability as it allowed anyone to view leads by email
   // Customers should use the authenticated /api/leads/my-requests endpoint instead
@@ -5492,7 +5556,32 @@ Thank you for your business!
         console.error("Error sending job assignment notification:", notificationError);
       }
 
-      res.json(updatedLead);
+      // Award JCMOVES tokens for accepting a job
+      let acceptRewardAmount = 0;
+      try {
+        const settings = await db.select().from(rewardSettings).where(eq(rewardSettings.settingKey, 'employee_job_accepted'));
+        const bonusTokens = settings.length > 0 && settings[0].isActive
+          ? parseFloat(settings[0].tokenAmount)
+          : 100;
+
+        await storage.creditWalletTokens(employeeId, bonusTokens);
+        await db.insert(rewards).values({
+          userId: employeeId,
+          rewardType: 'job_accepted',
+          tokenAmount: bonusTokens.toFixed(8),
+          cashValue: (bonusTokens * 0.01).toFixed(2),
+          status: 'confirmed',
+          earnedDate: new Date(),
+          referenceId: id,
+          metadata: { leadId: id, source: 'crew_acceptance' }
+        });
+        acceptRewardAmount = bonusTokens;
+        console.log(`🎁 Awarded ${bonusTokens} JCMOVES to employee ${employeeId} for accepting job ${id}`);
+      } catch (rewardErr) {
+        console.error("Job acceptance reward error:", rewardErr);
+      }
+
+      res.json({ ...updatedLead, rewardAmount: acceptRewardAmount });
     } catch (error) {
       console.error("Error accepting job:", error);
       res.status(500).json({ error: "Failed to accept job" });
