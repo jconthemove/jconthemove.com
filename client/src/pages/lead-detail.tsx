@@ -19,6 +19,15 @@ import { CrewSuggestionsDialog } from "@/components/crew-suggestions-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { JobOrderBuilder } from "@/components/JobOrderBuilder";
 
+interface OrderLineItem {
+  id?: string;
+  name: string;
+  qty: number;
+  unitPrice: number;
+  total: number;
+  category?: string;
+}
+
 interface Lead {
   id: string;
   firstName: string;
@@ -60,7 +69,7 @@ interface Lead {
   lastQuoteUpdatedAt?: string;
   tokenAllocation?: number;
   confirmedHours?: number;
-  orderLineItems?: any[];
+  orderLineItems?: OrderLineItem[];
   completionRewardedAt?: string;
   checkedInAt?: string;
   completedAt?: string;
@@ -81,9 +90,19 @@ interface Reward {
   metadata?: any;
 }
 
-function DisbursementSummaryCard({ lead }: { lead: any }) {
-  const { data, isLoading } = useQuery<{ records: any[] }>({
-    queryKey: ["/api/leads", lead.id, "disbursement-summary"],
+interface DisbursementRecord {
+  id: string;
+  user_id: string;
+  reward_type: string;
+  token_amount: string;
+  cash_value?: string;
+  earned_date?: string;
+  metadata?: Record<string, unknown>;
+}
+
+function DisbursementSummaryCard({ lead }: { lead: Lead }) {
+  const { data, isLoading } = useQuery<{ records: DisbursementRecord[] }>({
+    queryKey: [`/api/leads/${lead.id}/disbursement-summary`],
     enabled: !!lead.completionRewardedAt,
   });
 
@@ -262,7 +281,7 @@ export default function LeadDetailPage() {
 
   const toggleBonusMover = useMutation({
     mutationFn: async ({ memberId, isBonus }: { memberId: string; isBonus: boolean }) => {
-      const current: Record<string, boolean> = (lead as any).crewBonusFlags ?? {};
+      const current: Record<string, boolean> = lead.crewBonusFlags ?? {};
       const updated = { ...current, [memberId]: isBonus };
       return await apiRequest("PATCH", `/api/leads/${params?.id}`, { crewBonusFlags: updated });
     },
@@ -395,7 +414,7 @@ export default function LeadDetailPage() {
     hasPiano: boolean;
     pianoFee: string;
     totalSpecialItemsFee: string;
-    lineItems: any[];
+    lineItems: OrderLineItem[];
   }) => {
     updateLead.mutate({
       ...orderData,
@@ -916,7 +935,7 @@ export default function LeadDetailPage() {
                 <CardContent className="space-y-2">
                   {lead.orderLineItems && lead.orderLineItems.length > 0 ? (
                     <div className="space-y-1">
-                      {lead.orderLineItems.map((li: any, i: number) => (
+                      {lead.orderLineItems.map((li: OrderLineItem, i: number) => (
                         <div key={i} className="flex justify-between text-sm text-slate-300">
                           <span>{li.name}{li.qty > 1 ? ` × ${li.qty}` : ""}</span>
                           <span className="font-medium">${li.total?.toFixed(2) ?? "0.00"}</span>
@@ -944,7 +963,7 @@ export default function LeadDetailPage() {
                         <div className="space-y-1">
                           <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide">Bonus Mover (+25% payout)</p>
                           {lead.crewMembers.map((mid: string) => {
-                            const isBonus = (lead as any).crewBonusFlags?.[mid] === true;
+                            const isBonus = lead.crewBonusFlags?.[mid] === true;
                             return (
                               <div key={mid} className="flex items-center gap-2 text-xs">
                                 <Checkbox
@@ -1304,7 +1323,7 @@ export default function LeadDetailPage() {
             {lead.orderLineItems && lead.orderLineItems.length > 0 && (
               <div className="p-3 bg-emerald-950/20 border border-emerald-500/20 rounded-lg text-xs space-y-1">
                 <p className="font-semibold text-emerald-400 mb-1.5">Itemized order ({lead.orderLineItems.length} line items):</p>
-                {lead.orderLineItems.map((li: any, i: number) => (
+                {lead.orderLineItems.map((li: OrderLineItem, i: number) => (
                   <div key={i} className="flex justify-between text-slate-400">
                     <span>{li.name}{li.qty > 1 ? ` × ${li.qty}` : ""}</span>
                     <span>${li.total?.toFixed(2)}</span>
