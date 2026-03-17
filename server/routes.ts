@@ -4111,7 +4111,7 @@ Thank you for your business!
   });
 
   // General update lead endpoint (admin or employee)
-  app.patch("/api/leads/:id", isAuthenticated, async (req, res) => {
+  app.patch("/api/leads/:id", isAuthenticated, async (req: any, res) => {
     try {
       const { id } = req.params;
       const updateData = req.body;
@@ -4123,6 +4123,21 @@ Thank you for your business!
       if (!currentLead) {
         console.log(`❌ Lead ${id} not found for update`);
         return res.status(404).json({ error: "Lead not found" });
+      }
+
+      // Privileged-action guard: completing a job or modifying payout-driving fields
+      // requires admin or business_owner.
+      const PAYOUT_FIELDS = ["status", "totalPrice", "basePrice", "tokenAllocation", "crewMembers", "crewBonusFlags", "confirmedHours"];
+      const hasSensitiveChange = PAYOUT_FIELDS.some(f => f in updateData);
+      const isCompletingJob = updateData.status === "completed";
+
+      if (hasSensitiveChange || isCompletingJob) {
+        const requestingUserId = (req.session as any)?.userId;
+        const requestingUser = requestingUserId ? await storage.getUser(requestingUserId) : null;
+        const isPrivileged = requestingUser && (requestingUser.role === "admin" || requestingUser.role === "business_owner");
+        if (!isPrivileged) {
+          return res.status(403).json({ error: "Administrator access required to modify job pricing, crew, or completion status" });
+        }
       }
       
       // Update last quote timestamp if quote-related fields are being updated
