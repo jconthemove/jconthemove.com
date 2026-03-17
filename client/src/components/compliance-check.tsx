@@ -4,32 +4,31 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
 import { AlertCircle } from "lucide-react";
+
+const CURRENT_YEAR = new Date().getFullYear();
+const MIN_YEAR = 1920;
+const MAX_YEAR = CURRENT_YEAR - 18;
 
 export function ComplianceCheck({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
   const [showComplianceModal, setShowComplianceModal] = useState(false);
-  const [dateOfBirth, setDateOfBirth] = useState("");
+  const [birthYear, setBirthYear] = useState(CURRENT_YEAR - 30);
   const [tosAccepted, setTosAccepted] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   useEffect(() => {
     if (!user) return;
-    const storageKey = `compliance_verified_${user.id}`;
 
     if (user.tosAccepted && user.dateOfBirth) {
-      localStorage.setItem(storageKey, "true");
       setShowComplianceModal(false);
       return;
     }
-
-    const alreadyVerified = localStorage.getItem(storageKey);
-    if (alreadyVerified) return;
 
     setShowComplianceModal(true);
   }, [user]);
@@ -39,11 +38,9 @@ export function ComplianceCheck({ children }: { children: React.ReactNode }) {
       const res = await apiRequest("POST", "/api/auth/user/compliance", data);
       return res.json();
     },
-    onSuccess: () => {
-      if (user) {
-        localStorage.setItem(`compliance_verified_${user.id}`, "true");
-      }
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/auth/user"], type: "active" });
       setShowComplianceModal(false);
       toast({
         title: "Account verified",
@@ -61,15 +58,6 @@ export function ComplianceCheck({ children }: { children: React.ReactNode }) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!dateOfBirth) {
-      toast({
-        title: "Date of birth required",
-        description: "Please enter your date of birth.",
-        variant: "destructive",
-      });
-      return;
-    }
 
     if (!tosAccepted) {
       toast({
@@ -80,6 +68,7 @@ export function ComplianceCheck({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    const dateOfBirth = `${birthYear}-01-01`;
     complianceMutation.mutate({ dateOfBirth, tosAccepted });
   };
 
@@ -101,19 +90,26 @@ export function ComplianceCheck({ children }: { children: React.ReactNode }) {
           </DialogHeader>
           <form onSubmit={handleSubmit}>
             <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="dob" data-testid="label-dob">
-                  Date of Birth
+              <div className="grid gap-3">
+                <Label htmlFor="birth-year" data-testid="label-dob">
+                  Birth Year
                 </Label>
-                <Input
-                  id="dob"
-                  type="date"
-                  value={dateOfBirth}
-                  onChange={(e) => setDateOfBirth(e.target.value)}
-                  max={new Date().toISOString().split('T')[0]}
-                  required
-                  data-testid="input-dob"
+                <div className="text-center text-2xl font-semibold tabular-nums" data-testid="display-birth-year">
+                  {birthYear}
+                </div>
+                <Slider
+                  id="birth-year"
+                  min={MIN_YEAR}
+                  max={MAX_YEAR}
+                  step={1}
+                  value={[birthYear]}
+                  onValueChange={(vals) => setBirthYear(vals[0])}
+                  data-testid="slider-birth-year"
                 />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>{MIN_YEAR}</span>
+                  <span>{MAX_YEAR}</span>
+                </div>
                 <p className="text-sm text-muted-foreground break-words" data-testid="text-age-requirement">
                   You must be 18 years or older to use this service.
                 </p>
