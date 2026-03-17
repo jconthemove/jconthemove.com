@@ -4272,95 +4272,13 @@ Thank you for your business!
         
         // Distribute token rewards and notify when job is completed
         if (newStatus === 'completed') {
-          // Token reward distribution - only if status is actually changing to completed
-          const isStatusChangingToCompleted = previousStatus !== 'completed';
-          const isRewardsAlreadyDistributed = currentLead?.completionRewardedAt !== null && currentLead?.completionRewardedAt !== undefined;
-          
-          if (isStatusChangingToCompleted && !isRewardsAlreadyDistributed && updatedLead.tokenAllocation && updatedLead.crewMembers && updatedLead.crewMembers.length > 0) {
-            try {
-              const totalTokens = parseFloat(updatedLead.tokenAllocation);
-              
-              if (isNaN(totalTokens) || totalTokens <= 0) {
-                console.log(`⚠️ Invalid token allocation for job ${id}: ${updatedLead.tokenAllocation}`);
-              } else {
-                const tokensPerWorker = totalTokens / updatedLead.crewMembers.length;
-                
-                console.log(`💰 Quote completion: Distributing ${totalTokens} tokens to ${updatedLead.crewMembers.length} crew members (${tokensPerWorker} each)`);
-                
-                for (const crewMemberId of updatedLead.crewMembers) {
-                  try {
-                    await gamificationService.awardJobCompletion(crewMemberId, id, tokensPerWorker.toFixed(8), {
-                      onTime: true,
-                      customerRating: 5
-                    });
-                    console.log(`✅ Awarded ${tokensPerWorker} tokens to crew member ${crewMemberId}`);
-                  } catch (memberErr) {
-                    console.error(`❌ Failed to award allocation share to crew member ${crewMemberId}:`, memberErr);
-                  }
-                }
-                
-                await storage.updateLeadQuote(id, { completionRewardedAt: new Date() });
-                console.log(`✅ Marked job ${id} as rewarded at ${new Date().toISOString()}`);
-
-                // Customer earn reward (earn_rate_per_dollar × job price)
-                try {
-                  if (updatedLead.customerEmail) {
-                    const customer = await storage.getUserByEmail(updatedLead.customerEmail);
-                    if (customer) {
-                      const jobPrice = parseFloat(updatedLead.totalPrice || updatedLead.basePrice || '0');
-                      const rateSetting2 = await db.select().from(rewardSettings).where(eq(rewardSettings.settingKey, 'earn_rate_per_dollar')).limit(1);
-                      const earnRate2 = rateSetting2.length > 0 ? parseFloat(rateSetting2[0].tokenAmount) : 50;
-                      const LOYALTY_REWARD = jobPrice > 0 ? Math.round(jobPrice * earnRate2) : 0;
-                      if (LOYALTY_REWARD <= 0) throw new Error("No job price — skipping earn reward");
-                      const prevSpend = parseFloat((customer as any).totalCompletedSpend || '0');
-                      const newSpend = prevSpend + jobPrice;
-                      const newTier = getTierFromSpend(newSpend);
-                      await db.update(users).set({ loyaltyTier: newTier, totalCompletedSpend: newSpend.toFixed(2) } as any).where(eq(users.id, customer.id));
-                      await storage.creditWalletTokens(customer.id, LOYALTY_REWARD);
-                      await db.insert(rewards).values({
-                        userId: customer.id,
-                        rewardType: REWARD_TYPES.LOYALTY_BOOKING,
-                        tokenAmount: LOYALTY_REWARD.toFixed(8),
-                        cashValue: (LOYALTY_REWARD * 0.00000508432).toFixed(6),
-                        status: "confirmed",
-                        metadata: { jobId: id, serviceType: updatedLead.serviceType, jobPrice, earnRate: earnRate2, tokensPerDollar: earnRate2 }
-                      });
-                      console.log(`🎁 Awarded ${LOYALTY_REWARD} JCMOVES (${earnRate2}/$ × $${jobPrice}) to customer ${customer.email}`);
-                      // Tier points: job completion + spending bonus
-                      await awardTierPoints(customer.id, 'job_completed');
-                      const spentHundreds2 = Math.floor(jobPrice / 100);
-                      if (spentHundreds2 > 0) await awardTierPoints(customer.id, 'per_100_spent', spentHundreds2);
-
-                      // Referral bonus on first completed job
-                      if (customer.referredByUserId) {
-                        const completedJobs = await db.select().from(rewards)
-                          .where(and(eq(rewards.userId, customer.id), eq(rewards.rewardType, REWARD_TYPES.LOYALTY_BOOKING)));
-                        
-                        if (completedJobs.length === 1) {
-                          const REFERRAL_BONUS = TREASURY_CONFIG.REFERRAL_CONFIRMED_TOKENS;
-                          await storage.creditWalletTokens(customer.referredByUserId, REFERRAL_BONUS);
-                          await db.insert(rewards).values({
-                            userId: customer.referredByUserId,
-                            rewardType: REWARD_TYPES.REFERRAL_CONFIRMED,
-                            tokenAmount: REFERRAL_BONUS.toFixed(8),
-                            cashValue: (REFERRAL_BONUS * 0.01).toFixed(2),
-                            status: "confirmed",
-                            metadata: { referredUserId: customer.id, jobId: id }
-                          });
-                          console.log(`🎉 Awarded ${REFERRAL_BONUS} JCMOVES referral bonus to ${customer.referredByUserId}`);
-                        }
-                      }
-                    }
-                  }
-                } catch (customerRewardError) {
-                  console.error("Error awarding customer rewards:", customerRewardError);
-                }
-              }
-            } catch (tokenError) {
-              console.error("Error distributing tokens via quote endpoint:", tokenError);
-            }
-          } else if (isRewardsAlreadyDistributed) {
-            console.log(`ℹ️ Job ${id} rewards already distributed - skipping`);
+          // Canonical disbursement: delegate entirely to disburseJobTokens (idempotent, advisory-locked)
+          try {
+            const { disburseJobTokens } = await import('./services/disburse-job-tokens');
+            await disburseJobTokens(id);
+          } catch (tokenError) {
+            console.error("Error distributing tokens via quote endpoint:", tokenError);
+            // Non-fatal: advisory lock ensures partial runs can be retried
           }
 
           // SMS notifications
@@ -4404,6 +4322,28 @@ Thank you for your business!
       res.json({ records: rows });
     } catch (err: any) {
       console.error("Error fetching disbursement summary:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/leads/:id/retry-disbursement — admin retry when disbursement failed or is incomplete
+  // disburseJobTokens is idempotent (advisory lock + timestamp check), so safe to call again.
+  app.post("/api/leads/:id/retry-disbursement", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const lead = await storage.getLead(id);
+      if (!lead) return res.status(404).json({ error: "Lead not found" });
+      if (lead.status !== "completed") {
+        return res.status(400).json({ error: "Lead is not completed — mark it complete first" });
+      }
+      const { disburseJobTokens } = await import("./services/disburse-job-tokens");
+      const summary = await disburseJobTokens(id);
+      if (!summary) {
+        return res.json({ ok: true, note: "Already fully disbursed — no action taken" });
+      }
+      res.json({ ok: true, summary });
+    } catch (err: any) {
+      console.error("Error retrying disbursement:", err);
       res.status(500).json({ error: err.message });
     }
   });
