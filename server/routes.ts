@@ -3482,6 +3482,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dropoffAddress: lead.toAddress || '',
         status: lead.status,
         estimatedTotal: lead.totalPrice || '',
+        crewSize: lead.crewSize || null,
         createdAt: lead.createdAt?.toISOString() || ''
       }));
       

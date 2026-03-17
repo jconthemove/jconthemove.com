@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
-import { MapPin, Calendar, Coins, Loader2, Plus, Truck, Trash2, Snowflake, Wrench, Star, Shield, Clock, ChevronRight, Zap, Users, Package } from "lucide-react";
+import { MapPin, Calendar, Coins, Loader2, Plus, Truck, Trash2, Snowflake, Wrench, Star, Shield, Zap, Users, Package, ChevronRight, ArrowRight } from "lucide-react";
 import { EarnTasksButton } from "@/components/earn-tasks-button";
 import { FloatingMomHeart } from "@/components/floating-mom-heart";
 import type { LucideIcon } from "lucide-react";
@@ -14,6 +14,7 @@ interface JobLead {
   moveDate?: string;
   status: string;
   estimatedTotal?: string;
+  crewSize?: number | null;
   createdAt: string;
 }
 
@@ -47,14 +48,13 @@ const SERVICES = [
   { key: "cleaning", label: "Delivery", desc: "Heavy Item Delivery", icon: Package, color: "bg-green-500" },
 ];
 
-function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
+function getCustomerStatus(status: string) {
+  switch (status) {
+    case "completed": case "paid": return { label: "COMPLETED", cls: "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" };
+    case "confirmed": case "accepted": case "in_progress": case "scheduled": return { label: "ACCEPTED", cls: "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400" };
+    case "cancelled": return { label: "CANCELLED", cls: "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400" };
+    default: return { label: "SUBMITTED", cls: "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400" };
+  }
 }
 
 export default function CustomerHomePage() {
@@ -64,7 +64,6 @@ export default function CustomerHomePage() {
   const { data: wallet } = useQuery<{ tokenBalance: string }>({ queryKey: ["/api/rewards/wallet"] });
 
   const tokenBalance = parseFloat(wallet?.tokenBalance || "0");
-  // my-requests may return array or {leads:[...]}
   const myJobs: JobLead[] = Array.isArray(myJobsData)
     ? myJobsData
     : ((myJobsData as any)?.leads ?? []);
@@ -78,7 +77,8 @@ export default function CustomerHomePage() {
     <div className="min-h-screen bg-jc-cream dark:bg-zinc-950 pb-24">
       <div className="max-w-[430px] mx-auto px-4 pt-6">
 
-        <div className="flex items-center justify-between mb-5">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
           <div>
             <p className="text-zinc-500 dark:text-zinc-400 text-sm">{greeting}</p>
             <h1 className="text-2xl font-black text-zinc-900 dark:text-white">
@@ -94,22 +94,46 @@ export default function CustomerHomePage() {
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-jc-orange to-orange-600 rounded-2xl p-5 mb-6 shadow-lg shadow-jc-orange/20">
-          <h2 className="text-white font-black text-lg mb-1">Need help today?</h2>
-          <p className="text-white/80 text-sm mb-4">Book a service in 30 seconds</p>
-          <button
-            onClick={() => setLocation("/post-job")}
-            className="w-full h-12 rounded-xl bg-white text-jc-orange font-bold text-sm shadow-sm hover:bg-orange-50 active:scale-[0.98] transition-all"
-          >
-            Get a Free Quote
-          </button>
-          <div className="flex items-center justify-center gap-4 mt-3">
-            <span className="flex items-center gap-1 text-white/80 text-[11px]"><Shield className="h-3 w-3" /> Licensed & Insured</span>
-            <span className="flex items-center gap-1 text-white/80 text-[11px]"><Star className="h-3 w-3" /> 5-Star Reviews</span>
-            <span className="flex items-center gap-1 text-white/80 text-[11px]"><Zap className="h-3 w-3" /> Same-Day</span>
+        {/* How It Works — compact horizontal strip near top */}
+        <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 px-4 py-3 mb-4 shadow-sm">
+          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2">How It Works</p>
+          <div className="flex items-center gap-1">
+            {[
+              { step: "1", title: "Request" },
+              { step: "2", title: "Get Matched" },
+              { step: "3", title: "Done & Paid" },
+            ].map((s, i) => (
+              <div key={s.step} className="flex items-center gap-1 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-5 h-5 rounded-full bg-jc-orange/10 flex items-center justify-center flex-shrink-0">
+                    <span className="text-jc-orange font-black text-[10px]">{s.step}</span>
+                  </div>
+                  <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 whitespace-nowrap">{s.title}</span>
+                </div>
+                {i < 2 && <ArrowRight className="h-3 w-3 text-zinc-300 dark:text-zinc-600 flex-shrink-0 ml-1" />}
+              </div>
+            ))}
           </div>
         </div>
 
+        {/* Need Help Today — slim banner */}
+        <div className="flex items-center justify-between bg-jc-orange/10 border border-jc-orange/20 rounded-xl px-4 py-2.5 mb-5">
+          <div className="flex items-center gap-2">
+            <Zap className="h-4 w-4 text-jc-orange flex-shrink-0" />
+            <div>
+              <p className="text-sm font-bold text-zinc-900 dark:text-white leading-tight">Need help today?</p>
+              <p className="text-[11px] text-zinc-500 leading-tight">Book a service in 30 seconds</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setLocation("/post-job")}
+            className="flex-shrink-0 h-8 px-4 rounded-lg bg-jc-orange text-white font-bold text-xs shadow-sm hover:bg-jc-orange/90 active:scale-95 transition-all"
+          >
+            Get Quote
+          </button>
+        </div>
+
+        {/* Services */}
         <h2 className="font-bold text-zinc-900 dark:text-white text-base mb-3">Our Services</h2>
         <div className="flex gap-3 overflow-x-auto pb-3 mb-5 scrollbar-hide">
           {SERVICES.map(svc => {
@@ -135,6 +159,7 @@ export default function CustomerHomePage() {
           <FloatingMomHeart embedded />
         </div>
 
+        {/* Recent Jobs */}
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-bold text-zinc-900 dark:text-white text-base">My Recent Jobs</h2>
           <button
@@ -168,10 +193,12 @@ export default function CustomerHomePage() {
             {openJobs.map(job => {
               const svc = SERVICE_ICONS[job.serviceType] || SERVICE_ICONS.residential;
               const Icon = svc.icon;
+              const st = getCustomerStatus(job.status);
               return (
                 <div
                   key={job.id}
-                  className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 p-4 shadow-sm active:scale-[0.99] transition-transform"
+                  onClick={() => setLocation("/my-jobs")}
+                  className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 p-4 shadow-sm active:scale-[0.99] transition-transform cursor-pointer"
                 >
                   <div className="flex items-start gap-3">
                     <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${svc.bg}`}>
@@ -182,14 +209,8 @@ export default function CustomerHomePage() {
                         <span className="font-semibold text-zinc-900 dark:text-white text-sm">
                           {SERVICE_LABELS[job.serviceType] || job.serviceType}
                         </span>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          ["completed", "paid"].includes(job.status)
-                            ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
-                            : ["in_progress", "confirmed", "scheduled", "accepted"].includes(job.status)
-                            ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400"
-                            : "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
-                        }`}>
-                          {job.status.replace(/_/g, " ")}
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${st.cls}`}>
+                          {st.label}
                         </span>
                       </div>
                       {job.pickupAddress && (
@@ -198,7 +219,7 @@ export default function CustomerHomePage() {
                           <span className="truncate">{job.pickupAddress}</span>
                         </div>
                       )}
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 flex-wrap">
                         {job.moveDate && (
                           <div className="flex items-center gap-1 text-zinc-400 text-xs">
                             <Calendar className="h-3 w-3" />
@@ -211,6 +232,12 @@ export default function CustomerHomePage() {
                             <span>${parseFloat(job.estimatedTotal).toFixed(0)} est.</span>
                           </div>
                         )}
+                        {job.crewSize && (
+                          <div className="flex items-center gap-1 text-zinc-400 text-xs">
+                            <Users className="h-3 w-3" />
+                            <span>{job.crewSize} crew</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -220,42 +247,12 @@ export default function CustomerHomePage() {
           </div>
         )}
 
-        <div className="mt-6 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 p-5 shadow-sm">
-          <h3 className="font-bold text-zinc-900 dark:text-white text-sm mb-3">How It Works</h3>
-          <div className="space-y-3">
-            {[
-              { step: "1", title: "Request Service", desc: "Submit your job in seconds" },
-              { step: "2", title: "Get Matched", desc: "Available crews respond quickly" },
-              { step: "3", title: "Job Completed", desc: "Pay and review your experience" },
-            ].map(s => (
-              <div key={s.step} className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-jc-orange/10 flex items-center justify-center flex-shrink-0">
-                  <span className="text-jc-orange font-black text-sm">{s.step}</span>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-zinc-900 dark:text-white">{s.title}</p>
-                  <p className="text-xs text-zinc-400">{s.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="mt-4 bg-zinc-900 dark:bg-zinc-800 rounded-2xl p-5 shadow-sm">
-          <div className="flex items-center gap-2 mb-2">
-            <Users className="h-5 w-5 text-jc-orange" />
-            <h3 className="font-bold text-white text-sm">Join the Crew</h3>
-          </div>
-          <p className="text-zinc-400 text-xs mb-3">Earn money with JC ON THE MOVE. Accept jobs, flexible work, get paid fast.</p>
-          <button
-            onClick={() => setLocation("/crew-jobs")}
-            className="h-10 px-5 rounded-xl bg-jc-orange text-white font-bold text-xs shadow-sm hover:bg-jc-orange/90 active:scale-[0.98] transition-all"
-          >
-            Browse Crew Jobs
-          </button>
-        </div>
-
         <div className="mt-4 text-center py-4">
+          <div className="flex items-center justify-center gap-3 mb-2">
+            <span className="flex items-center gap-1 text-zinc-400 text-[11px]"><Shield className="h-3 w-3" /> Licensed & Insured</span>
+            <span className="flex items-center gap-1 text-zinc-400 text-[11px]"><Star className="h-3 w-3" /> 5-Star Reviews</span>
+            <span className="flex items-center gap-1 text-zinc-400 text-[11px]"><Zap className="h-3 w-3" /> Same-Day</span>
+          </div>
           <p className="text-zinc-400 text-xs">Serving Ironwood · Hurley · Ashland · Bessemer</p>
           <p className="text-zinc-300 dark:text-zinc-600 text-[10px] mt-1">© JC ON THE MOVE</p>
         </div>

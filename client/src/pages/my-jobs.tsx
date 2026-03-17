@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { MapPin, Calendar, Loader2, Truck, Trash2, Snowflake, Wrench, Plus, CheckCircle, Clock, AlertCircle } from "lucide-react";
+import { MapPin, Calendar, Loader2, Truck, Trash2, Snowflake, Wrench, Plus, CheckCircle, Clock, AlertCircle, Users, DollarSign, RefreshCw, ChevronRight } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 interface CustomerJob {
@@ -15,18 +15,19 @@ interface CustomerJob {
   moveDate: string;
   status: string;
   estimatedTotal: string;
+  crewSize?: number | null;
   createdAt: string;
 }
 
 const SERVICE_ICONS: Record<string, { icon: LucideIcon; color: string; bg: string }> = {
-  residential: { icon: Truck, color: "text-blue-600", bg: "bg-blue-50 dark:bg-blue-900/20" },
-  junk: { icon: Trash2, color: "text-orange-600", bg: "bg-orange-50 dark:bg-orange-900/20" },
-  snow: { icon: Snowflake, color: "text-cyan-600", bg: "bg-cyan-50 dark:bg-cyan-900/20" },
-  handyman: { icon: Wrench, color: "text-amber-600", bg: "bg-amber-50 dark:bg-amber-900/20" },
-  cleaning: { icon: Truck, color: "text-green-600", bg: "bg-green-50 dark:bg-green-900/20" },
-  demolition: { icon: Truck, color: "text-red-600", bg: "bg-red-50 dark:bg-red-900/20" },
-  flooring: { icon: Truck, color: "text-stone-600", bg: "bg-stone-50 dark:bg-stone-900/20" },
-  painting: { icon: Truck, color: "text-violet-600", bg: "bg-violet-50 dark:bg-violet-900/20" },
+  residential: { icon: Truck, color: "text-blue-500", bg: "bg-blue-500/10" },
+  junk: { icon: Trash2, color: "text-orange-500", bg: "bg-orange-500/10" },
+  snow: { icon: Snowflake, color: "text-cyan-500", bg: "bg-cyan-500/10" },
+  handyman: { icon: Wrench, color: "text-amber-500", bg: "bg-amber-500/10" },
+  cleaning: { icon: Truck, color: "text-green-500", bg: "bg-green-500/10" },
+  demolition: { icon: Truck, color: "text-red-500", bg: "bg-red-500/10" },
+  flooring: { icon: Truck, color: "text-stone-500", bg: "bg-stone-500/10" },
+  painting: { icon: Truck, color: "text-violet-500", bg: "bg-violet-500/10" },
 };
 
 const SERVICE_LABELS: Record<string, string> = {
@@ -40,19 +41,21 @@ const SERVICE_LABELS: Record<string, string> = {
   painting: "Painting",
 };
 
-function getStatusStyle(status: string) {
+function getCustomerStatus(status: string): { label: string; cls: string } {
   switch (status) {
-    case "completed": return "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400";
-    case "in_progress": return "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400";
-    case "confirmed": case "accepted": case "available": return "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400";
-    case "cancelled": return "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400";
-    default: return "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400";
+    case "completed": case "paid":
+      return { label: "COMPLETED", cls: "bg-green-500/15 text-green-400 border border-green-500/30" };
+    case "confirmed": case "accepted": case "in_progress": case "scheduled": case "activated":
+      return { label: "ACCEPTED", cls: "bg-purple-500/15 text-purple-400 border border-purple-500/30" };
+    case "cancelled":
+      return { label: "CANCELLED", cls: "bg-red-500/15 text-red-400 border border-red-500/30" };
+    default:
+      return { label: "SUBMITTED", cls: "bg-blue-500/15 text-blue-400 border border-blue-500/30" };
   }
 }
 
-function formatStatus(status: string) {
-  if (status === "quote_requested") return "SUBMITTED";
-  return status.replace(/_/g, " ").toUpperCase();
+function isReschedulable(status: string) {
+  return ["quote_requested", "available", "confirmed", "accepted", "scheduled", "activated"].includes(status);
 }
 
 type Filter = "all" | "active" | "completed";
@@ -69,8 +72,8 @@ export default function MyJobsPage() {
   const { data: jobs = [], isLoading } = useQuery<CustomerJob[]>({ queryKey: ["/api/leads/my-requests"] });
 
   const filtered = jobs.filter(j => {
-    if (filter === "active") return !["completed", "cancelled"].includes(j.status);
-    if (filter === "completed") return j.status === "completed";
+    if (filter === "active") return !["completed", "cancelled", "paid"].includes(j.status);
+    if (filter === "completed") return ["completed", "paid"].includes(j.status);
     return true;
   });
 
@@ -88,6 +91,7 @@ export default function MyJobsPage() {
           </button>
         </div>
 
+        {/* Filter tabs */}
         <div className="flex gap-2 mb-5">
           {FILTERS.map(f => {
             const active = filter === f.value;
@@ -138,12 +142,17 @@ export default function MyJobsPage() {
             {filtered.map(job => {
               const svc = SERVICE_ICONS[job.serviceType] || SERVICE_ICONS.residential;
               const Icon = svc.icon;
+              const st = getCustomerStatus(job.status);
+              const canReschedule = isReschedulable(job.status);
+              const hasCost = job.estimatedTotal && parseFloat(job.estimatedTotal) > 0;
+
               return (
                 <div
                   key={job.id}
-                  className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 p-4 shadow-sm active:scale-[0.99] transition-transform"
+                  className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 shadow-sm overflow-hidden"
                 >
-                  <div className="flex items-start gap-3">
+                  {/* Card header row */}
+                  <div className="flex items-start gap-3 p-4 pb-3">
                     <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${svc.bg}`}>
                       <Icon className={`h-5 w-5 ${svc.color}`} />
                     </div>
@@ -152,8 +161,8 @@ export default function MyJobsPage() {
                         <span className="font-semibold text-zinc-900 dark:text-white text-sm">
                           {SERVICE_LABELS[job.serviceType] || job.serviceType}
                         </span>
-                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${getStatusStyle(job.status)}`}>
-                          {formatStatus(job.status)}
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${st.cls}`}>
+                          {st.label}
                         </span>
                       </div>
                       {job.pickupAddress && (
@@ -162,21 +171,50 @@ export default function MyJobsPage() {
                           <span className="truncate">{job.pickupAddress}</span>
                         </div>
                       )}
-                      <div className="flex items-center gap-3">
-                        {job.moveDate && (
-                          <div className="flex items-center gap-1 text-zinc-400 text-xs">
-                            <Calendar className="h-3 w-3" />
-                            <span>{new Date(job.moveDate).toLocaleDateString()}</span>
-                          </div>
-                        )}
-                        {job.estimatedTotal && (
-                          <div className="text-zinc-500 dark:text-zinc-400 text-xs font-medium">
-                            Est. ${job.estimatedTotal}
-                          </div>
-                        )}
-                      </div>
+                      {job.moveDate && (
+                        <div className="flex items-center gap-1 text-zinc-400 text-xs">
+                          <Calendar className="h-3 w-3" />
+                          <span>{new Date(job.moveDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
+
+                  {/* Details row — cost + crew */}
+                  {(hasCost || job.crewSize) && (
+                    <div className="flex items-center gap-4 px-4 pb-3 border-t border-zinc-50 dark:border-zinc-800 pt-2.5">
+                      {hasCost && (
+                        <div className="flex items-center gap-1.5">
+                          <DollarSign className="h-3.5 w-3.5 text-green-500" />
+                          <span className="text-sm font-bold text-green-600 dark:text-green-400">
+                            ${parseFloat(job.estimatedTotal).toFixed(0)}
+                          </span>
+                          <span className="text-xs text-zinc-400">estimated</span>
+                        </div>
+                      )}
+                      {job.crewSize && (
+                        <div className="flex items-center gap-1.5">
+                          <Users className="h-3.5 w-3.5 text-zinc-400" />
+                          <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">{job.crewSize}</span>
+                          <span className="text-xs text-zinc-400">crew members</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Reschedule button — only for non-terminal jobs */}
+                  {canReschedule && (
+                    <div className="px-4 pb-3">
+                      <button
+                        onClick={() => setLocation("/customer-portal?tab=jobs")}
+                        className="w-full flex items-center justify-center gap-2 h-9 rounded-xl border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 text-xs font-semibold hover:bg-zinc-50 dark:hover:bg-zinc-800 active:scale-[0.98] transition-all"
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        Request Reschedule
+                        <ChevronRight className="h-3.5 w-3.5 ml-auto" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
