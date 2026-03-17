@@ -86,7 +86,7 @@ function DisbursementSummaryCard({ lead }: { lead: any }) {
   });
 
   const records = data?.records ?? [];
-  const totalDisburse = records.reduce((s, r) => s + parseFloat(r.amount || "0"), 0);
+  const totalDisburse = records.reduce((s, r) => s + parseFloat(r.token_amount || "0"), 0);
   const crewRecords = records.filter((r) => r.reward_type === "worker_job_completion_bonus" || r.reward_type === "worker_hours_bonus");
   const customerRecords = records.filter((r) => r.reward_type === "loyalty_booking");
   const referralRecords = records.filter((r) => r.reward_type === "referral_confirmed");
@@ -121,7 +121,7 @@ function DisbursementSummaryCard({ lead }: { lead: any }) {
                       {r.first_name || r.username || `User #${r.user_id}`}{" "}
                       <span className="text-[10px] text-slate-600">({r.reward_type})</span>
                     </span>
-                    <span className="text-amber-300 font-bold">{parseFloat(r.amount).toLocaleString()} JC</span>
+                    <span className="text-amber-300 font-bold">{parseFloat(r.token_amount || "0").toLocaleString()} JC</span>
                   </div>
                 ))}
               </div>
@@ -132,7 +132,7 @@ function DisbursementSummaryCard({ lead }: { lead: any }) {
                 {customerRecords.map((r) => (
                   <div key={r.id} className="flex justify-between text-sm">
                     <span className="text-slate-400">{r.first_name || r.username || `User #${r.user_id}`}</span>
-                    <span className="text-amber-300 font-bold">{parseFloat(r.amount).toLocaleString()} JC</span>
+                    <span className="text-amber-300 font-bold">{parseFloat(r.token_amount || "0").toLocaleString()} JC</span>
                   </div>
                 ))}
               </div>
@@ -143,7 +143,7 @@ function DisbursementSummaryCard({ lead }: { lead: any }) {
                 {referralRecords.map((r) => (
                   <div key={r.id} className="flex justify-between text-sm">
                     <span className="text-slate-400">{r.first_name || r.username || `User #${r.user_id}`}</span>
-                    <span className="text-amber-300 font-bold">{parseFloat(r.amount).toLocaleString()} JC</span>
+                    <span className="text-amber-300 font-bold">{parseFloat(r.token_amount || "0").toLocaleString()} JC</span>
                   </div>
                 ))}
               </div>

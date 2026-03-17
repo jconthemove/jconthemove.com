@@ -100,16 +100,16 @@ interface JobOrderBuilderProps {
   }) => void;
 }
 
-const MOVING_PACKAGES: { movers: number; hours: number; label: string; tag?: string; isJc222?: boolean }[] = [
-  { movers: 2, hours: 2, label: "JC222 Special", tag: "💥 Best Deal", isJc222: true },
-  { movers: 2, hours: 3, label: "2 Movers × 3 hrs", tag: "Short Move" },
-  { movers: 2, hours: 4, label: "2 Movers × 4 hrs" },
-  { movers: 3, hours: 3, label: "3 Movers × 3 hrs", tag: "Most Popular" },
-  { movers: 3, hours: 4, label: "3 Movers × 4 hrs" },
-  { movers: 4, hours: 3, label: "4 Movers × 3 hrs", tag: "Fastest" },
-  { movers: 4, hours: 4, label: "4 Movers × 4 hrs", tag: "Heavy Move" },
-  { movers: 2, hours: 6, label: "2 Movers × 6 hrs", tag: "Full Day" },
-  { movers: 3, hours: 6, label: "3 Movers × 6 hrs" },
+const MOVING_PACKAGES: { id: string; movers: number; hours: number; label: string; tag?: string; isJc222?: boolean }[] = [
+  { id: "moving_2m_2h", movers: 2, hours: 2, label: "JC222 Special", tag: "💥 Best Deal", isJc222: true },
+  { id: "moving_2m_3h", movers: 2, hours: 3, label: "2 Movers × 3 hrs", tag: "Short Move" },
+  { id: "moving_2m_4h", movers: 2, hours: 4, label: "2 Movers × 4 hrs" },
+  { id: "moving_3m_3h", movers: 3, hours: 3, label: "3 Movers × 3 hrs", tag: "Most Popular" },
+  { id: "moving_3m_4h", movers: 3, hours: 4, label: "3 Movers × 4 hrs" },
+  { id: "moving_4m_3h", movers: 4, hours: 3, label: "4 Movers × 3 hrs", tag: "Fastest" },
+  { id: "moving_4m_4h", movers: 4, hours: 4, label: "4 Movers × 4 hrs", tag: "Heavy Move" },
+  { id: "moving_2m_6h", movers: 2, hours: 6, label: "2 Movers × 6 hrs", tag: "Full Day" },
+  { id: "moving_3m_6h", movers: 3, hours: 6, label: "3 Movers × 6 hrs" },
 ];
 
 const MOVING_ADDONS = [
@@ -131,10 +131,10 @@ const MOVING_SPECIAL_ITEMS = [
 ];
 
 const JUNK_PACKAGES = [
-  { label: "Single Item", desc: "1–2 large items (couch, fridge, mattress)", low: 75, high: 150, tag: "Quick" },
-  { label: "¼ Truck Load", desc: "Small cleanout or a few boxes/furniture", low: 100, high: 200 },
-  { label: "½ Truck Load", desc: "One room / garage cleanout", low: 150, high: 300, tag: "Popular" },
-  { label: "Full Truck Load", desc: "Estate cleanout, full demo haul, large project", low: 300, high: 600, tag: "Best Value" },
+  { id: "junk_single_item", label: "Single Item", desc: "1–2 large items (couch, fridge, mattress)", low: 75, high: 150, tag: "Quick" },
+  { id: "junk_quarter", label: "¼ Truck Load", desc: "Small cleanout or a few boxes/furniture", low: 100, high: 200 },
+  { id: "junk_half", label: "½ Truck Load", desc: "One room / garage cleanout", low: 150, high: 300, tag: "Popular" },
+  { id: "junk_full", label: "Full Truck Load", desc: "Estate cleanout, full demo haul, large project", low: 300, high: 600, tag: "Best Value" },
 ];
 
 const JUNK_ADDONS = [
@@ -276,9 +276,25 @@ export function JobOrderBuilder({ lead, disabled, onApply }: JobOrderBuilderProp
   });
 
   const [driveMiles, setDriveMiles] = useState<string>("");
+  const [driveAutoCalc, setDriveAutoCalc] = useState(false);
   const [confirmedDate, setConfirmedDate] = useState(lead.confirmedFromAddress ?? "");
   const [quoteNotes, setQuoteNotes] = useState(lead.quoteNotes ?? "");
   const [showAddons, setShowAddons] = useState(true);
+
+  const pickupAddr = lead.confirmedFromAddress || lead.fromAddress;
+
+  useEffect(() => {
+    if (!pickupAddr || driveMiles) return;
+    fetch(`/api/utility/estimate-drive-miles?address=${encodeURIComponent(pickupAddr)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.miles && data.miles > 0) {
+          setDriveMiles(String(data.miles));
+          setDriveAutoCalc(true);
+        }
+      })
+      .catch(() => {});
+  }, [pickupAddr]);
 
   useEffect(() => {
     if (pricing && !selectedPkg && !selectedJunkPkg) {
@@ -319,7 +335,7 @@ export function JobOrderBuilder({ lead, disabled, onApply }: JobOrderBuilderProp
       const laborTotal = pkg.isJc222 ? pricing.jc222Price : pkg.movers * pkg.hours * pricing.ratePerMoverHour;
 
       lineItems.push({
-        id: "labor",
+        id: pkg.id,
         name: pkg.isJc222 ? `JC222 Special — ${pkg.movers} Movers × ${pkg.hours} hrs` : `Labor — ${pkg.movers} Movers × ${pkg.hours} hrs @ $${pricing.ratePerMoverHour}/mover/hr`,
         qty: 1,
         unitPrice: laborTotal,
@@ -381,7 +397,7 @@ export function JobOrderBuilder({ lead, disabled, onApply }: JobOrderBuilderProp
         laborTotal = parseFloat(junkCustomPrice) || Math.round((pkg.low + pkg.high) / 2);
         packageLabel = pkg.label;
         lineItems.push({
-          id: "junk_labor",
+          id: pkg.id,
           name: `Junk Removal — ${pkg.label}`,
           qty: 1,
           unitPrice: laborTotal,
@@ -564,6 +580,11 @@ export function JobOrderBuilder({ lead, disabled, onApply }: JobOrderBuilderProp
         <div>
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
             <Navigation className="h-3.5 w-3.5 text-blue-400" /> Drive Time (optional)
+            {driveAutoCalc && driveMiles && (
+              <span className="ml-1 text-[10px] bg-blue-950/60 text-blue-400 border border-blue-500/30 px-1.5 py-0.5 rounded">
+                auto-estimated
+              </span>
+            )}
           </p>
           <div className="flex items-center gap-3">
             <div className="relative flex-1">
@@ -574,7 +595,7 @@ export function JobOrderBuilder({ lead, disabled, onApply }: JobOrderBuilderProp
                 placeholder="One-way miles from Ironwood, MI"
                 className="bg-slate-800 border-slate-600 text-white pr-12"
                 value={driveMiles}
-                onChange={e => setDriveMiles(e.target.value)}
+                onChange={e => { setDriveMiles(e.target.value); setDriveAutoCalc(false); }}
               />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">mi</span>
             </div>
@@ -587,8 +608,11 @@ export function JobOrderBuilder({ lead, disabled, onApply }: JobOrderBuilderProp
           </div>
           {driveLineItem && (
             <p className="text-[11px] text-slate-500 mt-1">
-              {driveMiles} mi × 2 (round trip) ÷ {pricing.driveSpeedMph || 45}mph × {driveLineItem && driveLineItem.name.match(/(\d+) movers/)?.[1] || "?"} movers @ $40/hr
+              {driveMiles} mi × 2 (round trip) ÷ {pricing.driveSpeedMph || 45}mph × {driveLineItem.name.match(/(\d+) movers/)?.[1] || "?"} movers @ $40/hr
             </p>
+          )}
+          {!driveMiles && pickupAddr && (
+            <p className="text-[11px] text-slate-600 mt-1">Estimating from: {pickupAddr}</p>
           )}
         </div>
 

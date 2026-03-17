@@ -11,31 +11,38 @@ import { ArrowLeft, Save, RefreshCw, ExternalLink, CheckCircle, XCircle } from "
 import { Link } from "wouter";
 
 const KNOWN_ITEM_IDS = [
-  { id: "moving_2m_2h", label: "Moving: 2 Movers 2h (JC222)" },
-  { id: "moving_2m_4h", label: "Moving: 2 Movers 4h" },
-  { id: "moving_3m_4h", label: "Moving: 3 Movers 4h" },
-  { id: "moving_4m_4h", label: "Moving: 4 Movers 4h" },
-  { id: "junk_quarter", label: "Junk: Quarter Load" },
-  { id: "junk_half", label: "Junk: Half Load" },
-  { id: "junk_three_quarter", label: "Junk: 3/4 Load" },
-  { id: "junk_full", label: "Junk: Full Load" },
-  { id: "junk_custom", label: "Junk: Custom" },
-  { id: "addon_stairs", label: "Add-on: Stairs" },
-  { id: "addon_piano", label: "Add-on: Piano / Organ" },
-  { id: "addon_safe", label: "Add-on: Gun Safe" },
-  { id: "addon_packing", label: "Add-on: Packing / Unpacking" },
-  { id: "addon_storage", label: "Add-on: Storage Unit" },
-  { id: "addon_disposal", label: "Add-on: Disposal / Dump Run" },
-  { id: "addon_boxes", label: "Add-on: Box Kit" },
-  { id: "addon_tv_mount", label: "Add-on: TV Mount / Disassemble" },
-  { id: "addon_junk_extra_item", label: "Junk Add-on: Extra Item" },
-  { id: "addon_appliance_haul", label: "Junk Add-on: Appliance Haul" },
-  { id: "addon_hazmat", label: "Junk Add-on: Hazmat Surcharge" },
+  { id: "moving_2m_2h", label: "Moving: JC222 Special (2 Movers × 2h)" },
+  { id: "moving_2m_3h", label: "Moving: 2 Movers × 3 hrs" },
+  { id: "moving_2m_4h", label: "Moving: 2 Movers × 4 hrs" },
+  { id: "moving_3m_3h", label: "Moving: 3 Movers × 3 hrs" },
+  { id: "moving_3m_4h", label: "Moving: 3 Movers × 4 hrs" },
+  { id: "moving_4m_3h", label: "Moving: 4 Movers × 3 hrs" },
+  { id: "moving_4m_4h", label: "Moving: 4 Movers × 4 hrs" },
+  { id: "moving_2m_6h", label: "Moving: 2 Movers × 6 hrs" },
+  { id: "moving_3m_6h", label: "Moving: 3 Movers × 6 hrs" },
+  { id: "junk_single_item", label: "Junk: Single Item" },
+  { id: "junk_quarter", label: "Junk: ¼ Truck Load" },
+  { id: "junk_half", label: "Junk: ½ Truck Load" },
+  { id: "junk_full", label: "Junk: Full Truck Load" },
+  { id: "junk_custom", label: "Junk: Custom Price" },
+  { id: "mattress_bag", label: "Add-on: Mattress Bag(s)" },
+  { id: "wardrobe_boxes", label: "Add-on: Wardrobe Boxes" },
+  { id: "packing_supplies", label: "Add-on: Packing Tape & Supplies" },
+  { id: "long_carry", label: "Add-on: Long Carry (>75 ft)" },
+  { id: "stairs", label: "Add-on: Stairs / Flights" },
+  { id: "elevator", label: "Add-on: Elevator Fee" },
+  { id: "assembly", label: "Add-on: Furniture Assembly/Disassembly" },
+  { id: "appliance_connect", label: "Add-on: Appliance Connection" },
+  { id: "appliance_recycle", label: "Junk Add-on: Appliance Recycling Fee" },
+  { id: "hazmat", label: "Junk Add-on: Hazardous Surcharge" },
+  { id: "extra_labor", label: "Junk Add-on: Extra Labor Hour" },
+  { id: "dumpster_bag", label: "Junk Add-on: Cleanout Dumpster Bag" },
+  { id: "teardown", label: "Junk Add-on: Light Demolition" },
   { id: "drive_time", label: "Drive Time Fee" },
-  { id: "special_hot_tub", label: "Specialty: Hot Tub" },
-  { id: "special_pool_table", label: "Specialty: Pool Table" },
-  { id: "special_piano_grand", label: "Specialty: Grand Piano" },
-  { id: "special_trampoline", label: "Specialty: Trampoline" },
+  { id: "hot_tub", label: "Specialty: Hot Tub" },
+  { id: "piano", label: "Specialty: Piano" },
+  { id: "heavy_safe", label: "Specialty: Heavy Safe" },
+  { id: "pool_table", label: "Specialty: Pool Table" },
 ];
 
 export default function AdminSquareCatalogPage() {
@@ -112,14 +119,15 @@ export default function AdminSquareCatalogPage() {
             <div className="space-y-1.5 max-h-48 overflow-y-auto">
               {catalogData.items.map((item: any) => (
                 <div key={item.id} className="text-xs flex items-center gap-2">
-                  <span className="text-slate-300 flex-1 truncate">{item.itemData?.name || item.id}</span>
-                  {item.itemData?.variations?.map((v: any) => (
+                  <span className="text-slate-300 flex-1 truncate">{item.name || item.id}</span>
+                  {(item.variations || []).map((v: any) => (
                     <button
                       key={v.id}
+                      title={v.name}
                       className="font-mono text-blue-400 bg-blue-950/40 px-1.5 py-0.5 rounded border border-blue-500/20 hover:bg-blue-900/60 truncate max-w-[180px]"
                       onClick={() => { navigator.clipboard.writeText(v.id); toast({ title: "Copied", description: v.id }); }}
                     >
-                      {v.id}
+                      {v.name || v.id}
                     </button>
                   ))}
                 </div>

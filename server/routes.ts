@@ -4391,12 +4391,14 @@ Thank you for your business!
     try {
       const { id } = req.params;
       const { rows } = await pool.query(
-        `SELECT r.id, r.user_id, r.amount, r.reward_type, r.metadata, r.created_at,
+        `SELECT r.id, r.user_id, r.token_amount, r.reward_type, r.metadata, r.earned_date,
                 u.username, u.first_name, u.last_name, u.role
          FROM rewards r
          LEFT JOIN users u ON u.id = r.user_id
-         WHERE r.metadata->>'leadId' = $1
-         ORDER BY r.created_at ASC`,
+         WHERE r.metadata->>'jobId' = $1
+            OR r.metadata->>'leadId' = $1
+            OR r.reference_id = $1
+         ORDER BY r.earned_date ASC`,
         [id]
       );
       res.json({ records: rows });
@@ -13766,6 +13768,38 @@ Thank you for your business!
   });
 
   // ── Public pricing config (used by services page) ──────────────────────────
+  // ── Drive distance auto-estimate via OpenStreetMap Nominatim ──────────────
+  app.get("/api/utility/estimate-drive-miles", async (req, res) => {
+    const address = req.query.address as string;
+    if (!address || address.trim().length < 4) {
+      return res.json({ miles: 0, error: "No address" });
+    }
+    const BASE_LAT = 46.4539;
+    const BASE_LNG = -90.1715;
+
+    function haversine(lat1: number, lng1: number, lat2: number, lng2: number) {
+      const R = 3958.8;
+      const dLat = ((lat2 - lat1) * Math.PI) / 180;
+      const dLng = ((lng2 - lng1) * Math.PI) / 180;
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1&countrycodes=us`;
+      const response = await fetch(url, { headers: { "User-Agent": "JCOnTheMove/1.0 contact@jcontmove.com" } });
+      if (!response.ok) return res.json({ miles: 0, error: "Geocoding unavailable" });
+      const data: any[] = await response.json() as any[];
+      if (!data.length) return res.json({ miles: 0, note: "Address not found" });
+      const { lat, lon } = data[0];
+      const straight = haversine(BASE_LAT, BASE_LNG, parseFloat(lat), parseFloat(lon));
+      const estimated = Math.ceil(straight * 1.25);
+      return res.json({ miles: estimated, straight: Math.round(straight), lat, lon });
+    } catch (err: any) {
+      return res.json({ miles: 0, error: err.message });
+    }
+  });
+
   app.get("/api/pricing", async (_req, res) => {
     try {
       const { rows } = await pool.query(
