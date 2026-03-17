@@ -2,18 +2,18 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { MapPin, Calendar, Coins, Loader2, Plus, Truck, Trash2, Snowflake, Wrench, Star, Shield, Clock, ChevronRight, Zap, Users, Package } from "lucide-react";
+import { EarnTasksButton } from "@/components/earn-tasks-button";
+import { FloatingMomHeart } from "@/components/floating-mom-heart";
 import type { LucideIcon } from "lucide-react";
 
 interface JobLead {
   id: string;
-  firstName: string;
-  lastName: string;
   serviceType: string;
-  fromAddress: string;
-  toAddress?: string;
+  pickupAddress: string;
+  dropoffAddress?: string;
   moveDate?: string;
   status: string;
-  tokenAllocation?: string;
+  estimatedTotal?: string;
   createdAt: string;
 }
 
@@ -60,12 +60,15 @@ function timeAgo(dateStr: string) {
 export default function CustomerHomePage() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
-  const { data: allJobs = [], isLoading } = useQuery<JobLead[]>({ queryKey: ["/api/leads"] });
+  const { data: myJobsData, isLoading } = useQuery<JobLead[] | { leads?: JobLead[] }>({ queryKey: ["/api/leads/my-requests"] });
   const { data: wallet } = useQuery<{ tokenBalance: string }>({ queryKey: ["/api/rewards/wallet"] });
 
   const tokenBalance = parseFloat(wallet?.tokenBalance || "0");
-  const openJobs = allJobs
-    .filter(j => j.status === "available")
+  // my-requests may return array or {leads:[...]}
+  const myJobs: JobLead[] = Array.isArray(myJobsData)
+    ? myJobsData
+    : ((myJobsData as any)?.leads ?? []);
+  const openJobs = myJobs
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 20);
 
@@ -127,13 +130,18 @@ export default function CustomerHomePage() {
           })}
         </div>
 
+        <div className="space-y-3 mb-5">
+          <EarnTasksButton embedded />
+          <FloatingMomHeart embedded />
+        </div>
+
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-bold text-zinc-900 dark:text-white text-base">Open Jobs Near You</h2>
+          <h2 className="font-bold text-zinc-900 dark:text-white text-base">My Recent Jobs</h2>
           <button
             onClick={() => setLocation("/my-jobs")}
             className="text-xs font-semibold text-jc-orange flex items-center gap-0.5"
           >
-            My Jobs <ChevronRight className="h-3.5 w-3.5" />
+            View All <ChevronRight className="h-3.5 w-3.5" />
           </button>
         </div>
 
@@ -146,8 +154,8 @@ export default function CustomerHomePage() {
             <div className="w-16 h-16 rounded-2xl bg-jc-orange/10 flex items-center justify-center mx-auto mb-4">
               <Users className="h-8 w-8 text-jc-orange" />
             </div>
-            <p className="text-zinc-700 dark:text-zinc-300 font-semibold mb-1">No open jobs right now</p>
-            <p className="text-zinc-400 text-sm mb-4">Be the first to post a job and earn JCMOVES tokens</p>
+            <p className="text-zinc-700 dark:text-zinc-300 font-semibold mb-1">No jobs posted yet</p>
+            <p className="text-zinc-400 text-sm mb-4">Post your first job and earn JCMOVES tokens</p>
             <button
               onClick={() => setLocation("/post-job")}
               className="h-11 px-6 rounded-xl bg-jc-orange text-white font-bold text-sm shadow-sm hover:bg-jc-orange/90 active:scale-[0.98] transition-all"
@@ -174,12 +182,20 @@ export default function CustomerHomePage() {
                         <span className="font-semibold text-zinc-900 dark:text-white text-sm">
                           {SERVICE_LABELS[job.serviceType] || job.serviceType}
                         </span>
-                        <span className="text-[11px] text-zinc-400">{timeAgo(job.createdAt)}</span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          ["completed", "paid"].includes(job.status)
+                            ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                            : ["in_progress", "confirmed", "scheduled", "accepted"].includes(job.status)
+                            ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400"
+                            : "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
+                        }`}>
+                          {job.status.replace(/_/g, " ")}
+                        </span>
                       </div>
-                      {job.fromAddress && (
+                      {job.pickupAddress && (
                         <div className="flex items-center gap-1.5 text-zinc-500 dark:text-zinc-400 text-xs mb-1">
                           <MapPin className="h-3 w-3 flex-shrink-0" />
-                          <span className="truncate">{job.fromAddress}</span>
+                          <span className="truncate">{job.pickupAddress}</span>
                         </div>
                       )}
                       <div className="flex items-center gap-3">
@@ -189,10 +205,10 @@ export default function CustomerHomePage() {
                             <span>{new Date(job.moveDate).toLocaleDateString()}</span>
                           </div>
                         )}
-                        {job.tokenAllocation && parseFloat(job.tokenAllocation) > 0 && (
-                          <div className="flex items-center gap-1 text-jc-orange text-xs font-medium">
+                        {job.estimatedTotal && parseFloat(job.estimatedTotal) > 0 && (
+                          <div className="flex items-center gap-1 text-green-600 text-xs font-medium">
                             <Coins className="h-3 w-3" />
-                            <span>+{parseFloat(job.tokenAllocation).toFixed(0)} JCMOVES</span>
+                            <span>${parseFloat(job.estimatedTotal).toFixed(0)} est.</span>
                           </div>
                         )}
                       </div>

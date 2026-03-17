@@ -39,7 +39,7 @@ function isToday(dateStr: string | null | undefined): boolean {
   return normalized === easternToday;
 }
 
-export function EarnTasksButton() {
+export function EarnTasksButton({ embedded = false }: { embedded?: boolean } = {}) {
   const [open, setOpen] = useState(false);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -254,21 +254,45 @@ export function EarnTasksButton() {
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="fixed bottom-4 right-4 z-50 bg-gradient-to-br from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-white p-3.5 rounded-full shadow-2xl transition-all duration-300 hover:scale-110 group"
-        aria-label="Earn JCMOVES tasks"
-      >
-        <Coins className="h-5 w-5" />
-        {pendingCount > 0 && (
-          <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-extrabold w-5 h-5 rounded-full flex items-center justify-center shadow">
-            {pendingCount}
+      {embedded ? (
+        <button
+          onClick={() => setOpen(true)}
+          className="w-full flex items-center gap-3 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 p-4 shadow-sm active:scale-[0.98] transition-transform text-left"
+        >
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-yellow-500 to-orange-500 flex items-center justify-center flex-shrink-0 shadow-sm relative">
+            <Coins className="h-5 w-5 text-white" />
+            {pendingCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-extrabold w-4.5 h-4.5 w-4 h-4 rounded-full flex items-center justify-center shadow">
+                {pendingCount}
+              </span>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-zinc-900 dark:text-white text-sm">Daily Tasks</p>
+            <p className="text-xs text-zinc-400">{allDone ? "All done! ✓" : `${pendingCount} task${pendingCount !== 1 ? "s" : ""} remaining`}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs font-bold text-yellow-600 dark:text-yellow-400">{doneCount}/{totalCount}</p>
+            <p className="text-[10px] text-zinc-400">completed</p>
+          </div>
+        </button>
+      ) : (
+        <button
+          onClick={() => setOpen(true)}
+          className="fixed bottom-4 right-4 z-50 bg-gradient-to-br from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-white p-3.5 rounded-full shadow-2xl transition-all duration-300 hover:scale-110 group"
+          aria-label="Earn JCMOVES tasks"
+        >
+          <Coins className="h-5 w-5" />
+          {pendingCount > 0 && (
+            <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-extrabold w-5 h-5 rounded-full flex items-center justify-center shadow">
+              {pendingCount}
+            </span>
+          )}
+          <span className="absolute -top-8 right-0 bg-yellow-700 text-yellow-100 text-xs px-2 py-1 rounded-full whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+            Earn JCMOVES
           </span>
-        )}
-        <span className="absolute -top-8 right-0 bg-yellow-700 text-yellow-100 text-xs px-2 py-1 rounded-full whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-          Earn JCMOVES
-        </span>
-      </button>
+        </button>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto p-0">

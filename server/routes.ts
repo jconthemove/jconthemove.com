@@ -2198,6 +2198,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Upload photo/video for a job request (any authenticated user)
+  app.post("/api/leads/upload", isAuthenticatedAllowPending, async (req: any, res) => {
+    try {
+      const multer = (await import("multer")).default;
+      const upload = multer({
+        storage: multer.memoryStorage(),
+        limits: { fileSize: 100 * 1024 * 1024 }, // 100MB
+      }).single("file");
+
+      await new Promise<void>((resolve, reject) => {
+        upload(req, res as any, (err: any) => {
+          if (err) reject(err); else resolve();
+        });
+      });
+
+      if (!req.file) return res.status(400).json({ error: "No file provided" });
+
+      const file = req.file as Express.Multer.File;
+      const ext = (file.originalname.split('.').pop() || 'bin').toLowerCase();
+      const { ObjectStorageService } = await import("./objectStorage");
+      const objectStorage = new ObjectStorageService();
+      const url = await objectStorage.saveFileBuffer(file.buffer, file.mimetype, ext);
+      res.json({ url, mimeType: file.mimetype, name: file.originalname });
+    } catch (error: any) {
+      console.error("❌ Lead upload error:", error?.message);
+      res.status(500).json({ error: "Upload failed", detail: error?.message });
+    }
+  });
+
   app.post("/api/leads/marketplace", isAuthenticatedAllowPending, async (req: any, res) => {
     try {
       const leadData = insertLeadSchema.parse(req.body);

@@ -9,8 +9,6 @@ import { ThemeProvider } from "@/hooks/useTheme";
 import { WalletProviderWrapper } from "@/components/WalletProviderWrapper";
 import { RouteGuard } from "@/components/RouteGuard";
 import { ComplianceCheck } from "@/components/compliance-check";
-import { EarnTasksButton } from "@/components/earn-tasks-button";
-import { FloatingMomHeart } from "@/components/floating-mom-heart";
 import Header from "@/components/header";
 import BottomTabBar from "@/components/bottom-tab-bar";
 import PwaInstallPrompt from "@/components/pwa-install-prompt";
@@ -592,12 +590,6 @@ function App() {
                 <Toaster />
                 <SilentErrorBoundary label="PwaInstallPrompt">
                   <PwaInstallPrompt />
-                </SilentErrorBoundary>
-                <SilentErrorBoundary label="EarnTasksButton">
-                  <EarnTasksButton />
-                </SilentErrorBoundary>
-                <SilentErrorBoundary label="FloatingMomHeart">
-                  <FloatingMomHeart />
                 </SilentErrorBoundary>
               </TooltipProvider>
             </CartProvider>

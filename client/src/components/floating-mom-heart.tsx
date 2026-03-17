@@ -59,7 +59,7 @@ const QUICK_AMOUNTS = [5, 10, 25, 50, 100, 250];
 // ─────────────────────────────────────────────────────────────
 // Main Component
 // ─────────────────────────────────────────────────────────────
-export function FloatingMomHeart() {
+export function FloatingMomHeart({ embedded = false }: { embedded?: boolean } = {}) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<"donate" | "timeline" | "nominate">("donate");
   const [amount, setAmount] = useState(10);
@@ -196,7 +196,22 @@ export function FloatingMomHeart() {
 
   return (
     <>
-      {/* ── Floating button ── */}
+      {/* ── Embedded card or floating button ── */}
+      {embedded ? (
+        <button
+          onClick={() => setOpen(true)}
+          className="w-full flex items-center gap-3 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 p-4 shadow-sm active:scale-[0.98] transition-transform text-left"
+        >
+          <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm transition-all duration-200 ${burst ? "bg-pink-500 scale-110" : "bg-gradient-to-br from-pink-500 to-rose-600"}`}>
+            <Heart className="h-5 w-5 text-white" fill="white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-zinc-900 dark:text-white text-sm">❤️ Send Love to Mom</p>
+            <p className="text-xs text-zinc-400">{stats ? `${stats.totalHearts} hearts sent · ${stats.tokenBalance.toLocaleString()} tokens` : "Support Nicolasa with JCMOVES"}</p>
+          </div>
+          <span className="text-pink-500 text-lg">›</span>
+        </button>
+      ) : (
       <div className="fixed bottom-4 left-4 z-50 flex flex-col items-center pointer-events-none">
         {/* Burst particles */}
         {floatParticles.map(p => (
@@ -234,6 +249,7 @@ export function FloatingMomHeart() {
           </div>
         )}
       </div>
+      )}
 
       {/* ── Dialog ── */}
       <Dialog open={open} onOpenChange={setOpen}>

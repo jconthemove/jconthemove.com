@@ -30,13 +30,17 @@ const REWARD_LABELS: Record<string, string> = {
 
 export default function CustomerRewardsPage() {
   const { data: wallet, isLoading: walletLoading } = useQuery<WalletAccount>({ queryKey: ["/api/rewards/wallet"] });
-  const { data: history = [], isLoading: historyLoading } = useQuery<RewardHistory[]>({ queryKey: ["/api/rewards/history"] });
+  const { data: historyData, isLoading: historyLoading } = useQuery({ queryKey: ["/api/rewards/history"] });
 
   const tokenBalance = parseFloat(wallet?.tokenBalance || "0");
   const totalEarned = parseFloat(wallet?.totalEarned || "0");
   const totalRedeemed = parseFloat(wallet?.totalRedeemed || "0");
   const isLoading = walletLoading || historyLoading;
 
+  // API returns { rewards: [...], total: N, totalTokensEarned: "..." }
+  const history: RewardHistory[] = Array.isArray(historyData)
+    ? historyData
+    : ((historyData as any)?.rewards ?? []);
   const recentHistory = history.slice(0, 20);
 
   return (

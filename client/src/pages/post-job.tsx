@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft, Truck, Trash2, Snowflake, Wrench, MapPin, Calendar, FileText,
-  CheckCircle, Coins, Loader2, ChevronRight
+  CheckCircle, Coins, Loader2, ChevronRight, Camera, X, Image, Video, Upload
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -18,6 +18,13 @@ const SERVICES = [
 
 const ESTIMATED_TOKENS = 50;
 
+interface UploadedMedia {
+  url: string;
+  mimeType: string;
+  name: string;
+  localPreview?: string;
+}
+
 export default function PostJobPage() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
@@ -31,8 +38,53 @@ export default function PostJobPage() {
     moveDate: "",
     details: "",
   });
+  const [media, setMedia] = useState<UploadedMedia[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const set = (k: keyof typeof form, v: string) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    if (media.length + files.length > 6) {
+      toast({ title: "Max 6 files", description: "You can attach up to 6 photos or videos.", variant: "destructive" });
+      return;
+    }
+
+    setUploading(true);
+    for (const file of files) {
+      try {
+        const localPreview = URL.createObjectURL(file);
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await fetch("/api/leads/upload", {
+          method: "POST",
+          body: formData,
+          credentials: "include",
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "Upload failed");
+        }
+        const data = await res.json();
+        setMedia(prev => [...prev, { url: data.url, mimeType: data.mimeType, name: data.name, localPreview }]);
+      } catch (err: any) {
+        toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      }
+    }
+    setUploading(false);
+    if (e.target) e.target.value = "";
+  };
+
+  const removeMedia = (idx: number) => {
+    setMedia(prev => {
+      const copy = [...prev];
+      const item = copy.splice(idx, 1)[0];
+      if (item.localPreview) URL.revokeObjectURL(item.localPreview);
+      return copy;
+    });
+  };
 
   const submitMutation = useMutation({
     mutationFn: async () => {
@@ -46,6 +98,7 @@ export default function PostJobPage() {
         toAddress: form.toAddress || undefined,
         moveDate: form.moveDate || undefined,
         details: form.details || undefined,
+        photos: media.map(m => ({ url: m.url, mimeType: m.mimeType, name: m.name })),
       });
       return res.json();
     },
@@ -204,6 +257,68 @@ export default function PostJobPage() {
               />
             </div>
 
+            {/* Photo / Video Upload */}
+            <div>
+              <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
+                <Camera className="h-4 w-4 inline mr-1" /> Photos / Videos
+                <span className="text-zinc-400 font-normal ml-1">(optional, up to 6)</span>
+              </label>
+
+              {media.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {media.map((m, idx) => (
+                    <div key={idx} className="relative w-20 h-20 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 flex-shrink-0">
+                      {m.mimeType.startsWith("video/") ? (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Video className="h-7 w-7 text-zinc-400" />
+                          <span className="absolute bottom-1 left-1 text-[9px] text-zinc-500 truncate max-w-[60px]">{m.name}</span>
+                        </div>
+                      ) : (
+                        <img src={m.localPreview || m.url} alt={m.name} className="w-full h-full object-cover" />
+                      )}
+                      <button
+                        onClick={() => removeMedia(idx)}
+                        className="absolute top-1 right-1 w-5 h-5 bg-black/60 rounded-full flex items-center justify-center"
+                        aria-label="Remove"
+                      >
+                        <X className="h-3 w-3 text-white" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,video/*"
+                multiple
+                className="hidden"
+                onChange={handleFileSelect}
+              />
+
+              {media.length < 6 && (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="w-full h-12 rounded-xl border-2 border-dashed border-zinc-300 dark:border-zinc-700 flex items-center justify-center gap-2 text-zinc-500 dark:text-zinc-400 hover:border-jc-orange hover:text-jc-orange transition-colors disabled:opacity-60"
+                >
+                  {uploading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="text-sm">Uploading...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4" />
+                      <span className="text-sm font-medium">Add Photos or Videos</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+
             <button
               onClick={() => {
                 if (!form.fromAddress) {
@@ -257,6 +372,12 @@ export default function PostJobPage() {
                   <div className="flex items-start gap-2">
                     <FileText className="h-4 w-4 text-zinc-400 mt-0.5 flex-shrink-0" />
                     <span className="text-zinc-700 dark:text-zinc-300">{form.details}</span>
+                  </div>
+                )}
+                {media.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <Image className="h-4 w-4 text-zinc-400" />
+                    <span className="text-zinc-700 dark:text-zinc-300">{media.length} photo{media.length !== 1 ? "s" : ""}/video{media.length !== 1 ? "s" : ""} attached</span>
                   </div>
                 )}
               </div>
