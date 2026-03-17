@@ -13203,10 +13203,10 @@ Thank you for your business!
   // ── Admin: Create item ────────────────────────────────────────
   // Sanitize reward item body: convert empty strings to null for numeric/optional fields
   function sanitizeRewardItemBody(body: any) {
-    const numericFields = ["salePriceTokens", "cashValue", "inventory", "expirationDays", "maxPerUser", "maxPerMonth", "sortOrder"];
+    const numericFields = ["tokenPrice", "salePriceTokens", "cashValue", "inventory", "expirationDays", "maxPerUser", "maxPerMonth", "sortOrder"];
     const cleaned = { ...body };
     for (const field of numericFields) {
-      if (cleaned[field] === "" || cleaned[field] === undefined) cleaned[field] = null;
+      if (field in cleaned && cleaned[field] === "") cleaned[field] = null;
     }
     // Remove internal fields that should never be set by the client
     delete cleaned.id;

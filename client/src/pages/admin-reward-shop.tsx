@@ -182,6 +182,7 @@ export default function AdminRewardShopPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/reward-shop/items"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/reward-shop/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reward-shop/items"] });
       setEditItem(null);
       toast({ title: isNewItem ? "Item created!" : "Item updated!", description: "Changes are live in the marketplace." });
     },
@@ -194,6 +195,7 @@ export default function AdminRewardShopPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/reward-shop/items"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/reward-shop/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reward-shop/items"] });
     },
     onError: (e: any) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
   });
@@ -201,7 +203,10 @@ export default function AdminRewardShopPage() {
   const toggleFeaturedMutation = useMutation({
     mutationFn: ({ id, featured }: { id: number; featured: boolean }) =>
       apiRequest("PATCH", `/api/admin/reward-shop/items/${id}`, { featured }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/reward-shop/items"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/reward-shop/items"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reward-shop/items"] });
+    },
   });
 
   const resetCatalogMutation = useMutation({
@@ -209,6 +214,7 @@ export default function AdminRewardShopPage() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/reward-shop/items"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/reward-shop/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reward-shop/items"] });
       toast({ title: "Catalog reset!", description: `Hid ${data.hidden} old items, loaded ${data.inserted} official items.` });
     },
     onError: (e: any) => toast({ title: "Reset failed", description: e.message, variant: "destructive" }),
