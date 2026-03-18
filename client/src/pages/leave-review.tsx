@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Star, Heart, Users, DollarSign, ChevronRight, CheckCircle, Truck,
@@ -22,19 +22,19 @@ function StarRating({ value, onChange }: { value: number; onChange: (v: number) 
   const labels = ["", "Poor", "Fair", "Good", "Great", "Excellent!"];
   return (
     <div className="space-y-2">
-      <div className="flex gap-2 justify-center">
+      <div className="flex gap-1.5 justify-center">
         {[1, 2, 3, 4, 5].map((star) => (
           <button key={star} type="button" onClick={() => onChange(star)}
             onMouseEnter={() => setHovered(star)} onMouseLeave={() => setHovered(0)}
-            className="transition-transform hover:scale-110 focus:outline-none">
-            <Star className={`h-12 w-12 transition-colors ${star <= (hovered || value)
+            className="transition-transform active:scale-95 focus:outline-none p-1.5">
+            <Star className={`h-9 w-9 md:h-11 md:w-11 transition-colors ${star <= (hovered || value)
               ? "fill-amber-400 text-amber-400"
               : "text-slate-300 dark:text-slate-600"}`} />
           </button>
         ))}
       </div>
       {(hovered || value) > 0 && (
-        <p className="text-center text-lg font-semibold text-amber-500">
+        <p className="text-center text-base font-semibold text-amber-500">
           {labels[hovered || value]}
         </p>
       )}
@@ -489,6 +489,14 @@ export default function LeaveReviewPage() {
     onSuccess: () => setSubmitted(true),
   });
 
+  // Refs must be declared before any conditional returns
+  const commentRef = useRef<HTMLTextAreaElement>(null);
+  const moverNamesRef = useRef<HTMLInputElement>(null);
+  const scrollToInput = (el: HTMLElement | null) => {
+    if (!el) return;
+    setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "center" }), 350);
+  };
+
   // ─── Lookup screen (all hooks already called above) ───────────────────────
   if (!token && !jobId) {
     return (
@@ -576,22 +584,23 @@ export default function LeaveReviewPage() {
   // ─── Main form ─────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gradient-to-b from-amber-50 via-white to-white dark:from-slate-900 dark:via-slate-950 dark:to-slate-950">
-      {/* Hero */}
-      <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-4 py-8 text-center shadow-lg">
+      {/* Compact hero — shorter on mobile so the form is visible sooner */}
+      <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-4 py-4 md:py-8 text-center shadow-lg">
         <div className="max-w-2xl mx-auto">
-          <div className="flex items-center justify-center gap-2 mb-2">
-            <Truck className="h-7 w-7" />
-            <span className="text-xl font-bold tracking-wide">JC ON THE MOVE</span>
+          <div className="flex items-center justify-center gap-2 mb-1">
+            <Truck className="h-5 w-5 md:h-7 md:w-7" />
+            <span className="text-base md:text-xl font-bold tracking-wide">JC ON THE MOVE</span>
           </div>
-          <h1 className="text-2xl md:text-3xl font-bold mb-1">How did we do? 🚚</h1>
-          <p className="opacity-90 text-sm md:text-base">
+          <h1 className="text-xl md:text-3xl font-bold mb-0.5">How did we do? 🚚</h1>
+          <p className="opacity-90 text-xs md:text-base">
             {jobInfo?.customerName ? `Hi ${jobInfo.customerName}!` : "Hi there!"}{" "}
             Your {jobInfo?.serviceLabel || "service"} is complete — we'd love your feedback.
           </p>
         </div>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
+      {/* Extra bottom padding so sticky bar doesn't hide content */}
+      <div className="max-w-2xl mx-auto px-4 py-4 md:py-8 space-y-4 md:space-y-6 pb-28">
 
         {/* Job summary */}
         {jobInfo && (
@@ -647,10 +656,12 @@ export default function LeaveReviewPage() {
             <div>
               <Label className="text-sm font-medium mb-2 block">Your review</Label>
               <Textarea
+                ref={commentRef}
                 placeholder="Describe your experience — what went well, what stood out..."
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
-                className="min-h-[110px] resize-none"
+                onFocus={() => scrollToInput(commentRef.current)}
+                className="min-h-[120px] resize-none text-base"
               />
             </div>
             <div>
@@ -659,11 +670,14 @@ export default function LeaveReviewPage() {
                 <span className="text-muted-foreground font-normal">(optional)</span>
               </Label>
               <Input
+                ref={moverNamesRef}
                 placeholder={jobInfo?.assignedEmployees?.length
                   ? `e.g. ${jobInfo.assignedEmployees.map((e) => e.name.split(" ")[0]).join(", ")} were fantastic!`
                   : "e.g. Marcus and Darrell were amazing!"}
                 value={moverNames}
                 onChange={(e) => setMoverNames(e.target.value)}
+                onFocus={() => scrollToInput(moverNamesRef.current)}
+                className="text-base"
               />
               <p className="text-xs text-muted-foreground mt-1">
                 Name a mover and they'll earn bonus reward tokens! 🏆
@@ -860,35 +874,38 @@ export default function LeaveReviewPage() {
         {/* ─── Jewelry Discount ─── */}
         <JewelryDiscountCard />
 
-        {/* ─── Submit ─── */}
-        <div className="pb-10">
+      </div>
+
+      {/* ─── Sticky Submit Bar — always above keyboard ─── */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 dark:bg-slate-950/95 backdrop-blur border-t border-amber-200 dark:border-amber-800 px-4 py-3" style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}>
+        <div className="max-w-2xl mx-auto space-y-1.5">
           {submitMutation.isError && (
-            <p className="text-destructive text-center mb-3 text-sm">
+            <p className="text-destructive text-center text-xs">
               {(submitMutation.error as Error)?.message || "Something went wrong. Please try again."}
+            </p>
+          )}
+          {rating === 0 && (
+            <p className="text-center text-xs text-muted-foreground">
+              Tap the stars above to rate your experience
             </p>
           )}
           <Button
             onClick={() => submitMutation.mutate()}
             disabled={rating === 0 || submitMutation.isPending}
             size="lg"
-            className="w-full h-14 text-lg bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow-lg shadow-amber-200 dark:shadow-amber-900">
+            className="w-full h-12 text-base bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-bold rounded-xl shadow-lg">
             {submitMutation.isPending ? (
               <span className="flex items-center gap-2">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
                 Submitting...
               </span>
             ) : (
               <span className="flex items-center gap-2">
                 Submit Review
-                <ChevronRight className="h-5 w-5" />
+                <ChevronRight className="h-4 w-4" />
               </span>
             )}
           </Button>
-          {rating === 0 && (
-            <p className="text-center text-sm text-muted-foreground mt-2">
-              Please select a star rating to continue
-            </p>
-          )}
         </div>
       </div>
     </div>
