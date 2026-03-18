@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient, storeTokens, clearTokens } from "@/lib/queryClient";
+import { apiRequest, queryClient, storeTokens, clearTokens, getApiBase } from "@/lib/queryClient";
 import { WelcomeModal } from "@/components/welcome-modal";
 import { Loader2, LogIn, Lock, Mail, User, UserPlus, Phone, Coins, Truck } from "lucide-react";
 
@@ -37,14 +37,24 @@ export default function LoginPage() {
 
   const loginMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/auth/login", { email: form.email, password: form.password });
+      const base = getApiBase();
+      // Use raw fetch — NOT apiRequest — so a wrong-password 401 shows an
+      // error message here instead of redirecting away from the login page.
+      const res = await fetch(`${base}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: form.email, password: form.password }),
+        credentials: "include",
+      });
       const data = await res.json();
-      // Also obtain JWT tokens for cross-platform / mobile auth persistence
+      if (!res.ok) throw new Error(data.error || "Invalid email or password");
+      // JWT tokens for cross-platform / mobile auth persistence
       try {
-        const tokenRes = await fetch("/api/auth/token", {
+        const tokenRes = await fetch(`${base}/api/auth/token`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: form.email, password: form.password }),
+          credentials: "include",
         });
         if (tokenRes.ok) {
           const tokenData = await tokenRes.json();
@@ -66,18 +76,25 @@ export default function LoginPage() {
 
   const registerMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/auth/customer/register", {
-        email: form.email, password: form.password,
-        firstName: form.firstName, lastName: form.lastName,
-        phoneNumber: form.phoneNumber, rewardsEnrolled: form.rewardsEnrolled,
+      const base = getApiBase();
+      const res = await fetch(`${base}/api/auth/customer/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: form.email, password: form.password,
+          firstName: form.firstName, lastName: form.lastName,
+          phoneNumber: form.phoneNumber, rewardsEnrolled: form.rewardsEnrolled,
+        }),
+        credentials: "include",
       });
       const data = await res.json();
-      // Also obtain JWT tokens for cross-platform / mobile auth persistence
+      if (!res.ok) throw new Error(data.error || "Could not create account");
       try {
-        const tokenRes = await fetch("/api/auth/token", {
+        const tokenRes = await fetch(`${base}/api/auth/token`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: form.email, password: form.password }),
+          credentials: "include",
         });
         if (tokenRes.ok) {
           const tokenData = await tokenRes.json();

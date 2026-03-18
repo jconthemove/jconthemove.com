@@ -7,7 +7,7 @@ import {
   FileText
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, clearTokens } from "@/lib/queryClient";
+import { apiRequest, clearTokens, queryClient } from "@/lib/queryClient";
 
 export default function CustomerProfilePage() {
   const { user } = useAuth();
@@ -36,6 +36,7 @@ export default function CustomerProfilePage() {
     } catch {
     } finally {
       clearTokens();
+      queryClient.clear();
       window.location.href = "/";
     }
   };

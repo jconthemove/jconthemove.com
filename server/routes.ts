@@ -2518,6 +2518,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Auth routes
   app.get('/api/auth/user', isAuthenticatedAllowPending, async (req: any, res) => {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.set("Pragma", "no-cache");
     try {
       const userId = (req.session as any).userId;
       console.log(`✅ Authentication successful - Fetching user data for userId: ${userId}`);
