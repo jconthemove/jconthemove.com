@@ -171,8 +171,8 @@ export function JobCard({ lead, onDelete, showContact = true, showTokens = true,
                 ${parseFloat(displayPrice).toFixed(2)}
               </span>
               {showTokens && earnTokens && earnTokens > 0 && (
-                <span className="text-amber-400/80 text-[10px] ml-1 flex items-center gap-0.5">
-                  <Zap className="h-2.5 w-2.5" /> ~{earnTokens.toLocaleString()} JCMOVES
+                <span className="text-orange-400/80 text-[10px] ml-1 flex items-center gap-0.5">
+                  <Zap className="h-2.5 w-2.5" /> crew ~{earnTokens.toLocaleString()} JCMOVES
                 </span>
               )}
             </div>
