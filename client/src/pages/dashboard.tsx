@@ -183,7 +183,9 @@ function BusinessOwnerDashboard() {
 export default function Dashboard() {
   const { user } = useAuth();
 
-  if (user?.role === 'admin') {
+  if (!user) return null;
+
+  if (user.role === 'admin' || user.role === 'business_owner') {
     return <BusinessOwnerDashboard />;
   }
 

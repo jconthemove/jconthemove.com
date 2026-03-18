@@ -1336,25 +1336,25 @@ export default function StakingPage() {
                             ? `Reinvest ${formatNumber(pending)} now`
                             : `Claim ${formatNumber(pending)} to wallet`}
                         </Button>
-                      {(() => {
-                        const isLocked = !isFlexible && remaining > 0;
-                        return (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => unstakeMutation.mutate(stake.id)}
-                            disabled={unstakeMutation.isPending || isLocked}
-                            className={isLocked 
-                              ? "border-red-800/50 text-red-400/70 cursor-not-allowed opacity-60" 
-                              : "border-gray-600 text-gray-300 hover:bg-gray-800 hover:text-white"}
-                            title={isLocked ? `Locked for ${remaining} more days` : "Withdraw your staked tokens"}
-                          >
-                            {unstakeMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : isLocked ? <Lock className="h-3 w-3 mr-1" /> : <Unlock className="h-3 w-3 mr-1" />}
-                            {isLocked ? `Locked (${remaining}d)` : "Unstake"}
-                          </Button>
-                        );
-                      })()}
-                    </div>
+                        {(() => {
+                          const isLocked = !isFlexible && remaining > 0;
+                          return (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => unstakeMutation.mutate(stake.id)}
+                              disabled={unstakeMutation.isPending || isLocked}
+                              className={isLocked 
+                                ? "border-red-800/50 text-red-400/70 cursor-not-allowed opacity-60" 
+                                : "border-gray-600 text-gray-300 hover:bg-gray-800 hover:text-white"}
+                              title={isLocked ? `Locked for ${remaining} more days` : "Withdraw your staked tokens"}
+                            >
+                              {unstakeMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : isLocked ? <Lock className="h-3 w-3 mr-1" /> : <Unlock className="h-3 w-3 mr-1" />}
+                              {isLocked ? `Locked (${remaining}d)` : "Unstake"}
+                            </Button>
+                          );
+                        })()}
+                      </div>
                   </div>
                 );
               })}
