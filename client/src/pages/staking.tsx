@@ -1355,6 +1355,7 @@ export default function StakingPage() {
                           );
                         })()}
                       </div>
+                    </div>
                   </div>
                 );
               })}

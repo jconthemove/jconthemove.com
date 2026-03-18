@@ -144,6 +144,7 @@ export const users = pgTable("users", {
   walletMode: text("wallet_mode"), // 'personal' | 'company' - how user wants to receive JCMOVES tokens
   personalWalletAddress: text("personal_wallet_address"), // User's personal Phantom wallet address (if walletMode = 'personal')
   companyWalletId: varchar("company_wallet_id"), // Foreign key to userWallets for company-assigned wallet (if walletMode = 'company')
+  isAvailable: boolean("is_available").default(false), // Worker duty status: true = available for jobs right now
   rewardsEnrolled: boolean("rewards_enrolled").notNull().default(false),
   loyaltyTier: text("loyalty_tier").default("bronze"), // 'bronze', 'silver', 'gold', 'vip'
   totalCompletedSpend: decimal("total_completed_spend", { precision: 10, scale: 2 }).default("0.00"),

@@ -4,7 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import {
   MapPin, Calendar, Coins, Loader2, Truck, Trash2, Snowflake, Wrench,
-  CheckCircle, Users
+  CheckCircle, Users, UserCheck, Power
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -74,8 +74,63 @@ export default function CrewJobsPage() {
     onError: (e: any) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
   });
 
+  const { data: availableWorkers = [], isLoading: loadingWorkers } = useQuery<{
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    username: string | null;
+    profileImageUrl: string | null;
+    role: string;
+    isAvailable: boolean;
+  }[]>({
+    queryKey: ["/api/employees/available"],
+    staleTime: 30000,
+  });
+
   const jobs = isEmployee ? availableJobs : allLeads.filter(l => l.status === "available");
   const isLoading = isEmployee ? loadingAvailable : loadingAll;
+
+  // Customers see "Find Crews" view — just show available workers
+  if (!isEmployee) {
+    return (
+      <div className="min-h-screen bg-jc-cream dark:bg-zinc-950 pb-24">
+        <div className="max-w-[430px] mx-auto px-4 pt-6">
+          <h1 className="text-2xl font-black text-zinc-900 dark:text-white mb-1">Available Crews</h1>
+          <p className="text-zinc-500 dark:text-zinc-400 text-sm mb-6">Workers who are ready to take your job right now</p>
+          {loadingWorkers ? (
+            <div className="flex justify-center py-16">
+              <Loader2 className="h-8 w-8 animate-spin text-jc-orange" />
+            </div>
+          ) : availableWorkers.length === 0 ? (
+            <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 p-8 text-center shadow-sm">
+              <Power className="h-12 w-12 text-zinc-300 dark:text-zinc-700 mx-auto mb-3" />
+              <p className="text-zinc-600 dark:text-zinc-400 font-semibold">No crew members ready</p>
+              <p className="text-zinc-400 text-sm mt-1">Workers will appear here once they go on duty</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {availableWorkers.map(w => (
+                <div key={w.id} className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 p-4 shadow-sm flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-orange-100 dark:bg-orange-900/20 flex items-center justify-center text-2xl font-black text-jc-orange flex-shrink-0">
+                    {(w.firstName || w.username || "?")[0].toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-zinc-900 dark:text-white">{w.firstName ? `${w.firstName}${w.lastName ? ` ${w.lastName[0]}.` : ""}` : w.username}</p>
+                    <p className="text-zinc-500 text-sm capitalize">{w.role.replace(/_/g, " ")}</p>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                      <span className="text-green-600 dark:text-green-400 text-xs font-semibold">On Duty</span>
+                    </div>
+                  </div>
+                  <UserCheck className="h-5 w-5 text-green-500 flex-shrink-0" />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-jc-cream dark:bg-zinc-950 pb-24">

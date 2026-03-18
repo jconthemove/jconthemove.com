@@ -399,7 +399,24 @@ export default function MobileLeadManager() {
   const [showPhotoCapture, setShowPhotoCapture] = useState(false);
   const [selectedJobForPhotos, setSelectedJobForPhotos] = useState<Lead | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
-  
+  const [dutyStatus, setDutyStatus] = useState<boolean>(Boolean((user as any)?.isAvailable));
+
+  const toggleDutyMutation = useMutation({
+    mutationFn: async (next: boolean) => {
+      const res = await apiRequest("PATCH", "/api/auth/user/availability", { isAvailable: next });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setDutyStatus(data.isAvailable);
+      queryClient.invalidateQueries({ queryKey: ["/api/employees/available"] });
+      toast({
+        title: data.isAvailable ? "🟢 ON DUTY" : "🔴 OFF DUTY",
+        description: data.isAvailable ? "You're visible to customers" : "Hidden from customer view",
+      });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
   // Offline storage capabilities
   const { 
     isOnline, 
@@ -709,6 +726,16 @@ export default function MobileLeadManager() {
             <span className="text-xs opacity-75">
               {isOnline ? 'Online' : 'Offline'}
             </span>
+            <button
+              onClick={() => toggleDutyMutation.mutate(!dutyStatus)}
+              disabled={toggleDutyMutation.isPending}
+              className={`ml-1 flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full transition-colors ${
+                dutyStatus ? "bg-green-500/30 text-green-200" : "bg-white/10 text-white/50"
+              }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${dutyStatus ? "bg-green-400 animate-pulse" : "bg-white/30"}`} />
+              {dutyStatus ? "ON DUTY" : "OFF DUTY"}
+            </button>
           </div>
           <div className="flex-1 text-center">
             <h1 className="text-xl font-bold">JC ON THE MOVE</h1>

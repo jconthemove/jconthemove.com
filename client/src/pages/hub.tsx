@@ -20,6 +20,7 @@ import {
   Sun, Cloud, CloudSnow, CloudRain, Zap, Trophy, BookOpen,
   RefreshCw, Coins, Star, Megaphone, Truck,
   Camera, ClipboardList, DollarSign, Wind, ChevronLeft, History,
+  Power, UserCheck, Wifi, WifiOff,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -142,6 +143,9 @@ export default function TeamHub() {
   const [calendarDialogOpen, setCalendarDialogOpen] = useState(false);
   const [historyExpanded, setHistoryExpanded] = useState(false);
 
+  // Worker availability (on/off duty toggle)
+  const [dutyStatus, setDutyStatus] = useState<boolean>(Boolean((currentUser as any)?.isAvailable));
+
   const scriptureClaimMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/mining/scripture-claim", {});
@@ -166,6 +170,23 @@ export default function TeamHub() {
     },
   });
 
+  // Worker availability toggle mutation
+  const toggleDutyMutation = useMutation({
+    mutationFn: async (next: boolean) => {
+      const res = await apiRequest("PATCH", "/api/auth/user/availability", { isAvailable: next });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setDutyStatus(data.isAvailable);
+      queryClient.invalidateQueries({ queryKey: ["/api/employees/available"] });
+      toast({
+        title: data.isAvailable ? "🟢 You're ON DUTY" : "🔴 You're OFF DUTY",
+        description: data.isAvailable ? "Customers can see you're available" : "You won't appear in available crews",
+      });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
   // Greeting
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
@@ -182,6 +203,11 @@ export default function TeamHub() {
 
   const { data: employees = [] } = useQuery<User[]>({
     queryKey: ["/api/employees"],
+  });
+
+  const { data: availableWorkers = [] } = useQuery<{ id: string; firstName: string | null; lastName: string | null; username: string | null; profileImageUrl: string | null; role: string; isAvailable: boolean }[]>({
+    queryKey: ["/api/employees/available"],
+    staleTime: 30000,
   });
 
   const { data: quotedLeads = [] } = useQuery<Lead[]>({
@@ -385,6 +411,25 @@ export default function TeamHub() {
                 </div>
               ))}
             </div>
+
+            {/* On-duty toggle — all crew members */}
+            <button
+              onClick={() => toggleDutyMutation.mutate(!dutyStatus)}
+              disabled={toggleDutyMutation.isPending}
+              className={`mt-4 w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all active:scale-[0.98] ${
+                dutyStatus
+                  ? "bg-green-500/15 border-green-500/40 text-green-300"
+                  : "bg-slate-800/60 border-slate-600/40 text-slate-400"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                {dutyStatus ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
+                <span className="text-sm font-bold">{dutyStatus ? "ON DUTY — visible to customers" : "OFF DUTY — hidden from customers"}</span>
+              </div>
+              <div className={`w-10 h-5 rounded-full transition-colors relative ${dutyStatus ? "bg-green-500" : "bg-slate-600"}`}>
+                <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${dutyStatus ? "left-5" : "left-0.5"}`} />
+              </div>
+            </button>
           </div>
         </div>
 
@@ -596,6 +641,40 @@ export default function TeamHub() {
                   );
                 })
               )}
+            </div>
+          )}
+        </div>
+
+        {/* ══ CREW SPOTLIGHT (available workers) ══ */}
+        <div className="rounded-2xl bg-gradient-to-br from-teal-950/50 via-slate-900 to-slate-950 border border-teal-500/20 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <UserCheck className="h-4 w-4 text-teal-400" />
+              <span className="font-bold text-white">Crew Spotlight</span>
+            </div>
+            <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${availableWorkers.length > 0 ? "bg-green-500/15 text-green-400" : "bg-slate-700/50 text-slate-500"}`}>
+              {availableWorkers.length} ready
+            </span>
+          </div>
+          {availableWorkers.length === 0 ? (
+            <div className="text-center py-4">
+              <Power className="h-8 w-8 text-slate-600 mx-auto mb-2" />
+              <p className="text-slate-500 text-sm">No crew members on duty</p>
+              <p className="text-slate-600 text-xs mt-1">Workers flip the switch above to go on duty</p>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-3">
+              {availableWorkers.map(w => (
+                <div key={w.id} className="flex items-center gap-2 bg-teal-500/10 border border-teal-500/20 rounded-xl px-3 py-2">
+                  <div className="w-7 h-7 rounded-full bg-teal-600/30 flex items-center justify-center text-teal-300 text-xs font-black">
+                    {(w.firstName || w.username || "?")[0].toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="text-white text-xs font-semibold">{w.firstName || w.username}</p>
+                    <p className="text-teal-400 text-[10px]">🟢 On Duty</p>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>

@@ -2641,6 +2641,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Toggle worker on-duty / availability status
+  app.patch('/api/auth/user/availability', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId || req.user?.id;
+      const { isAvailable } = req.body;
+      if (typeof isAvailable !== 'boolean') {
+        return res.status(400).json({ message: "isAvailable must be a boolean" });
+      }
+      const [updated] = await db.update(users).set({ isAvailable }).where(eq(users.id, userId)).returning();
+      if (!updated) return res.status(404).json({ message: "User not found" });
+      res.json({ isAvailable: updated.isAvailable });
+    } catch (error: any) {
+      console.error("Error toggling availability:", error);
+      res.status(500).json({ message: "Failed to update availability" });
+    }
+  });
+
+  // Get available workers (employees who toggled on-duty)
+  app.get('/api/employees/available', isAuthenticated, async (req: any, res) => {
+    try {
+      const available = await db.select({
+        id: users.id,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        username: users.username,
+        profileImageUrl: users.profileImageUrl,
+        role: users.role,
+        isAvailable: users.isAvailable,
+      }).from(users).where(
+        and(
+          eq(users.isAvailable, true),
+          eq(users.status, 'approved'),
+          inArray(users.role, ['employee', 'admin', 'business_owner'])
+        )
+      );
+      res.json(available);
+    } catch (error: any) {
+      console.error("Error fetching available workers:", error);
+      res.status(500).json({ message: "Failed to fetch available workers" });
+    }
+  });
+
   // Get all users (for employee/admin to assign jobs)
   app.get('/api/users', isAuthenticated, requireEmployee, async (req: any, res) => {
     try {
