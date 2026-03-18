@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { X, Users, Award, Pencil, Check } from "lucide-react";
+import { X, Users, Award, Pencil, Check, Zap } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -393,15 +393,40 @@ export function LeadQuoteDialog({ open, onOpenChange, lead, employees, onSave }:
                   </div>
                 </div>
 
-                <div className="p-3 bg-primary/10 rounded-lg">
-                  <p className="text-sm font-semibold text-primary flex items-center gap-2">
-                    <Award className="h-4 w-4" />
-                    Reward Pool: {tokenAllocation.toFixed(2) || '0.00'} JCMOVES tokens
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Employees will earn bonuses from this pool based on performance
-                  </p>
-                </div>
+                {basePrice > 0 && (() => {
+                  const customerTokens = Math.round(totalPrice * 15);
+                  const workerPool = Math.round(totalPrice * 15);
+                  const crewCount = selectedCrewMembers.length;
+                  const perWorker = crewCount > 0 ? Math.round(workerPool / crewCount) : workerPool;
+                  return (
+                    <div className="p-3 rounded-lg bg-amber-950/30 border border-amber-500/25 space-y-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-500/70 flex items-center gap-1.5">
+                        <Zap className="h-3 w-3" />
+                        $1 = 15 JCMOVES · Auto-conversion on ${totalPrice.toFixed(2)}
+                      </p>
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-slate-400">Customer earns on completion</span>
+                          <span className="font-bold text-amber-400">~{customerTokens.toLocaleString()} JCMOVES</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-slate-400">
+                            Worker pool {crewCount > 0 ? `(÷${crewCount} = ~${perWorker.toLocaleString()} each)` : ""}
+                          </span>
+                          <span className="font-bold text-orange-400">~{workerPool.toLocaleString()} JCMOVES</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+                {basePrice === 0 && (
+                  <div className="p-3 rounded-lg bg-slate-800/50 border border-slate-700/50">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                      <Zap className="h-3.5 w-3.5 text-amber-500/50" />
+                      Enter a base price above to see the $1 = 15 JCMOVES token conversion
+                    </p>
+                  </div>
+                )}
 
                 <div>
                   <Label htmlFor="confirmedDate" className="text-sm text-muted-foreground">Confirmed Move Date</Label>

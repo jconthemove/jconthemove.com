@@ -1025,12 +1025,29 @@ export default function LeadDetailPage() {
                       )}
                     </div>
                   )}
-                  {lead.totalPrice && (
-                    <div className="flex items-center gap-1.5 text-xs text-amber-400/80 pt-0.5">
-                      <Zap className="h-3.5 w-3.5" />
-                      Customer earns ~{Math.round(parseFloat(lead.totalPrice) * 15).toLocaleString()} JCMOVES on completion
-                    </div>
-                  )}
+                  {(lead.totalPrice || lead.basePrice) && (() => {
+                    const price = parseFloat(lead.totalPrice || lead.basePrice || "0");
+                    const crewCount = lead.crewSize ? parseInt(String(lead.crewSize)) : 0;
+                    const customerTokens = Math.round(price * 15);
+                    const workerPool = Math.round(price * 15);
+                    const perWorker = crewCount > 0 ? Math.round(workerPool / crewCount) : workerPool;
+                    return (
+                      <div className="pt-1.5 border-t border-slate-700/50 space-y-1">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Token conversion · $1 = 15 JCMOVES</p>
+                        <div className="flex items-center gap-1.5 text-xs text-amber-400">
+                          <Zap className="h-3.5 w-3.5 shrink-0" />
+                          <span>Customer earns <strong>~{customerTokens.toLocaleString()}</strong> JCMOVES</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs text-orange-400">
+                          <Zap className="h-3.5 w-3.5 shrink-0" />
+                          <span>
+                            Workers earn <strong>~{workerPool.toLocaleString()}</strong> JCMOVES
+                            {crewCount > 0 && <span className="text-orange-400/70"> (~{perWorker.toLocaleString()} each × {crewCount})</span>}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </CardContent>
               </Card>
             )}
@@ -1466,6 +1483,28 @@ export default function LeadDetailPage() {
                   placeholder="Enter invoice amount"
                 />
               </div>
+              {parseFloat(invoiceAmount) > 0 && (() => {
+                const amt = parseFloat(invoiceAmount);
+                const crewCount = lead?.crewSize ? parseInt(String(lead.crewSize)) : 0;
+                const tokens = Math.round(amt * 15);
+                const perWorker = crewCount > 0 ? Math.round(tokens / crewCount) : tokens;
+                return (
+                  <div className="mt-2 p-2.5 rounded-lg bg-amber-950/30 border border-amber-500/20 space-y-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-500/70">$1 = 15 JCMOVES conversion</p>
+                    <div className="flex items-center gap-1.5 text-xs text-amber-400">
+                      <Zap className="h-3 w-3 shrink-0" />
+                      <span>Customer earns <strong>~{tokens.toLocaleString()}</strong> JCMOVES</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-orange-400">
+                      <Zap className="h-3 w-3 shrink-0" />
+                      <span>
+                        Workers earn <strong>~{tokens.toLocaleString()}</strong> JCMOVES
+                        {crewCount > 0 && <span className="text-orange-400/70"> (~{perWorker.toLocaleString()} each × {crewCount})</span>}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
             <div>
               <Label>Description</Label>
