@@ -331,7 +331,7 @@ function computeQuote(a: Answers): Quote {
   const minPrice = round25(crew * minH * RATE) + specialSurcharge;
   const maxPrice = round25(crew * maxH * RATE) + specialSurcharge;
   const midPrice = (minPrice + maxPrice) / 2;
-  const tokensEstimate = Math.round(midPrice * 50);
+  const tokensEstimate = Math.round(midPrice * 15);
 
   return {
     crew,

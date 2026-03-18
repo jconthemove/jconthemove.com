@@ -1003,6 +1003,10 @@ export default function LeadDetailPage() {
                           <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide">Bonus Mover (+25% payout)</p>
                           {lead.crewMembers.map((mid: string) => {
                             const isBonus = lead.crewBonusFlags?.[mid] === true;
+                            const emp = employees.find((e: Employee) => e.id === mid);
+                            const displayName = emp
+                              ? `${emp.firstName || ""} ${emp.lastName || ""}`.trim() || emp.email
+                              : `Crew #${mid.slice(0, 6)}`;
                             return (
                               <div key={mid} className="flex items-center gap-2 text-xs">
                                 <Checkbox
@@ -1012,7 +1016,7 @@ export default function LeadDetailPage() {
                                   className="h-3.5 w-3.5"
                                 />
                                 <span className={isBonus ? "text-amber-400 font-medium" : "text-slate-400"}>
-                                  {mid.slice(0, 8)}… {isBonus ? "(+25%)" : ""}
+                                  {displayName} {isBonus ? "(+25%)" : ""}
                                 </span>
                               </div>
                             );
@@ -1024,7 +1028,7 @@ export default function LeadDetailPage() {
                   {lead.totalPrice && (
                     <div className="flex items-center gap-1.5 text-xs text-amber-400/80 pt-0.5">
                       <Zap className="h-3.5 w-3.5" />
-                      Customer earns ~{Math.round(parseFloat(lead.totalPrice) * 50).toLocaleString()} JCMOVES on completion
+                      Customer earns ~{Math.round(parseFloat(lead.totalPrice) * 15).toLocaleString()} JCMOVES on completion
                     </div>
                   )}
                 </CardContent>

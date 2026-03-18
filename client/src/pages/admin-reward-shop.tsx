@@ -112,7 +112,7 @@ export default function AdminRewardShopPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<"items" | "categories" | "redemptions" | "spin_wheel" | "distribution">("items");
-  const [earnRate, setEarnRate] = useState<number>(50);
+  const [earnRate, setEarnRate] = useState<number>(15);
   const [bookingReward, setBookingReward] = useState<number>(250);
   const [itemSearch, setItemSearch] = useState("");
   const [editItem, setEditItem] = useState<Partial<RewardItem> | null>(null);
@@ -854,7 +854,7 @@ export default function AdminRewardShopPage() {
                 <span className="text-sm font-bold w-20 text-right">{earnRate}/dollar</span>
               </div>
               <div className="flex gap-2 flex-wrap">
-                {[10, 25, 50, 75, 100, 150].map(v => (
+                {[5, 10, 15, 25, 50, 100].map(v => (
                   <button key={v} onClick={() => setEarnRate(v)}
                     className={`px-3 py-1 text-xs rounded-full border font-semibold transition-colors ${earnRate === v ? "bg-orange-500 text-black border-orange-500" : "border-border text-muted-foreground hover:text-foreground"}`}>
                     {v}x
@@ -900,14 +900,16 @@ export default function AdminRewardShopPage() {
               <p className="text-[10px] text-muted-foreground mt-2">* Est. value at $0.01 per JCMOVES. Does not include booking reward (+{bookingReward} JCMOVES flat).</p>
             </div>
 
-            {/* All Settings — Editable */}
+            {/* All Settings — Editable (excludes earn rate + booking reward which have dedicated controls above) */}
             <div className="bg-card border border-border rounded-xl p-5">
               <h3 className="text-sm font-bold mb-1">All Reward Settings</h3>
               <p className="text-[10px] text-muted-foreground mb-4">Edit any value and hit Save to update it live across the entire system.</p>
               <div className="space-y-3">
-                {(rewardSettingsData ?? []).map((s: any) => (
-                  <AllSettingRow key={s.settingKey} setting={s} saveRateMutation={saveRateMutation} />
-                ))}
+                {(rewardSettingsData ?? [])
+                  .filter((s: any) => s.settingKey !== 'earn_rate_per_dollar' && s.settingKey !== 'customer_quote_accepted')
+                  .map((s: any) => (
+                    <AllSettingRow key={s.settingKey} setting={s} saveRateMutation={saveRateMutation} />
+                  ))}
               </div>
             </div>
           </div>

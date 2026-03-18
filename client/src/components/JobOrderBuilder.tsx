@@ -146,7 +146,7 @@ const JUNK_ADDONS = [
   { id: "teardown", name: "Light Demolition / Teardown", description: "Sheds, decks, swing sets", unitPrice: 150, qtyOptions: [1] },
 ];
 
-const EARN_RATE = 50; // JCMOVES per $1
+const EARN_RATE = 15; // JCMOVES per $1
 
 function PackageCard({ pkg, selected, pricing, onSelect }: {
   pkg: typeof MOVING_PACKAGES[0];
