@@ -284,36 +284,41 @@ function SwipeCard({ lead, onSwipeLeft, onSwipeRight, onTap, showAcceptActions =
 
             {/* Contact Actions - Show for all jobs */}
             <div className="flex items-center gap-2 pt-2">
-              {lead.phone && (
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="flex-1"
-                  asChild
-                  data-testid={`call-customer-${lead.id}`}
-                >
-                  <a href={`tel:${lead.phone}`} className="flex items-center justify-center gap-2">
-                    <Phone className="h-4 w-4" />
-                    Call
-                  </a>
-                </Button>
-              )}
-              {lead.phone && (
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="flex-1"
-                  asChild
-                  data-testid={`text-customer-${lead.id}`}
-                >
-                  <a 
-                    href={`sms:${lead.phone}?body=${encodeURIComponent(generateSMSTemplate(lead))}`} 
-                    className="flex items-center justify-center gap-2"
+              {lead.phone ? (
+                <>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    asChild
+                    data-testid={`call-customer-${lead.id}`}
                   >
-                    <MessageSquare className="h-4 w-4" />
-                    Text
-                  </a>
-                </Button>
+                    <a href={`tel:${lead.phone}`} className="flex items-center justify-center gap-2">
+                      <Phone className="h-4 w-4" />
+                      Call
+                    </a>
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    asChild
+                    data-testid={`text-customer-${lead.id}`}
+                  >
+                    <a 
+                      href={`sms:${lead.phone}?body=${encodeURIComponent(generateSMSTemplate(lead))}`} 
+                      className="flex items-center justify-center gap-2"
+                    >
+                      <MessageSquare className="h-4 w-4" />
+                      Text
+                    </a>
+                  </Button>
+                </>
+              ) : (
+                <p className="text-xs text-amber-500/80 italic flex items-center gap-1 pt-1">
+                  <Phone className="h-3 w-3" />
+                  No phone on file — add it in the admin panel
+                </p>
               )}
               {lead.email && (
                 <Button 
@@ -641,7 +646,10 @@ export default function MobileLeadManager() {
   const handleCallCustomer = (leadId: string) => {
     const lead = [...availableJobs, ...myJobs].find(job => job.id === leadId);
     if (!lead) return;
-    
+    if (!lead.phone) {
+      toast({ title: "No phone number", description: "This customer has no phone number on file.", variant: "destructive" });
+      return;
+    }
     // Format phone number for calling
     const phoneNumber = lead.phone.replace(/\D/g, '');
     const callUrl = `tel:${phoneNumber}`;
@@ -657,7 +665,10 @@ export default function MobileLeadManager() {
   const handleMessageCustomer = (leadId: string) => {
     const lead = [...availableJobs, ...myJobs].find(job => job.id === leadId);
     if (!lead) return;
-    
+    if (!lead.phone) {
+      toast({ title: "No phone number", description: "This customer has no phone number on file.", variant: "destructive" });
+      return;
+    }
     // Format phone number for SMS
     const phoneNumber = lead.phone.replace(/\D/g, '');
     const message = encodeURIComponent(`Hi ${lead.firstName}, this is JC ON THE MOVE regarding your ${lead.serviceType} moving service. I'm on my way to your location.`);

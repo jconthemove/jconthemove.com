@@ -19,7 +19,7 @@ import { faucetService } from "./services/faucet";
 import { insertFundingDepositSchema, insertFaucetConfigSchema, insertFaucetWalletSchema } from "@shared/schema";
 import { z } from "zod";
 import { EncryptionService } from "./services/encryption";
-import { eq, desc, sql, and, gte, lte, or, ilike } from 'drizzle-orm';
+import { eq, desc, sql, and, gte, lte, or, ilike, inArray } from 'drizzle-orm';
 import { db, pool } from './db';
 import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, giftCards, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens, promoCodes, reviews, rewardCategories, rewardItems, rewardRedemptions, buybackFund, laborQuotes } from '@shared/schema';
 import { getFaucetPayService } from "./services/faucetpay";
@@ -5451,10 +5451,28 @@ Thank you for your business!
   });
 
   // Employee Job Routes
+  // Helper: enrich leads list by backfilling phone from the user table when lead.phone is blank
+  async function enrichLeadsWithPhone(leadList: any[]): Promise<any[]> {
+    const missing = leadList.filter(l => !l.phone && l.email);
+    if (missing.length === 0) return leadList;
+    const emails = [...new Set(missing.map(l => l.email as string))];
+    const matchedUsers = await db.select({ email: users.email, phoneNumber: users.phoneNumber })
+      .from(users)
+      .where(inArray(users.email, emails));
+    const phoneMap: Record<string, string> = {};
+    for (const u of matchedUsers) {
+      if (u.email && u.phoneNumber) phoneMap[u.email] = u.phoneNumber;
+    }
+    return leadList.map(l => ({
+      ...l,
+      phone: l.phone || phoneMap[l.email] || null,
+    }));
+  }
+
   app.get("/api/leads/available", isAuthenticated, requireEmployee, async (req, res) => {
     try {
       const availableLeads = await storage.getAvailableLeads();
-      res.json(availableLeads);
+      res.json(await enrichLeadsWithPhone(availableLeads));
     } catch (error) {
       console.error("Error fetching available leads:", error);
       res.status(500).json({ error: "Failed to fetch available jobs" });
@@ -5465,7 +5483,7 @@ Thank you for your business!
     try {
       const employeeId = req.currentUser.id;
       const assignedLeads = await storage.getAssignedLeads(employeeId);
-      res.json(assignedLeads);
+      res.json(await enrichLeadsWithPhone(assignedLeads));
     } catch (error) {
       console.error("Error fetching assigned leads:", error);
       res.status(500).json({ error: "Failed to fetch assigned jobs" });
