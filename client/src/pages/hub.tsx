@@ -172,8 +172,10 @@ export default function TeamHub() {
   const firstName = currentUser?.firstName || currentUser?.username || "Crew";
 
   // ── Queries ──────────────────────────────────────
+  // Admins see all leads; employees only see jobs assigned to them
+  const leadsEndpoint = isAdmin ? "/api/leads" : "/api/leads/my-jobs";
   const { data: leads = [], isLoading: leadsLoading } = useQuery<Lead[]>({
-    queryKey: ["/api/leads"],
+    queryKey: [leadsEndpoint],
     staleTime: 0,
     refetchOnMount: true,
   });
@@ -299,13 +301,18 @@ export default function TeamHub() {
   }, [leads]);
 
   // ── Mutations ─────────────────────────────────────
+  const invalidateLeads = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/leads/my-jobs"] });
+  };
+
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
       const response = await apiRequest("PATCH", `/api/leads/${id}/status`, { status });
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      invalidateLeads();
       toast({ title: "Status updated" });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
@@ -314,7 +321,7 @@ export default function TeamHub() {
   const deleteLeadMutation = useMutation({
     mutationFn: async (id: string) => apiRequest("DELETE", `/api/leads/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      invalidateLeads();
       toast({ title: "Lead deleted" });
       setLeadToDelete(null);
     },
@@ -908,7 +915,7 @@ export default function TeamHub() {
               <QuoteForm
                 variant="employee"
                 onSuccess={() => {
-                  queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+                  invalidateLeads();
                   setActiveTab("leads");
                   toast({ title: "✅ Lead added!", description: "Lead has been saved." });
                 }}

@@ -1,6 +1,6 @@
 import { type User, type InsertUser, type UpsertUser, type Lead, type InsertLead, type Contact, type InsertContact, type Notification, type InsertNotification, type TreasuryAccount, type InsertTreasuryAccount, type FundingDeposit, type InsertFundingDeposit, type ReserveTransaction, type InsertReserveTransaction, type FaucetConfig, type InsertFaucetConfig, type FaucetClaim, type InsertFaucetClaim, type FaucetWallet, type InsertFaucetWallet, type FaucetRevenue, type InsertFaucetRevenue, type EmployeeStats, type InsertEmployeeStats, type AchievementType, type EmployeeAchievement, type InsertEmployeeAchievement, type PointTransaction, type InsertPointTransaction, type WeeklyLeaderboard, type DailyCheckin, type InsertDailyCheckin, type WalletAccount, type InsertWalletAccount, type SupportedCurrency, type InsertSupportedCurrency, type UserWallet, type InsertUserWallet, type TreasuryWallet, type InsertTreasuryWallet, type WalletTransaction, type InsertWalletTransaction, type ShopItem, type InsertShopItem, type Review, type InsertReview, type Testimonial, type InsertTestimonial, type WalletPayout, type InsertWalletPayout, type TokenConversion, type InsertTokenConversion, type TreasuryLimit, type InsertTreasuryLimit, type SquareInvoice, type InsertSquareInvoice, type SnowCustomer, type InsertSnowCustomer, type SnowServiceType, type InsertSnowServiceType, type SnowServiceLog, type InsertSnowServiceLog, type StakingTier, type Stake, type InsertStake, stakingTiers, stakes, leads, contacts, users, notifications, walletAccounts, rewards, treasuryAccounts, fundingDeposits, reserveTransactions, priceHistory, faucetConfig, faucetClaims, faucetWallets, faucetRevenue, employeeStats, achievementTypes, employeeAchievements, pointTransactions, weeklyLeaderboards, dailyCheckins, supportedCurrencies, userWallets, treasuryWallets, walletTransactions, shopItems, cashoutRequests, fraudLogs, helpRequests, miningSessions, miningClaims, treasuryWithdrawals, reviews, testimonials, walletPayouts, tokenConversions, treasuryLimits, squareInvoices, buybackFund, snowCustomers, snowServiceTypes, snowServiceLogs } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, isNull, and, isNotNull, sql, gt, gte, inArray } from "drizzle-orm";
+import { eq, desc, isNull, and, isNotNull, sql, gt, gte, inArray, or } from "drizzle-orm";
 import { TREASURY_CONFIG } from "./constants";
 import { cryptoService } from "./services/crypto";
 import { creditGenerosityFund } from "./services/generosityFund";
@@ -1021,7 +1021,12 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(leads)
-      .where(eq(leads.assignedToUserId, employeeId))
+      .where(
+        or(
+          eq(leads.assignedToUserId, employeeId),
+          sql`${employeeId} = ANY(${leads.crewMembers})`
+        )
+      )
       .orderBy(desc(leads.createdAt));
   }
 
