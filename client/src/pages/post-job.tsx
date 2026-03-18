@@ -117,15 +117,29 @@ export default function PostJobPage() {
   const [pkgStep, setPkgStep] = useState(false);
   const cameFromPackagesPage = !!prefilledPackageId && prefilledPrice > 0;
 
-  const { data: pricing } = useQuery<Pricing>({ queryKey: ["/api/pricing"] });
-  const { data: catalog } = useQuery<CatalogDefs>({ queryKey: ["/api/pricing/catalog-definitions"] });
+  const { data: pricing } = useQuery<Pricing>({ queryKey: ["/api/pricing"], retry: 2 });
+  const { data: catalog, isError: catalogError } = useQuery<CatalogDefs>({ queryKey: ["/api/pricing/catalog-definitions"], retry: 2 });
 
   const ratePerMoverHour = pricing?.ratePerMoverHour ?? 60;
   const jc222Price = pricing?.jc222Price ?? 222;
   const shortJobFull = pricing?.shortJobFull ?? 300;
 
-  const movingPackages = catalog?.movingPackages ?? [];
-  const junkPackages = catalog?.junkPackages ?? [];
+  const FALLBACK_MOVING: MovingPackage[] = [
+    { id: "moving_2m_2h", movers: 2, hours: 2, label: "JC222 Special", tag: "💥 Best Deal", isJc222: true },
+    { id: "moving_2m_3h", movers: 2, hours: 3, label: "2 Movers × 3 hrs", tag: "Short Move" },
+    { id: "moving_3m_3h", movers: 3, hours: 3, label: "3 Movers × 3 hrs", tag: "Most Popular" },
+    { id: "moving_3m_4h", movers: 3, hours: 4, label: "3 Movers × 4 hrs" },
+    { id: "moving_4m_4h", movers: 4, hours: 4, label: "4 Movers × 4 hrs", tag: "Heavy Move" },
+    { id: "moving_2m_6h", movers: 2, hours: 6, label: "2 Movers × 6 hrs", tag: "Full Day" },
+  ];
+  const FALLBACK_JUNK: JunkPackage[] = [
+    { id: "junk_small", label: "Small Load", desc: "¼ truck or less", low: 100, high: 175, tag: "Quick Pickup" },
+    { id: "junk_medium", label: "Medium Load", desc: "½ truck", low: 200, high: 300, tag: "Most Popular" },
+    { id: "junk_large", label: "Large Load", desc: "Full truck", low: 350, high: 500, tag: "Full Cleanout" },
+  ];
+
+  const movingPackages = catalog?.movingPackages?.length ? catalog.movingPackages : FALLBACK_MOVING;
+  const junkPackages = catalog?.junkPackages?.length ? catalog.junkPackages : FALLBACK_JUNK;
   const movingAddons = catalog?.movingAddons ?? [];
   const junkAddons = catalog?.junkAddons ?? [];
 

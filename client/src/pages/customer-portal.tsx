@@ -140,13 +140,13 @@ export default function CustomerPortal() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: wallet } = useQuery<WalletAccount>({ queryKey: ["/api/rewards/wallet"] });
-  const { data: miningStatus } = useQuery<MiningStatus>({ queryKey: ["/api/mining/status"], refetchInterval: 5000 });
-  const { data: rewardsHistory } = useQuery<RewardHistory[]>({ queryKey: ["/api/rewards/history"] });
-  const { data: referralCode } = useQuery<{ referralCode: string }>({ queryKey: ["/api/referrals/my-code"] });
-  const { data: referralStats } = useQuery<ReferralStats>({ queryKey: ["/api/referrals/stats"] });
-  const { data: customerJobs = [], isLoading: jobsLoading } = useQuery<CustomerJob[]>({ queryKey: ["/api/leads/my-requests"] });
-  const { data: stakes = [] } = useQuery<Stake[]>({ queryKey: ["/api/staking/my-stakes"] });
+  const { data: wallet } = useQuery<WalletAccount>({ queryKey: ["/api/rewards/wallet"], retry: 2 });
+  const { data: miningStatus } = useQuery<MiningStatus>({ queryKey: ["/api/mining/status"], refetchInterval: 15000, refetchIntervalInBackground: false, retry: 1 });
+  const { data: rewardsHistory } = useQuery<RewardHistory[]>({ queryKey: ["/api/rewards/history"], retry: 2 });
+  const { data: referralCode } = useQuery<{ referralCode: string }>({ queryKey: ["/api/referrals/my-code"], retry: 1 });
+  const { data: referralStats } = useQuery<ReferralStats>({ queryKey: ["/api/referrals/stats"], retry: 1 });
+  const { data: customerJobs = [], isLoading: jobsLoading, isError: jobsError, refetch: refetchJobs } = useQuery<CustomerJob[]>({ queryKey: ["/api/leads/my-requests"], retry: 2 });
+  const { data: stakes = [] } = useQuery<Stake[]>({ queryKey: ["/api/staking/my-stakes"], retry: 1 });
 
   useEffect(() => {
     if (!miningStatus?.currentSession) { setAnimatedTokens(0); return; }
@@ -276,6 +276,16 @@ export default function CustomerPortal() {
 
             {jobsLoading ? (
               <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-blue-400" /></div>
+            ) : jobsError ? (
+              <Card className="border-red-500/20 bg-red-950/10">
+                <CardContent className="py-8 text-center">
+                  <p className="text-red-400 font-semibold mb-1">Couldn't load your jobs</p>
+                  <p className="text-slate-500 text-sm mb-4">Check your connection and try again</p>
+                  <Button size="sm" variant="outline" className="border-white/10 text-slate-300" onClick={() => refetchJobs()}>
+                    Retry
+                  </Button>
+                </CardContent>
+              </Card>
             ) : customerJobs.length === 0 ? (
               <Card className="border-white/5 bg-white/[0.03]">
                 <CardContent className="py-12 text-center">

@@ -69,7 +69,7 @@ const FILTERS: { label: string; value: Filter; icon: LucideIcon }[] = [
 export default function MyJobsPage() {
   const [, setLocation] = useLocation();
   const [filter, setFilter] = useState<Filter>("all");
-  const { data: jobs = [], isLoading } = useQuery<CustomerJob[]>({ queryKey: ["/api/leads/my-requests"] });
+  const { data: jobs = [], isLoading, isError, refetch } = useQuery<CustomerJob[]>({ queryKey: ["/api/leads/my-requests"], retry: 2 });
 
   const filtered = jobs.filter(j => {
     if (filter === "active") return !["completed", "cancelled", "paid"].includes(j.status);
@@ -116,6 +116,18 @@ export default function MyJobsPage() {
         {isLoading ? (
           <div className="flex justify-center py-16">
             <Loader2 className="h-8 w-8 animate-spin text-jc-orange" />
+          </div>
+        ) : isError ? (
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-red-100 dark:border-red-900/30 p-8 text-center shadow-sm">
+            <Truck className="h-10 w-10 text-red-400 mx-auto mb-3" />
+            <p className="text-red-500 font-semibold mb-1">Couldn't load your jobs</p>
+            <p className="text-zinc-400 text-sm mb-4">Check your connection and try again</p>
+            <button
+              onClick={() => refetch()}
+              className="h-10 px-6 rounded-xl bg-jc-orange text-white font-bold text-sm"
+            >
+              Try Again
+            </button>
           </div>
         ) : filtered.length === 0 ? (
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 p-8 text-center shadow-sm">

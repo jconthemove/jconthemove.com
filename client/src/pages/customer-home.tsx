@@ -60,8 +60,8 @@ function getCustomerStatus(status: string) {
 export default function CustomerHomePage() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
-  const { data: myJobsData, isLoading } = useQuery<JobLead[] | { leads?: JobLead[] }>({ queryKey: ["/api/leads/my-requests"] });
-  const { data: wallet } = useQuery<{ tokenBalance: string }>({ queryKey: ["/api/rewards/wallet"] });
+  const { data: myJobsData, isLoading, isError: jobsError, refetch: refetchJobs } = useQuery<JobLead[] | { leads?: JobLead[] }>({ queryKey: ["/api/leads/my-requests"], retry: 2 });
+  const { data: wallet } = useQuery<{ tokenBalance: string }>({ queryKey: ["/api/rewards/wallet"], retry: 2 });
 
   const tokenBalance = parseFloat(wallet?.tokenBalance || "0");
   const myJobs: JobLead[] = Array.isArray(myJobsData)
@@ -190,6 +190,12 @@ export default function CustomerHomePage() {
         {isLoading ? (
           <div className="flex justify-center py-16">
             <Loader2 className="h-8 w-8 animate-spin text-jc-orange" />
+          </div>
+        ) : jobsError ? (
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-red-100 dark:border-red-900/30 p-6 text-center shadow-sm">
+            <p className="text-red-500 font-semibold text-sm mb-1">Couldn't load your jobs</p>
+            <p className="text-zinc-400 text-xs mb-3">Check your connection and try again</p>
+            <button onClick={() => refetchJobs()} className="h-9 px-5 rounded-xl bg-jc-orange text-white font-bold text-xs">Retry</button>
           </div>
         ) : openJobs.length === 0 ? (
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 p-8 text-center shadow-sm">
