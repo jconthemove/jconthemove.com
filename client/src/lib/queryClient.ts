@@ -1,8 +1,40 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+const PRODUCTION_URL = "https://task-marketplace-upmichiganstate.replit.app";
+
+export function getApiBase(): string {
+  if (typeof window === "undefined") return "";
+  const isCapacitor = (window as any).Capacitor?.isNativePlatform?.() === true;
+  if (isCapacitor) return PRODUCTION_URL;
+  return "";
+}
+
+export function getStoredToken(): string | null {
+  try {
+    return localStorage.getItem("jc_access_token");
+  } catch {
+    return null;
+  }
+}
+
+export function storeTokens(accessToken: string, refreshToken?: string) {
+  try {
+    localStorage.setItem("jc_access_token", accessToken);
+    if (refreshToken) localStorage.setItem("jc_refresh_token", refreshToken);
+  } catch {}
+}
+
+export function clearTokens() {
+  try {
+    localStorage.removeItem("jc_access_token");
+    localStorage.removeItem("jc_refresh_token");
+  } catch {}
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     if (res.status === 401) {
+      clearTokens();
       window.location.href = "/";
       throw new Error("Session expired. Redirecting to login...");
     }
@@ -11,19 +43,25 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+function buildHeaders(hasBody: boolean): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (hasBody) headers["Content-Type"] = "application/json";
+  const token = getStoredToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return headers;
+}
+
 export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const headers: Record<string, string> = {};
-  if (data) {
-    headers["Content-Type"] = "application/json";
-  }
-  
-  const res = await fetch(url, {
+  const base = getApiBase();
+  const fullUrl = url.startsWith("http") ? url : `${base}${url}`;
+
+  const res = await fetch(fullUrl, {
     method,
-    headers,
+    headers: buildHeaders(!!data),
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
@@ -38,11 +76,21 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(queryKey.join("/") as string, {
+    const base = getApiBase();
+    const path = queryKey.join("/") as string;
+    const fullUrl = path.startsWith("http") ? path : `${base}${path}`;
+
+    const headers: Record<string, string> = {};
+    const token = getStoredToken();
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const res = await fetch(fullUrl, {
       credentials: "include",
+      headers,
     });
 
     if (res.status === 401) {
+      clearTokens();
       if (unauthorizedBehavior === "returnNull") {
         return null;
       }
@@ -59,8 +107,8 @@ export const queryClient = new QueryClient({
     queries: {
       queryFn: getQueryFn({ on401: "returnNull" }),
       refetchInterval: false,
-      refetchOnWindowFocus: false,
-      staleTime: Infinity,
+      refetchOnWindowFocus: true,
+      staleTime: 30_000,
       retry: false,
     },
     mutations: {
