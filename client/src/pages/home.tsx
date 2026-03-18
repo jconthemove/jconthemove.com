@@ -231,7 +231,7 @@ export default function HomePage() {
 
         <div className="relative z-10 text-center px-4 max-w-4xl mx-auto">
           <Badge className="mb-4 bg-blue-600/20 text-blue-300 border-blue-500/30 text-xs px-3 py-1">
-            <MapPin className="h-3 w-3 mr-1" /> Serving Ironwood & Iron River, MI · Green Bay & Wausau, WI
+            <MapPin className="h-3 w-3 mr-1" /> Serving UP Michigan · Wisconsin · Nationwide
           </Badge>
           <h1 className="text-5xl md:text-7xl font-black tracking-tight mb-4 leading-none">
             <span className="text-white">JC ON THE</span>
@@ -611,8 +611,8 @@ export default function HomePage() {
             <div>
               <h3 className="font-semibold text-slate-300 mb-3 text-sm">Contact</h3>
               <a href="tel:(906) 285-9312" className="block text-slate-500 hover:text-slate-300 text-xs transition-colors mb-1">(906) 285-9312</a>
-              <p className="text-slate-500 text-xs">Ironwood & Iron River, MI</p>
-              <p className="text-slate-500 text-xs">Green Bay & Wausau, WI</p>
+              <p className="text-slate-500 text-xs">Based in Ironwood, MI</p>
+              <p className="text-slate-500 text-xs">Serving UP Michigan · Wisconsin · Nationwide</p>
             </div>
           </div>
           <div className="border-t border-white/5 pt-6 flex flex-col sm:flex-row items-center justify-between gap-2">

@@ -276,7 +276,7 @@ export default function CustomerHomePage() {
             <span className="flex items-center gap-1 text-zinc-400 text-[11px]"><Star className="h-3 w-3" /> 5-Star Reviews</span>
             <span className="flex items-center gap-1 text-zinc-400 text-[11px]"><Zap className="h-3 w-3" /> Same-Day</span>
           </div>
-          <p className="text-zinc-400 text-xs">Serving Ironwood · Hurley · Ashland · Bessemer</p>
+          <p className="text-zinc-400 text-xs">Serving UP Michigan · Wisconsin · Nationwide</p>
           <p className="text-zinc-300 dark:text-zinc-600 text-[10px] mt-1">© JC ON THE MOVE</p>
         </div>
       </div>

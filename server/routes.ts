@@ -5,7 +5,7 @@ import { getEasternDateStr, getEasternDayStart, getEasternDayEnd } from "./utils
 import { storage } from "./storage";
 import { insertLeadSchema, insertContactSchema, insertCashoutRequestSchema, insertShopItemSchema, insertReviewSchema } from "@shared/schema";
 import { sendEmail, generateLeadNotificationEmail, generateContactNotificationEmail } from "./services/email";
-import { setupAuth, isAuthenticated, isAuthenticatedAllowPending } from "./auth";
+import { setupAuth, isAuthenticated, isAuthenticatedAllowPending, signJwt, signRefreshToken, verifyRefreshToken } from "./auth";
 import bcrypt from "bcrypt";
 // REMOVED: Daily check-in service replaced by unified mining system with streaks
 // import { dailyCheckinService } from "./services/daily-checkin";
@@ -1195,6 +1195,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Login failed. Please try again." });
     }
   });
+
+  // ─── CROSS-PLATFORM JWT TOKEN AUTH ──────────────────────────────────────────
+  // Mobile apps, external apps, and any non-browser client use these endpoints.
+  // Browsers continue to use session cookies — both systems share the same DB.
+
+  // POST /api/auth/token — login and get JWT access + refresh tokens
+  app.post("/api/auth/token", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      if (!email || !password) return res.status(400).json({ error: "Email and password are required" });
+
+      const [user] = await db.select().from(users).where(eq(users.email, email.trim().toLowerCase())).limit(1);
+      if (!user || !user.passwordHash) return res.status(401).json({ error: "Invalid email or password" });
+
+      const match = await bcrypt.compare(password, user.passwordHash);
+      if (!match) return res.status(401).json({ error: "Invalid email or password" });
+
+      const validStatuses = ['approved', 'active'];
+      if (!validStatuses.includes(user.status || '')) {
+        return res.status(403).json({ error: "Account pending approval or restricted", status: user.status });
+      }
+
+      const accessToken = signJwt(user.id, user.role || 'customer');
+      const refreshToken = signRefreshToken(user.id);
+
+      console.log(`[JWT] Token issued for userId=${user.id} role=${user.role}`);
+
+      return res.json({
+        success: true,
+        accessToken,
+        refreshToken,
+        expiresIn: 7776000, // 90 days in seconds
+        user: {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          role: user.role,
+          status: user.status,
+        }
+      });
+    } catch (e: any) {
+      console.error("JWT token login error:", e);
+      res.status(500).json({ error: "Login failed. Please try again." });
+    }
+  });
+
+  // POST /api/auth/token/refresh — swap a refresh token for a new access token
+  app.post("/api/auth/token/refresh", async (req, res) => {
+    try {
+      const { refreshToken } = req.body;
+      if (!refreshToken) return res.status(400).json({ error: "refreshToken is required" });
+
+      const payload = verifyRefreshToken(refreshToken);
+      if (!payload) return res.status(401).json({ error: "Invalid or expired refresh token. Please log in again." });
+
+      const [user] = await db.select().from(users).where(eq(users.id, payload.userId)).limit(1);
+      if (!user) return res.status(401).json({ error: "User not found" });
+
+      const validStatuses = ['approved', 'active'];
+      if (!validStatuses.includes(user.status || '')) {
+        return res.status(403).json({ error: "Account restricted", status: user.status });
+      }
+
+      const accessToken = signJwt(user.id, user.role || 'customer');
+      const newRefreshToken = signRefreshToken(user.id);
+
+      return res.json({ accessToken, refreshToken: newRefreshToken, expiresIn: 7776000 });
+    } catch (e: any) {
+      console.error("JWT refresh error:", e);
+      res.status(500).json({ error: "Token refresh failed." });
+    }
+  });
+
+  // GET /api/auth/token/me — verify JWT and return current user (for mobile "am I still logged in?" check)
+  app.get("/api/auth/token/me", isAuthenticated, async (req: any, res) => {
+    const user = req.user;
+    return res.json({
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      status: user.status,
+      username: user.username,
+    });
+  });
+  // ─────────────────────────────────────────────────────────────────────────────
 
   // Logout endpoint for all users (email/password)
   app.post("/api/auth/logout", (req, res) => {

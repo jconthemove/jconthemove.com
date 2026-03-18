@@ -1,6 +1,11 @@
 import session from "express-session";
 import type { Express, RequestHandler } from "express";
 import connectPg from "connect-pg-simple";
+import jwt from "jsonwebtoken";
+
+function getJwtSecret(): string {
+  return process.env.JWT_SECRET || process.env.SESSION_SECRET || "jcmoves-jwt-fallback-secret";
+}
 
 export function getSession() {
   const sessionTtl = 90 * 24 * 60 * 60 * 1000; // 90 days (3 months)
@@ -38,18 +43,25 @@ export function setupAuth(app: Express) {
   console.log('✅ Session management setup completed');
 }
 
-async function lookupSessionUser(req: any, res: any): Promise<any | null> {
-  const hasCookie = !!(req.cookies?.['jc.sid'] || req.headers.cookie?.includes('jc.sid'));
-  console.log('[AUTH CHECK] Path:', req.path, '| Session ID:', req.sessionID?.slice(0, 8) || 'none', '| Has cookie:', hasCookie);
-  
-  const sessionUserId = (req.session as any).userId;
-  
-  if (!sessionUserId) {
-    console.log('[AUTH CHECK] ❌ No session user ID found');
-    res.status(401).json({ message: "Unauthorized" });
+export function signJwt(userId: number, role: string): string {
+  return jwt.sign({ userId, role }, getJwtSecret(), { expiresIn: "90d" });
+}
+
+export function signRefreshToken(userId: number): string {
+  return jwt.sign({ userId, type: "refresh" }, getJwtSecret(), { expiresIn: "180d" });
+}
+
+export function verifyRefreshToken(token: string): { userId: number } | null {
+  try {
+    const payload = jwt.verify(token, getJwtSecret()) as any;
+    if (payload.type !== "refresh") return null;
+    return { userId: payload.userId };
+  } catch {
     return null;
   }
-  
+}
+
+async function lookupUserById(userId: number, res: any): Promise<any | null> {
   try {
     const { db } = await import('./db');
     const { users } = await import('@shared/schema');
@@ -58,11 +70,11 @@ async function lookupSessionUser(req: any, res: any): Promise<any | null> {
     const [dbUser] = await db
       .select()
       .from(users)
-      .where(eq(users.id, sessionUserId))
+      .where(eq(users.id, userId))
       .limit(1);
 
     if (!dbUser) {
-      console.log('[AUTH CHECK] ❌ Session user not found in database');
+      console.log('[AUTH CHECK] ❌ User not found in database');
       res.status(401).json({ message: "Unauthorized" });
       return null;
     }
@@ -73,6 +85,39 @@ async function lookupSessionUser(req: any, res: any): Promise<any | null> {
     res.status(500).json({ message: "Authentication check failed" });
     return null;
   }
+}
+
+async function lookupSessionUser(req: any, res: any): Promise<any | null> {
+  // 1. Try JWT Bearer token first (for mobile apps and cross-platform clients)
+  const authHeader = req.headers['authorization'];
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    try {
+      const payload = jwt.verify(token, getJwtSecret()) as any;
+      if (payload?.userId) {
+        console.log('[AUTH CHECK] 🔑 JWT auth — userId:', payload.userId);
+        return await lookupUserById(payload.userId, res);
+      }
+    } catch (err) {
+      console.log('[AUTH CHECK] ❌ Invalid JWT token:', (err as Error).message);
+      res.status(401).json({ message: "Invalid or expired token. Please log in again." });
+      return null;
+    }
+  }
+
+  // 2. Fall back to session cookie (for web browsers)
+  const hasCookie = !!(req.cookies?.['jc.sid'] || req.headers.cookie?.includes('jc.sid'));
+  console.log('[AUTH CHECK] Path:', req.path, '| Session ID:', req.sessionID?.slice(0, 8) || 'none', '| Has cookie:', hasCookie);
+  
+  const sessionUserId = (req.session as any).userId;
+  
+  if (!sessionUserId) {
+    console.log('[AUTH CHECK] ❌ No session user ID found');
+    res.status(401).json({ message: "Unauthorized" });
+    return null;
+  }
+
+  return await lookupUserById(sessionUserId, res);
 }
 
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
