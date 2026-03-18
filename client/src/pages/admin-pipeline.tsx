@@ -8,6 +8,7 @@ import {
   AlertCircle, Truck, Copy, Check
 } from "lucide-react";
 import { getStatusColors } from "@/lib/job-status";
+import { SERVICE_LABELS, getServiceBadgeColor } from "@/components/JobCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -26,17 +27,6 @@ const STAGES = [
   { key: "reviewReceived", label: "Review In",     shortLabel: "Review",   icon: Star,         color: "bg-pink-500"   },
 ] as const;
 
-const SERVICE_LABELS: Record<string, string> = {
-  residential: "Residential Move", commercial: "Commercial Move",
-  junk: "Junk Removal", snow: "Snow Removal", cleaning: "Cleaning",
-  handyman: "Handyman", demolition: "Demolition", flooring: "Flooring", painting: "Painting",
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  quote_requested: "border-slate-400 bg-slate-900 text-slate-300",
-  available: "border-blue-400 bg-blue-950 text-blue-300",
-  completed: "border-green-400 bg-green-950 text-green-300",
-};
 
 // ─── Pipeline progress bar ────────────────────────────────────────────────────
 function PipelineBar({ stages }: { stages: Record<string, { done: boolean; at: any }> }) {
