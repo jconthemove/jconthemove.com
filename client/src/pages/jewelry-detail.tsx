@@ -9,12 +9,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
-import { ArrowLeft, Gem, ChevronLeft, ChevronRight, Pencil, Trash2, Video, Loader2, Tag, RotateCcw, ShoppingCart, Check, Bitcoin, Heart, Share2, Sparkles, Star } from "lucide-react";
+import { ArrowLeft, Gem, ChevronLeft, ChevronRight, Pencil, Trash2, Video, Loader2, Tag, RotateCcw, ShoppingCart, Check, Bitcoin, Heart, Share2, Sparkles, Star, Coins } from "lucide-react";
 import { useCart } from "@/hooks/useCart";
 import { FloatingCartButton } from "@/components/cart-button";
+
+const EARN_RATE = 50; // JCMOVES per $1 spent
+const TOKEN_PRICE_USD = 0.000005034116; // Fallback token price
 
 const isVideoUrl = (url: string) => /\.(mp4|webm|ogg|mov)$/i.test(url);
 
@@ -50,7 +54,115 @@ interface JewelryItem {
   createdAt: string;
 }
 
-function DetailCartButtons({ item, onBtcCheckout, btcLoading }: { item: JewelryItem; onBtcCheckout?: () => void; btcLoading?: boolean }) {
+interface WalletBalance {
+  tokenBalance: string;
+}
+
+function JCMOVESPanel({ item, onCheckoutWithDiscount }: { item: JewelryItem; onCheckoutWithDiscount: (useTokens: boolean, tokenAmount: number) => void }) {
+  const { user } = useAuth();
+  const [useTokens, setUseTokens] = useState(false);
+
+  const { data: walletData } = useQuery<WalletBalance>({
+    queryKey: ["/api/wallet/balance"],
+    enabled: !!user,
+  });
+
+  const tokenBalance = walletData ? parseFloat(walletData.tokenBalance) : 0;
+  const itemPrice = item.price ? parseFloat(item.price) : 0;
+
+  const tokensToEarn = Math.round(itemPrice * EARN_RATE);
+  const tokenValueUsd = tokenBalance * TOKEN_PRICE_USD;
+
+  const maxDiscountUsd = Math.min(itemPrice * 0.5, tokenValueUsd);
+  const tokensNeededForMaxDiscount = maxDiscountUsd / TOKEN_PRICE_USD;
+  const discountUsd = useTokens ? maxDiscountUsd : 0;
+  const discountedPrice = Math.max(0, itemPrice - discountUsd);
+
+  if (!user) {
+    return (
+      <div className="bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 rounded-xl p-4">
+        <div className="flex items-center gap-2 mb-1">
+          <Star className="h-4 w-4 text-amber-500" />
+          <p className="text-sm font-bold text-amber-800">Earn JCMOVES Rewards</p>
+        </div>
+        <p className="text-xs text-amber-700 mb-3">
+          Sign up free to earn <span className="font-bold">{tokensToEarn.toLocaleString()} JCMOVES</span> on this purchase
+          ({EARN_RATE} per $1). Use tokens for discounts across all JC on the Move services.
+        </p>
+        <Link href="/register">
+          <Button size="sm" className="w-full bg-amber-500 hover:bg-amber-400 text-white font-bold text-xs">
+            Create Account to Earn Rewards &rarr;
+          </Button>
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-gradient-to-r from-purple-50 to-violet-50 border border-purple-200 rounded-xl p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Coins className="h-4 w-4 text-purple-500" />
+          <span className="text-sm font-bold text-purple-800">JCMOVES Balance</span>
+        </div>
+        <span className="text-sm font-bold text-purple-700">
+          {tokenBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })} tokens
+        </span>
+      </div>
+
+      <div className="text-xs text-purple-600">
+        This purchase earns you <span className="font-bold text-purple-800">{tokensToEarn.toLocaleString()} JCMOVES</span> ({EARN_RATE} per $1).
+      </div>
+
+      {tokenBalance >= 1000 && (
+        <div className="border-t border-purple-200 pt-3">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-medium text-purple-700">Apply JCMOVES discount</span>
+            <Switch
+              checked={useTokens}
+              onCheckedChange={setUseTokens}
+              className="scale-90"
+            />
+          </div>
+          {useTokens && (
+            <div className="bg-purple-100 rounded-lg p-2 text-xs text-purple-700 space-y-1">
+              <div className="flex justify-between">
+                <span>Tokens used:</span>
+                <span className="font-bold">~{Math.round(tokensNeededForMaxDiscount).toLocaleString()} JCMOVES</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Discount:</span>
+                <span className="font-bold text-green-700">-${discountUsd.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between border-t border-purple-200 pt-1">
+                <span>New total:</span>
+                <span className="font-bold">${discountedPrice.toFixed(2)}</span>
+              </div>
+            </div>
+          )}
+          <p className="text-xs text-purple-500 mt-1">
+            Up to 50% off using your JCMOVES balance.
+          </p>
+          <Button
+            size="sm"
+            className="w-full mt-2 bg-purple-600 hover:bg-purple-700 text-white text-xs"
+            onClick={() => onCheckoutWithDiscount(useTokens, Math.round(tokensNeededForMaxDiscount))}
+          >
+            Checkout {useTokens ? `— Save $${discountUsd.toFixed(2)}` : ""}
+          </Button>
+        </div>
+      )}
+
+      {tokenBalance < 1000 && (
+        <p className="text-xs text-purple-500">
+          You need at least 1,000 JCMOVES to apply a discount. Keep earning!
+        </p>
+      )}
+    </div>
+  );
+}
+
+function DetailCartButtons({ item, onBtcCheckout, btcLoading, onCheckoutWithDiscount }: { item: JewelryItem; onBtcCheckout?: () => void; btcLoading?: boolean; onCheckoutWithDiscount: (useTokens: boolean, tokenAmount: number) => void }) {
   const { addItem, removeItem, isInCart } = useCart();
   const cartId = `jewelry-${item.id}`;
   const inCart = isInCart(cartId);
@@ -110,6 +222,8 @@ function DetailCartButtons({ item, onBtcCheckout, btcLoading }: { item: JewelryI
           <p className="text-orange-600 text-xs">Added! Pay with Bitcoin at checkout to <span className="font-bold">save 10%</span></p>
         </div>
       )}
+
+      <JCMOVESPanel item={item} onCheckoutWithDiscount={onCheckoutWithDiscount} />
     </div>
   );
 }
@@ -124,6 +238,7 @@ export default function JewelryDetailPage() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editItem, setEditItem] = useState<JewelryItem | null>(null);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [btcCheckoutLoading, setBtcCheckoutLoading] = useState(false);
   const [customOrderOpen, setCustomOrderOpen] = useState(false);
   const [customOrderForm, setCustomOrderForm] = useState({ name: "", description: "", materials: "", budget: "", contact: "" });
@@ -201,6 +316,24 @@ export default function JewelryDetailPage() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
+
+  const handleCheckout = async (useTokens = false, tokenAmount = 0) => {
+    if (!item) return;
+    setCheckoutLoading(true);
+    try {
+      const res = await apiRequest("POST", "/api/square/create-checkout", { itemId: item.id, useTokens, tokenAmount });
+      const data = await res.json();
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      } else {
+        toast({ title: "Error", description: "Could not create checkout link", variant: "destructive" });
+      }
+    } catch (error: any) {
+      toast({ title: "Payment Error", description: error.message || "Failed to start checkout. Please try again.", variant: "destructive" });
+    } finally {
+      setCheckoutLoading(false);
+    }
+  };
 
   const handleBtcCheckout = async () => {
     if (!item || !item.price) return;
@@ -451,7 +584,12 @@ export default function JewelryDetailPage() {
             🎁 Request a Custom Order Like This
           </button>
 
-          <DetailCartButtons item={item} onBtcCheckout={handleBtcCheckout} btcLoading={btcCheckoutLoading} />
+          <DetailCartButtons
+            item={item}
+            onBtcCheckout={handleBtcCheckout}
+            btcLoading={btcCheckoutLoading}
+            onCheckoutWithDiscount={handleCheckout}
+          />
 
           {!item.inStock && (
             <div className="bg-rose-50 rounded-xl p-3 text-center border border-rose-100">

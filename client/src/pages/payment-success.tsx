@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Link } from "wouter";
-import { CheckCircle, ShoppingBag, ArrowLeft, Truck, Coins } from "lucide-react";
+import { CheckCircle, ShoppingBag, ArrowLeft, Truck, Coins, Gem, Star } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function PaymentSuccessPage() {
   const params = new URLSearchParams(window.location.search);
@@ -11,8 +12,13 @@ export default function PaymentSuccessPage() {
   const isPromo = type === "promo";
   const shopItemsParam = params.get("shopItems");
   const shopItemIds = shopItemsParam ? shopItemsParam.split(",").filter(Boolean) : [];
+  const jewelryItemId = params.get("itemId");
+  const isJewelryPurchase = !!jewelryItemId && shopItemIds.length === 0;
+
+  const { user } = useAuth();
 
   const [shopRewardTotal, setShopRewardTotal] = useState(0);
+  const [jewelryReward, setJewelryReward] = useState<{ tokensEarned: number; earnRate: number; purchasePrice: number; itemTitle: string } | null>(null);
   const rewardCalled = useRef(false);
 
   useEffect(() => {
@@ -32,6 +38,22 @@ export default function PaymentSuccessPage() {
         .catch(() => {});
     }
   }, []);
+
+  useEffect(() => {
+    if (isJewelryPurchase && jewelryItemId && user && !rewardCalled.current) {
+      rewardCalled.current = true;
+      apiRequest("POST", "/api/jewelry/payment-complete", { itemId: jewelryItemId })
+        .then((res) => res.json())
+        .then((data: any) => {
+          if (data?.tokensEarned > 0) {
+            setJewelryReward(data);
+            queryClient.invalidateQueries({ queryKey: ["/api/wallet"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/wallet/balance"] });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [user]);
 
   if (isPromo) {
     return (
@@ -106,7 +128,53 @@ export default function PaymentSuccessPage() {
             </div>
           )}
 
-          {shopItemIds.length === 0 && (
+          {isJewelryPurchase && jewelryReward && jewelryReward.tokensEarned > 0 && (
+            <div className="bg-gradient-to-r from-purple-50 to-violet-50 border border-purple-300 rounded-lg p-4">
+              <div className="flex items-center gap-3 mb-2">
+                <Coins className="h-6 w-6 text-purple-500 flex-shrink-0" />
+                <div className="text-left">
+                  <p className="text-sm font-bold text-purple-800">+{jewelryReward.tokensEarned.toLocaleString()} JCMOVES Earned! 🎉</p>
+                  <p className="text-xs text-purple-700">
+                    {jewelryReward.earnRate} JCMOVES per $1 × ${jewelryReward.purchasePrice.toFixed(2)}
+                  </p>
+                </div>
+              </div>
+              <p className="text-xs text-purple-600 text-left">
+                Tokens have been credited to your wallet. Use them on your next jewelry or moving service!
+              </p>
+            </div>
+          )}
+
+          {isJewelryPurchase && !user && (
+            <div className="bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-300 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Star className="h-4 w-4 text-amber-500" />
+                <p className="text-sm font-bold text-amber-800">Earn JCMOVES Rewards!</p>
+              </div>
+              <p className="text-xs text-amber-700 mb-3">
+                Create a free account to earn {50} JCMOVES per $1 spent on all future jewelry and moving purchases.
+              </p>
+              <Link href="/register">
+                <Button size="sm" className="w-full bg-amber-500 hover:bg-amber-400 text-white font-bold">
+                  Create Account &rarr;
+                </Button>
+              </Link>
+            </div>
+          )}
+
+          {isJewelryPurchase && user && (
+            <div className="bg-purple-50 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Gem className="h-4 w-4 text-purple-500" />
+                <p className="text-sm text-purple-700 font-medium">
+                  Your handcrafted jewelry will be prepared with care.
+                </p>
+              </div>
+              <p className="text-xs text-purple-600">We'll reach out about shipping details.</p>
+            </div>
+          )}
+
+          {shopItemIds.length === 0 && !isJewelryPurchase && (
             <div className="bg-purple-50 rounded-lg p-4">
               <p className="text-sm text-purple-700 font-medium">
                 Your handcrafted jewelry will be prepared with care. We'll reach out about shipping details.
@@ -123,12 +191,22 @@ export default function PaymentSuccessPage() {
                 </Button>
               </Link>
             ) : (
-              <Link href="/nature-made-jewls">
-                <Button className="w-full bg-purple-600 hover:bg-purple-700 py-5">
-                  <ShoppingBag className="h-5 w-5 mr-2" />
-                  Continue Shopping
-                </Button>
-              </Link>
+              <>
+                {user && (
+                  <Link href="/wallet">
+                    <Button className="w-full bg-purple-600 hover:bg-purple-700 py-5">
+                      <Coins className="h-5 w-5 mr-2" />
+                      View My JCMOVES Balance
+                    </Button>
+                  </Link>
+                )}
+                <Link href="/nature-made-jewls">
+                  <Button variant="outline" className="w-full py-5 border-purple-300 text-purple-700 hover:bg-purple-50">
+                    <ShoppingBag className="h-5 w-5 mr-2" />
+                    Continue Shopping
+                  </Button>
+                </Link>
+              </>
             )}
             <Link href="/">
               <Button variant="outline" className="w-full py-5">

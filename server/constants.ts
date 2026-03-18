@@ -69,6 +69,7 @@ export const REWARD_TYPES = {
   LOYALTY_BOOKING: 'loyalty_booking', // Customer reward for completed job
   LEAD_CREATION: 'lead_creation',
   CUSTOMER_QUOTE_REWARD: 'customer_quote_reward', // 200 JCMOVES for customer's accepted/completed quotes
+  JEWELRY_PURCHASE: 'jewelry_purchase', // Tokens earned on Nature Made Jewls purchase (50 per $1)
 } as const;
 
 // ── Official JCMOVES Token Conversion Rates ────────────────────────────────

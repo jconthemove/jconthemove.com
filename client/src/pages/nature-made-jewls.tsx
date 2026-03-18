@@ -896,8 +896,66 @@ export default function AshleyShop() {
         </div>
       </div>
 
-      {/* Main Grid */}
-      <main className="container mx-auto px-2 sm:px-3 py-4 sm:py-6">
+      {/* Slim Video Banner */}
+      <div className="w-full"
+        style={{ background: "linear-gradient(90deg, #0d0704 0%, #2d1a0f 25%, #1e1208 50%, #2d1a0f 75%, #0d0704 100%)" }}>
+        <div className="absolute inset-0 opacity-10 pointer-events-none"
+          style={{ backgroundImage: "repeating-linear-gradient(60deg, transparent, transparent 3px, rgba(180,100,30,0.12) 3px, rgba(180,100,30,0.12) 6px)" }} />
+        <div className="relative flex items-center justify-between px-4 py-2.5 max-w-5xl mx-auto gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex-shrink-0 w-10 h-10 rounded-lg overflow-hidden border border-amber-700/50 shadow">
+              <video
+                src={jewelryVideoSrc}
+                autoPlay
+                loop
+                muted
+                playsInline
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div className="min-w-0">
+              <p className="text-amber-400/80 text-[9px] uppercase tracking-widest leading-none mb-0.5">Handmade with love ♡</p>
+              <p className="text-amber-100 font-serif font-bold text-sm md:text-base leading-tight truncate"
+                style={{ fontFamily: "'Georgia', serif" }}>
+                Nature Made Jewls — Handmade Jewelry &amp; Custom Creations
+              </p>
+            </div>
+          </div>
+          <div className="hidden sm:flex items-center gap-4 flex-shrink-0">
+            <div className="flex items-center gap-2">
+              {["Copper Wire", "Natural Stone", "Custom Designs"].map(f => (
+                <span key={f} className="flex items-center gap-1 text-amber-100/70 text-[10px]">
+                  <CheckCircle2 className="h-2.5 w-2.5 text-amber-500" />{f}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="h-px bg-gradient-to-r from-transparent via-amber-700/50 to-transparent" />
+      </div>
+
+      <main className="container mx-auto px-2 sm:px-3 py-3 sm:py-6">
+
+        {/* JCMOVES Rewards Banner */}
+        {!user ? (
+          <div className="mb-4 bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-3">
+            <span className="text-xl">🪙</span>
+            <div className="flex-1">
+              <p className="text-sm font-bold text-amber-800">Earn JCMOVES Rewards on Every Purchase!</p>
+              <p className="text-xs text-amber-700">Get 50 JCMOVES per $1 spent — usable on jewelry, moving, and more. <Link href="/register" className="underline font-semibold">Sign up free &rarr;</Link></p>
+            </div>
+          </div>
+        ) : (
+          <div className="mb-4 bg-gradient-to-r from-purple-50 to-violet-50 border border-purple-200 rounded-xl px-4 py-3 flex items-center gap-3">
+            <span className="text-xl">💎</span>
+            <div className="flex-1">
+              <p className="text-sm font-bold text-purple-800">Earn JCMOVES on Every Purchase</p>
+              <p className="text-xs text-purple-600">Tap any item to see your balance and apply a discount at checkout.</p>
+            </div>
+          </div>
+        )}
+
+
         {isLoading ? (
           <div className="text-center text-rose-400 py-16 font-serif italic">Loading beautiful pieces...</div>
         ) : items.length === 0 ? (

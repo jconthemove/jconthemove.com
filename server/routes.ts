@@ -11133,6 +11133,82 @@ Thank you for your business!
     }
   });
 
+  // ── Jewelry Purchase Completion — credit JCMOVES to buyer ──────────────────
+  // Called by the frontend payment-success page after Square redirects back.
+  // Idempotent: if the item already has completionRewardedAt set we skip re-award.
+  app.post("/api/jewelry/payment-complete", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id || req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+
+      const { itemId } = req.body;
+      if (!itemId) return res.status(400).json({ error: "Missing itemId" });
+
+      const dbItem = await storage.getJewelryItem(itemId);
+      if (!dbItem) return res.status(404).json({ error: "Item not found" });
+
+      const purchasePrice = parseFloat(dbItem.price || "0");
+      if (purchasePrice <= 0) return res.status(400).json({ error: "Invalid item price" });
+
+      // Idempotency: skip if already rewarded for this item
+      const alreadyRewarded = await db.select({ id: rewards.id })
+        .from(rewards)
+        .where(and(eq(rewards.userId, userId), eq(rewards.rewardType, 'jewelry_purchase'), eq(rewards.referenceId, itemId)))
+        .limit(1);
+
+      if (alreadyRewarded.length > 0) {
+        return res.json({ success: true, tokensEarned: 0, alreadyRewarded: true });
+      }
+
+      // Look up earn rate from reward settings (default 50 JCMOVES per $1)
+      const rateSetting = await db.select().from(rewardSettings).where(eq(rewardSettings.settingKey, 'earn_rate_per_dollar')).limit(1);
+      const earnRate = rateSetting.length > 0 ? parseFloat(rateSetting[0].tokenAmount) : 50;
+      const tokensEarned = Math.round(purchasePrice * earnRate);
+
+      if (tokensEarned > 0) {
+        // Credit tokens to wallet
+        await storage.creditWalletTokens(userId, tokensEarned);
+
+        // Log in rewards table with jewelry_purchase type + source tag
+        await db.insert(rewards).values({
+          userId,
+          rewardType: 'jewelry_purchase',
+          tokenAmount: tokensEarned.toFixed(8),
+          cashValue: (purchasePrice * 0.01).toFixed(2),
+          status: "confirmed",
+          referenceId: itemId,
+          metadata: {
+            source: "jewelry_shop",
+            itemId,
+            itemTitle: dbItem.title,
+            purchasePrice,
+            earnRate,
+            tokensPerDollar: earnRate,
+          }
+        });
+
+        // Log treasury distribution with jewelry_shop source tag
+        try {
+          await treasuryService.distributeTokens(
+            tokensEarned,
+            `Jewelry purchase reward: ${tokensEarned} JCMOVES for "${dbItem.title}" ($${purchasePrice.toFixed(2)}) — source: jewelry_shop`,
+            "jewelry_shop",
+            itemId
+          );
+        } catch (treasuryErr) {
+          console.warn("[jewelry-payment-complete] Treasury distribution failed (non-fatal):", treasuryErr);
+        }
+
+        console.log(`💎 Jewelry purchase reward: ${tokensEarned} JCMOVES to user ${userId} for item "${dbItem.title}" ($${purchasePrice})`);
+      }
+
+      res.json({ success: true, tokensEarned, earnRate, purchasePrice, itemTitle: dbItem.title });
+    } catch (error: any) {
+      console.error("Error processing jewelry payment completion:", error);
+      res.status(500).json({ error: error.message || "Failed to process payment completion" });
+    }
+  });
+
   // ── Square Catalog ID mappings (admin only) ─────────────────────────────
   app.get("/api/square/catalog-mappings", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
     try {
