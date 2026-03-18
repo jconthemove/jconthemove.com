@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Slider } from "@/components/ui/slider";
 import { Loader2, TrendingUp, Lock, Unlock, Coins, Clock, ArrowLeft, Sparkles, Diamond, PartyPopper, Shield, AlertTriangle, Activity, Gauge, Copy, CheckCheck, ExternalLink, Wallet, Percent, ChevronRight, AlertCircle, RefreshCw } from "lucide-react";
 import { Link } from "wouter";
 import type { StakingTier, Stake } from "@shared/schema";
@@ -1015,64 +1016,134 @@ export default function StakingPage() {
                     </p>
                   </div>
                 )}
-                <div className="flex flex-col gap-3">
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <Input
-                        type="number"
-                        placeholder={`Min ${parseFloat(selectedTierData.minStake).toLocaleString()} JCMOVES`}
-                        value={stakeAmount}
-                        onChange={e => setStakeAmount(e.target.value)}
-                        min={parseFloat(selectedTierData.minStake)}
-                        step="1"
-                        className="text-lg h-12"
-                      />
-                    </div>
-                    <Button
-                      onClick={() => setStakeAmount(walletBalance.toFixed(2))}
-                      variant="outline"
-                      className="h-12 px-4"
-                    >
-                      Max
-                    </Button>
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    <p>Available: <span className="font-semibold text-foreground">{formatNumber(walletBalance)} JCMOVES</span></p>
-                    {stakeAmount && parseFloat(stakeAmount) > 0 && (
-                      <div className="space-y-1 mt-1">
-                        <p className="text-green-500 font-medium">
-                          ~{formatNumber(parseFloat(stakeAmount) * (parseFloat(selectedTierData.annualRatePercent) * (healthData?.aprMultiplier ?? 1) + treasuryBonusPct) / 365 / 100)} JCMOVES/day
-                          {healthData && healthData.aprMultiplier < 1 && (
-                            <span className="text-yellow-500 text-xs ml-1">(adjusted)</span>
-                          )}
+                {(() => {
+                  const minStake = parseFloat(selectedTierData.minStake);
+                  // Always floor to 3 decimal places so Max never exceeds actual balance
+                  const safeMax = Math.floor(walletBalance * 1000) / 1000;
+                  const entered = parseFloat(stakeAmount) || 0;
+                  const exceedsBalance = entered > walletBalance;
+                  const belowMin = entered > 0 && entered < minStake;
+                  const canStake = !exceedsBalance && !belowMin && entered > 0 && !stakeMutation.isPending;
+                  const dailyEarn = entered > 0
+                    ? entered * (parseFloat(selectedTierData.annualRatePercent) * (healthData?.aprMultiplier ?? 1) + treasuryBonusPct) / 365 / 100
+                    : 0;
+
+                  const setPercent = (pct: number) => {
+                    const val = Math.floor(safeMax * pct * 1000) / 1000;
+                    setStakeAmount(val > 0 ? String(val) : "");
+                  };
+
+                  return (
+                    <div className="flex flex-col gap-3">
+                      {/* Amount input + Max */}
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <Input
+                            type="number"
+                            placeholder={`Min ${minStake.toLocaleString()} JCMOVES`}
+                            value={stakeAmount}
+                            onChange={e => setStakeAmount(e.target.value)}
+                            min={minStake}
+                            step="1"
+                            className={`text-lg h-12 ${exceedsBalance ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                          />
+                        </div>
+                        <Button
+                          onClick={() => setStakeAmount(String(safeMax))}
+                          variant="outline"
+                          className="h-12 px-4"
+                        >
+                          Max
+                        </Button>
+                      </div>
+
+                      {/* Quick-select percentage buttons */}
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {[0.25, 0.5, 0.75, 1].map(pct => (
+                          <Button
+                            key={pct}
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setPercent(pct)}
+                            className="text-xs h-8 border-slate-700/60 text-slate-300 hover:border-yellow-500/60 hover:text-yellow-400"
+                          >
+                            {pct === 1 ? "MAX" : `${pct * 100}%`}
+                          </Button>
+                        ))}
+                      </div>
+
+                      {/* Slider from min to safeMax */}
+                      {safeMax >= minStake && (
+                        <div className="px-1 space-y-1.5">
+                          <Slider
+                            min={minStake}
+                            max={safeMax}
+                            step={Math.max(1, Math.floor(safeMax / 1000))}
+                            value={[Math.min(Math.max(entered || minStake, minStake), safeMax)]}
+                            onValueChange={([v]) => setStakeAmount(String(Math.floor(v * 1000) / 1000))}
+                            className="w-full"
+                          />
+                          <div className="flex justify-between text-[10px] text-slate-500">
+                            <span>Min: {formatNumber(minStake)}</span>
+                            <span>Max: {formatNumber(safeMax)}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Balance / validation feedback */}
+                      <div className="text-sm">
+                        <p className="text-muted-foreground">
+                          Available: <span className="font-semibold text-foreground">{formatNumber(walletBalance)} JCMOVES</span>
                         </p>
-                        {treasuryBonusPct > 0 && (
-                          <p className="text-xs text-emerald-400">Includes +{treasuryBonusPct.toFixed(2)}% treasury bonus</p>
+                        {exceedsBalance && (
+                          <p className="text-red-400 text-xs mt-1 flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3" />
+                            Amount exceeds your balance — use Max or lower the amount
+                          </p>
+                        )}
+                        {belowMin && (
+                          <p className="text-yellow-400 text-xs mt-1 flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3" />
+                            Minimum stake for this tier is {formatNumber(minStake)} JCMOVES
+                          </p>
+                        )}
+                        {dailyEarn > 0 && !exceedsBalance && !belowMin && (
+                          <div className="space-y-0.5 mt-1">
+                            <p className="text-green-500 font-medium">
+                              ~{formatNumber(dailyEarn)} JCMOVES/day
+                              {healthData && healthData.aprMultiplier < 1 && (
+                                <span className="text-yellow-500 text-xs ml-1">(adjusted)</span>
+                              )}
+                            </p>
+                            {treasuryBonusPct > 0 && (
+                              <p className="text-xs text-emerald-400">Includes +{treasuryBonusPct.toFixed(2)}% treasury bonus</p>
+                            )}
+                          </div>
                         )}
                       </div>
-                    )}
-                  </div>
 
-                  {/* Auto-compound toggle */}
-                  <div className="flex items-start gap-3 p-3 rounded-xl border border-slate-700/60 bg-slate-900/50">
-                    <div className="flex-1 space-y-0.5">
-                      <p className="text-sm font-semibold text-slate-200 flex items-center gap-1.5">
-                        <Sparkles className="h-4 w-4 text-emerald-400" /> Auto-Compound Rewards
-                      </p>
-                      <p className="text-xs text-slate-500">When enabled, your daily rewards are automatically added back to your stake to maximize compounding growth.</p>
+                      {/* Auto-compound info */}
+                      <div className="flex items-start gap-3 p-3 rounded-xl border border-slate-700/60 bg-slate-900/50">
+                        <div className="flex-1 space-y-0.5">
+                          <p className="text-sm font-semibold text-slate-200 flex items-center gap-1.5">
+                            <Sparkles className="h-4 w-4 text-emerald-400" /> Auto-Compound Rewards
+                          </p>
+                          <p className="text-xs text-slate-500">When ON, your daily rewards are automatically reinvested back into this stake each day — growing your principal and increasing future earnings. Toggle it per stake after depositing.</p>
+                        </div>
+                        <p className="text-xs text-slate-500 italic mt-1 shrink-0">Set per stake</p>
+                      </div>
+
+                      <Button
+                        onClick={() => stakeMutation.mutate({ tierId: selectedTier!, amount: Math.floor(entered * 1000) / 1000 })}
+                        disabled={!canStake}
+                        className="w-full h-12 text-lg font-bold bg-gradient-to-r from-yellow-500 to-orange-500 text-white hover:from-yellow-600 hover:to-orange-600 disabled:opacity-50"
+                      >
+                        {stakeMutation.isPending ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <Lock className="h-5 w-5 mr-2" />}
+                        Stake Tokens
+                      </Button>
                     </div>
-                    <p className="text-xs text-slate-500 italic mt-1">Enable per stake</p>
-                  </div>
-
-                  <Button
-                    onClick={() => stakeMutation.mutate({ tierId: selectedTier, amount: parseFloat(stakeAmount) })}
-                    disabled={!stakeAmount || parseFloat(stakeAmount) <= 0 || stakeMutation.isPending}
-                    className="w-full h-12 text-lg font-bold bg-gradient-to-r from-yellow-500 to-orange-500 text-white hover:from-yellow-600 hover:to-orange-600"
-                  >
-                    {stakeMutation.isPending ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <Lock className="h-5 w-5 mr-2" />}
-                    Stake Tokens
-                  </Button>
-                </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -1221,11 +1292,18 @@ export default function StakingPage() {
                           : "border-slate-700/50 bg-slate-900/30 text-slate-400 hover:border-slate-600/70"
                       }`}
                     >
-                      <span className="flex items-center gap-2">
-                        <Sparkles className={`h-3.5 w-3.5 ${stake.autoCompound ? "text-emerald-400" : "text-slate-500"}`} />
-                        Auto-Compound Rewards
+                      <span className="flex flex-col items-start gap-0.5">
+                        <span className="flex items-center gap-2">
+                          <Sparkles className={`h-3.5 w-3.5 ${stake.autoCompound ? "text-emerald-400" : "text-slate-500"}`} />
+                          Auto-Compound Rewards
+                        </span>
+                        <span className="text-[10px] text-slate-500 ml-5">
+                          {stake.autoCompound
+                            ? "Daily rewards are automatically reinvested into this stake"
+                            : "Daily rewards go to your wallet — toggle to reinvest them"}
+                        </span>
                       </span>
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${
                         stake.autoCompound
                           ? "bg-emerald-500/30 text-emerald-300"
                           : "bg-slate-700/50 text-slate-500"
@@ -1234,16 +1312,30 @@ export default function StakingPage() {
                       </span>
                     </button>
 
-                    <div className="flex gap-2 pt-1">
-                      <Button
-                        size="sm"
-                        onClick={() => claimMutation.mutate(stake.id)}
-                        disabled={pending < 0.01 || claimMutation.isPending}
-                        className="bg-green-600 hover:bg-green-700 text-white shadow-md"
-                      >
-                        {claimMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Coins className="h-3 w-3 mr-1" />}
-                        {stake.autoCompound ? `Compound ${formatNumber(pending)}` : `Claim ${formatNumber(pending)}`}
-                      </Button>
+                    {/* Claim / Compound button with explanation */}
+                    <div className="rounded-lg border border-slate-700/40 bg-slate-900/30 p-2.5 space-y-2">
+                      <div className="flex items-start gap-2 text-[10px] text-slate-500">
+                        <AlertCircle className="h-3 w-3 mt-0.5 shrink-0 text-slate-600" />
+                        <span>
+                          {stake.autoCompound
+                            ? "Compound button manually reinvests your pending rewards back into this stake right now, increasing its principal. This is the same thing that happens automatically each day."
+                            : "Claim button withdraws your pending rewards to your main wallet. Toggle Auto-Compound above to reinvest them instead."}
+                        </span>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => claimMutation.mutate(stake.id)}
+                          disabled={pending < 0.01 || claimMutation.isPending}
+                          className={stake.autoCompound
+                            ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md"
+                            : "bg-green-600 hover:bg-green-700 text-white shadow-md"}
+                        >
+                          {claimMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Coins className="h-3 w-3 mr-1" />}
+                          {stake.autoCompound
+                            ? `Reinvest ${formatNumber(pending)} now`
+                            : `Claim ${formatNumber(pending)} to wallet`}
+                        </Button>
                       {(() => {
                         const isLocked = !isFlexible && remaining > 0;
                         return (
