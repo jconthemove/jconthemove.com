@@ -214,7 +214,7 @@ export default function HomePage() {
               <div className="min-w-0">
                 <p className="text-amber-400/70 text-[9px] uppercase tracking-widest leading-none mb-0.5">Dedicated with love ♡</p>
                 <p className="text-amber-100 font-serif font-bold text-sm leading-tight truncate">
-                  Nature Made Jewls — Handmade Jewelry &amp; Custom Creations
+                  Hand-Crafted Made With Love By Ashley
                 </p>
               </div>
             </div>

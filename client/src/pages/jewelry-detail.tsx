@@ -8,10 +8,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
-import { ArrowLeft, Gem, ChevronLeft, ChevronRight, Pencil, Trash2, Video, Loader2, Tag, RotateCcw, ShoppingCart, Check, Bitcoin } from "lucide-react";
+import { ArrowLeft, Gem, ChevronLeft, ChevronRight, Pencil, Trash2, Video, Loader2, Tag, RotateCcw, ShoppingCart, Check, Bitcoin, Heart, Share2, Sparkles, Star } from "lucide-react";
 import { useCart } from "@/hooks/useCart";
 import { FloatingCartButton } from "@/components/cart-button";
 
@@ -23,6 +24,14 @@ function MediaItem({ src, alt, className }: { src: string; alt: string; classNam
   }
   return <img src={src} alt={alt} className={className} />;
 }
+
+const COLLECTIONS = [
+  { value: "earrings", label: "Earrings", emoji: "✨" },
+  { value: "rings", label: "Rings", emoji: "💍" },
+  { value: "necklaces", label: "Necklaces", emoji: "🌿" },
+  { value: "bracelets", label: "Bracelets", emoji: "💛" },
+  { value: "custom", label: "Custom Orders", emoji: "🎁" },
+];
 
 interface JewelryItem {
   id: string;
@@ -41,7 +50,7 @@ interface JewelryItem {
   createdAt: string;
 }
 
-function DetailCartButtons({ item, onBtcCheckout, btcLoading }: { item: JewelryItem; onCheckout?: () => void; checkoutLoading?: boolean; onBtcCheckout?: () => void; btcLoading?: boolean }) {
+function DetailCartButtons({ item, onBtcCheckout, btcLoading }: { item: JewelryItem; onBtcCheckout?: () => void; btcLoading?: boolean }) {
   const { addItem, removeItem, isInCart } = useCart();
   const cartId = `jewelry-${item.id}`;
   const inCart = isInCart(cartId);
@@ -49,12 +58,12 @@ function DetailCartButtons({ item, onBtcCheckout, btcLoading }: { item: JewelryI
   if (!item.price || item.inStock === false) return null;
 
   return (
-    <div className="pt-3 border-t space-y-2.5">
+    <div className="pt-3 border-t border-rose-100 space-y-2.5">
       <Button
-        className={`w-full py-5 text-base font-semibold ${
+        className={`w-full py-5 text-base font-semibold rounded-xl ${
           inCart
             ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-            : "bg-emerald-500 hover:bg-emerald-600 text-white"
+            : "bg-rose-500 hover:bg-rose-600 text-white"
         }`}
         onClick={() => {
           if (inCart) {
@@ -81,14 +90,14 @@ function DetailCartButtons({ item, onBtcCheckout, btcLoading }: { item: JewelryI
         <button
           onClick={onBtcCheckout}
           disabled={btcLoading}
-          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-orange-500/40 bg-orange-500/10 hover:bg-orange-500/20 transition-colors cursor-pointer"
+          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-orange-400/40 bg-orange-50 hover:bg-orange-100 transition-colors cursor-pointer"
         >
           {btcLoading ? (
-            <><Loader2 className="h-4 w-4 text-orange-400 animate-spin" /><span className="text-orange-300 text-sm">Creating BTC Payment...</span></>
+            <><Loader2 className="h-4 w-4 text-orange-500 animate-spin" /><span className="text-orange-600 text-sm">Creating BTC Payment...</span></>
           ) : (
             <>
-              <Bitcoin className="h-4 w-4 text-orange-400" />
-              <span className="text-orange-300 text-sm font-medium">Pay with Bitcoin</span>
+              <Bitcoin className="h-4 w-4 text-orange-500" />
+              <span className="text-orange-600 text-sm font-medium">Pay with Bitcoin</span>
               <span className="inline-flex items-center bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">Save 10%</span>
             </>
           )}
@@ -96,9 +105,9 @@ function DetailCartButtons({ item, onBtcCheckout, btcLoading }: { item: JewelryI
       )}
 
       {inCart && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-950/40 border border-orange-500/30">
-          <Bitcoin className="h-3.5 w-3.5 text-orange-400 flex-shrink-0" />
-          <p className="text-orange-300/90 text-xs">Added! Pay with Bitcoin at checkout to <span className="font-bold text-orange-300">save 10%</span></p>
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-50 border border-orange-200">
+          <Bitcoin className="h-3.5 w-3.5 text-orange-500 flex-shrink-0" />
+          <p className="text-orange-600 text-xs">Added! Pay with Bitcoin at checkout to <span className="font-bold">save 10%</span></p>
         </div>
       )}
     </div>
@@ -115,14 +124,28 @@ export default function JewelryDetailPage() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editItem, setEditItem] = useState<JewelryItem | null>(null);
-  const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [btcCheckoutLoading, setBtcCheckoutLoading] = useState(false);
+  const [customOrderOpen, setCustomOrderOpen] = useState(false);
+  const [customOrderForm, setCustomOrderForm] = useState({ name: "", description: "", materials: "", budget: "", contact: "" });
+  const [customOrderSubmitting, setCustomOrderSubmitting] = useState(false);
+  const [wishlist, setWishlist] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem("ashley-wishlist") || "[]")); } catch { return new Set(); }
+  });
 
   const isAdmin = user?.role === 'admin' || user?.role === 'business_owner';
 
   const canEditItem = (_item: JewelryItem) => {
     if (!user) return false;
     return isAdmin;
+  };
+
+  const toggleWishlist = (itemId: string) => {
+    setWishlist(prev => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId); else next.add(itemId);
+      localStorage.setItem("ashley-wishlist", JSON.stringify([...next]));
+      return next;
+    });
   };
 
   const { data: item, isLoading } = useQuery<JewelryItem>({
@@ -133,6 +156,11 @@ export default function JewelryDetailPage() {
       return res.json();
     },
     enabled: !!id,
+  });
+
+  const { data: ratingStats } = useQuery<{ averageRating?: number; totalCount?: number }>({
+    queryKey: ["/api/testimonials/stats"],
+    staleTime: 5 * 60 * 1000,
   });
 
   const deleteMutation = useMutation({
@@ -174,24 +202,6 @@ export default function JewelryDetailPage() {
     },
   });
 
-  const handleCheckout = async () => {
-    if (!item) return;
-    setCheckoutLoading(true);
-    try {
-      const res = await apiRequest("POST", "/api/square/create-checkout", { itemId: item.id });
-      const data = await res.json();
-      if (data.checkoutUrl) {
-        window.location.href = data.checkoutUrl;
-      } else {
-        toast({ title: "Error", description: "Could not create checkout link", variant: "destructive" });
-      }
-    } catch (error: any) {
-      toast({ title: "Payment Error", description: error.message || "Failed to start checkout. Please try again.", variant: "destructive" });
-    } finally {
-      setCheckoutLoading(false);
-    }
-  };
-
   const handleBtcCheckout = async () => {
     if (!item || !item.price) return;
     setBtcCheckoutLoading(true);
@@ -218,6 +228,13 @@ export default function JewelryDetailPage() {
     }
   };
 
+  const handleShare = () => {
+    const url = window.location.href;
+    navigator.clipboard.writeText(url)
+      .then(() => toast({ title: "Link copied to clipboard!" }))
+      .catch(() => toast({ title: "Share link", description: url }));
+  };
+
   const getPhotos = (item: JewelryItem) => {
     const photos: string[] = [];
     if (item.imageUrl) photos.push(item.imageUrl);
@@ -227,66 +244,108 @@ export default function JewelryDetailPage() {
     return photos;
   };
 
+  const handleCustomOrderSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCustomOrderSubmitting(true);
+    try {
+      const res = await fetch('/api/jewelry/custom-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...customOrderForm, referenceItem: item?.title }),
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Server error ${res.status}`);
+      }
+      toast({ title: "Custom order request sent!", description: "Ashley will reach out soon." });
+      setCustomOrderOpen(false);
+      setCustomOrderForm({ name: "", description: "", materials: "", budget: "", contact: "" });
+    } catch (err: any) {
+      toast({ title: "Failed to send request", description: err.message, variant: "destructive" });
+    } finally {
+      setCustomOrderSubmitting(false);
+    }
+  };
+
+  const startEdit = () => {
+    if (!item) return;
+    setEditItem({ ...item });
+    setIsEditOpen(true);
+  };
+
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-400 via-purple-300 to-gray-500 flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "linear-gradient(160deg, #fdf6f0 0%, #fef1f2 100%)" }}>
+        <Loader2 className="h-8 w-8 animate-spin text-rose-400" />
       </div>
     );
   }
 
   if (!item) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-400 via-purple-300 to-gray-500 flex flex-col items-center justify-center p-4">
-        <Gem className="h-16 w-16 text-stone-300 mb-4" />
-        <p className="text-stone-600 text-lg">Item not found</p>
+      <div className="min-h-screen flex flex-col items-center justify-center p-4" style={{ background: "linear-gradient(160deg, #fdf6f0 0%, #fef1f2 100%)" }}>
+        <div className="text-5xl mb-4">🌸</div>
+        <p className="text-stone-500 text-lg font-serif">Item not found</p>
         <Link href="/nature-made-jewls">
-          <Button variant="outline" className="mt-4"><ArrowLeft className="h-4 w-4 mr-2" /> Back to Shop</Button>
+          <Button variant="outline" className="mt-4 border-rose-300 text-rose-500"><ArrowLeft className="h-4 w-4 mr-2" /> Back to Shop</Button>
         </Link>
       </div>
     );
   }
 
   const photos = getPhotos(item);
+  const isWishlisted = wishlist.has(item.id);
 
   const nextPhoto = () => setCurrentPhotoIndex((prev) => (prev + 1) % photos.length);
   const prevPhoto = () => setCurrentPhotoIndex((prev) => (prev - 1 + photos.length) % photos.length);
 
-  const startEdit = () => {
-    setEditItem({ ...item });
-    setIsEditOpen(true);
-  };
-
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-400 via-purple-300 to-gray-500">
-      <div className="sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-purple-200/50 shadow-sm">
+    <div className="min-h-screen" style={{ background: "linear-gradient(160deg, #fdf6f0 0%, #fef1f2 40%, #fff8f0 100%)" }}>
+
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-50 backdrop-blur border-b border-rose-100/80 shadow-sm" style={{ background: "rgba(253,246,240,0.97)" }}>
         <div className="flex items-center justify-between px-4 py-3">
           <Link href="/nature-made-jewls">
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" className="text-stone-500 hover:text-rose-500">
               <ArrowLeft className="h-4 w-4 mr-1" /> Back
             </Button>
           </Link>
-          <span className="font-serif text-sm font-bold text-purple-700 truncate mx-2">{item.title}</span>
-          <div className="w-16" />
+          <span className="font-serif text-sm font-bold text-stone-700 truncate mx-2">{item.title}</span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handleShare}
+              className="p-2 rounded-full hover:bg-rose-50 transition-colors text-stone-400 hover:text-rose-500"
+              aria-label="Share"
+            >
+              <Share2 className="h-5 w-5" />
+            </button>
+            <button
+              onClick={() => toggleWishlist(item.id)}
+              className={`p-2 rounded-full transition-colors ${isWishlisted ? "text-rose-500" : "text-stone-400 hover:text-rose-400"}`}
+              aria-label={isWishlisted ? "Remove from wishlist" : "Save to wishlist"}
+            >
+              <Heart className={`h-5 w-5 ${isWishlisted ? "fill-rose-500" : ""}`} />
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="relative w-full bg-stone-100" style={{ height: '60vh' }}>
+      {/* Photo Gallery */}
+      <div className="relative w-full bg-rose-50" style={{ height: '60vh' }}>
         {item.inStock === false && (
           <div className="absolute top-4 left-4 z-20">
-            <span className="bg-red-500 text-white font-bold text-sm px-4 py-1.5 rounded-full shadow-lg uppercase tracking-wider">
-              Sold
-            </span>
+            <span className="bg-red-500 text-white font-bold text-sm px-4 py-1.5 rounded-full shadow-lg uppercase tracking-wider">Sold</span>
+          </div>
+        )}
+        {item.featured && (
+          <div className="absolute top-4 right-4 z-20 flex items-center gap-1 bg-amber-400 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow">
+            <Sparkles className="h-3 w-3" /> Featured
           </div>
         )}
         {photos.length > 0 ? (
           <>
-            <MediaItem
-              src={photos[currentPhotoIndex]}
-              alt={item.title}
-              className="w-full h-full object-contain"
-            />
+            <MediaItem src={photos[currentPhotoIndex]} alt={item.title} className="w-full h-full object-contain" />
             {photos.length > 1 && (
               <>
                 <button onClick={prevPhoto} className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white rounded-full p-2.5 shadow-lg">
@@ -297,11 +356,23 @@ export default function JewelryDetailPage() {
                 </button>
                 <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
                   {photos.map((_, i) => (
+                    <button key={i} onClick={() => setCurrentPhotoIndex(i)} className={`w-2.5 h-2.5 rounded-full transition-colors shadow ${i === currentPhotoIndex ? 'bg-rose-500 scale-110' : 'bg-white/70'}`} />
+                  ))}
+                </div>
+                {/* Thumbnail strip */}
+                <div className="absolute bottom-14 left-1/2 -translate-x-1/2 flex gap-2 max-w-full overflow-x-auto px-4">
+                  {photos.slice(0, 8).map((photo, i) => (
                     <button
                       key={i}
                       onClick={() => setCurrentPhotoIndex(i)}
-                      className={`w-3 h-3 rounded-full transition-colors shadow ${i === currentPhotoIndex ? 'bg-purple-500 scale-110' : 'bg-white/70'}`}
-                    />
+                      className={`flex-shrink-0 w-10 h-10 rounded-lg overflow-hidden border-2 transition-all ${i === currentPhotoIndex ? "border-rose-500 shadow-md" : "border-white/70 opacity-70"}`}
+                    >
+                      {isVideoUrl(photo) ? (
+                        <div className="w-full h-full bg-stone-200 flex items-center justify-center"><Video className="h-3 w-3 text-stone-500" /></div>
+                      ) : (
+                        <img src={photo} alt="" className="w-full h-full object-cover" />
+                      )}
+                    </button>
                   ))}
                 </div>
               </>
@@ -309,109 +380,156 @@ export default function JewelryDetailPage() {
           </>
         ) : (
           <div className="w-full h-full flex items-center justify-center">
-            <Gem className="w-24 h-24 text-stone-300" />
+            <div className="text-5xl">🌸</div>
           </div>
         )}
       </div>
 
+      {/* Content */}
       <div className="bg-white rounded-t-3xl -mt-4 relative z-10 min-h-[40vh]">
         <div className="p-5 space-y-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1">
               <h1 className="text-2xl font-serif font-bold text-stone-800">{item.title}</h1>
-              {item.category && (
-                <p className="text-purple-600 capitalize text-sm mt-0.5">{item.category}</p>
+              {item.category && <p className="text-rose-500 capitalize text-sm mt-0.5">{item.category}</p>}
+              {ratingStats?.averageRating && (
+                <div className="flex items-center gap-1.5 mt-1.5">
+                  <div className="flex items-center gap-0.5">
+                    {[1,2,3,4,5].map(s => (
+                      <Star key={s} className={`h-3.5 w-3.5 ${s <= Math.round(ratingStats.averageRating!) ? "fill-amber-400 text-amber-400" : "text-stone-300"}`} />
+                    ))}
+                  </div>
+                  <span className="text-xs text-stone-500">{ratingStats.averageRating.toFixed(1)} · Ashley's Shop</span>
+                </div>
               )}
             </div>
-            {item.price && (
-              <p className="text-2xl font-bold text-purple-600">${item.price}</p>
-            )}
+            {item.price && <p className="text-2xl font-bold text-rose-600">${item.price}</p>}
           </div>
 
+          {/* Materials */}
           {item.materials && (
-            <div className="bg-purple-50 rounded-lg p-3">
-              <p className="text-xs font-medium text-purple-500 uppercase tracking-wide">Materials</p>
-              <p className="text-stone-700 text-sm mt-0.5">{item.materials}</p>
+            <div className="bg-rose-50 rounded-xl p-3 border border-rose-100">
+              <p className="text-xs font-semibold text-rose-400 uppercase tracking-wide mb-1">Made With</p>
+              <p className="text-stone-700 text-sm">{item.materials}</p>
             </div>
           )}
 
+          {/* Made with Love blurb */}
+          <div className="bg-amber-50 rounded-xl p-3 border border-amber-100">
+            <p className="text-xs font-semibold text-amber-500 uppercase tracking-wide mb-1">Handcrafted with Love</p>
+            <p className="text-stone-600 text-sm italic">
+              This piece was handmade by Ashley in Michigan — thoughtfully crafted from quality materials. Each creation is one-of-a-kind, made slowly and with care. <span className="text-amber-500">Ships from Michigan with love 💛</span>
+            </p>
+          </div>
+
+          {/* Short description */}
+          {item.shortDescription && (
+            <p className="text-stone-600 text-sm font-medium italic border-l-2 border-rose-200 pl-3">"{item.shortDescription}"</p>
+          )}
+
+          {/* Full description */}
           {item.description && (
             <div>
-              <p className="text-xs font-medium text-stone-400 uppercase tracking-wide">About this piece</p>
-              <p className="text-stone-600 text-sm whitespace-pre-wrap mt-1">{item.description}</p>
+              <p className="text-xs font-medium text-stone-400 uppercase tracking-wide mb-1">About this Piece</p>
+              <p className="text-stone-600 text-sm whitespace-pre-wrap">{item.description}</p>
             </div>
           )}
 
-          <DetailCartButtons item={item} onCheckout={handleCheckout} checkoutLoading={checkoutLoading} onBtcCheckout={handleBtcCheckout} btcLoading={btcCheckoutLoading} />
+          {/* Social Share Button */}
+          <button
+            onClick={handleShare}
+            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-stone-200 bg-stone-50 hover:bg-stone-100 text-stone-600 text-sm font-medium transition-colors"
+          >
+            <Share2 className="h-4 w-4" /> Share this piece
+          </button>
 
-            {!item.inStock && (
-              <div className="bg-stone-100 rounded-lg p-3 text-center">
-                <p className="text-stone-500 font-medium">This item has been sold</p>
-              </div>
-            )}
+          {/* Custom Order CTA */}
+          <button
+            onClick={() => setCustomOrderOpen(true)}
+            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-600 text-sm font-semibold transition-colors"
+          >
+            🎁 Request a Custom Order Like This
+          </button>
 
+          <DetailCartButtons item={item} onBtcCheckout={handleBtcCheckout} btcLoading={btcCheckoutLoading} />
 
-            {canEditItem(item) && (
-              <div className="space-y-2 pt-2 border-t border-stone-200">
-                <Button
-                  variant={item.inStock === false ? "outline" : "default"}
-                  size="sm"
-                  className={item.inStock === false
-                    ? "w-full border-green-400 text-green-600 hover:bg-green-50"
-                    : "w-full bg-amber-500 hover:bg-amber-600 text-white"}
-                  onClick={() => soldMutation.mutate({ id: item.id, sold: item.inStock !== false })}
-                  disabled={soldMutation.isPending}
-                >
-                  {item.inStock === false ? (
-                    <><RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Mark Available</>
-                  ) : (
-                    <><Tag className="h-3.5 w-3.5 mr-1.5" /> Mark as Sold</>
-                  )}
+          {!item.inStock && (
+            <div className="bg-rose-50 rounded-xl p-3 text-center border border-rose-100">
+              <p className="text-rose-500 font-medium text-sm">This item has been sold — request a custom version above!</p>
+            </div>
+          )}
+
+          {canEditItem(item) && (
+            <div className="space-y-2 pt-2 border-t border-stone-200">
+              <Button
+                variant={item.inStock === false ? "outline" : "default"}
+                size="sm"
+                className={item.inStock === false
+                  ? "w-full border-green-400 text-green-600 hover:bg-green-50"
+                  : "w-full bg-amber-500 hover:bg-amber-600 text-white"}
+                onClick={() => soldMutation.mutate({ id: item.id, sold: item.inStock !== false })}
+                disabled={soldMutation.isPending}
+              >
+                {item.inStock === false ? (
+                  <><RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Mark Available</>
+                ) : (
+                  <><Tag className="h-3.5 w-3.5 mr-1.5" /> Mark as Sold</>
+                )}
+              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" className="flex-1 border-rose-300 text-rose-600" onClick={startEdit}>
+                  <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit
                 </Button>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="flex-1 border-purple-400 text-purple-600" onClick={startEdit}>
-                    <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit
-                  </Button>
-                  <Button variant="outline" size="sm" className="flex-1 border-red-300 text-red-600" onClick={() => setDeleteConfirmOpen(true)}>
-                    <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete
-                  </Button>
-                </div>
+                <Button variant="outline" size="sm" className="flex-1 border-red-300 text-red-600" onClick={() => setDeleteConfirmOpen(true)}>
+                  <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete
+                </Button>
               </div>
-            )}
+            </div>
+          )}
         </div>
       </div>
 
+      {/* Edit Dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit Item</DialogTitle>
+            <DialogTitle className="font-serif">Edit Item</DialogTitle>
           </DialogHeader>
           {editItem && (
             <div className="space-y-4">
-              <div>
-                <Label>Title</Label>
-                <Input value={editItem.title} onChange={(e) => setEditItem({ ...editItem, title: e.target.value })} />
-              </div>
-              <div>
-                <Label>Price</Label>
-                <Input value={editItem.price || ""} onChange={(e) => setEditItem({ ...editItem, price: e.target.value })} placeholder="25.00" />
-              </div>
+              <div><Label>Title</Label><Input value={editItem.title} onChange={(e) => setEditItem({ ...editItem, title: e.target.value })} /></div>
+              <div><Label>Price</Label><Input value={editItem.price || ""} onChange={(e) => setEditItem({ ...editItem, price: e.target.value })} placeholder="25.00" /></div>
               <div>
                 <Label>Category</Label>
-                <Input value={editItem.category || ""} onChange={(e) => setEditItem({ ...editItem, category: e.target.value })} />
+                <Select value={editItem.category || ""} onValueChange={(v) => setEditItem({ ...editItem, category: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                  <SelectContent>
+                    {COLLECTIONS.map((cat) => (
+                      <SelectItem key={cat.value} value={cat.value}>{cat.emoji} {cat.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <div>
-                <Label>Materials</Label>
-                <Input value={editItem.materials || ""} onChange={(e) => setEditItem({ ...editItem, materials: e.target.value })} />
-              </div>
-              <div>
-                <Label>Description</Label>
-                <Textarea value={editItem.description || ""} onChange={(e) => setEditItem({ ...editItem, description: e.target.value })} rows={4} />
+              <div><Label>Materials</Label><Input value={editItem.materials || ""} onChange={(e) => setEditItem({ ...editItem, materials: e.target.value })} /></div>
+              <div><Label>Short Description</Label><Input value={editItem.shortDescription || ""} onChange={(e) => setEditItem({ ...editItem, shortDescription: e.target.value })} /></div>
+              <div><Label>Full Description</Label><Textarea value={editItem.description || ""} onChange={(e) => setEditItem({ ...editItem, description: e.target.value })} rows={4} /></div>
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                <button
+                  type="button"
+                  onClick={() => setEditItem({ ...editItem, featured: !editItem.featured })}
+                  className={`w-10 h-6 rounded-full transition-colors flex-shrink-0 relative ${editItem.featured ? "bg-amber-400" : "bg-stone-300"}`}
+                >
+                  <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${editItem.featured ? "left-5" : "left-1"}`} />
+                </button>
+                <div>
+                  <p className="text-sm font-semibold text-stone-700 flex items-center gap-1"><Sparkles className="h-3.5 w-3.5 text-amber-500" /> Featured</p>
+                  <p className="text-xs text-stone-400">Shows sparkle badge on card</p>
+                </div>
               </div>
               <Button
-                onClick={() => updateMutation.mutate({ title: editItem.title, price: editItem.price, category: editItem.category, materials: editItem.materials, description: editItem.description })}
+                onClick={() => updateMutation.mutate({ title: editItem.title, price: editItem.price, category: editItem.category, materials: editItem.materials, shortDescription: editItem.shortDescription, description: editItem.description, featured: editItem.featured })}
                 disabled={updateMutation.isPending}
-                className="w-full"
+                className="w-full bg-rose-500 hover:bg-rose-600"
               >
                 {updateMutation.isPending ? "Saving..." : "Save Changes"}
               </Button>
@@ -420,6 +538,7 @@ export default function JewelryDetailPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Delete Confirm */}
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -432,6 +551,28 @@ export default function JewelryDetailPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Custom Order Dialog */}
+      <Dialog open={customOrderOpen} onOpenChange={setCustomOrderOpen}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-stone-800">🎁 Request a Custom Order</DialogTitle>
+          </DialogHeader>
+          {item && <p className="text-stone-400 text-xs -mt-2">Inspired by: <span className="text-rose-500 font-medium">{item.title}</span></p>}
+          <p className="text-stone-500 text-sm">Describe what you'd love — Ashley will reach out to discuss the details.</p>
+          <form onSubmit={handleCustomOrderSubmit} className="space-y-4">
+            <div><Label>Your Name *</Label><Input required value={customOrderForm.name} onChange={(e) => setCustomOrderForm({ ...customOrderForm, name: e.target.value })} placeholder="Jane Smith" /></div>
+            <div><Label>What would you like? *</Label><Textarea required value={customOrderForm.description} onChange={(e) => setCustomOrderForm({ ...customOrderForm, description: e.target.value })} placeholder="Describe the piece — style, size, occasion..." rows={4} /></div>
+            <div><Label>Preferred Materials</Label><Input value={customOrderForm.materials} onChange={(e) => setCustomOrderForm({ ...customOrderForm, materials: e.target.value })} placeholder="e.g. copper wire, rose quartz, sterling silver..." /></div>
+            <div><Label>Budget Range</Label><Input value={customOrderForm.budget} onChange={(e) => setCustomOrderForm({ ...customOrderForm, budget: e.target.value })} placeholder="e.g. $25–$75" /></div>
+            <div><Label>Contact (email or phone) *</Label><Input required value={customOrderForm.contact} onChange={(e) => setCustomOrderForm({ ...customOrderForm, contact: e.target.value })} placeholder="your@email.com or (906) 555-1234" /></div>
+            <Button type="submit" disabled={customOrderSubmitting} className="w-full bg-rose-500 hover:bg-rose-600">
+              {customOrderSubmitting ? "Sending..." : "Send Request"}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       <FloatingCartButton />
     </div>
   );

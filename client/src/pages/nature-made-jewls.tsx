@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Gem, Leaf, Search, Plus, ChevronLeft, ChevronRight, Mail, Phone, ImagePlus, X, Heart, Pencil, Trash2, Video, Tag, RotateCcw, ShoppingCart, Check, CheckCircle2, Bitcoin, Bot, Send, RefreshCw } from "lucide-react";
+import { ArrowLeft, Gem, Search, Plus, ChevronLeft, ChevronRight, Mail, Phone, ImagePlus, X, Heart, Pencil, Trash2, Video, Tag, RotateCcw, ShoppingCart, Check, CheckCircle2, Bitcoin, Bot, Send, RefreshCw, Star, Sparkles, Share2, ExternalLink, MapPin, Leaf } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { useCart } from "@/hooks/useCart";
@@ -70,16 +70,16 @@ interface JewelryItem {
   createdAt: string;
 }
 
-const categories = [
-  { value: "all", label: "All" },
-  { value: "earrings", label: "Earrings" },
-  { value: "necklaces", label: "Necklaces" },
-  { value: "bracelets", label: "Bracelets" },
-  { value: "rings", label: "Rings" },
-  { value: "custom", label: "Custom" },
+const COLLECTIONS = [
+  { value: "all", label: "All Pieces", emoji: "✨" },
+  { value: "earrings", label: "Earrings", emoji: "✨" },
+  { value: "rings", label: "Rings", emoji: "💍" },
+  { value: "necklaces", label: "Necklaces", emoji: "🌿" },
+  { value: "bracelets", label: "Bracelets", emoji: "💛" },
+  { value: "custom", label: "Custom Orders", emoji: "🎁" },
 ];
 
-function CartButtons({ item }: { item: JewelryItem; onCheckout?: () => void; checkoutLoading?: boolean }) {
+function CartButtons({ item }: { item: JewelryItem }) {
   const { addItem, removeItem, isInCart } = useCart();
   const cartId = `jewelry-${item.id}`;
   const inCart = isInCart(cartId);
@@ -87,12 +87,12 @@ function CartButtons({ item }: { item: JewelryItem; onCheckout?: () => void; che
   if (!item.price || item.inStock === false) return null;
 
   return (
-    <div className="pt-3 border-t space-y-2.5">
+    <div className="pt-3 border-t border-rose-100 space-y-2.5">
       <Button
-        className={`w-full py-5 text-base font-semibold ${
+        className={`w-full py-5 text-base font-semibold rounded-xl ${
           inCart
             ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-            : "bg-emerald-500 hover:bg-emerald-600 text-white"
+            : "bg-rose-500 hover:bg-rose-600 text-white"
         }`}
         onClick={() => {
           if (inCart) {
@@ -115,23 +115,31 @@ function CartButtons({ item }: { item: JewelryItem; onCheckout?: () => void; che
         )}
       </Button>
 
-      <a href="/bitcoin-payment" className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-orange-500/40 bg-orange-500/10 hover:bg-orange-500/20 transition-colors">
-        <Bitcoin className="h-4 w-4 text-orange-400" />
-        <span className="text-orange-300 text-sm font-medium">Pay with Bitcoin</span>
+      <a href="/bitcoin-payment" className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-orange-400/40 bg-orange-50 hover:bg-orange-100 transition-colors">
+        <Bitcoin className="h-4 w-4 text-orange-500" />
+        <span className="text-orange-600 text-sm font-medium">Pay with Bitcoin</span>
         <span className="inline-flex items-center bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">Save 10%</span>
       </a>
-
-      {inCart && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-950/40 border border-orange-500/30">
-          <Bitcoin className="h-3.5 w-3.5 text-orange-400 flex-shrink-0" />
-          <p className="text-orange-300/90 text-xs">Added! Pay with Bitcoin at checkout to <span className="font-bold text-orange-300">save 10%</span></p>
-        </div>
-      )}
     </div>
   );
 }
 
-export default function NatureMadeJewls() {
+function WishlistHeart({ item, wishlist, onToggle }: { item: JewelryItem; wishlist: Set<string>; onToggle: (id: string) => void }) {
+  const isWishlisted = wishlist.has(item.id);
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onToggle(item.id); }}
+      className={`absolute top-2.5 right-2.5 z-10 w-8 h-8 rounded-full flex items-center justify-center shadow-md transition-all duration-200 ${
+        isWishlisted ? "bg-rose-500 text-white" : "bg-white/90 text-rose-400 hover:bg-rose-50"
+      }`}
+      aria-label={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
+    >
+      <Heart className={`h-4 w-4 ${isWishlisted ? "fill-white" : ""}`} />
+    </button>
+  );
+}
+
+export default function AshleyShop() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -147,11 +155,26 @@ export default function NatureMadeJewls() {
   const [hoveredItem, setHoveredItem] = useState<JewelryItem | null>(null);
   const [hoverPos, setHoverPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [wishlist, setWishlist] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem("ashley-wishlist") || "[]")); } catch { return new Set(); }
+  });
+  const [wishlistOpen, setWishlistOpen] = useState(false);
+  const [customOrderOpen, setCustomOrderOpen] = useState(false);
+  const [customOrderForm, setCustomOrderForm] = useState({ name: "", description: "", materials: "", budget: "", contact: "" });
+  const [customOrderSubmitting, setCustomOrderSubmitting] = useState(false);
+  const [newItemFeatured, setNewItemFeatured] = useState(false);
+
+  const toggleWishlist = (id: string) => {
+    setWishlist(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      localStorage.setItem("ashley-wishlist", JSON.stringify([...next]));
+      return next;
+    });
+  };
 
   useEffect(() => {
-    return () => {
-      if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
-    };
+    return () => { if (hoverTimeout.current) clearTimeout(hoverTimeout.current); };
   }, []);
 
   useEffect(() => {
@@ -183,9 +206,7 @@ export default function NatureMadeJewls() {
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<JewelryItem | null>(null);
-  const [checkoutLoading, setCheckoutLoading] = useState(false);
 
-  // ── Chatbot listing assistant ──────────────────────────────────────────────
   type ChatStep = 'photos' | 'title' | 'category' | 'price' | 'materials' | 'shortDesc' | 'description' | 'confirm' | 'done';
   type ChatMsg = { role: 'bot' | 'user'; content: string };
   const [chatOpen, setChatOpen] = useState(false);
@@ -205,7 +226,7 @@ export default function NatureMadeJewls() {
     mutationFn: (item: any) => apiRequest("POST", "/api/jewelry", item),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/jewelry"] });
-      botSay("🎉 It's live! Your piece has been added to the shop. Want to add another? Type \"yes\" to start over.");
+      botSay("🌸 It's live! Your piece has been added to the shop. Want to add another? Type \"yes\" to start over.");
       setChatStep('done');
     },
     onError: (err: any) => botSay(`Something went wrong: ${err.message}. Try again?`),
@@ -215,7 +236,7 @@ export default function NatureMadeJewls() {
     if (chatOpen && chatMessages.length === 0) {
       setChatStep('photos');
       setChatData({ photos: [], title: '', category: '', price: '', materials: '', shortDesc: '', description: '' });
-      botSay("Hey! I'm your jewelry listing assistant 💎\n\nLet's get a new piece added to the shop. Start by uploading a photo — tap the camera button below!");
+      botSay("Hey! I'm your Ashley Shop listing assistant 🌸\n\nLet's get a new piece added to the shop. Start by uploading a photo — tap the camera button below!");
     }
   }, [chatOpen]);
 
@@ -249,7 +270,23 @@ export default function NatureMadeJewls() {
 
     if (chatStep === 'title') {
       setChatData(d => ({ ...d, title: text }));
-      setTimeout(() => { botSay("Nice! What category does it fall under?"); setChatStep('category'); }, 400);
+      const lower = text.toLowerCase();
+      const suggested = lower.match(/earring|stud|hoop|dangle/) ? 'earrings'
+        : lower.match(/ring|band|solitaire/) ? 'rings'
+        : lower.match(/necklace|pendant|chain|choker|lariat/) ? 'necklaces'
+        : lower.match(/bracelet|bangle|cuff|anklet/) ? 'bracelets'
+        : lower.match(/custom|commission|request|order/) ? 'custom'
+        : null;
+      if (suggested) {
+        const match = COLLECTIONS.find(c => c.value === suggested)!;
+        setChatData(d => ({ ...d, category: suggested }));
+        setTimeout(() => {
+          botSay(`Beautiful name! I'm guessing this is in ${match.emoji} ${match.label} — does that sound right? Tap to confirm or pick a different category.`);
+          setChatStep('category');
+        }, 400);
+      } else {
+        setTimeout(() => { botSay("Beautiful name! What category does it fall under?"); setChatStep('category'); }, 400);
+      }
     } else if (chatStep === 'price') {
       const clean = text.replace(/[$,\s]/g, '');
       if (isNaN(Number(clean))) { botSay("Just the number please — like 45 or 120."); return; }
@@ -269,7 +306,7 @@ export default function NatureMadeJewls() {
       setTimeout(() => { botSay(summary); setChatStep('confirm'); }, 400);
     } else if (chatStep === 'confirm') {
       if (text.toLowerCase().startsWith('y')) {
-        botSay("Listing it now…");
+        botSay("Adding it to the shop with love… 🌸");
         chatCreateMutation.mutate({ title: chatData.title, shortDescription: chatData.shortDesc, description: chatData.description, price: chatData.price, category: chatData.category, materials: chatData.materials, imageUrl: chatData.photos[0] || '', photos: chatData.photos.slice(1), inStock: true, featured: false, status: 'active' });
       } else {
         botSay("No problem! I've cleared everything. Type \"restart\" whenever you want to add a new piece.");
@@ -278,11 +315,10 @@ export default function NatureMadeJewls() {
     } else if (chatStep === 'done') {
       setChatMessages([]);
       setChatData({ photos: [], title: '', category: '', price: '', materials: '', shortDesc: '', description: '' });
-      botSay("Let's add another piece! 💎 Upload a photo to get started.");
+      botSay("Let's add another piece! 🌸 Upload a photo to get started.");
       setChatStep('photos');
     }
   }
-  // ── end chatbot ────────────────────────────────────────────────────────────
 
   const [, navigate] = useLocation();
   const isAdmin = user?.role === 'admin' || user?.role === 'business_owner';
@@ -306,6 +342,24 @@ export default function NatureMadeJewls() {
     },
   });
 
+  const { data: ratingStats } = useQuery<{ averageRating?: number; totalCount?: number }>({
+    queryKey: ["/api/testimonials/stats"],
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: allItems = [] } = useQuery<JewelryItem[]>({
+    queryKey: ["/api/jewelry"],
+    queryFn: async () => {
+      const res = await fetch("/api/jewelry", { credentials: 'include' });
+      if (!res.ok) throw new Error("Failed to fetch items");
+      return res.json();
+    },
+    enabled: wishlist.size > 0,
+    staleTime: 30 * 1000,
+  });
+
+  const wishlistedItems = (allItems.length > 0 ? allItems : items).filter(i => wishlist.has(i.id));
+
   const createMutation = useMutation({
     mutationFn: (item: any) => apiRequest("POST", "/api/jewelry", item),
     onSuccess: () => {
@@ -313,7 +367,8 @@ export default function NatureMadeJewls() {
       setIsCreateOpen(false);
       setNewItem({ title: "", shortDescription: "", description: "", price: "", category: "", materials: "", imageUrl: "" });
       setPhotoUrls([]);
-      toast({ title: "Item added!" });
+      setNewItemFeatured(false);
+      toast({ title: "Piece added to the shop!" });
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -355,7 +410,7 @@ export default function NatureMadeJewls() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/jewelry"] });
       if (selectedItem && selectedItem.id === variables.id) {
-        setSelectedItem({ ...selectedItem, inStock: !variables.sold, soldAt: variables.sold ? new Date().toISOString() : null, status: variables.sold ? 'sold' : 'active' } as any);
+        setSelectedItem({ ...selectedItem, inStock: !variables.sold, status: variables.sold ? 'sold' : 'active' });
       }
       toast({ title: variables.sold ? "Item marked as sold" : "Item marked as available" });
     },
@@ -363,24 +418,6 @@ export default function NatureMadeJewls() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
-
-  const handleCheckout = async (item: JewelryItem) => {
-    setCheckoutLoading(true);
-    try {
-      const res = await apiRequest("POST", "/api/square/create-checkout", { itemId: item.id });
-      const data = await res.json();
-      if (data.checkoutUrl) {
-        window.location.href = data.checkoutUrl;
-      } else {
-        toast({ title: "Error", description: "Could not create checkout link", variant: "destructive" });
-      }
-    } catch (error: any) {
-      toast({ title: "Payment Error", description: error.message || "Failed to start checkout. Please try again.", variant: "destructive" });
-    } finally {
-      setCheckoutLoading(false);
-    }
-  };
-
 
   const startEdit = (item: JewelryItem) => {
     setEditItem({ ...item });
@@ -398,6 +435,7 @@ export default function NatureMadeJewls() {
       price: editItem.price && editItem.price !== '' ? editItem.price : '0.00',
       category: editItem.category,
       materials: editItem.materials,
+      featured: editItem.featured,
       imageUrl: editPhotoUrls[0] || editItem.imageUrl,
       photos: editPhotoUrls,
     };
@@ -414,15 +452,8 @@ export default function NatureMadeJewls() {
       for (const file of filesToUpload) {
         const formData = new FormData();
         formData.append('file', file);
-        const res = await fetch('/api/jewelry/upload', {
-          method: 'POST',
-          credentials: 'include',
-          body: formData,
-        });
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.detail || errData.error || `Server error ${res.status}`);
-        }
+        const res = await fetch('/api/jewelry/upload', { method: 'POST', credentials: 'include', body: formData });
+        if (!res.ok) { const errData = await res.json().catch(() => ({})); throw new Error(errData.detail || errData.error || `Server error ${res.status}`); }
         const { url } = await res.json();
         setEditPhotoUrls(prev => [...prev, url]);
       }
@@ -436,30 +467,14 @@ export default function NatureMadeJewls() {
   };
 
   const handleCreate = () => {
-    if (!newItem.title.trim()) {
-      toast({ title: "Title is required", variant: "destructive" });
-      return;
-    }
-    const itemData = {
+    if (!newItem.title.trim()) { toast({ title: "Title is required", variant: "destructive" }); return; }
+    createMutation.mutate({
       ...newItem,
       imageUrl: photoUrls[0] || newItem.imageUrl,
       photos: photoUrls,
-    };
-    createMutation.mutate(itemData);
+      featured: newItemFeatured,
+    });
   };
-
-  const addPhotoUrl = () => {
-    if (newPhotoUrl.trim() && photoUrls.length < 10) {
-      setPhotoUrls([...photoUrls, newPhotoUrl.trim()]);
-      setNewPhotoUrl("");
-    }
-  };
-
-  const removePhotoUrl = (index: number) => {
-    setPhotoUrls(photoUrls.filter((_, i) => i !== index));
-  };
-
-  const videoExts = ['mp4', 'webm', 'ogg', 'mov'];
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -471,15 +486,8 @@ export default function NatureMadeJewls() {
       for (const file of filesToUpload) {
         const formData = new FormData();
         formData.append('file', file);
-        const res = await fetch('/api/jewelry/upload', {
-          method: 'POST',
-          credentials: 'include',
-          body: formData,
-        });
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.detail || errData.error || `Server error ${res.status}`);
-        }
+        const res = await fetch('/api/jewelry/upload', { method: 'POST', credentials: 'include', body: formData });
+        if (!res.ok) { const errData = await res.json().catch(() => ({})); throw new Error(errData.detail || errData.error || `Server error ${res.status}`); }
         const { url } = await res.json();
         setPhotoUrls(prev => [...prev, url]);
       }
@@ -526,434 +534,522 @@ export default function NatureMadeJewls() {
     }
   };
 
+  const handleCustomOrderSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCustomOrderSubmitting(true);
+    try {
+      const res = await fetch('/api/jewelry/custom-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(customOrderForm),
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Server error ${res.status}`);
+      }
+      toast({ title: "Request sent! Ashley will reach out soon." });
+      setCustomOrderOpen(false);
+      setCustomOrderForm({ name: "", description: "", materials: "", budget: "", contact: "" });
+    } catch (err: any) {
+      toast({ title: "Failed to send request", description: err.message, variant: "destructive" });
+    } finally {
+      setCustomOrderSubmitting(false);
+    }
+  };
+
+  const shareItem = (item: JewelryItem) => {
+    const url = `${window.location.origin}/nature-made-jewls/${item.id}`;
+    navigator.clipboard.writeText(url)
+      .then(() => toast({ title: "Link copied!" }))
+      .catch(() => toast({ title: "Share link", description: url }));
+  };
+
+  const heights = ['aspect-[3/4]', 'aspect-[4/5]', 'aspect-square', 'aspect-[2/3]', 'aspect-[5/6]'];
+
+  const avgPrice = (() => {
+    const priced = items.filter(i => i.price && i.inStock !== false).map(i => parseFloat(i.price!));
+    return priced.length > 0 ? priced.reduce((a, b) => a + b, 0) / priced.length : 0;
+  })();
+
+  const isGreatPrice = (item: JewelryItem) => {
+    if (!item.price || item.inStock === false || avgPrice === 0) return false;
+    return parseFloat(item.price) < avgPrice * 0.8;
+  };
+
+  const renderCard = (item: JewelryItem, origIdx: number) => {
+    const photos = getItemPhotos(item);
+    const itemHeight = heights[origIdx % heights.length];
+    const greatPrice = isGreatPrice(item);
+    return (
+      <div
+        key={item.id}
+        className="relative group"
+      >
+        <Card
+          className="overflow-hidden cursor-pointer group hover:shadow-xl transition-all duration-300 border-0 bg-white shadow-md shadow-rose-100/60"
+          onClick={() => openItem(item)}
+          onMouseEnter={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const viewportW = window.innerWidth;
+            const popupW = 320;
+            let x = rect.right + 12;
+            if (x + popupW > viewportW) x = rect.left - popupW - 12;
+            if (x < 8) x = rect.left + rect.width / 2 - popupW / 2;
+            let y = rect.top;
+            if (y + 400 > window.innerHeight) y = window.innerHeight - 410;
+            if (y < 8) y = 8;
+            setHoverPos({ x, y });
+            if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+            hoverTimeout.current = setTimeout(() => setHoveredItem(item), 400);
+          }}
+          onMouseLeave={() => {
+            if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+            setHoveredItem(null);
+          }}
+        >
+          <div className={`${itemHeight} relative overflow-hidden bg-rose-50`}>
+            {photos.length > 0 ? (
+              <MediaThumb
+                src={photos[0]}
+                alt={item.title}
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <Gem className="w-10 h-10 text-rose-200" />
+              </div>
+            )}
+
+            {item.featured && (
+              <div className="absolute top-2 left-2 flex items-center gap-1 bg-amber-400/95 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow">
+                <Sparkles className="h-2.5 w-2.5" /> Featured
+              </div>
+            )}
+
+            {!item.featured && greatPrice && (
+              <div className="absolute top-2 left-2 flex items-center gap-1 bg-emerald-500/95 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow">
+                <Star className="h-2.5 w-2.5 fill-white" /> Great Price
+              </div>
+            )}
+
+            {item.price && item.inStock !== false && (
+              <div className="absolute bottom-2 left-2">
+                <span className="bg-white/95 text-rose-600 font-bold text-xs px-2 py-0.5 rounded-full shadow">
+                  ${item.price}
+                </span>
+              </div>
+            )}
+
+            {photos.length > 1 && (
+              <span className="absolute bottom-2 right-2 bg-black/50 text-white text-[10px] px-1.5 py-0.5 rounded-full">
+                +{photos.length - 1}
+              </span>
+            )}
+
+            {!item.inStock && (
+              <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                <span className="bg-white text-stone-800 px-2 py-0.5 rounded-full text-xs font-medium">Sold</span>
+              </div>
+            )}
+
+            <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+          </div>
+
+          <div className="p-2.5">
+            <h3 className="font-medium text-stone-800 text-sm line-clamp-1">{item.title}</h3>
+            <p className="text-stone-400 text-xs line-clamp-1 mt-0.5">{item.shortDescription || item.category || "Handcrafted with love"}</p>
+          </div>
+        </Card>
+
+        <WishlistHeart item={item} wishlist={wishlist} onToggle={toggleWishlist} />
+      </div>
+    );
+  };
+
+  const col0 = items.filter((_, i) => i % 2 === 0);
+  const col1 = items.filter((_, i) => i % 2 === 1);
+  const lg0 = items.filter((_, i) => i % 4 === 0);
+  const lg1 = items.filter((_, i) => i % 4 === 1);
+  const lg2 = items.filter((_, i) => i % 4 === 2);
+  const lg3 = items.filter((_, i) => i % 4 === 3);
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-400 via-purple-300 to-gray-500">
-      <header className="sticky top-0 z-50 bg-gradient-to-r from-slate-100/95 via-purple-50/95 to-slate-200/95 backdrop-blur border-b border-purple-200/50 shadow-sm">
+    <div className="min-h-screen" style={{ background: "linear-gradient(160deg, #fdf6f0 0%, #fef1f2 40%, #fff8f0 100%)" }}>
+
+      {/* Header */}
+      <header className="sticky top-0 z-50 backdrop-blur border-b border-rose-100/80 shadow-sm" style={{ background: "rgba(253,246,240,0.97)" }}>
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <Link href="/">
-            <Button variant="ghost" size="sm" className="text-stone-600">
+            <Button variant="ghost" size="sm" className="text-stone-500 hover:text-rose-500">
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
           <div className="flex items-center gap-2">
-            <Leaf className="w-5 h-5 text-purple-600" />
-            <h1 className="font-serif text-xl font-bold bg-gradient-to-r from-slate-700 via-purple-700 to-slate-600 bg-clip-text text-transparent">Nature Made Jewls</h1>
-            <Gem className="w-5 h-5 text-slate-400" />
+            <span className="text-rose-400">🌸</span>
+            <h1 className="font-serif text-base md:text-lg font-bold text-stone-700 leading-tight text-center">
+              Hand-Crafted Made With Love<br className="hidden sm:block" /> <span className="text-rose-500">By Ashley</span>
+            </h1>
+            <span className="text-amber-400">✨</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setWishlistOpen(true)}
+              className="relative p-2 rounded-full hover:bg-rose-50 transition-colors"
+              aria-label="Wishlist"
+            >
+              <Heart className={`h-5 w-5 ${wishlist.size > 0 ? "fill-rose-500 text-rose-500" : "text-stone-400"}`} />
+              {wishlist.size > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{wishlist.size}</span>
+              )}
+            </button>
             {!user && (
               <Link href="/login?redirect=/nature-made-jewls">
-                <Button variant="ghost" size="sm" className="text-purple-600 font-semibold">
-                  Login
-                </Button>
+                <Button variant="ghost" size="sm" className="text-rose-500 font-semibold text-xs">Login</Button>
               </Link>
             )}
             <a href="mailto:upmichiganstatemovers@gmail.com">
-              <Button variant="ghost" size="sm"><Mail className="h-4 w-4 text-stone-600" /></Button>
+              <Button variant="ghost" size="sm"><Mail className="h-4 w-4 text-stone-500" /></Button>
             </a>
             <a href="tel:906-285-9312">
-              <Button variant="ghost" size="sm"><Phone className="h-4 w-4 text-stone-600" /></Button>
+              <Button variant="ghost" size="sm"><Phone className="h-4 w-4 text-stone-500" /></Button>
             </a>
           </div>
         </div>
       </header>
 
-      <div className="sticky top-14 z-40 bg-gradient-to-r from-slate-100/95 via-purple-50/95 to-slate-200/95 backdrop-blur border-b border-purple-200/50">
-        <div className="container mx-auto px-3 sm:px-4 py-2 sm:py-3">
-          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-stone-400" />
-              <Input
-                placeholder="Search jewelry..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 bg-white/70 border-purple-200 h-9 sm:h-10 text-sm"
-              />
+      {/* Meet Ashley Hero */}
+      <section className="relative overflow-hidden" style={{ background: "linear-gradient(135deg, #fdf2f8 0%, #fce7f3 50%, #fff1f2 100%)" }}>
+        <div className="container mx-auto px-4 py-10 md:py-14">
+          <div className="flex flex-col md:flex-row items-center gap-8 max-w-4xl mx-auto">
+            <div className="flex-shrink-0">
+              <div className="relative w-32 h-32 md:w-44 md:h-44 rounded-full overflow-hidden border-4 border-white shadow-xl shadow-rose-200/50">
+                <div className="w-full h-full bg-gradient-to-br from-rose-200 to-amber-100 flex items-center justify-center">
+                  <video src={jewelryVideoSrc} autoPlay loop muted playsInline className="w-full h-full object-cover" />
+                </div>
+              </div>
+              <div className="mt-3 text-center">
+                <span className="text-xs text-rose-400 font-medium flex items-center justify-center gap-1">
+                  <MapPin className="h-3 w-3" /> Michigan, with love 💛
+                </span>
+              </div>
             </div>
-            <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-              {categories.map((cat) => (
+            <div className="text-center md:text-left">
+              <p className="text-rose-400 text-sm font-semibold uppercase tracking-widest mb-1">Meet the Maker</p>
+              <h2 className="text-3xl md:text-4xl font-serif font-bold text-stone-800 mb-3 leading-tight">
+                Hi, I'm Ashley 🌸
+              </h2>
+              <p className="text-stone-600 leading-relaxed text-sm md:text-base max-w-lg">
+                Every piece I make is hand-crafted with love right here in Michigan. I work with natural stones, copper wire, sterling silver, and materials I choose for their beauty and energy. Each creation is one-of-a-kind — made slowly, mindfully, and with intention.
+              </p>
+              <div className="flex flex-wrap gap-2 mt-4 justify-center md:justify-start">
+                {["Natural Stones", "Copper Wire", "Sterling Silver", "Custom Orders"].map(tag => (
+                  <span key={tag} className="text-xs bg-rose-100 text-rose-600 px-2.5 py-1 rounded-full font-medium">{tag}</span>
+                ))}
+              </div>
+              <div className="mt-4 flex gap-3 justify-center md:justify-start">
                 <Button
-                  key={cat.value}
-                  variant={selectedCategory === cat.value ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setSelectedCategory(cat.value)}
-                  className={selectedCategory === cat.value 
-                    ? "bg-gradient-to-r from-purple-600 to-slate-600 hover:from-purple-700 hover:to-slate-700 text-white whitespace-nowrap" 
-                    : "border-border text-white bg-background hover:bg-muted whitespace-nowrap"}
+                  onClick={() => setCustomOrderOpen(true)}
+                  className="bg-rose-500 hover:bg-rose-600 text-white rounded-full px-5 py-2 text-sm font-semibold shadow-md"
                 >
-                  {cat.label}
+                  🎁 Request Custom Order
                 </Button>
-              ))}
+              </div>
             </div>
-            {canAdd ? (
-              <div className="flex gap-2">
-                {isAdmin && (
-                  <Button
-                    onClick={() => setChatOpen(true)}
-                    className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 whitespace-nowrap shadow-lg"
-                  >
-                    <Bot className="h-4 w-4 mr-1" /> Chat to Add
-                  </Button>
-                )}
+          </div>
+        </div>
+        <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-b from-transparent" style={{ background: "linear-gradient(to bottom, transparent, #fdf6f0)" }} />
+      </section>
+
+      {/* Collections Filter Row */}
+      <div className="sticky top-14 z-40 border-b border-rose-100/80" style={{ background: "rgba(253,246,240,0.97)" }}>
+        <div className="container mx-auto px-3 py-2">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+            {COLLECTIONS.map((col) => (
+              <button
+                key={col.value}
+                onClick={() => setSelectedCategory(col.value)}
+                className={`flex items-center gap-1.5 whitespace-nowrap px-3.5 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
+                  selectedCategory === col.value
+                    ? "bg-rose-500 text-white shadow-md shadow-rose-300/40"
+                    : "bg-white text-stone-600 border border-stone-200 hover:border-rose-300 hover:text-rose-500"
+                }`}
+              >
+                <span>{col.emoji}</span> {col.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Search + Admin Controls */}
+        <div className="container mx-auto px-3 pb-2 flex items-center gap-2">
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-stone-400" />
+            <Input
+              placeholder="Search pieces..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 bg-white/80 border-rose-200 h-8 text-sm rounded-full"
+            />
+          </div>
+          {canAdd && (
+            <div className="flex gap-2 ml-auto">
+              {isAdmin && (
+                <Button
+                  onClick={() => setChatOpen(true)}
+                  size="sm"
+                  className="bg-gradient-to-r from-rose-400 to-amber-400 hover:from-rose-500 hover:to-amber-500 text-white rounded-full text-xs"
+                >
+                  <Bot className="h-3.5 w-3.5 mr-1" /> AI List
+                </Button>
+              )}
               <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
                 <DialogTrigger asChild>
-                  <Button className="bg-gradient-to-r from-purple-500 to-slate-600 hover:from-purple-600 hover:to-slate-700 whitespace-nowrap">
-                    <Plus className="h-4 w-4 mr-1" /> Add
+                  <Button size="sm" className="bg-rose-500 hover:bg-rose-600 text-white rounded-full text-xs">
+                    <Plus className="h-3.5 w-3.5 mr-1" /> Add Piece
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
                   <DialogHeader>
-                    <DialogTitle>Add New Piece</DialogTitle>
+                    <DialogTitle className="font-serif">Add New Piece</DialogTitle>
                   </DialogHeader>
                   <div className="space-y-4">
                     <div>
                       <Label>Title *</Label>
-                      <Input
-                        value={newItem.title}
-                        onChange={(e) => setNewItem({ ...newItem, title: e.target.value })}
-                        placeholder="e.g., Turquoise Drop Earrings"
-                      />
+                      <Input value={newItem.title} onChange={(e) => setNewItem({ ...newItem, title: e.target.value })} placeholder="e.g., Turquoise Drop Earrings" />
                     </div>
-                    
                     <div>
                       <Label>Photos & Videos</Label>
                       <div className="space-y-2">
                         {photoUrls.map((url, index) => (
                           <div key={index} className="flex gap-2 items-center">
                             {isVideoUrl(url) ? (
-                              <div className="w-12 h-12 rounded bg-stone-200 flex items-center justify-center"><Video className="h-5 w-5 text-purple-600" /></div>
+                              <div className="w-12 h-12 rounded bg-rose-100 flex items-center justify-center"><Video className="h-5 w-5 text-rose-400" /></div>
                             ) : (
                               <img src={url} alt="" className="w-12 h-12 object-cover rounded" />
                             )}
                             <span className="text-sm text-stone-600 truncate flex-1">{url.split('/').pop()}</span>
-                            <Button type="button" variant="ghost" size="sm" onClick={() => removePhotoUrl(index)}>
-                              <X className="h-4 w-4" />
-                            </Button>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => setPhotoUrls(photoUrls.filter((_, i) => i !== index))}><X className="h-4 w-4" /></Button>
                           </div>
                         ))}
                         <div className="flex gap-2">
-                          <Input
-                            value={newPhotoUrl}
-                            onChange={(e) => setNewPhotoUrl(e.target.value)}
-                            placeholder="Paste image URL..."
-                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPhotoUrl(); } }}
-                            className="flex-1"
-                          />
-                          <Button type="button" variant="outline" onClick={addPhotoUrl} disabled={!newPhotoUrl.trim() || photoUrls.length >= 10} title="Add URL">
-                            <Plus className="h-4 w-4" />
-                          </Button>
-                          <label
-                            className={`inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 cursor-pointer ${photoUrls.length >= 10 || isUploading ? 'opacity-50 pointer-events-none' : ''}`}
-                            title="Upload from device"
-                          >
-                            <input
-                              type="file"
-                              ref={fileInputRef}
-                              onChange={handleFileUpload}
-                              accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime"
-                              multiple
-                              className="sr-only"
-                            />
+                          <Input value={newPhotoUrl} onChange={(e) => setNewPhotoUrl(e.target.value)} placeholder="Paste image URL..." onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (newPhotoUrl.trim() && photoUrls.length < 10) { setPhotoUrls([...photoUrls, newPhotoUrl.trim()]); setNewPhotoUrl(""); } } }} className="flex-1" />
+                          <Button type="button" variant="outline" onClick={() => { if (newPhotoUrl.trim() && photoUrls.length < 10) { setPhotoUrls([...photoUrls, newPhotoUrl.trim()]); setNewPhotoUrl(""); } }} disabled={!newPhotoUrl.trim() || photoUrls.length >= 10}><Plus className="h-4 w-4" /></Button>
+                          <label className={`inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 cursor-pointer ${photoUrls.length >= 10 || isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                            <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime" multiple className="sr-only" />
                             {isUploading ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <ImagePlus className="h-4 w-4" />}
                           </label>
                         </div>
                         <p className="text-xs text-stone-500">{photoUrls.length}/10 photos & videos</p>
                       </div>
                     </div>
-
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <Label>Price</Label>
-                        <Input
-                          value={newItem.price}
-                          onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
-                          placeholder="25.00"
-                        />
+                        <Input value={newItem.price} onChange={(e) => setNewItem({ ...newItem, price: e.target.value })} placeholder="25.00" />
                       </div>
                       <div>
                         <Label>Category</Label>
                         <Select value={newItem.category} onValueChange={(v) => setNewItem({ ...newItem, category: v })}>
                           <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                           <SelectContent>
-                            {categories.filter(c => c.value !== "all").map((cat) => (
-                              <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+                            {COLLECTIONS.filter(c => c.value !== "all").map((cat) => (
+                              <SelectItem key={cat.value} value={cat.value}>{cat.emoji} {cat.label}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       </div>
                     </div>
-
                     <div>
                       <Label>Short Description</Label>
-                      <Input
-                        value={newItem.shortDescription}
-                        onChange={(e) => setNewItem({ ...newItem, shortDescription: e.target.value })}
-                        placeholder="One line for thumbnail"
-                      />
+                      <Input value={newItem.shortDescription} onChange={(e) => setNewItem({ ...newItem, shortDescription: e.target.value })} placeholder="One line for thumbnail" />
                     </div>
-
                     <div>
                       <Label>Materials</Label>
-                      <Input
-                        value={newItem.materials}
-                        onChange={(e) => setNewItem({ ...newItem, materials: e.target.value })}
-                        placeholder="Sterling silver, turquoise..."
-                      />
+                      <Input value={newItem.materials} onChange={(e) => setNewItem({ ...newItem, materials: e.target.value })} placeholder="Sterling silver, turquoise..." />
                     </div>
-
                     <div>
                       <Label>Full Description</Label>
-                      <Textarea
-                        value={newItem.description}
-                        onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
-                        placeholder="Tell the story of this piece..."
-                        rows={3}
-                      />
+                      <Textarea value={newItem.description} onChange={(e) => setNewItem({ ...newItem, description: e.target.value })} placeholder="Tell the story of this piece..." rows={3} />
                     </div>
-
-                    <Button onClick={handleCreate} disabled={createMutation.isPending} className="w-full bg-purple-600 hover:bg-purple-700">
-                      {createMutation.isPending ? "Adding..." : "Add Item"}
+                    <div className="flex items-center gap-3 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                      <button
+                        type="button"
+                        onClick={() => setNewItemFeatured(!newItemFeatured)}
+                        className={`w-10 h-6 rounded-full transition-colors flex-shrink-0 relative ${newItemFeatured ? "bg-amber-400" : "bg-stone-300"}`}
+                      >
+                        <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${newItemFeatured ? "left-5" : "left-1"}`} />
+                      </button>
+                      <div>
+                        <p className="text-sm font-semibold text-stone-700 flex items-center gap-1"><Sparkles className="h-3.5 w-3.5 text-amber-500" /> Mark as Featured</p>
+                        <p className="text-xs text-stone-400">Shows sparkle badge on the card</p>
+                      </div>
+                    </div>
+                    <Button onClick={handleCreate} disabled={createMutation.isPending} className="w-full bg-rose-500 hover:bg-rose-600">
+                      {createMutation.isPending ? "Adding..." : "Add to Shop"}
                     </Button>
                   </div>
                 </DialogContent>
               </Dialog>
-              </div>
-            ) : (
-              <Link href="/login?redirect=/nature-made-jewls">
-                <Button className="bg-gradient-to-r from-purple-500 to-slate-600 hover:from-purple-600 hover:to-slate-700 whitespace-nowrap">
-                  <Plus className="h-4 w-4 mr-1" /> Add
-                </Button>
-              </Link>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Slim Video Banner */}
-      <div className="w-full"
-        style={{ background: "linear-gradient(90deg, #0d0704 0%, #2d1a0f 25%, #1e1208 50%, #2d1a0f 75%, #0d0704 100%)" }}>
-        <div className="absolute inset-0 opacity-10 pointer-events-none"
-          style={{ backgroundImage: "repeating-linear-gradient(60deg, transparent, transparent 3px, rgba(180,100,30,0.12) 3px, rgba(180,100,30,0.12) 6px)" }} />
-        <div className="relative flex items-center justify-between px-4 py-2.5 max-w-5xl mx-auto gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="flex-shrink-0 w-10 h-10 rounded-lg overflow-hidden border border-amber-700/50 shadow">
-              <video
-                src={jewelryVideoSrc}
-                autoPlay
-                loop
-                muted
-                playsInline
-                className="w-full h-full object-cover"
-              />
-            </div>
-            <div className="min-w-0">
-              <p className="text-amber-400/80 text-[9px] uppercase tracking-widest leading-none mb-0.5">Handmade with love ♡</p>
-              <p className="text-amber-100 font-serif font-bold text-sm md:text-base leading-tight truncate"
-                style={{ fontFamily: "'Georgia', serif" }}>
-                Nature Made Jewls — Handmade Jewelry &amp; Custom Creations
-              </p>
-            </div>
-          </div>
-          <div className="hidden sm:flex items-center gap-4 flex-shrink-0">
-            <div className="flex items-center gap-2">
-              {["Copper Wire", "Natural Stone", "Custom Designs"].map(f => (
-                <span key={f} className="flex items-center gap-1 text-amber-100/70 text-[10px]">
-                  <CheckCircle2 className="h-2.5 w-2.5 text-amber-500" />{f}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-        <div className="h-px bg-gradient-to-r from-transparent via-amber-700/50 to-transparent" />
-      </div>
-
-
-      <main className="container mx-auto px-2 sm:px-3 py-3 sm:py-6">
+      {/* Main Grid */}
+      <main className="container mx-auto px-2 sm:px-3 py-4 sm:py-6">
         {isLoading ? (
-          <div className="text-center text-stone-500 py-16">Loading beautiful pieces...</div>
+          <div className="text-center text-rose-400 py-16 font-serif italic">Loading beautiful pieces...</div>
         ) : items.length === 0 ? (
           <div className="text-center py-16">
-            <Gem className="w-16 h-16 mx-auto text-stone-300 mb-4" />
-            <p className="text-stone-500 text-lg">No items found</p>
+            <div className="text-5xl mb-4">🌸</div>
+            <p className="text-stone-500 text-lg font-serif">No pieces found</p>
             <p className="text-stone-400 text-sm mt-2">
               {searchQuery ? "Try a different search" : "New pieces coming soon!"}
             </p>
-            {canAdd && (
-              <Button 
-                onClick={() => setIsCreateOpen(true)}
-                className="mt-6 bg-gradient-to-r from-purple-500 to-slate-600 hover:from-purple-600 hover:to-slate-700"
-              >
-                <Plus className="h-4 w-4 mr-2" /> Add Your First Item
-              </Button>
-            )}
-            {!user && (
-              <div className="mt-6">
-                <Link href="/login?redirect=/nature-made-jewls">
-                  <Button variant="outline" className="border-purple-600 text-purple-600">
-                    Login to Add Items
-                  </Button>
-                </Link>
-              </div>
-            )}
           </div>
         ) : (
           <>
-          {/* Diverging offset gallery — items split into explicit columns with cascading offsets */}
-          {(() => {
-            const heights = ['aspect-[3/4]', 'aspect-[4/5]', 'aspect-square', 'aspect-[2/3]', 'aspect-[5/6]'];
-
-            const renderCard = (item: JewelryItem, origIdx: number) => {
-              const photos = getItemPhotos(item);
-              const itemHeight = heights[origIdx % heights.length];
-              return (
-                <Card
-                  key={item.id}
-                  className="overflow-hidden cursor-pointer group hover:shadow-xl transition-all duration-300 border-0 bg-white/90 backdrop-blur-sm shadow-md shadow-purple-100/50"
-                  onClick={() => openItem(item)}
-                  onMouseEnter={(e) => {
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    const viewportW = window.innerWidth;
-                    const popupW = 320;
-                    let x = rect.right + 12;
-                    if (x + popupW > viewportW) x = rect.left - popupW - 12;
-                    if (x < 8) x = rect.left + rect.width / 2 - popupW / 2;
-                    let y = rect.top;
-                    if (y + 400 > window.innerHeight) y = window.innerHeight - 410;
-                    if (y < 8) y = 8;
-                    setHoverPos({ x, y });
-                    if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
-                    hoverTimeout.current = setTimeout(() => setHoveredItem(item), 400);
-                  }}
-                  onMouseLeave={() => {
-                    if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
-                    setHoveredItem(null);
-                  }}
-                >
-                  <div className={`${itemHeight} relative overflow-hidden bg-stone-100`}>
-                    {photos.length > 0 ? (
-                      <MediaThumb
-                        src={photos[0]}
-                        alt={item.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Gem className="w-10 h-10 text-stone-300" />
-                      </div>
-                    )}
-                    {photos.some(p => isVideoUrl(p)) && (
-                      <span className="absolute top-2 left-2 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded-full flex items-center gap-1">
-                        <Video className="h-2.5 w-2.5" /> Video
-                      </span>
-                    )}
-                    {photos.length > 1 && (
-                      <span className="absolute top-2 right-2 bg-black/50 text-white text-[10px] px-1.5 py-0.5 rounded-full">
-                        +{photos.length - 1}
-                      </span>
-                    )}
-                    {item.featured && (
-                      <Heart className="absolute bottom-2 left-2 w-4 h-4 text-rose-500 fill-rose-500" />
-                    )}
-                    {!item.inStock && (
-                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                        <span className="bg-white text-stone-800 px-2 py-0.5 rounded-full text-xs font-medium">Sold</span>
-                      </div>
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                  </div>
-                  <div className="p-2 sm:p-3">
-                    <h3 className="font-medium text-stone-800 text-sm line-clamp-1">{item.title}</h3>
-                    <p className="text-stone-400 text-xs line-clamp-1">{item.shortDescription || item.category || "Handcrafted"}</p>
-                    {item.price && (
-                      <p className="text-purple-600 font-semibold text-sm mt-0.5">${item.price}</p>
-                    )}
-                  </div>
-                </Card>
-              );
-            };
-
-            /* Mobile/tablet: 2 explicit columns, right offset down */
-            const col0 = items.filter((_, i) => i % 2 === 0);
-            const col1 = items.filter((_, i) => i % 2 === 1);
-
-            /* Desktop (lg+): 4 columns with cascading offsets */
-            const lg0 = items.filter((_, i) => i % 4 === 0);
-            const lg1 = items.filter((_, i) => i % 4 === 1);
-            const lg2 = items.filter((_, i) => i % 4 === 2);
-            const lg3 = items.filter((_, i) => i % 4 === 3);
-
-            return (
-              <>
-                {/* Mobile + tablet: 2-column diverging */}
-                <div className="grid grid-cols-2 gap-2 sm:gap-3 items-start lg:hidden">
-                  <div className="flex flex-col gap-2 sm:gap-3">
-                    {col0.map((item, i) => renderCard(item, i * 2))}
-                  </div>
-                  <div className="flex flex-col gap-2 sm:gap-3 pt-12 sm:pt-16">
-                    {col1.map((item, i) => renderCard(item, i * 2 + 1))}
-                  </div>
-                </div>
-
-                {/* Desktop: 4-column cascading diverge */}
-                <div className="hidden lg:grid lg:grid-cols-4 lg:gap-3 items-start">
-                  <div className="flex flex-col gap-3">
-                    {lg0.map((item, i) => renderCard(item, i * 4))}
-                  </div>
-                  <div className="flex flex-col gap-3 pt-16">
-                    {lg1.map((item, i) => renderCard(item, i * 4 + 1))}
-                  </div>
-                  <div className="flex flex-col gap-3 pt-8">
-                    {lg2.map((item, i) => renderCard(item, i * 4 + 2))}
-                  </div>
-                  <div className="flex flex-col gap-3 pt-20">
-                    {lg3.map((item, i) => renderCard(item, i * 4 + 3))}
-                  </div>
-                </div>
-              </>
-            );
-          })()}
-
-          {hoveredItem && (
-            <div
-              className="fixed z-[100] pointer-events-none animate-in fade-in zoom-in-95 duration-200"
-              style={{ left: hoverPos.x, top: hoverPos.y }}
-            >
-              <div className="w-80 bg-white rounded-xl shadow-2xl shadow-purple-200/60 border border-purple-100 overflow-hidden">
-                {getItemPhotos(hoveredItem).length > 0 ? (
-                  <MediaThumb
-                    src={getItemPhotos(hoveredItem)[0]}
-                    alt={hoveredItem.title}
-                    className="w-full aspect-square object-cover"
-                  />
-                ) : (
-                  <div className="w-full aspect-square bg-stone-100 flex items-center justify-center">
-                    <Gem className="w-16 h-16 text-stone-300" />
-                  </div>
-                )}
-                <div className="p-4">
-                  <h3 className="font-serif font-bold text-stone-800 text-lg">{hoveredItem.title}</h3>
-                  {hoveredItem.category && (
-                    <p className="text-purple-600 text-sm capitalize">{hoveredItem.category}</p>
-                  )}
-                  {hoveredItem.price && (
-                    <p className="text-purple-700 font-bold text-xl mt-1">${hoveredItem.price}</p>
-                  )}
-                  {hoveredItem.shortDescription && (
-                    <p className="text-stone-500 text-sm mt-2 line-clamp-2">{hoveredItem.shortDescription}</p>
-                  )}
-                  <p className="text-purple-400 text-xs mt-3 italic">Click to view full details</p>
-                </div>
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 items-start lg:hidden">
+              <div className="flex flex-col gap-2 sm:gap-3">
+                {col0.map((item, i) => renderCard(item, i * 2))}
+              </div>
+              <div className="flex flex-col gap-2 sm:gap-3 pt-12 sm:pt-16">
+                {col1.map((item, i) => renderCard(item, i * 2 + 1))}
               </div>
             </div>
-          )}
+
+            <div className="hidden lg:grid lg:grid-cols-4 lg:gap-3 items-start">
+              <div className="flex flex-col gap-3">
+                {lg0.map((item, i) => renderCard(item, i * 4))}
+              </div>
+              <div className="flex flex-col gap-3 pt-16">
+                {lg1.map((item, i) => renderCard(item, i * 4 + 1))}
+              </div>
+              <div className="flex flex-col gap-3 pt-8">
+                {lg2.map((item, i) => renderCard(item, i * 4 + 2))}
+              </div>
+              <div className="flex flex-col gap-3 pt-20">
+                {lg3.map((item, i) => renderCard(item, i * 4 + 3))}
+              </div>
+            </div>
+
+            {hoveredItem && (
+              <div
+                className="fixed z-[100] pointer-events-none animate-in fade-in zoom-in-95 duration-200"
+                style={{ left: hoverPos.x, top: hoverPos.y }}
+              >
+                <div className="w-80 bg-white rounded-xl shadow-2xl shadow-rose-200/60 border border-rose-100 overflow-hidden">
+                  {getItemPhotos(hoveredItem).length > 0 ? (
+                    <MediaThumb src={getItemPhotos(hoveredItem)[0]} alt={hoveredItem.title} className="w-full aspect-square object-cover" />
+                  ) : (
+                    <div className="w-full aspect-square bg-rose-50 flex items-center justify-center">
+                      <Gem className="w-16 h-16 text-rose-200" />
+                    </div>
+                  )}
+                  <div className="p-4">
+                    <h3 className="font-serif font-bold text-stone-800 text-lg">{hoveredItem.title}</h3>
+                    {hoveredItem.category && <p className="text-rose-500 text-sm capitalize">{hoveredItem.category}</p>}
+                    {hoveredItem.price && <p className="text-rose-600 font-bold text-xl mt-1">${hoveredItem.price}</p>}
+                    {hoveredItem.shortDescription && <p className="text-stone-500 text-sm mt-2 line-clamp-2">{hoveredItem.shortDescription}</p>}
+                    <p className="text-rose-300 text-xs mt-3 italic">Click to view full details</p>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
       </main>
 
+      {/* Footer */}
+      <footer className="border-t border-rose-100 py-8 mt-8" style={{ background: "linear-gradient(135deg, #fdf2f8 0%, #fff8f0 100%)" }}>
+        <div className="container mx-auto px-4 text-center space-y-3">
+          <p className="font-serif text-stone-700 font-bold text-lg">Hand-Crafted Made With Love By Ashley</p>
+          <p className="text-rose-400 text-sm flex items-center justify-center gap-1.5">
+            <MapPin className="h-3.5 w-3.5" /> Ships from Michigan with love 💛
+          </p>
+          <div className="flex items-center justify-center gap-4 text-sm text-stone-500">
+            <a href="mailto:upmichiganstatemovers@gmail.com" className="flex items-center gap-1.5 hover:text-rose-500 transition-colors">
+              <Mail className="h-3.5 w-3.5" /> Email Ashley
+            </a>
+            <a href="tel:906-285-9312" className="flex items-center gap-1.5 hover:text-rose-500 transition-colors">
+              <Phone className="h-3.5 w-3.5" /> (906) 285-9312
+            </a>
+          </div>
+          <div className="flex items-center justify-center gap-3 text-stone-400">
+            <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" className="p-2 rounded-full hover:bg-rose-100 hover:text-rose-500 transition-colors" aria-label="Facebook">
+              <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+            </a>
+            <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="p-2 rounded-full hover:bg-rose-100 hover:text-rose-500 transition-colors" aria-label="Instagram">
+              <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>
+            </a>
+            <a href="https://pinterest.com" target="_blank" rel="noopener noreferrer" className="p-2 rounded-full hover:bg-rose-100 hover:text-rose-500 transition-colors" aria-label="Pinterest">
+              <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12.017 0C5.396 0 .029 5.367.029 11.987c0 5.079 3.158 9.417 7.618 11.162-.105-.949-.199-2.403.041-3.439.219-.937 1.406-5.957 1.406-5.957s-.359-.72-.359-1.781c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738a.36.36 0 01.083.345l-.333 1.36c-.053.22-.174.267-.402.161-1.499-.698-2.436-2.889-2.436-4.649 0-3.785 2.75-7.262 7.929-7.262 4.163 0 7.398 2.967 7.398 6.931 0 4.136-2.607 7.464-6.227 7.464-1.216 0-2.359-.631-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146C9.57 23.812 10.763 24 12.017 24c6.624 0 11.99-5.367 11.99-11.988C24.007 5.367 18.641.001 12.017.001z"/></svg>
+            </a>
+          </div>
+          <button
+            onClick={() => setCustomOrderOpen(true)}
+            className="inline-flex items-center gap-2 bg-rose-500 hover:bg-rose-600 text-white px-5 py-2 rounded-full text-sm font-semibold transition-colors"
+          >
+            🎁 Request a Custom Order
+          </button>
+        </div>
+      </footer>
+
+      {/* Wishlist Drawer */}
+      {wishlistOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setWishlistOpen(false)} />
+          <div className="relative z-50 w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl overflow-hidden max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-rose-100">
+              <h2 className="font-serif font-bold text-stone-800 flex items-center gap-2">
+                <Heart className="h-5 w-5 text-rose-500 fill-rose-500" /> My Wishlist ({wishlist.size})
+              </h2>
+              <button onClick={() => setWishlistOpen(false)} className="text-stone-400 hover:text-stone-600"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="overflow-y-auto flex-1 p-4">
+              {wishlistedItems.length === 0 ? (
+                <div className="text-center py-10">
+                  <Heart className="h-12 w-12 text-rose-200 mx-auto mb-3" />
+                  <p className="text-stone-400 font-serif italic">No saved pieces yet</p>
+                  <p className="text-stone-400 text-xs mt-1">Tap the heart on any piece to save it here</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {wishlistedItems.map(item => {
+                    const photos = getItemPhotos(item);
+                    return (
+                      <div key={item.id} className="flex items-center gap-3 p-2 rounded-xl hover:bg-rose-50 transition-colors">
+                        <div className="w-16 h-16 rounded-lg overflow-hidden bg-rose-50 flex-shrink-0">
+                          {photos.length > 0 ? (
+                            <img src={photos[0]} alt={item.title} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center"><Gem className="h-6 w-6 text-rose-200" /></div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-stone-800 text-sm truncate">{item.title}</p>
+                          {item.price && <p className="text-rose-500 font-bold text-sm">${item.price}</p>}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => openItem(item)} className="p-1.5 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-600 transition-colors"><ExternalLink className="h-3.5 w-3.5" /></button>
+                          <button onClick={() => toggleWishlist(item.id)} className="p-1.5 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-600 transition-colors"><X className="h-3.5 w-3.5" /></button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Product Detail Modal */}
       {selectedItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedItem(null)} />
-          <div className="relative z-50 w-full h-full md:w-[95vw] md:max-w-5xl md:h-[90vh] md:rounded-xl bg-white overflow-hidden flex flex-col md:flex-row">
+          <div className="relative z-50 w-full h-full md:w-[95vw] md:max-w-5xl md:h-[90vh] md:rounded-2xl bg-white overflow-hidden flex flex-col md:flex-row">
             <button
               onClick={() => setSelectedItem(null)}
               className="absolute top-3 right-3 z-10 bg-black/50 hover:bg-black/70 text-white rounded-full p-2"
@@ -961,314 +1057,199 @@ export default function NatureMadeJewls() {
               <X className="h-5 w-5" />
             </button>
 
-            <div className="relative w-full md:w-3/5 h-[55vh] md:h-full bg-stone-100 flex-shrink-0">
+            <div className="relative w-full md:w-3/5 h-[50vh] md:h-full bg-rose-50 flex-shrink-0">
               {selectedItem.inStock === false && (
                 <div className="absolute top-4 left-4 z-20">
-                  <span className="bg-red-500 text-white font-bold text-sm px-4 py-1.5 rounded-full shadow-lg uppercase tracking-wider">
-                    Sold
-                  </span>
+                  <span className="bg-red-500 text-white font-bold text-sm px-4 py-1.5 rounded-full shadow-lg uppercase tracking-wider">Sold</span>
+                </div>
+              )}
+              {selectedItem.featured && (
+                <div className="absolute top-4 left-4 z-20 flex items-center gap-1 bg-amber-400 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow">
+                  <Sparkles className="h-3 w-3" /> Featured
                 </div>
               )}
               {getItemPhotos(selectedItem).length > 0 ? (
                 <>
-                  <MediaItem
-                    src={getItemPhotos(selectedItem)[currentPhotoIndex]}
-                    alt={selectedItem.title}
-                    className="w-full h-full object-contain"
-                  />
+                  <MediaItem src={getItemPhotos(selectedItem)[currentPhotoIndex]} alt={selectedItem.title} className="w-full h-full object-contain" />
                   {getItemPhotos(selectedItem).length > 1 && (
                     <>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); prevPhoto(); }}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white rounded-full p-2.5 shadow-lg"
-                      >
+                      <button onClick={prevPhoto} className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white rounded-full p-2.5 shadow-lg">
                         <ChevronLeft className="h-6 w-6" />
                       </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); nextPhoto(); }}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white rounded-full p-2.5 shadow-lg"
-                      >
+                      <button onClick={nextPhoto} className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white rounded-full p-2.5 shadow-lg">
                         <ChevronRight className="h-6 w-6" />
                       </button>
-                      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+                      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
                         {getItemPhotos(selectedItem).map((_, i) => (
-                          <button
-                            key={i}
-                            onClick={(e) => { e.stopPropagation(); setCurrentPhotoIndex(i); }}
-                            className={`w-3 h-3 rounded-full transition-colors shadow ${i === currentPhotoIndex ? 'bg-purple-500 scale-110' : 'bg-white/70'}`}
-                          />
+                          <button key={i} onClick={() => setCurrentPhotoIndex(i)} className={`w-2.5 h-2.5 rounded-full transition-colors shadow ${i === currentPhotoIndex ? 'bg-rose-500 scale-110' : 'bg-white/70'}`} />
                         ))}
                       </div>
                     </>
                   )}
                 </>
               ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <Gem className="w-24 h-24 text-stone-300" />
-                </div>
+                <div className="w-full h-full flex items-center justify-center"><Gem className="w-24 h-24 text-rose-200" /></div>
               )}
             </div>
 
-            <div className="w-full md:w-2/5 flex-1 overflow-y-auto">
-              <div className="p-5 md:p-8 space-y-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h2 className="text-2xl md:text-3xl font-serif font-bold text-stone-800">{selectedItem.title}</h2>
-                    {selectedItem.category && (
-                      <p className="text-purple-600 capitalize text-sm md:text-lg mt-0.5">{selectedItem.category}</p>
-                    )}
-                  </div>
-                  {selectedItem.price && (
-                    <p className="text-2xl md:text-3xl font-bold text-purple-600 whitespace-nowrap">${selectedItem.price}</p>
-                  )}
-                </div>
-
-                {selectedItem.materials && (
-                  <div className="bg-purple-50 rounded-lg p-3">
-                    <p className="text-xs font-medium text-purple-500 uppercase tracking-wide">Materials</p>
-                    <p className="text-stone-700 text-sm mt-0.5">{selectedItem.materials}</p>
-                  </div>
-                )}
-
-                {selectedItem.description && (
-                  <div>
-                    <p className="text-xs font-medium text-stone-400 uppercase tracking-wide">About this piece</p>
-                    <p className="text-stone-600 text-sm whitespace-pre-wrap mt-1">{selectedItem.description}</p>
-                  </div>
-                )}
-
-                <CartButtons item={selectedItem} />
-                {canEditItem(selectedItem) && (
-                    <div className="space-y-2 pt-2 border-t border-stone-200">
-                      <Button
-                        variant={selectedItem.inStock === false ? "outline" : "default"}
-                        size="sm"
-                        className={selectedItem.inStock === false
-                          ? "w-full border-green-400 text-green-600 hover:bg-green-50"
-                          : "w-full bg-amber-500 hover:bg-amber-600 text-white"}
-                        onClick={() => soldMutation.mutate({ id: selectedItem.id, sold: selectedItem.inStock !== false })}
-                        disabled={soldMutation.isPending}
-                      >
-                        {selectedItem.inStock === false ? (
-                          <><RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Mark Available</>
-                        ) : (
-                          <><Tag className="h-3.5 w-3.5 mr-1.5" /> Mark as Sold</>
-                        )}
-                      </Button>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="flex-1 border-purple-400 text-purple-600 hover:bg-purple-50"
-                          onClick={() => startEdit(selectedItem)}
-                        >
-                          <Pencil className="h-3.5 w-3.5 mr-1.5" />
-                          Edit
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="flex-1 border-red-300 text-red-600 hover:bg-red-50"
-                          onClick={() => { setItemToDelete(selectedItem); setDeleteConfirmOpen(true); }}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                          Delete
-                        </Button>
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1">
+                  <h1 className="text-2xl font-serif font-bold text-stone-800">{selectedItem.title}</h1>
+                  {selectedItem.category && <p className="text-rose-500 capitalize text-sm mt-0.5">{selectedItem.category}</p>}
+                  {ratingStats?.averageRating && (
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      <div className="flex items-center gap-0.5">
+                        {[1,2,3,4,5].map(s => (
+                          <Star key={s} className={`h-3.5 w-3.5 ${s <= Math.round(ratingStats.averageRating!) ? "fill-amber-400 text-amber-400" : "text-stone-300"}`} />
+                        ))}
                       </div>
+                      <span className="text-xs text-stone-500">{ratingStats.averageRating.toFixed(1)} · Ashley's Shop</span>
                     </div>
                   )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => shareItem(selectedItem)} className="p-2 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-500 transition-colors" title="Share"><Share2 className="h-4 w-4" /></button>
+                  <WishlistHeart item={selectedItem} wishlist={wishlist} onToggle={toggleWishlist} />
+                </div>
               </div>
+
+              {selectedItem.price && (
+                <p className="text-2xl font-bold text-rose-600">${selectedItem.price}</p>
+              )}
+
+              {selectedItem.materials && (
+                <div className="bg-rose-50 rounded-xl p-3 border border-rose-100">
+                  <p className="text-xs font-semibold text-rose-400 uppercase tracking-wide mb-1">Made With</p>
+                  <p className="text-stone-700 text-sm">{selectedItem.materials}</p>
+                </div>
+              )}
+
+              <div className="bg-amber-50 rounded-xl p-3 border border-amber-100">
+                <p className="text-xs font-semibold text-amber-500 uppercase tracking-wide mb-1">Made with Love</p>
+                <p className="text-stone-600 text-sm italic">Each piece is handcrafted by Ashley in Michigan — no two are exactly alike. Made slowly, mindfully, and with care.</p>
+              </div>
+
+              {selectedItem.shortDescription && (
+                <p className="text-stone-600 text-sm font-medium italic">"{selectedItem.shortDescription}"</p>
+              )}
+
+              {selectedItem.description && (
+                <div>
+                  <p className="text-xs font-medium text-stone-400 uppercase tracking-wide">About this Piece</p>
+                  <p className="text-stone-600 text-sm whitespace-pre-wrap mt-1">{selectedItem.description}</p>
+                </div>
+              )}
+
+              <button
+                onClick={() => { setSelectedItem(null); setCustomOrderOpen(true); }}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-600 text-sm font-semibold transition-colors"
+              >
+                🎁 Request a Custom Order Like This
+              </button>
+
+              <CartButtons item={selectedItem} />
+
+              {!selectedItem.inStock && (
+                <div className="bg-stone-100 rounded-lg p-3 text-center">
+                  <p className="text-stone-500 font-medium text-sm">This item has been sold — request a custom version!</p>
+                </div>
+              )}
+
+              {canEditItem(selectedItem) && (
+                <div className="space-y-2 pt-2 border-t border-stone-200">
+                  <Button
+                    variant={selectedItem.inStock === false ? "outline" : "default"}
+                    size="sm"
+                    className={selectedItem.inStock === false
+                      ? "w-full border-green-400 text-green-600 hover:bg-green-50"
+                      : "w-full bg-amber-500 hover:bg-amber-600 text-white"}
+                    onClick={() => soldMutation.mutate({ id: selectedItem.id, sold: selectedItem.inStock !== false })}
+                    disabled={soldMutation.isPending}
+                  >
+                    {selectedItem.inStock === false ? (
+                      <><RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Mark Available</>
+                    ) : (
+                      <><Tag className="h-3.5 w-3.5 mr-1.5" /> Mark as Sold</>
+                    )}
+                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" className="flex-1 border-rose-300 text-rose-600" onClick={() => startEdit(selectedItem)}>
+                      <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit
+                    </Button>
+                    <Button variant="outline" size="sm" className="flex-1 border-red-300 text-red-600" onClick={() => { setItemToDelete(selectedItem); setDeleteConfirmOpen(true); }}>
+                      <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
       )}
 
+      {/* Edit Dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit Item</DialogTitle>
+            <DialogTitle className="font-serif">Edit Piece</DialogTitle>
           </DialogHeader>
           {editItem && (
             <div className="space-y-4">
+              <div><Label>Title</Label><Input value={editItem.title} onChange={(e) => setEditItem({ ...editItem, title: e.target.value })} /></div>
+              <div><Label>Price</Label><Input value={editItem.price || ""} onChange={(e) => setEditItem({ ...editItem, price: e.target.value })} placeholder="25.00" /></div>
               <div>
-                <Label>Title *</Label>
-                <Input
-                  value={editItem.title}
-                  onChange={(e) => setEditItem({ ...editItem, title: e.target.value })}
-                />
-              </div>
-
-              {/* ── Photos & Videos ── */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm font-semibold">Photos & Videos <span className="text-stone-400 font-normal text-xs">({editPhotoUrls.length}/10)</span></Label>
-                </div>
-
-                {/* Hidden file input — triggered by buttons below */}
-                <input
-                  type="file"
-                  ref={editFileInputRef}
-                  onChange={handleEditFileUpload}
-                  accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime"
-                  multiple
-                  className="sr-only"
-                />
-
-                {/* Thumbnail grid */}
-                {editPhotoUrls.length > 0 ? (
-                  <div className="grid grid-cols-3 gap-2">
-                    {editPhotoUrls.map((url, index) => (
-                      <div key={index} className="relative group aspect-square rounded-xl overflow-hidden bg-stone-100 border-2 border-stone-200">
-                        {isVideoUrl(url) ? (
-                          <div className="w-full h-full flex flex-col items-center justify-center gap-1 bg-purple-50">
-                            <Video className="h-7 w-7 text-purple-500" />
-                            <span className="text-[10px] text-stone-500">Video</span>
-                          </div>
-                        ) : (
-                          <img src={url} alt="" className="w-full h-full object-cover" />
-                        )}
-                        {/* Delete button — always visible */}
-                        <button
-                          type="button"
-                          onClick={() => setEditPhotoUrls(editPhotoUrls.filter((_, i) => i !== index))}
-                          className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-md z-10"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                        {index === 0 && (
-                          <span className="absolute bottom-1 left-1 bg-purple-600 text-white text-[9px] px-1.5 py-0.5 rounded-full font-medium">Cover</span>
-                        )}
-                      </div>
+                <Label>Category</Label>
+                <Select value={editItem.category || ""} onValueChange={(v) => setEditItem({ ...editItem, category: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                  <SelectContent>
+                    {COLLECTIONS.filter(c => c.value !== "all").map((cat) => (
+                      <SelectItem key={cat.value} value={cat.value}>{cat.emoji} {cat.label}</SelectItem>
                     ))}
-                    {/* Add more slot */}
-                    {editPhotoUrls.length < 10 && (
-                      <button
-                        type="button"
-                        onClick={() => editFileInputRef.current?.click()}
-                        disabled={isEditUploading}
-                        className="aspect-square rounded-xl border-2 border-dashed border-purple-300 bg-purple-50 hover:bg-purple-100 flex flex-col items-center justify-center gap-1 text-purple-500 transition-colors disabled:opacity-50"
-                      >
-                        {isEditUploading ? (
-                          <span className="h-5 w-5 animate-spin rounded-full border-2 border-purple-600 border-t-transparent" />
-                        ) : (
-                          <>
-                            <Plus className="h-6 w-6" />
-                            <span className="text-[10px] font-medium">Add</span>
-                          </>
-                        )}
-                      </button>
-                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div><Label>Materials</Label><Input value={editItem.materials || ""} onChange={(e) => setEditItem({ ...editItem, materials: e.target.value })} /></div>
+              <div><Label>Short Description</Label><Input value={editItem.shortDescription || ""} onChange={(e) => setEditItem({ ...editItem, shortDescription: e.target.value })} /></div>
+              <div><Label>Full Description</Label><Textarea value={editItem.description || ""} onChange={(e) => setEditItem({ ...editItem, description: e.target.value })} rows={4} /></div>
+              <div>
+                <Label>Photos</Label>
+                <div className="space-y-2">
+                  {editPhotoUrls.map((url, index) => (
+                    <div key={index} className="flex gap-2 items-center">
+                      {isVideoUrl(url) ? (
+                        <div className="w-12 h-12 rounded bg-rose-100 flex items-center justify-center"><Video className="h-5 w-5 text-rose-400" /></div>
+                      ) : (
+                        <img src={url} alt="" className="w-12 h-12 object-cover rounded" />
+                      )}
+                      <span className="text-sm text-stone-600 truncate flex-1">{url.split('/').pop()}</span>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setEditPhotoUrls(editPhotoUrls.filter((_, i) => i !== index))}><X className="h-4 w-4" /></Button>
+                    </div>
+                  ))}
+                  <div className="flex gap-2">
+                    <Input value={editPhotoUrl} onChange={(e) => setEditPhotoUrl(e.target.value)} placeholder="Paste image URL..." className="flex-1" />
+                    <Button type="button" variant="outline" onClick={() => { if (editPhotoUrl.trim() && editPhotoUrls.length < 10) { setEditPhotoUrls([...editPhotoUrls, editPhotoUrl.trim()]); setEditPhotoUrl(""); } }}><Plus className="h-4 w-4" /></Button>
+                    <label className={`inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 w-10 cursor-pointer ${editPhotoUrls.length >= 10 || isEditUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                      <input type="file" ref={editFileInputRef} onChange={handleEditFileUpload} accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime" multiple className="sr-only" />
+                      {isEditUploading ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <ImagePlus className="h-4 w-4" />}
+                    </label>
                   </div>
-                ) : (
-                  /* Empty state — full-width clickable zone */
-                  <button
-                    type="button"
-                    onClick={() => editFileInputRef.current?.click()}
-                    disabled={isEditUploading}
-                    className="w-full border-2 border-dashed border-purple-300 rounded-xl p-8 text-center bg-purple-50 hover:bg-purple-100 transition-colors disabled:opacity-50"
-                  >
-                    {isEditUploading ? (
-                      <div className="flex flex-col items-center gap-2 text-purple-500">
-                        <span className="h-6 w-6 animate-spin rounded-full border-2 border-purple-600 border-t-transparent" />
-                        <span className="text-sm font-medium">Uploading...</span>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center gap-2 text-purple-500">
-                        <ImagePlus className="h-8 w-8" />
-                        <span className="text-sm font-semibold">Tap to Add Photos or Videos</span>
-                        <span className="text-xs text-stone-400">JPG, PNG, MP4 · Up to 10 files</span>
-                      </div>
-                    )}
-                  </button>
-                )}
-
-                {/* Add more button (when photos exist) */}
-                {editPhotoUrls.length > 0 && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="w-full border-purple-300 text-purple-700 hover:bg-purple-50"
-                    onClick={() => editFileInputRef.current?.click()}
-                    disabled={isEditUploading || editPhotoUrls.length >= 10}
-                  >
-                    {isEditUploading ? (
-                      <><span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-purple-600 border-t-transparent mr-2" />Uploading...</>
-                    ) : (
-                      <><ImagePlus className="h-3.5 w-3.5 mr-2" />Add More Photos/Videos</>
-                    )}
-                  </Button>
-                )}
-
-                {/* URL paste fallback */}
-                <div className="flex gap-2">
-                  <Input
-                    value={editPhotoUrl}
-                    onChange={(e) => setEditPhotoUrl(e.target.value)}
-                    placeholder="Or paste an image URL..."
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (editPhotoUrl.trim() && editPhotoUrls.length < 10) { setEditPhotoUrls([...editPhotoUrls, editPhotoUrl.trim()]); setEditPhotoUrl(""); } } }}
-                    className="flex-1 text-sm"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => { if (editPhotoUrl.trim() && editPhotoUrls.length < 10) { setEditPhotoUrls([...editPhotoUrls, editPhotoUrl.trim()]); setEditPhotoUrl(""); } }}
-                    disabled={!editPhotoUrl.trim() || editPhotoUrls.length >= 10}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
                 </div>
               </div>
-
-              <div className="grid grid-cols-2 gap-3">
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                <button
+                  type="button"
+                  onClick={() => setEditItem({ ...editItem, featured: !editItem.featured })}
+                  className={`w-10 h-6 rounded-full transition-colors flex-shrink-0 relative ${editItem.featured ? "bg-amber-400" : "bg-stone-300"}`}
+                >
+                  <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${editItem.featured ? "left-5" : "left-1"}`} />
+                </button>
                 <div>
-                  <Label>Price</Label>
-                  <Input
-                    value={editItem.price || ""}
-                    onChange={(e) => setEditItem({ ...editItem, price: e.target.value })}
-                    placeholder="25.00"
-                  />
-                </div>
-                <div>
-                  <Label>Category</Label>
-                  <Select value={editItem.category || ""} onValueChange={(v) => setEditItem({ ...editItem, category: v })}>
-                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                    <SelectContent>
-                      {categories.filter(c => c.value !== "all").map((cat) => (
-                        <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <p className="text-sm font-semibold text-stone-700 flex items-center gap-1"><Sparkles className="h-3.5 w-3.5 text-amber-500" /> Featured</p>
+                  <p className="text-xs text-stone-400">Sparkle badge on card</p>
                 </div>
               </div>
-
-              <div>
-                <Label>Short Description</Label>
-                <Input
-                  value={editItem.shortDescription || ""}
-                  onChange={(e) => setEditItem({ ...editItem, shortDescription: e.target.value })}
-                />
-              </div>
-
-              <div>
-                <Label>Materials</Label>
-                <Input
-                  value={editItem.materials || ""}
-                  onChange={(e) => setEditItem({ ...editItem, materials: e.target.value })}
-                />
-              </div>
-
-              <div>
-                <Label>Full Description</Label>
-                <Textarea
-                  value={editItem.description || ""}
-                  onChange={(e) => setEditItem({ ...editItem, description: e.target.value })}
-                  rows={3}
-                />
-              </div>
-
-              <Button onClick={handleUpdate} disabled={updateMutation.isPending} className="w-full bg-purple-600 hover:bg-purple-700">
+              <Button onClick={handleUpdate} disabled={updateMutation.isPending} className="w-full bg-rose-500 hover:bg-rose-600">
                 {updateMutation.isPending ? "Saving..." : "Save Changes"}
               </Button>
             </div>
@@ -1276,149 +1257,108 @@ export default function NatureMadeJewls() {
         </DialogContent>
       </Dialog>
 
+      {/* Delete Confirm */}
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this item?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently remove "{itemToDelete?.title}" from the shop. This action cannot be undone.
-            </AlertDialogDescription>
+            <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-red-600 hover:bg-red-700"
-              onClick={() => itemToDelete && deleteMutation.mutate(itemToDelete.id)}
-            >
-              {deleteMutation.isPending ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
+            <AlertDialogAction onClick={() => itemToDelete && deleteMutation.mutate(itemToDelete.id)} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* ── Jewelry Listing Chatbot Dialog ──────────────────────────── */}
+      {/* Custom Order Dialog */}
+      <Dialog open={customOrderOpen} onOpenChange={setCustomOrderOpen}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-stone-800">🎁 Request a Custom Order</DialogTitle>
+          </DialogHeader>
+          <p className="text-stone-500 text-sm -mt-2">Describe what you'd love — Ashley will reach out to discuss the details and pricing.</p>
+          <form onSubmit={handleCustomOrderSubmit} className="space-y-4">
+            <div><Label>Your Name *</Label><Input required value={customOrderForm.name} onChange={(e) => setCustomOrderForm({ ...customOrderForm, name: e.target.value })} placeholder="Jane Smith" /></div>
+            <div><Label>What would you like? *</Label><Textarea required value={customOrderForm.description} onChange={(e) => setCustomOrderForm({ ...customOrderForm, description: e.target.value })} placeholder="Describe the piece — style, size, occasion..." rows={4} /></div>
+            <div><Label>Preferred Materials</Label><Input value={customOrderForm.materials} onChange={(e) => setCustomOrderForm({ ...customOrderForm, materials: e.target.value })} placeholder="e.g. copper wire, rose quartz, sterling silver..." /></div>
+            <div><Label>Budget Range</Label><Input value={customOrderForm.budget} onChange={(e) => setCustomOrderForm({ ...customOrderForm, budget: e.target.value })} placeholder="e.g. $25–$75" /></div>
+            <div><Label>Contact (email or phone) *</Label><Input required value={customOrderForm.contact} onChange={(e) => setCustomOrderForm({ ...customOrderForm, contact: e.target.value })} placeholder="your@email.com or (906) 555-1234" /></div>
+            <Button type="submit" disabled={customOrderSubmitting} className="w-full bg-rose-500 hover:bg-rose-600">
+              {customOrderSubmitting ? "Sending..." : "Send Request"}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* AI Listing Chat */}
       {chatOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) { setChatOpen(false); setChatMessages([]); } }}>
-          <div className="w-full sm:max-w-md bg-slate-900 border border-purple-700/50 rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col" style={{ maxHeight: '90vh' }}>
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700/60 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600">
-                  <Bot className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <p className="font-bold text-white">Listing Assistant</p>
-                  <p className="text-xs text-slate-400">Chat to add a new piece</p>
-                </div>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+          <div className="fixed inset-0 bg-black/60" onClick={() => setChatOpen(false)} />
+          <div className="relative z-50 w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl overflow-hidden flex flex-col" style={{ height: '80vh' }}>
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-rose-100" style={{ background: "linear-gradient(135deg, #fdf2f8, #fff8f0)" }}>
+              <div className="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center"><Bot className="h-4 w-4 text-rose-500" /></div>
+              <div>
+                <p className="font-semibold text-stone-800 text-sm">Ashley Shop Assistant</p>
+                <p className="text-rose-400 text-[10px]">AI Listing Creator</p>
               </div>
-              <div className="flex gap-2">
-                <Button variant="ghost" size="sm" onClick={() => { setChatMessages([]); setChatData({ photos: [], title: '', category: '', price: '', materials: '', shortDesc: '', description: '' }); }} className="text-slate-400 hover:text-white h-8 w-8 p-0" title="Restart">
-                  <RefreshCw className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => { setChatOpen(false); setChatMessages([]); }} className="text-slate-400 hover:text-white h-8 w-8 p-0">
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
+              <button onClick={() => { setChatOpen(false); setChatMessages([]); setChatStep('photos'); }} className="ml-auto text-stone-400 hover:text-stone-600"><X className="h-5 w-5" /></button>
             </div>
 
-            {/* Messages */}
-            <div ref={chatScrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4 min-h-0">
+            <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
               {chatMessages.map((msg, i) => (
                 <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  {msg.role === 'bot' ? (
-                    <div className="max-w-[85%] bg-slate-700/60 rounded-2xl rounded-tl-sm px-4 py-3 text-slate-100 text-sm whitespace-pre-wrap leading-relaxed">
-                      {msg.content}
-                    </div>
-                  ) : (
-                    <div className="max-w-[75%] bg-gradient-to-r from-emerald-600 to-teal-600 rounded-2xl rounded-tr-sm px-4 py-2.5 text-white text-sm">
-                      {msg.content}
-                    </div>
-                  )}
+                  <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap ${
+                    msg.role === 'user'
+                      ? 'bg-rose-500 text-white rounded-br-sm'
+                      : 'bg-rose-50 text-stone-700 rounded-bl-sm border border-rose-100'
+                  }`}>
+                    {msg.content}
+                  </div>
                 </div>
               ))}
-
-              {/* Category buttons — show when on category step */}
               {chatStep === 'category' && (
-                <div className="flex flex-wrap gap-2 pl-1">
-                  {['earrings','necklaces','bracelets','rings','custom'].map(cat => (
-                    <button key={cat} onClick={() => { userSay(cat.charAt(0).toUpperCase() + cat.slice(1)); setChatData(d => ({ ...d, category: cat })); setTimeout(() => { botSay(`Perfect! What price will you list this for? (Just the number, e.g. 45)`); setChatStep('price'); }, 400); }} className="px-3 py-2 rounded-xl text-sm font-medium border border-purple-500/60 text-purple-300 bg-purple-900/30 hover:bg-purple-900/60 hover:border-purple-400 transition-all capitalize">
-                      {cat}
+                <div className="flex flex-wrap gap-2 justify-center">
+                  {COLLECTIONS.filter(c => c.value !== "all").map(cat => (
+                    <button key={cat.value} onClick={() => {
+                      setChatData(d => ({ ...d, category: cat.value }));
+                      userSay(`${cat.emoji} ${cat.label}`);
+                      setTimeout(() => { botSay("Perfect! What's the price for this piece?"); setChatStep('price'); }, 400);
+                    }} className="px-3 py-1.5 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-full text-sm font-medium transition-colors">
+                      {cat.emoji} {cat.label}
                     </button>
                   ))}
                 </div>
               )}
-
-              {/* Upload more photos button during title/later steps */}
-              {(chatStep === 'title' || chatStep === 'category' || chatStep === 'price') && chatData.photos.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <div className="flex gap-1 flex-wrap">
-                    {chatData.photos.slice(0, 3).map((url, idx) => (
-                      <img key={idx} src={url} alt="" className="w-10 h-10 rounded-lg object-cover border border-slate-600" />
-                    ))}
-                    {chatData.photos.length > 3 && <div className="w-10 h-10 rounded-lg bg-slate-700 flex items-center justify-center text-xs text-slate-400">+{chatData.photos.length - 3}</div>}
-                  </div>
-                  <label className="text-xs text-teal-400 cursor-pointer hover:underline">
-                    <input type="file" className="sr-only" multiple accept="image/*" ref={chatFileRef} onChange={e => handleChatUpload(e.target.files)} />
-                    + more photos
-                  </label>
-                </div>
-              )}
-
-              {chatUploading && (
-                <div className="flex justify-start">
-                  <div className="bg-slate-700/60 rounded-2xl px-4 py-3 text-slate-400 text-sm flex items-center gap-2">
-                    <span className="h-4 w-4 rounded-full border-2 border-teal-400 border-t-transparent animate-spin" />
-                    Uploading photos…
-                  </div>
-                </div>
-              )}
             </div>
 
-            {/* Input area */}
-            <div className="px-4 py-4 border-t border-slate-700/60 shrink-0">
-              {chatStep === 'photos' ? (
-                <label className="flex items-center justify-center gap-3 w-full py-4 rounded-2xl border-2 border-dashed border-teal-500/50 bg-teal-900/20 cursor-pointer hover:border-teal-400 hover:bg-teal-900/40 transition-all text-teal-300">
-                  <input type="file" className="sr-only" multiple accept="image/*" onChange={e => handleChatUpload(e.target.files)} disabled={chatUploading} />
-                  {chatUploading ? <span className="h-5 w-5 rounded-full border-2 border-teal-400 border-t-transparent animate-spin" /> : <ImagePlus className="h-5 w-5" />}
-                  <span className="font-medium">{chatUploading ? 'Uploading…' : 'Tap to upload photos'}</span>
+            <div className="border-t border-rose-100 p-3 flex gap-2">
+              {chatStep === 'photos' && (
+                <label className={`flex items-center justify-center w-10 h-10 rounded-full bg-rose-100 text-rose-500 cursor-pointer hover:bg-rose-200 transition-colors flex-shrink-0 ${chatUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                  <input type="file" ref={chatFileRef} onChange={(e) => handleChatUpload(e.target.files)} accept="image/*" multiple className="sr-only" />
+                  {chatUploading ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <ImagePlus className="h-5 w-5" />}
                 </label>
-              ) : chatStep === 'category' ? (
-                <p className="text-center text-xs text-slate-500">Select a category above</p>
-              ) : chatStep === 'done' ? (
-                <Button onClick={handleChatSend} className="w-full bg-emerald-600 hover:bg-emerald-700">Add Another Piece</Button>
-              ) : (
-                <div className="flex gap-2">
-                  <input
-                    value={chatInput}
-                    onChange={e => setChatInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleChatSend(); } }}
-                    placeholder={chatStep === 'price' ? 'e.g. 45' : chatStep === 'materials' ? 'e.g. sterling silver, turquoise' : chatStep === 'confirm' ? 'yes or no' : 'Type your answer…'}
-                    className="flex-1 bg-slate-800 border border-slate-600 rounded-xl px-4 py-2.5 text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-teal-500"
-                    autoFocus
-                  />
-                  <Button onClick={handleChatSend} disabled={!chatInput.trim()} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl px-3">
-                    <Send className="h-4 w-4" />
-                  </Button>
-                </div>
               )}
+              <Input
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleChatSend(); } }}
+                placeholder={chatStep === 'photos' ? "Upload a photo to start..." : "Type your reply..."}
+                className="flex-1 rounded-full border-rose-200"
+                disabled={chatStep === 'photos' || chatStep === 'category'}
+              />
+              <button
+                onClick={handleChatSend}
+                disabled={chatStep === 'photos' || chatStep === 'category' || !chatInput.trim()}
+                className="w-10 h-10 rounded-full bg-rose-500 hover:bg-rose-600 text-white flex items-center justify-center flex-shrink-0 disabled:opacity-40 transition-colors"
+              >
+                <Send className="h-4 w-4" />
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      <footer className="bg-gradient-to-r from-slate-800 via-purple-900 to-slate-800 border-t border-purple-700/50 py-8 mt-8">
-        <div className="container mx-auto px-4 text-center">
-          <div className="flex items-center justify-center gap-2 mb-2">
-            <Leaf className="w-5 h-5 text-purple-300" />
-            <span className="font-serif font-bold text-white">Nature Made Jewls</span>
-            <Gem className="w-5 h-5 text-purple-300" />
-          </div>
-          <p className="text-slate-300 text-sm">Handcrafted in Michigan's Upper Peninsula</p>
-          <p className="text-slate-400 text-xs mt-2">
-            Part of the <Link href="/"><span className="text-purple-300 hover:underline">JC ON THE MOVE</span></Link> family
-          </p>
-        </div>
-      </footer>
       <FloatingCartButton />
     </div>
   );

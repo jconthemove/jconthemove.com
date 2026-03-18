@@ -92,7 +92,7 @@ export default function PaymentSuccessPage() {
             <p className="text-stone-500 mt-2">
               {shopItemIds.length > 0
                 ? "Your purchase is complete. Sellers have been notified."
-                : "Thank you for your purchase from Nature Made Jewls. You'll receive a confirmation from Square shortly."}
+                : "Thank you for your purchase from Hand-Crafted Made With Love By Ashley. You'll receive a confirmation from Square shortly."}
             </p>
           </div>
 

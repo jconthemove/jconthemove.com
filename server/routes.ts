@@ -10924,6 +10924,49 @@ Thank you for your business!
     }
   });
 
+  // Custom order request (public)
+  app.post("/api/jewelry/custom-order", async (req: any, res) => {
+    try {
+      const { name, description, materials, budget, contact, referenceItem } = req.body;
+      if (!name || !description || !contact) {
+        return res.status(400).json({ error: "Name, description, and contact are required" });
+      }
+
+      const companyEmail = process.env.COMPANY_EMAIL || "upmichiganstatemovers@gmail.com";
+      const { sendEmail } = await import("./services/email");
+
+      const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+      const html = `
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;background:#fdf6f0;border-radius:12px;">
+          <h2 style="color:#e11d48;">🎁 New Custom Order Request</h2>
+          <table style="width:100%;border-collapse:collapse;">
+            <tr><td style="padding:8px 0;font-weight:bold;color:#78716c;">Customer</td><td style="padding:8px 0;">${esc(name)}</td></tr>
+            <tr><td style="padding:8px 0;font-weight:bold;color:#78716c;">Contact</td><td style="padding:8px 0;">${esc(contact)}</td></tr>
+            <tr><td style="padding:8px 0;font-weight:bold;color:#78716c;">Description</td><td style="padding:8px 0;">${esc(description)}</td></tr>
+            ${materials ? `<tr><td style="padding:8px 0;font-weight:bold;color:#78716c;">Materials</td><td style="padding:8px 0;">${esc(materials)}</td></tr>` : ''}
+            ${budget ? `<tr><td style="padding:8px 0;font-weight:bold;color:#78716c;">Budget</td><td style="padding:8px 0;">${esc(budget)}</td></tr>` : ''}
+            ${referenceItem ? `<tr><td style="padding:8px 0;font-weight:bold;color:#78716c;">Inspired by</td><td style="padding:8px 0;">${esc(referenceItem)}</td></tr>` : ''}
+          </table>
+        </div>`;
+      const text = `Custom Order Request\nFrom: ${name}\nContact: ${contact}\nDescription: ${description}\nMaterials: ${materials || 'N/A'}\nBudget: ${budget || 'N/A'}\nReference: ${referenceItem || 'N/A'}`;
+
+      await sendEmail({
+        to: companyEmail,
+        from: companyEmail,
+        subject: `🎁 Custom Order Request from ${name}`,
+        text,
+        html,
+      });
+
+      console.log(`[Custom Order] Email notification sent for new request`);
+      res.json({ success: true, message: "Custom order request received" });
+    } catch (error: any) {
+      console.error("[Custom Order] Failed to process request:", error.message);
+      res.status(500).json({ error: "Failed to submit custom order request. Please try again." });
+    }
+  });
+
   // Admin: Retroactively grant jewelry listing rewards for existing items
   app.post("/api/admin/jewelry-listing-rewards", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
     try {

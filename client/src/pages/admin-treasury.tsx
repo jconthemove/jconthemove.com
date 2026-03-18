@@ -2659,7 +2659,7 @@ export default function AdminTreasuryPage() {
                     <div>
                       <Label className="text-slate-300 text-xs">Jewelry Discount %</Label>
                       <Input type="number" min="0" max="100" value={promoForm.discountPercentJewelry} onChange={e => setPromoForm(f => ({...f, discountPercentJewelry: e.target.value}))} placeholder="0" className="bg-slate-800 border-slate-600 text-white mt-1" />
-                      <p className="text-xs text-slate-500 mt-0.5">Applied to Nature Made Jewls purchases</p>
+                      <p className="text-xs text-slate-500 mt-0.5">Applied to Ashley's Shop purchases</p>
                     </div>
                     <div>
                       <Label className="text-slate-300 text-xs">Bonus JCMOVES (to customer)</Label>

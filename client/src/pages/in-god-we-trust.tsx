@@ -51,7 +51,7 @@ export default function InGodWeTrustPage() {
       href: "/nature-made-jewls",
       icon: Gem,
       label: "Jewels",
-      description: "Nature Made Jewls store listings and orders",
+      description: "Ashley's Shop — handmade jewelry listings and orders",
       color: "from-emerald-500 to-teal-600",
       shadow: "shadow-emerald-900/30",
       stat: null,

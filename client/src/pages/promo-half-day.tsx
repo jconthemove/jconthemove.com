@@ -273,7 +273,7 @@ export default function PromoHalfDayPage() {
                 className="w-full bg-slate-800/60 border-amber-500/40 text-amber-200 hover:bg-amber-900/30 hover:text-amber-100"
               >
                 <Gem className="h-4 w-4 mr-2" />
-                {showJewelry ? "Hide" : "Browse"} Nature Made Jewls
+                {showJewelry ? "Hide" : "Browse"} Ashley's Shop
                 <span className="ml-2 text-xs text-amber-400">({availableJewelry.length} items)</span>
               </Button>
             </div>

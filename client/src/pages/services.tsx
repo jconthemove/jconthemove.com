@@ -860,7 +860,7 @@ export default function ServicesPage() {
                 </p>
                 {[
                   { label: "⚡ Book Now",            pct: 5,  active: true,  note: "instant discount" },
-                  { label: "💎 Add 1 Jewls item",    pct: 5,  active: breakdown.jewelsCount >= 1, note: "from Nature Made Jewls" },
+                  { label: "💎 Add 1 Jewls item",    pct: 5,  active: breakdown.jewelsCount >= 1, note: "from Ashley's Shop" },
                   { label: "💎 Add 2 Jewls items",   pct: 10, active: breakdown.jewelsCount >= 2, note: "max jewels bonus" },
                   { label: "📦 Book 2 services",     pct: 10, active: breakdown.multiService, note: "applied to both jobs" },
                   { label: "₿ Pay with Bitcoin",     pct: 10, active: false, note: "at checkout" },

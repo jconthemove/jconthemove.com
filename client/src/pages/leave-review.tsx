@@ -156,7 +156,7 @@ function JewelryDiscountCard() {
       <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-4 py-3 flex items-center gap-2">
         <Gem className="h-5 w-5" />
         <div>
-          <p className="font-bold text-sm">Thank-You Discount — Nature Made Jewls</p>
+          <p className="font-bold text-sm">Thank-You Discount — Ashley's Shop</p>
           <p className="text-xs opacity-90">Exclusive 10% off for completing your review</p>
         </div>
         <Badge className="ml-auto bg-white text-purple-700 font-bold text-xs">10% OFF</Badge>

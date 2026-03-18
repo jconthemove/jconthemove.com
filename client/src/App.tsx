@@ -562,7 +562,7 @@ function Router() {
       {/* Pi Jackpot - Pi Network lottery app landing page */}
       <Route path="/pi-jackpot" component={PiJackpotPage} />
       
-      {/* Nature Made Jewls - Jewelry business page */}
+      {/* Ashley's Shop - Hand-Crafted Made With Love By Ashley */}
       <Route path="/nature-made-jewls" component={NatureMadeJewls} />
       <Route path="/nature-made-jewls/:id" component={JewelryDetailPage} />
       <Route path="/moving-estimator" component={MovingEstimator} />

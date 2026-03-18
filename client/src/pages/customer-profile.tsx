@@ -45,7 +45,7 @@ export default function CustomerProfilePage() {
 
   const menuItems = [
     { label: "Staking", icon: Coins, href: "/staking", external: false },
-    { label: "Nature Made Jewls", icon: Gem, href: "/nature-made-jewls", external: false },
+    { label: "Ashley's Shop", icon: Gem, href: "/nature-made-jewls", external: false },
     { label: "Terms of Service", icon: FileText, href: "/terms", external: false },
     { label: "Privacy Policy", icon: Shield, href: "/privacy", external: false },
   ];
