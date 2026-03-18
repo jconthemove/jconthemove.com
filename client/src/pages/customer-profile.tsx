@@ -7,7 +7,7 @@ import {
   FileText
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, clearTokens } from "@/lib/queryClient";
 
 export default function CustomerProfilePage() {
   const { user } = useAuth();
@@ -33,8 +33,9 @@ export default function CustomerProfilePage() {
     setLoggingOut(true);
     try {
       await apiRequest("POST", "/api/auth/logout", {});
-      window.location.href = "/";
     } catch {
+    } finally {
+      clearTokens();
       window.location.href = "/";
     }
   };

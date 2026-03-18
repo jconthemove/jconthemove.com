@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
 import { useState, useRef, useEffect } from "react";
 import { Menu, X, User, LogOut, Sun, Moon, ChevronDown, ShoppingBag, Gem, BarChart3, Globe } from "lucide-react";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, clearTokens } from "@/lib/queryClient";
 
 export default function Header() {
   const [location] = useLocation();
@@ -29,9 +29,10 @@ export default function Header() {
   const handleLogout = async () => {
     try {
       await apiRequest("POST", "/api/auth/logout", {});
-      window.location.href = "/";
     } catch (error) {
       console.error("Logout error:", error);
+    } finally {
+      clearTokens();
       window.location.href = "/";
     }
   };

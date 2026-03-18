@@ -15,7 +15,7 @@ import { Link, useLocation } from "wouter";
 import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, clearTokens } from "@/lib/queryClient";
 import { LOYALTY_TIERS, getTierProgress, getNextTier } from "@/lib/loyalty";
 import QuoteForm from "@/components/QuoteForm";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -731,7 +731,8 @@ export default function CustomerPortal() {
               variant="outline"
               className="w-full border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300"
               onClick={async () => {
-                await apiRequest("POST", "/api/auth/logout", {});
+                try { await apiRequest("POST", "/api/auth/logout", {}); } catch {}
+                clearTokens();
                 window.location.href = "/";
               }}
             >
