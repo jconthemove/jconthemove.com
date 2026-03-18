@@ -344,6 +344,22 @@ export default function TeamHub() {
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  const awardCustomerTokensMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/leads/${id}/award-customer-tokens`);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      invalidateLeads();
+      if (data.totalAwarded > 0) {
+        toast({ title: `🎁 +${data.totalAwarded.toLocaleString()} JCMOVES awarded!`, description: `Sent to ${data.customerEmail}` });
+      } else {
+        toast({ title: "Already paid", description: data.note });
+      }
+    },
+    onError: (e: any) => toast({ title: "Award failed", description: e.message, variant: "destructive" }),
+  });
+
   const deleteLeadMutation = useMutation({
     mutationFn: async (id: string) => apiRequest("DELETE", `/api/leads/${id}`),
     onSuccess: () => {
@@ -632,6 +648,16 @@ export default function TeamHub() {
                         <p className="text-white text-sm font-semibold truncate">{lead.firstName} {lead.lastName}</p>
                         <p className="text-slate-500 text-xs">{displayDate}</p>
                       </div>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        title="Award completion JCMOVES to customer"
+                        className="h-7 w-7 text-amber-500/60 hover:text-amber-400 flex-shrink-0"
+                        disabled={awardCustomerTokensMutation.isPending}
+                        onClick={() => awardCustomerTokensMutation.mutate(lead.id)}
+                      >
+                        <Coins className="h-4 w-4" />
+                      </Button>
                       <Link href={`/lead/${lead.id}`}>
                         <Button size="icon" variant="ghost" className="h-7 w-7 text-slate-500 hover:text-white flex-shrink-0">
                           <ChevronRight className="h-4 w-4" />

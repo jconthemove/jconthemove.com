@@ -1049,8 +1049,10 @@ export default function RewardsDashboard() {
               <p className="text-xs font-bold text-slate-300 mb-3 flex items-center gap-2"><Zap className="h-3.5 w-3.5 text-yellow-400" /> Boost Your Earnings</p>
               <div className="space-y-2">
                 {[
-                  { icon: '📋', label: 'Create a job lead', amount: '+200 JCMOVES', color: 'text-cyan-400' },
-                  { icon: '✅', label: 'Complete a job', amount: '+500 JCMOVES', color: 'text-emerald-400' },
+                  { icon: '📋', label: 'Post a job', amount: '+100 JCMOVES', color: 'text-cyan-400' },
+                  { icon: '🎉', label: 'Job completion bonus', amount: '+1,500 JCMOVES', color: 'text-emerald-400' },
+                  { icon: '💵', label: 'Per dollar spent on jobs', amount: '+15 JCMOVES', color: 'text-green-400' },
+                  { icon: '⭐', label: 'Leave a review', amount: '+150 JCMOVES', color: 'text-amber-400' },
                   { icon: '👥', label: 'Refer a friend', amount: '+2,500 JCMOVES', color: 'text-violet-400' },
                   { icon: '🔗', label: 'Daily mining claim', amount: '+1,728 JCMOVES', color: 'text-orange-400' },
                   { icon: '💎', label: 'Stake JCMOVES', amount: 'Up to 18% APR*', color: 'text-yellow-400' },

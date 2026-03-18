@@ -125,6 +125,7 @@ async function ensureRewardSettingsSeeded() {
         { settingKey: "scripture_reward", label: "Daily Scripture", description: "Tokens awarded for reading the daily scripture", tokenAmount: "100.00", isActive: true },
         { settingKey: "shop_purchase", label: "Shop Purchase Reward", description: "Tokens awarded to buyer after a community shop purchase", tokenAmount: "100.00", isActive: true },
         { settingKey: "jewelry_purchase", label: "Jewelry Purchase Reward", description: "Tokens awarded after a Nature Made Jewls purchase", tokenAmount: "150.00", isActive: true },
+        { settingKey: "customer_quote_completed", label: "Job Completion Bonus", description: "Flat JCMOVES bonus awarded to customer when their job is marked completed", tokenAmount: "1500.00", isActive: true },
       ];
       await db.insert(rewardSettings).values(defaults);
       console.log("✅ Default reward settings seeded successfully");
@@ -143,6 +144,12 @@ async function ensureRewardSettingsSeeded() {
       if (bookingRow && parseFloat(bookingRow.tokenAmount) === 200) {
         await db.update(rewardSettings).set({ tokenAmount: "250.00", label: "Job Booking Reward" }).where(eq(rewardSettings.settingKey, 'customer_quote_accepted'));
         console.log("✅ Booking reward updated 200 → 250 JCMOVES");
+      }
+      // Ensure customer_quote_completed exists for existing databases
+      const hasCompletionBonus = existing.find(s => s.settingKey === 'customer_quote_completed');
+      if (!hasCompletionBonus) {
+        await db.insert(rewardSettings).values({ settingKey: "customer_quote_completed", label: "Job Completion Bonus", description: "Flat JCMOVES bonus awarded to customer when their job is marked completed", tokenAmount: "1500.00", isActive: true });
+        console.log("✅ customer_quote_completed setting inserted — 1500 JCMOVES flat completion bonus");
       }
     }
   } catch (error) {
@@ -4512,6 +4519,108 @@ Thank you for your business!
       res.json({ ok: true, summary });
     } catch (err: any) {
       console.error("Error retrying disbursement:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/leads/:id/award-customer-tokens — force-award customer JCMOVES even if overall
+  // disbursement stamp is set. Uses per-recipient idempotency (level 3) to prevent double-credit.
+  app.post("/api/leads/:id/award-customer-tokens", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const lead = await storage.getLead(id) as any;
+      if (!lead) return res.status(404).json({ error: "Lead not found" });
+      if (lead.status !== "completed") {
+        return res.status(400).json({ error: "Lead is not completed" });
+      }
+      if (!lead.email) {
+        return res.status(400).json({ error: "Lead has no customer email on file" });
+      }
+
+      const { pool: dbPool } = await import("./db");
+      const { rewards: rewardsTable, rewardSettings: rsTable } = await import("@shared/schema");
+      const { db: drizzleDb } = await import("./db");
+
+      // Case-insensitive lookup
+      const emailLookup = await dbPool.query(
+        `SELECT * FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+        [lead.email.trim()]
+      );
+      const customer = emailLookup.rows[0];
+      if (!customer) {
+        return res.status(404).json({ error: `No account found for email "${lead.email}"` });
+      }
+
+      // Get settings
+      const settingsRows = await drizzleDb.select().from(rsTable);
+      const getSetting = (key: string) => {
+        const row = settingsRows.find((s: any) => s.settingKey === key);
+        return row && row.isActive ? parseFloat(row.tokenAmount) : null;
+      };
+      const completionBonus = getSetting("customer_quote_completed") ?? 1500;
+      const earnRate        = getSetting("earn_rate_per_dollar") ?? 15;
+      const TOKEN_PRICE     = 0.00000508432;
+
+      const awarded: { type: string; amount: number }[] = [];
+
+      // Check & award flat completion bonus
+      const flatCheck = await dbPool.query(
+        `SELECT 1 FROM rewards WHERE user_id = $1 AND reward_type = $2 AND reference_id = $3 LIMIT 1`,
+        [customer.id, "customer_quote_completed", id]
+      );
+      if (flatCheck.rows.length === 0) {
+        await drizzleDb.insert(rewardsTable).values({
+          userId: customer.id,
+          rewardType: "customer_quote_completed",
+          tokenAmount: completionBonus.toFixed(8),
+          cashValue: (completionBonus * TOKEN_PRICE).toFixed(6),
+          status: "confirmed",
+          referenceId: id,
+          metadata: { jobId: id, type: "flat_completion", manualAward: true },
+        });
+        await storage.creditWalletTokens(customer.id, completionBonus);
+        awarded.push({ type: "flat_completion_bonus", amount: completionBonus });
+        console.log(`🎁 [manual] Customer ${customer.email}: flat bonus +${completionBonus} JCMOVES`);
+      }
+
+      // Check & award per-dollar earn
+      const jobPrice = parseFloat(lead.totalPrice || lead.basePrice || "0");
+      const explicitAlloc = lead.tokenAllocation ? parseFloat(lead.tokenAllocation) : 0;
+      const earnTokens = explicitAlloc > 0
+        ? Math.round(explicitAlloc)
+        : (jobPrice > 0 ? Math.round(jobPrice * earnRate) : 0);
+      if (earnTokens > 0) {
+        const earnCheck = await dbPool.query(
+          `SELECT 1 FROM rewards WHERE user_id = $1 AND reward_type = $2 AND reference_id = $3 LIMIT 1`,
+          [customer.id, "loyalty_booking", id]
+        );
+        if (earnCheck.rows.length === 0) {
+          await drizzleDb.insert(rewardsTable).values({
+            userId: customer.id,
+            rewardType: "loyalty_booking",
+            tokenAmount: earnTokens.toFixed(8),
+            cashValue: (earnTokens * TOKEN_PRICE).toFixed(6),
+            status: "confirmed",
+            referenceId: id,
+            metadata: { jobId: id, jobPrice, source: explicitAlloc > 0 ? "tokenAllocation" : "formula", manualAward: true },
+          });
+          await storage.creditWalletTokens(customer.id, earnTokens);
+          awarded.push({ type: "per_dollar_earn", amount: earnTokens });
+          console.log(`🎁 [manual] Customer ${customer.email}: per-dollar earn +${earnTokens} JCMOVES`);
+        }
+      }
+
+      const total = awarded.reduce((s, a) => s + a.amount, 0);
+      res.json({
+        ok: true,
+        customerId: customer.id,
+        customerEmail: customer.email,
+        awarded,
+        totalAwarded: total,
+        note: awarded.length === 0 ? "Customer already has all completion rewards for this job" : `Awarded ${total} JCMOVES total`,
+      });
+    } catch (err: any) {
+      console.error("Error awarding customer tokens:", err);
       res.status(500).json({ error: err.message });
     }
   });

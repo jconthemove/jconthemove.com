@@ -33,12 +33,13 @@ import { eq, and } from "drizzle-orm";
 import { storage } from "../storage";
 import type { Lead } from "@shared/schema";
 
-const TOKEN_PRICE    = 0.00000508432;
-const HOURS_RATE     = 25;   // JCMOVES per confirmed hour per crew member
-const FALLBACK_FLAT  = 500;  // JCMOVES flat per worker if setting not found
-const FALLBACK_EARN  = 50;   // JCMOVES per $1 if setting not found
-const REFERRAL_BONUS = 1000; // JCMOVES awarded to referrer on first confirmed job
-const BONUS_MULTIPLIER = 1.25; // +25% for bonus-flagged movers
+const TOKEN_PRICE        = 0.00000508432;
+const HOURS_RATE         = 25;    // JCMOVES per confirmed hour per crew member
+const FALLBACK_FLAT      = 500;   // JCMOVES flat per worker if setting not found
+const FALLBACK_EARN      = 15;    // JCMOVES per $1 if setting not found
+const FALLBACK_COMPLETION = 1500; // JCMOVES flat bonus for customer on job completion
+const REFERRAL_BONUS     = 1000;  // JCMOVES awarded to referrer on first confirmed job
+const BONUS_MULTIPLIER   = 1.25;  // +25% for bonus-flagged movers
 
 export type DisbursementSummary = {
   customerTokens: number;
@@ -152,10 +153,11 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
 
     const bonusFlags: Record<string, boolean> = (lead.crewBonusFlags as Record<string, boolean>) ?? {};
 
-    const baseFlatReward = (await getSetting("worker_job_completion_bonus"))
+    const baseFlatReward    = (await getSetting("worker_job_completion_bonus"))
       ?? (await getSetting("employee_job_completed"))
       ?? FALLBACK_FLAT;
-    const earnRate     = (await getSetting("earn_rate_per_dollar")) ?? FALLBACK_EARN;
+    const earnRate          = (await getSetting("earn_rate_per_dollar")) ?? FALLBACK_EARN;
+    const completionBonus   = (await getSetting("customer_quote_completed")) ?? FALLBACK_COMPLETION;
     const confirmedHrs = lead.confirmedHours ? Number(lead.confirmedHours) : 0;
     const baseHoursBonus = HOURS_RATE * confirmedHrs;
     const now = new Date();
@@ -237,22 +239,51 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
       }
     }
 
-    // ── B. CUSTOMER earn reward ───────────────────────────────────────────────
+    // ── B. CUSTOMER rewards (flat completion bonus + per-dollar earn) ─────────
     try {
       const customerEmail = lead.email;
       if (customerEmail) {
-        const customer = await storage.getUserByEmail(customerEmail);
+        // Case-insensitive email lookup to avoid mismatch issues
+        const emailLookup = await pool.query(
+          `SELECT * FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+          [customerEmail.trim()]
+        );
+        const customer = emailLookup.rows[0] || null;
+
         if (customer) {
-          const jobPrice = parseFloat(lead.totalPrice || lead.basePrice || "0");
+          const jobPrice   = parseFloat(lead.totalPrice || lead.basePrice || "0");
           const explicitAlloc = lead.tokenAllocation ? parseFloat(lead.tokenAllocation) : 0;
-          const customerTokens = explicitAlloc > 0
+
+          // ── B1. Flat completion bonus (always awarded, configurable) ──────
+          const completionExists = await rewardAlreadyExists(leadId, customer.id, "customer_quote_completed");
+          if (!completionExists) {
+            await db.insert(rewards).values({
+              userId: customer.id,
+              rewardType: "customer_quote_completed",
+              tokenAmount: completionBonus.toFixed(8),
+              cashValue: (completionBonus * TOKEN_PRICE).toFixed(6),
+              status: "confirmed",
+              referenceId: leadId,
+              metadata: { jobId: leadId, type: "flat_completion" },
+            });
+            await storage.creditWalletTokens(customer.id, completionBonus);
+            await awardPoints(customer.id, "job_completed");
+            summary.customerTokens += completionBonus;
+            summary.customerId = customer.id;
+            console.log(`🎁 Customer ${customer.email}: flat completion bonus +${completionBonus} JCMOVES`);
+          } else {
+            console.log(`ℹ️ Customer ${customer.email}: flat completion bonus already exists — skipping`);
+          }
+
+          // ── B2. Per-dollar earn (tokenAllocation override OR rate × price) ─
+          const earnTokens = explicitAlloc > 0
             ? Math.round(explicitAlloc)
             : (jobPrice > 0 ? Math.round(jobPrice * earnRate) : 0);
 
-          if (customerTokens > 0) {
+          if (earnTokens > 0) {
             const earnExists = await rewardAlreadyExists(leadId, customer.id, "loyalty_booking");
             if (!earnExists) {
-              const prevSpend = parseFloat(customer.totalCompletedSpend || "0");
+              const prevSpend = parseFloat(customer.total_completed_spend || "0");
               const newSpend  = prevSpend + jobPrice;
               const newTier   = getTierFromSpend(newSpend);
 
@@ -264,8 +295,8 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
               await db.insert(rewards).values({
                 userId: customer.id,
                 rewardType: "loyalty_booking",
-                tokenAmount: customerTokens.toFixed(8),
-                cashValue: (customerTokens * TOKEN_PRICE).toFixed(6),
+                tokenAmount: earnTokens.toFixed(8),
+                cashValue: (earnTokens * TOKEN_PRICE).toFixed(6),
                 status: "confirmed",
                 referenceId: leadId,
                 metadata: {
@@ -275,45 +306,50 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
                   source: explicitAlloc > 0 ? "tokenAllocation" : "formula",
                 },
               });
-              await storage.creditWalletTokens(customer.id, customerTokens);
-              await awardPoints(customer.id, "job_completed");
+              await storage.creditWalletTokens(customer.id, earnTokens);
               const spentHundreds = Math.floor(jobPrice / 100);
               if (spentHundreds > 0) await awardPoints(customer.id, "per_100_spent", spentHundreds);
 
-              summary.customerTokens = customerTokens;
+              summary.customerTokens += earnTokens;
               summary.customerId = customer.id;
-              console.log(`🎁 Customer ${customer.email}: ${customerTokens} JCMOVES`);
-
-              // ── C. REFERRAL BONUS (first completed job only) ──────────────
-              if (customer.referredByUserId) {
-                const prevJobs = await db
-                  .select()
-                  .from(rewards)
-                  .where(and(eq(rewards.userId, customer.id), eq(rewards.rewardType, "loyalty_booking")));
-                if (prevJobs.length === 1) {
-                  const referralExists = await rewardAlreadyExists(
-                    leadId, customer.referredByUserId, "referral_confirmed"
-                  );
-                  if (!referralExists) {
-                    await db.insert(rewards).values({
-                      userId: customer.referredByUserId,
-                      rewardType: "referral_confirmed",
-                      tokenAmount: REFERRAL_BONUS.toFixed(8),
-                      cashValue: (REFERRAL_BONUS * TOKEN_PRICE).toFixed(6),
-                      status: "confirmed",
-                      referenceId: leadId,
-                      metadata: { referredUserId: customer.id, jobId: leadId },
-                    });
-                    await storage.creditWalletTokens(customer.referredByUserId, REFERRAL_BONUS);
-                    console.log(`🎉 Referral ${REFERRAL_BONUS} JCMOVES → ${customer.referredByUserId}`);
-                  }
-                }
-              }
+              console.log(`🎁 Customer ${customer.email}: per-dollar earn +${earnTokens} JCMOVES (job $${jobPrice})`);
             } else {
               console.log(`ℹ️ Customer ${customer.email}: earn reward already exists — skipping`);
             }
+          } else {
+            console.log(`ℹ️ Customer ${customer.email}: no price on file — flat bonus only`);
           }
+
+          // ── C. REFERRAL BONUS (first completed job only) ──────────────────
+          if (customer.referred_by_user_id) {
+            const prevJobs = await pool.query(
+              `SELECT 1 FROM rewards WHERE user_id = $1 AND reward_type = 'loyalty_booking' LIMIT 2`,
+              [customer.id]
+            );
+            if (prevJobs.rows.length <= 1) {
+              const referralExists = await rewardAlreadyExists(
+                leadId, customer.referred_by_user_id, "referral_confirmed"
+              );
+              if (!referralExists) {
+                await db.insert(rewards).values({
+                  userId: customer.referred_by_user_id,
+                  rewardType: "referral_confirmed",
+                  tokenAmount: REFERRAL_BONUS.toFixed(8),
+                  cashValue: (REFERRAL_BONUS * TOKEN_PRICE).toFixed(6),
+                  status: "confirmed",
+                  referenceId: leadId,
+                  metadata: { referredUserId: customer.id, jobId: leadId },
+                });
+                await storage.creditWalletTokens(customer.referred_by_user_id, REFERRAL_BONUS);
+                console.log(`🎉 Referral ${REFERRAL_BONUS} JCMOVES → ${customer.referred_by_user_id}`);
+              }
+            }
+          }
+        } else {
+          console.log(`⚠️ disburseJobTokens: no user account found for email "${customerEmail}" — flat completion bonus skipped`);
         }
+      } else {
+        console.log(`⚠️ disburseJobTokens: lead ${leadId} has no email — customer rewards skipped`);
       }
     } catch (err) {
       console.error("❌ Customer earn reward failed:", err);

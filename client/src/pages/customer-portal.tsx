@@ -93,11 +93,15 @@ const REWARD_LABELS: Record<string, string> = {
   lead_creation: "Job Creation Bonus",
   job_completion: "Job Completion",
   loyalty_booking: "Loyalty Reward",
+  customer_quote_completed: "Job Completion Bonus",
+  customer_quote_accepted: "Job Booked",
+  booking_request: "Posted a new job",
   referral: "Referral Bonus",
   referral_request: "Referral Code Applied",
   referral_signup_bonus: "Referral Signup Bonus",
   referral_confirmed: "Referral Confirmed",
   signup_bonus: "Welcome Bonus",
+  review_submitted: "Left a review",
 };
 
 function formatTokens(n: number) {
