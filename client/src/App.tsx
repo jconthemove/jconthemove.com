@@ -1,5 +1,5 @@
 import { Component as ReactComponent, ReactNode } from "react";
-import { Switch, Route, Redirect } from "wouter";
+import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -18,6 +18,9 @@ import OnboardingPage from "@/pages/onboarding";
 import CustomerHomePage from "@/pages/customer-home";
 import MyJobsPage from "@/pages/my-jobs";
 import PostJobPage from "@/pages/post-job";
+import CustomerBookPage from "@/pages/customer/book";
+import CustomerWalletPage from "@/pages/customer/wallet";
+import CustomerEarnPage from "@/pages/customer/earn";
 import ServicePackagesPage from "@/pages/service-packages";
 import CrewJobsPage from "@/pages/crew-jobs";
 import CustomerRewardsPage from "@/pages/customer-rewards";
@@ -84,6 +87,19 @@ import AdminQuoteReviewPage from "@/pages/admin-quote-review";
 import { CartProvider } from "@/hooks/useCart";
 import { NotificationPrompt } from "@/components/notification-prompt";
 import { useMiningNotifications } from "@/hooks/useMiningNotifications";
+
+import CrewLayout from "@/layouts/CrewLayout";
+import AdminLayout from "@/layouts/AdminLayout";
+import CrewTodayPage from "@/pages/crew/today";
+import CrewJobsNewPage from "@/pages/crew/jobs";
+import CrewSchedulePage from "@/pages/crew/schedule";
+import CrewEarningsPage from "@/pages/crew/earnings";
+import AdminOverviewPage from "@/pages/admin/overview";
+import AdminJobsPage from "@/pages/admin/jobs";
+import AdminPeoplePage from "@/pages/admin/people";
+import AdminFinancePage from "@/pages/admin/finance";
+import AdminMarketplacePage from "@/pages/admin/marketplace";
+import AdminSystemPage from "@/pages/admin/system";
 
 // Landing page for unauthenticated users — now uses the splash page
 function LandingPage() {
@@ -255,6 +271,18 @@ function CustomerApp() {
           <Route path="/my-jobs">
             <MyJobsPage />
           </Route>
+          <Route path="/jobs">
+            <MyJobsPage />
+          </Route>
+          <Route path="/book">
+            <CustomerBookPage />
+          </Route>
+          <Route path="/wallet">
+            <CustomerWalletPage />
+          </Route>
+          <Route path="/earn">
+            <CustomerEarnPage />
+          </Route>
           <Route path="/post-job">
             <PostJobPage />
           </Route>
@@ -296,6 +324,7 @@ function CustomerApp() {
 // Main app for authenticated users - Unified routing for all devices
 function AuthenticatedApp() {
   const { user, isPending } = useAuth();
+  const [location] = useLocation();
   useMiningNotifications();
   
   // Redirect pending users to pending-approval page
@@ -325,7 +354,63 @@ function AuthenticatedApp() {
   if (user?.role === 'customer') {
     return <CustomerApp />;
   }
+
+  // Non-customer roles get role-appropriate default pages at root
+  if (user?.role === 'admin' && location === "/") {
+    return <Redirect to="/admin" />;
+  }
+  const isCrewRole = user?.role === 'employee' || user?.role === 'business_owner';
+  if (isCrewRole && location === "/") {
+    return <Redirect to="/crew" />;
+  }
   
+  // === CREW APP (employees, admin, business_owner) ===
+  if (location.startsWith("/crew")) {
+    return (
+      <ComplianceCheck>
+        <RouteGuard allowedRoles={['admin', 'employee', 'business_owner']}>
+          <NotificationPrompt />
+          <CrewLayout>
+            <Switch>
+              <Route path="/crew"><CrewTodayPage /></Route>
+              <Route path="/crew/jobs"><CrewJobsNewPage /></Route>
+              <Route path="/crew/schedule"><CrewSchedulePage /></Route>
+              <Route path="/crew/earnings"><CrewEarningsPage /></Route>
+              <Route><Redirect to="/crew" /></Route>
+            </Switch>
+          </CrewLayout>
+        </RouteGuard>
+      </ComplianceCheck>
+    );
+  }
+
+  // === ADMIN PANEL (admin, business_owner) ===
+  if (location.startsWith("/admin") && !location.startsWith("/admin/btc-payments") && !location.startsWith("/admin/quote-review")) {
+    return (
+      <ComplianceCheck>
+        <RouteGuard allowedRoles={['admin', 'business_owner']}>
+          <NotificationPrompt />
+          <AdminLayout>
+            <Switch>
+              <Route path="/admin"><AdminOverviewPage /></Route>
+              <Route path="/admin/jobs"><AdminJobsPage /></Route>
+              <Route path="/admin/people"><AdminPeoplePage /></Route>
+              <Route path="/admin/finance"><AdminFinancePage /></Route>
+              <Route path="/admin/marketplace"><AdminMarketplacePage /></Route>
+              <Route path="/admin/system"><AdminSystemPage /></Route>
+              {/* Legacy admin URL redirects */}
+              <Route path="/admin/treasury"><Redirect to="/admin/finance" /></Route>
+              <Route path="/admin/users"><Redirect to="/admin/people" /></Route>
+              <Route path="/admin/employees"><Redirect to="/admin/people" /></Route>
+              <Route path="/admin/rewards"><Redirect to="/admin/marketplace" /></Route>
+              <Route><Redirect to="/admin" /></Route>
+            </Switch>
+          </AdminLayout>
+        </RouteGuard>
+      </ComplianceCheck>
+    );
+  }
+
   return (
     <ComplianceCheck>
       <div className="min-h-screen bg-background text-foreground font-sans">

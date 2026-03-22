@@ -9,8 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Mail, Phone, MapPin, Calendar, Truck, Users, DollarSign, Award, TrendingUp, CheckCircle, Circle, Clock, Star, ExternalLink, Sparkles, Send, FileText, Loader2, Bitcoin, Copy, Check, Zap, ShoppingBag, AlertTriangle, UserCheck } from "lucide-react";
-import { useState, useEffect } from "react";
+import { ArrowLeft, Mail, Phone, MapPin, Calendar, Users, DollarSign, Award, TrendingUp, CheckCircle, Clock, Star, ExternalLink, Sparkles, Send, FileText, Loader2, Bitcoin, Copy, Check, Zap, ShoppingBag, AlertTriangle, UserCheck, Camera, Image } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -77,6 +77,7 @@ interface Lead {
   createdAt: string;
   redemptionId?: number;
   appliedCreditNote?: string;
+  photos?: Array<{ url: string; mimeType: string; name: string }>;
 }
 
 interface Reward {
@@ -88,7 +89,7 @@ interface Reward {
   status: string;
   earnedDate: string;
   referenceId?: string;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
 }
 
 interface DisbursementRecord {
@@ -98,6 +99,8 @@ interface DisbursementRecord {
   token_amount: string;
   cash_value?: string;
   earned_date?: string;
+  first_name?: string;
+  username?: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -208,6 +211,8 @@ export default function LeadDetailPage() {
   const [copiedBtcLink, setCopiedBtcLink] = useState(false);
   const [selectedCrewMembers, setSelectedCrewMembers] = useState<string[]>([]);
   const [bonusMover, setBonusMover] = useState(false);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const { hasAdminAccess } = useAuth();
 
   const { data: lead, isLoading, isError, error } = useQuery<Lead>({
@@ -280,7 +285,7 @@ export default function LeadDetailPage() {
   }, [lead, form]);
 
   const updateLead = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: Partial<Lead>) => {
       return await apiRequest("PATCH", `/api/leads/${params?.id}`, data);
     },
     onSuccess: () => {
@@ -343,7 +348,7 @@ export default function LeadDetailPage() {
         window.open(data.invoiceUrl, '_blank');
       }
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({
         title: "Failed to create invoice",
         description: error.message || "Something went wrong",
@@ -374,7 +379,7 @@ export default function LeadDetailPage() {
       setBtcPaymentLink(link);
       toast({ title: "Bitcoin payment link created!", description: "Share this link with the customer to collect payment." });
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({ title: "Failed to create BTC payment", description: error.message, variant: "destructive" });
     },
   });
@@ -382,7 +387,7 @@ export default function LeadDetailPage() {
   const advanceToStep = useMutation({
     mutationFn: async (targetStep: number) => {
       let newStatus = lead?.status;
-      let updateData: any = {};
+      let updateData: Record<string, unknown> = {};
       switch (targetStep) {
         case 2:
           newStatus = "available";
@@ -575,6 +580,33 @@ export default function LeadDetailPage() {
 
   const currentStep = getCurrentStep();
 
+  const handlePhotoUpload = async (files: FileList) => {
+    if (!files.length) return;
+    const existingCount = lead?.photos?.length ?? 0;
+    if (existingCount + files.length > 10) {
+      toast({ title: "Max 10 photos", description: "Only 10 photos allowed per job.", variant: "destructive" });
+      return;
+    }
+    setPhotoUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await fetch(`/api/leads/${params?.id}/upload`, { method: "POST", body: formData, credentials: "include" });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "Upload failed");
+        }
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/leads", params?.id] });
+      toast({ title: "Photos uploaded!", description: "Photos saved to this job." });
+    } catch {
+      toast({ title: "Upload failed", description: "Could not upload photo. Try again.", variant: "destructive" });
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
+
   const requestReview = (platform: string) => {
     const customerEmail = lead?.email;
     const customerName = `${lead?.firstName} ${lead?.lastName}`;
@@ -605,23 +637,25 @@ export default function LeadDetailPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-4xl mx-auto px-4 py-6">
         {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
+        <div className="mb-5">
+          <div className="flex items-center justify-between mb-3">
             <Button
-              variant="outline"
+              variant="ghost"
+              size="sm"
               onClick={() => setLocation("/leads")}
-              className="flex items-center gap-2"
+              className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
               data-testid="button-back-to-leads"
             >
               <ArrowLeft className="h-4 w-4" />
-              Back to Leads
+              Back
             </Button>
             <div className="flex gap-2">
               {!isEditing && (
                 <Button 
                   variant="outline"
+                  size="sm"
                   onClick={() => setShowCrewSuggestions(true)} 
                   data-testid="button-crew-suggestions"
                   className="flex items-center gap-2"
@@ -631,12 +665,12 @@ export default function LeadDetailPage() {
                 </Button>
               )}
               {!isEditing ? (
-                <Button onClick={() => setIsEditing(true)} data-testid="button-edit">
-                  Edit Details
+                <Button size="sm" onClick={() => setIsEditing(true)} data-testid="button-edit">
+                  Edit
                 </Button>
               ) : (
                 <>
-                  <Button variant="outline" onClick={() => {
+                  <Button size="sm" variant="outline" onClick={() => {
                     setIsEditing(false);
                     const members = lead?.crewMembers || [];
                     setSelectedCrewMembers(members);
@@ -645,8 +679,8 @@ export default function LeadDetailPage() {
                   }} data-testid="button-cancel">
                     Cancel
                   </Button>
-                  <Button onClick={handleSave} disabled={updateLead.isPending} data-testid="button-save">
-                    {updateLead.isPending ? "Saving..." : "Save Changes"}
+                  <Button size="sm" onClick={handleSave} disabled={updateLead.isPending} data-testid="button-save">
+                    {updateLead.isPending ? "Saving..." : "Save"}
                   </Button>
                 </>
               )}
@@ -654,200 +688,47 @@ export default function LeadDetailPage() {
           </div>
           
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-3xl font-bold text-foreground">
+            <h1 className="text-2xl font-bold text-foreground">
               {lead.firstName} {lead.lastName}
             </h1>
             <Badge className={serviceTypeBadge()}>
               {lead.serviceType === "residential" && "Residential"}
               {lead.serviceType === "commercial" && "Commercial"}
               {lead.serviceType === "junk" && "Junk Removal"}
+              {!["residential", "commercial", "junk"].includes(lead.serviceType) && lead.serviceType}
             </Badge>
             <Badge variant={lead.status === "completed" ? "default" : "secondary"}>
-              {lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
+              {lead.status.charAt(0).toUpperCase() + lead.status.slice(1).replace(/_/g, " ")}
             </Badge>
           </div>
+
+          {/* Reward Credit Banner */}
+          {lead.appliedCreditNote && (
+            <div className="mt-3 p-3 rounded-xl border border-orange-500/40 bg-orange-500/10 flex items-start gap-3">
+              <span className="text-xl">🎁</span>
+              <div>
+                <p className="font-semibold text-orange-400 text-sm mb-0.5">JCMOVES Reward Applied</p>
+                <p className="text-sm text-foreground/80">{lead.appliedCreditNote}</p>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Reward Credit Banner */}
-        {lead.appliedCreditNote && (
-          <div className="mb-6 p-4 rounded-xl border border-orange-500/40 bg-orange-500/10 flex items-start gap-3">
-            <span className="text-2xl">🎁</span>
-            <div>
-              <p className="font-semibold text-orange-400 text-sm mb-1">JCMOVES Reward Applied to This Job</p>
-              <p className="text-sm text-foreground/80">{lead.appliedCreditNote}</p>
-            </div>
-          </div>
-        )}
+        {/* === 4-Tab Interface === */}
+        <Tabs defaultValue="details" className="w-full">
+          <TabsList className="grid w-full grid-cols-4 mb-6">
+            <TabsTrigger value="details">Details</TabsTrigger>
+            <TabsTrigger value="quote">Quote</TabsTrigger>
+            <TabsTrigger value="notes">Notes/Photos</TabsTrigger>
+            <TabsTrigger value="history">History</TabsTrigger>
+          </TabsList>
 
-        {/* 5-Step Workflow Progress */}
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle>Job Workflow</CardTitle>
-            <CardDescription>Complete these 5 simple steps to finish the job</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-6">
-              {/* Progress Steps */}
-              <div className="flex items-center justify-between">
-                {workflow.map((step, idx) => (
-                  <div key={step.step} className="flex items-center flex-1">
-                    <div className="flex flex-col items-center flex-1">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${
-                        currentStep > step.step 
-                          ? 'bg-green-600 border-green-600 text-white' 
-                          : currentStep === step.step
-                          ? 'bg-primary border-primary text-white'
-                          : 'bg-muted border-muted-foreground/30 text-muted-foreground'
-                      }`}>
-                        {currentStep > step.step ? (
-                          <CheckCircle className="h-5 w-5" />
-                        ) : (
-                          <span className="font-bold">{step.step}</span>
-                        )}
-                      </div>
-                      <p className={`text-xs mt-2 text-center ${
-                        currentStep >= step.step ? 'font-semibold' : 'text-muted-foreground'
-                      }`}>
-                        {step.name}
-                      </p>
-                    </div>
-                    {idx < workflow.length - 1 && (
-                      <div className={`h-0.5 flex-1 ${
-                        currentStep > step.step ? 'bg-green-600' : 'bg-muted'
-                      }`} />
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {/* Step-specific Actions */}
-              <div className="p-4 bg-muted/50 rounded-lg">
-                {currentStep === 1 && (
-                  <div className="space-y-3">
-                    <h4 className="font-semibold flex items-center gap-2">
-                      <Circle className="h-4 w-4 text-primary" />
-                      Step 1: Quote Requested
-                    </h4>
-                    <p className="text-sm text-muted-foreground">
-                      Customer has requested a quote. Review details and set pricing.
-                    </p>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <div>
-                        <Label htmlFor="token-allocation">JCMOVES Tokens</Label>
-                        <Input
-                          id="token-allocation"
-                          type="number"
-                          placeholder="e.g., 500"
-                          value={tokenAllocation}
-                          onChange={(e) => setTokenAllocation(e.target.value)}
-                          data-testid="input-token-allocation"
-                        />
-                      </div>
-                    </div>
-                    {hasAdminAccess && selectedCrewMembers.length === 0 && (
-                      <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-md px-3 py-2">
-                        <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-                        <span>No crew members assigned. Please assign crew before activating.</span>
-                      </div>
-                    )}
-                    <Button 
-                      onClick={() => advanceToStep.mutate(2)} 
-                      disabled={!lead?.basePrice || advanceToStep.isPending}
-                      data-testid="button-make-available"
-                    >
-                      {advanceToStep.isPending ? "Activating..." : "Make Job Available"}
-                    </Button>
-                  </div>
-                )}
-
-                {currentStep === 2 && (
-                  <div className="space-y-3">
-                    <h4 className="font-semibold flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-primary" />
-                      Step 2: Job Available
-                    </h4>
-                    <p className="text-sm text-muted-foreground">
-                      Job is available for employees to accept. Mark complete when finished.
-                    </p>
-                    <div className="p-3 bg-primary/10 rounded-lg">
-                      <p className="text-sm font-semibold text-primary">
-                        Token Reward: {lead?.tokenAllocation || 0} JCMOVES
-                      </p>
-                    </div>
-                    <Button 
-                      onClick={() => advanceToStep.mutate(3)}
-                      disabled={advanceToStep.isPending}
-                      data-testid="button-mark-complete"
-                    >
-                      {advanceToStep.isPending ? "Completing..." : "Mark as Complete"}
-                    </Button>
-                  </div>
-                )}
-
-                {currentStep === 3 && (
-                  <div className="space-y-3">
-                    <h4 className="font-semibold flex items-center gap-2">
-                      <Star className="h-4 w-4 text-primary" />
-                      Step 3: Completed
-                    </h4>
-                    <p className="text-sm text-muted-foreground">
-                      Job complete! Request a review from the customer.
-                    </p>
-                    <div className="p-3 bg-primary/10 rounded-lg">
-                      <p className="text-sm font-semibold text-primary">
-                        ⭐ Review Bonus: +30% for 4.0+ rating ({potentialEarnings.withRating.tokens} JCMOVES)
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button 
-                        onClick={() => requestReview("google")}
-                        variant="outline"
-                        className="gap-2"
-                        data-testid="button-review-google"
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                        Google Review
-                      </Button>
-                      <Button 
-                        onClick={() => requestReview("facebook")}
-                        variant="outline"
-                        className="gap-2"
-                        data-testid="button-review-facebook"
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                        Facebook Review
-                      </Button>
-                      <Button 
-                        onClick={() => requestReview("inapp")}
-                        variant="outline"
-                        className="gap-2"
-                        data-testid="button-review-inapp"
-                      >
-                        <Star className="h-4 w-4" />
-                        In-App Review
-                      </Button>
-                    </div>
-                    {lead?.status === "completed" && (
-                      <div className="mt-4 p-4 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-900 rounded-lg">
-                        <p className="text-sm font-semibold text-green-800 dark:text-green-200">
-                          ✅ Job Completed! Great work!
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Content */}
-          <div className="lg:col-span-2 space-y-6">
+          {/* ─────────── TAB: DETAILS ─────────── */}
+          <TabsContent value="details" className="space-y-4">
             {/* Customer Information */}
             <Card>
-              <CardHeader>
-                <CardTitle>Customer Information</CardTitle>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Customer Information</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {isEditing ? (
@@ -893,46 +774,42 @@ export default function LeadDetailPage() {
                   <>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="flex items-center gap-3">
-                        <Mail className="h-5 w-5 text-muted-foreground" />
+                        <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                         <div>
-                          <p className="text-sm text-muted-foreground">Email</p>
-                          <a href={`mailto:${lead.email}`} className="text-sm font-medium hover:underline" data-testid="link-email">
-                            {lead.email}
-                          </a>
+                          <p className="text-xs text-muted-foreground">Email</p>
+                          <a href={`mailto:${lead.email}`} className="text-sm font-medium hover:underline" data-testid="link-email">{lead.email}</a>
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <Phone className="h-5 w-5 text-muted-foreground" />
+                        <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                         <div>
-                          <p className="text-sm text-muted-foreground">Phone</p>
-                          <a href={`tel:${lead.phone}`} className="text-sm font-medium hover:underline" data-testid="link-phone">
-                            {lead.phone || "Not provided"}
-                          </a>
+                          <p className="text-xs text-muted-foreground">Phone</p>
+                          <a href={`tel:${lead.phone}`} className="text-sm font-medium hover:underline" data-testid="link-phone">{lead.phone || "Not provided"}</a>
                         </div>
                       </div>
                     </div>
                     <Separator />
                     <div className="space-y-3">
                       <div className="flex items-start gap-3">
-                        <MapPin className="h-5 w-5 text-muted-foreground mt-0.5" />
-                        <div className="flex-1">
-                          <p className="text-sm text-muted-foreground">From</p>
+                        <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">From</p>
                           <p className="text-sm font-medium">{lead.fromAddress}</p>
                         </div>
                       </div>
                       {lead.toAddress && (
                         <div className="flex items-start gap-3">
-                          <MapPin className="h-5 w-5 text-muted-foreground mt-0.5" />
-                          <div className="flex-1">
-                            <p className="text-sm text-muted-foreground">To</p>
+                          <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                          <div>
+                            <p className="text-xs text-muted-foreground">To</p>
                             <p className="text-sm font-medium">{lead.toAddress}</p>
                           </div>
                         </div>
                       )}
                       <div className="flex items-center gap-3">
-                        <Calendar className="h-5 w-5 text-muted-foreground" />
+                        <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                         <div>
-                          <p className="text-sm text-muted-foreground">Requested Move Date</p>
+                          <p className="text-xs text-muted-foreground">Requested Move Date</p>
                           <p className="text-sm font-medium">{lead.moveDate || "Not specified"}</p>
                         </div>
                       </div>
@@ -941,7 +818,7 @@ export default function LeadDetailPage() {
                       <>
                         <Separator />
                         <div>
-                          <p className="text-sm text-muted-foreground mb-2">Additional Details</p>
+                          <p className="text-xs text-muted-foreground mb-1.5">Additional Details</p>
                           <p className="text-sm bg-muted p-3 rounded">{lead.details}</p>
                         </div>
                       </>
@@ -951,17 +828,220 @@ export default function LeadDetailPage() {
               </CardContent>
             </Card>
 
-            {/* ── Order Builder ── */}
+            {/* Schedule & Addresses */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  Schedule & Addresses
+                </CardTitle>
+                <CardDescription>Confirm the date, pickup, and delivery locations</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label htmlFor="confirmedDate">Confirmed Move Date</Label>
+                  <Input id="confirmedDate" type="date" disabled={!isEditing} {...form.register("confirmedDate")} data-testid="input-confirmed-date" />
+                </div>
+                <div>
+                  <Label htmlFor="confirmedFromAddress">Confirmed Pickup Address</Label>
+                  <Input id="confirmedFromAddress" disabled={!isEditing} {...form.register("confirmedFromAddress")} data-testid="input-confirmed-from" />
+                </div>
+                <div>
+                  <Label htmlFor="confirmedToAddress">Confirmed Delivery Address</Label>
+                  <Input id="confirmedToAddress" disabled={!isEditing} {...form.register("confirmedToAddress")} data-testid="input-confirmed-to" />
+                </div>
+                {!hasAdminAccess && (
+                  <div>
+                    <Label htmlFor="basePrice">Base Price</Label>
+                    <div className="relative">
+                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input id="basePrice" type="number" step="0.01" className="pl-9" disabled={!isEditing} {...form.register("basePrice")} data-testid="input-base-price" />
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Crew Assignment */}
             {hasAdminAccess && (
-              <JobOrderBuilder
-                lead={lead}
-                leadId={lead.id}
-                disabled={updateLead.isPending}
-                onApply={handleOrderApply}
-              />
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center justify-between text-base">
+                    <span className="flex items-center gap-2"><Users className="h-4 w-4" />Crew Assignment</span>
+                    <span className="text-sm font-normal text-muted-foreground">
+                      {selectedCrewMembers.length + (bonusMover ? 1 : 0)} mover{(selectedCrewMembers.length + (bonusMover ? 1 : 0)) !== 1 ? "s" : ""}
+                    </span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {isEditing ? (
+                    <>
+                      <div className="max-h-48 overflow-y-auto space-y-1.5 border rounded-md p-2 bg-muted/20 mb-3" data-testid="crew-member-list">
+                        {employees.filter(e => e.isApproved || e.status === "approved").length === 0 ? (
+                          <p className="text-xs text-muted-foreground text-center py-2">No approved employees found</p>
+                        ) : (
+                          employees.filter(emp => emp.isApproved || emp.status === "approved").map((emp) => {
+                            const isSelected = selectedCrewMembers.includes(emp.id);
+                            const toggleMember = () => setSelectedCrewMembers(prev => prev.includes(emp.id) ? prev.filter(id => id !== emp.id) : [...prev, emp.id]);
+                            return (
+                              <div key={emp.id} role="option" aria-selected={isSelected} tabIndex={0}
+                                className="flex items-center gap-2 p-1.5 rounded hover:bg-muted/50 cursor-pointer"
+                                onClick={toggleMember}
+                                onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); toggleMember(); } }}
+                                data-testid={`crew-checkbox-${emp.id}`}
+                              >
+                                <Checkbox checked={isSelected} tabIndex={-1} className="h-4 w-4 pointer-events-none" />
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-sm font-medium ${isSelected ? "text-primary" : ""}`}>{emp.firstName} {emp.lastName}</p>
+                                  <p className="text-xs text-muted-foreground truncate">{emp.email}</p>
+                                </div>
+                                {isSelected && <UserCheck className="h-3.5 w-3.5 text-primary flex-shrink-0" />}
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="bonus-mover-toggle" className="flex items-center gap-2 cursor-pointer text-sm">
+                          Bonus Mover <span className="text-xs text-muted-foreground">(+1 crew, +25%)</span>
+                        </Label>
+                        <Switch id="bonus-mover-toggle" checked={bonusMover} onCheckedChange={setBonusMover} data-testid="toggle-bonus-mover" />
+                      </div>
+                    </>
+                  ) : selectedCrewMembers.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5" data-testid="crew-member-badges">
+                      {selectedCrewMembers.map((memberId) => {
+                        const emp = employees.find(e => e.id === memberId);
+                        return (
+                          <Badge key={memberId} variant="secondary" className="text-xs" data-testid={`crew-badge-${memberId}`}>
+                            <UserCheck className="h-3 w-3 mr-1" />
+                            {emp ? `${emp.firstName} ${emp.lastName}` : memberId.slice(0, 8) + "…"}
+                          </Badge>
+                        );
+                      })}
+                      {bonusMover && <Badge className="text-xs bg-amber-600/20 text-amber-400 border-amber-500/30">+1 Bonus Mover</Badge>}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground italic">No crew assigned yet</p>
+                  )}
+
+                  {/* Bonus mover flags (view-only) */}
+                  {!isEditing && lead.crewMembers && lead.crewMembers.length > 0 && (
+                    <div className="mt-3 pt-3 border-t space-y-1">
+                      <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide">Bonus Mover (+25% payout)</p>
+                      {lead.crewMembers.map((mid: string) => {
+                        const isBonus = lead.crewBonusFlags?.[mid] === true;
+                        const emp = employees.find((e: Employee) => e.id === mid);
+                        const displayName = emp ? `${emp.firstName || ""} ${emp.lastName || ""}`.trim() || emp.email : `Crew #${mid.slice(0, 6)}`;
+                        return (
+                          <div key={mid} className="flex items-center gap-2 text-xs">
+                            <Checkbox checked={isBonus} onCheckedChange={(v) => toggleBonusMover.mutate({ memberId: mid, isBonus: !!v })} disabled={toggleBonusMover.isPending} className="h-3.5 w-3.5" />
+                            <span className={isBonus ? "text-amber-400 font-medium" : "text-slate-400"}>{displayName} {isBonus ? "(+25%)" : ""}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             )}
 
-            {/* ── Current Order Summary (if an order has been built) ── */}
+            {/* Action: Send reminder */}
+            {lead.status === "confirmed" && (
+              <Button variant="outline" className="w-full" onClick={() => sendReminder.mutate()} disabled={sendReminder.isPending}>
+                {sendReminder.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                Send Move Reminder to Customer
+              </Button>
+            )}
+          </TabsContent>
+
+          {/* ─────────── TAB: QUOTE ─────────── */}
+          <TabsContent value="quote" className="space-y-4">
+            {/* Workflow Step Actions */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Job Workflow</CardTitle>
+                <CardDescription>
+                  Step {currentStep} of {workflow.length}: {workflow.find(w => w.step === currentStep)?.name}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between mb-4">
+                  {workflow.map((step, idx) => (
+                    <div key={step.step} className="flex items-center flex-1">
+                      <div className="flex flex-col items-center flex-1">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 ${
+                          currentStep > step.step ? 'bg-green-600 border-green-600 text-white' :
+                          currentStep === step.step ? 'bg-primary border-primary text-white' :
+                          'bg-muted border-muted-foreground/30 text-muted-foreground'
+                        }`}>
+                          {currentStep > step.step ? <CheckCircle className="h-4 w-4" /> : <span className="text-xs font-bold">{step.step}</span>}
+                        </div>
+                        <p className="text-[10px] mt-1 text-center text-muted-foreground">{step.name}</p>
+                      </div>
+                      {idx < workflow.length - 1 && <div className={`h-0.5 flex-1 ${currentStep > step.step ? 'bg-green-600' : 'bg-muted'}`} />}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="p-3 bg-muted/50 rounded-lg">
+                  {currentStep === 1 && (
+                    <div className="space-y-3">
+                      <p className="text-sm text-muted-foreground">Review details and set pricing, then make available.</p>
+                      <div className="flex gap-2 items-end">
+                        <div className="flex-1">
+                          <Label>JCMOVES Token Allocation</Label>
+                          <Input type="number" placeholder="e.g., 500" value={tokenAllocation} onChange={(e) => setTokenAllocation(e.target.value)} data-testid="input-token-allocation" />
+                        </div>
+                      </div>
+                      {hasAdminAccess && selectedCrewMembers.length === 0 && (
+                        <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-md px-3 py-2">
+                          <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                          <span>No crew members assigned. Assign crew in the Details tab.</span>
+                        </div>
+                      )}
+                      <Button onClick={() => advanceToStep.mutate(2)} disabled={!lead?.basePrice || advanceToStep.isPending} data-testid="button-make-available">
+                        {advanceToStep.isPending ? "Activating..." : "Make Job Available"}
+                      </Button>
+                    </div>
+                  )}
+                  {currentStep === 2 && (
+                    <div className="space-y-3">
+                      <p className="text-sm text-muted-foreground">Job is available. Mark complete when finished.</p>
+                      <div className="p-3 bg-primary/10 rounded-lg">
+                        <p className="text-sm font-semibold text-primary">Token Reward: {lead?.tokenAllocation || 0} JCMOVES</p>
+                      </div>
+                      <Button onClick={() => advanceToStep.mutate(3)} disabled={advanceToStep.isPending} data-testid="button-mark-complete">
+                        {advanceToStep.isPending ? "Completing..." : "Mark as Complete"}
+                      </Button>
+                    </div>
+                  )}
+                  {currentStep === 3 && (
+                    <div className="space-y-3">
+                      <p className="text-sm text-muted-foreground">Job complete! Request a review from the customer.</p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button onClick={() => requestReview("google")} variant="outline" className="gap-2" data-testid="button-review-google">
+                          <ExternalLink className="h-4 w-4" /> Google Review
+                        </Button>
+                        <Button onClick={() => requestReview("facebook")} variant="outline" className="gap-2" data-testid="button-review-facebook">
+                          <ExternalLink className="h-4 w-4" /> Facebook Review
+                        </Button>
+                        <Button onClick={() => requestReview("inapp")} variant="outline" className="gap-2" data-testid="button-review-inapp">
+                          <Star className="h-4 w-4" /> In-App Review
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Order Builder (Admin only) */}
+            {hasAdminAccess && (
+              <JobOrderBuilder lead={lead} leadId={lead.id} disabled={updateLead.isPending} onApply={handleOrderApply} />
+            )}
+
+            {/* Active Order Summary */}
             {(lead.totalPrice || lead.basePrice) && (
               <Card className="border-emerald-500/30 bg-slate-900/60">
                 <CardHeader className="pb-2">
@@ -992,37 +1072,9 @@ export default function LeadDetailPage() {
                     </div>
                   )}
                   {lead.crewSize && (
-                    <div className="pt-1 space-y-1.5">
-                      <div className="flex items-center gap-2 text-xs text-slate-400">
-                        <Users className="h-3.5 w-3.5" />
-                        {lead.crewSize} movers
-                        {lead.confirmedHours ? <><Clock className="h-3.5 w-3.5 ml-2" />{lead.confirmedHours} hrs</> : null}
-                      </div>
-                      {hasAdminAccess && lead.crewMembers && lead.crewMembers.length > 0 && (
-                        <div className="space-y-1">
-                          <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide">Bonus Mover (+25% payout)</p>
-                          {lead.crewMembers.map((mid: string) => {
-                            const isBonus = lead.crewBonusFlags?.[mid] === true;
-                            const emp = employees.find((e: Employee) => e.id === mid);
-                            const displayName = emp
-                              ? `${emp.firstName || ""} ${emp.lastName || ""}`.trim() || emp.email
-                              : `Crew #${mid.slice(0, 6)}`;
-                            return (
-                              <div key={mid} className="flex items-center gap-2 text-xs">
-                                <Checkbox
-                                  checked={isBonus}
-                                  onCheckedChange={(v) => toggleBonusMover.mutate({ memberId: mid, isBonus: !!v })}
-                                  disabled={toggleBonusMover.isPending}
-                                  className="h-3.5 w-3.5"
-                                />
-                                <span className={isBonus ? "text-amber-400 font-medium" : "text-slate-400"}>
-                                  {displayName} {isBonus ? "(+25%)" : ""}
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
+                    <div className="flex items-center gap-2 text-xs text-slate-400 pt-1">
+                      <Users className="h-3.5 w-3.5" />{lead.crewSize} movers
+                      {lead.confirmedHours ? <><Clock className="h-3.5 w-3.5 ml-2" />{lead.confirmedHours} hrs</> : null}
                     </div>
                   )}
                   {(lead.totalPrice || lead.basePrice) && (() => {
@@ -1033,29 +1085,14 @@ export default function LeadDetailPage() {
                     return (
                       <div className="pt-1.5 border-t border-slate-700/50 space-y-1">
                         <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Token conversion · $1 = 15 JCMOVES</p>
-                        {hasAdminAccess ? (
-                          <>
-                            <div className="flex items-center gap-1.5 text-xs text-amber-400">
-                              <Zap className="h-3.5 w-3.5 shrink-0" />
-                              <span>Customer earns <strong>~{jobTokens.toLocaleString()}</strong> JCMOVES</span>
-                            </div>
-                            <div className="flex items-center gap-1.5 text-xs text-orange-400">
-                              <Zap className="h-3.5 w-3.5 shrink-0" />
-                              <span>
-                                Crew earns <strong>~{jobTokens.toLocaleString()}</strong> JCMOVES
-                                {crewCount > 0 && <span className="text-orange-400/70"> (~{perWorker.toLocaleString()} each × {crewCount})</span>}
-                              </span>
-                            </div>
-                          </>
-                        ) : (
-                          <div className="flex items-center gap-1.5 text-xs text-orange-400">
-                            <Zap className="h-3.5 w-3.5 shrink-0" />
-                            <span>
-                              Crew earns <strong>~{jobTokens.toLocaleString()}</strong> JCMOVES on completion
-                              {crewCount > 0 && <span className="text-orange-400/70"> (~{perWorker.toLocaleString()} each)</span>}
-                            </span>
-                          </div>
-                        )}
+                        <div className="flex items-center gap-1.5 text-xs text-amber-400">
+                          <Zap className="h-3.5 w-3.5 shrink-0" />
+                          <span>Customer earns <strong>~{jobTokens.toLocaleString()}</strong> JCMOVES</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs text-orange-400">
+                          <Zap className="h-3.5 w-3.5 shrink-0" />
+                          <span>Crew earns <strong>~{jobTokens.toLocaleString()}</strong> JCMOVES{crewCount > 0 && <span className="text-orange-400/70"> (~{perWorker.toLocaleString()} each)</span>}</span>
+                        </div>
                       </div>
                     );
                   })()}
@@ -1063,391 +1100,262 @@ export default function LeadDetailPage() {
               </Card>
             )}
 
-            {/* ── Schedule Details (editable separately) ── */}
+            {/* Invoice (Admin Only) */}
+            {hasAdminAccess && (
+              <Card className="border-emerald-500/30">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <FileText className="h-4 w-4 text-emerald-500" /> Invoice
+                  </CardTitle>
+                  <CardDescription>Send a Square invoice to the customer</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="p-3 bg-muted/50 rounded-lg space-y-1 text-sm">
+                    <div className="flex justify-between"><span className="text-muted-foreground">Customer</span><span className="font-medium">{lead.firstName} {lead.lastName}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Email</span><span className="font-medium">{lead.email}</span></div>
+                    {(lead.totalPrice || lead.basePrice) && (
+                      <div className="flex justify-between"><span className="text-muted-foreground">Amount</span><span className="font-bold text-emerald-600 dark:text-emerald-400">${parseFloat(lead.totalPrice || lead.basePrice || "0").toFixed(2)}</span></div>
+                    )}
+                  </div>
+                  <Button onClick={() => { const price = lead.totalPrice || lead.basePrice || ""; setInvoiceAmount(price ? parseFloat(price).toString() : ""); setInvoiceDescription(`${lead.serviceType} - ${lead.firstName} ${lead.lastName}`); setShowInvoiceDialog(true); }} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white">
+                    <Send className="h-4 w-4 mr-2" /> Send Invoice via Square
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* BTC Payment (Admin Only) */}
+            {hasAdminAccess && (
+              <Card className="border-orange-500/30">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Bitcoin className="h-4 w-4 text-orange-500" /> Bitcoin Payment
+                  </CardTitle>
+                  <CardDescription>Generate a BTC payment link (10% discount)</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button onClick={() => { const price = lead.totalPrice || lead.basePrice || ""; setBtcAmount(price ? parseFloat(price).toString() : ""); setBtcPaymentLink(null); setShowBtcDialog(true); }} className="w-full bg-orange-600 hover:bg-orange-700 text-white">
+                    <Bitcoin className="h-4 w-4 mr-2" /> Generate BTC Payment Link
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
+          {/* ─────────── TAB: NOTES ─────────── */}
+          <TabsContent value="notes" className="space-y-4">
+            {/* Job Notes */}
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  Schedule & Addresses
-                </CardTitle>
-                <CardDescription>Confirm the date, pickup, and delivery locations</CardDescription>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Notes</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="confirmedDate">Confirmed Move Date</Label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="confirmedDate"
-                      type="date"
-                      className="pl-9"
-                      disabled={!isEditing}
-                      {...form.register("confirmedDate")}
-                      data-testid="input-confirmed-date"
-                    />
+              <CardContent>
+                {lead.quoteNotes ? (
+                  <div className="p-3 bg-muted rounded-lg">
+                    <p className="text-xs text-muted-foreground mb-1">Quote Notes</p>
+                    <p className="text-sm whitespace-pre-wrap">{lead.quoteNotes}</p>
                   </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="confirmedFromAddress">Confirmed Pickup Address</Label>
-                  <Input
-                    id="confirmedFromAddress"
-                    disabled={!isEditing}
-                    {...form.register("confirmedFromAddress")}
-                    data-testid="input-confirmed-from"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="confirmedToAddress">Confirmed Delivery Address</Label>
-                  <Input
-                    id="confirmedToAddress"
-                    disabled={!isEditing}
-                    {...form.register("confirmedToAddress")}
-                    data-testid="input-confirmed-to"
-                  />
-                </div>
-
-                {!hasAdminAccess && (
-                  <div>
-                    <Label htmlFor="basePrice">Base Price</Label>
-                    <div className="relative">
-                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="basePrice"
-                        type="number"
-                        step="0.01"
-                        className="pl-9"
-                        disabled={!isEditing}
-                        {...form.register("basePrice")}
-                        data-testid="input-base-price"
-                      />
-                    </div>
-                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic text-center py-4">No notes added yet. Notes from the quote builder will appear here.</p>
                 )}
+              </CardContent>
+            </Card>
 
-                {hasAdminAccess && (
-                  <div className="space-y-3 pt-2">
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <Label className="flex items-center gap-2">
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                        Crew Assignment
-                      </Label>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <span>
-                          {selectedCrewMembers.length + (bonusMover ? 1 : 0)} mover{selectedCrewMembers.length + (bonusMover ? 1 : 0) !== 1 ? "s" : ""}
-                        </span>
-                        {bonusMover && (
-                          <Badge className="bg-amber-600/20 text-amber-400 border-amber-500/30 text-[10px]">
-                            +1 Bonus
-                          </Badge>
+            {/* Photo Upload */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Camera className="h-4 w-4" /> Photos
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {/* Existing photos grid */}
+                {lead.photos && lead.photos.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2">
+                    {lead.photos.map((photo, i) => (
+                      <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-muted bg-muted/20">
+                        {photo.mimeType?.startsWith("video/") ? (
+                          <video src={photo.url} className="w-full h-full object-cover" />
+                        ) : (
+                          <img src={photo.url} alt={photo.name || `Photo ${i + 1}`} className="w-full h-full object-cover" />
                         )}
                       </div>
-                    </div>
-
-                    {isEditing ? (
-                      <>
-                        <div
-                          className="max-h-48 overflow-y-auto space-y-1.5 border rounded-md p-2 bg-muted/20"
-                          data-testid="crew-member-list"
-                        >
-                          {employees.filter(e => e.isApproved || e.status === "approved").length === 0 ? (
-                            <p className="text-xs text-muted-foreground text-center py-2">No approved employees found</p>
-                          ) : (
-                            employees
-                              .filter(emp => emp.isApproved || emp.status === "approved")
-                              .map((emp) => {
-                              const isSelected = selectedCrewMembers.includes(emp.id);
-                              const toggleMember = () => {
-                                setSelectedCrewMembers(prev =>
-                                  prev.includes(emp.id)
-                                    ? prev.filter(id => id !== emp.id)
-                                    : [...prev, emp.id]
-                                );
-                              };
-                              return (
-                                <div
-                                  key={emp.id}
-                                  role="option"
-                                  aria-selected={isSelected}
-                                  tabIndex={0}
-                                  className="flex items-center gap-2 p-1.5 rounded hover:bg-muted/50 cursor-pointer"
-                                  onClick={() => toggleMember()}
-                                  onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); toggleMember(); } }}
-                                  data-testid={`crew-checkbox-${emp.id}`}
-                                >
-                                  <Checkbox
-                                    checked={isSelected}
-                                    tabIndex={-1}
-                                    className="h-4 w-4 pointer-events-none"
-                                  />
-                                  <div className="flex-1 min-w-0">
-                                    <p className={`text-sm font-medium leading-none ${isSelected ? "text-primary" : ""}`}>
-                                      {emp.firstName} {emp.lastName}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground truncate">{emp.email}</p>
-                                  </div>
-                                  {isSelected && <UserCheck className="h-3.5 w-3.5 text-primary flex-shrink-0" />}
-                                </div>
-                              );
-                            })
-                          )}
-                        </div>
-
-                        <div className="flex items-center justify-between py-1">
-                          <Label htmlFor="bonus-mover-toggle" className="flex items-center gap-2 cursor-pointer">
-                            <span className="text-sm">Bonus Mover</span>
-                            <span className="text-xs text-muted-foreground">(+1 crew, +25% payout)</span>
-                          </Label>
-                          <Switch
-                            id="bonus-mover-toggle"
-                            checked={bonusMover}
-                            onCheckedChange={setBonusMover}
-                            data-testid="toggle-bonus-mover"
-                          />
-                        </div>
-                      </>
-                    ) : (
-                      selectedCrewMembers.length > 0 ? (
-                        <div className="flex flex-wrap gap-1.5" data-testid="crew-member-badges">
-                          {selectedCrewMembers.map((memberId) => {
-                            const emp = employees.find(e => e.id === memberId);
-                            return (
-                              <Badge
-                                key={memberId}
-                                variant="secondary"
-                                className="text-xs"
-                                data-testid={`crew-badge-${memberId}`}
-                              >
-                                <UserCheck className="h-3 w-3 mr-1" />
-                                {emp ? `${emp.firstName} ${emp.lastName}` : memberId.slice(0, 8) + "…"}
-                              </Badge>
-                            );
-                          })}
-                          {bonusMover && (
-                            <Badge className="text-xs bg-amber-600/20 text-amber-400 border-amber-500/30">
-                              +1 Bonus Mover
-                            </Badge>
-                          )}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-muted-foreground italic">No crew assigned yet</p>
-                      )
-                    )}
+                    ))}
                   </div>
                 )}
+
+                {/* Upload button */}
+                <div>
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/*,video/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => e.target.files && handlePhotoUpload(e.target.files)}
+                  />
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => photoInputRef.current?.click()}
+                    disabled={photoUploading}
+                  >
+                    {photoUploading ? (
+                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Uploading...</>
+                    ) : (
+                      <><Image className="h-4 w-4 mr-2" />Add Photos / Videos</>
+                    )}
+                  </Button>
+                  {lead.photos && lead.photos.length > 0 && (
+                    <p className="text-xs text-muted-foreground text-center mt-1.5">{lead.photos.length}/10 photos attached</p>
+                  )}
+                </div>
               </CardContent>
             </Card>
 
-            {/* Send Invoice - Admin Only */}
-            {hasAdminAccess && (
-              <Card className="border-emerald-500/30 bg-gradient-to-br from-emerald-50/50 to-white dark:from-emerald-950/20 dark:to-background">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileText className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                    Invoice
-                  </CardTitle>
-                  <CardDescription>Send a Square invoice to the customer for payment</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="p-3 bg-muted/50 rounded-lg space-y-1">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Customer</span>
-                      <span className="font-medium">{lead.firstName} {lead.lastName}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Email</span>
-                      <span className="font-medium">{lead.email}</span>
-                    </div>
-                    {lead.totalPrice && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Quote Total</span>
-                        <span className="font-bold text-emerald-600 dark:text-emerald-400">${parseFloat(lead.totalPrice).toFixed(2)}</span>
-                      </div>
-                    )}
-                    {!lead.totalPrice && lead.basePrice && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Base Price</span>
-                        <span className="font-bold text-emerald-600 dark:text-emerald-400">${parseFloat(lead.basePrice).toFixed(2)}</span>
-                      </div>
-                    )}
-                  </div>
-                  <Button
-                    onClick={() => {
-                      const price = lead.totalPrice || lead.basePrice || "";
-                      setInvoiceAmount(price ? parseFloat(price).toString() : "");
-                      setInvoiceDescription(`${lead.serviceType} - ${lead.firstName} ${lead.lastName}`);
-                      setShowInvoiceDialog(true);
-                    }}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
-                  >
-                    <Send className="h-4 w-4 mr-2" />
-                    Send Invoice via Square
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* ── JCMOVES Disbursement Summary (shows after completion rewards are distributed) ── */}
-            {lead.completionRewardedAt && hasAdminAccess && (
-              <DisbursementSummaryCard lead={lead} />
-            )}
-
-            {/* Bitcoin Payment - Admin Only */}
-            {hasAdminAccess && (
-              <Card className="border-orange-500/30 bg-gradient-to-br from-orange-50/50 to-white dark:from-orange-950/20 dark:to-background">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Bitcoin className="h-5 w-5 text-orange-500" />
-                    Bitcoin Payment
-                  </CardTitle>
-                  <CardDescription>Generate a BTC payment link for this job (10% discount)</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="p-3 bg-muted/50 rounded-lg space-y-1">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Customer</span>
-                      <span className="font-medium">{lead.firstName} {lead.lastName}</span>
-                    </div>
-                    {(lead.totalPrice || lead.basePrice) && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Quote Total</span>
-                        <span className="font-bold text-orange-600 dark:text-orange-400">
-                          ${parseFloat(lead.totalPrice || lead.basePrice || "0").toFixed(2)}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  <Button
-                    onClick={() => {
-                      const price = lead.totalPrice || lead.basePrice || "";
-                      setBtcAmount(price ? parseFloat(price).toString() : "");
-                      setBtcPaymentLink(null);
-                      setShowBtcDialog(true);
-                    }}
-                    className="w-full bg-orange-600 hover:bg-orange-700 text-white"
-                  >
-                    <Bitcoin className="h-4 w-4 mr-2" />
-                    Generate BTC Payment Link
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-
-          {/* Sidebar - Potential Earnings & Rewards */}
-          <div className="space-y-6">
-            {/* Potential Earnings */}
+            {/* Quick Contact */}
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5" />
-                  Potential Earnings
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Phone className="h-4 w-4" /> Quick Contact
                 </CardTitle>
-                <CardDescription>Rewards for completing this job</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="p-3 bg-muted rounded-lg">
-                  <p className="text-sm text-muted-foreground mb-2">Base Completion</p>
-                  <div className="space-y-1">
-                    <p className="text-lg font-bold">{potentialEarnings.base.points} Points</p>
-                    <p className="text-sm text-muted-foreground">{potentialEarnings.base.tokens} JCMOVES</p>
-                  </div>
-                </div>
-
-                <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg">
-                  <p className="text-sm text-muted-foreground mb-2">+ On-Time Bonus (20%)</p>
-                  <div className="space-y-1">
-                    <p className="text-lg font-bold text-primary">{potentialEarnings.withOnTime.points} Points</p>
-                    <p className="text-sm text-muted-foreground">{potentialEarnings.withOnTime.tokens} JCMOVES</p>
-                  </div>
-                </div>
-
-                <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg">
-                  <p className="text-sm text-muted-foreground mb-2">+ Rating Bonus (30% for 4.0+)</p>
-                  <div className="space-y-1">
-                    <p className="text-lg font-bold text-primary">{potentialEarnings.withRating.points} Points</p>
-                    <p className="text-sm text-muted-foreground">{potentialEarnings.withRating.tokens} JCMOVES</p>
-                  </div>
-                </div>
-
-                <Separator />
-
-                <div className="p-4 bg-gradient-to-br from-primary/10 to-primary/5 border-2 border-primary/30 rounded-lg">
-                  <p className="text-sm text-muted-foreground mb-2">Maximum Potential</p>
-                  <div className="space-y-1">
-                    <p className="text-2xl font-bold text-primary">{potentialEarnings.withBoth.points} Points</p>
-                    <p className="text-sm text-muted-foreground">{potentialEarnings.withBoth.tokens} JCMOVES</p>
-                  </div>
-                </div>
+              <CardContent className="flex flex-col gap-2">
+                <a href={`tel:${lead.phone}`} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600/10 border border-blue-500/20 text-blue-400 text-sm font-medium hover:bg-blue-600/20 transition-colors">
+                  <Phone className="h-4 w-4" /> Call {lead.firstName}
+                </a>
+                <a href={`mailto:${lead.email}`} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-700/30 border border-slate-600/30 text-slate-300 text-sm font-medium hover:bg-slate-700/50 transition-colors">
+                  <Mail className="h-4 w-4" /> Email {lead.firstName}
+                </a>
+                <a href={`sms:${lead.phone}`} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-600/10 border border-green-500/20 text-green-400 text-sm font-medium hover:bg-green-600/20 transition-colors">
+                  <Send className="h-4 w-4" /> Text {lead.firstName}
+                </a>
               </CardContent>
             </Card>
+          </TabsContent>
 
-            {/* Rewards Tracking */}
+          {/* ─────────── TAB: HISTORY ─────────── */}
+          <TabsContent value="history" className="space-y-4">
+            {/* Status Change Log */}
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Award className="h-5 w-5" />
-                  Rewards Status
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Clock className="h-4 w-4" /> Status Change Log
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <Tabs defaultValue="pending" className="w-full">
+                <div className="relative pl-5 border-l-2 border-muted space-y-4">
+                  {[
+                    { status: "New Lead", ts: lead.createdAt, color: "bg-blue-500" },
+                    { status: "Quote Updated", ts: lead.lastQuoteUpdatedAt, color: "bg-amber-500" },
+                    { status: "Checked In", ts: lead.checkedInAt, color: "bg-purple-500" },
+                    { status: "Completed", ts: lead.completedAt, color: "bg-green-500" },
+                    { status: "Rewards Distributed", ts: lead.completionRewardedAt, color: "bg-primary" },
+                  ].filter(e => e.ts).sort((a, b) => new Date(a.ts!).getTime() - new Date(b.ts!).getTime()).map(({ status, ts, color }) => (
+                    <div key={status} className="relative flex items-start gap-3">
+                      <div className={`absolute -left-[22px] w-3 h-3 rounded-full border-2 border-background ${color} mt-0.5`} />
+                      <div>
+                        <p className="text-sm font-semibold">{status}</p>
+                        <p className="text-xs text-muted-foreground">{new Date(ts!).toLocaleString()}</p>
+                      </div>
+                    </div>
+                  ))}
+                  {!lead.createdAt && (
+                    <p className="text-sm text-muted-foreground">No status history available.</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Timestamps */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Timeline</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {[
+                  { label: "Lead Created", ts: lead.createdAt },
+                  { label: "Checked In", ts: lead.checkedInAt },
+                  { label: "Completed", ts: lead.completedAt },
+                  { label: "Rewards Distributed", ts: lead.completionRewardedAt },
+                  { label: "Last Quote Updated", ts: lead.lastQuoteUpdatedAt },
+                ].filter(e => e.ts).map(({ label, ts }) => (
+                  <div key={label} className="flex justify-between text-sm border-b border-muted/50 pb-1.5">
+                    <span className="text-muted-foreground">{label}</span>
+                    <span className="font-medium">{new Date(ts!).toLocaleString()}</span>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            {/* Potential Earnings */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <TrendingUp className="h-4 w-4" /> Potential Earnings
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 gap-3">
+                {[
+                  { label: "Base Completion", pts: potentialEarnings.base.points, tokens: potentialEarnings.base.tokens },
+                  { label: "+On-Time (20%)", pts: potentialEarnings.withOnTime.points, tokens: potentialEarnings.withOnTime.tokens },
+                  { label: "+Rating (30%)", pts: potentialEarnings.withRating.points, tokens: potentialEarnings.withRating.tokens },
+                  { label: "Maximum Potential", pts: potentialEarnings.withBoth.points, tokens: potentialEarnings.withBoth.tokens },
+                ].map(e => (
+                  <div key={e.label} className="p-3 bg-muted/50 rounded-lg">
+                    <p className="text-xs text-muted-foreground mb-1">{e.label}</p>
+                    <p className="font-bold">{e.pts} pts</p>
+                    <p className="text-xs text-muted-foreground">{e.tokens} JCMOVES</p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            {/* Rewards Status */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Award className="h-4 w-4" /> Rewards Status
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Tabs defaultValue="pending">
                   <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="pending" data-testid="tab-pending">
-                      Pending ({pendingRewards.length})
-                    </TabsTrigger>
-                    <TabsTrigger value="credited" data-testid="tab-credited">
-                      Credited ({creditedRewards.length})
-                    </TabsTrigger>
+                    <TabsTrigger value="pending" data-testid="tab-pending">Pending ({pendingRewards.length})</TabsTrigger>
+                    <TabsTrigger value="credited" data-testid="tab-credited">Credited ({creditedRewards.length})</TabsTrigger>
                   </TabsList>
-                  
                   <TabsContent value="pending" className="space-y-3 mt-4">
                     {pendingRewards.length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-4">
-                        No pending rewards
-                      </p>
+                      <p className="text-sm text-muted-foreground text-center py-4">No pending rewards</p>
                     ) : (
                       pendingRewards.map(reward => (
                         <div key={reward.id} className="p-3 border rounded-lg" data-testid={`pending-reward-${reward.id}`}>
                           <div className="flex justify-between items-start">
                             <div>
                               <p className="font-medium text-sm">{reward.rewardType}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {new Date(reward.earnedDate).toLocaleDateString()}
-                              </p>
+                              <p className="text-xs text-muted-foreground">{new Date(reward.earnedDate).toLocaleDateString()}</p>
                             </div>
                             <Badge variant="outline">Pending</Badge>
                           </div>
-                          <div className="mt-2 text-sm">
-                            <p className="font-semibold">{parseFloat(reward.tokenAmount).toFixed(2)} JCMOVES credits</p>
-                          </div>
+                          <p className="mt-2 text-sm font-semibold">{parseFloat(reward.tokenAmount).toFixed(2)} JCMOVES</p>
                         </div>
                       ))
                     )}
                   </TabsContent>
-                  
                   <TabsContent value="credited" className="space-y-3 mt-4">
                     {creditedRewards.length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-4">
-                        No credited rewards yet
-                      </p>
+                      <p className="text-sm text-muted-foreground text-center py-4">No credited rewards yet</p>
                     ) : (
                       creditedRewards.map(reward => (
                         <div key={reward.id} className="p-3 border rounded-lg bg-muted/30" data-testid={`credited-reward-${reward.id}`}>
                           <div className="flex justify-between items-start">
                             <div>
                               <p className="font-medium text-sm">{reward.rewardType}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {new Date(reward.earnedDate).toLocaleDateString()}
-                              </p>
+                              <p className="text-xs text-muted-foreground">{new Date(reward.earnedDate).toLocaleDateString()}</p>
                             </div>
                             <Badge className="bg-green-600">Credited</Badge>
                           </div>
-                          <div className="mt-2 text-sm">
-                            <p className="font-semibold">{parseFloat(reward.tokenAmount).toFixed(2)} JCMOVES credits</p>
-                          </div>
+                          <p className="mt-2 text-sm font-semibold">{parseFloat(reward.tokenAmount).toFixed(2)} JCMOVES</p>
                         </div>
                       ))
                     )}
@@ -1455,8 +1363,13 @@ export default function LeadDetailPage() {
                 </Tabs>
               </CardContent>
             </Card>
-          </div>
-        </div>
+
+            {/* Disbursement Summary */}
+            {lead.completionRewardedAt && hasAdminAccess && (
+              <DisbursementSummaryCard lead={lead} />
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* Crew Suggestions Dialog */}
@@ -1503,15 +1416,10 @@ export default function LeadDetailPage() {
                   <div className="mt-2 p-2.5 rounded-lg bg-amber-950/30 border border-amber-500/20 space-y-1">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-500/70">$1 = 15 JCMOVES conversion</p>
                     <div className="flex items-center gap-1.5 text-xs text-amber-400">
-                      <Zap className="h-3 w-3 shrink-0" />
-                      <span>Customer earns <strong>~{tokens.toLocaleString()}</strong> JCMOVES</span>
+                      <Zap className="h-3 w-3 shrink-0" /><span>Customer earns <strong>~{tokens.toLocaleString()}</strong> JCMOVES</span>
                     </div>
                     <div className="flex items-center gap-1.5 text-xs text-orange-400">
-                      <Zap className="h-3 w-3 shrink-0" />
-                      <span>
-                        Workers earn <strong>~{tokens.toLocaleString()}</strong> JCMOVES
-                        {crewCount > 0 && <span className="text-orange-400/70"> (~{perWorker.toLocaleString()} each × {crewCount})</span>}
-                      </span>
+                      <Zap className="h-3 w-3 shrink-0" /><span>Workers earn <strong>~{tokens.toLocaleString()}</strong> JCMOVES{crewCount > 0 && <span className="text-orange-400/70"> (~{perWorker.toLocaleString()} each × {crewCount})</span>}</span>
                     </div>
                   </div>
                 );
@@ -1519,11 +1427,7 @@ export default function LeadDetailPage() {
             </div>
             <div>
               <Label>Description</Label>
-              <Input
-                value={invoiceDescription}
-                onChange={(e) => setInvoiceDescription(e.target.value)}
-                placeholder="Service description"
-              />
+              <Input value={invoiceDescription} onChange={(e) => setInvoiceDescription(e.target.value)} placeholder="Service description" />
             </div>
             {lead.orderLineItems && lead.orderLineItems.length > 0 && (
               <div className="p-3 bg-emerald-950/20 border border-emerald-500/20 rounded-lg text-xs space-y-1">
@@ -1534,9 +1438,7 @@ export default function LeadDetailPage() {
                     <span>${li.total?.toFixed(2)}</span>
                   </div>
                 ))}
-                <p className="text-[10px] text-slate-500 pt-1 border-t border-emerald-500/10">
-                  Invoice will use Square order line items.
-                </p>
+                <p className="text-[10px] text-slate-500 pt-1 border-t border-emerald-500/10">Invoice will use Square order line items.</p>
               </div>
             )}
             <div className="p-3 bg-muted rounded-lg text-sm space-y-1">
@@ -1545,19 +1447,9 @@ export default function LeadDetailPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowInvoiceDialog(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => createInvoiceMutation.mutate()}
-              disabled={createInvoiceMutation.isPending || !invoiceAmount || parseFloat(invoiceAmount) <= 0}
-              className="bg-emerald-600 hover:bg-emerald-700"
-            >
-              {createInvoiceMutation.isPending ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4 mr-2" />
-              )}
+            <Button variant="outline" onClick={() => setShowInvoiceDialog(false)}>Cancel</Button>
+            <Button onClick={() => createInvoiceMutation.mutate()} disabled={createInvoiceMutation.isPending || !invoiceAmount || parseFloat(invoiceAmount) <= 0} className="bg-emerald-600 hover:bg-emerald-700">
+              {createInvoiceMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
               {createInvoiceMutation.isPending ? "Sending..." : "Send Invoice"}
             </Button>
           </DialogFooter>
@@ -1583,27 +1475,13 @@ export default function LeadDetailPage() {
                   <Label>Amount ($)</Label>
                   <div className="relative">
                     <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      className="pl-9"
-                      value={btcAmount}
-                      onChange={(e) => setBtcAmount(e.target.value)}
-                      placeholder="Enter amount in USD"
-                    />
+                    <Input type="number" step="0.01" min="0.01" className="pl-9" value={btcAmount} onChange={(e) => setBtcAmount(e.target.value)} placeholder="Enter amount in USD" />
                   </div>
                 </div>
                 {btcAmount && parseFloat(btcAmount) > 0 && (
                   <div className="p-3 bg-orange-950/30 border border-orange-500/30 rounded-lg text-sm space-y-1">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Original</span>
-                      <span>${parseFloat(btcAmount).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-orange-400 font-medium">
-                      <span>With 10% BTC Discount</span>
-                      <span>${(parseFloat(btcAmount) * 0.9).toFixed(2)}</span>
-                    </div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Original</span><span>${parseFloat(btcAmount).toFixed(2)}</span></div>
+                    <div className="flex justify-between text-orange-400 font-medium"><span>With 10% BTC Discount</span><span>${(parseFloat(btcAmount) * 0.9).toFixed(2)}</span></div>
                   </div>
                 )}
               </>
@@ -1614,40 +1492,21 @@ export default function LeadDetailPage() {
                   <p className="text-xs font-mono break-all text-orange-300 leading-relaxed">{btcPaymentLink}</p>
                 </div>
                 <div className="flex gap-2">
-                  <Button
-                    className="flex-1"
-                    variant="outline"
-                    onClick={async () => {
-                      await navigator.clipboard.writeText(btcPaymentLink);
-                      setCopiedBtcLink(true);
-                      setTimeout(() => setCopiedBtcLink(false), 3000);
-                    }}
-                  >
+                  <Button className="flex-1" variant="outline" onClick={async () => { await navigator.clipboard.writeText(btcPaymentLink); setCopiedBtcLink(true); setTimeout(() => setCopiedBtcLink(false), 3000); }}>
                     {copiedBtcLink ? <Check className="h-4 w-4 mr-2 text-green-500" /> : <Copy className="h-4 w-4 mr-2" />}
                     {copiedBtcLink ? "Copied!" : "Copy Link"}
                   </Button>
-                  <Button
-                    className="flex-1 bg-orange-600 hover:bg-orange-700"
-                    onClick={() => window.open(btcPaymentLink, "_blank")}
-                  >
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    Open
+                  <Button className="flex-1 bg-orange-600 hover:bg-orange-700" onClick={() => window.open(btcPaymentLink, "_blank")}>
+                    <ExternalLink className="h-4 w-4 mr-2" /> Open
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground text-center">
-                  You can verify this payment in the Admin Bitcoin Payments panel once the customer sends BTC.
-                </p>
               </div>
             )}
           </div>
           {!btcPaymentLink && (
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowBtcDialog(false)}>Cancel</Button>
-              <Button
-                onClick={() => createBtcPaymentMutation.mutate()}
-                disabled={createBtcPaymentMutation.isPending || !btcAmount || parseFloat(btcAmount) <= 0}
-                className="bg-orange-600 hover:bg-orange-700"
-              >
+              <Button onClick={() => createBtcPaymentMutation.mutate()} disabled={createBtcPaymentMutation.isPending || !btcAmount || parseFloat(btcAmount) <= 0} className="bg-orange-600 hover:bg-orange-700">
                 {createBtcPaymentMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Bitcoin className="h-4 w-4 mr-2" />}
                 {createBtcPaymentMutation.isPending ? "Generating..." : "Generate Link"}
               </Button>
