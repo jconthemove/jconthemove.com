@@ -9,7 +9,7 @@ import {
 
 interface AdminStats {
   totalLeads: number;
-  activeJobs: number;
+  activeLeads: number;
   totalUsers: number;
 }
 
@@ -54,7 +54,7 @@ export default function AdminOverviewPage() {
         {[
           { icon: Coins, label: "JCMOVES Balance", value: (liveBalance?.balance || 0).toLocaleString(undefined, { maximumFractionDigits: 0 }), color: "text-purple-400" },
           { icon: TrendingUp, label: "JCMOVES Burned", value: (buybackFund?.burnWallet?.tokenBalance || 0).toLocaleString(undefined, { maximumFractionDigits: 0 }), color: "text-green-400" },
-          { icon: Activity, label: "Active Jobs", value: String(adminStats?.activeJobs ?? "—"), color: "text-blue-400" },
+          { icon: Activity, label: "Active Leads", value: String(adminStats?.activeLeads ?? "—"), color: "text-blue-400" },
           { icon: Users, label: "Total Users", value: String(adminStats?.totalUsers ?? "—"), color: "text-orange-400" },
         ].map(s => (
           <Card key={s.label} className="border-white/5 bg-white/[0.03]">

@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Mail, Phone, MapPin, Calendar, Users, DollarSign, Award, TrendingUp, CheckCircle, Clock, Star, ExternalLink, Sparkles, Send, FileText, Loader2, Bitcoin, Copy, Check, Zap, ShoppingBag, AlertTriangle, UserCheck, Camera, Image } from "lucide-react";
+import { ArrowLeft, Mail, Phone, MapPin, Calendar, Users, DollarSign, Award, TrendingUp, CheckCircle, Clock, Star, ExternalLink, Sparkles, Send, FileText, Loader2, Bitcoin, Copy, Check, Zap, ShoppingBag, AlertTriangle, UserCheck, Camera, Image, ChevronRight, PlayCircle } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -213,7 +213,7 @@ export default function LeadDetailPage() {
   const [bonusMover, setBonusMover] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
-  const { hasAdminAccess } = useAuth();
+  const { hasAdminAccess, isEmployee } = useAuth();
 
   const { data: lead, isLoading, isError, error } = useQuery<Lead>({
     queryKey: ["/api/leads", params?.id],
@@ -416,6 +416,20 @@ export default function LeadDetailPage() {
     },
     onSuccess: () => {
       toast({ title: "Reminder sent", description: "Customer has been notified about tomorrow's move" });
+    },
+  });
+
+  const updateStatus = useMutation({
+    mutationFn: async (newStatus: string) => {
+      return await apiRequest("PATCH", `/api/leads/${params?.id}/status`, { status: newStatus });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads", params?.id] });
+      toast({ title: "Status updated", description: "Lead pipeline stage advanced." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update status", variant: "destructive" });
     },
   });
 
@@ -725,6 +739,65 @@ export default function LeadDetailPage() {
 
           {/* ─────────── TAB: DETAILS ─────────── */}
           <TabsContent value="details" className="space-y-4">
+            {/* Pipeline Stepper — admins and employees only */}
+            {(hasAdminAccess || isEmployee) && (() => {
+              const PIPELINE_STAGES = [
+                { key: "new",       label: "New",       next: "quoted",     action: "Send Quote"   },
+                { key: "quoted",    label: "Quoted",    next: "confirmed",  action: "Confirm Job"  },
+                { key: "confirmed", label: "Confirmed", next: "available",  action: "Start Job"    },
+                { key: "available", label: "In Progress", next: "completed", action: "Mark Complete" },
+                { key: "completed", label: "Completed", next: null,         action: null           },
+              ];
+              const currentIdx = PIPELINE_STAGES.findIndex(s => s.key === lead.status);
+              const currentStage = PIPELINE_STAGES[currentIdx] ?? PIPELINE_STAGES[0];
+              const nextStage = currentStage.next ? PIPELINE_STAGES.find(s => s.key === currentStage.next) : null;
+              return (
+                <Card className="border-blue-500/20 bg-blue-950/10">
+                  <CardContent className="pt-4 pb-4">
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Pipeline</p>
+                    <div className="flex items-center gap-1 mb-4 overflow-x-auto">
+                      {PIPELINE_STAGES.map((stage, idx) => {
+                        const isCompleted = currentIdx > idx;
+                        const isCurrent = currentIdx === idx;
+                        return (
+                          <div key={stage.key} className="flex items-center shrink-0">
+                            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                              isCompleted ? "bg-green-600/20 border-green-500/40 text-green-400" :
+                              isCurrent ? "bg-blue-600/30 border-blue-500/50 text-blue-300" :
+                              "bg-slate-800/50 border-slate-700/50 text-slate-500"
+                            }`}>
+                              {isCompleted && <CheckCircle className="h-3 w-3 shrink-0" />}
+                              {isCurrent && <PlayCircle className="h-3 w-3 shrink-0" />}
+                              <span>{stage.label}</span>
+                            </div>
+                            {idx < PIPELINE_STAGES.length - 1 && (
+                              <ChevronRight className="h-3 w-3 text-slate-600 mx-0.5 shrink-0" />
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {nextStage && lead.status !== "completed" && (
+                      <Button
+                        size="sm"
+                        onClick={() => updateStatus.mutate(currentStage.next!)}
+                        disabled={updateStatus.isPending}
+                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                      >
+                        {updateStatus.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <PlayCircle className="h-3.5 w-3.5 mr-1.5" />}
+                        {currentStage.action}
+                      </Button>
+                    )}
+                    {lead.status === "completed" && (
+                      <div className="flex items-center gap-1.5 text-green-400 text-sm font-semibold">
+                        <CheckCircle className="h-4 w-4" /> Job Complete
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })()}
+
             {/* Customer Information */}
             <Card>
               <CardHeader className="pb-3">

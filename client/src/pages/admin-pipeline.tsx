@@ -5,7 +5,7 @@ import {
   Search, ChevronRight, Star, MessageSquare, CheckCircle2,
   Clock, UserCheck, Clipboard, Send, RefreshCw, Filter,
   ArrowLeft, Phone, Mail, Calendar, DollarSign, ExternalLink,
-  AlertCircle, Truck, Copy, Check
+  AlertCircle, Truck, Copy, Check, Play
 } from "lucide-react";
 import { getStatusColors } from "@/lib/job-status";
 import { SERVICE_LABELS, getServiceBadgeColor } from "@/components/JobCard";
@@ -16,6 +16,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+
+// ─── Lead status pipeline (for quick-advance) ────────────────────────────────
+const LEAD_PIPELINE: Record<string, { next: string; action: string }> = {
+  new:       { next: "quoted",    action: "Send Quote"    },
+  quoted:    { next: "confirmed", action: "Confirm Job"   },
+  confirmed: { next: "available", action: "Start Job"     },
+  available: { next: "completed", action: "Mark Complete" },
+};
 
 // ─── Stage definitions ────────────────────────────────────────────────────────
 const STAGES = [
@@ -130,9 +138,20 @@ function ReviewRequestButton({ job }: { job: any }) {
 }
 
 // ─── Job Row ──────────────────────────────────────────────────────────────────
-function JobRow({ job, expanded, onToggle }: { job: any; expanded: boolean; onToggle: () => void }) {
+function JobRow({ job, expanded, onToggle, onRefresh }: { job: any; expanded: boolean; onToggle: () => void; onRefresh: () => void }) {
   const completedStages = STAGES.filter((s) => job.stages[s.key]?.done).length;
   const sc = getStatusColors(job.status);
+  const { toast } = useToast();
+  const pipelineStep = LEAD_PIPELINE[job.status];
+
+  const advanceMutation = useMutation({
+    mutationFn: () => apiRequest("PATCH", `/api/leads/${job.id}/status`, { status: pipelineStep!.next }),
+    onSuccess: () => {
+      toast({ title: "Advanced", description: `Moved to ${pipelineStep!.next}` });
+      onRefresh();
+    },
+    onError: () => toast({ title: "Error", description: "Could not advance status", variant: "destructive" }),
+  });
 
   return (
     <div className={`rounded-xl border-l-4 ${sc.border} border-t border-r border-b border-slate-700/60 transition-all bg-slate-900/80`}>
@@ -166,7 +185,22 @@ function JobRow({ job, expanded, onToggle }: { job: any; expanded: boolean; onTo
         </div>
 
         {/* Right side */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+          {pipelineStep && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => advanceMutation.mutate()}
+              disabled={advanceMutation.isPending}
+              className="h-6 text-xs px-2 border-blue-500/40 text-blue-400 hover:bg-blue-950/40"
+            >
+              {advanceMutation.isPending ? (
+                <RefreshCw className="h-3 w-3 animate-spin" />
+              ) : (
+                <><Play className="h-2.5 w-2.5 mr-1" />Advance</>
+              )}
+            </Button>
+          )}
           <span className="text-xs text-slate-500">{completedStages}/{STAGES.length}</span>
           <ChevronRight className={`h-4 w-4 text-slate-500 transition-transform ${expanded ? "rotate-90" : ""}`} />
         </div>
@@ -234,7 +268,7 @@ function JobRow({ job, expanded, onToggle }: { job: any; expanded: boolean; onTo
               </div>
             ) : (
               <div className="space-y-2">
-                {!isComplete && (
+                {!job.stages?.completed?.done && (
                   <p className="text-xs text-slate-500 flex items-center gap-1">
                     <AlertCircle className="h-3 w-3" />
                     Complete job first to request review
@@ -398,6 +432,7 @@ export default function AdminPipelinePage() {
                 job={job}
                 expanded={expandedId === job.id}
                 onToggle={() => setExpandedId(expandedId === job.id ? null : job.id)}
+                onRefresh={refetch}
               />
             ))}
           </div>

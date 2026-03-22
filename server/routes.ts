@@ -7709,10 +7709,12 @@ Thank you for your business!
       const users = await storage.getAllUsers();
       const leads = await storage.getLeads();
       
+      const activeLeadsCount = leads.filter((lead: any) => lead.status === 'new' || lead.status === 'available').length;
       const stats = {
         totalUsers: users.length,
         totalLeads: leads.length,
-        activeJobs: leads.filter((lead: any) => lead.status === 'in_progress').length,
+        activeLeads: activeLeadsCount,
+        activeJobs: activeLeadsCount, // backward-compat alias
         monthlyRevenue: 45000, // This would come from actual financial data
         completedJobs: leads.filter((lead: any) => lead.status === 'completed').length,
         pendingLeads: leads.filter((lead: any) => lead.status === 'new').length,
@@ -13822,7 +13824,7 @@ Thank you for your business!
       if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
 
       const [activeItems] = await db.select({ count: sql<number>`count(*)` }).from(rewardItems).where(eq(rewardItems.status, "active"));
-      const [pendingRedemptions] = await db.select({ count: sql<number>`count(*)` }).from(rewardRedemptions).where(eq(rewardRedemptions.status, "pending"));
+      const [pendingRedemptions] = await db.select({ count: sql<number>`count(*)` }).from(rewardRedemptions).where(inArray(rewardRedemptions.status, ["pending", "pending_approval", "redeemed_pending_schedule"]));
       const [tokensBurned] = await db.select({ total: sql<number>`coalesce(sum(token_cost), 0)` }).from(rewardRedemptions).where(eq(rewardRedemptions.status, "completed"));
       const [lowStock] = await db.select({ count: sql<number>`count(*)` }).from(rewardItems).where(and(eq(rewardItems.status, "active"), sql`inventory IS NOT NULL AND inventory < 5`));
 

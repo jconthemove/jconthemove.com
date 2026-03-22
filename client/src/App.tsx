@@ -421,9 +421,7 @@ function AuthenticatedApp() {
             <PageWrapper component={TeamHub} />
           </Route>
           <Route path="/dashboard">
-            <RouteGuard allowedRoles={['admin', 'employee', 'business_owner']}>
-              <PageWrapper component={Dashboard} />
-            </RouteGuard>
+            <Redirect to="/admin" />
           </Route>
           <Route path="/employee/add-job">
             <RouteGuard allowedRoles={['admin', 'employee', 'business_owner']}>
@@ -492,9 +490,7 @@ function AuthenticatedApp() {
             </RouteGuard>
           </Route>
           <Route path="/in-god-we-trust">
-            <RouteGuard allowedRoles={['admin', 'business_owner']}>
-              <PageWrapper component={InGodWeTrustPage} />
-            </RouteGuard>
+            <Redirect to="/admin/finance" />
           </Route>
           <Route path="/admin/treasury">
             <RouteGuard allowedRoles={['admin', 'business_owner']}>
