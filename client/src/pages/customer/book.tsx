@@ -21,19 +21,33 @@ const SERVICES = [
   { value: "handyman", label: "Handyman", sub: "General repairs", icon: Wrench, color: "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700 text-amber-700 dark:text-amber-300" },
 ];
 
-interface MovingPackage { id: string; movers: number; hours: number; label: string; tag?: string; isJc222?: boolean; }
+interface MovingPackage { id: string; movers: number; hours: number; label: string; tag?: string; }
 interface JunkPackage { id: string; label: string; desc: string; low: number; high: number; tag?: string; }
 interface Addon { id: string; name: string; description?: string; unitPrice: number; qtyOptions: number[]; }
 interface CatalogDefs { movingPackages: MovingPackage[]; junkPackages: JunkPackage[]; movingAddons: Addon[]; junkAddons: Addon[]; }
 interface Pricing { ratePerMoverHour: number; jc222Price: number; shortJobFull: number; }
 
+// Hour-based discount tiers: book more hours, save more
+const HOUR_TIERS = [
+  { minHours: 7, pct: 20, label: "20% Off", desc: "7+ hours" },
+  { minHours: 5, pct: 15, label: "15% Off", desc: "5+ hours" },
+  { minHours: 3, pct: 10, label: "10% Off", desc: "3+ hours" },
+];
+
+function getHourDiscount(hours: number): { pct: number; label: string; desc: string } | null {
+  return HOUR_TIERS.find(t => hours >= t.minHours) ?? null;
+}
+
 const FALLBACK_MOVING: MovingPackage[] = [
-  { id: "moving_2m_2h", movers: 2, hours: 2, label: "JC222 Special", tag: "💥 Best Deal", isJc222: true },
-  { id: "moving_2m_3h", movers: 2, hours: 3, label: "2 Movers × 3 hrs", tag: "Short Move" },
-  { id: "moving_3m_3h", movers: 3, hours: 3, label: "3 Movers × 3 hrs", tag: "Most Popular" },
-  { id: "moving_3m_4h", movers: 3, hours: 4, label: "3 Movers × 4 hrs" },
-  { id: "moving_4m_4h", movers: 4, hours: 4, label: "4 Movers × 4 hrs", tag: "Heavy Move" },
-  { id: "moving_2m_6h", movers: 2, hours: 6, label: "2 Movers × 6 hrs", tag: "Full Day" },
+  { id: "moving_2m_2h", movers: 2, hours: 2, label: "2 Movers × 2 hrs",  tag: "Quick Job"      },
+  { id: "moving_2m_3h", movers: 2, hours: 3, label: "2 Movers × 3 hrs",  tag: "10% Off"        },
+  { id: "moving_3m_3h", movers: 3, hours: 3, label: "3 Movers × 3 hrs",  tag: "Most Popular"   },
+  { id: "moving_3m_4h", movers: 3, hours: 4, label: "3 Movers × 4 hrs"                         },
+  { id: "moving_2m_5h", movers: 2, hours: 5, label: "2 Movers × 5 hrs",  tag: "15% Off"        },
+  { id: "moving_3m_5h", movers: 3, hours: 5, label: "3 Movers × 5 hrs",  tag: "15% Off"        },
+  { id: "moving_4m_4h", movers: 4, hours: 4, label: "4 Movers × 4 hrs",  tag: "Heavy Move"     },
+  { id: "moving_2m_7h", movers: 2, hours: 7, label: "2 Movers × 7 hrs",  tag: "20% Off · Best Value" },
+  { id: "moving_3m_7h", movers: 3, hours: 7, label: "3 Movers × 7 hrs",  tag: "20% Off"        },
 ];
 const FALLBACK_JUNK: JunkPackage[] = [
   { id: "junk_small", label: "Small Load", desc: "¼ truck or less", low: 100, high: 175, tag: "Quick Pickup" },
@@ -74,7 +88,6 @@ export default function CustomerBookPage() {
   const { data: catalog } = useQuery<CatalogDefs>({ queryKey: ["/api/pricing/catalog-definitions"], retry: 2 });
 
   const ratePerMoverHour = pricing?.ratePerMoverHour ?? 60;
-  const jc222Price = pricing?.jc222Price ?? 222;
   const shortJobFull = pricing?.shortJobFull ?? 300;
 
   const movingPackages = catalog?.movingPackages?.length ? catalog.movingPackages : FALLBACK_MOVING;
@@ -90,10 +103,11 @@ export default function CustomerBookPage() {
     ? movingPackages.find(p => p.id === selectedPkgId)
     : junkPackages.find(p => p.id === selectedPkgId);
 
-  const calcMovingPrice = (pkg: MovingPackage) => {
-    if (pkg.isJc222) return jc222Price;
+  const calcMovingPrice = (pkg: MovingPackage): number => {
     const base = pkg.movers * pkg.hours * ratePerMoverHour;
-    return base < shortJobFull ? shortJobFull : base;
+    const floored = base < shortJobFull ? shortJobFull : base;
+    const discount = getHourDiscount(pkg.hours);
+    return discount ? Math.round(floored * (1 - discount.pct / 100)) : floored;
   };
 
   const calcAddonTotal = () => {
@@ -376,14 +390,32 @@ export default function CustomerBookPage() {
           <div className="space-y-4">
             <div>
               <h2 className="text-xl font-bold mb-1">Choose a package</h2>
-              <p className="text-sm text-muted-foreground">Pick the option that best fits your job.</p>
+              <p className="text-sm text-muted-foreground">Book more hours and save automatically.</p>
             </div>
+
+            {/* Discount tier callout */}
+            {isMoving && (
+              <div className="flex items-stretch gap-2">
+                {HOUR_TIERS.map(tier => (
+                  <div key={tier.pct} className="flex-1 bg-green-500/10 border border-green-500/20 rounded-xl p-2.5 text-center">
+                    <p className="text-green-500 font-black text-sm">{tier.label}</p>
+                    <p className="text-muted-foreground text-[10px] mt-0.5">{tier.desc}</p>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Moving packages */}
             {isMoving && (
               <div className="space-y-2">
                 {movingPackages.map(pkg => {
+                  const fullPrice = (() => {
+                    const base = pkg.movers * pkg.hours * ratePerMoverHour;
+                    return base < shortJobFull ? shortJobFull : base;
+                  })();
                   const price = calcMovingPrice(pkg);
+                  const discount = getHourDiscount(pkg.hours);
+                  const savings = fullPrice - price;
                   const isSelected = selectedPkgId === pkg.id;
                   return (
                     <button key={pkg.id} onClick={() => setSelectedPkgId(pkg.id)}
@@ -393,9 +425,13 @@ export default function CustomerBookPage() {
                           <Users className="h-4 w-4" />
                         </div>
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <p className="font-semibold text-sm">{pkg.label}</p>
-                            {pkg.tag && <Badge className="text-[10px] px-1.5 py-0">{pkg.tag}</Badge>}
+                            {discount && (
+                              <Badge className="text-[10px] px-1.5 py-0 bg-green-500/20 text-green-600 border-green-500/30">
+                                {discount.label}
+                              </Badge>
+                            )}
                           </div>
                           <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
                             <span className="flex items-center gap-1"><Users className="h-3 w-3" />{pkg.movers} movers</span>
@@ -403,8 +439,14 @@ export default function CustomerBookPage() {
                           </div>
                         </div>
                       </div>
-                      <div className="text-right">
+                      <div className="text-right flex-shrink-0">
                         <p className="font-bold text-primary">${price}</p>
+                        {discount && savings > 0 && (
+                          <p className="text-[10px] text-green-500 line-through-adjacent">
+                            <span className="line-through text-muted-foreground">${fullPrice}</span>
+                            <span className="ml-1 text-green-500">−${savings}</span>
+                          </p>
+                        )}
                         {isSelected && <CheckCircle className="h-4 w-4 text-primary ml-auto mt-0.5" />}
                       </div>
                     </button>

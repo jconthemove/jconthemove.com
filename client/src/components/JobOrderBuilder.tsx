@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import {
   Users, Clock, DollarSign, Truck, Package2, Zap, AlertTriangle,
-  CheckCircle2, Star, ShoppingCart, ChevronDown, ChevronUp, Sparkles,
+  CheckCircle2, Star, ShoppingCart, ChevronDown, ChevronUp,
   Wrench, Sofa, Navigation
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -54,7 +54,6 @@ interface OrderPackage {
   hours: number;
   label: string;
   tag?: string;
-  isJc222?: boolean;
 }
 
 interface LineItem {
@@ -74,8 +73,18 @@ interface OrderSummary {
   confirmedHours: number;
   lineItems: LineItem[];
   packageLabel: string;
-  isJc222: boolean;
   tokenEstimate: number;
+}
+
+// Hour-based discount tiers
+const HOUR_TIERS = [
+  { minHours: 7, pct: 20 },
+  { minHours: 5, pct: 15 },
+  { minHours: 3, pct: 10 },
+];
+
+function getHourDiscount(hours: number): number {
+  return HOUR_TIERS.find(t => hours >= t.minHours)?.pct ?? 0;
 }
 
 interface JobOrderBuilderProps {
@@ -101,16 +110,18 @@ interface JobOrderBuilderProps {
   }) => void;
 }
 
-const MOVING_PACKAGES: { id: string; movers: number; hours: number; label: string; tag?: string; isJc222?: boolean }[] = [
-  { id: "moving_2m_2h", movers: 2, hours: 2, label: "JC222 Special", tag: "💥 Best Deal", isJc222: true },
-  { id: "moving_2m_3h", movers: 2, hours: 3, label: "2 Movers × 3 hrs", tag: "Short Move" },
-  { id: "moving_2m_4h", movers: 2, hours: 4, label: "2 Movers × 4 hrs" },
-  { id: "moving_3m_3h", movers: 3, hours: 3, label: "3 Movers × 3 hrs", tag: "Most Popular" },
-  { id: "moving_3m_4h", movers: 3, hours: 4, label: "3 Movers × 4 hrs" },
-  { id: "moving_4m_3h", movers: 4, hours: 3, label: "4 Movers × 3 hrs", tag: "Fastest" },
-  { id: "moving_4m_4h", movers: 4, hours: 4, label: "4 Movers × 4 hrs", tag: "Heavy Move" },
-  { id: "moving_2m_6h", movers: 2, hours: 6, label: "2 Movers × 6 hrs", tag: "Full Day" },
-  { id: "moving_3m_6h", movers: 3, hours: 6, label: "3 Movers × 6 hrs" },
+const MOVING_PACKAGES: { id: string; movers: number; hours: number; label: string; tag?: string }[] = [
+  { id: "moving_2m_2h", movers: 2, hours: 2, label: "2 Movers × 2 hrs",  tag: "Quick Job"      },
+  { id: "moving_2m_3h", movers: 2, hours: 3, label: "2 Movers × 3 hrs",  tag: "10% Off"        },
+  { id: "moving_3m_3h", movers: 3, hours: 3, label: "3 Movers × 3 hrs",  tag: "Most Popular"   },
+  { id: "moving_2m_4h", movers: 2, hours: 4, label: "2 Movers × 4 hrs"                         },
+  { id: "moving_3m_4h", movers: 3, hours: 4, label: "3 Movers × 4 hrs"                         },
+  { id: "moving_4m_3h", movers: 4, hours: 3, label: "4 Movers × 3 hrs",  tag: "10% Off"        },
+  { id: "moving_4m_4h", movers: 4, hours: 4, label: "4 Movers × 4 hrs",  tag: "Heavy Move"     },
+  { id: "moving_2m_5h", movers: 2, hours: 5, label: "2 Movers × 5 hrs",  tag: "15% Off"        },
+  { id: "moving_3m_5h", movers: 3, hours: 5, label: "3 Movers × 5 hrs",  tag: "15% Off"        },
+  { id: "moving_2m_7h", movers: 2, hours: 7, label: "2 Movers × 7 hrs",  tag: "20% Off · Best" },
+  { id: "moving_3m_7h", movers: 3, hours: 7, label: "3 Movers × 7 hrs",  tag: "20% Off"        },
 ];
 
 const MOVING_ADDONS = [
@@ -154,8 +165,11 @@ function PackageCard({ pkg, selected, pricing, onSelect }: {
   pricing: Pricing;
   onSelect: () => void;
 }) {
-  const labor = pkg.isJc222 ? pricing.jc222Price : pkg.movers * pkg.hours * pricing.ratePerMoverHour;
-  const savings = pkg.isJc222 ? pricing.shortJobFull - pricing.jc222Price : 0;
+  const base = pkg.movers * pkg.hours * pricing.ratePerMoverHour;
+  const floored = base < pricing.shortJobFull ? pricing.shortJobFull : base;
+  const discountPct = getHourDiscount(pkg.hours);
+  const labor = discountPct > 0 ? Math.round(floored * (1 - discountPct / 100)) : floored;
+  const savings = floored - labor;
 
   return (
     <button
@@ -164,21 +178,21 @@ function PackageCard({ pkg, selected, pricing, onSelect }: {
         "w-full text-left rounded-xl border-2 p-3 transition-all",
         selected
           ? "border-blue-500 bg-blue-950/40 ring-1 ring-blue-500/40"
-          : "border-slate-700/50 bg-slate-800/40 hover:border-slate-600",
-        pkg.isJc222 && "border-yellow-500/60 bg-gradient-to-br from-yellow-950/40 to-slate-800/40"
+          : "border-slate-700/50 bg-slate-800/40 hover:border-slate-600"
       )}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
-            {pkg.isJc222 && <Sparkles className="h-3.5 w-3.5 text-yellow-400 flex-shrink-0" />}
-            <span className={cn("text-sm font-semibold", pkg.isJc222 ? "text-yellow-300" : "text-white")}>
-              {pkg.label}
-            </span>
-            {pkg.tag && (
+            <span className="text-sm font-semibold text-white">{pkg.label}</span>
+            {discountPct > 0 && (
+              <Badge className="text-[10px] px-1.5 py-0 h-4 border bg-green-600/20 text-green-400 border-green-500/30">
+                {discountPct}% Off
+              </Badge>
+            )}
+            {!discountPct && pkg.tag && (
               <Badge className={cn(
                 "text-[10px] px-1.5 py-0 h-4 border",
-                pkg.isJc222 ? "bg-yellow-600/30 text-yellow-300 border-yellow-500/40" :
                 pkg.tag === "Most Popular" ? "bg-teal-600/30 text-teal-300 border-teal-500/40" :
                 "bg-slate-700/50 text-slate-400 border-slate-600/40"
               )}>
@@ -190,19 +204,15 @@ function PackageCard({ pkg, selected, pricing, onSelect }: {
             <span className="flex items-center gap-1"><Users className="h-3 w-3" />{pkg.movers} movers</span>
             <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{pkg.hours} hrs</span>
           </div>
-          {pkg.isJc222 && savings > 0 && (
-            <p className="text-[11px] text-yellow-400/80 mt-0.5">Save ${savings} — promo price!</p>
+          {savings > 0 && (
+            <p className="text-[11px] text-green-400/80 mt-0.5">Save ${savings}</p>
           )}
         </div>
         <div className="text-right flex-shrink-0">
-          {pkg.isJc222 ? (
-            <>
-              <p className="text-slate-400 line-through text-xs">${pricing.shortJobFull}</p>
-              <p className="font-bold text-yellow-300 text-base">${pricing.jc222Price}</p>
-            </>
-          ) : (
-            <p className="font-bold text-emerald-400 text-base">${labor.toLocaleString()}</p>
+          {savings > 0 && (
+            <p className="text-slate-500 line-through text-xs">${floored}</p>
           )}
+          <p className="font-bold text-emerald-400 text-base">${labor.toLocaleString()}</p>
         </div>
       </div>
       {selected && (
@@ -350,11 +360,17 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
     if (isMoving) {
       if (selectedPkg === null) return null;
       const pkg = movingPackages[selectedPkg];
-      const laborTotal = pkg.isJc222 ? pricing.jc222Price : pkg.movers * pkg.hours * pricing.ratePerMoverHour;
+      const base = pkg.movers * pkg.hours * pricing.ratePerMoverHour;
+      const floored = base < pricing.shortJobFull ? pricing.shortJobFull : base;
+      const discountPct = getHourDiscount(pkg.hours);
+      const laborTotal = discountPct > 0 ? Math.round(floored * (1 - discountPct / 100)) : floored;
+      const laborLabel = discountPct > 0
+        ? `Labor — ${pkg.movers} Movers × ${pkg.hours} hrs (${discountPct}% off)`
+        : `Labor — ${pkg.movers} Movers × ${pkg.hours} hrs @ $${pricing.ratePerMoverHour}/mover/hr`;
 
       lineItems.push({
         id: pkg.id,
-        name: pkg.isJc222 ? `JC222 Special — ${pkg.movers} Movers × ${pkg.hours} hrs` : `Labor — ${pkg.movers} Movers × ${pkg.hours} hrs @ $${pricing.ratePerMoverHour}/mover/hr`,
+        name: laborLabel,
         qty: 1,
         unitPrice: laborTotal,
         total: laborTotal,
@@ -402,7 +418,6 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
         confirmedHours: pkg.hours,
         lineItems,
         packageLabel: pkg.label,
-        isJc222: !!pkg.isJc222,
         tokenEstimate: Math.round(grandTotal * EARN_RATE),
       };
     }
@@ -463,7 +478,6 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
         confirmedHours: 2,
         lineItems,
         packageLabel,
-        isJc222: false,
         tokenEstimate: Math.round(grandTotal * EARN_RATE),
       };
     }
@@ -555,13 +569,20 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
 
           {isMoving && (
             <>
-              {/* JC222 promo highlight */}
-              <div className="mb-3 p-3 rounded-xl bg-yellow-950/30 border border-yellow-500/30 text-xs text-yellow-300/80">
-                <div className="flex items-center gap-1.5 font-semibold mb-1">
-                  <Sparkles className="h-3.5 w-3.5 text-yellow-400" />
-                  JC222 Special — ${pricing.jc222Price} (save ${pricing.shortJobFull - pricing.jc222Price})
+              {/* Hour-based discount tiers */}
+              <div className="mb-3 flex gap-1.5">
+                <div className="flex-1 bg-green-500/10 border border-green-500/20 rounded-lg p-2 text-center">
+                  <p className="text-green-400 font-black text-xs">10% Off</p>
+                  <p className="text-slate-500 text-[10px]">3+ hrs</p>
                 </div>
-                2 movers, 2 hrs — perfect for small/studio moves or load-only jobs. Use code JC222 to lock it in.
+                <div className="flex-1 bg-green-500/10 border border-green-500/20 rounded-lg p-2 text-center">
+                  <p className="text-green-400 font-black text-xs">15% Off</p>
+                  <p className="text-slate-500 text-[10px]">5+ hrs</p>
+                </div>
+                <div className="flex-1 bg-green-500/10 border border-green-500/20 rounded-lg p-2 text-center">
+                  <p className="text-green-400 font-black text-xs">20% Off</p>
+                  <p className="text-slate-500 text-[10px]">7+ hrs</p>
+                </div>
               </div>
               <div className="space-y-2">
                 {movingPackages.map((pkg, i) => (
@@ -825,12 +846,6 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
                 <span className="flex items-center gap-1"><Zap className="h-3 w-3" />Customer earns</span>
                 <span>~{summary.tokenEstimate.toLocaleString()} JCMOVES</span>
               </div>
-              {summary.isJc222 && (
-                <div className="mt-2 p-2 rounded-lg bg-yellow-950/40 border border-yellow-500/30 text-xs text-yellow-300/90 flex items-center gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5 text-yellow-400 flex-shrink-0" />
-                  JC222 promo price applied — ${pricing.shortJobFull - pricing.jc222Price} saved!
-                </div>
-              )}
             </div>
           </div>
         )}
