@@ -4,7 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft, Truck, Trash2, Snowflake, Wrench, MapPin, Calendar, FileText,
   CheckCircle, Coins, Loader2, ChevronRight, Camera, X, Image, Video, Upload,
-  Users, Clock, Package, CheckCircle2, Minus, Plus, HelpCircle, DollarSign
+  Users, Clock, Package, CheckCircle2, Minus, Plus, HelpCircle, DollarSign,
+  Tag, AlertCircle
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -111,6 +112,37 @@ export default function PostJobPage() {
   const [media, setMedia] = useState<UploadedMedia[]>([]);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [promoCode, setPromoCode] = useState("");
+  const [promoResult, setPromoResult] = useState<{
+    valid: boolean; discountPercent?: number; description?: string; code?: string; error?: string;
+  } | null>(null);
+  const [promoLoading, setPromoLoading] = useState(false);
+
+  useEffect(() => {
+    const trimmed = promoCode.trim().toUpperCase();
+    if (!trimmed) { setPromoResult(null); return; }
+    const timer = setTimeout(async () => {
+      setPromoLoading(true);
+      try {
+        const res = await fetch("/api/promo-codes/validate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ code: trimmed, context: "service" }),
+        });
+        const data = await res.json();
+        setPromoResult(data.valid
+          ? { valid: true, discountPercent: data.discountPercent, description: data.description, code: data.code }
+          : { valid: false, error: data.error || "Invalid code" });
+      } catch {
+        setPromoResult({ valid: false, error: "Could not verify code" });
+      } finally {
+        setPromoLoading(false);
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [promoCode]);
 
   const [selectedPkgId, setSelectedPkgId] = useState<string | null>(prefilledPackageId || null);
   const [addonQtys, setAddonQtys] = useState<Record<string, number>>(prefilledAddons);
@@ -287,6 +319,7 @@ export default function PostJobPage() {
         selectedPackageId: pkgId || undefined,
         crewSize: pkgId ? crewSize : undefined,
         basePrice: estimatedTotal > 0 ? estimatedTotal.toFixed(2) : undefined,
+        promoCode: promoResult?.valid && promoResult.code ? promoResult.code : undefined,
       });
       return res.json();
     },
@@ -939,6 +972,41 @@ export default function PostJobPage() {
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Promo code input */}
+            <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 p-4 shadow-sm space-y-2">
+              <label className="flex items-center gap-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                <Tag className="h-4 w-4 text-jc-orange" />
+                Have a promo code?
+              </label>
+              <div className="flex gap-2 items-center">
+                <input
+                  type="text"
+                  value={promoCode}
+                  onChange={e => setPromoCode(e.target.value.toUpperCase())}
+                  placeholder="e.g. JC10OFF-A3K7"
+                  maxLength={24}
+                  className="flex-1 h-11 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 px-3 text-sm font-mono uppercase tracking-wider text-zinc-900 dark:text-white placeholder:normal-case placeholder:tracking-normal placeholder:font-sans focus:outline-none focus:ring-2 focus:ring-jc-orange/40"
+                />
+                {promoLoading && <Loader2 className="h-4 w-4 animate-spin text-zinc-400 flex-shrink-0" />}
+                {!promoLoading && promoResult?.valid && <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0" />}
+                {!promoLoading && promoResult && !promoResult.valid && <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0" />}
+              </div>
+              {promoResult?.valid && (
+                <div className="flex items-center gap-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 px-3 py-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                  <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+                    {promoResult.discountPercent ? `${promoResult.discountPercent}% off your service` : promoResult.description || "Code applied!"}
+                  </span>
+                </div>
+              )}
+              {promoResult && !promoResult.valid && (
+                <div className="flex items-center gap-2 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-3 py-2">
+                  <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+                  <span className="text-sm text-red-600 dark:text-red-400">{promoResult.error}</span>
+                </div>
+              )}
             </div>
 
             <div className="bg-jc-orange/5 border border-jc-orange/20 rounded-2xl p-4 flex items-center gap-3">
