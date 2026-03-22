@@ -19,10 +19,10 @@ import { apiRequest } from "@/lib/queryClient";
 
 // ─── Lead status pipeline (for quick-advance) ────────────────────────────────
 const LEAD_PIPELINE: Record<string, { next: string; action: string }> = {
-  new:       { next: "quoted",    action: "Send Quote"    },
-  quoted:    { next: "confirmed", action: "Confirm Job"   },
-  confirmed: { next: "available", action: "Start Job"     },
-  available: { next: "completed", action: "Mark Complete" },
+  new:         { next: "quoted",      action: "Send Quote"      },
+  quoted:      { next: "available",   action: "Confirm Job"     },
+  available:   { next: "in_progress", action: "Start Job"       },
+  in_progress: { next: "completed",   action: "Mark Complete"   },
 };
 
 // ─── Stage definitions ────────────────────────────────────────────────────────

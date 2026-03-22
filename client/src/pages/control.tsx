@@ -50,7 +50,7 @@ const SECTIONS = [
         statsSuffix: "total",
       },
       {
-        href: "/admin/pipeline",
+        href: "/admin/jobs",
         icon: Activity,
         label: "Job Pipeline",
         description: "Track every job from quote → completion A–Z",

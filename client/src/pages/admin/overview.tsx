@@ -94,14 +94,12 @@ export default function AdminOverviewPage() {
       {/* Quick Links Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {[
-          { href: "/crew", label: "Team Hub", desc: "Today's jobs, crew status, inspiration", color: "from-blue-600 to-blue-700" },
-          { href: "/crew/jobs", label: "Job Board", desc: "All leads, status updates", color: "from-cyan-600 to-cyan-700" },
-          { href: "/admin/jobs", label: "Jobs & Pipeline", desc: "Leads + pipeline view", color: "from-amber-600 to-orange-600" },
+          { href: "/admin/jobs", label: "Jobs", desc: "All leads, pipeline & job management", color: "from-amber-600 to-orange-600" },
           { href: "/admin/people", label: "People", desc: "Users, roles, employees", color: "from-orange-600 to-orange-700" },
           { href: "/admin/finance", label: "Finance", desc: "Treasury, transfers, payouts", color: "from-emerald-600 to-green-700" },
           { href: "/admin/marketplace", label: "Marketplace", desc: "Rewards, lottery, promo codes", color: "from-purple-600 to-purple-700" },
           { href: "/admin/system", label: "System", desc: "System check, Square, config", color: "from-slate-500 to-slate-700" },
-          { href: "/leads", label: "All Leads", desc: "Browse and search all leads", color: "from-teal-600 to-teal-700" },
+          { href: "/crew", label: "Team Hub", desc: "Today's jobs, crew status, inspiration", color: "from-blue-600 to-blue-700" },
         ].map(item => (
           <Link key={item.href} href={item.href}>
             <div className="group flex items-center gap-3 border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/10 rounded-xl p-4 cursor-pointer transition-all">

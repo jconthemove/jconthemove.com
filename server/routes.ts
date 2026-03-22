@@ -5795,6 +5795,74 @@ Thank you for your business!
     }
   });
 
+  // Job board — open jobs employees can sign up for (personal info masked)
+  app.get("/api/leads/job-board", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const userId = req.currentUser.id;
+      const openLeads = await db.select({
+        id: leads.id,
+        serviceType: leads.serviceType,
+        fromAddress: leads.fromAddress,
+        toAddress: leads.toAddress,
+        moveDate: leads.moveDate,
+        crewSize: leads.crewSize,
+        status: leads.status,
+        price: leads.price,
+        details: leads.details,
+        crewMembers: leads.crewMembers,
+        confirmedDate: leads.confirmedDate,
+        createdAt: leads.createdAt,
+      })
+        .from(leads)
+        .where(
+          and(
+            inArray(leads.status, ["new", "quoted", "available", "in_progress"]),
+          )
+        )
+        .orderBy(desc(leads.createdAt));
+
+      const masked = openLeads.map(lead => ({
+        ...lead,
+        estimatedTokens: lead.price ? Math.floor(Number(lead.price) * 15) + 1500 : 1500,
+        alreadyApplied: Array.isArray(lead.crewMembers) && lead.crewMembers.includes(userId),
+        crewSlotsFilled: Array.isArray(lead.crewMembers) ? lead.crewMembers.length : 0,
+      }));
+
+      res.json(masked);
+    } catch (error) {
+      console.error("Error fetching job board:", error);
+      res.status(500).json({ error: "Failed to fetch job board" });
+    }
+  });
+
+  // Worker signs up for a job (adds self to crewMembers)
+  app.post("/api/leads/:id/crew-apply", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const leadId = req.params.id;
+      const userId = req.currentUser.id;
+
+      const [lead] = await db.select().from(leads).where(eq(leads.id, leadId));
+      if (!lead) return res.status(404).json({ error: "Job not found" });
+
+      if (["completed", "cancelled"].includes(lead.status)) {
+        return res.status(400).json({ error: "This job is no longer open" });
+      }
+
+      const currentMembers: string[] = Array.isArray(lead.crewMembers) ? lead.crewMembers : [];
+      if (currentMembers.includes(userId)) {
+        return res.status(400).json({ error: "You have already signed up for this job" });
+      }
+
+      const updatedMembers = [...currentMembers, userId];
+      await db.update(leads).set({ crewMembers: updatedMembers }).where(eq(leads.id, leadId));
+
+      res.json({ success: true, message: "You're signed up! The admin will confirm your assignment." });
+    } catch (error) {
+      console.error("Error applying to job:", error);
+      res.status(500).json({ error: "Failed to sign up for job" });
+    }
+  });
+
   // ── Worker Availability & Goals ────────────────────────────────────────────
 
   // My full availability: blocks + schedule + goals + stats

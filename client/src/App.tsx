@@ -434,9 +434,7 @@ function AuthenticatedApp() {
             </RouteGuard>
           </Route>
           <Route path="/leads">
-            <RouteGuard allowedRoles={['admin', 'employee', 'business_owner']}>
-              <PageWrapper component={LeadsPage} />
-            </RouteGuard>
+            <Redirect to="/admin/jobs" />
           </Route>
           <Route path="/lead/:id">
             <PageWrapper component={LeadDetailPage} />
@@ -513,9 +511,7 @@ function AuthenticatedApp() {
             </RouteGuard>
           </Route>
           <Route path="/admin/pipeline">
-            <RouteGuard allowedRoles={['admin', 'business_owner']}>
-              <AdminPipelinePage />
-            </RouteGuard>
+            <Redirect to="/admin/jobs" />
           </Route>
           <Route path="/admin/promo-codes">
             <RouteGuard allowedRoles={['admin', 'business_owner']}>

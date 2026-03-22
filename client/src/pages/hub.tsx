@@ -1095,9 +1095,9 @@ export default function TeamHub() {
                           Full Leads View <ChevronRight className="h-3 w-3 ml-1" />
                         </Button>
                       </Link>
-                      <Link href="/admin/pipeline">
+                      <Link href="/admin/jobs">
                         <Button variant="outline" size="sm" className="border-white/10 text-slate-400 hover:text-white">
-                          Pipeline View <ChevronRight className="h-3 w-3 ml-1" />
+                          Manage Jobs <ChevronRight className="h-3 w-3 ml-1" />
                         </Button>
                       </Link>
                     </div>

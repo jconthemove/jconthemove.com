@@ -126,7 +126,7 @@ export default function InGodWeTrustPage() {
       badgeColor: "bg-blue-500",
     },
     {
-      href: "/admin/pipeline",
+      href: "/admin/jobs",
       icon: Activity,
       label: "Job Pipeline A–Z",
       description: "Track every job from quote → review with full lifecycle view",
