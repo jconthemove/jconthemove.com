@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft, Truck, Trash2, Snowflake, Wrench, MapPin, Calendar, FileText,
   CheckCircle, Coins, Loader2, ChevronRight, Camera, X, Image, Video, Upload,
-  Users, Clock, Sparkles, Package, CheckCircle2, Minus, Plus
+  Users, Clock, Package, CheckCircle2, Minus, Plus, HelpCircle, DollarSign
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -13,10 +13,11 @@ import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 
 const SERVICES = [
-  { value: "residential", label: "Moving", sub: "Local & long distance", icon: Truck, color: "bg-blue-50 dark:bg-blue-900/20 text-blue-600 border-blue-200 dark:border-blue-800" },
-  { value: "junk", label: "Junk Removal", sub: "Haul away & disposal", icon: Trash2, color: "bg-orange-50 dark:bg-orange-900/20 text-orange-600 border-orange-200 dark:border-orange-800" },
-  { value: "snow", label: "Snow Removal", sub: "Plowing & shoveling", icon: Snowflake, color: "bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 border-cyan-200 dark:border-cyan-800" },
-  { value: "handyman", label: "Handyman", sub: "General repairs", icon: Wrench, color: "bg-amber-50 dark:bg-amber-900/20 text-amber-600 border-amber-200 dark:border-amber-800" },
+  { value: "residential", label: "Moving",         sub: "Local & long distance",              icon: Truck,       color: "bg-blue-50 dark:bg-blue-900/20 text-blue-600 border-blue-200 dark:border-blue-800"     },
+  { value: "junk",        label: "Junk Removal",   sub: "Haul away & disposal",               icon: Trash2,      color: "bg-orange-50 dark:bg-orange-900/20 text-orange-600 border-orange-200 dark:border-orange-800" },
+  { value: "snow",        label: "Snow Removal",   sub: "Plowing & shoveling",                icon: Snowflake,   color: "bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 border-cyan-200 dark:border-cyan-800"     },
+  { value: "handyman",    label: "Handyman",        sub: "General repairs & labor",            icon: Wrench,      color: "bg-amber-50 dark:bg-amber-900/20 text-amber-600 border-amber-200 dark:border-amber-800" },
+  { value: "custom",      label: "Something Else",  sub: "Describe what you need — we'll quote you", icon: HelpCircle, color: "bg-violet-50 dark:bg-violet-900/20 text-violet-600 border-violet-200 dark:border-violet-800" },
 ];
 
 const EARN_RATE = 15;
@@ -37,7 +38,6 @@ interface MovingPackage {
   hours: number;
   label: string;
   tag?: string;
-  isJc222?: boolean;
 }
 
 interface JunkPackage {
@@ -107,6 +107,7 @@ export default function PostJobPage() {
     moveDate: "",
     details: "",
   });
+  const [budgetEstimate, setBudgetEstimate] = useState("");
   const [media, setMedia] = useState<UploadedMedia[]>([]);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -121,16 +122,28 @@ export default function PostJobPage() {
   const { data: catalog, isError: catalogError } = useQuery<CatalogDefs>({ queryKey: ["/api/pricing/catalog-definitions"], retry: 2 });
 
   const ratePerMoverHour = pricing?.ratePerMoverHour ?? 60;
-  const jc222Price = pricing?.jc222Price ?? 222;
   const shortJobFull = pricing?.shortJobFull ?? 300;
 
+  // Hour-based discount tiers
+  const HOUR_TIERS = [
+    { minHours: 7, pct: 20 },
+    { minHours: 5, pct: 15 },
+    { minHours: 3, pct: 10 },
+  ];
+  function getHourDiscount(hours: number): number {
+    return HOUR_TIERS.find(t => hours >= t.minHours)?.pct ?? 0;
+  }
+
   const FALLBACK_MOVING: MovingPackage[] = [
-    { id: "moving_2m_2h", movers: 2, hours: 2, label: "JC222 Special", tag: "💥 Best Deal", isJc222: true },
-    { id: "moving_2m_3h", movers: 2, hours: 3, label: "2 Movers × 3 hrs", tag: "Short Move" },
-    { id: "moving_3m_3h", movers: 3, hours: 3, label: "3 Movers × 3 hrs", tag: "Most Popular" },
-    { id: "moving_3m_4h", movers: 3, hours: 4, label: "3 Movers × 4 hrs" },
-    { id: "moving_4m_4h", movers: 4, hours: 4, label: "4 Movers × 4 hrs", tag: "Heavy Move" },
-    { id: "moving_2m_6h", movers: 2, hours: 6, label: "2 Movers × 6 hrs", tag: "Full Day" },
+    { id: "moving_2m_2h", movers: 2, hours: 2, label: "2 Movers × 2 hrs",  tag: "Quick Job"      },
+    { id: "moving_2m_3h", movers: 2, hours: 3, label: "2 Movers × 3 hrs",  tag: "10% Off"        },
+    { id: "moving_3m_3h", movers: 3, hours: 3, label: "3 Movers × 3 hrs",  tag: "Most Popular"   },
+    { id: "moving_3m_4h", movers: 3, hours: 4, label: "3 Movers × 4 hrs"                         },
+    { id: "moving_2m_5h", movers: 2, hours: 5, label: "2 Movers × 5 hrs",  tag: "15% Off"        },
+    { id: "moving_3m_5h", movers: 3, hours: 5, label: "3 Movers × 5 hrs",  tag: "15% Off"        },
+    { id: "moving_4m_4h", movers: 4, hours: 4, label: "4 Movers × 4 hrs",  tag: "Heavy Move"     },
+    { id: "moving_2m_7h", movers: 2, hours: 7, label: "2 Movers × 7 hrs",  tag: "20% Off · Best" },
+    { id: "moving_3m_7h", movers: 3, hours: 7, label: "3 Movers × 7 hrs",  tag: "20% Off"        },
   ];
   const FALLBACK_JUNK: JunkPackage[] = [
     { id: "junk_small", label: "Small Load", desc: "¼ truck or less", low: 100, high: 175, tag: "Quick Pickup" },
@@ -148,7 +161,15 @@ export default function PostJobPage() {
   const needsPackageStep = PACKAGE_SERVICES.includes(form.serviceType);
 
   function getMovingPrice(pkg: MovingPackage): number {
-    return pkg.isJc222 ? jc222Price : pkg.movers * pkg.hours * ratePerMoverHour;
+    const base = pkg.movers * pkg.hours * ratePerMoverHour;
+    const floored = base < shortJobFull ? shortJobFull : base;
+    const discountPct = getHourDiscount(pkg.hours);
+    return discountPct > 0 ? Math.round(floored * (1 - discountPct / 100)) : floored;
+  }
+
+  function getMovingFullPrice(pkg: MovingPackage): number {
+    const base = pkg.movers * pkg.hours * ratePerMoverHour;
+    return base < shortJobFull ? shortJobFull : base;
   }
 
   function getJunkMid(pkg: JunkPackage): number {
@@ -259,7 +280,9 @@ export default function PostJobPage() {
         fromAddress: form.fromAddress,
         toAddress: form.toAddress || undefined,
         moveDate: form.moveDate || undefined,
-        details: form.details || undefined,
+        details: form.serviceType === "custom" && budgetEstimate
+          ? `${form.details}\n\nBudget estimate: ${budgetEstimate}`
+          : form.details || undefined,
         photos: media.map(m => ({ url: m.url, mimeType: m.mimeType, name: m.name })),
         selectedPackageId: pkgId || undefined,
         crewSize: pkgId ? crewSize : undefined,
@@ -431,12 +454,26 @@ export default function PostJobPage() {
             </h2>
             <p className="text-xs text-zinc-400 mb-4">Select a package or skip and let the crew decide on-site.</p>
 
+            {/* Discount tier bar */}
+            {isMoving && (
+              <div className="flex gap-2 mb-3">
+                {[{ label: "10% Off", hrs: "3+ hrs" }, { label: "15% Off", hrs: "5+ hrs" }, { label: "20% Off", hrs: "7+ hrs" }].map(t => (
+                  <div key={t.label} className="flex-1 bg-green-500/10 border border-green-500/20 rounded-lg p-2 text-center">
+                    <p className="text-green-600 dark:text-green-400 font-black text-xs">{t.label}</p>
+                    <p className="text-zinc-500 text-[10px]">{t.hrs}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Moving packages */}
             {isMoving && (
               <div className="space-y-2.5 mb-4">
                 {movingPackages.map(pkg => {
                   const price = getMovingPrice(pkg);
-                  const savings = pkg.isJc222 ? shortJobFull - jc222Price : 0;
+                  const fullPrice = getMovingFullPrice(pkg);
+                  const discountPct = getHourDiscount(pkg.hours);
+                  const savings = fullPrice - price;
                   const isSelected = selectedPkgId === pkg.id;
                   return (
                     <button
@@ -446,21 +483,21 @@ export default function PostJobPage() {
                         "w-full text-left rounded-xl border-2 p-3 transition-all",
                         isSelected
                           ? "border-blue-500 bg-blue-50 dark:bg-blue-950/40 ring-1 ring-blue-500/30"
-                          : "border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:border-zinc-300",
-                        pkg.isJc222 && !isSelected && "border-yellow-400/50 dark:border-yellow-500/40"
+                          : "border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:border-zinc-300"
                       )}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            {pkg.isJc222 && <Sparkles className="h-3.5 w-3.5 text-yellow-500 flex-shrink-0" />}
-                            <span className={cn("text-sm font-bold", pkg.isJc222 ? "text-yellow-700 dark:text-yellow-300" : "text-zinc-900 dark:text-white")}>
-                              {pkg.label}
-                            </span>
-                            {pkg.tag && (
+                            <span className="text-sm font-bold text-zinc-900 dark:text-white">{pkg.label}</span>
+                            {discountPct > 0 && (
+                              <Badge className="text-[10px] px-1.5 py-0 h-4 border bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-300 dark:border-green-500/40">
+                                {discountPct}% Off
+                              </Badge>
+                            )}
+                            {!discountPct && pkg.tag && (
                               <Badge className={cn(
                                 "text-[10px] px-1.5 py-0 h-4 border",
-                                pkg.isJc222 ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 border-yellow-300 dark:border-yellow-500/40" :
                                 pkg.tag === "Most Popular" ? "bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 border-teal-300 dark:border-teal-500/40" :
                                 "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700"
                               )}>
@@ -472,19 +509,15 @@ export default function PostJobPage() {
                             <span className="flex items-center gap-1"><Users className="h-3 w-3" />{pkg.movers} movers</span>
                             <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{pkg.hours} hrs</span>
                           </div>
-                          {pkg.isJc222 && savings > 0 && (
-                            <p className="text-[11px] text-yellow-600 dark:text-yellow-400 mt-0.5">Save ${savings} — promo!</p>
+                          {savings > 0 && (
+                            <p className="text-[11px] text-green-600 dark:text-green-400 mt-0.5">Save ${savings}</p>
                           )}
                         </div>
                         <div className="text-right flex-shrink-0">
-                          {pkg.isJc222 ? (
-                            <>
-                              <p className="text-zinc-400 line-through text-xs">${shortJobFull}</p>
-                              <p className="font-black text-yellow-600 dark:text-yellow-400 text-base">${jc222Price}</p>
-                            </>
-                          ) : (
-                            <p className="font-black text-emerald-600 dark:text-emerald-400 text-base">${price.toLocaleString()}</p>
+                          {savings > 0 && (
+                            <p className="text-zinc-400 line-through text-xs">${fullPrice}</p>
                           )}
+                          <p className="font-black text-emerald-600 dark:text-emerald-400 text-base">${price.toLocaleString()}</p>
                         </div>
                       </div>
                       {isSelected && (
@@ -619,61 +652,130 @@ export default function PostJobPage() {
         {/* Step 2 (details) or step 3 if package step happened */}
         {step === 2 && !pkgStep && (
           <div className="space-y-5">
-            <h2 className="font-bold text-zinc-900 dark:text-white">Job Details</h2>
+            {form.serviceType === "custom" ? (
+              <>
+                <div>
+                  <h2 className="font-bold text-zinc-900 dark:text-white mb-1">Tell Us What You Need</h2>
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400">Describe the job and we'll build a custom quote for you — usually within a few hours.</p>
+                </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
-                <MapPin className="h-4 w-4 inline mr-1" /> Location / Address
-              </label>
-              <input
-                type="text"
-                placeholder="123 Main St, Ironwood, MI"
-                required
-                value={form.fromAddress}
-                onChange={e => set("fromAddress", e.target.value)}
-                className="w-full h-13 px-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder:text-zinc-400 text-base focus:outline-none focus:ring-2 focus:ring-jc-orange/30 focus:border-jc-orange transition-all"
-              />
-            </div>
+                {/* Custom description — prominent */}
+                <div className="bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800/40 rounded-2xl p-4">
+                  <label className="block text-sm font-bold text-violet-700 dark:text-violet-400 mb-2">
+                    <HelpCircle className="h-4 w-4 inline mr-1" /> Describe the Job <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    placeholder="e.g. I need help moving a pool table from my basement to a friend's house 15 miles away. It's on the second floor and will need disassembly..."
+                    rows={5}
+                    required
+                    value={form.details}
+                    onChange={e => set("details", e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-violet-200 dark:border-violet-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder:text-zinc-400 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400/30 focus:border-violet-400 transition-all resize-none"
+                  />
+                </div>
 
-            {form.serviceType === "residential" && (
-              <div>
-                <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
-                  Delivery Address
-                </label>
-                <input
-                  type="text"
-                  placeholder="456 Oak Ave, Green Bay, WI"
-                  value={form.toAddress}
-                  onChange={e => set("toAddress", e.target.value)}
-                  className="w-full h-13 px-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder:text-zinc-400 text-base focus:outline-none focus:ring-2 focus:ring-jc-orange/30 focus:border-jc-orange transition-all"
-                />
-              </div>
+                {/* Location */}
+                <div>
+                  <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
+                    <MapPin className="h-4 w-4 inline mr-1" /> Job Location <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="123 Main St, Ironwood, MI"
+                    value={form.fromAddress}
+                    onChange={e => set("fromAddress", e.target.value)}
+                    className="w-full h-12 px-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder:text-zinc-400 text-base focus:outline-none focus:ring-2 focus:ring-jc-orange/30 focus:border-jc-orange transition-all"
+                  />
+                </div>
+
+                {/* Preferred date */}
+                <div>
+                  <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
+                    <Calendar className="h-4 w-4 inline mr-1" /> Preferred Date
+                    <span className="text-zinc-400 font-normal ml-1">(optional)</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={form.moveDate}
+                    onChange={e => set("moveDate", e.target.value)}
+                    className="w-full h-12 px-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white text-base focus:outline-none focus:ring-2 focus:ring-jc-orange/30 focus:border-jc-orange transition-all"
+                  />
+                </div>
+
+                {/* Budget estimate */}
+                <div>
+                  <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
+                    <DollarSign className="h-4 w-4 inline mr-1" /> Budget / Price Range
+                    <span className="text-zinc-400 font-normal ml-1">(optional — helps us quote accurately)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. $100–$300 or Under $500"
+                    value={budgetEstimate}
+                    onChange={e => setBudgetEstimate(e.target.value)}
+                    className="w-full h-12 px-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder:text-zinc-400 text-base focus:outline-none focus:ring-2 focus:ring-jc-orange/30 focus:border-jc-orange transition-all"
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 className="font-bold text-zinc-900 dark:text-white">Job Details</h2>
+
+                <div>
+                  <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
+                    <MapPin className="h-4 w-4 inline mr-1" /> Location / Address
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="123 Main St, Ironwood, MI"
+                    required
+                    value={form.fromAddress}
+                    onChange={e => set("fromAddress", e.target.value)}
+                    className="w-full h-13 px-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder:text-zinc-400 text-base focus:outline-none focus:ring-2 focus:ring-jc-orange/30 focus:border-jc-orange transition-all"
+                  />
+                </div>
+
+                {form.serviceType === "residential" && (
+                  <div>
+                    <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
+                      Delivery Address
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="456 Oak Ave, Green Bay, WI"
+                      value={form.toAddress}
+                      onChange={e => set("toAddress", e.target.value)}
+                      className="w-full h-13 px-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder:text-zinc-400 text-base focus:outline-none focus:ring-2 focus:ring-jc-orange/30 focus:border-jc-orange transition-all"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
+                    <Calendar className="h-4 w-4 inline mr-1" /> Preferred Date
+                  </label>
+                  <input
+                    type="date"
+                    value={form.moveDate}
+                    onChange={e => set("moveDate", e.target.value)}
+                    className="w-full h-13 px-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white text-base focus:outline-none focus:ring-2 focus:ring-jc-orange/30 focus:border-jc-orange transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
+                    <FileText className="h-4 w-4 inline mr-1" /> Additional Notes
+                  </label>
+                  <textarea
+                    placeholder="Describe what you need help with..."
+                    rows={3}
+                    value={form.details}
+                    onChange={e => set("details", e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder:text-zinc-400 text-base focus:outline-none focus:ring-2 focus:ring-jc-orange/30 focus:border-jc-orange transition-all resize-none"
+                  />
+                </div>
+              </>
             )}
-
-            <div>
-              <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
-                <Calendar className="h-4 w-4 inline mr-1" /> Preferred Date
-              </label>
-              <input
-                type="date"
-                value={form.moveDate}
-                onChange={e => set("moveDate", e.target.value)}
-                className="w-full h-13 px-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white text-base focus:outline-none focus:ring-2 focus:ring-jc-orange/30 focus:border-jc-orange transition-all"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
-                <FileText className="h-4 w-4 inline mr-1" /> Additional Notes
-              </label>
-              <textarea
-                placeholder="Describe what you need help with..."
-                rows={3}
-                value={form.details}
-                onChange={e => set("details", e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder:text-zinc-400 text-base focus:outline-none focus:ring-2 focus:ring-jc-orange/30 focus:border-jc-orange transition-all resize-none"
-              />
-            </div>
 
             <div>
               <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
@@ -738,9 +840,20 @@ export default function PostJobPage() {
 
             <button
               onClick={() => {
-                if (!form.fromAddress) {
-                  toast({ title: "Location required", description: "Please enter a location.", variant: "destructive" });
-                  return;
+                if (form.serviceType === "custom") {
+                  if (!form.details.trim()) {
+                    toast({ title: "Description required", description: "Please describe what you need help with.", variant: "destructive" });
+                    return;
+                  }
+                  if (!form.fromAddress) {
+                    toast({ title: "Location required", description: "Please enter a job location.", variant: "destructive" });
+                    return;
+                  }
+                } else {
+                  if (!form.fromAddress) {
+                    toast({ title: "Location required", description: "Please enter a location.", variant: "destructive" });
+                    return;
+                  }
                 }
                 setStep(3);
               }}

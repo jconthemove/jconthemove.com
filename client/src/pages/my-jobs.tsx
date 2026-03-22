@@ -4,7 +4,7 @@ import { useLocation } from "wouter";
 import {
   MapPin, Calendar, Loader2, Truck, Trash2, Snowflake, Wrench,
   Plus, CheckCircle, Clock, AlertCircle, Users, DollarSign, X,
-  Package, ChevronRight, RefreshCw, Coins
+  Package, ChevronRight, RefreshCw, Coins, HelpCircle
 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { LucideIcon } from "lucide-react";
@@ -25,12 +25,13 @@ interface CustomerJob {
 }
 
 const SERVICE_CONFIG: Record<string, { icon: LucideIcon; color: string; bg: string; label: string }> = {
-  residential: { icon: Truck,     color: "text-blue-400",   bg: "bg-blue-500/15",   label: "Moving"       },
-  junk:        { icon: Trash2,    color: "text-orange-400", bg: "bg-orange-500/15", label: "Junk Removal" },
-  snow:        { icon: Snowflake, color: "text-cyan-400",   bg: "bg-cyan-500/15",   label: "Snow Removal" },
-  handyman:    { icon: Wrench,    color: "text-amber-400",  bg: "bg-amber-500/15",  label: "Handyman"     },
-  cleaning:    { icon: Package,   color: "text-green-400",  bg: "bg-green-500/15",  label: "Cleaning"     },
-  demolition:  { icon: Truck,     color: "text-red-400",    bg: "bg-red-500/15",    label: "Demolition"   },
+  residential: { icon: Truck,        color: "text-blue-400",   bg: "bg-blue-500/15",   label: "Moving"        },
+  junk:        { icon: Trash2,       color: "text-orange-400", bg: "bg-orange-500/15", label: "Junk Removal"  },
+  snow:        { icon: Snowflake,    color: "text-cyan-400",   bg: "bg-cyan-500/15",   label: "Snow Removal"  },
+  handyman:    { icon: Wrench,       color: "text-amber-400",  bg: "bg-amber-500/15",  label: "Handyman"      },
+  cleaning:    { icon: Package,      color: "text-green-400",  bg: "bg-green-500/15",  label: "Cleaning"      },
+  demolition:  { icon: Truck,        color: "text-red-400",    bg: "bg-red-500/15",    label: "Demolition"    },
+  custom:      { icon: HelpCircle,   color: "text-violet-400", bg: "bg-violet-500/15", label: "Custom Job"    },
 };
 
 function getStatus(status: string) {

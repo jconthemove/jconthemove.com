@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import {
   MapPin, Calendar, Coins, Loader2, Truck, Trash2,
-  Snowflake, Wrench, Package, ChevronRight, Plus, CheckCircle2, Clock
+  Snowflake, Wrench, Package, ChevronRight, Plus, CheckCircle2, Clock, HelpCircle
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -28,15 +28,16 @@ const SERVICES: { key: string; label: string; desc: string; icon: LucideIcon; co
 const SERVICE_LABELS: Record<string, string> = {
   residential: "Moving", junk: "Junk Removal", snow: "Snow Removal",
   handyman: "Labor Help", cleaning: "Delivery", demolition: "Demolition",
-  flooring: "Flooring", painting: "Painting",
+  flooring: "Flooring", painting: "Painting", custom: "Custom Job",
 };
 
 const SERVICE_ICONS: Record<string, { icon: LucideIcon; color: string; bg: string }> = {
-  residential: { icon: Truck,     color: "text-blue-500",   bg: "bg-blue-500/10"   },
-  junk:        { icon: Trash2,    color: "text-orange-500", bg: "bg-orange-500/10" },
-  snow:        { icon: Snowflake, color: "text-cyan-500",   bg: "bg-cyan-500/10"   },
-  handyman:    { icon: Wrench,    color: "text-amber-500",  bg: "bg-amber-500/10"  },
-  cleaning:    { icon: Package,   color: "text-green-500",  bg: "bg-green-500/10"  },
+  residential: { icon: Truck,        color: "text-blue-500",   bg: "bg-blue-500/10"   },
+  junk:        { icon: Trash2,       color: "text-orange-500", bg: "bg-orange-500/10" },
+  snow:        { icon: Snowflake,    color: "text-cyan-500",   bg: "bg-cyan-500/10"   },
+  handyman:    { icon: Wrench,       color: "text-amber-500",  bg: "bg-amber-500/10"  },
+  cleaning:    { icon: Package,      color: "text-green-500",  bg: "bg-green-500/10"  },
+  custom:      { icon: HelpCircle,   color: "text-violet-500", bg: "bg-violet-500/10" },
 };
 
 function getStatusInfo(status: string) {
