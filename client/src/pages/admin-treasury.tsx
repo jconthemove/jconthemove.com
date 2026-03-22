@@ -116,6 +116,23 @@ export default function AdminTreasuryPage() {
     queryKey: ["/api/treasury/limits"],
   });
 
+  // Treasury liability analytics
+  const { data: treasuryAnalytics, refetch: refetchAnalytics } = useQuery<{
+    liability: {
+      totalTokensEarned: number;
+      totalTokensRedeemed: number;
+      pendingRedemptionsValue: number;
+      completedRedemptionsValue: number;
+      liabilityTotal: number;
+      treasurySupply: number;
+      safetyRatioPct: number;
+      safetyStatus: "green" | "yellow" | "red";
+    };
+  }>({
+    queryKey: ["/api/treasury/analytics"],
+    staleTime: 60000,
+  });
+
   // Buyback fund stats with live burn wallet balance
   const { data: buybackFundData, refetch: refetchBuybackFund } = useQuery<{ 
     fund: { 
@@ -730,6 +747,10 @@ export default function AdminTreasuryPage() {
             <TabsTrigger value="staking-treasury" className="data-[state=active]:bg-indigo-500/20 data-[state=active]:text-indigo-300" data-testid="tab-staking-treasury">
               <Layers className="h-4 w-4 mr-2" />
               Staking
+            </TabsTrigger>
+            <TabsTrigger value="liability" className="data-[state=active]:bg-red-500/20 data-[state=active]:text-red-300" data-testid="tab-liability">
+              <Calculator className="h-4 w-4 mr-2" />
+              Liability
             </TabsTrigger>
           </TabsList>
 
@@ -3058,6 +3079,127 @@ export default function AdminTreasuryPage() {
                 )}
               </div>
             </Card>
+          </TabsContent>
+
+          {/* Token Liability Dashboard Tab */}
+          <TabsContent value="liability" className="space-y-6">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <h2 className="text-xl font-black text-white">Token Liability Dashboard</h2>
+                <p className="text-slate-400 text-sm">Financial exposure vs. 24M JCMOVES treasury supply</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => refetchAnalytics()} className="border-red-500/40 text-red-300 hover:bg-red-500/10">
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh
+              </Button>
+            </div>
+
+            {(() => {
+              const liability = treasuryAnalytics?.liability;
+              if (!liability) return (
+                <Card className="p-8 text-center bg-slate-900/50 border-slate-700/50">
+                  <Loader2 className="h-8 w-8 animate-spin text-slate-500 mx-auto mb-3" />
+                  <p className="text-slate-400">Loading liability data...</p>
+                </Card>
+              );
+
+              const safetyColors = {
+                green: { border: "border-green-500/40", bg: "bg-green-500/10", text: "text-green-300", badge: "bg-green-500/20 text-green-300 border-green-500/40", label: "Healthy" },
+                yellow: { border: "border-yellow-500/40", bg: "bg-yellow-500/10", text: "text-yellow-300", badge: "bg-yellow-500/20 text-yellow-300 border-yellow-500/40", label: "Caution" },
+                red: { border: "border-red-500/40", bg: "bg-red-500/10", text: "text-red-300", badge: "bg-red-500/20 text-red-300 border-red-500/40", label: "Critical" },
+              };
+              const colors = safetyColors[liability.safetyStatus];
+
+              return (
+                <div className="space-y-4">
+                  {/* Safety Ratio Highlight */}
+                  <Card className={`p-6 border ${colors.border} ${colors.bg} relative overflow-hidden`}>
+                    <div className="flex items-start justify-between mb-4">
+                      <div>
+                        <p className="text-slate-400 text-sm font-medium mb-1">Overall Safety Ratio</p>
+                        <p className="text-sm text-slate-500">Liability as % of 24M supply</p>
+                      </div>
+                      <span className={`px-3 py-1 rounded-full border text-xs font-bold ${colors.badge}`}>
+                        {colors.label}
+                      </span>
+                    </div>
+                    <div className={`text-5xl font-black ${colors.text} mb-2`}>
+                      {liability.safetyRatioPct.toFixed(2)}%
+                    </div>
+                    <div className="w-full bg-slate-800 rounded-full h-3 mt-3">
+                      <div
+                        className={`h-3 rounded-full transition-all duration-500 ${liability.safetyStatus === "green" ? "bg-green-500" : liability.safetyStatus === "yellow" ? "bg-yellow-500" : "bg-red-500"}`}
+                        style={{ width: `${Math.min(liability.safetyRatioPct, 100)}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-xs text-slate-500 mt-1">
+                      <span>0%</span>
+                      <span className="text-yellow-500">10% — caution</span>
+                      <span className="text-red-500">25% — critical</span>
+                      <span>100%</span>
+                    </div>
+                  </Card>
+
+                  {/* Liability Metrics Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <Card className="p-5 bg-slate-900/50 border-slate-700/50">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Coins className="h-5 w-5 text-blue-400" />
+                        <p className="text-slate-400 text-sm font-medium">Total Tokens Earned</p>
+                      </div>
+                      <p className="text-2xl font-black text-blue-300">{liability.totalTokensEarned.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                      <p className="text-xs text-slate-500 mt-1">All-time, all users</p>
+                    </Card>
+
+                    <Card className="p-5 bg-slate-900/50 border-slate-700/50">
+                      <div className="flex items-center gap-2 mb-3">
+                        <CheckCircle className="h-5 w-5 text-green-400" />
+                        <p className="text-slate-400 text-sm font-medium">Completed Redemptions</p>
+                      </div>
+                      <p className="text-2xl font-black text-green-300">{liability.completedRedemptionsValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                      <p className="text-xs text-slate-500 mt-1">Tokens already fulfilled</p>
+                    </Card>
+
+                    <Card className="p-5 bg-slate-900/50 border-slate-700/50">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Clock className="h-5 w-5 text-amber-400" />
+                        <p className="text-slate-400 text-sm font-medium">Pending Redemptions</p>
+                      </div>
+                      <p className="text-2xl font-black text-amber-300">{liability.pendingRedemptionsValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                      <p className="text-xs text-slate-500 mt-1">Committed but not yet fulfilled</p>
+                    </Card>
+
+                    <Card className={`p-5 border ${colors.border} ${colors.bg} sm:col-span-2 lg:col-span-2`}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <AlertTriangle className={`h-5 w-5 ${colors.text}`} />
+                        <p className="text-slate-300 text-sm font-semibold">Total Liability</p>
+                        <span className="text-slate-500 text-xs">(Pending + Completed)</span>
+                      </div>
+                      <p className={`text-3xl font-black ${colors.text}`}>{liability.liabilityTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                      <p className="text-xs text-slate-500 mt-1">JCMOVES owed or already paid out</p>
+                    </Card>
+
+                    <Card className="p-5 bg-slate-900/50 border-slate-700/50">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Shield className="h-5 w-5 text-slate-400" />
+                        <p className="text-slate-400 text-sm font-medium">Treasury Supply</p>
+                      </div>
+                      <p className="text-2xl font-black text-slate-200">{(liability.treasurySupply / 1_000_000).toFixed(0)}M</p>
+                      <p className="text-xs text-slate-500 mt-1">Total JCMOVES minted (24M cap)</p>
+                    </Card>
+                  </div>
+
+                  {/* Info callout */}
+                  <Card className="p-4 bg-slate-900/40 border-slate-700/30">
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      <strong className="text-slate-400">How this works:</strong> The safety ratio measures total token liability (pending + completed redemptions) against the 24M JCMOVES supply cap.
+                      {" "}Below <strong className="text-green-400">10%</strong> is healthy. Between <strong className="text-yellow-400">10–25%</strong> warrants caution. Above <strong className="text-red-400">25%</strong> requires immediate attention.
+                      {" "}The auto-approval threshold is configurable in the Rewards settings tab under <em>Redemption Auto-Approve Threshold</em>.
+                    </p>
+                  </Card>
+                </div>
+              );
+            })()}
           </TabsContent>
         </Tabs>
       </div>

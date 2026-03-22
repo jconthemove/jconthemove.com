@@ -126,6 +126,7 @@ async function ensureRewardSettingsSeeded() {
         { settingKey: "shop_purchase", label: "Shop Purchase Reward", description: "Tokens awarded to buyer after a community shop purchase", tokenAmount: "100.00", isActive: true },
         { settingKey: "jewelry_purchase", label: "Jewelry Purchase Reward", description: "Tokens awarded after a Nature Made Jewls purchase", tokenAmount: "150.00", isActive: true },
         { settingKey: "customer_quote_completed", label: "Job Completion Bonus", description: "Flat JCMOVES bonus awarded to customer when their job is marked completed", tokenAmount: "1500.00", isActive: true },
+        { settingKey: "redemption_auto_approve_threshold", label: "Redemption Auto-Approve Threshold", description: "Redemptions under this token amount are auto-approved. At or above this amount are held for manual admin review.", tokenAmount: "5000.00", isActive: true },
       ];
       await db.insert(rewardSettings).values(defaults);
       console.log("✅ Default reward settings seeded successfully");
@@ -150,6 +151,12 @@ async function ensureRewardSettingsSeeded() {
       if (!hasCompletionBonus) {
         await db.insert(rewardSettings).values({ settingKey: "customer_quote_completed", label: "Job Completion Bonus", description: "Flat JCMOVES bonus awarded to customer when their job is marked completed", tokenAmount: "1500.00", isActive: true });
         console.log("✅ customer_quote_completed setting inserted — 1500 JCMOVES flat completion bonus");
+      }
+      // Ensure auto-approve threshold exists
+      const hasAutoApproveThreshold = existing.find(s => s.settingKey === 'redemption_auto_approve_threshold');
+      if (!hasAutoApproveThreshold) {
+        await db.insert(rewardSettings).values({ settingKey: "redemption_auto_approve_threshold", label: "Redemption Auto-Approve Threshold", description: "Redemptions under this token amount are auto-approved. At or above this amount are held for manual admin review.", tokenAmount: "5000.00", isActive: true });
+        console.log("✅ redemption_auto_approve_threshold setting inserted — 5000 JCMOVES");
       }
     }
   } catch (error) {
@@ -2091,6 +2098,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Treasury dashboard helper functions
   async function getTreasuryAnalytics() {
+    const TREASURY_SUPPLY = 24_000_000;
+
     // Get reward distribution patterns and user analytics
     const rewardStats = await db
       .select({
@@ -2132,13 +2141,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
       .where(sql`${rewards.earnedDate} >= ${thirtyDaysAgoISO}`)
       .orderBy(desc(rewards.earnedDate));
 
+    // ── Liability metrics ────────────────────────────────────────────────────
+    // Total tokens ever earned (sum of positive reward entries only)
+    const [totalEarnedRow] = await db
+      .select({ total: sql<number>`coalesce(sum(cast(${rewards.tokenAmount} as decimal)), 0)` })
+      .from(rewards)
+      .where(sql`cast(${rewards.tokenAmount} as decimal) > 0`);
+    const totalTokensEarned = Number(totalEarnedRow?.total ?? 0);
+
+    // Total tokens redeemed in completed redemptions
+    const [completedRedRow] = await db
+      .select({ total: sql<number>`coalesce(sum(token_cost), 0)` })
+      .from(rewardRedemptions)
+      .where(eq(rewardRedemptions.status, "completed"));
+    const totalTokensRedeemed = Number(completedRedRow?.total ?? 0);
+
+    // Pending redemptions (tokens committed but not yet fulfilled)
+    const [pendingRedRow] = await db
+      .select({ total: sql<number>`coalesce(sum(token_cost), 0)` })
+      .from(rewardRedemptions)
+      .where(inArray(rewardRedemptions.status, ["pending", "pending_approval", "approved", "redeemed_pending_schedule"]));
+    const pendingRedemptionsValue = Number(pendingRedRow?.total ?? 0);
+
+    const liabilityTotal = pendingRedemptionsValue + totalTokensRedeemed;
+    const safetyRatioPct = TREASURY_SUPPLY > 0 ? (liabilityTotal / TREASURY_SUPPLY) * 100 : 0;
+    const safetyStatus = safetyRatioPct < 10 ? "green" : safetyRatioPct < 25 ? "yellow" : "red";
+
     return {
       rewardStats,
       userStats: { 
         totalUsers: userStats[0]?.totalUsers || 0,
         activeUsers: activeUsers[0]?.activeUsers || 0
       },
-      recentRewards
+      recentRewards,
+      liability: {
+        totalTokensEarned,
+        totalTokensRedeemed,
+        pendingRedemptionsValue,
+        completedRedemptionsValue: totalTokensRedeemed,
+        liabilityTotal,
+        treasurySupply: TREASURY_SUPPLY,
+        safetyRatioPct: parseFloat(safetyRatioPct.toFixed(4)),
+        safetyStatus,
+      }
     };
   }
 
@@ -7854,6 +7899,55 @@ Thank you for your business!
     }
   });
 
+  // ── Unified dashboard endpoint ──────────────────────────────────────────────
+  // Returns jobs summary, token totals, and liability metrics in one call
+  app.get("/api/dashboard", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const [allLeads, allUsers, liabilityData] = await Promise.all([
+        storage.getLeads(),
+        storage.getAllUsers(),
+        getTreasuryAnalytics(),
+      ]);
+
+      const jobsByStage: Record<string, number> = {};
+      for (const lead of allLeads) {
+        const stage = lead.status || "unknown";
+        jobsByStage[stage] = (jobsByStage[stage] || 0) + 1;
+      }
+
+      const [totalEarnedRow] = await db
+        .select({ total: sql<number>`coalesce(sum(cast(${rewards.tokenAmount} as decimal)), 0)` })
+        .from(rewards)
+        .where(sql`cast(${rewards.tokenAmount} as decimal) > 0`);
+      const totalTokensEarned = Number(totalEarnedRow?.total ?? 0);
+
+      const [totalWalletRow] = await db
+        .select({ total: sql<number>`coalesce(sum(cast(token_balance as decimal)), 0)` })
+        .from(walletAccounts);
+      const totalTokensInWallets = Number(totalWalletRow?.total ?? 0);
+
+      res.json({
+        jobs: {
+          total: allLeads.length,
+          byStage: jobsByStage,
+          completed: jobsByStage["completed"] || 0,
+          active: (jobsByStage["available"] || 0) + (jobsByStage["new"] || 0),
+        },
+        tokens: {
+          totalEarned: totalTokensEarned,
+          totalInWallets: totalTokensInWallets,
+        },
+        users: {
+          total: allUsers.length,
+        },
+        liability: liabilityData.liability,
+      });
+    } catch (error) {
+      console.error("Error getting dashboard:", error);
+      res.status(500).json({ error: "Failed to get dashboard" });
+    }
+  });
+
   // Admin Token Ledger - Shows all JCMOVES transactions across customers and employees
   app.get("/api/admin/token-ledger", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
@@ -13541,9 +13635,30 @@ Thank you for your business!
         scheduledDate: scheduledDate ? new Date(scheduledDate) : null,
       }).returning();
 
+      // ── Auto-approval engine ─────────────────────────────────────
+      // Evaluate EVERY new redemption on submission. The engine enforces the threshold
+      // policy even for instant/scheduled items — high-cost ones are held for review.
+      try {
+        const { evaluateRedemption } = await import("./services/auto-approve-redemptions");
+        const autoResult = await evaluateRedemption(redemption.id, userId, cost, redemptionStatus);
+        redemption.status = autoResult.status;
+        if (autoResult.adminNotes !== null) redemption.adminNotes = autoResult.adminNotes;
+      } catch (autoErr) {
+        console.error("[AutoApprove] Evaluation failed (non-fatal):", autoErr);
+      }
+
       const expiresAt = itemRow.expirationDays
         ? new Date(Date.now() + itemRow.expirationDays * 86400000)
         : null;
+
+      // ── Gate all fulfillment side effects on final status ────────
+      // If auto-approval held the redemption for manual review, no entitlements,
+      // credits, coupons, or other benefits are provisioned until admin approves.
+      if (redemption.status === "pending_approval") {
+        console.log(`⏸️ Redemption ${redemption.id} held for approval — skipping fulfillment side effects`);
+        res.json({ success: true, redemption, newBalance: newBalance.toFixed(2), item: itemRow, autoCreatedLeadId: null });
+        return;
+      }
 
       // ── Side effects based on logic flags ──────────────────────
       // Service credit (labor minutes)
@@ -13721,7 +13836,7 @@ Thank you for your business!
         }
       }
 
-      console.log(`🎁 Reward redeemed: ${itemRow.name} by user ${userId} for ${cost} JCMOVES — status: ${redemptionStatus}`);
+      console.log(`🎁 Reward redeemed: ${itemRow.name} by user ${userId} for ${cost} JCMOVES — status: ${redemption.status}`);
       res.json({ success: true, redemption, newBalance: newBalance.toFixed(2), item: itemRow, autoCreatedLeadId });
     } catch (e: any) {
       console.error("Reward redemption error:", e);
