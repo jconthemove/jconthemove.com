@@ -123,6 +123,12 @@ app.use((req, res, next) => {
       res.sendFile(videoPath);
     });
 
+    // Serve specific static HTML files from client/public before Vite's catch-all
+    app.get('/structure-review.html', (_req, res) => {
+      res.setHeader('Content-Type', 'text/html');
+      res.sendFile(path.resolve(process.cwd(), 'client/public/structure-review.html'));
+    });
+
     // Setup Vite for development or serve static files for production
     if (app.get("env") === "development") {
       console.log('Setting up Vite development server...');
