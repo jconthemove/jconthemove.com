@@ -31,8 +31,13 @@ export default function PendingQuotesPage() {
 
   const saveQuote = useMutation({
     mutationFn: async (data: any) => {
-      const response = await apiRequest("PATCH", `/api/leads/${selectedLead?.id}/quote`, data);
-      return response.json();
+      const { status: newStatus, ...quoteFields } = data;
+      const response = await apiRequest("PATCH", `/api/leads/${selectedLead?.id}/quote`, quoteFields);
+      const result = await response.json();
+      if (newStatus && newStatus !== selectedLead?.status) {
+        await apiRequest("PATCH", `/api/leads/${selectedLead?.id}/status`, { status: newStatus });
+      }
+      return result;
     },
     onSuccess: () => {
       toast({

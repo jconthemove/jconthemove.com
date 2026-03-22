@@ -576,6 +576,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('⚠️ Auto-compound migration error (non-fatal):', compoundErr);
   }
 
+  // Lead history table for stage audit trail
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS lead_history (
+        id SERIAL PRIMARY KEY,
+        lead_id VARCHAR NOT NULL,
+        from_status TEXT,
+        to_status TEXT NOT NULL,
+        changed_by_user_id VARCHAR,
+        note TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_lead_history_lead_id ON lead_history(lead_id);
+    `);
+    console.log('✅ lead_history table ready');
+  } catch (lhErr) {
+    console.error('⚠️ lead_history migration error (non-fatal):', lhErr);
+  }
+
   // Seed staking tiers and treasury user on startup (ensures production has them)
   await ensureStakingTiersSeeded();
   await ensureStakingTreasuryUser();
@@ -2341,6 +2360,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const lead = await storage.createLead(leadData);
 
       await storage.updateLeadStatus(lead.id, "available");
+      try {
+        await writeLeadHistory(lead.id, lead.status ?? "new", "available", req.user?.id ?? (req.session as any)?.userId ?? null, "Marketplace submission");
+      } catch (histErr) {
+        console.error('[lead_history] Marketplace auto-advance history failed:', histErr);
+      }
       const updatedLead = await storage.getLead(lead.id);
 
       const emailContent = generateLeadNotificationEmail(lead);
@@ -3666,21 +3690,115 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Protected routes - Update lead status (dashboard only - business owner only)
-  app.patch("/api/leads/:id/status", isAuthenticated, requireBusinessOwner, async (req, res) => {
+  // Allowed forward transitions (enforced pipeline)
+  // new/quote_requested → quoted → available (confirmed is an alias for available) → in_progress → completed
+  // accepted (crew-full from job accept flow) → in_progress is also a valid path
+  const LEAD_TRANSITIONS: Record<string, string> = {
+    "new":            "quoted",
+    "quote_requested":"quoted",
+    "quoted":         "available",
+    "confirmed":      "in_progress",  // legacy alias: confirmed = available
+    "available":      "in_progress",
+    "accepted":       "in_progress",  // crew-full accepted jobs progress to in_progress
+    "in_progress":    "completed",
+  };
+
+  // Helper: write a lead_history row
+  async function writeLeadHistory(leadId: string, fromStatus: string | null, toStatus: string, changedByUserId: string | null, note?: string) {
+    await pool.query(
+      `INSERT INTO lead_history (lead_id, from_status, to_status, changed_by_user_id, note) VALUES ($1,$2,$3,$4,$5)`,
+      [leadId, fromStatus ?? null, toStatus, changedByUserId ?? null, note ?? null]
+    );
+  }
+
+  // GET lead history
+  app.get("/api/leads/:id/history", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
       const { id } = req.params;
-      const { status } = req.body;
-      
+      const { rows } = await pool.query(`
+        SELECT lh.id, lh.lead_id, lh.from_status, lh.to_status, lh.note, lh.created_at,
+               u.first_name, u.last_name
+        FROM lead_history lh
+        LEFT JOIN users u ON u.id = lh.changed_by_user_id
+        WHERE lh.lead_id = $1
+        ORDER BY lh.created_at ASC
+      `, [id]);
+      res.json(rows);
+    } catch (error) {
+      console.error("Error fetching lead history:", error);
+      res.status(500).json({ error: "Failed to fetch lead history" });
+    }
+  });
+
+  // Force-override status (admin only — skips transition check)
+  app.patch("/api/leads/:id/status/force", isAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { status, note } = req.body;
+      const actorId = (req.session as any)?.userId ?? req.user?.id ?? null;
+
       const VALID_LEAD_STATUSES = ["new", "contacted", "quoted", "confirmed", "available", "accepted", "in_progress", "completed", "cancelled", "quote_requested"];
       if (!status || !VALID_LEAD_STATUSES.includes(status)) {
         return res.status(400).json({ error: `Invalid status. Must be one of: ${VALID_LEAD_STATUSES.join(", ")}` });
+      }
+
+      const existingLead = await storage.getLead(id);
+      if (!existingLead) return res.status(404).json({ error: "Lead not found" });
+
+      const updatedLead = await storage.updateLeadStatus(id, status);
+      if (!updatedLead) return res.status(404).json({ error: "Lead not found" });
+
+      await writeLeadHistory(id, existingLead.status, status, actorId, note || "Admin force override");
+
+      res.json(updatedLead);
+    } catch (error) {
+      console.error("Error force-updating lead status:", error);
+      res.status(500).json({ error: "Failed to force update lead status" });
+    }
+  });
+
+  // Protected routes - Update lead status (dashboard only - business owner only)
+  app.patch("/api/leads/:id/status", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+      const actorId = (req.session as any)?.userId ?? req.user?.id ?? null;
+
+      const VALID_LEAD_STATUSES = ["new", "contacted", "quoted", "confirmed", "available", "accepted", "in_progress", "completed", "cancelled", "quote_requested"];
+      if (!status || !VALID_LEAD_STATUSES.includes(status)) {
+        return res.status(400).json({ error: `Invalid status. Must be one of: ${VALID_LEAD_STATUSES.join(", ")}` });
+      }
+
+      // Enforce pipeline transitions
+      const existingLead = await storage.getLead(id);
+      if (!existingLead) return res.status(404).json({ error: "Lead not found" });
+
+      const currentStatus = existingLead.status;
+
+      // If the current status is in the transition map, only allow the exact next step
+      // If it is NOT in the map (e.g. completed, cancelled, contacted, accepted) it is
+      // a terminal or legacy status — all forward/backward changes require the force endpoint
+      if (currentStatus in LEAD_TRANSITIONS) {
+        const allowedNext = LEAD_TRANSITIONS[currentStatus];
+        if (status !== allowedNext) {
+          return res.status(400).json({
+            error: `Invalid transition: ${currentStatus} → ${status}. Expected next stage: ${allowedNext}. Use the force endpoint to override.`
+          });
+        }
+      } else {
+        // Status not in the transition map: terminal or legacy — require force
+        return res.status(400).json({
+          error: `Cannot change status from '${currentStatus}' via this endpoint. Use the force endpoint to correct pipeline stage.`
+        });
       }
 
       const updatedLead = await storage.updateLeadStatus(id, status);
       if (!updatedLead) {
         return res.status(404).json({ error: "Lead not found" });
       }
+
+      // Log the history
+      await writeLeadHistory(id, currentStatus, status, actorId);
 
       // Send SMS notifications for status changes
       try {
@@ -4275,6 +4393,11 @@ Thank you for your business!
     try {
       const { id } = req.params;
       const updateData = req.body;
+
+      // Status changes must go through the dedicated /status endpoint (enforced transitions + history)
+      if ("status" in updateData) {
+        return res.status(400).json({ error: "Status changes must use PATCH /api/leads/:id/status to enforce pipeline transitions and audit logging." });
+      }
       
       console.log(`📝 Updating lead ${id} with:`, updateData);
       
@@ -4285,11 +4408,10 @@ Thank you for your business!
         return res.status(404).json({ error: "Lead not found" });
       }
 
-      // Privileged-action guard: completing a job or modifying payout-driving fields
-      // requires admin or business_owner.
-      const PAYOUT_FIELDS = ["status", "totalPrice", "basePrice", "tokenAllocation", "crewMembers", "crewBonusFlags", "confirmedHours"];
+      // Privileged-action guard: modifying payout-driving fields requires admin or business_owner.
+      const PAYOUT_FIELDS = ["totalPrice", "basePrice", "tokenAllocation", "crewMembers", "crewBonusFlags", "confirmedHours"];
       const hasSensitiveChange = PAYOUT_FIELDS.some(f => f in updateData);
-      const isCompletingJob = updateData.status === "completed";
+      const isCompletingJob = false; // status changes now blocked above
 
       if (hasSensitiveChange || isCompletingJob) {
         const requestingUserId = (req.session as any)?.userId;
@@ -4310,24 +4432,6 @@ Thank you for your business!
       if (!updatedLead) {
         console.log(`❌ Lead ${id} not found for update`);
         return res.status(404).json({ error: "Lead not found" });
-      }
-      
-      // IDEMPOTENCY CHECK: Only distribute tokens if rewards haven't been distributed yet
-      const isStatusChangingToCompleted = updateData.status === "completed" && currentLead.status !== "completed";
-      const rewardsAlreadyDistributed = currentLead.completionRewardedAt !== null && currentLead.completionRewardedAt !== undefined;
-
-      if (isStatusChangingToCompleted && !rewardsAlreadyDistributed) {
-        try {
-          const { disburseJobTokens } = await import('./services/disburse-job-tokens');
-          await disburseJobTokens(id);
-        } catch (tokenError) {
-          console.error("Error distributing job completion tokens:", tokenError);
-          // Don't fail the request if token distribution fails
-        }
-      } else if (rewardsAlreadyDistributed) {
-        console.log(`ℹ️ Job ${id} rewards already distributed at ${currentLead.completionRewardedAt} - skipping`);
-      } else if (updateData.status === "completed" && currentLead.status === "completed") {
-        console.log(`ℹ️ Job ${id} already completed - skipping token distribution`);
       }
       
       console.log(`✅ Lead ${id} updated successfully`);
@@ -4382,11 +4486,16 @@ Thank you for your business!
     try {
       const { id } = req.params;
       const quoteData = req.body;
+
+      // Status changes must go through the dedicated /status endpoint
+      if ("status" in quoteData) {
+        return res.status(400).json({ error: "Status changes must use PATCH /api/leads/:id/status to enforce pipeline transitions and audit logging." });
+      }
       
       // Get the current lead to check for status change
       const currentLead = await storage.getLead(id);
       const previousStatus = currentLead?.status;
-      const newStatus = quoteData.status;
+      const newStatus = undefined; // status changes blocked above
       
       // Calculate special items fees based on weight ($200 base + $150 per 100lbs up to 1000lbs)
       const calculateHeavyItemFee = (weight: number | null | undefined): number => {
@@ -5780,6 +5889,7 @@ Thank you for your business!
       const isCrewFull = updatedAcceptedBy.length >= crewSize;
 
       // Update the lead
+      const previousStatus = lead.status;
       const updatedLead = await storage.addEmployeeAcceptance(
         id, 
         employeeId, 
@@ -5788,6 +5898,15 @@ Thank you for your business!
       
       if (!updatedLead) {
         return res.status(500).json({ error: "Failed to accept job" });
+      }
+
+      // Log history if status changed to 'accepted' (crew full)
+      if (isCrewFull) {
+        try {
+          await writeLeadHistory(id, previousStatus, "accepted", employeeId, "Crew full — job accepted");
+        } catch (histErr) {
+          console.error('[lead_history] Accept history write failed:', histErr);
+        }
       }
 
       // Send notification to employee
@@ -5854,12 +5973,20 @@ Thank you for your business!
       if (!isAssigned) {
         return res.status(403).json({ error: "You can only complete jobs you're assigned to" });
       }
+
+      // Enforce transition: job must be in_progress to be completed
+      if (lead.status !== "in_progress") {
+        return res.status(400).json({
+          error: `Job must be in 'in_progress' status to be completed. Current status: ${lead.status}`
+        });
+      }
       
       // Update job status to completed
       const updatedLead = await storage.updateLeadStatus(id, "completed");
       if (!updatedLead) {
         return res.status(404).json({ error: "Failed to update job status" });
       }
+      await writeLeadHistory(id, lead.status, "completed", employeeId, "Marked complete by employee");
 
       // Single unified reward disbursement — crew tokens, customer earn, referral bonus
       try {
@@ -15000,6 +15127,7 @@ Thank you for your business!
       const user = await storage.getUser((req.session as any).userId);
       if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
       const { basePrice, totalPrice, quoteNotes } = req.body;
+      const [currentLead] = await db.select().from(leads).where(eq(leads.id, req.params.id));
       await db.update(leads)
         .set({
           status: "quote_requested" as any,
@@ -15009,6 +15137,11 @@ Thank you for your business!
           lastQuoteUpdatedAt: new Date(),
         })
         .where(eq(leads.id, req.params.id));
+      try {
+        await writeLeadHistory(req.params.id, currentLead?.status ?? null, "quote_requested", user.id, "Chatbot quote approved by admin");
+      } catch (histErr) {
+        console.error('[lead_history] Chatbot approve history failed:', histErr);
+      }
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -15019,7 +15152,13 @@ Thank you for your business!
     try {
       const user = await storage.getUser((req.session as any).userId);
       if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
+      const [currentLead] = await db.select().from(leads).where(eq(leads.id, req.params.id));
       await db.update(leads).set({ status: "dismissed" as any }).where(eq(leads.id, req.params.id));
+      try {
+        await writeLeadHistory(req.params.id, currentLead?.status ?? null, "dismissed", user.id, "Chatbot quote dismissed by admin");
+      } catch (histErr) {
+        console.error('[lead_history] Chatbot dismiss history failed:', histErr);
+      }
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ error: e.message });

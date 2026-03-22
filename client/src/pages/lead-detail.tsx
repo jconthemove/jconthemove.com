@@ -20,6 +20,17 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Switch } from "@/components/ui/switch";
 import { JobOrderBuilder } from "@/components/JobOrderBuilder";
 
+interface LeadHistoryEntry {
+  id: number;
+  lead_id: string;
+  from_status: string | null;
+  to_status: string;
+  note: string | null;
+  created_at: string;
+  first_name: string | null;
+  last_name: string | null;
+}
+
 interface OrderLineItem {
   id?: string;
   name: string;
@@ -239,6 +250,16 @@ export default function LeadDetailPage() {
     enabled: hasAdminAccess,
   });
 
+  const { data: leadHistory = [], isLoading: historyLoading } = useQuery<LeadHistoryEntry[]>({
+    queryKey: ["/api/leads", params?.id, "history"],
+    queryFn: async () => {
+      const res = await fetch(`/api/leads/${params?.id}/history`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch history");
+      return res.json();
+    },
+    enabled: !!params?.id,
+  });
+
   const form = useForm({
     defaultValues: {
       firstName: "",
@@ -386,27 +407,46 @@ export default function LeadDetailPage() {
 
   const advanceToStep = useMutation({
     mutationFn: async (targetStep: number) => {
-      let newStatus = lead?.status;
-      let updateData: Record<string, unknown> = {};
+      let newStatus: string | null = null;
+      let nonStatusData: Record<string, unknown> = {};
       switch (targetStep) {
         case 2:
           newStatus = "available";
-          if (tokenAllocation) updateData.tokenAllocation = parseFloat(tokenAllocation);
-          updateData.crewMembers = selectedCrewMembers;
-          updateData.crewSize = computeEffectiveCrewSize();
+          if (tokenAllocation) nonStatusData.tokenAllocation = parseFloat(tokenAllocation);
+          nonStatusData.crewMembers = selectedCrewMembers;
+          nonStatusData.crewSize = computeEffectiveCrewSize();
           break;
         case 3:
+          newStatus = "in_progress";
+          break;
+        case 4:
           newStatus = "completed";
-          updateData.completedAt = new Date().toISOString();
+          nonStatusData.completedAt = new Date().toISOString();
           break;
       }
-      updateData = { ...updateData, status: newStatus };
-      return await apiRequest("PATCH", `/api/leads/${params?.id}`, updateData);
+      if (Object.keys(nonStatusData).length > 0) {
+        await apiRequest("PATCH", `/api/leads/${params?.id}`, nonStatusData);
+      }
+      if (newStatus) {
+        return await apiRequest("PATCH", `/api/leads/${params?.id}/status`, { status: newStatus });
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads", params?.id, "history"] });
       toast({ title: "Step completed", description: "Job workflow advanced successfully" });
       setIsCheckingIn(false);
+    },
+    onError: (error: any) => {
+      let msg = error?.message || "Failed to advance step";
+      try {
+        const jsonStart = msg.indexOf("{");
+        if (jsonStart !== -1) {
+          const parsed = JSON.parse(msg.slice(jsonStart));
+          if (parsed?.error) msg = parsed.error;
+        }
+      } catch {}
+      toast({ title: "Step blocked", description: msg, variant: "destructive" });
     },
   });
 
@@ -426,10 +466,19 @@ export default function LeadDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
       queryClient.invalidateQueries({ queryKey: ["/api/leads", params?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads", params?.id, "history"] });
       toast({ title: "Status updated", description: "Lead pipeline stage advanced." });
     },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to update status", variant: "destructive" });
+    onError: (error: any) => {
+      let msg = error?.message || "Failed to update status";
+      try {
+        const jsonStart = msg.indexOf("{");
+        if (jsonStart !== -1) {
+          const parsed = JSON.parse(msg.slice(jsonStart));
+          if (parsed?.error) msg = parsed.error;
+        }
+      } catch {}
+      toast({ title: "Transition blocked", description: msg, variant: "destructive" });
     },
   });
 
@@ -439,7 +488,6 @@ export default function LeadDetailPage() {
     const formData = form.getValues();
     updateLead.mutate({
       ...formData,
-      status: lead?.status,
       crewMembers: selectedCrewMembers,
       crewSize: computeEffectiveCrewSize(),
     });
@@ -465,7 +513,6 @@ export default function LeadDetailPage() {
     updateLead.mutate({
       ...orderData,
       orderLineItems: orderData.lineItems,
-      status: lead?.status,
       lastQuoteUpdatedAt: new Date().toISOString(),
     }, {
       onSuccess: () => {
@@ -578,16 +625,18 @@ export default function LeadDetailPage() {
     }
   };
 
-  // 3-step workflow system
+  // 4-step workflow system (matches enforced pipeline)
   const workflow = [
     { step: 1, name: "Quote Requested", status: ["quote_requested"] },
     { step: 2, name: "Job Available", status: ["available"] },
-    { step: 3, name: "Completed", status: ["completed"] }
+    { step: 3, name: "In Progress", status: ["in_progress"] },
+    { step: 4, name: "Completed", status: ["completed"] }
   ];
 
   const getCurrentStep = () => {
     if (!lead) return 1;
-    if (lead.status === "completed") return 3;
+    if (lead.status === "completed") return 4;
+    if (lead.status === "in_progress") return 3;
     if (lead.status === "available") return 2;
     return 1;
   };
@@ -742,15 +791,24 @@ export default function LeadDetailPage() {
             {/* Pipeline Stepper — admins and employees only */}
             {(hasAdminAccess || isEmployee) && (() => {
               const PIPELINE_STAGES = [
-                { key: "new",       label: "New",       next: "quoted",     action: "Send Quote"   },
-                { key: "quoted",    label: "Quoted",    next: "confirmed",  action: "Confirm Job"  },
-                { key: "confirmed", label: "Confirmed", next: "available",  action: "Start Job"    },
-                { key: "available", label: "In Progress", next: "completed", action: "Mark Complete" },
-                { key: "completed", label: "Completed", next: null,         action: null           },
+                { key: "new",         label: "New",         next: "quoted",      action: "Send Quote"   },
+                { key: "quoted",      label: "Quoted",      next: "available",   action: "Confirm Job"  },
+                { key: "available",   label: "Available",   next: "in_progress", action: "Start Job"    },
+                { key: "in_progress", label: "In Progress", next: "completed",   action: "Mark Complete" },
+                { key: "completed",   label: "Completed",   next: null,          action: null           },
               ];
-              const currentIdx = PIPELINE_STAGES.findIndex(s => s.key === lead.status);
+              // Normalize legacy 'confirmed' status to 'available' for stepper display
+              const normalizedStatus = lead.status === "confirmed" ? "available" : lead.status;
+              const currentIdx = PIPELINE_STAGES.findIndex(s => s.key === normalizedStatus);
               const currentStage = PIPELINE_STAGES[currentIdx] ?? PIPELINE_STAGES[0];
               const nextStage = currentStage.next ? PIPELINE_STAGES.find(s => s.key === currentStage.next) : null;
+              // Build a map of stage key → timestamp from history
+              const stageReachedAt: Record<string, string> = {};
+              for (const entry of leadHistory) {
+                if (entry.to_status && entry.created_at) {
+                  stageReachedAt[entry.to_status] = entry.created_at;
+                }
+              }
               return (
                 <Card className="border-blue-500/20 bg-blue-950/10">
                   <CardContent className="pt-4 pb-4">
@@ -759,16 +817,24 @@ export default function LeadDetailPage() {
                       {PIPELINE_STAGES.map((stage, idx) => {
                         const isCompleted = currentIdx > idx;
                         const isCurrent = currentIdx === idx;
+                        const reachedAt = stageReachedAt[stage.key];
                         return (
                           <div key={stage.key} className="flex items-center shrink-0">
-                            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                            <div className={`flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors ${
                               isCompleted ? "bg-green-600/20 border-green-500/40 text-green-400" :
                               isCurrent ? "bg-blue-600/30 border-blue-500/50 text-blue-300" :
                               "bg-slate-800/50 border-slate-700/50 text-slate-500"
                             }`}>
-                              {isCompleted && <CheckCircle className="h-3 w-3 shrink-0" />}
-                              {isCurrent && <PlayCircle className="h-3 w-3 shrink-0" />}
-                              <span>{stage.label}</span>
+                              <div className="flex items-center gap-1">
+                                {isCompleted && <CheckCircle className="h-3 w-3 shrink-0" />}
+                                {isCurrent && <PlayCircle className="h-3 w-3 shrink-0" />}
+                                <span>{stage.label}</span>
+                              </div>
+                              {isCompleted && reachedAt && (
+                                <span className="text-[9px] font-normal opacity-70">
+                                  {new Date(reachedAt).toLocaleDateString()}
+                                </span>
+                              )}
                             </div>
                             {idx < PIPELINE_STAGES.length - 1 && (
                               <ChevronRight className="h-3 w-3 text-slate-600 mx-0.5 shrink-0" />
@@ -1080,16 +1146,27 @@ export default function LeadDetailPage() {
                   )}
                   {currentStep === 2 && (
                     <div className="space-y-3">
-                      <p className="text-sm text-muted-foreground">Job is available. Mark complete when finished.</p>
+                      <p className="text-sm text-muted-foreground">Job is available. Mark as in progress once the crew has started.</p>
                       <div className="p-3 bg-primary/10 rounded-lg">
                         <p className="text-sm font-semibold text-primary">Token Reward: {lead?.tokenAllocation || 0} JCMOVES</p>
                       </div>
-                      <Button onClick={() => advanceToStep.mutate(3)} disabled={advanceToStep.isPending} data-testid="button-mark-complete">
-                        {advanceToStep.isPending ? "Completing..." : "Mark as Complete"}
+                      <Button onClick={() => advanceToStep.mutate(3)} disabled={advanceToStep.isPending} data-testid="button-mark-in-progress">
+                        {advanceToStep.isPending ? "Starting..." : "Mark as In Progress"}
                       </Button>
                     </div>
                   )}
                   {currentStep === 3 && (
+                    <div className="space-y-3">
+                      <p className="text-sm text-muted-foreground">Job is in progress. Mark complete when finished.</p>
+                      <div className="p-3 bg-primary/10 rounded-lg">
+                        <p className="text-sm font-semibold text-primary">Token Reward: {lead?.tokenAllocation || 0} JCMOVES</p>
+                      </div>
+                      <Button onClick={() => advanceToStep.mutate(4)} disabled={advanceToStep.isPending} data-testid="button-mark-complete">
+                        {advanceToStep.isPending ? "Completing..." : "Mark as Complete"}
+                      </Button>
+                    </div>
+                  )}
+                  {currentStep === 4 && (
                     <div className="space-y-3">
                       <p className="text-sm text-muted-foreground">Job complete! Request a review from the customer.</p>
                       <div className="flex flex-wrap gap-2">
@@ -1309,46 +1386,93 @@ export default function LeadDetailPage() {
 
           {/* ─────────── TAB: HISTORY ─────────── */}
           <TabsContent value="history" className="space-y-4">
-            {/* Status Change Log */}
+            {/* Stage Transition Timeline */}
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Clock className="h-4 w-4" /> Status Change Log
+                  <Clock className="h-4 w-4" /> Stage History
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="relative pl-5 border-l-2 border-muted space-y-4">
-                  {[
-                    { status: "New Lead", ts: lead.createdAt, color: "bg-blue-500" },
-                    { status: "Quote Updated", ts: lead.lastQuoteUpdatedAt, color: "bg-amber-500" },
-                    { status: "Checked In", ts: lead.checkedInAt, color: "bg-purple-500" },
-                    { status: "Completed", ts: lead.completedAt, color: "bg-green-500" },
-                    { status: "Rewards Distributed", ts: lead.completionRewardedAt, color: "bg-primary" },
-                  ].filter(e => e.ts).sort((a, b) => new Date(a.ts!).getTime() - new Date(b.ts!).getTime()).map(({ status, ts, color }) => (
-                    <div key={status} className="relative flex items-start gap-3">
-                      <div className={`absolute -left-[22px] w-3 h-3 rounded-full border-2 border-background ${color} mt-0.5`} />
+                {historyLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Loading history…
+                  </div>
+                ) : (
+                  <div className="relative pl-5 border-l-2 border-muted space-y-4">
+                    {/* Always show "Job Created" as first entry */}
+                    <div className="relative flex items-start gap-3">
+                      <div className="absolute -left-[22px] w-3 h-3 rounded-full border-2 border-background bg-blue-500 mt-0.5" />
                       <div>
-                        <p className="text-sm font-semibold">{status}</p>
-                        <p className="text-xs text-muted-foreground">{new Date(ts!).toLocaleString()}</p>
+                        <div className="flex items-center gap-2">
+                          <Badge className="text-[10px] px-1.5 py-0 bg-blue-600/20 text-blue-300 border-blue-500/30">Job Created</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">{new Date(lead.createdAt).toLocaleString()}</p>
                       </div>
                     </div>
-                  ))}
-                  {!lead.createdAt && (
-                    <p className="text-sm text-muted-foreground">No status history available.</p>
-                  )}
-                </div>
+                    {leadHistory.map((entry) => {
+                      const stageColors: Record<string, string> = {
+                        quoted: "bg-amber-500",
+                        confirmed: "bg-purple-500",
+                        available: "bg-cyan-500",
+                        in_progress: "bg-blue-500",
+                        completed: "bg-green-500",
+                        cancelled: "bg-red-500",
+                      };
+                      const dotColor = stageColors[entry.to_status] ?? "bg-slate-400";
+                      const badgeColors: Record<string, string> = {
+                        quoted: "bg-amber-600/20 text-amber-300 border-amber-500/30",
+                        confirmed: "bg-purple-600/20 text-purple-300 border-purple-500/30",
+                        available: "bg-cyan-600/20 text-cyan-300 border-cyan-500/30",
+                        in_progress: "bg-blue-600/20 text-blue-300 border-blue-500/30",
+                        completed: "bg-green-600/20 text-green-300 border-green-500/30",
+                        cancelled: "bg-red-600/20 text-red-300 border-red-500/30",
+                      };
+                      const badgeClass = badgeColors[entry.to_status] ?? "bg-slate-600/20 text-slate-300 border-slate-500/30";
+                      const changedBy = entry.first_name
+                        ? `${entry.first_name}${entry.last_name ? " " + entry.last_name : ""}`
+                        : "System";
+                      return (
+                        <div key={entry.id} className="relative flex items-start gap-3">
+                          <div className={`absolute -left-[22px] w-3 h-3 rounded-full border-2 border-background ${dotColor} mt-0.5`} />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {entry.from_status && (
+                                <>
+                                  <Badge className="text-[10px] px-1.5 py-0 bg-slate-600/20 text-slate-400 border-slate-500/30 capitalize">
+                                    {entry.from_status.replace(/_/g, " ")}
+                                  </Badge>
+                                  <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                                </>
+                              )}
+                              <Badge className={`text-[10px] px-1.5 py-0 capitalize ${badgeClass}`}>
+                                {entry.to_status.replace(/_/g, " ")}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {new Date(entry.created_at).toLocaleString()} · {changedBy}
+                              {entry.note && <span className="italic ml-1">— {entry.note}</span>}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {leadHistory.length === 0 && (
+                      <p className="text-sm text-muted-foreground">No stage changes recorded yet.</p>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
             {/* Timestamps */}
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Timeline</CardTitle>
+                <CardTitle className="text-base">Key Timestamps</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
                 {[
                   { label: "Lead Created", ts: lead.createdAt },
-                  { label: "Checked In", ts: lead.checkedInAt },
                   { label: "Completed", ts: lead.completedAt },
                   { label: "Rewards Distributed", ts: lead.completionRewardedAt },
                   { label: "Last Quote Updated", ts: lead.lastQuoteUpdatedAt },
