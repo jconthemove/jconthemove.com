@@ -5641,6 +5641,112 @@ Thank you for your business!
     }
   });
 
+  // ── Worker Availability & Goals ────────────────────────────────────────────
+
+  // My full availability: blocks + schedule + goals + stats
+  app.get("/api/workers/my-availability", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const userId = req.currentUser.id;
+      const [blocks, schedule, goals, stats] = await Promise.all([
+        storage.getWorkerDayBlocks(userId),
+        storage.getWorkerSchedule(userId),
+        storage.getWorkerGoals(userId),
+        storage.getWorkerJobStats(userId),
+      ]);
+      res.json({ blocks, schedule, goals: goals ?? null, stats });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Block a day off
+  app.post("/api/workers/day-blocks", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const { date, reason } = req.body;
+      if (!date) return res.status(400).json({ error: "date required (YYYY-MM-DD)" });
+      const block = await storage.createWorkerDayBlock(req.currentUser.id, date, reason);
+      res.json(block);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Remove a blocked day
+  app.delete("/api/workers/day-blocks/:id", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const ok = await storage.deleteWorkerDayBlock(parseInt(req.params.id), req.currentUser.id);
+      if (!ok) return res.status(404).json({ error: "Block not found" });
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Upsert recurring schedule for a day-of-week
+  app.put("/api/workers/schedule", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const { dayOfWeek, startHour, endHour, isAvailable } = req.body;
+      if (dayOfWeek === undefined) return res.status(400).json({ error: "dayOfWeek required" });
+      const row = await storage.upsertWorkerSchedule(req.currentUser.id, dayOfWeek, startHour ?? 8, endHour ?? 17, isAvailable ?? true);
+      res.json(row);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Get my goals
+  app.get("/api/workers/goals/my", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const goals = await storage.getWorkerGoals(req.currentUser.id);
+      res.json(goals ?? null);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Worker updates their own goals
+  app.put("/api/workers/goals/my", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const { weeklyJobGoal, monthlyJobGoal, preferredJobSize, notes } = req.body;
+      const goals = await storage.upsertWorkerGoals(req.currentUser.id, { weeklyJobGoal, monthlyJobGoal, preferredJobSize, notes });
+      res.json(goals);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Admin: get all workers' availability for crew assignment
+  app.get("/api/workers/all-availability", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const data = await storage.getAllWorkersAvailability();
+      res.json(data);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Admin: set goals for a specific worker
+  app.put("/api/workers/:userId/goals", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const { userId } = req.params;
+      const { weeklyJobGoal, monthlyJobGoal, preferredJobSize, notes } = req.body;
+      const goals = await storage.upsertWorkerGoals(userId, { weeklyJobGoal, monthlyJobGoal, preferredJobSize, notes, setByAdminId: req.currentUser.id });
+      res.json(goals);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Admin: get goals for a specific worker
+  app.get("/api/workers/:userId/goals", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const goals = await storage.getWorkerGoals(req.params.userId);
+      res.json(goals ?? null);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.post("/api/leads/:id/accept", isAuthenticated, requireEmployee, async (req: any, res) => {
     try {
       const { id } = req.params;

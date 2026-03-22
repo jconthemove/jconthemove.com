@@ -1943,3 +1943,39 @@ export const insertEthStakeSchema = createInsertSchema(ethStakes).omit({
 
 export type EthStake = typeof ethStakes.$inferSelect;
 export type InsertEthStake = z.infer<typeof insertEthStakeSchema>;
+
+// ── Worker Day Blocks (days off) ────────────────────────────────────────────
+export const workerDayBlocks = pgTable("worker_day_blocks", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  date: text("date").notNull(), // 'YYYY-MM-DD'
+  reason: text("reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type WorkerDayBlock = typeof workerDayBlocks.$inferSelect;
+
+// ── Worker Weekly Schedule (recurring availability hours) ────────────────────
+export const workerSchedule = pgTable("worker_schedule", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  dayOfWeek: integer("day_of_week").notNull(), // 0=Sun … 6=Sat
+  startHour: integer("start_hour").default(8),  // 0–23
+  endHour: integer("end_hour").default(17),      // 0–23
+  isAvailable: boolean("is_available").default(true),
+}, (t) => ({
+  uniq: unique().on(t.userId, t.dayOfWeek),
+}));
+export type WorkerScheduleRow = typeof workerSchedule.$inferSelect;
+
+// ── Worker & Admin Goals ─────────────────────────────────────────────────────
+export const workerGoals = pgTable("worker_goals", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id).unique(),
+  weeklyJobGoal: integer("weekly_job_goal").default(0),
+  monthlyJobGoal: integer("monthly_job_goal").default(0),
+  preferredJobSize: text("preferred_job_size").default("any"), // 'small'|'medium'|'large'|'any'
+  notes: text("notes"),
+  setByAdminId: varchar("set_by_admin_id"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+export type WorkerGoal = typeof workerGoals.$inferSelect;

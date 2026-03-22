@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>JC ON THE MOVE — App Structure Review</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Georgia, 'Times New Roman', serif; color: #111; background: #fff; font-size: 11pt; line-height: 1.55; }
+  .cover { page-break-after: always; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 90vh; text-align: center; border-bottom: 3px solid #111; padding: 60px 40px; }
+  .cover h1 { font-size: 32pt; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 8px; }
+  .cover .sub { font-size: 16pt; font-weight: 400; color: #555; margin-bottom: 6px; }
+  .cover .date { font-size: 11pt; color: #888; margin-top: 20px; }
+  .cover .purpose { font-size: 10pt; max-width: 420px; color: #444; margin-top: 14px; border: 1px solid #ccc; border-radius: 6px; padding: 12px 16px; }
+  h2.page-title { font-size: 20pt; font-weight: 700; border-bottom: 2.5px solid #111; padding-bottom: 8px; margin-bottom: 22px; letter-spacing: -0.3px; }
+  h3 { font-size: 13pt; font-weight: 700; margin-top: 20px; margin-bottom: 6px; color: #000; }
+  h4 { font-size: 11pt; font-weight: 700; margin-top: 14px; margin-bottom: 4px; color: #222; }
+  p { margin-bottom: 7px; }
+  ul { margin: 6px 0 10px 20px; }
+  li { margin-bottom: 3px; }
+  .section { margin-bottom: 24px; }
+  .page { page-break-before: always; padding: 40px 48px; }
+  .first-page { padding: 40px 48px; }
+  .tag { display: inline-block; background: #f0f0f0; border: 1px solid #ccc; border-radius: 3px; font-size: 8.5pt; padding: 1px 6px; font-family: monospace; margin: 1px 2px; vertical-align: middle; }
+  .note { background: #fffbea; border-left: 3px solid #e6c200; padding: 8px 12px; margin: 10px 0; font-size: 9.5pt; border-radius: 0 4px 4px 0; }
+  .issue { background: #fff0f0; border-left: 3px solid #c00; padding: 8px 12px; margin: 10px 0; font-size: 9.5pt; border-radius: 0 4px 4px 0; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin: 10px 0; }
+  th { background: #111; color: #fff; padding: 5px 9px; text-align: left; }
+  td { border: 1px solid #ccc; padding: 4px 9px; vertical-align: top; }
+  tr:nth-child(even) td { background: #f8f8f8; }
+  .pill { display: inline-block; border: 1px solid #999; border-radius: 20px; font-size: 8pt; padding: 1px 8px; margin: 1px; }
+  .footer { position: fixed; bottom: 0; left: 0; right: 0; font-size: 8pt; color: #aaa; padding: 6px 48px; border-top: 1px solid #eee; display: flex; justify-content: space-between; }
+  @media print {
+    .footer { display: flex; }
+    body { font-size: 10.5pt; }
+    .page, .first-page { padding: 28px 36px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- COVER PAGE -->
+<div class="cover">
+  <div style="font-size:10pt;letter-spacing:2px;color:#888;text-transform:uppercase;margin-bottom:16px;">Structure Review Document</div>
+  <h1>JC ON THE MOVE LLC</h1>
+  <div class="sub">Platform Architecture & Page Layout Review</div>
+  <div style="margin-top:28px;font-size:12pt;font-weight:600;">JC ON THE MOVE — App Pages Inventory</div>
+  <div class="date">Prepared: March 2026 &nbsp;|&nbsp; For: ChatGPT UX Review</div>
+  <div class="purpose">
+    <strong>Purpose:</strong> Review the following page structures for layout congestion, feature overlap, and repetitive UI patterns. Suggest consolidations, tab reductions, and UX improvements.
+  </div>
+</div>
+
+<!-- TABLE OF CONTENTS -->
+<div class="first-page">
+  <h2 class="page-title">Table of Contents</h2>
+  <table>
+    <tr><th>#</th><th>Page</th><th>Audience</th><th>Tabs / Sections</th></tr>
+    <tr><td>1</td><td>Home (Landing)</td><td>Public</td><td>Hero, Pricing Calc, Services, Reviews, Gallery, Chatbot</td></tr>
+    <tr><td>2</td><td>Customer Portal</td><td>Customer</td><td>My Jobs, Wallet, Rewards, Profile</td></tr>
+    <tr><td>3</td><td>Crew HQ (Hub)</td><td>Worker / Admin</td><td>Leads, Add Lead, Schedule, Team, Quotes</td></tr>
+    <tr><td>4</td><td>Control Center</td><td>Admin / Owner</td><td>Operations, People, Finance, Marketplace, System</td></tr>
+    <tr><td colspan="4" style="padding-top:10px;font-weight:bold;">Additional Pages (secondary / linked)</td></tr>
+    <tr><td>5</td><td>Lead Detail</td><td>Admin / Worker</td><td>Quote builder, crew assign, Square invoice, status</td></tr>
+    <tr><td>6</td><td>Rewards Marketplace</td><td>All</td><td>Shop items, redeem JCMOVES, cart</td></tr>
+    <tr><td>7</td><td>Staking</td><td>All</td><td>Tiers, active stakes, completed stakes</td></tr>
+    <tr><td>8</td><td>Mining</td><td>All</td><td>Daily claim, streak, referrals</td></tr>
+    <tr><td>9</td><td>Admin – Users</td><td>Admin</td><td>Approve/role/delete users</td></tr>
+    <tr><td>10</td><td>Admin – Treasury</td><td>Admin</td><td>Balances, withdraw, ledger</td></tr>
+    <tr><td>11</td><td>Admin – Lottery</td><td>Admin</td><td>Draw control, winners, audit</td></tr>
+    <tr><td>12</td><td>Admin – Pipeline</td><td>Admin</td><td>A–Z job tracking</td></tr>
+    <tr><td>13</td><td>Snow Removal</td><td>Admin</td><td>Customers, service logs, billing</td></tr>
+    <tr><td>14</td><td>Jewelry Shop</td><td>All</td><td>Browse, JCMOVES earn/redeem</td></tr>
+    <tr><td>15</td><td>Leave Review</td><td>Customer</td><td>Star rating, comments, mover names</td></tr>
+  </table>
+</div>
+
+<!-- PAGE 1: HOME -->
+<div class="page">
+  <h2 class="page-title">1. Home Page — Public Landing</h2>
+  <div class="note">URL: <code>/</code> &nbsp;|&nbsp; Audience: General public, prospective customers &nbsp;|&nbsp; Goal: Conversion to quote request</div>
+
+  <div class="section">
+    <h3>Sections (top to bottom)</h3>
+
+    <h4>A. Hero / Header</h4>
+    <ul>
+      <li>Company logo, tagline "JC ON THE MOVE LLC"</li>
+      <li>Sticky "Login" button (top right)</li>
+      <li>"Get a Free Quote" CTA button → opens booking form / chatbot</li>
+      <li>Phone number link: (906) 285-9312</li>
+      <li>Dedication banner: "In memory of Nature Made Jewls"</li>
+    </ul>
+
+    <h4>B. Services Grid</h4>
+    <ul>
+      <li>8 service cards: Moving, Junk Removal, Snow Removal, Cleaning, Handyman, Demo, Flooring, Painting</li>
+      <li>Each card: icon + name, clickable to scroll to pricing or pre-fill chatbot</li>
+    </ul>
+
+    <h4>C. Live Pricing Calculator</h4>
+    <ul>
+      <li>Toggle: Labor Only vs. Truck Included</li>
+      <li>Crew size slider: 1–5 movers</li>
+      <li>Duration input (hours)</li>
+      <li>ZIP code input → calculates drive distance from Ironwood MI at $40/hr/mover, 45 mph</li>
+      <li>Add-ons: assembly, packing materials, stairs fee, appliances</li>
+      <li>Real-time estimate display: labor, drive time, add-ons, total</li>
+    </ul>
+
+    <h4>D. Testimonials Carousel</h4>
+    <ul>
+      <li>Rotating approved customer reviews</li>
+      <li>Star rating + reviewer name + text</li>
+    </ul>
+
+    <h4>E. Photo Gallery</h4>
+    <ul>
+      <li>Grid of job photos from past moves</li>
+      <li>Tap/click to enlarge</li>
+    </ul>
+
+    <h4>F. Booking Chatbot</h4>
+    <ul>
+      <li>Floating/embedded chat widget</li>
+      <li>Collects: name, phone, email, service type, address, date, details</li>
+      <li>Submits as a lead to backend</li>
+    </ul>
+  </div>
+
+  <div class="issue"><strong>Possible Congestion:</strong> Hero + Calculator + Chatbot overlap in purpose. Consider: calculator as a quick preview, chatbot as the main lead-capture CTA — not both at equal prominence.</div>
+</div>
+
+<!-- PAGE 2: CUSTOMER PORTAL -->
+<div class="page">
+  <h2 class="page-title">2. Customer Portal</h2>
+  <div class="note">URL: <code>/portal</code> &nbsp;|&nbsp; Audience: Logged-in customers &nbsp;|&nbsp; Goal: Track jobs, earn & redeem JCMOVES</div>
+
+  <div class="two-col">
+    <div>
+      <h3>Tab 1 — My Jobs</h3>
+      <ul>
+        <li>List of all customer quote/service requests</li>
+        <li>Status badges: Pending, Confirmed, In Progress, Completed</li>
+        <li>Filter tabs: All / Quote / Activated / Completed</li>
+        <li>"+ Request Quote" button → new lead form</li>
+        <li>Each card: service type, address, price, JCMOVES earned badge</li>
+        <li>"Leave Review" button on completed jobs</li>
+        <li>Package/add-ons details if applicable</li>
+      </ul>
+
+      <h3>Tab 2 — Wallet</h3>
+      <ul>
+        <li>JCMOVES balance (large display)</li>
+        <li>Total Earned / Total Spent stats</li>
+        <li>Transaction History (paginated list)</li>
+        <li>"How to Earn JCMOVES" section:
+          <ul>
+            <li>Post a job: +100</li>
+            <li>Completion bonus: +1,500</li>
+            <li>Per dollar spent: +15</li>
+            <li>Leave a review: +150</li>
+            <li>Refer a friend: +2,500</li>
+          </ul>
+        </li>
+        <li>Daily Mining widget (up to 3 claims/day)</li>
+        <li>Referral link + code display</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Tab 3 — Rewards</h3>
+      <ul>
+        <li>Link to Rewards Marketplace</li>
+        <li>Loyalty Tier tracker (Bronze → Silver → Gold → VIP)</li>
+        <li>Progress bar toward next tier</li>
+        <li>Tier benefits summary</li>
+        <li>Quantum Spin (lottery wheel) if eligible</li>
+      </ul>
+
+      <h3>Tab 4 — Profile</h3>
+      <ul>
+        <li>Name, email, phone display/edit</li>
+        <li>Profile photo upload</li>
+        <li>Notification preferences</li>
+        <li>Logout button</li>
+      </ul>
+
+      <h3>Header / Always Visible</h3>
+      <ul>
+        <li>Loyalty tier badge</li>
+        <li>JCMOVES balance chip</li>
+        <li>Welcome message + user name</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="issue"><strong>Possible Congestion:</strong> Wallet tab is dense — Mining widget + Referral section + Transaction history + Earn guide all compete. Consider splitting Mining and Referral into their own sub-tab or collapsible card.</div>
+  <div class="note"><strong>Repetition:</strong> "How to Earn JCMOVES" appears on both the Welcome/Onboarding modal and the Wallet tab. Consider keeping only one authoritative location.</div>
+</div>
+
+<!-- PAGE 3: CREW HQ -->
+<div class="page">
+  <h2 class="page-title">3. Crew HQ (Hub)</h2>
+  <div class="note">URL: <code>/hub</code> &nbsp;|&nbsp; Audience: Employees + Admins &nbsp;|&nbsp; Goal: Job operations, scheduling, crew management</div>
+
+  <h3>Always-Visible Header</h3>
+  <ul>
+    <li>Personalized greeting ("Good Morning, [Name]")</li>
+    <li>Weather widget (Ironwood MI + Iron River) with snow alert flag</li>
+    <li>On-Duty / Off-Duty toggle button</li>
+    <li>JCMOVES wallet balance</li>
+    <li>Stats bar: Active Jobs · Total Leads · Completed</li>
+  </ul>
+
+  <h3>Daily Scripture / Inspiration Card</h3>
+  <ul>
+    <li>Rotating Bible verse or mover wisdom quote (day-of-year indexed)</li>
+    <li>"Claim Daily Reward" button → awards mining tokens (up to once/day, streak tracked)</li>
+    <li>Announcements marquee (team policy reminders)</li>
+  </ul>
+
+  <h3>Operations Tabs (5 tabs)</h3>
+
+  <table>
+    <tr><th>Tab</th><th>Who Sees</th><th>Contents</th></tr>
+    <tr>
+      <td><strong>Leads</strong></td>
+      <td>All (admin sees all, employee sees assigned)</td>
+      <td>Search bar, status filter, sortable lead cards. Each card: name, service type, phone, address, status badge, quick-action buttons (View, Complete, Award Tokens). Leaderboard + History sections below.</td>
+    </tr>
+    <tr>
+      <td><strong>Add Lead</strong></td>
+      <td>All employees</td>
+      <td>QuoteForm component — full lead creation form: name, contact, service type, address, date, details, crew size, truck config, special items, SMS consent.</td>
+    </tr>
+    <tr>
+      <td><strong>Schedule</strong> <span class="pill">NEW</span></td>
+      <td>All employees</td>
+      <td>Jobs this week / this month / all time stats. Goal progress bars. "My Job Goals" setter (weekly, monthly, preferred size). "Block a Day Off" date picker + blocked days list. Weekly availability hour grid (Mon–Sun toggles + start/end time). Admin sub-section: Crew Availability Overview (all workers, blocked today, job counts vs goals, edit button).</td>
+    </tr>
+    <tr>
+      <td><strong>Team</strong></td>
+      <td>All (admin has extra controls)</td>
+      <td>List of all employees with avatar, name, email. Admin: role dropdown (employee / admin / business_owner). Link to "Manage All Users".</td>
+    </tr>
+    <tr>
+      <td><strong>Quotes</strong></td>
+      <td>All (admin has extra controls)</td>
+      <td>Pending Quotes list with "Review" links. Admin: quick links to Control Center, Treasury, Users, Marketplace, Promo Codes, System Check.</td>
+    </tr>
+  </table>
+
+  <h3>Below Tabs — History Section</h3>
+  <ul>
+    <li>Completed jobs with expand/collapse</li>
+    <li>Each completed job: customer name, service, date, total price, JCMOVES disbursed</li>
+    <li>Manual "Award Tokens" button (admin) for missed disbursements</li>
+  </ul>
+
+  <div class="issue"><strong>Congestion:</strong> Leads tab is very long — it contains: search/filter controls, lead cards, leaderboard, history, AND links to other pages. Consider moving History to its own tab, and the Leaderboard to the Team tab.</div>
+  <div class="note"><strong>Repetition:</strong> Admin quick-links appear in the Quotes tab (odd location) and also in Control Center. Move admin links to a dedicated "Admin" tab or the Team tab.</div>
+</div>
+
+<!-- PAGE 4: CONTROL CENTER -->
+<div class="page">
+  <h2 class="page-title">4. Control Center (Admin)</h2>
+  <div class="note">URL: <code>/control</code> &nbsp;|&nbsp; Audience: Admin / Business Owner only &nbsp;|&nbsp; Goal: High-level business management</div>
+
+  <h3>Live Stats Bar</h3>
+  <ul>
+    <li>JCMOVES Balance (admin wallet)</li>
+    <li>Tokens Burned total</li>
+    <li>Active Jobs count</li>
+    <li>Total Users count</li>
+    <li>Treasury balance (SOL)</li>
+  </ul>
+
+  <div class="two-col">
+    <div>
+      <h3>Section: Operations</h3>
+      <ul>
+        <li>→ Team Hub (Crew HQ)</li>
+        <li>→ Lead List (all leads)</li>
+        <li>→ Job Pipeline (A–Z status board)</li>
+        <li>→ Snow Removal Management</li>
+      </ul>
+
+      <h3>Section: People</h3>
+      <ul>
+        <li>→ User &amp; Role Management</li>
+        <li>→ Testimonial Moderation (approve/reject reviews)</li>
+        <li>→ Sponsor Tiers Management</li>
+        <li>→ Pending Employee Approvals</li>
+      </ul>
+
+      <h3>Section: Finance</h3>
+      <ul>
+        <li>→ Treasury / Ledger (JC MOVES BANKS)</li>
+        <li>→ Bitcoin Payment Verification</li>
+        <li>→ Staking Health Monitor</li>
+        <li>→ Buyback Fund Management</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Section: Marketplace</h3>
+      <ul>
+        <li>→ Reward Catalog Management (add/edit shop items)</li>
+        <li>→ Promo Code Creation</li>
+        <li>→ Lottery Control (Mega draws, winners, audit)</li>
+        <li>→ Jewelry Shop Management</li>
+        <li>→ Reward Settings (earn rates, bonus amounts)</li>
+      </ul>
+
+      <h3>Section: System</h3>
+      <ul>
+        <li>→ Square Catalog Sync (map products)</li>
+        <li>→ System Health Check</li>
+        <li>→ Notification Broadcast</li>
+        <li>→ App Version / Build Info</li>
+      </ul>
+
+      <h3>Section: Reports (Planned)</h3>
+      <ul>
+        <li>Revenue by month</li>
+        <li>Job count by service type</li>
+        <li>JCMOVES circulation report</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note"><strong>Note:</strong> Control Center is primarily a navigation hub — most items are links to other pages. Consider whether this page could be simplified to a cleaner dashboard with quick-glance stats + navigation tiles, removing the redundancy with the Hub's admin quick-links in the Quotes tab.</div>
+  <div class="issue"><strong>Overlap:</strong> Admin links exist in 3 places: Quotes tab in Hub, Control Center, and the nav bar. Consolidate to one authoritative admin nav.</div>
+</div>
+
+<!-- PAGE 5: SECONDARY PAGES -->
+<div class="page">
+  <h2 class="page-title">5. Secondary / Linked Pages</h2>
+
+  <h3>Lead Detail Page <span class="tag">/lead/:id</span></h3>
+  <ul>
+    <li><strong>Quote Builder:</strong> Itemized order line items, package selection, hours, special items (hot tub, safe, piano, pool table)</li>
+    <li><strong>Crew Assignment:</strong> Select crew members from available workers, bonus mover flag, crew size</li>
+    <li><strong>Square Invoice:</strong> Build Order button → creates Square catalog order, sends invoice</li>
+    <li><strong>Status Management:</strong> Move through statuses (quote → confirmed → in_progress → completed)</li>
+    <li><strong>Address Confirmation:</strong> Admin can override from/to addresses</li>
+    <li><strong>JCMOVES Disbursement:</strong> Shows token allocation; triggers on completion</li>
+    <li><strong>Photos:</strong> Upload before/after/progress photos</li>
+    <li><strong>Notes:</strong> Internal quote notes and customer communication log</li>
+  </ul>
+  <div class="issue"><strong>Congestion:</strong> Lead Detail is the heaviest page in the app — it contains order building, crew management, financial tools, communication, photos, and status all on one screen. Consider tabbing the sections (Summary | Order | Crew | Documents | Activity).</div>
+
+  <h3>Rewards Marketplace <span class="tag">/rewards</span></h3>
+  <ul>
+    <li>Grid of shop items (physical goods, discounts, services)</li>
+    <li>Filter by category</li>
+    <li>JCMOVES price + USD price on each item</li>
+    <li>Add to cart → checkout with JCMOVES balance</li>
+  </ul>
+
+  <h3>Staking <span class="tag">/staking</span></h3>
+  <ul>
+    <li>Tier cards: Flexible, Bronze, Silver, Gold, Diamond</li>
+    <li>Stake form: amount + tier selection</li>
+    <li>Active stakes: progress bar, daily rate, pending rewards, claim/unstake buttons</li>
+    <li>Auto-compound toggle per stake</li>
+    <li>Completed stakes history</li>
+    <li>Treasury APR bonus (dynamic)</li>
+  </ul>
+
+  <h3>Mining <span class="tag">/mining</span></h3>
+  <ul>
+    <li>Daily token claim (up to 3/day)</li>
+    <li>Streak counter + streak bonus</li>
+    <li>Referral code + referred users list</li>
+    <li>Mining rate info</li>
+  </ul>
+
+  <h3>Snow Removal <span class="tag">/snow-removal</span></h3>
+  <ul>
+    <li>Customer list with addresses and service frequency</li>
+    <li>Service type catalog (plow, salt, shovel, etc.)</li>
+    <li>Monthly billing log per customer</li>
+    <li>Service date log with amount charged</li>
+  </ul>
+
+  <h3>Leave Review <span class="tag">/leave-review/:leadId</span></h3>
+  <ul>
+    <li>Star rating (1–5)</li>
+    <li>Written review text</li>
+    <li>Mover name selection / input</li>
+    <li>Submit → awards +150 JCMOVES to customer</li>
+    <li>Thank you confirmation</li>
+  </ul>
+</div>
+
+<!-- PAGE 6: OVERALL OBSERVATIONS -->
+<div class="page">
+  <h2 class="page-title">6. Cross-Page Observations for Review</h2>
+
+  <h3>Navigation Structure</h3>
+  <table>
+    <tr><th>Location</th><th>What's There</th><th>Issue</th></tr>
+    <tr><td>Hub → Leads tab</td><td>Leaderboard, History, job cards, search</td><td>Too much in one tab</td></tr>
+    <tr><td>Hub → Quotes tab</td><td>Pending quotes + Admin quick-links</td><td>Admin nav in wrong tab</td></tr>
+    <tr><td>Control Center</td><td>Navigation tiles + stats</td><td>Repeats Hub admin links</td></tr>
+    <tr><td>Customer Portal → Wallet</td><td>Balance, mining, referral, history, earn guide</td><td>5 different concepts in 1 tab</td></tr>
+    <tr><td>Lead Detail</td><td>8+ different function areas</td><td>Single page too dense</td></tr>
+  </table>
+
+  <h3>Feature Repetition</h3>
+  <ul>
+    <li>"How to Earn JCMOVES" appears in: Onboarding modal, Customer Wallet tab, Rewards Dashboard</li>
+    <li>JCMOVES balance shown in: Hub header, Customer Portal header, Staking page, Mining page</li>
+    <li>Admin links appear in: Hub Quotes tab, Control Center, navbar</li>
+    <li>Job history appears in: Hub Leads tab (collapsed), Hub History section, Admin Pipeline</li>
+  </ul>
+
+  <h3>Suggested Consolidations</h3>
+  <ul>
+    <li><strong>Hub Leads tab:</strong> Move Leaderboard → Team tab. Move History → separate History tab. Keep Leads tab for active job management only.</li>
+    <li><strong>Customer Portal Wallet:</strong> Break into "Wallet" (balance + history) and "Earn" (mining + referral + earn guide) sub-sections or cards.</li>
+    <li><strong>Admin Links:</strong> Remove from Hub Quotes tab. Keep only in Control Center + top nav.</li>
+    <li><strong>Lead Detail:</strong> Add tabs: Summary | Order Builder | Crew &amp; Schedule | Documents &amp; Photos | History &amp; Notes</li>
+    <li><strong>JCMOVES Earn Guide:</strong> One canonical location — Wallet tab. Remove from onboarding and rewards dashboard.</li>
+  </ul>
+
+  <h3>Page Count Summary</h3>
+  <table>
+    <tr><th>Category</th><th>Pages</th><th>Avg Complexity</th></tr>
+    <tr><td>Customer-facing</td><td>Home, Portal, Marketplace, Mining, Staking, Jewelry, Leave Review</td><td>Medium</td></tr>
+    <tr><td>Worker-facing</td><td>Hub, Lead Detail, Snow Removal</td><td>High</td></tr>
+    <tr><td>Admin-only</td><td>Control Center, Users, Treasury, Lottery, Pipeline, Square, System</td><td>Medium–Low</td></tr>
+    <tr><td>Auth / Utility</td><td>Login, Register, Onboarding, Profile, Terms, Privacy, Gallery</td><td>Low</td></tr>
+  </table>
+
+  <div class="note" style="margin-top:20px;">
+    <strong>For ChatGPT:</strong> Please review the above structure and suggest: (1) which sections are too long and should be tabbed or collapsed, (2) which features overlap and should be merged, (3) which pages could be combined, and (4) any mobile UX improvements for a 430px max-width layout with bottom navigation.
+  </div>
+</div>
+
+<div class="footer">
+  <span>JC ON THE MOVE LLC — Confidential Structure Review</span>
+  <span>March 2026</span>
+</div>
+
+</body>
+</html>

@@ -1,6 +1,7 @@
 import { type User, type InsertUser, type UpsertUser, type Lead, type InsertLead, type Contact, type InsertContact, type Notification, type InsertNotification, type TreasuryAccount, type InsertTreasuryAccount, type FundingDeposit, type InsertFundingDeposit, type ReserveTransaction, type InsertReserveTransaction, type FaucetConfig, type InsertFaucetConfig, type FaucetClaim, type InsertFaucetClaim, type FaucetWallet, type InsertFaucetWallet, type FaucetRevenue, type InsertFaucetRevenue, type EmployeeStats, type InsertEmployeeStats, type AchievementType, type EmployeeAchievement, type InsertEmployeeAchievement, type PointTransaction, type InsertPointTransaction, type WeeklyLeaderboard, type DailyCheckin, type InsertDailyCheckin, type WalletAccount, type InsertWalletAccount, type SupportedCurrency, type InsertSupportedCurrency, type UserWallet, type InsertUserWallet, type TreasuryWallet, type InsertTreasuryWallet, type WalletTransaction, type InsertWalletTransaction, type ShopItem, type InsertShopItem, type Review, type InsertReview, type Testimonial, type InsertTestimonial, type WalletPayout, type InsertWalletPayout, type TokenConversion, type InsertTokenConversion, type TreasuryLimit, type InsertTreasuryLimit, type SquareInvoice, type InsertSquareInvoice, type SnowCustomer, type InsertSnowCustomer, type SnowServiceType, type InsertSnowServiceType, type SnowServiceLog, type InsertSnowServiceLog, type StakingTier, type Stake, type InsertStake, stakingTiers, stakes, leads, contacts, users, notifications, walletAccounts, rewards, treasuryAccounts, fundingDeposits, reserveTransactions, priceHistory, faucetConfig, faucetClaims, faucetWallets, faucetRevenue, employeeStats, achievementTypes, employeeAchievements, pointTransactions, weeklyLeaderboards, dailyCheckins, supportedCurrencies, userWallets, treasuryWallets, walletTransactions, shopItems, cashoutRequests, fraudLogs, helpRequests, miningSessions, miningClaims, treasuryWithdrawals, reviews, testimonials, walletPayouts, tokenConversions, treasuryLimits, squareInvoices, buybackFund, snowCustomers, snowServiceTypes, snowServiceLogs } from "@shared/schema";
+import { type WorkerDayBlock, type WorkerScheduleRow, type WorkerGoal, workerDayBlocks, workerSchedule, workerGoals } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, isNull, and, isNotNull, sql, gt, gte, inArray, or } from "drizzle-orm";
+import { eq, desc, isNull, and, isNotNull, sql, gt, gte, inArray, or, lte } from "drizzle-orm";
 import { TREASURY_CONFIG } from "./constants";
 import { cryptoService } from "./services/crypto";
 import { creditGenerosityFund } from "./services/generosityFund";
@@ -236,6 +237,17 @@ export interface IStorage {
   claimStakingRewards(stakeId: string, userId: string): Promise<{ earned: number }>;
   unstake(stakeId: string, userId: string): Promise<{ returned: number; penalty: number; earned: number }>;
   getStakingTreasuryBalance(): Promise<{ tokenBalance: string; totalDeposited: string; totalPaidOut: string }>;
+
+  // Worker availability & goals
+  getWorkerDayBlocks(userId: string): Promise<WorkerDayBlock[]>;
+  createWorkerDayBlock(userId: string, date: string, reason?: string): Promise<WorkerDayBlock>;
+  deleteWorkerDayBlock(id: number, userId: string): Promise<boolean>;
+  getWorkerSchedule(userId: string): Promise<WorkerScheduleRow[]>;
+  upsertWorkerSchedule(userId: string, dayOfWeek: number, startHour: number, endHour: number, isAvailable: boolean): Promise<WorkerScheduleRow>;
+  getWorkerGoals(userId: string): Promise<WorkerGoal | undefined>;
+  upsertWorkerGoals(userId: string, goals: { weeklyJobGoal?: number; monthlyJobGoal?: number; preferredJobSize?: string; notes?: string; setByAdminId?: string }): Promise<WorkerGoal>;
+  getWorkerJobStats(userId: string): Promise<{ thisWeek: number; thisMonth: number; allTime: number }>;
+  getAllWorkersAvailability(): Promise<{ user: User; goals: WorkerGoal | null; thisWeek: number; thisMonth: number; blockedDates: string[]; schedule: WorkerScheduleRow[] }[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3002,6 +3014,87 @@ export class DatabaseStorage implements IStorage {
     await this.creditWalletTokens(userId, returned);
 
     return { returned, penalty, earned: pendingEarned };
+  }
+
+  // ── Worker Availability & Goals ─────────────────────────────────────────────
+
+  async getWorkerDayBlocks(userId: string): Promise<WorkerDayBlock[]> {
+    return db.select().from(workerDayBlocks).where(eq(workerDayBlocks.userId, userId)).orderBy(workerDayBlocks.date);
+  }
+
+  async createWorkerDayBlock(userId: string, date: string, reason?: string): Promise<WorkerDayBlock> {
+    const [row] = await db.insert(workerDayBlocks).values({ userId, date, reason }).returning();
+    return row;
+  }
+
+  async deleteWorkerDayBlock(id: number, userId: string): Promise<boolean> {
+    const res = await db.delete(workerDayBlocks).where(and(eq(workerDayBlocks.id, id), eq(workerDayBlocks.userId, userId)));
+    return (res.rowCount ?? 0) > 0;
+  }
+
+  async getWorkerSchedule(userId: string): Promise<WorkerScheduleRow[]> {
+    return db.select().from(workerSchedule).where(eq(workerSchedule.userId, userId)).orderBy(workerSchedule.dayOfWeek);
+  }
+
+  async upsertWorkerSchedule(userId: string, dayOfWeek: number, startHour: number, endHour: number, isAvailable: boolean): Promise<WorkerScheduleRow> {
+    const [row] = await db.insert(workerSchedule)
+      .values({ userId, dayOfWeek, startHour, endHour, isAvailable })
+      .onConflictDoUpdate({ target: [workerSchedule.userId, workerSchedule.dayOfWeek], set: { startHour, endHour, isAvailable } })
+      .returning();
+    return row;
+  }
+
+  async getWorkerGoals(userId: string): Promise<WorkerGoal | undefined> {
+    const [row] = await db.select().from(workerGoals).where(eq(workerGoals.userId, userId));
+    return row;
+  }
+
+  async upsertWorkerGoals(userId: string, goals: { weeklyJobGoal?: number; monthlyJobGoal?: number; preferredJobSize?: string; notes?: string; setByAdminId?: string }): Promise<WorkerGoal> {
+    const [row] = await db.insert(workerGoals)
+      .values({ userId, ...goals, updatedAt: new Date() })
+      .onConflictDoUpdate({ target: workerGoals.userId, set: { ...goals, updatedAt: new Date() } })
+      .returning();
+    return row;
+  }
+
+  async getWorkerJobStats(userId: string): Promise<{ thisWeek: number; thisMonth: number; allTime: number }> {
+    const now = new Date();
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay());
+    startOfWeek.setHours(0, 0, 0, 0);
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const completedLeads = await db.select({ confirmedDate: leads.confirmedDate, crewMembers: leads.crewMembers, assignedToUserId: leads.assignedToUserId })
+      .from(leads)
+      .where(eq(leads.status, "completed"));
+
+    let allTime = 0, thisWeek = 0, thisMonth = 0;
+    for (const lead of completedLeads) {
+      const members = lead.crewMembers || [];
+      const isAssigned = lead.assignedToUserId === userId || members.includes(userId);
+      if (!isAssigned) continue;
+      allTime++;
+      if (lead.confirmedDate) {
+        const d = new Date(lead.confirmedDate);
+        if (d >= startOfMonth) thisMonth++;
+        if (d >= startOfWeek) thisWeek++;
+      }
+    }
+    return { thisWeek, thisMonth, allTime };
+  }
+
+  async getAllWorkersAvailability(): Promise<{ user: User; goals: WorkerGoal | null; thisWeek: number; thisMonth: number; blockedDates: string[]; schedule: WorkerScheduleRow[] }[]> {
+    const employees = await this.getApprovedEmployees();
+    const results = await Promise.all(employees.map(async (user) => {
+      const [goals, stats, blocks, schedule] = await Promise.all([
+        this.getWorkerGoals(user.id).then(g => g ?? null),
+        this.getWorkerJobStats(user.id),
+        this.getWorkerDayBlocks(user.id),
+        this.getWorkerSchedule(user.id),
+      ]);
+      return { user, goals, thisWeek: stats.thisWeek, thisMonth: stats.thisMonth, blockedDates: blocks.map(b => b.date), schedule };
+    }));
+    return results;
   }
 }
 
