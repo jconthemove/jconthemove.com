@@ -1,5 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
 import path from "path";
+import fs from "fs";
 import cors from "cors";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
@@ -123,10 +124,13 @@ app.use((req, res, next) => {
       res.sendFile(videoPath);
     });
 
-    // Serve specific static HTML files from client/public before Vite's catch-all
+    // Serve specific static HTML files from client/public (dev) or dist/public (prod)
     app.get('/structure-review.html', (_req, res) => {
+      const devPath = path.resolve(process.cwd(), 'client/public/structure-review.html');
+      const prodPath = path.resolve(process.cwd(), 'dist/public/structure-review.html');
+      const filePath = fs.existsSync(devPath) ? devPath : prodPath;
       res.setHeader('Content-Type', 'text/html');
-      res.sendFile(path.resolve(process.cwd(), 'client/public/structure-review.html'));
+      res.sendFile(filePath);
     });
 
     // Setup Vite for development or serve static files for production
