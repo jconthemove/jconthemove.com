@@ -1,0 +1,13 @@
+client/src/App.tsx
+client/src/pages/home.tsx
+client/src/pages/_archive/home.tsx
+client/src/components/homepage-booking-calculator.tsx
+client/src/components/booking-chatbot.tsx
+client/src/components/QuoteForm.tsx
+client/src/components/ui/date-picker.tsx
+shared/pricing.ts
+
+Referenced asset filenames:
+attached_assets/20201208_140539_1764946073180.jpg
+attached_assets/20210401_100524_HDR_1764946073184.jpg
+attached_assets/20210401_100538_HDR_1764946073187.jpg
