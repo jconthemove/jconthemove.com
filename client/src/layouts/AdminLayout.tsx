@@ -1,7 +1,8 @@
 import { useLocation } from "wouter";
 import {
-  LayoutDashboard, Briefcase, Users, Wallet, ShoppingBag, Settings, ChevronRight
+  LayoutDashboard, Briefcase, Users, Wallet, ShoppingBag, Settings, ChevronRight, LogOut
 } from "lucide-react";
+import { apiRequest, clearTokens, queryClient } from "@/lib/queryClient";
 
 const tabs = [
   { label: "Overview", icon: LayoutDashboard, path: "/admin" },
@@ -14,6 +15,18 @@ const tabs = [
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
+
+  const handleLogout = async () => {
+    try {
+      await apiRequest("POST", "/api/auth/logout", {});
+    } catch (error) {
+      console.error("Logout error:", error);
+    } finally {
+      clearTokens();
+      queryClient.clear();
+      window.location.href = "/";
+    }
+  };
 
   const isActive = (path: string) =>
     path === "/admin" ? (location === "/admin" || location === "/admin/") : location.startsWith(path);
@@ -49,6 +62,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               );
             })}
           </nav>
+          <div className="px-2 pb-6 pt-2">
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 hover:border-white/40 text-white transition-all"
+            >
+              <LogOut className="h-4 w-4 flex-shrink-0" />
+              Logout
+            </button>
+          </div>
         </aside>
 
         {/* Main content with sidebar offset on desktop */}
@@ -76,6 +98,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </button>
             );
           })}
+          <button
+            onClick={handleLogout}
+            aria-label="Logout"
+            className="flex flex-col items-center justify-center gap-0.5 flex-1 py-1 transition-colors bg-white/10 backdrop-blur-sm border-l border-white/20 text-white hover:bg-white/20"
+          >
+            <LogOut className="h-5 w-5" />
+            <span className="text-[10px] font-medium">Logout</span>
+          </button>
         </div>
       </nav>
     </div>
