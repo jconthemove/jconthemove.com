@@ -1,26 +1,140 @@
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Truck, Trash2, Snowflake, Sparkles, Gift, ShoppingBag, Star, Users, Gem, Clock, BadgeDollarSign, CheckCircle2, Calculator, MessageSquare, X } from "lucide-react";
-import promoImage from "@assets/file_00000000839871fd8e13378301744f2e_(1)_1771260918919.png";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Truck, Trash2, Snowflake, Sparkles, Wrench, HardHat, Layers, PaintBucket,
+  CheckCircle2, Star, Shield, Zap, MapPin, Phone, Send, Gift, ChevronRight
+} from "lucide-react";
 import { Link } from "wouter";
-import { BookingChatbot } from "@/components/booking-chatbot";
 import { HomepageBookingCalculator } from "@/components/homepage-booking-calculator";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { insertLeadSchema, type InsertLead } from "@shared/schema";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import job1 from "@assets/20210401_100524_HDR_1764946073184.jpg";
+import job2 from "@assets/20210401_100531_HDR_1764946073186.jpg";
+import job3 from "@assets/FB_IMG_1675268568106_1758501643336.jpg";
 
 const jewelryVideoSrc = "/jewelry-video.mp4";
 
-export default function HomePage() {
-  const [assistantOpen, setAssistantOpen] = useState(false);
+const serviceOptions = [
+  { value: "residential", label: "Moving", icon: Truck },
+  { value: "junk", label: "Junk Removal", icon: Trash2 },
+  { value: "snow", label: "Snow Removal", icon: Snowflake },
+  { value: "cleaning", label: "Move In/Out", icon: Sparkles },
+  { value: "handyman", label: "Handyman", icon: Wrench },
+  { value: "demolition", label: "Light Demo", icon: HardHat },
+  { value: "flooring", label: "Flooring", icon: Layers },
+  { value: "painting", label: "Painting", icon: PaintBucket },
+];
 
-  // Hero video kept for future integration:
-  // src="/attached_assets/hero-video-compressed.mp4"
-  // poster="/attached_assets/FB_IMG_5937718007297288444_1758496258755.jpg"
+const recentJobs = [
+  {
+    photo: job1,
+    crew: 2,
+    hours: 3,
+    price: 450,
+    label: "2 Movers · 3 Hours",
+  },
+  {
+    photo: job2,
+    crew: 3,
+    hours: 4,
+    price: 600,
+    label: "3 Movers · 4 Hours",
+  },
+  {
+    photo: job3,
+    crew: 1,
+    hours: 2,
+    price: 150,
+    label: "Junk Removal · Same-Day",
+  },
+];
+
+const testimonials = [
+  {
+    name: "Sarah M.",
+    service: "Moving",
+    quote: "Fast, careful, and professional. Highly recommend.",
+    rating: 5,
+  },
+  {
+    name: "James D.",
+    service: "Moving",
+    quote: "Best movers in the Northwoods. Showed up on time and got it done.",
+    rating: 5,
+  },
+  {
+    name: "Linda K.",
+    service: "Moving",
+    quote: "Easy booking, clear pricing, and a crew that works hard.",
+    rating: 5,
+  },
+];
+
+export default function HomePage() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [photoFiles, setPhotoFiles] = useState<FileList | null>(null);
+
+  const form = useForm<InsertLead>({
+    resolver: zodResolver(insertLeadSchema),
+    defaultValues: {
+      firstName: "",
+      lastName: "",
+      email: "",
+      phone: "",
+      serviceType: "",
+      fromAddress: "",
+      toAddress: "",
+      moveDate: "",
+      propertySize: "",
+      details: "",
+      promoCode: "",
+      smsConsent: false,
+    },
+  });
+
+  const submitLead = useMutation({
+    mutationFn: async (data: InsertLead) => {
+      const response = await apiRequest("POST", "/api/leads", data);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Quote request submitted!",
+        description: "We will contact you within 24 hours with your quote.",
+      });
+      form.reset();
+      setPhotoFiles(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+    },
+    onError: (error: Error) => {
+      if (error.message.includes("401")) return;
+      toast({
+        title: "Error",
+        description: "Failed to submit quote request. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const onSubmit = (data: InsertLead) => {
+    submitLead.mutate(data);
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
 
-      {/* Nature Made Jewls — Top Dedication Banner */}
+      {/* Nature Made Jewls — Top Dedication Banner (preserved) */}
       <Link href="/nature-made-jewls">
         <div className="w-full cursor-pointer group relative overflow-hidden"
           style={{ background: "linear-gradient(90deg, #0d0704 0%, #2d1a0f 25%, #1e1208 50%, #2d1a0f 75%, #0d0704 100%)" }}>
@@ -59,265 +173,549 @@ export default function HomePage() {
         </div>
       </Link>
 
-      {/* Hero branding */}
-      <section className="pt-8 pb-2 px-4">
-        <h1 className="text-3xl md:text-5xl font-bold text-center text-white tracking-wide">
-          JC ON THE MOVE LLC
-        </h1>
+      {/* ── HERO SECTION ── */}
+      <section className="px-4 pt-10 pb-8">
+        <div className="max-w-5xl mx-auto">
+          <div className="grid md:grid-cols-[1fr_380px] gap-8 items-center">
+
+            {/* Left: Headline + trust badges + CTAs */}
+            <div>
+              <div className="inline-flex items-center gap-1.5 bg-blue-500/10 border border-blue-400/30 rounded-full px-3 py-1 mb-4">
+                <MapPin className="h-3 w-3 text-blue-400" />
+                <span className="text-blue-300 text-xs font-medium">Ironwood, Iron River, Green Bay, Wausau, and surrounding Northwoods areas</span>
+              </div>
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-white leading-tight mb-4">
+                Fast, Reliable Moving<br />
+                <span className="text-blue-400">in the Northwoods</span>
+              </h1>
+              <p className="text-slate-300 text-lg mb-6">
+                Moving, junk removal, and labor help across Ironwood and surrounding areas. Licensed, insured, and ready to work today.
+              </p>
+              <div className="flex flex-wrap gap-3 mb-6">
+                {[
+                  { icon: Shield, label: "Licensed & Insured" },
+                  { icon: Star, label: "5-Star Local Reputation" },
+                  { icon: Zap, label: "Fast Response" },
+                ].map(({ icon: Icon, label }) => (
+                  <div key={label} className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-full px-3 py-1.5">
+                    <Icon className="h-3.5 w-3.5 text-blue-400" />
+                    <span className="text-white/80 text-xs font-medium">{label}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <Link href="/quote">
+                  <Button className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 py-2.5 text-base rounded-xl">
+                    Get Instant Quote
+                  </Button>
+                </Link>
+                <a href="tel:+19063859312">
+                  <Button variant="outline" className="border-slate-600 text-white hover:bg-slate-700 font-bold px-6 py-2.5 text-base rounded-xl">
+                    <Phone className="h-4 w-4 mr-2" />
+                    Call Now (906) 385-9312
+                  </Button>
+                </a>
+              </div>
+              <p className="mt-3 text-slate-500 text-xs">Next openings available today. Book now to lock your spot.</p>
+            </div>
+
+            {/* Right: Quick Book panel */}
+            <div className="bg-slate-800/80 border border-slate-700/60 rounded-2xl p-5 shadow-2xl">
+              <p className="text-blue-400 text-xs font-semibold uppercase tracking-widest mb-1">Quick Book</p>
+              <h2 className="text-white font-bold text-xl mb-1">Start Here — Price Your Move Fast</h2>
+              <p className="text-slate-400 text-sm mb-4">Pick a starting option, then finish your quote in seconds.</p>
+              <div className="space-y-2.5">
+                <Link href="/quote?service=residential&crew=2">
+                  <div className="flex items-center justify-between bg-slate-700/60 hover:bg-blue-600/20 border border-slate-600/60 hover:border-blue-500/60 rounded-xl px-4 py-3 cursor-pointer transition-all group">
+                    <div>
+                      <p className="text-white font-semibold text-sm">2 Movers — from $300</p>
+                      <p className="text-slate-400 text-xs">2-hour minimum · best for small moves</p>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-slate-500 group-hover:text-blue-400 transition-colors" />
+                  </div>
+                </Link>
+                <Link href="/quote?service=residential&crew=3">
+                  <div className="flex items-center justify-between bg-blue-600/20 border border-blue-500/60 rounded-xl px-4 py-3 cursor-pointer hover:bg-blue-600/30 transition-all group relative">
+                    <div className="absolute -top-2 left-4">
+                      <span className="bg-blue-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">Most Popular</span>
+                    </div>
+                    <div>
+                      <p className="text-white font-semibold text-sm pt-1">3 Movers — Most Popular</p>
+                      <p className="text-blue-200 text-xs">Flexible duration · takes top jobs</p>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-blue-400 group-hover:text-white transition-colors" />
+                  </div>
+                </Link>
+                <Link href="/quote?service=junk">
+                  <div className="flex items-center justify-between bg-slate-700/60 hover:bg-orange-500/20 border border-slate-600/60 hover:border-orange-500/60 rounded-xl px-4 py-3 cursor-pointer transition-all group">
+                    <div>
+                      <p className="text-white font-semibold text-sm">Junk Removal — from $150</p>
+                      <p className="text-slate-400 text-xs">Fast local pickup</p>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-slate-500 group-hover:text-orange-400 transition-colors" />
+                  </div>
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
-      {/* Monthly Special Promo - #1 Slot */}
-      <section className="py-6 px-4">
-        <div className="max-w-4xl mx-auto">
-          <Link href="/promo/half-day">
-            <div className="relative group cursor-pointer rounded-2xl overflow-hidden shadow-2xl border-2 border-yellow-400/60 hover:border-yellow-300 transition-all duration-300 hover:scale-[1.01]">
-              <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-r from-yellow-500 via-amber-500 to-yellow-500 text-black text-center py-2 font-extrabold text-sm md:text-base tracking-wider uppercase">
-                <span className="animate-pulse">&#9733;</span> Monthly Special — Best Value <span className="animate-pulse">&#9733;</span>
+      {/* ── WHY PEOPLE CHOOSE US ── */}
+      <section className="py-10 px-4 bg-slate-950/50">
+        <div className="max-w-5xl mx-auto">
+          <p className="text-blue-400 text-xs font-semibold uppercase tracking-widest text-center mb-2">Trust</p>
+          <h2 className="text-2xl md:text-3xl font-bold text-white text-center mb-8">Why People Choose JC ON THE MOVE</h2>
+
+          {/* Stat blocks */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            {[
+              { value: "500+", label: "Jobs Completed" },
+              { value: "5.0", label: "Average Rating" },
+              { value: "Same-Day", label: "Availability" },
+              { value: "Ironwood", label: "Based in Ironwood, MI" },
+            ].map(({ value, label }) => (
+              <div key={label} className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4 text-center">
+                <p className="text-white font-extrabold text-2xl md:text-3xl">{value}</p>
+                <p className="text-slate-400 text-xs mt-1">{label}</p>
               </div>
-              <img
-                src={promoImage}
-                alt="Half Day Loading/Unloading - 3 movers, 4 hours, travel time included - $600"
-                className="w-full object-cover max-h-[420px] md:max-h-[480px]"
-              />
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-4 md:p-6">
-                <div className="flex items-center justify-between">
+            ))}
+          </div>
+
+          {/* Trust lines */}
+          <div className="flex flex-wrap justify-center gap-x-10 gap-y-3">
+            {[
+              "No hidden fees.",
+              "Professional, uniformed crews.",
+              "Fast scheduling & clear communication.",
+            ].map((line) => (
+              <div key={line} className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-400 flex-shrink-0" />
+                <span className="text-slate-300 text-sm">{line}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── RECENT JOBS ── */}
+      <section className="py-10 px-4">
+        <div className="max-w-5xl mx-auto">
+          <p className="text-blue-400 text-xs font-semibold uppercase tracking-widest mb-1">Recent Jobs</p>
+          <h2 className="text-2xl font-bold text-white mb-1">Recent Jobs</h2>
+          <p className="text-slate-400 text-sm mb-6">Real work from our crew across the Northwoods.</p>
+
+          <div className="grid md:grid-cols-3 gap-4">
+            {recentJobs.map((job, i) => (
+              <div key={i} className="relative rounded-2xl overflow-hidden border border-slate-700/50 shadow-lg group">
+                <img
+                  src={job.photo}
+                  alt={job.label}
+                  className="w-full h-52 object-cover group-hover:scale-105 transition-transform duration-500"
+                />
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-4">
+                  <p className="text-white font-semibold text-sm">{job.label}</p>
+                  <p className="text-emerald-400 font-bold">${job.price}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── LIVE PRICING CALCULATOR + SERVICES SNAPSHOT ── */}
+      <section className="py-10 px-4 bg-slate-950/60">
+        <div className="max-w-5xl mx-auto">
+          <div className="grid md:grid-cols-[1fr_300px] gap-8 items-start">
+
+            {/* Left: Calculator */}
+            <div>
+              <HomepageBookingCalculator />
+            </div>
+
+            {/* Right: Services Snapshot */}
+            <div>
+              <p className="text-blue-400 text-xs font-semibold uppercase tracking-widest mb-1">Services Snapshot</p>
+              <h3 className="text-white font-bold text-xl mb-2">What We Do Most</h3>
+              <p className="text-slate-400 text-sm mb-5">The services people turn to us for every day.</p>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { icon: Truck, label: "Moving", sub: "Tap to price a move", href: "/quote?service=residential", iconCls: "text-blue-400", borderCls: "hover:border-blue-500/50" },
+                  { icon: Trash2, label: "Junk Removal", sub: "Tap to request pickup", href: "/quote?service=junk", iconCls: "text-orange-400", borderCls: "hover:border-orange-500/50" },
+                  { icon: Sparkles, label: "Labor Help", sub: "Tap to get a quote", href: "/quote?service=cleaning", iconCls: "text-teal-400", borderCls: "hover:border-teal-500/50" },
+                  { icon: Snowflake, label: "Snow Removal", sub: "Tap to request service", href: "/quote?service=snow", iconCls: "text-cyan-400", borderCls: "hover:border-cyan-500/50" },
+                ].map(({ icon: Icon, label, sub, href, iconCls, borderCls }) => (
+                  <Link key={label} href={href}>
+                    <div className={`bg-slate-800/60 border border-slate-700/50 ${borderCls} rounded-xl p-4 cursor-pointer hover:bg-slate-700/60 transition-all group`}>
+                      <Icon className={`h-7 w-7 ${iconCls} mb-2`} />
+                      <p className="text-white font-semibold text-sm">{label}</p>
+                      <p className="text-slate-500 text-xs mt-0.5">{sub}</p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── TESTIMONIALS ── */}
+      <section className="py-10 px-4">
+        <div className="max-w-5xl mx-auto">
+          <p className="text-blue-400 text-xs font-semibold uppercase tracking-widest text-center mb-2">Testimonials</p>
+          <h2 className="text-2xl md:text-3xl font-bold text-white text-center mb-2">What Customers Say</h2>
+          <p className="text-slate-400 text-sm text-center mb-8">Short, honest proof from recent customers.</p>
+          <div className="grid md:grid-cols-3 gap-5">
+            {testimonials.map((t, i) => (
+              <div key={i} className="bg-slate-800/60 border border-slate-700/50 rounded-2xl p-5">
+                <div className="flex gap-0.5 mb-3">
+                  {Array.from({ length: t.rating }).map((_, j) => (
+                    <Star key={j} className="h-4 w-4 text-yellow-400 fill-yellow-400" />
+                  ))}
+                </div>
+                <p className="text-slate-200 text-sm italic mb-4">"{t.quote}"</p>
+                <div>
+                  <p className="text-white font-semibold text-sm">{t.name}</p>
+                  <p className="text-slate-500 text-xs">{t.service}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── INLINE QUOTE FORM ── */}
+      <section id="quote" className="py-10 px-4 bg-slate-950/60">
+        <div className="max-w-3xl mx-auto">
+          <p className="text-blue-400 text-xs font-semibold uppercase tracking-widest text-center mb-2">Quote Form</p>
+          <h2 className="text-2xl md:text-3xl font-bold text-white text-center mb-2">Get Your Free Quote</h2>
+          <p className="text-slate-400 text-sm text-center mb-2">Takes less than 60 seconds. No commitment required.</p>
+          <p className="text-slate-500 text-xs text-center mb-6">We respect fast · No spam · Real local crew</p>
+
+          {/* Mini trust badges */}
+          <div className="flex flex-wrap justify-center gap-4 mb-8">
+            {[
+              { icon: Shield, label: "Licensed and Insured" },
+              { icon: Zap, label: "Fast booking response" },
+              { icon: CheckCircle2, label: "No-obligation quote" },
+            ].map(({ icon: Icon, label }) => (
+              <div key={label} className="flex items-center gap-1.5 text-slate-300 text-xs">
+                <Icon className="h-3.5 w-3.5 text-blue-400" />
+                {label}
+              </div>
+            ))}
+          </div>
+
+          <Card className="bg-slate-800/80 border border-slate-700/60 shadow-2xl">
+            <CardContent className="p-6 md:p-8">
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+
+                {/* Service Type */}
+                <div>
+                  <Label className="block text-sm font-medium text-white mb-3">Service Type *</Label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {serviceOptions.map((service) => {
+                      const IconComponent = service.icon;
+                      return (
+                        <label key={service.value} className="relative cursor-pointer">
+                          <input
+                            type="radio"
+                            value={service.value}
+                            className="peer sr-only"
+                            {...form.register("serviceType", { required: true })}
+                          />
+                          <div className="p-3 border border-slate-600 rounded-xl cursor-pointer peer-checked:border-blue-500 peer-checked:bg-blue-500/10 transition-colors text-center">
+                            <IconComponent className="h-6 w-6 text-blue-400 mx-auto mb-1" />
+                            <span className="text-slate-200 text-xs font-medium block">{service.label}</span>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {form.formState.errors.serviceType && (
+                    <p className="text-red-400 text-xs mt-1">Service type is required</p>
+                  )}
+                </div>
+
+                {/* Name */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <p className="text-yellow-400 font-bold text-lg md:text-xl">Half Day Loading/Unloading</p>
-                    <p className="text-white/80 text-sm">3 Movers &bull; 4 Hours &bull; Travel Included</p>
+                    <Label htmlFor="firstName" className="text-slate-300 text-sm mb-1.5 block">First Name *</Label>
+                    <Input
+                      id="firstName"
+                      placeholder="Enter your first name"
+                      className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500 focus:border-blue-500"
+                      {...form.register("firstName")}
+                    />
+                    {form.formState.errors.firstName && (
+                      <p className="text-red-400 text-xs mt-1">{form.formState.errors.firstName.message}</p>
+                    )}
                   </div>
-                  <div className="bg-yellow-500 text-black font-extrabold text-xl md:text-2xl px-4 py-2 rounded-xl shadow-lg group-hover:scale-110 transition-transform">
-                    $600
+                  <div>
+                    <Label htmlFor="lastName" className="text-slate-300 text-sm mb-1.5 block">Last Name *</Label>
+                    <Input
+                      id="lastName"
+                      placeholder="Enter your last name"
+                      className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500 focus:border-blue-500"
+                      {...form.register("lastName")}
+                    />
+                    {form.formState.errors.lastName && (
+                      <p className="text-red-400 text-xs mt-1">{form.formState.errors.lastName.message}</p>
+                    )}
                   </div>
                 </div>
-              </div>
-            </div>
-          </Link>
-        </div>
-      </section>
 
-      {/* NEED HELP? Section */}
-      <section className="py-8 px-4">
-        <div className="max-w-4xl mx-auto">
-          <h2 className="text-3xl md:text-4xl font-bold text-center text-white mb-8">
-            NEED HELP?
-          </h2>
-          
-          {/* 4 Service Boxes - 2x2 Grid */}
-          <div className="grid grid-cols-2 gap-4 md:gap-6">
-            {/* Moving */}
-            <Link href="/quote?service=residential">
-              <Card className="group cursor-pointer bg-gradient-to-br from-blue-600 to-blue-800 border-2 border-blue-400/50 hover:border-blue-300 hover:shadow-xl hover:shadow-blue-500/20 transition-all duration-300 hover:scale-[1.02]" data-testid="card-moving">
-                <CardContent className="p-6 md:p-8 text-center">
-                  <div className="mb-4 flex justify-center">
-                    <div className="bg-white/20 p-4 rounded-full">
-                      <Truck className="h-10 w-10 md:h-14 md:w-14 text-white" />
-                    </div>
+                {/* Email + Phone */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="email" className="text-slate-300 text-sm mb-1.5 block">Email Address *</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="your@email.com"
+                      className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500 focus:border-blue-500"
+                      {...form.register("email")}
+                    />
+                    {form.formState.errors.email && (
+                      <p className="text-red-400 text-xs mt-1">{form.formState.errors.email.message}</p>
+                    )}
                   </div>
-                  <h3 className="text-xl md:text-2xl font-bold text-white mb-2">MOVING</h3>
-                  <p className="text-blue-100 text-sm md:text-base">Loading & Unloading</p>
-                </CardContent>
-              </Card>
-            </Link>
-
-            {/* Junk Removal */}
-            <Link href="/quote?service=junk">
-              <Card className="group cursor-pointer bg-gradient-to-br from-orange-600 to-orange-800 border-2 border-orange-400/50 hover:border-orange-300 hover:shadow-xl hover:shadow-orange-500/20 transition-all duration-300 hover:scale-[1.02]" data-testid="card-junk">
-                <CardContent className="p-6 md:p-8 text-center">
-                  <div className="mb-4 flex justify-center">
-                    <div className="bg-white/20 p-4 rounded-full">
-                      <Trash2 className="h-10 w-10 md:h-14 md:w-14 text-white" />
-                    </div>
+                  <div>
+                    <Label htmlFor="phone" className="text-slate-300 text-sm mb-1.5 block">Phone Number *</Label>
+                    <Input
+                      id="phone"
+                      type="tel"
+                      placeholder="(555) 123-4567"
+                      className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500 focus:border-blue-500"
+                      {...form.register("phone")}
+                    />
+                    {form.formState.errors.phone && (
+                      <p className="text-red-400 text-xs mt-1">{form.formState.errors.phone.message}</p>
+                    )}
                   </div>
-                  <h3 className="text-xl md:text-2xl font-bold text-white mb-2">JUNK</h3>
-                  <p className="text-orange-100 text-sm md:text-base">Removal</p>
-                </CardContent>
-              </Card>
-            </Link>
+                </div>
 
-            {/* Snow Removal */}
-            <Link href="/quote?service=snow">
-              <Card className="group cursor-pointer bg-gradient-to-br from-cyan-600 to-cyan-800 border-2 border-cyan-400/50 hover:border-cyan-300 hover:shadow-xl hover:shadow-cyan-500/20 transition-all duration-300 hover:scale-[1.02]" data-testid="card-snow">
-                <CardContent className="p-6 md:p-8 text-center">
-                  <div className="mb-4 flex justify-center">
-                    <div className="bg-white/20 p-4 rounded-full">
-                      <Snowflake className="h-10 w-10 md:h-14 md:w-14 text-white" />
-                    </div>
+                {/* Addresses */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="fromAddress" className="text-slate-300 text-sm mb-1.5 block">Service Address *</Label>
+                    <Input
+                      id="fromAddress"
+                      placeholder="Where do you need service?"
+                      className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500 focus:border-blue-500"
+                      {...form.register("fromAddress")}
+                    />
+                    {form.formState.errors.fromAddress && (
+                      <p className="text-red-400 text-xs mt-1">{form.formState.errors.fromAddress.message}</p>
+                    )}
                   </div>
-                  <h3 className="text-xl md:text-2xl font-bold text-white mb-2">SNOW</h3>
-                  <p className="text-cyan-100 text-sm md:text-base">Removal</p>
-                </CardContent>
-              </Card>
-            </Link>
-
-            {/* Move In/Out Cleaning */}
-            <Link href="/quote?service=cleaning">
-              <Card className="group cursor-pointer bg-gradient-to-br from-green-600 to-green-800 border-2 border-green-400/50 hover:border-green-300 hover:shadow-xl hover:shadow-green-500/20 transition-all duration-300 hover:scale-[1.02]" data-testid="card-cleaning">
-                <CardContent className="p-6 md:p-8 text-center">
-                  <div className="mb-4 flex justify-center">
-                    <div className="bg-white/20 p-4 rounded-full">
-                      <Sparkles className="h-10 w-10 md:h-14 md:w-14 text-white" />
-                    </div>
+                  <div>
+                    <Label htmlFor="toAddress" className="text-slate-300 text-sm mb-1.5 block">Destination (if moving)</Label>
+                    <Input
+                      id="toAddress"
+                      placeholder="Destination address"
+                      className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500 focus:border-blue-500"
+                      {...form.register("toAddress")}
+                    />
                   </div>
-                  <h3 className="text-xl md:text-2xl font-bold text-white mb-2">MOVE IN/OUT</h3>
-                  <p className="text-green-100 text-sm md:text-base">Cleaning</p>
-                </CardContent>
-              </Card>
-            </Link>
-          </div>
+                </div>
 
-          {/* Chatbot Quote CTA */}
-          <button
-            onClick={() => setAssistantOpen(true)}
-            className="mt-5 w-full group relative overflow-hidden flex items-center justify-between px-5 py-4 rounded-2xl border-2 border-teal-500/50 bg-gradient-to-r from-teal-900/50 to-blue-900/50 hover:border-teal-400 hover:from-teal-900/70 hover:to-blue-900/70 transition-all duration-300"
-          >
-            <div className="flex items-center gap-3">
-              <div className="bg-teal-500/20 p-2.5 rounded-xl shrink-0">
-                <MessageSquare className="h-6 w-6 text-teal-400" />
-              </div>
-              <div className="text-left">
-                <p className="font-bold text-white text-base">Get a Free Quote</p>
-                <p className="text-teal-300 text-xs">2-minute chatbot · reviewed by Darrell · no pressure</p>
-              </div>
-            </div>
-            <div className="bg-teal-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg group-hover:bg-teal-400 transition-colors shrink-0">
-              Start →
-            </div>
-          </button>
-        </div>
-      </section>
+                {/* Date + Property Size */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="moveDate" className="text-slate-300 text-sm mb-1.5 block">Preferred Date</Label>
+                    <Input
+                      id="moveDate"
+                      type="date"
+                      className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500 focus:border-blue-500"
+                      {...form.register("moveDate")}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-slate-300 text-sm mb-1.5 block">Property Size</Label>
+                    <Select onValueChange={(value) => form.setValue("propertySize", value)}>
+                      <SelectTrigger className="bg-slate-700/50 border-slate-600 text-slate-300 focus:border-blue-500">
+                        <SelectValue placeholder="Select size" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="studio">Studio/1 BR</SelectItem>
+                        <SelectItem value="2br">2-3 Bedroom</SelectItem>
+                        <SelectItem value="4br">4+ Bedroom</SelectItem>
+                        <SelectItem value="office">Small Office</SelectItem>
+                        <SelectItem value="large-office">Large Office</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
 
-      {/* Live Booking Calculator */}
-      <section className="py-8 px-4 bg-slate-950/60">
-        <div className="max-w-4xl mx-auto">
-          <HomepageBookingCalculator />
-        </div>
-      </section>
-
-      {/* Nature Made Jewls - Featured Business Card Style */}
-      <section className="py-6 px-4">
-        <div className="max-w-4xl mx-auto">
-          <Link href="/nature-made-jewls">
-            <div className="group cursor-pointer relative overflow-hidden rounded-2xl shadow-2xl border-2 border-amber-700/50 hover:border-amber-400/80 hover:shadow-amber-800/40 transition-all duration-500 hover:scale-[1.01]"
-              style={{ background: "linear-gradient(135deg, #1a0e08 0%, #2d1a0f 30%, #1e1208 60%, #120a05 100%)" }}>
-              <div className="absolute inset-0 opacity-10"
-                style={{ backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(139,90,43,0.15) 2px, rgba(139,90,43,0.15) 4px)" }} />
-              <div className="relative flex items-center gap-0 overflow-hidden">
-                <div className="flex-shrink-0 w-32 md:w-48 h-28 md:h-36 overflow-hidden">
-                  <video
-                    src={jewelryVideoSrc}
-                    autoPlay
-                    loop
-                    muted
-                    playsInline
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                {/* Details */}
+                <div>
+                  <Label htmlFor="details" className="text-slate-300 text-sm mb-1.5 block">Additional Details</Label>
+                  <Textarea
+                    id="details"
+                    rows={3}
+                    placeholder="Tell us more about your move... (special items, stairs, parking, etc.)"
+                    className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500 focus:border-blue-500 resize-none"
+                    {...form.register("details")}
                   />
-                  <div className="absolute inset-y-0 left-32 md:left-48 w-8 bg-gradient-to-r from-[#1a0e08] to-transparent" />
                 </div>
-                <div className="flex-1 px-4 md:px-6 py-4">
-                  <p className="text-amber-500/70 text-[10px] uppercase tracking-widest mb-1 font-medium">Handmade Jewelry &amp; Custom Creations</p>
-                  <h3 className="font-serif text-xl md:text-2xl font-bold text-amber-100 tracking-wide mb-2"
-                    style={{ fontFamily: "'Georgia', serif" }}>
-                    Nature Made Jewls
-                  </h3>
-                  <div className="space-y-1 mb-3">
-                    {["Copper Wire Jewelry", "Natural Stone Pieces", "Custom Designs"].map(f => (
-                      <div key={f} className="flex items-center gap-1.5">
-                        <CheckCircle2 className="h-3 w-3 text-amber-500 flex-shrink-0" />
-                        <span className="text-amber-100/80 text-xs">{f}</span>
-                      </div>
-                    ))}
+
+                {/* Promo Code */}
+                <div>
+                  <Label htmlFor="promoCode" className="text-slate-300 text-sm mb-1.5 block">Promo Code (optional)</Label>
+                  <Input
+                    id="promoCode"
+                    placeholder="Enter promo code for savings"
+                    className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500 focus:border-blue-500"
+                    {...form.register("promoCode")}
+                  />
+                </div>
+
+                {/* Photo Upload */}
+                <div>
+                  <Label htmlFor="photoUpload" className="text-slate-300 text-sm mb-1.5 block">Add Photos (optional)</Label>
+                  <p className="text-slate-500 text-xs mb-2">Select up to 5 photos to help us provide an accurate quote.</p>
+                  <label
+                    htmlFor="photoUpload"
+                    className="flex flex-col items-center justify-center border-2 border-dashed border-slate-600 rounded-xl p-6 text-center hover:border-blue-500/50 transition-colors cursor-pointer"
+                  >
+                    {photoFiles && photoFiles.length > 0 ? (
+                      <p className="text-slate-300 text-sm">{photoFiles.length} photo{photoFiles.length !== 1 ? "s" : ""} selected</p>
+                    ) : (
+                      <p className="text-slate-400 text-sm">Tap to add photos</p>
+                    )}
+                    <input
+                      id="photoUpload"
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="sr-only"
+                      onChange={(e) => setPhotoFiles(e.target.files)}
+                    />
+                  </label>
+                </div>
+
+                {/* SMS Consent */}
+                <div className="flex items-start space-x-3 p-4 bg-slate-700/30 rounded-xl border border-slate-600/50">
+                  <Checkbox
+                    id="smsConsent"
+                    checked={form.watch("smsConsent") ?? false}
+                    onCheckedChange={(checked) => form.setValue("smsConsent", checked === true)}
+                  />
+                  <div className="grid gap-1 leading-none">
+                    <Label htmlFor="smsConsent" className="text-slate-200 text-sm font-medium cursor-pointer">
+                      I agree to receive text messages
+                    </Label>
+                    <p className="text-xs text-slate-500">
+                      By checking this box, you consent to receive SMS notifications about your quote and service updates from JC ON THE MOVE. Message and data rates may apply. Reply STOP to unsubscribe.
+                    </p>
                   </div>
-                  <div className="flex items-center gap-2 text-amber-400 text-sm font-semibold">
-                    <span>Shop Collection</span>
-                    <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                    </svg>
-                  </div>
                 </div>
-                <div className="hidden md:block flex-shrink-0 pr-5 text-right">
-                  <p className="text-amber-100/50 text-[10px] mb-1">Visit</p>
-                  <p className="text-amber-300/70 text-xs font-semibold">www.JCONTHEMOVE.com</p>
-                </div>
+
+                <Button
+                  type="submit"
+                  className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 text-base rounded-xl"
+                  disabled={submitLead.isPending}
+                >
+                  <Send className="mr-2 h-5 w-5" />
+                  {submitLead.isPending ? "Submitting..." : "Start My Move"}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      {/* ── REWARDS CALLOUT ── */}
+      <section className="py-8 px-4">
+        <div className="max-w-5xl mx-auto text-center">
+          <p className="text-blue-400 text-xs font-semibold uppercase tracking-widest mb-2">Earn JCMOVES Rewards</p>
+          <p className="text-slate-300 text-sm mb-4">Earn points on every job and redeem for future services.</p>
+          <div className="flex justify-center">
+            <Link href="/nature-made-jewls">
+              <div className="inline-flex items-center gap-2 bg-slate-800/60 border border-slate-700/50 rounded-full px-5 py-2.5 cursor-pointer hover:border-blue-500/50 hover:bg-slate-700/60 transition-all">
+                <Gift className="h-4 w-4 text-blue-400" />
+                <span className="text-white text-sm font-medium">Nature Made Jewls</span>
               </div>
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* ── FOOTER ── */}
+      <footer className="bg-slate-950 border-t border-slate-800/60 py-10 px-4">
+        <div className="max-w-5xl mx-auto">
+          <div className="grid md:grid-cols-4 gap-8 mb-8">
+
+            {/* Company info */}
+            <div>
+              <h3 className="text-white font-bold text-base mb-3">JC ON THE MOVE LLC</h3>
+              <p className="text-slate-400 text-sm leading-relaxed">
+                Local moving, junk removal, and labor support built for Northwoods homes and businesses.
+              </p>
             </div>
-          </Link>
-        </div>
-      </section>
 
-      {/* Bottom Row - Reviews, Rewards, Shop, Sponsors */}
-      <section className="py-8 px-4 pb-12">
-        <div className="max-w-4xl mx-auto">
-          <div className="grid grid-cols-4 gap-2 md:gap-4">
-            {/* Reviews */}
-            <Link href="/reviews">
-              <Card className="group cursor-pointer bg-gradient-to-br from-yellow-600 to-yellow-800 border border-yellow-500/30 hover:border-yellow-400 hover:shadow-lg hover:shadow-yellow-500/20 transition-all duration-300" data-testid="card-reviews">
-                <CardContent className="p-3 md:p-4 text-center">
-                  <div className="mb-2 flex justify-center">
-                    <Star className="h-6 w-6 md:h-8 md:w-8 text-yellow-200" />
-                  </div>
-                  <h3 className="text-xs md:text-sm font-semibold text-white">Reviews</h3>
-                </CardContent>
-              </Card>
-            </Link>
+            {/* Start Here */}
+            <div>
+              <h4 className="text-white font-semibold text-sm mb-3">Start Here</h4>
+              <ul className="space-y-2">
+                {[
+                  { label: "Free quote", href: "/quote" },
+                  { label: "Junk removal", href: "/quote?service=junk" },
+                  { label: "Snow service", href: "/quote?service=snow" },
+                ].map(({ label, href }) => (
+                  <li key={label}>
+                    <Link href={href}>
+                      <span className="text-slate-400 hover:text-white text-sm transition-colors cursor-pointer">{label}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
 
-            {/* Reward Shop */}
-            <Link href="/marketplace">
-              <Card className="group cursor-pointer bg-gradient-to-br from-purple-700 to-purple-900 border border-purple-500/30 hover:border-purple-400 hover:shadow-lg hover:shadow-purple-500/20 transition-all duration-300" data-testid="card-rewards">
-                <CardContent className="p-3 md:p-4 text-center">
-                  <div className="mb-2 flex justify-center">
-                    <Gift className="h-6 w-6 md:h-8 md:w-8 text-purple-200" />
-                  </div>
-                  <h3 className="text-xs md:text-sm font-semibold text-white">Reward Shop</h3>
-                </CardContent>
-              </Card>
-            </Link>
+            {/* Company */}
+            <div>
+              <h4 className="text-white font-semibold text-sm mb-3">Company</h4>
+              <ul className="space-y-2">
+                {[
+                  { label: "Leave a review", href: "/reviews" },
+                  { label: "Terms of service", href: "/terms" },
+                  { label: "Privacy policy", href: "/privacy" },
+                ].map(({ label, href }) => (
+                  <li key={label}>
+                    <Link href={href}>
+                      <span className="text-slate-400 hover:text-white text-sm transition-colors cursor-pointer">{label}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
 
-            {/* Moving Shop */}
-            <Link href="/services">
-              <Card className="group cursor-pointer bg-gradient-to-br from-blue-700 to-blue-900 border border-blue-500/30 hover:border-blue-400 hover:shadow-lg hover:shadow-blue-500/20 transition-all duration-300" data-testid="card-shop">
-                <CardContent className="p-3 md:p-4 text-center">
-                  <div className="mb-2 flex justify-center">
-                    <Truck className="h-6 w-6 md:h-8 md:w-8 text-blue-200" />
-                  </div>
-                  <h3 className="text-xs md:text-sm font-semibold text-white">Moving Shop</h3>
-                </CardContent>
-              </Card>
-            </Link>
+            {/* Contact */}
+            <div>
+              <h4 className="text-white font-semibold text-sm mb-3">Contact</h4>
+              <ul className="space-y-2">
+                <li>
+                  <a href="tel:+19063859312" className="text-slate-400 hover:text-white text-sm transition-colors">
+                    (906) 385-9312
+                  </a>
+                </li>
+                <li>
+                  <span className="text-slate-400 text-sm">Ironwood and Iron River, MI</span>
+                </li>
+                <li>
+                  <span className="text-slate-400 text-sm">Green Bay and Wausau, WI</span>
+                </li>
+              </ul>
+            </div>
+          </div>
 
-            {/* Sponsors */}
-            <Link href="/sponsors">
-              <Card className="group cursor-pointer bg-gradient-to-br from-slate-600 to-slate-800 border border-slate-500/30 hover:border-slate-400 hover:shadow-lg hover:shadow-slate-500/20 transition-all duration-300" data-testid="card-sponsors">
-                <CardContent className="p-3 md:p-4 text-center">
-                  <div className="mb-2 flex justify-center">
-                    <Users className="h-6 w-6 md:h-8 md:w-8 text-slate-200" />
-                  </div>
-                  <h3 className="text-xs md:text-sm font-semibold text-white">Sponsors</h3>
-                </CardContent>
-              </Card>
-            </Link>
+          <div className="border-t border-slate-800/60 pt-6 text-center">
+            <p className="text-slate-600 text-xs">&copy; {new Date().getFullYear()} JC ON THE MOVE LLC. All rights reserved.</p>
           </div>
         </div>
-      </section>
+      </footer>
 
-      {/* ── JCMOVES Booking Chatbot Dialog ── */}
-      <Dialog open={assistantOpen} onOpenChange={(o) => { setAssistantOpen(o); }}>
-        <DialogContent className="sm:max-w-lg w-full max-h-[92vh] flex flex-col p-0 overflow-hidden bg-slate-950 border border-slate-700/60">
-          <DialogHeader className="px-5 pt-4 pb-2 shrink-0 border-b border-slate-800/60">
-            <DialogTitle className="flex items-center gap-2.5 text-white">
-              <div className="p-1.5 rounded-lg bg-gradient-to-br from-teal-500 to-blue-600 shrink-0">
-                <Truck className="h-4 w-4 text-white" />
-              </div>
-              <div>
-                <span className="font-bold">JC Moving Assistant</span>
-                <p className="text-xs text-slate-400 font-normal">Guided quote — reviewed by Darrell before anything is sent</p>
-              </div>
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-4 pt-3">
-            <BookingChatbot onClose={() => setAssistantOpen(false)} />
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
