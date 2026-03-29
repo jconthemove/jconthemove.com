@@ -8,10 +8,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Truck, Trash2, Snowflake, Sparkles, Wrench, HardHat, Layers, PaintBucket,
-  CheckCircle2, Star, Shield, Zap, MapPin, Phone, Send, Gift, ChevronRight
+  CheckCircle2, Star, Shield, Zap, MapPin, Phone, Send, Gift, ChevronRight, Calculator, MessageSquare
 } from "lucide-react";
 import { Link } from "wouter";
 import { HomepageBookingCalculator } from "@/components/homepage-booking-calculator";
+import { BookingChatbot } from "@/components/booking-chatbot";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -84,6 +85,13 @@ export default function HomePage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [photoFiles, setPhotoFiles] = useState<FileList | null>(null);
+  const [entryMode, setEntryMode] = useState<"calculator" | "guided">("calculator");
+
+  function scrollToGetStarted(mode: "calculator" | "guided" = "calculator") {
+    setEntryMode(mode);
+    const el = document.getElementById("get-started");
+    if (el) el.scrollIntoView({ behavior: "smooth" });
+  }
 
   const form = useForm<InsertLead>({
     resolver: zodResolver(insertLeadSchema),
@@ -204,11 +212,12 @@ export default function HomePage() {
                 ))}
               </div>
               <div className="flex flex-wrap gap-3">
-                <Link href="/quote">
-                  <Button className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 py-2.5 text-base rounded-xl">
-                    Get Instant Quote
-                  </Button>
-                </Link>
+                <Button
+                  onClick={() => scrollToGetStarted("calculator")}
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 py-2.5 text-base rounded-xl"
+                >
+                  Get Instant Quote
+                </Button>
                 <a href="tel:+19063859312">
                   <Button variant="outline" className="border-slate-600 text-white hover:bg-slate-700 font-bold px-6 py-2.5 text-base rounded-xl">
                     <Phone className="h-4 w-4 mr-2" />
@@ -225,7 +234,7 @@ export default function HomePage() {
               <h2 className="text-white font-bold text-xl mb-1">Start Here — Price Your Move Fast</h2>
               <p className="text-slate-400 text-sm mb-4">Pick a starting option, then finish your quote in seconds.</p>
               <div className="space-y-2.5">
-                <Link href="/quote?service=residential&crew=2">
+                <button onClick={() => scrollToGetStarted("calculator")} className="w-full text-left">
                   <div className="flex items-center justify-between bg-slate-700/60 hover:bg-blue-600/20 border border-slate-600/60 hover:border-blue-500/60 rounded-xl px-4 py-3 cursor-pointer transition-all group">
                     <div>
                       <p className="text-white font-semibold text-sm">2 Movers — from $300</p>
@@ -233,8 +242,8 @@ export default function HomePage() {
                     </div>
                     <ChevronRight className="h-4 w-4 text-slate-500 group-hover:text-blue-400 transition-colors" />
                   </div>
-                </Link>
-                <Link href="/quote?service=residential&crew=3">
+                </button>
+                <button onClick={() => scrollToGetStarted("calculator")} className="w-full text-left">
                   <div className="flex items-center justify-between bg-blue-600/20 border border-blue-500/60 rounded-xl px-4 py-3 cursor-pointer hover:bg-blue-600/30 transition-all group relative">
                     <div className="absolute -top-2 left-4">
                       <span className="bg-blue-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">Most Popular</span>
@@ -245,8 +254,8 @@ export default function HomePage() {
                     </div>
                     <ChevronRight className="h-4 w-4 text-blue-400 group-hover:text-white transition-colors" />
                   </div>
-                </Link>
-                <Link href="/quote?service=junk">
+                </button>
+                <button onClick={() => scrollToGetStarted("guided")} className="w-full text-left">
                   <div className="flex items-center justify-between bg-slate-700/60 hover:bg-orange-500/20 border border-slate-600/60 hover:border-orange-500/60 rounded-xl px-4 py-3 cursor-pointer transition-all group">
                     <div>
                       <p className="text-white font-semibold text-sm">Junk Removal — from $150</p>
@@ -254,7 +263,7 @@ export default function HomePage() {
                     </div>
                     <ChevronRight className="h-4 w-4 text-slate-500 group-hover:text-orange-400 transition-colors" />
                   </div>
-                </Link>
+                </button>
               </div>
             </div>
           </div>
@@ -323,14 +332,57 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── LIVE PRICING CALCULATOR + SERVICES SNAPSHOT ── */}
-      <section className="py-10 px-4 bg-slate-950/60">
+      {/* ── GET STARTED — UNIFIED ENTRY SECTION ── */}
+      <section id="get-started" className="py-10 px-4 bg-slate-950/60">
         <div className="max-w-5xl mx-auto">
           <div className="grid md:grid-cols-[1fr_300px] gap-8 items-start">
 
-            {/* Left: Calculator */}
+            {/* Left: Tabbed entry (calculator or guided chatbot) */}
             <div>
-              <HomepageBookingCalculator />
+              {/* Section label */}
+              <p className="text-blue-400 text-xs font-semibold uppercase tracking-widest mb-1">Get Started</p>
+              <h2 className="text-white font-bold text-2xl mb-4">How would you like to begin?</h2>
+
+              {/* Tab switch */}
+              <div className="flex flex-col sm:flex-row gap-3 mb-6">
+                <button
+                  onClick={() => setEntryMode("calculator")}
+                  className={`flex-1 flex items-start gap-3 rounded-xl border px-4 py-3 text-left transition-all ${
+                    entryMode === "calculator"
+                      ? "border-blue-500 bg-blue-500/10"
+                      : "border-slate-700/60 bg-slate-800/40 hover:border-slate-600"
+                  }`}
+                >
+                  <Calculator className={`h-5 w-5 mt-0.5 shrink-0 ${entryMode === "calculator" ? "text-blue-400" : "text-slate-500"}`} />
+                  <div>
+                    <p className={`font-semibold text-sm ${entryMode === "calculator" ? "text-white" : "text-slate-300"}`}>Instant Pricing</p>
+                    <p className="text-slate-500 text-xs mt-0.5">Know roughly what you need? Build your move and see pricing now.</p>
+                  </div>
+                </button>
+                <button
+                  onClick={() => setEntryMode("guided")}
+                  className={`flex-1 flex items-start gap-3 rounded-xl border px-4 py-3 text-left transition-all ${
+                    entryMode === "guided"
+                      ? "border-teal-500 bg-teal-500/10"
+                      : "border-slate-700/60 bg-slate-800/40 hover:border-slate-600"
+                  }`}
+                >
+                  <MessageSquare className={`h-5 w-5 mt-0.5 shrink-0 ${entryMode === "guided" ? "text-teal-400" : "text-slate-500"}`} />
+                  <div>
+                    <p className={`font-semibold text-sm ${entryMode === "guided" ? "text-white" : "text-slate-300"}`}>Guided Questions</p>
+                    <p className="text-slate-500 text-xs mt-0.5">Not sure what service fits? We'll ask a few quick questions and help you figure it out.</p>
+                  </div>
+                </button>
+              </div>
+
+              {/* Tab content */}
+              {entryMode === "calculator" ? (
+                <HomepageBookingCalculator />
+              ) : (
+                <div className="bg-slate-800/60 border border-slate-700/50 rounded-2xl p-4">
+                  <BookingChatbot embedded />
+                </div>
+              )}
             </div>
 
             {/* Right: Services Snapshot */}
@@ -340,18 +392,18 @@ export default function HomePage() {
               <p className="text-slate-400 text-sm mb-5">The services people turn to us for every day.</p>
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { icon: Truck, label: "Moving", sub: "Tap to price a move", href: "/quote?service=residential", iconCls: "text-blue-400", borderCls: "hover:border-blue-500/50" },
-                  { icon: Trash2, label: "Junk Removal", sub: "Tap to request pickup", href: "/quote?service=junk", iconCls: "text-orange-400", borderCls: "hover:border-orange-500/50" },
-                  { icon: Sparkles, label: "Labor Help", sub: "Tap to get a quote", href: "/quote?service=cleaning", iconCls: "text-teal-400", borderCls: "hover:border-teal-500/50" },
-                  { icon: Snowflake, label: "Snow Removal", sub: "Tap to request service", href: "/quote?service=snow", iconCls: "text-cyan-400", borderCls: "hover:border-cyan-500/50" },
-                ].map(({ icon: Icon, label, sub, href, iconCls, borderCls }) => (
-                  <Link key={label} href={href}>
+                  { icon: Truck, label: "Moving", sub: "Tap to price a move", mode: "calculator" as const, iconCls: "text-blue-400", borderCls: "hover:border-blue-500/50" },
+                  { icon: Trash2, label: "Junk Removal", sub: "Tap to get a quote", mode: "guided" as const, iconCls: "text-orange-400", borderCls: "hover:border-orange-500/50" },
+                  { icon: Sparkles, label: "Labor Help", sub: "Tap to get a quote", mode: "guided" as const, iconCls: "text-teal-400", borderCls: "hover:border-teal-500/50" },
+                  { icon: Snowflake, label: "Snow Removal", sub: "Tap to request service", mode: "guided" as const, iconCls: "text-cyan-400", borderCls: "hover:border-cyan-500/50" },
+                ].map(({ icon: Icon, label, sub, mode, iconCls, borderCls }) => (
+                  <button key={label} onClick={() => scrollToGetStarted(mode)} className="text-left">
                     <div className={`bg-slate-800/60 border border-slate-700/50 ${borderCls} rounded-xl p-4 cursor-pointer hover:bg-slate-700/60 transition-all group`}>
                       <Icon className={`h-7 w-7 ${iconCls} mb-2`} />
                       <p className="text-white font-semibold text-sm">{label}</p>
                       <p className="text-slate-500 text-xs mt-0.5">{sub}</p>
                     </div>
-                  </Link>
+                  </button>
                 ))}
               </div>
             </div>
@@ -384,12 +436,12 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── INLINE QUOTE FORM ── */}
+      {/* ── MANUAL FALLBACK QUOTE FORM ── */}
       <section id="quote" className="py-10 px-4 bg-slate-950/60">
         <div className="max-w-3xl mx-auto">
-          <p className="text-blue-400 text-xs font-semibold uppercase tracking-widest text-center mb-2">Quote Form</p>
-          <h2 className="text-2xl md:text-3xl font-bold text-white text-center mb-2">Get Your Free Quote</h2>
-          <p className="text-slate-400 text-sm text-center mb-2">Takes less than 60 seconds. No commitment required.</p>
+          <p className="text-slate-500 text-xs font-semibold uppercase tracking-widest text-center mb-2">Custom / Non-Calculator Jobs</p>
+          <h2 className="text-2xl md:text-3xl font-bold text-white text-center mb-2">Need a Custom Quote?</h2>
+          <p className="text-slate-400 text-sm text-center mb-2">For specialty jobs, large commercial moves, or anything outside the calculator — send us your details and we'll be in touch.</p>
           <p className="text-slate-500 text-xs text-center mb-6">We respect fast · No spam · Real local crew</p>
 
           {/* Mini trust badges */}

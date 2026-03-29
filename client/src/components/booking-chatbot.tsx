@@ -361,7 +361,8 @@ function shortAnswer(stepId: string, val: string | string[]): string {
 // ─────────────────────────────────────────────
 // Main Component
 // ─────────────────────────────────────────────
-export function BookingChatbot({ onClose }: { onClose?: () => void }) {
+export function BookingChatbot({ onClose, embedded = false, showCloseButton, className }: { onClose?: () => void; embedded?: boolean; showCloseButton?: boolean; className?: string }) {
+  const showClose = showCloseButton ?? !embedded;
   const { toast } = useToast();
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -533,7 +534,7 @@ export function BookingChatbot({ onClose }: { onClose?: () => void }) {
   const progress = isDone ? 100 : Math.round((stepIdx / visibleSteps.length) * 100);
 
   return (
-    <div className="flex flex-col h-full min-h-[500px]">
+    <div className={`flex flex-col h-full min-h-[500px]${className ? " " + className : ""}`}>
       {/* Progress bar */}
       <div className="px-1 pb-2 shrink-0">
         <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
@@ -638,7 +639,7 @@ export function BookingChatbot({ onClose }: { onClose?: () => void }) {
                   <p className="font-bold text-white text-sm">Quote Submitted!</p>
                   <p className="text-xs text-slate-400">Darrell will review and reach out soon.</p>
                 </div>
-                {onClose && (
+                {onClose && showClose && (
                   <Button variant="outline" size="sm" onClick={onClose} className="border-slate-600 text-slate-300 hover:bg-slate-800">
                     Close <ArrowRight className="h-3 w-3 ml-1" />
                   </Button>
