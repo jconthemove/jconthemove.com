@@ -12350,6 +12350,72 @@ Thank you for your business!
   });
 
   // ── Sponsor business card upload ──────────────────────────────────────────
+  // Public: active sponsors for display on sponsors page
+  app.get("/api/sponsors", async (_req, res) => {
+    try {
+      const activeSponsors = await storage.getSponsors("active");
+      res.json(activeSponsors);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin: all sponsors
+  app.get("/api/admin/sponsors", async (req: any, res) => {
+    try {
+      if (!req.user || (req.user.role !== "admin" && req.user.role !== "business_owner")) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      const allSponsors = await storage.getSponsors();
+      res.json(allSponsors);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin: approve sponsor
+  app.post("/api/admin/sponsors/:id/approve", async (req: any, res) => {
+    try {
+      if (!req.user || (req.user.role !== "admin" && req.user.role !== "business_owner")) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      const sponsor = await storage.updateSponsorStatus(req.params.id, "active");
+      if (!sponsor) return res.status(404).json({ error: "Sponsor not found" });
+      res.json(sponsor);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin: reject sponsor
+  app.post("/api/admin/sponsors/:id/reject", async (req: any, res) => {
+    try {
+      if (!req.user || (req.user.role !== "admin" && req.user.role !== "business_owner")) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      const sponsor = await storage.updateSponsorStatus(req.params.id, "cancelled");
+      if (!sponsor) return res.status(404).json({ error: "Sponsor not found" });
+      res.json(sponsor);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin: toggle featured
+  app.patch("/api/admin/sponsors/:id/featured", async (req: any, res) => {
+    try {
+      if (!req.user || (req.user.role !== "admin" && req.user.role !== "business_owner")) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      const current = await storage.getSponsor(req.params.id);
+      if (!current) return res.status(404).json({ error: "Sponsor not found" });
+      const sponsor = await storage.updateSponsorFeatured(req.params.id, !current.featured);
+      res.json(sponsor);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post("/api/sponsor/upload-card", async (req: any, res) => {
     try {
       const multer = (await import("multer")).default;
@@ -12379,13 +12445,17 @@ Thank you for your business!
         return res.status(400).json({ error: "Missing required fields" });
       }
 
-      const validTiers: Record<string, number> = {
-        "sponsor-bronze": 100,
-        "sponsor-silver": 250,
-        "sponsor-gold": 500,
+      const validTiers: Record<string, { price: number; tier: string }> = {
+        "sponsor-starter": { price: 50, tier: "starter" },
+        "sponsor-growth": { price: 100, tier: "growth" },
+        "sponsor-power": { price: 200, tier: "power" },
+        // Legacy tier IDs (backward compat)
+        "sponsor-bronze": { price: 50, tier: "starter" },
+        "sponsor-silver": { price: 100, tier: "growth" },
+        "sponsor-gold": { price: 200, tier: "power" },
       };
-      const expectedPrice = validTiers[tierId];
-      if (!expectedPrice || expectedPrice !== tierPrice) {
+      const tierInfo = validTiers[tierId];
+      if (!tierInfo || tierInfo.price !== tierPrice) {
         return res.status(400).json({ error: "Invalid sponsorship tier" });
       }
 
@@ -12434,6 +12504,25 @@ Thank you for your business!
       const paymentLink = paymentLinkResponse.result?.paymentLink || paymentLinkResponse.paymentLink;
       if (!paymentLink?.url) {
         return res.status(500).json({ error: "Failed to create payment link" });
+      }
+
+      // Save sponsor to DB with status pending before redirecting
+      try {
+        await storage.createSponsor({
+          businessName,
+          contactName,
+          email,
+          phone,
+          website: (req.body as any).website || null,
+          logoUrl: businessCardUrl || null,
+          tier: tierInfo.tier,
+          status: "pending",
+          featured: false,
+          tierPrice,
+          squarePaymentUrl: paymentLink.url,
+        });
+      } catch (dbErr) {
+        console.error("Failed to save sponsor to DB (non-critical):", dbErr);
       }
 
       const cardBlock = businessCardUrl

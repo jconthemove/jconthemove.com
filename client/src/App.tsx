@@ -101,6 +101,7 @@ import AdminPeoplePage from "@/pages/admin/people";
 import AdminFinancePage from "@/pages/admin/finance";
 import AdminMarketplacePage from "@/pages/admin/marketplace";
 import AdminSystemPage from "@/pages/admin/system";
+import AdminSponsorsPage from "@/pages/admin/sponsors";
 
 // Landing page for unauthenticated users — uses the new homepage
 function LandingPage() {
@@ -399,6 +400,7 @@ function AuthenticatedApp() {
               <Route path="/admin/finance"><AdminFinancePage /></Route>
               <Route path="/admin/marketplace"><AdminMarketplacePage /></Route>
               <Route path="/admin/system"><AdminSystemPage /></Route>
+              <Route path="/admin/sponsors"><AdminSponsorsPage /></Route>
               {/* Legacy admin URL redirects */}
               <Route path="/admin/treasury"><Redirect to="/admin/finance" /></Route>
               <Route path="/admin/users"><Redirect to="/admin/people" /></Route>

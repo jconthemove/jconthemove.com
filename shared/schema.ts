@@ -1944,6 +1944,31 @@ export const insertEthStakeSchema = createInsertSchema(ethStakes).omit({
 export type EthStake = typeof ethStakes.$inferSelect;
 export type InsertEthStake = z.infer<typeof insertEthStakeSchema>;
 
+// ── Sponsors ─────────────────────────────────────────────────────────────────
+export const sponsors = pgTable("sponsors", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  businessName: text("business_name").notNull(),
+  contactName: text("contact_name").notNull(),
+  email: text("email").notNull(),
+  phone: text("phone").notNull(),
+  website: text("website"),
+  logoUrl: text("logo_url"),
+  tier: text("tier").notNull(), // 'starter' | 'growth' | 'power'
+  status: text("status").notNull().default("pending"), // 'pending' | 'active' | 'cancelled'
+  featured: boolean("featured").notNull().default(false),
+  tierPrice: integer("tier_price").notNull(),
+  squarePaymentUrl: text("square_payment_url"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const insertSponsorSchema = createInsertSchema(sponsors).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertSponsor = z.infer<typeof insertSponsorSchema>;
+export type Sponsor = typeof sponsors.$inferSelect;
+
 // ── Worker Day Blocks (days off) ────────────────────────────────────────────
 export const workerDayBlocks = pgTable("worker_day_blocks", {
   id: serial("id").primaryKey(),

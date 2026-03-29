@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import {
-  Users, Activity, Coins, TrendingUp, Wallet, Bitcoin, ChevronRight
+  Users, Activity, Coins, TrendingUp, Wallet, Bitcoin, ChevronRight, Handshake
 } from "lucide-react";
 
 interface AdminStats {
@@ -94,17 +94,18 @@ export default function AdminOverviewPage() {
       {/* Quick Links Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {[
-          { href: "/admin/jobs", label: "Jobs", desc: "All leads, pipeline & job management", color: "from-amber-600 to-orange-600" },
-          { href: "/admin/people", label: "People", desc: "Users, roles, employees", color: "from-orange-600 to-orange-700" },
-          { href: "/admin/finance", label: "Finance", desc: "Treasury, transfers, payouts", color: "from-emerald-600 to-green-700" },
-          { href: "/admin/marketplace", label: "Marketplace", desc: "Rewards, lottery, promo codes", color: "from-purple-600 to-purple-700" },
-          { href: "/admin/system", label: "System", desc: "System check, Square, config", color: "from-slate-500 to-slate-700" },
-          { href: "/crew", label: "Team Hub", desc: "Today's jobs, crew status, inspiration", color: "from-blue-600 to-blue-700" },
+          { href: "/admin/jobs", label: "Jobs", desc: "All leads, pipeline & job management", color: "from-amber-600 to-orange-600", icon: Activity },
+          { href: "/admin/people", label: "People", desc: "Users, roles, employees", color: "from-orange-600 to-orange-700", icon: Users },
+          { href: "/admin/finance", label: "Finance", desc: "Treasury, transfers, payouts", color: "from-emerald-600 to-green-700", icon: Activity },
+          { href: "/admin/marketplace", label: "Marketplace", desc: "Rewards, lottery, promo codes", color: "from-purple-600 to-purple-700", icon: Activity },
+          { href: "/admin/sponsors", label: "Sponsors", desc: "Manage sponsor sign-ups & tiers", color: "from-yellow-600 to-amber-700", icon: Handshake },
+          { href: "/admin/system", label: "System", desc: "System check, Square, config", color: "from-slate-500 to-slate-700", icon: Activity },
+          { href: "/crew", label: "Team Hub", desc: "Today's jobs, crew status, inspiration", color: "from-blue-600 to-blue-700", icon: Activity },
         ].map(item => (
           <Link key={item.href} href={item.href}>
             <div className="group flex items-center gap-3 border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/10 rounded-xl p-4 cursor-pointer transition-all">
               <div className={`flex-shrink-0 w-10 h-10 rounded-lg bg-gradient-to-br ${item.color} flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform`}>
-                <Activity className="h-5 w-5 text-white" />
+                <item.icon className="h-5 w-5 text-white" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-white text-sm">{item.label}</p>
