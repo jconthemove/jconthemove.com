@@ -1,0 +1,37 @@
+Merge Calculator and Guided Quote Entry
+Summary
+Create a single “Get Started” booking/quote section on the homepage that begins by asking the customer how they want to proceed: Instant Pricing or Guided Questions. Use an inline tab-style switch with equal visual emphasis so customers can choose the experience that fits them best without feeling pushed into one path.
+
+Key Changes
+Replace the current split discovery pattern on the homepage with one shared entry section that contains:
+A short intro explaining there are two ways to get started.
+An inline tab switch for Instant Pricing and Guided Questions.
+The selected flow rendered directly beneath the switch.
+Keep the existing live calculator from home.tsx / homepage-booking-calculator.tsx as the Instant Pricing tab content.
+Reuse the existing guided assistant from booking-chatbot.tsx as the Guided Questions tab content, but render it as part of the section instead of relying only on the floating dialog.
+Update homepage CTA buttons and scroll targets so “Get Instant Quote” / service shortcut actions scroll into the unified section and can optionally preselect the relevant tab.
+Keep the floating chatbot launcher only if it still adds value as a shortcut; otherwise remove it to avoid duplicate entry points and customer confusion.
+Add lightweight copy for the chooser:
+Instant Pricing: “Know roughly what you need? Build your move and see pricing now.”
+Guided Questions: “Not sure what service fits? We’ll ask a few quick questions and help you figure it out.”
+Preserve existing backend submission behavior for both flows. This change should be presentation/orchestration only unless a gap is discovered during implementation.
+Implementation Notes
+In home.tsx, introduce a single state value like entryMode = "calculator" | "guided" and use it to control the tab UI and rendered panel.
+Route current quick-book buttons and service cards to the unified section, with sensible presets:
+Residential move shortcuts select calculator.
+Service types that are less pricing-friendly can select guided or the existing manual form if needed.
+If the guided chatbot currently assumes dialog sizing/close behavior, make it support an embedded mode via props such as embedded or showCloseButton.
+Keep the manual quote form available as a fallback path for non-calculator services unless the guided flow is expanded to fully cover them.
+Test Plan
+Homepage shows one unified chooser with both options visible and selectable.
+Switching tabs updates the content without breaking calculator presets or chatbot progress initialization.
+“Get Instant Quote” and service shortcut buttons scroll to the merged section and select the intended tab.
+Calculator flow still computes pricing and booking totals correctly.
+Guided flow still asks its full question sequence and submits successfully.
+Mobile layout works cleanly with the tab switch and embedded guided flow.
+No duplicate/conflicting CTAs remain that send customers to separate quote experiences unexpectedly.
+Assumptions
+The desired homepage behavior is an inline tab switch with equal emphasis between the two options.
+We are merging the customer entry experience, not rewriting the pricing logic or quote engine.
+The guided assistant should remain available on the homepage, but likely as embedded content rather than only a floating modal.
+The existing manual quote form can remain as a fallback for service categories not fully covered by the calculator.
