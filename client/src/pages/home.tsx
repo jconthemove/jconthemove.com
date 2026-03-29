@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Truck, Trash2, Snowflake, Sparkles, Gift, ShoppingBag, Star, Users, Volume2, VolumeX, Gem, Clock, BadgeDollarSign, CheckCircle2, Calculator, MessageSquare, X } from "lucide-react";
+import { Truck, Trash2, Snowflake, Sparkles, Gift, ShoppingBag, Star, Users, Gem, Clock, BadgeDollarSign, CheckCircle2, Calculator, MessageSquare, X } from "lucide-react";
 import promoImage from "@assets/file_00000000839871fd8e13378301744f2e_(1)_1771260918919.png";
 import { Link } from "wouter";
 import { BookingChatbot } from "@/components/booking-chatbot";
@@ -11,54 +11,11 @@ import { HomepageBookingCalculator } from "@/components/homepage-booking-calcula
 const jewelryVideoSrc = "/jewelry-video.mp4";
 
 export default function HomePage() {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [isMuted, setIsMuted] = useState(true);
   const [assistantOpen, setAssistantOpen] = useState(false);
 
-  const toggleMute = () => {
-    if (videoRef.current) {
-      videoRef.current.muted = !isMuted;
-      setIsMuted(!isMuted);
-    }
-  };
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    let hasPlayed = false;
-
-    const playVideo = async () => {
-      if (hasPlayed) return;
-      try {
-        await video.play();
-        hasPlayed = true;
-        document.removeEventListener('click', handleUserInteraction);
-        document.removeEventListener('touchstart', handleUserInteraction);
-      } catch (error) {
-        console.log("Video play attempt failed, will retry on interaction or when ready");
-      }
-    };
-
-    const handleCanPlay = () => {
-      playVideo();
-    };
-
-    const handleUserInteraction = () => {
-      playVideo();
-    };
-
-    video.addEventListener('canplay', handleCanPlay);
-    document.addEventListener('click', handleUserInteraction);
-    document.addEventListener('touchstart', handleUserInteraction);
-    playVideo();
-
-    return () => {
-      video.removeEventListener('canplay', handleCanPlay);
-      document.removeEventListener('click', handleUserInteraction);
-      document.removeEventListener('touchstart', handleUserInteraction);
-    };
-  }, []);
+  // Hero video kept for future integration:
+  // src="/attached_assets/hero-video-compressed.mp4"
+  // poster="/attached_assets/FB_IMG_5937718007297288444_1758496258755.jpg"
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
@@ -102,48 +59,11 @@ export default function HomePage() {
         </div>
       </Link>
 
-      {/* Hero Section with Branding and Video */}
-      <section className="py-8 px-4">
-        <div className="max-w-4xl mx-auto">
-          {/* Company Branding */}
-          <h1 className="text-3xl md:text-5xl font-bold text-center text-white mb-6 tracking-wide">
-            JC ON THE MOVE LLC
-          </h1>
-          
-          {/* Centered Video - Compact Size */}
-          <div className="relative mx-auto max-w-xl">
-            <div className="relative aspect-[4/5] md:aspect-[16/9] overflow-hidden rounded-2xl shadow-2xl border-4 border-primary/30">
-              <video
-                ref={videoRef}
-                src="/attached_assets/hero-video-compressed.mp4"
-                poster="/attached_assets/FB_IMG_5937718007297288444_1758496258755.jpg"
-                autoPlay
-                loop
-                muted
-                playsInline
-                preload="auto"
-                className="w-full h-full object-cover"
-                data-testid="video-hero"
-              >
-                Your browser does not support the video tag.
-              </video>
-              
-              {/* Unmute Button */}
-              <button
-                onClick={toggleMute}
-                className="absolute bottom-4 right-4 bg-black/60 hover:bg-black/80 text-white p-3 rounded-full transition-all duration-200 backdrop-blur-sm shadow-lg hover:scale-110 z-10"
-                aria-label={isMuted ? "Unmute video" : "Mute video"}
-                data-testid="button-toggle-mute"
-              >
-                {isMuted ? (
-                  <VolumeX className="h-6 w-6" />
-                ) : (
-                  <Volume2 className="h-6 w-6" />
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Hero branding */}
+      <section className="pt-8 pb-2 px-4">
+        <h1 className="text-3xl md:text-5xl font-bold text-center text-white tracking-wide">
+          JC ON THE MOVE LLC
+        </h1>
       </section>
 
       {/* Monthly Special Promo - #1 Slot */}
