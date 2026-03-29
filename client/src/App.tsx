@@ -13,6 +13,7 @@ import Header from "@/components/header";
 import BottomTabBar from "@/components/bottom-tab-bar";
 import PwaInstallPrompt from "@/components/pwa-install-prompt";
 import HomePage from "@/pages/home";
+import LegacyHomePage from "@/pages/_archive/home";
 import SplashPage from "@/pages/splash";
 import OnboardingPage from "@/pages/onboarding";
 import CustomerHomePage from "@/pages/customer-home";
@@ -101,11 +102,11 @@ import AdminFinancePage from "@/pages/admin/finance";
 import AdminMarketplacePage from "@/pages/admin/marketplace";
 import AdminSystemPage from "@/pages/admin/system";
 
-// Landing page for unauthenticated users — now uses the splash page
+// Landing page for unauthenticated users — uses the new homepage
 function LandingPage() {
   return (
     <div className="min-h-screen bg-background text-foreground font-sans">
-      <SplashPage />
+      <HomePage />
     </div>
   );
 }
@@ -642,6 +643,9 @@ function Router() {
       {/* Ashley's Shop - Hand-Crafted Made With Love By Ashley */}
       <Route path="/nature-made-jewls" component={NatureMadeJewls} />
       <Route path="/nature-made-jewls/:id" component={JewelryDetailPage} />
+      {/* Legacy public homepage preserved for reference */}
+      <Route path="/legacy-home" component={LegacyHomePage} />
+      <Route path="/welcome" component={LegacyHomePage} />
       <Route path="/moving-estimator" component={MovingEstimator} />
       <Route path="/payment-success" component={PaymentSuccessPage} />
       <Route path="/promo/half-day" component={PromoHalfDayPage} />
