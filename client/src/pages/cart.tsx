@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -8,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { useCart } from "@/hooks/useCart";
 import { Link, useLocation } from "wouter";
-import { ArrowLeft, Trash2, ShoppingCart, Percent, Shield, Loader2, CreditCard, Gem, Truck, Plus, MapPin, CalendarDays, Heart, Building2, Trophy, Check, Bitcoin, Tag, X, CheckCircle2, Package, Home, DollarSign, Zap } from "lucide-react";
+import { ArrowLeft, Trash2, ShoppingCart, Percent, Shield, Loader2, CreditCard, Gem, Truck, Plus, MapPin, CalendarDays, Heart, Building2, Trophy, Check, Bitcoin, Tag, X, CheckCircle2, Package, Home, DollarSign, Zap, Sparkles } from "lucide-react";
 
 interface PromoResult {
   valid: boolean;
@@ -47,6 +48,39 @@ export default function CartPage() {
   const [promoApplied, setPromoApplied] = useState(false);
 
   const context = hasServiceItems ? 'service' : hasJewelryItems ? 'jewelry' : 'any';
+
+  // Scan account for earned promo codes
+  const { data: myCodes = [] } = useQuery<any[]>({
+    queryKey: ["/api/promo-codes/my-codes"],
+    retry: false,
+  });
+
+  const applyMyCode = async (code: string) => {
+    setPromoInput(code);
+    setPromoLoading(true);
+    setPromoError("");
+    setPromoResult(null);
+    setPromoApplied(false);
+    try {
+      const res = await fetch("/api/promo-codes/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, context }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.valid) {
+        setPromoError(data.error || "Code could not be applied");
+      } else {
+        setPromoResult(data);
+        setPromoApplied(true);
+        toast({ title: "Code applied!", description: data.description });
+      }
+    } catch {
+      setPromoError("Failed to apply code. Please try again.");
+    } finally {
+      setPromoLoading(false);
+    }
+  };
 
   const promoDiscountAmount = promoResult && promoApplied
     ? Math.round(total * (promoResult.discountPercent / 100) * 100) / 100
@@ -461,6 +495,40 @@ export default function CartPage() {
                   <span>⚠</span> Please select a delivery method to continue
                 </p>
               )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Saved codes scanner */}
+        {myCodes.length > 0 && !promoApplied && (
+          <Card className="bg-amber-950/30 border-amber-500/30 mb-3">
+            <CardContent className="pt-3 pb-3">
+              <p className="text-xs font-bold text-amber-400 flex items-center gap-1.5 mb-2">
+                <Sparkles className="h-3.5 w-3.5" />
+                You have {myCodes.length} saved code{myCodes.length > 1 ? "s" : ""} — tap to apply
+              </p>
+              <div className="flex flex-col gap-2">
+                {myCodes.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => applyMyCode(c.code)}
+                    disabled={promoLoading}
+                    className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-amber-900/40 border border-amber-700/50 hover:bg-amber-800/50 transition-colors text-left"
+                  >
+                    <div className="min-w-0">
+                      <span className="font-mono font-bold text-amber-300 text-sm tracking-wide">{c.code}</span>
+                      {c.description && (
+                        <p className="text-amber-500/80 text-xs truncate mt-0.5">{c.description}</p>
+                      )}
+                    </div>
+                    <span className="text-xs font-bold text-amber-400 bg-amber-900/60 border border-amber-700/40 rounded-lg px-2 py-1 shrink-0">
+                      {promoLoading && promoInput === c.code ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : "Apply"}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </CardContent>
           </Card>
         )}

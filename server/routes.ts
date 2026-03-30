@@ -9650,10 +9650,15 @@ Thank you for your business!
         });
       }
 
-      // Increment uses count
-      await db.update(promoCodes)
-        .set({ usesCount: promo.usesCount + 1, updatedAt: new Date() })
-        .where(eq(promoCodes.id, promo.id));
+      // Increment uses count and auto-delete when fully exhausted
+      const newUsesCount = promo.usesCount + 1;
+      if (promo.maxUses !== null && newUsesCount >= promo.maxUses) {
+        await db.delete(promoCodes).where(eq(promoCodes.id, promo.id));
+      } else {
+        await db.update(promoCodes)
+          .set({ usesCount: newUsesCount, updatedAt: new Date() })
+          .where(eq(promoCodes.id, promo.id));
+      }
 
       // Credit reward tokens to the customer
       if (customerReward > 0) {
@@ -9802,6 +9807,33 @@ Thank you for your business!
     } catch (error: any) {
       console.error("Error updating promo code:", error);
       res.status(400).json({ error: error.message });
+    }
+  });
+
+  // Customer: get all available promo codes belonging to this user
+  app.get("/api/promo-codes/my-codes", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { promoCodes } = await import("@shared/schema");
+      const now = new Date();
+      const codes = await db.select().from(promoCodes).where(
+        and(
+          eq(promoCodes.referralUserId, userId),
+          eq(promoCodes.isActive, true),
+          or(
+            sql`${promoCodes.expiresAt} IS NULL`,
+            sql`${promoCodes.expiresAt} > ${now}`
+          ),
+          or(
+            sql`${promoCodes.maxUses} IS NULL`,
+            sql`${promoCodes.usesCount} < ${promoCodes.maxUses}`
+          )
+        )
+      );
+      res.json(codes);
+    } catch (error: any) {
+      console.error("Error fetching user promo codes:", error);
+      res.status(500).json({ error: error.message });
     }
   });
 
