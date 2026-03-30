@@ -289,7 +289,7 @@ async function ensureJackpotsSeeded() {
         ('pricing_short_job_rate',       '150', 'Short job flat rate ($/hr, small truck load-only)'),
         ('pricing_short_job_full',       '300', 'Short job full price before promo ($)'),
         ('pricing_jc222_price',          '222', 'JC222 promo price for short jobs ($)'),
-        ('pricing_drive_speed_mph',       '35', 'Average drive speed for travel time calc (mph)'),
+        ('pricing_drive_speed_mph',       '50', 'Average drive speed for travel time calc (mph)'),
         ('pricing_junk_small_low',       '100', 'Junk removal small load estimate low ($)'),
         ('pricing_junk_small_high',      '200', 'Junk removal small load estimate high ($)'),
         ('pricing_junk_large_low',       '200', 'Junk removal full truckload estimate low ($)'),
@@ -298,6 +298,11 @@ async function ensureJackpotsSeeded() {
       ON CONFLICT (setting_key) DO NOTHING;
     `);
     console.log('✅ Quantum Spin jackpots seeded');
+    // Migrate drive speed from old 35 mph default to 50 mph
+    await pool.query(`
+      UPDATE spin_config SET setting_value = '50'
+      WHERE setting_key = 'pricing_drive_speed_mph' AND setting_value = '35';
+    `);
   } catch (err) {
     console.error('Failed to seed jackpots:', err);
   }
@@ -2367,6 +2372,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
     };
   }
   
+  // ── ZIP-to-ETA endpoint ─────────────────────────────────────────────────────
+  // In-memory cache keyed by ZIP code
+  const zipEtaCache = new Map<string, { distanceMiles: number; estimatedMinutes: number; availabilityLabel: string }>();
+
+  app.get("/api/eta", async (req, res) => {
+    try {
+      const zip = String(req.query.zip ?? "").trim().replace(/\D/g, "").slice(0, 5);
+      if (zip.length < 5) {
+        return res.status(400).json({ error: "Enter a valid 5-digit ZIP code." });
+      }
+
+      if (zipEtaCache.has(zip)) {
+        const [crewRow] = await db.select({ count: sql<number>`count(*)` }).from(users)
+          .where(and(eq(users.isAvailable, true), eq(users.role, "employee")));
+        const crewCount = Number(crewRow?.count ?? 0);
+        const cached = zipEtaCache.get(zip)!;
+        return res.json({ ...cached, crewCount });
+      }
+
+      // Fetch coordinates for customer ZIP via free Zippopotam API
+      const geoRes = await fetch(`https://api.zippopotam.us/us/${zip}`);
+      if (!geoRes.ok) {
+        return res.status(400).json({ error: "ZIP code not found. Please check and try again." });
+      }
+      const geoData = await geoRes.json() as any;
+      const place = geoData.places?.[0];
+      if (!place) {
+        return res.status(400).json({ error: "ZIP code not found. Please check and try again." });
+      }
+
+      const customerLat = Number(place.latitude);
+      const customerLng = Number(place.longitude);
+
+      // Ironwood, MI base coordinates
+      const BASE_LAT = 46.4547;
+      const BASE_LNG = -90.1701;
+
+      // Haversine distance in miles
+      const R = 3958.8;
+      const dLat = ((customerLat - BASE_LAT) * Math.PI) / 180;
+      const dLng = ((customerLng - BASE_LNG) * Math.PI) / 180;
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos((BASE_LAT * Math.PI) / 180) *
+          Math.cos((customerLat * Math.PI) / 180) *
+          Math.sin(dLng / 2) ** 2;
+      const distanceMiles = Math.round(R * 2 * Math.asin(Math.sqrt(a)));
+
+      const DRIVE_SPEED_MPH = 50;
+      const estimatedMinutes = Math.round((distanceMiles / DRIVE_SPEED_MPH) * 60);
+
+      let availabilityLabel: string;
+      if (estimatedMinutes <= 30) {
+        availabilityLabel = "nearby";
+      } else if (estimatedMinutes <= 60) {
+        availabilityLabel = "close";
+      } else if (estimatedMinutes <= 180) {
+        availabilityLabel = "moderate";
+      } else {
+        availabilityLabel = "far";
+      }
+
+      const payload = { distanceMiles, estimatedMinutes, availabilityLabel };
+      zipEtaCache.set(zip, payload);
+
+      // Live crew availability count
+      const [crewRow] = await db.select({ count: sql<number>`count(*)` }).from(users)
+        .where(and(eq(users.isAvailable, true), eq(users.role, "employee")));
+      const crewCount = Number(crewRow?.count ?? 0);
+
+      return res.json({ ...payload, crewCount });
+    } catch (err) {
+      console.error("ETA lookup error:", err);
+      return res.status(500).json({ error: "Could not calculate ETA right now." });
+    }
+  });
+
   // Submit quote request
   app.post("/api/leads", async (req, res) => {
     try {
@@ -14914,7 +14996,7 @@ Thank you for your business!
         shortJobRate:  n('pricing_short_job_rate',   150),
         shortJobFull:  n('pricing_short_job_full',   300),
         jc222Price:    n('pricing_jc222_price',      222),
-        driveSpeedMph: n('pricing_drive_speed_mph',   35),
+        driveSpeedMph: n('pricing_drive_speed_mph',   50),
         junkSmallLow:  n('pricing_junk_small_low',   100),
         junkSmallHigh: n('pricing_junk_small_high',  200),
         junkLargeLow:  n('pricing_junk_large_low',   200),

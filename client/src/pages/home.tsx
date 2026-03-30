@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -126,6 +126,14 @@ export default function HomePage() {
   const [quoteOpen, setQuoteOpen] = useState(false);
   const [bannerIdx, setBannerIdx] = useState(0);
 
+  // Hero ZIP ETA widget
+  type HeroEtaData = { distanceMiles: number; estimatedMinutes: number; availabilityLabel: string; crewCount: number };
+  const [heroZip, setHeroZip] = useState("");
+  const [heroEtaData, setHeroEtaData] = useState<HeroEtaData | null>(null);
+  const [heroEtaLoading, setHeroEtaLoading] = useState(false);
+  const [heroEtaError, setHeroEtaError] = useState("");
+  const heroInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     const id = setInterval(() => setBannerIdx(prev => (prev + 1) % BANNER_MESSAGES.length), 3000);
     return () => clearInterval(id);
@@ -135,6 +143,27 @@ export default function HomePage() {
     setEntryMode(mode);
     const el = document.getElementById("get-started");
     if (el) el.scrollIntoView({ behavior: "smooth" });
+  }
+
+  async function lookupHeroEta() {
+    const zip = heroZip.trim().replace(/\D/g, "").slice(0, 5);
+    if (zip.length < 5) {
+      setHeroEtaError("Enter a 5-digit ZIP code.");
+      return;
+    }
+    setHeroEtaLoading(true);
+    setHeroEtaError("");
+    setHeroEtaData(null);
+    try {
+      const res = await fetch(`/api/eta?zip=${zip}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Could not calculate ETA.");
+      setHeroEtaData(data);
+    } catch (err: any) {
+      setHeroEtaError(err?.message || "Could not calculate ETA.");
+    } finally {
+      setHeroEtaLoading(false);
+    }
   }
 
   const form = useForm<InsertLead>({
@@ -279,6 +308,67 @@ export default function HomePage() {
                 </a>
               </div>
               <p className="mt-3 text-slate-500 text-xs">Next openings available today. Book now to lock your spot.</p>
+
+              {/* Hero ZIP ETA widget */}
+              <div className="mt-5 rounded-xl border border-white/10 bg-white/5 p-3">
+                <p className="text-slate-400 text-xs mb-2 font-medium">Enter your ZIP to see how far we are →</p>
+                <div className="flex gap-2">
+                  <input
+                    ref={heroInputRef}
+                    type="text"
+                    inputMode="numeric"
+                    value={heroZip}
+                    maxLength={5}
+                    onChange={(e) => {
+                      setHeroZip(e.target.value.replace(/\D/g, "").slice(0, 5));
+                      setHeroEtaData(null);
+                      setHeroEtaError("");
+                    }}
+                    onKeyDown={(e) => e.key === "Enter" && lookupHeroEta()}
+                    placeholder="Your ZIP code"
+                    className="flex-1 rounded-lg bg-slate-900 border border-slate-700 text-white text-sm px-3 py-2 placeholder:text-slate-500 focus:outline-none focus:border-blue-500 min-w-0"
+                  />
+                  <button
+                    onClick={lookupHeroEta}
+                    disabled={heroEtaLoading}
+                    className="flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white text-sm font-semibold px-4 py-2 transition-colors shrink-0"
+                  >
+                    {heroEtaLoading ? (
+                      <Zap className="h-3.5 w-3.5 animate-pulse" />
+                    ) : (
+                      <Zap className="h-3.5 w-3.5" />
+                    )}
+                    Check
+                  </button>
+                </div>
+                {heroEtaError && <p className="mt-1.5 text-xs text-slate-400">{heroEtaError}</p>}
+                {heroEtaData && (
+                  <div className={`mt-2 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium ${
+                    heroEtaData.availabilityLabel === "far"
+                      ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-200"
+                      : "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+                  }`}>
+                    {heroEtaData.availabilityLabel !== "far" ? (
+                      <span className="relative flex h-2 w-2 flex-shrink-0">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                      </span>
+                    ) : (
+                      <span className="h-2 w-2 flex-shrink-0 rounded-full bg-yellow-400" />
+                    )}
+                    {heroEtaData.availabilityLabel === "far" ? (
+                      <span>We serve this area — contact us to confirm availability</span>
+                    ) : (
+                      <span>
+                        {heroEtaData.crewCount > 0 ? `${heroEtaData.crewCount} Mover${heroEtaData.crewCount > 1 ? "s" : ""} Online · ` : ""}
+                        ~{heroEtaData.estimatedMinutes < 60
+                          ? `${heroEtaData.estimatedMinutes} min away`
+                          : `${Math.floor(heroEtaData.estimatedMinutes / 60)} hr${Math.floor(heroEtaData.estimatedMinutes / 60) > 1 ? "s" : ""}${heroEtaData.estimatedMinutes % 60 > 0 ? ` ${heroEtaData.estimatedMinutes % 60} min` : ""} away`}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Right: Quick Book panel */}

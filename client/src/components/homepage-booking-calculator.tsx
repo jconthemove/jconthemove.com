@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Calculator, Loader2, MapPin, Navigation, ShieldCheck, Truck, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -86,6 +86,14 @@ export function HomepageBookingCalculator({ preset }: Props) {
   const [appliedPromo, setAppliedPromo] = useState<ValidatedPromo | null>(null);
   const [promoError, setPromoError] = useState("");
   const [isApplyingPromo, setIsApplyingPromo] = useState(false);
+
+  // ETA state
+  type EtaData = { distanceMiles: number; estimatedMinutes: number; availabilityLabel: string; crewCount: number };
+  const [etaData, setEtaData] = useState<EtaData | null>(null);
+  const [etaLoading, setEtaLoading] = useState(false);
+  const [etaError, setEtaError] = useState("");
+  const etaDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const minimumHours = getMinimumLaborHours(addOns);
   const minimumMovers = getMinimumMovers(addOns, truckSize);
   const serviceAssignments = dropoffZip.trim() ? 2 : 1;
@@ -117,6 +125,26 @@ export function HomepageBookingCalculator({ preset }: Props) {
     setPickupInfo(null);
     setZipError("");
     setShowBookingFields(false);
+    setEtaData(null);
+    setEtaError("");
+
+    if (etaDebounceRef.current) clearTimeout(etaDebounceRef.current);
+    const zip = pickupZip.trim();
+    if (zip.length < 5) return;
+
+    setEtaLoading(true);
+    etaDebounceRef.current = setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/eta?zip=${zip}`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data?.error || "Could not calculate ETA.");
+        setEtaData(data);
+      } catch (err: any) {
+        setEtaError(err?.message || "Could not calculate ETA.");
+      } finally {
+        setEtaLoading(false);
+      }
+    }, 600);
   }, [pickupZip]);
 
   useEffect(() => {
@@ -532,6 +560,41 @@ export function HomepageBookingCalculator({ preset }: Props) {
                   placeholder="49938"
                   className="border-slate-700 bg-slate-950/70 text-white"
                 />
+                {etaLoading && (
+                  <div className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-400">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Checking crew availability...
+                  </div>
+                )}
+                {!etaLoading && etaData && (
+                  <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium ${
+                    etaData.availabilityLabel === "far"
+                      ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-200"
+                      : "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+                  }`}>
+                    {etaData.availabilityLabel !== "far" ? (
+                      <span className="relative flex h-2 w-2 flex-shrink-0">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                      </span>
+                    ) : (
+                      <span className="h-2 w-2 flex-shrink-0 rounded-full bg-yellow-400" />
+                    )}
+                    {etaData.availabilityLabel === "far" ? (
+                      <span>We serve this area — contact us to confirm availability</span>
+                    ) : (
+                      <span>
+                        {etaData.crewCount > 0 ? `${etaData.crewCount} Mover${etaData.crewCount > 1 ? "s" : ""} Online · ` : ""}
+                        ~{etaData.estimatedMinutes < 60
+                          ? `${etaData.estimatedMinutes} min away`
+                          : `${Math.floor(etaData.estimatedMinutes / 60)} hr${Math.floor(etaData.estimatedMinutes / 60) > 1 ? "s" : ""}${etaData.estimatedMinutes % 60 > 0 ? ` ${etaData.estimatedMinutes % 60} min` : ""} away`}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {!etaLoading && etaError && (
+                  <p className="text-xs text-slate-400">{etaError}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="dropoff-zip" className="text-slate-200">

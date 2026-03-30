@@ -43,7 +43,7 @@ const DEFAULT_PRICING: Pricing = {
   shortJobRate: 150,
   shortJobFull: 300,
   jc222Price: 222,
-  driveSpeedMph: 35,
+  driveSpeedMph: 50,
   junkSmallLow: 100,
   junkSmallHigh: 200,
   junkLargeLow: 200,
@@ -101,7 +101,7 @@ function haversine(lat1: number, lng1: number, lat2: number, lng2: number): numb
 
 function roundHalf(n: number) { return Math.ceil(n * 2) / 2; }
 
-function computeDrive(sel: Sel, driveSpeedMph = 35): DriveInfo | undefined {
+function computeDrive(sel: Sel, driveSpeedMph = 50): DriveInfo | undefined {
   if (!sel.pickup) return undefined;
   const p = sel.pickup;
   const pickupMiles = haversine(BASE_LAT, BASE_LNG, p.lat, p.lng);
