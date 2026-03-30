@@ -50,6 +50,12 @@ const BOOKING_SUCCESS_STORAGE_KEY = "jc-booking-success-invoice-id";
 const HOURS = [2, 3, 4, 5, 6, 7, 8];
 const CREWS = [1, 2, 3, 4, 5];
 
+const MOVER_TILES = [
+  { label: "Small Move", sub: "1–2 movers", value: 1, recommended: false },
+  { label: "Standard Move", sub: "2–3 movers", value: 2, recommended: true },
+  { label: "Large Move", sub: "3–5 movers", value: 4, recommended: false },
+];
+
 const EMPTY_BOOKING_FIELDS: BookingFields = {
   firstName: "",
   lastName: "",
@@ -64,7 +70,7 @@ const EMPTY_BOOKING_FIELDS: BookingFields = {
 export function HomepageBookingCalculator({ preset }: Props) {
   const { toast } = useToast();
   const [movers, setMovers] = useState(2);
-  const [hours, setHours] = useState(2);
+  const [hours, setHours] = useState(3);
   const [addOns, setAddOns] = useState<PricingAddOns>(DEFAULT_ADD_ONS);
   const [truckSize, setTruckSize] = useState<TruckSize>("sixteen");
   const [pickupZip, setPickupZip] = useState("");
@@ -338,18 +344,18 @@ export function HomepageBookingCalculator({ preset }: Props) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-amber-300">Live Pricing</p>
           <h2 className="mt-2 text-2xl font-bold text-white">Build Your Move (Live Pricing)</h2>
-          <p className="mt-2 text-sm text-slate-400">
+          <p className="mt-2 text-base text-slate-400">
             Labor is {`$${PRICING_BASE.laborRatePerMoverHour}/hr`} per mover. Travel is {`$${PRICING_BASE.travelRatePerCrewHour}/hr`} per crew from Ironwood, MI.
           </p>
-          <p className="mt-2 text-xs font-medium text-slate-300">
+          <p className="mt-2 text-sm font-medium text-slate-300">
             No hidden fees • Discounts after 2 hours • Instant estimate
           </p>
-          <p className="mt-2 text-xs text-emerald-200">Prices update instantly — lock your rate by booking now.</p>
+          <p className="mt-2 text-sm text-emerald-200">Prices update instantly — lock your rate by booking now.</p>
         </div>
         <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-100">
           Calculator first
@@ -357,39 +363,42 @@ export function HomepageBookingCalculator({ preset }: Props) {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-        <div className="space-y-5">
+        <div className="space-y-7">
           <div>
-            <p className="mb-3 text-sm font-semibold text-slate-200">Crew size</p>
-            <div className="grid grid-cols-5 gap-2">
-              {CREWS.map((crew) => (
-                <button
-                  key={crew}
-                  type="button"
-                  onClick={() => setMovers(crew)}
-                  disabled={crew < minimumMovers}
-                  className={`rounded-xl border px-3 py-3 text-sm font-semibold transition ${
-                    movers === crew
-                      ? "border-blue-400 bg-blue-500/15 text-blue-100"
-                      : crew < minimumMovers
-                        ? "cursor-not-allowed border-white/5 bg-white/[0.03] text-slate-500"
-                        : "border-white/10 bg-white/5 text-slate-300 hover:border-white/20"
-                  }`}
-                >
-                  {crew}
-                </button>
-              ))}
+            <p className="mb-3 text-base font-semibold text-slate-200">How big is your move?</p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {MOVER_TILES.map((tile) => {
+                const tileSelected =
+                  (tile.value === 1 && movers <= 1) ||
+                  (tile.value === 2 && movers >= 2 && movers <= 3) ||
+                  (tile.value === 4 && movers >= 4);
+                return (
+                  <button
+                    key={tile.label}
+                    type="button"
+                    onClick={() => setMovers(tile.value)}
+                    className={`relative rounded-xl border px-4 py-4 text-left transition ${
+                      tileSelected
+                        ? "border-blue-400 bg-blue-500/15"
+                        : "border-white/10 bg-white/5 hover:border-white/20"
+                    }`}
+                  >
+                    {tile.recommended && (
+                      <span className="absolute -top-2.5 left-3 bg-blue-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">
+                        Recommended
+                      </span>
+                    )}
+                    <p className={`font-semibold text-sm ${tileSelected ? "text-blue-100" : "text-slate-200"}`}>{tile.label}</p>
+                    <p className={`text-xs mt-0.5 ${tileSelected ? "text-blue-300" : "text-slate-400"}`}>{tile.sub}</p>
+                  </button>
+                );
+              })}
             </div>
-            <p className="mt-2 text-xs text-slate-400">
-              {addOns.truck
-                ? truckSize === "large"
-                  ? `Larger-than-16-foot truck jobs require at least ${minimumMovers} movers${addOns.stairs ? " with stairs included" : ""}.`
-                  : `16-foot truck jobs require at least ${minimumMovers} movers${addOns.stairs ? " with stairs included" : ""}.`
-                : "Labor-only jobs can be booked with as few as 1 mover."}
-            </p>
+            <p className="mt-3 text-xs text-slate-500 italic">Most common job: 2 movers for 3 hours ≈ $450</p>
           </div>
 
           <div>
-            <p className="mb-3 text-sm font-semibold text-slate-200">Hours</p>
+            <p className="mb-3 text-base font-semibold text-slate-200">Hours</p>
             <div className="grid grid-cols-4 gap-2 md:grid-cols-7">
               {HOURS.map((option) => (
                 <button
@@ -397,7 +406,7 @@ export function HomepageBookingCalculator({ preset }: Props) {
                   type="button"
                   onClick={() => setHours(option)}
                   disabled={option < minimumHours}
-                  className={`rounded-xl border px-3 py-3 text-sm font-semibold transition ${
+                  className={`relative rounded-xl border px-3 py-4 text-sm font-semibold transition ${
                     hours === option
                       ? "border-emerald-400 bg-emerald-500/10 text-emerald-100"
                       : option < minimumHours
@@ -405,6 +414,11 @@ export function HomepageBookingCalculator({ preset }: Props) {
                         : "border-white/10 bg-white/5 text-slate-300 hover:border-white/20"
                   }`}
                 >
+                  {option === 3 && (
+                    <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 whitespace-nowrap bg-emerald-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+                      Most common choice
+                    </span>
+                  )}
                   {option}h
                 </button>
               ))}
@@ -417,7 +431,7 @@ export function HomepageBookingCalculator({ preset }: Props) {
           </div>
 
           <div>
-            <p className="mb-3 text-sm font-semibold text-slate-200">Add-ons</p>
+            <p className="mb-3 text-base font-semibold text-slate-200">Optional Services</p>
             <div className="space-y-2">
               {[
                 { key: "packing", label: "Packing help", detail: `+$${movers * 50 * laborPreview.billableHours}` },
@@ -448,7 +462,7 @@ export function HomepageBookingCalculator({ preset }: Props) {
                     key={item.key}
                     type="button"
                     onClick={() => toggleAddOn(key)}
-                    className={`flex w-full items-center justify-between rounded-xl border px-4 py-3 text-sm transition ${
+                    className={`flex w-full items-center justify-between rounded-xl border px-4 py-4 text-base transition ${
                       addOns[key]
                         ? "border-emerald-400 bg-emerald-500/10 text-emerald-100"
                         : "border-white/10 bg-white/5 text-slate-300 hover:border-white/20"
@@ -466,7 +480,7 @@ export function HomepageBookingCalculator({ preset }: Props) {
                 <button
                   type="button"
                   onClick={() => selectTruckOption("sixteen")}
-                  className={`flex items-center justify-between rounded-xl border px-4 py-3 text-sm transition ${
+                  className={`flex items-center justify-between rounded-xl border px-4 py-4 text-base transition ${
                     addOns.truck && truckSize === "sixteen"
                       ? "border-emerald-400 bg-emerald-500/10 text-emerald-100"
                       : "border-white/10 bg-white/5 text-slate-300 hover:border-white/20"
@@ -478,7 +492,7 @@ export function HomepageBookingCalculator({ preset }: Props) {
                 <button
                   type="button"
                   onClick={() => selectTruckOption("large")}
-                  className={`flex items-center justify-between rounded-xl border px-4 py-3 text-sm transition ${
+                  className={`flex items-center justify-between rounded-xl border px-4 py-4 text-base transition ${
                     addOns.truck && truckSize === "large"
                       ? "border-emerald-400 bg-emerald-500/10 text-emerald-100"
                       : "border-white/10 bg-white/5 text-slate-300 hover:border-white/20"
@@ -547,7 +561,7 @@ export function HomepageBookingCalculator({ preset }: Props) {
               ) : (
                 <>
                   <Navigation className="mr-2 h-4 w-4" />
-                  Calculate Travel
+                  Get Final Price
                 </>
               )}
             </Button>
@@ -563,7 +577,7 @@ export function HomepageBookingCalculator({ preset }: Props) {
           <div className="rounded-2xl border border-blue-400/20 bg-blue-950/35 p-5">
             <div className="flex items-center gap-2 text-blue-200">
               <Calculator className="h-4 w-4" />
-              <p className="text-sm font-semibold">Live subtotal before travel</p>
+              <p className="text-sm font-semibold">Estimated Cost So Far</p>
             </div>
             <p className="mt-4 text-4xl font-black text-white">
               ${Math.round(laborPreview.subtotalBeforeTravel)}
@@ -571,6 +585,7 @@ export function HomepageBookingCalculator({ preset }: Props) {
             <p className="mt-2 text-sm text-slate-300">
               {laborPreview.billableMovers} mover{laborPreview.billableMovers > 1 ? "s" : ""} x {laborPreview.billableHours} billable hour{laborPreview.billableHours > 1 ? "s" : ""} before distance is added.
             </p>
+            <p className="mt-3 text-xs text-slate-400 leading-relaxed">We handle the heavy lifting, loading, and logistics — you don't need to figure it all out.</p>
             <div className="mt-4 space-y-2 text-sm text-slate-300">
               <div className="flex items-center justify-between">
                 <span>Labor subtotal</span>
@@ -716,13 +731,28 @@ export function HomepageBookingCalculator({ preset }: Props) {
                 <Button
                   type="button"
                   onClick={() => setShowBookingFields(true)}
-                  className="w-full rounded-xl bg-emerald-600 py-5 text-base font-semibold hover:bg-emerald-500"
+                  className="w-full rounded-xl bg-emerald-600 py-6 text-base font-bold hover:bg-emerald-500"
                 >
-                  Continue to booking details
+                  Get My Price
                 </Button>
+                <a href="tel:+19062859312" className="block text-center text-sm text-slate-400 hover:text-slate-200 transition-colors">
+                  Talk to Us Instead — (906) 285-9312
+                </a>
               </div>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Confidence bar */}
+      <div className="rounded-xl border border-white/10 bg-white/5 px-5 py-3">
+        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-slate-400">
+          {["No hidden fees", "Final price confirmed before job", "You approve everything first"].map((item, i) => (
+            <span key={item} className="flex items-center gap-1.5">
+              {i > 0 && <span className="hidden sm:inline text-slate-600">·</span>}
+              <span>{item}</span>
+            </span>
+          ))}
         </div>
       </div>
 

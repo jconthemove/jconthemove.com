@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,8 +23,6 @@ import { useToast } from "@/hooks/use-toast";
 import job1 from "@assets/20210401_100524_HDR_1764946073184.jpg";
 import job2 from "@assets/20210401_100531_HDR_1764946073186.jpg";
 import job3 from "@assets/FB_IMG_1675268568106_1758501643336.jpg";
-
-const jewelryVideoSrc = "/jewelry-video.mp4";
 
 const serviceOptions = [
   { value: "residential", label: "Moving", icon: Truck },
@@ -82,12 +80,25 @@ const testimonials = [
   },
 ];
 
+const BANNER_MESSAGES = [
+  "🚛 Same-Day Moves Available",
+  "⭐ 5-Star Local Movers",
+  "💪 500+ Jobs Completed",
+  "📞 Call Now — (906) 285-9312",
+];
+
 export default function HomePage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [photoFiles, setPhotoFiles] = useState<FileList | null>(null);
   const [entryMode, setEntryMode] = useState<"calculator" | "guided">("calculator");
   const [quoteOpen, setQuoteOpen] = useState(false);
+  const [bannerIdx, setBannerIdx] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setBannerIdx(prev => (prev + 1) % BANNER_MESSAGES.length), 3000);
+    return () => clearInterval(id);
+  }, []);
 
   function scrollToGetStarted(mode: "calculator" | "guided" = "calculator") {
     setEntryMode(mode);
@@ -145,44 +156,52 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
 
-      {/* Nature Made Jewls — Top Dedication Banner (preserved) */}
-      <Link href="/nature-made-jewls">
-        <div className="w-full cursor-pointer group relative overflow-hidden"
-          style={{ background: "linear-gradient(90deg, #0d0704 0%, #2d1a0f 25%, #1e1208 50%, #2d1a0f 75%, #0d0704 100%)" }}>
-          <div className="absolute inset-0 opacity-10"
-            style={{ backgroundImage: "repeating-linear-gradient(60deg, transparent, transparent 3px, rgba(180,100,30,0.12) 3px, rgba(180,100,30,0.12) 6px)" }} />
-          <div className="relative flex items-center justify-between px-4 py-2.5 max-w-5xl mx-auto gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="flex-shrink-0 w-10 h-10 rounded-lg overflow-hidden border border-amber-700/50 shadow">
-                <video src={jewelryVideoSrc} autoPlay loop muted playsInline className="w-full h-full object-cover" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-amber-400/80 text-[9px] uppercase tracking-widest leading-none mb-0.5">Dedicated with love ♡</p>
-                <p className="text-amber-100 font-serif font-bold text-sm md:text-base leading-tight truncate"
-                  style={{ fontFamily: "'Georgia', serif" }}>
-                  Nature Made Jewls — Handmade Jewelry &amp; Custom Creations
-                </p>
-              </div>
-            </div>
-            <div className="hidden sm:flex items-center gap-4 flex-shrink-0">
-              <div className="flex items-center gap-2">
-                {["Copper Wire", "Natural Stone", "Custom Designs"].map(f => (
-                  <span key={f} className="flex items-center gap-1 text-amber-100/70 text-[10px]">
-                    <CheckCircle2 className="h-2.5 w-2.5 text-amber-500" />{f}
-                  </span>
-                ))}
-              </div>
-              <span className="text-amber-400 text-xs font-semibold group-hover:underline whitespace-nowrap">
-                Shop Now →
-              </span>
-            </div>
-            <span className="sm:hidden text-amber-400 text-xs font-semibold group-hover:underline flex-shrink-0">
-              Shop →
+      {/* ── ANIMATED TOP BANNER ── */}
+      <a
+        href={BANNER_MESSAGES[bannerIdx].includes("Call Now") ? "tel:+19062859312" : undefined}
+        className={`block w-full py-3 text-center text-sm md:text-base font-medium transition-colors ${
+          BANNER_MESSAGES[bannerIdx].includes("Call Now")
+            ? "cursor-pointer hover:brightness-110"
+            : "cursor-default"
+        }`}
+        style={{ background: "linear-gradient(90deg, #1e3a5f 0%, #1d4ed8 50%, #1e3a5f 100%)" }}
+      >
+        <span
+          key={bannerIdx}
+          className={`inline-flex items-center gap-2 transition-all duration-500 ${
+            BANNER_MESSAGES[bannerIdx].includes("Call Now") ? "animate-pulse text-yellow-300" : "text-white"
+          }`}
+        >
+          {BANNER_MESSAGES[bannerIdx]}
+          {BANNER_MESSAGES[bannerIdx].includes("Call Now") && (
+            <span className="inline-flex items-center gap-1 underline text-yellow-200 text-xs">
+              <Phone className="h-3.5 w-3.5" /> Tap to Call
             </span>
+          )}
+        </span>
+      </a>
+
+      {/* ── TOP NAV ── */}
+      <nav className="border-b border-slate-800/60 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50">
+        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
+          <div>
+            <p className="text-white font-extrabold text-base leading-tight tracking-tight">JC ON THE MOVE</p>
+            <p className="text-slate-500 text-[10px] leading-none">Northwoods Moving &amp; More</p>
           </div>
-          <div className="h-px bg-gradient-to-r from-transparent via-amber-700/50 to-transparent" />
+          <div className="flex items-center gap-3">
+            <a href="tel:+19062859312" className="hidden sm:flex items-center gap-1.5 text-slate-400 hover:text-white text-sm transition-colors">
+              <Phone className="h-3.5 w-3.5" />
+              (906) 285-9312
+            </a>
+            <Link href="/login">
+              <span className="group relative text-white/30 hover:text-white text-sm font-medium px-3 py-1.5 rounded-full border border-white/0 hover:border-white/20 hover:bg-white/5 transition-all duration-200 cursor-pointer inline-flex items-center gap-1.5">
+                Login
+                <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-xs text-white/60">→ Sign in to your account</span>
+              </span>
+            </Link>
+          </div>
         </div>
-      </Link>
+      </nav>
 
       {/* ── HERO SECTION ── */}
       <section className="px-4 pt-10 pb-8">
@@ -217,14 +236,14 @@ export default function HomePage() {
               <div className="flex flex-wrap gap-3">
                 <Button
                   onClick={() => scrollToGetStarted("calculator")}
-                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 py-2.5 text-base rounded-xl"
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-7 py-3 text-lg rounded-xl"
                 >
-                  Get Instant Quote
+                  Get My Price
                 </Button>
-                <a href="tel:+19063859312">
+                <a href="tel:+19062859312">
                   <Button variant="outline" className="border-slate-600 text-white hover:bg-slate-700 font-bold px-6 py-2.5 text-base rounded-xl">
                     <Phone className="h-4 w-4 mr-2" />
-                    Call Now (906) 385-9312
+                    Call Now (906) 285-9312
                   </Button>
                 </a>
               </div>
@@ -342,6 +361,15 @@ export default function HomePage() {
 
             {/* Left: Tabbed entry (calculator or guided chatbot) */}
             <div>
+              {/* Phone escape hatch */}
+              <a href="tel:+19062859312" className="flex items-center gap-3 mb-5 bg-slate-800/70 border border-slate-600/60 hover:border-blue-500/50 rounded-xl px-4 py-3 transition-all group">
+                <Phone className="h-5 w-5 text-blue-400 flex-shrink-0" />
+                <div>
+                  <p className="text-white font-semibold text-sm">Prefer to talk? Call <span className="text-blue-300">(906) 285-9312</span></p>
+                  <p className="text-slate-400 text-xs">A real person will help you — no forms required.</p>
+                </div>
+              </a>
+
               {/* Section label */}
               <p className="text-blue-400 text-xs font-semibold uppercase tracking-widest mb-1">Get Started</p>
               <h2 className="text-white font-bold text-2xl mb-4">How would you like to begin?</h2>
@@ -689,18 +717,79 @@ export default function HomePage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── REWARDS CALLOUT ── */}
-      <section className="py-8 px-4">
-        <div className="max-w-5xl mx-auto text-center">
-          <p className="text-blue-400 text-xs font-semibold uppercase tracking-widest mb-2">Earn JCMOVES Rewards</p>
-          <p className="text-slate-300 text-sm mb-4">Earn points on every job and redeem for future services.</p>
-          <div className="flex justify-center">
-            <Link href="/nature-made-jewls">
-              <div className="inline-flex items-center gap-2 bg-slate-800/60 border border-slate-700/50 rounded-full px-5 py-2.5 cursor-pointer hover:border-blue-500/50 hover:bg-slate-700/60 transition-all">
-                <Gift className="h-4 w-4 text-blue-400" />
-                <span className="text-white text-sm font-medium">Nature Made Jewls</span>
-              </div>
-            </Link>
+      {/* ── NORTHWOODS NETWORK ── */}
+      <section className="py-14 px-4 bg-gradient-to-b from-slate-950/80 to-slate-900/60">
+        <div className="max-w-5xl mx-auto">
+
+          {/* Header */}
+          <div className="text-center mb-10">
+            <div className="inline-flex items-center gap-2 text-yellow-400 mb-3">
+              <Gift className="h-5 w-5" />
+              <span className="text-xs font-semibold uppercase tracking-widest">Northwoods Network</span>
+            </div>
+            <h2 className="text-2xl md:text-3xl font-bold text-white mb-3">Use Your Rewards in the Northwoods Network</h2>
+            <p className="text-slate-300 text-base max-w-2xl mx-auto">
+              Earn JCMOVES rewards when you book a move, then spend them like store credit at local partner businesses.
+            </p>
+          </div>
+
+          {/* Value bar */}
+          <div className="flex flex-col sm:flex-row justify-center gap-6 mb-10 text-sm text-slate-300">
+            <div className="flex items-center gap-2 justify-center">
+              <Star className="h-4 w-4 text-yellow-400 fill-yellow-400 flex-shrink-0" />
+              <span>Most customers earn $25–$100 in rewards per job</span>
+            </div>
+            <div className="flex items-center gap-2 justify-center">
+              <CheckCircle2 className="h-4 w-4 text-blue-400 flex-shrink-0" />
+              <span>Spend rewards locally — like store credit</span>
+            </div>
+          </div>
+
+          {/* Featured partner card */}
+          <div className="bg-slate-800/70 border border-blue-500/20 rounded-2xl p-6 md:p-8 max-w-3xl mx-auto mb-8 shadow-xl">
+            <p className="text-blue-400 text-xs font-semibold uppercase tracking-widest mb-4">✨ Featured Local Partner</p>
+
+            <h3 className="text-xl font-bold text-white mb-2">Nature Made Jewls</h3>
+            <p className="text-slate-300 text-sm mb-6">
+              Handcrafted jewelry — copper wire, natural stone, custom designs. Purchased using your JCMOVES rewards.
+            </p>
+
+            {/* Ashley testimonial */}
+            <div className="bg-slate-900/70 border border-white/5 rounded-xl p-4 mb-6">
+              <p className="text-slate-200 text-sm italic mb-2">
+                "I used my moving rewards to get jewelry — didn't expect that. Super cool."
+              </p>
+              <p className="text-slate-500 text-xs">— Ashley R.</p>
+            </div>
+
+            {/* CTAs */}
+            <div className="flex flex-col sm:flex-row gap-3 mb-4">
+              <Link href="/nature-made-jewls">
+                <Button className="bg-blue-600 hover:bg-blue-500 text-white font-semibold px-6 py-3 rounded-xl text-base w-full sm:w-auto">
+                  Shop with Rewards →
+                </Button>
+              </Link>
+              <button
+                onClick={() => scrollToGetStarted("calculator")}
+                className="border border-slate-600 text-slate-300 hover:bg-slate-700/60 font-semibold px-6 py-3 rounded-xl text-base transition-all w-full sm:w-auto text-center"
+              >
+                How Rewards Work
+              </button>
+            </div>
+            <p className="text-xs text-slate-500">
+              Use JCMOVES rewards just like store credit at select local businesses.
+            </p>
+          </div>
+
+          {/* Final CTA */}
+          <div className="text-center">
+            <p className="text-slate-400 text-base mb-5">Book a move → Earn rewards → Spend locally</p>
+            <Button
+              onClick={() => scrollToGetStarted("calculator")}
+              className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-8 py-4 rounded-xl text-lg"
+            >
+              Get My Price →
+            </Button>
           </div>
         </div>
       </section>
@@ -759,8 +848,8 @@ export default function HomePage() {
               <h4 className="text-white font-semibold text-sm mb-3">Contact</h4>
               <ul className="space-y-2">
                 <li>
-                  <a href="tel:+19063859312" className="text-slate-400 hover:text-white text-sm transition-colors">
-                    (906) 385-9312
+                  <a href="tel:+19062859312" className="text-slate-400 hover:text-white text-sm transition-colors">
+                    (906) 285-9312
                   </a>
                 </li>
                 <li>

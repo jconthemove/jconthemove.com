@@ -370,7 +370,7 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
   const [messages, setMessages] = useState<Message[]>([
     {
       from: "bot",
-      text: "👋 Hey! I'm JC — your moving assistant. I'll ask you a few quick questions to build your custom quote.\n\nDarrell reviews every quote personally before anything is sent. No spam, no pressure.",
+      text: "👋 Hi — I'm JC from Northwoods Moving. I'll help you build your move step-by-step. No pressure, no spam — real human review before anything is sent.",
       ts: Date.now(),
     },
   ]);
@@ -516,7 +516,7 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
     setAnswers({});
     setMessages([{
       from: "bot",
-      text: "👋 Hey! I'm JC — your moving assistant. I'll ask you a few quick questions to build your custom quote.\n\nDarrell reviews every quote personally before anything is sent. No spam, no pressure.",
+      text: "👋 Hi — I'm JC from Northwoods Moving. I'll help you build your move step-by-step. No pressure, no spam — real human review before anything is sent.",
       ts: Date.now(),
     }]);
     setStepIdx(0);
@@ -538,7 +538,7 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
       {/* Progress bar */}
       <div className="px-1 pb-2 shrink-0">
         <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-          <span>{isDone ? "✅ All done!" : `Step ${stepIdx + 1} of ${visibleSteps.length}`}</span>
+          <span>{isDone ? "✅ All done!" : "Takes about 60 seconds"}</span>
           <span>{progress}%</span>
         </div>
         <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">

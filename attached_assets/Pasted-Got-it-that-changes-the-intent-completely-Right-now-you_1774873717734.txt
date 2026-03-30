@@ -1,0 +1,299 @@
+Got it — that changes the intent completely.
+
+Right now you have a context mismatch problem:
+
+👉 Moving testimonials
+👉 Then suddenly jewelry shop (Nature Made Jewels)
+👉 Then footer
+
+That creates cognitive friction (especially bad for older users)
+
+🚨 THE REAL ISSUE
+
+Ashley’s section isn’t wrong — it’s just:
+
+❌ not clearly separated
+❌ not explained
+❌ not tied to your main service
+
+👉 It feels like a random ad instead of part of your ecosystem
+
+✅ WHAT YOU SHOULD DO INSTEAD
+🔧 1. LABEL THE SECTION CLEARLY (CRITICAL)
+
+Right now:
+
+“Earn JCMOVES Rewards”
+
+👉 Too vague
+
+Change to:
+🎁 Use Your Rewards in the Northwoods Network
+
+Subtext:
+
+Earn rewards from your move and spend them at local partner businesses.
+
+👉 Now jewelry shop makes sense
+
+🔧 2. REFRAME ASHLEY AS A USE CASE (NOT RANDOM)
+
+Instead of it feeling like a stray testimonial:
+
+💬 “I used my moving rewards to get jewelry — didn’t expect that. Super cool.”
+
+— Ashley R.
+
+👉 This connects:
+MOVE → REWARDS → JEWELRY
+
+🔧 3. FIX THE BUTTON (THIS IS THE BIG MISS)
+
+Current:
+👉 “Nature Made Jewels” (weak, unclear)
+
+Replace with:
+
+👉 “Shop with Rewards →”
+
+OR
+
+👉 “View Partner Shop”
+
+👉 This makes it actionable + understandable
+
+🔧 4. ADD A MICRO-EXPLANATION (OLDER USERS NEED THIS)
+
+Right under the button:
+
+Use JCMOVES rewards just like store credit at select local businesses.
+
+👉 removes confusion instantly
+
+🔧 5. VISUAL SEPARATION (VERY IMPORTANT)
+
+You need to visually isolate this from moving content:
+
+Do ONE of these:
+Light glow box
+Slight background color shift
+“Partner Spotlight” tag
+
+Example:
+
+✨ Featured Local Partner
+Nature Made Jewels
+🔧 6. ADD VALUE ANCHOR (MAKE IT FEEL REAL)
+
+Right now it feels abstract
+
+Add:
+
+Most customers earn $25–$100 in rewards per job
+
+👉 makes it tangible
+
+🎯 FINAL STRUCTURE (WHAT THIS SHOULD LOOK LIKE)
+Section:
+
+🎁 Use Your Rewards in the Northwoods Network
+Earn rewards from your move and spend them locally.
+
+💬 Ashley testimonial (rewritten)
+
+👉 Shop with Rewards →
+
+Small text:
+“Use JCMOVES like store credit at partner shops”
+
+🧠 WHY THIS MATTERS
+
+Right now:
+👉 Jewelry = distraction
+
+After fix:
+👉 Jewelry = proof your ecosystem works
+
+That’s a massive difference.
+
+🚀 OPTIONAL (HIGH IMPACT UPGRADE)
+
+If you want this to really hit:
+
+Add 2–3 partner tiles:
+
+💎 Jewelry
+☕ Coffee
+🧰 Services
+
+👉 This becomes a local rewards marketplace preview
+
+💰 STRATEGIC NOTE (FOR YOUR SYSTEM)
+
+This section is your:
+👉 Token utility proof
+👉 Local network expansion
+👉 Retention driver
+
+Don’t treat it like a small add-on
+Treat it like a mini marketplace teaser
+
+If you want next level:
+
+👉 Say “Build Northwoods Network section UI (React)”
+
+I’ll give you:
+
+full component
+partner cards
+rewards integration hooks
+mobile optimized layout
+
+That’s how this turns from “confusing” → powerful ecosystem hook
+
+Say “Build Northwoods Network section UI (React)”
+
+Below is a production-ready React section you can drop into your Next.js app. It’s designed to:
+
+Clearly explain the Northwoods Network
+Connect move → rewards → local partners
+Highlight Nature Made Jewels (Ashley)
+Provide strong CTAs
+Stay friendly for older users (bigger text, simple language, clear actions)
+✅ NorthwoodsNetworkSection.tsx (READY TO PASTE)
+"use client"
+
+import React from "react"
+import { Card, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Gift, Store, Star } from "lucide-react"
+
+export default function NorthwoodsNetworkSection() {
+  return (
+    <section className="w-full py-16 px-4 md:px-8 bg-gradient-to-b from-[#0b1220] to-[#0e1628]">
+      
+      <div className="max-w-6xl mx-auto text-center">
+
+        {/* HEADER */}
+        <div className="mb-10">
+          <div className="flex justify-center items-center gap-2 mb-3 text-yellow-400">
+            <Gift className="w-6 h-6" />
+            <span className="text-sm tracking-wide uppercase">
+              Northwoods Network
+            </span>
+          </div>
+
+          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+            Use Your Rewards Around Town
+          </h2>
+
+          <p className="text-lg text-gray-300 max-w-2xl mx-auto">
+            Earn JCMOVES rewards when you book a move, then spend them like store
+            credit at local partner businesses.
+          </p>
+        </div>
+
+        {/* VALUE BAR */}
+        <div className="mb-10 flex flex-col md:flex-row justify-center gap-6 text-sm md:text-base text-gray-300">
+          <div className="flex items-center gap-2">
+            <Star className="text-yellow-400 w-5 h-5" />
+            Most customers earn $25–$100 per job
+          </div>
+          <div className="flex items-center gap-2">
+            <Store className="text-blue-400 w-5 h-5" />
+            Spend rewards locally
+          </div>
+        </div>
+
+        {/* FEATURED PARTNER */}
+        <Card className="bg-[#111a2e] border border-blue-500/20 shadow-xl rounded-2xl max-w-3xl mx-auto mb-8">
+          <CardContent className="p-6 md:p-8 text-left">
+
+            <div className="mb-4 text-sm text-blue-400 uppercase tracking-wide">
+              ✨ Featured Local Partner
+            </div>
+
+            <h3 className="text-2xl font-semibold text-white mb-2">
+              Nature Made Jewels
+            </h3>
+
+            <p className="text-gray-300 mb-6">
+              Handcrafted jewelry you can purchase using your JCMOVES rewards.
+            </p>
+
+            {/* TESTIMONIAL */}
+            <div className="bg-[#0c1424] border border-white/5 rounded-xl p-4 mb-6">
+              <p className="text-gray-200 italic mb-2">
+                “I used my moving rewards to get jewelry — didn’t expect that.
+                Super cool.”
+              </p>
+              <p className="text-sm text-gray-400">— Ashley R.</p>
+            </div>
+
+            {/* CTA */}
+            <div className="flex flex-col md:flex-row gap-4">
+              <Button className="bg-blue-600 hover:bg-blue-500 text-white text-base px-6 py-3 rounded-xl">
+                Shop with Rewards →
+              </Button>
+
+              <Button
+                variant="outline"
+                className="border-gray-500 text-gray-300 text-base px-6 py-3 rounded-xl"
+              >
+                How Rewards Work
+              </Button>
+            </div>
+
+            {/* MICRO EXPLANATION */}
+            <p className="text-xs text-gray-500 mt-4">
+              Use JCMOVES rewards just like store credit at select local
+              businesses.
+            </p>
+
+          </CardContent>
+        </Card>
+
+        {/* FINAL CTA */}
+        <div className="mt-8">
+          <p className="text-gray-300 mb-4 text-lg">
+            Book a move → Earn rewards → Spend locally
+          </p>
+
+          <Button className="bg-green-500 hover:bg-green-400 text-black font-semibold px-8 py-4 rounded-xl text-lg">
+            Get My Price →
+          </Button>
+        </div>
+
+      </div>
+    </section>
+  )
+}
+🔥 WHAT THIS FIXES (IMPORTANT)
+Before:
+Jewelry = confusing
+Rewards = vague
+No clear action
+After:
+Clear system:
+Move → Earn → Spend locally
+Ashley = proof (not random)
+Strong CTA hierarchy:
+Shop
+Learn
+Book
+🎯 WHERE TO PLACE THIS
+
+Put it:
+
+👉 Right below testimonials
+👉 Above footer
+
+Flow becomes:
+
+Testimonials
+↓
+Northwoods Network (this section)
+↓
+Final CTA
+↓
+Footer
