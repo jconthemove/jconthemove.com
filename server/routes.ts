@@ -33,6 +33,7 @@ import { solanaTransferService } from "./services/solana-transfer";
 import { jupiterSwapService, SUPPORTED_TOKENS } from "./services/jupiter-swap";
 import { smsService } from "./services/sms";
 import { ensureMomsAccount } from "./services/generosityFund";
+import { dispatchGenericJob } from "./services/dispatchGeneric";
 
 async function ensureStakingTiersSeeded() {
   try {
@@ -2640,6 +2641,118 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (err: any) {
       console.error("Error creating junk booking:", err);
+      res.status(500).json({ error: "Failed to create booking" });
+    }
+  });
+
+  // POST /api/jobs/create-moving — create a moving job and auto-dispatch
+  app.post("/api/jobs/create-moving", isAuthenticatedAllowPending, async (req: any, res) => {
+    try {
+      const { movers, hours, address, customerName, phone, email } = req.body;
+
+      const moverCount = Math.floor(Number(movers) || 0);
+      const hourCount  = Math.floor(Number(hours)  || 0);
+
+      if (moverCount < 1 || moverCount > 10) {
+        return res.status(400).json({ error: "Mover count must be between 1 and 10" });
+      }
+      if (hourCount < 1 || hourCount > 24) {
+        return res.status(400).json({ error: "Hours must be between 1 and 24" });
+      }
+      if (!address || typeof address !== "string" || address.trim().length < 5) {
+        return res.status(400).json({ error: "A valid pickup address is required" });
+      }
+
+      const nameParts = (customerName || "").trim().split(" ");
+      const firstName = nameParts[0] || "Customer";
+      const lastName = nameParts.slice(1).join(" ") || "Moving";
+
+      const [lead] = await db.insert(leads).values({
+        firstName,
+        lastName,
+        email: email || "noreply@jconthemove.com",
+        phone: phone || "",
+        serviceType: "moving",
+        fromAddress: address.trim(),
+        status: "open",
+        crewSize: moverCount,
+        details: `Moving job: ${moverCount} mover${moverCount > 1 ? "s" : ""}, ${hourCount} hour${hourCount > 1 ? "s" : ""}`,
+        createdByUserId: (req.session as any).userId || req.user?.id || null,
+      }).returning();
+
+      const assignedCrew = await dispatchGenericJob({
+        leadId: lead.id,
+        kind: "moving",
+        crewSize: moverCount,
+      });
+
+      const dispatched = assignedCrew.length >= moverCount;
+      res.json({
+        jobId: lead.id,
+        status: dispatched ? "assigned" : "open",
+        crewCount: assignedCrew.length,
+        message: dispatched
+          ? "Crew assigned! They'll be in touch shortly."
+          : "We'll reach you shortly — our team will confirm your booking.",
+      });
+    } catch (err: any) {
+      console.error("Error creating moving booking:", err);
+      res.status(500).json({ error: "Failed to create booking" });
+    }
+  });
+
+  // POST /api/jobs/create-labor — create a labor-only job and auto-dispatch
+  app.post("/api/jobs/create-labor", isAuthenticatedAllowPending, async (req: any, res) => {
+    try {
+      const { movers, hours, address, customerName, phone, email } = req.body;
+
+      const moverCount = Math.floor(Number(movers) || 0);
+      const hourCount  = Math.floor(Number(hours)  || 0);
+
+      if (moverCount < 1 || moverCount > 10) {
+        return res.status(400).json({ error: "Mover count must be between 1 and 10" });
+      }
+      if (hourCount < 1 || hourCount > 24) {
+        return res.status(400).json({ error: "Hours must be between 1 and 24" });
+      }
+      if (!address || typeof address !== "string" || address.trim().length < 5) {
+        return res.status(400).json({ error: "A valid pickup address is required" });
+      }
+
+      const nameParts = (customerName || "").trim().split(" ");
+      const firstName = nameParts[0] || "Customer";
+      const lastName = nameParts.slice(1).join(" ") || "Labor";
+
+      const [lead] = await db.insert(leads).values({
+        firstName,
+        lastName,
+        email: email || "noreply@jconthemove.com",
+        phone: phone || "",
+        serviceType: "handyman",
+        fromAddress: address.trim(),
+        status: "open",
+        crewSize: moverCount,
+        details: `Labor job: ${moverCount} helper${moverCount > 1 ? "s" : ""}, ${hourCount} hour${hourCount > 1 ? "s" : ""}`,
+        createdByUserId: (req.session as any).userId || req.user?.id || null,
+      }).returning();
+
+      const assignedCrew = await dispatchGenericJob({
+        leadId: lead.id,
+        kind: "labor",
+        crewSize: moverCount,
+      });
+
+      const dispatched = assignedCrew.length >= moverCount;
+      res.json({
+        jobId: lead.id,
+        status: dispatched ? "assigned" : "open",
+        crewCount: assignedCrew.length,
+        message: dispatched
+          ? "Crew assigned! They'll be in touch shortly."
+          : "We'll reach you shortly — our team will confirm your booking.",
+      });
+    } catch (err: any) {
+      console.error("Error creating labor booking:", err);
       res.status(500).json({ error: "Failed to create booking" });
     }
   });

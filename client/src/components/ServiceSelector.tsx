@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useMutation } from "@tanstack/react-query";
-import { Truck, Trash2, Wrench, Snowflake, ChevronRight, Clock, ArrowLeft, Loader2, Plus, Minus } from "lucide-react";
+import { Truck, Trash2, Wrench, Snowflake, ChevronRight, Clock, ArrowLeft, Loader2, Plus, Minus, Users } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { createJob } from "@/lib/createJob";
 
 // ── Junk booking types ────────────────────────────────────────────────────────
 
@@ -19,6 +20,9 @@ const ADD_ONS = [
   { key: "fridge",   label: "Fridge",        price: 100 },
   { key: "gym",      label: "Gym Equipment", price: 100 },
 ];
+
+const MOVER_OPTIONS = [1, 2, 3, 4, 5];
+const HOUR_OPTIONS  = [2, 3, 4, 5, 6, 8];
 
 // ── JunkFlow ──────────────────────────────────────────────────────────────────
 
@@ -164,65 +168,218 @@ function JunkFlow({ user, onBooked, onBack }: { user: any; onBooked: (id: string
   );
 }
 
-// ── Coming Soon panel ─────────────────────────────────────────────────────────
+// ── MovingFlow ────────────────────────────────────────────────────────────────
 
-function ComingSoonPanel({ service }: { service: "moving" | "labor" | "snow" }) {
-  const config = {
-    moving: {
-      icon: Truck,
-      color: "text-blue-400",
-      bg: "bg-blue-500/10",
-      border: "border-blue-500/20",
-      title: "Moving Help",
-      body: "Full-service moving quotes with live pricing are on the way. Use the calculator below to get an instant estimate now.",
-      cta: "Get Moving Estimate",
-      ctaPath: "/moving-estimator",
-    },
-    labor: {
-      icon: Wrench,
-      color: "text-amber-400",
-      bg: "bg-amber-500/10",
-      border: "border-amber-500/20",
-      title: "Labor Only",
-      body: "Loading, unloading, and heavy lifting — no truck needed. Booking flow coming soon.",
-      cta: "Post a Job Now",
-      ctaPath: "/post-job",
-    },
-    snow: {
-      icon: Snowflake,
-      color: "text-cyan-400",
-      bg: "bg-cyan-500/10",
-      border: "border-cyan-500/20",
-      title: "Snow Removal",
-      body: "Residential and commercial snow plowing for driveways, walkways, and parking lots. Available seasonally.",
-      cta: "Post a Job Now",
-      ctaPath: "/post-job",
-    },
-  }[service];
+function MovingFlow({ user, onBooked }: { user: any; onBooked: (id: string, price: number) => void }) {
+  const { toast } = useToast();
+  const [movers, setMovers] = useState(2);
+  const [hours, setHours] = useState(4);
+  const [address, setAddress] = useState("");
 
-  const Icon = config.icon;
-  const [, setLocation] = useLocation();
+  const book = useMutation({
+    mutationFn: () => createJob({
+      serviceType: "moving",
+      movers,
+      hours,
+      address,
+      customerName: `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Customer",
+      phone: user?.phoneNumber || "",
+      email: user?.email || "",
+    }),
+    onSuccess: (data) => {
+      toast({ title: "Booking submitted!", description: data.message });
+      onBooked(data.jobId, data.totalPrice ?? 0);
+    },
+    onError: (err: any) => toast({ title: "Booking failed", description: err.message || "Please try again.", variant: "destructive" }),
+  });
 
   return (
-    <div className={`rounded-2xl border ${config.border} ${config.bg} p-5 space-y-3`}>
+    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-5">
+      <div>
+        <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2">How many movers?</p>
+        <div className="flex gap-2 flex-wrap">
+          {MOVER_OPTIONS.map(n => (
+            <button
+              key={n}
+              onClick={() => setMovers(n)}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl border font-bold text-sm transition-all active:scale-95 ${
+                movers === n
+                  ? "bg-blue-500/15 border-blue-500 text-blue-300"
+                  : "bg-zinc-800 border-zinc-700 text-zinc-300 hover:border-zinc-600"
+              }`}
+            >
+              <Users className="h-3.5 w-3.5" />{n}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2">How many hours?</p>
+        <div className="flex gap-2 flex-wrap">
+          {HOUR_OPTIONS.map(h => (
+            <button
+              key={h}
+              onClick={() => setHours(h)}
+              className={`px-4 py-2 rounded-xl border font-bold text-sm transition-all active:scale-95 ${
+                hours === h
+                  ? "bg-blue-500/15 border-blue-500 text-blue-300"
+                  : "bg-zinc-800 border-zinc-700 text-zinc-300 hover:border-zinc-600"
+              }`}
+            >
+              {h}h
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <label className="text-xs text-zinc-500 font-semibold block mb-1">Pickup Address</label>
+        <input
+          type="text"
+          value={address}
+          onChange={e => setAddress(e.target.value)}
+          placeholder="123 Main St, City, State"
+          className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-blue-500"
+        />
+      </div>
+
+      <div className="border-t border-zinc-800 pt-3">
+        <button
+          onClick={() => book.mutate()}
+          disabled={book.isPending || !address.trim()}
+          className="w-full py-3.5 rounded-xl bg-blue-500 hover:bg-blue-400 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all text-white font-black text-base shadow-lg shadow-blue-500/25 flex items-center justify-center gap-2"
+        >
+          {book.isPending
+            ? <Loader2 className="h-5 w-5 animate-spin" />
+            : <><Truck className="h-5 w-5" />Book {movers} Mover{movers > 1 ? "s" : ""} · {hours}h</>
+          }
+        </button>
+        <p className="text-center text-xs text-zinc-600 mt-2">⚡ Most jobs booked in under 30 seconds</p>
+      </div>
+    </div>
+  );
+}
+
+// ── LaborFlow ─────────────────────────────────────────────────────────────────
+
+function LaborFlow({ user, onBooked }: { user: any; onBooked: (id: string, price: number) => void }) {
+  const { toast } = useToast();
+  const [movers, setMovers] = useState(2);
+  const [hours, setHours] = useState(3);
+  const [address, setAddress] = useState("");
+
+  const book = useMutation({
+    mutationFn: () => createJob({
+      serviceType: "labor",
+      movers,
+      hours,
+      address,
+      customerName: `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Customer",
+      phone: user?.phoneNumber || "",
+      email: user?.email || "",
+    }),
+    onSuccess: (data) => {
+      toast({ title: "Booking submitted!", description: data.message });
+      onBooked(data.jobId, data.totalPrice ?? 0);
+    },
+    onError: (err: any) => toast({ title: "Booking failed", description: err.message || "Please try again.", variant: "destructive" }),
+  });
+
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-5">
+      <div>
+        <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2">How many helpers?</p>
+        <div className="flex gap-2 flex-wrap">
+          {MOVER_OPTIONS.map(n => (
+            <button
+              key={n}
+              onClick={() => setMovers(n)}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl border font-bold text-sm transition-all active:scale-95 ${
+                movers === n
+                  ? "bg-amber-500/15 border-amber-500 text-amber-300"
+                  : "bg-zinc-800 border-zinc-700 text-zinc-300 hover:border-zinc-600"
+              }`}
+            >
+              <Users className="h-3.5 w-3.5" />{n}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2">How many hours?</p>
+        <div className="flex gap-2 flex-wrap">
+          {HOUR_OPTIONS.map(h => (
+            <button
+              key={h}
+              onClick={() => setHours(h)}
+              className={`px-4 py-2 rounded-xl border font-bold text-sm transition-all active:scale-95 ${
+                hours === h
+                  ? "bg-amber-500/15 border-amber-500 text-amber-300"
+                  : "bg-zinc-800 border-zinc-700 text-zinc-300 hover:border-zinc-600"
+              }`}
+            >
+              {h}h
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <label className="text-xs text-zinc-500 font-semibold block mb-1">Job Address</label>
+        <input
+          type="text"
+          value={address}
+          onChange={e => setAddress(e.target.value)}
+          placeholder="123 Main St, City, State"
+          className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-amber-500"
+        />
+      </div>
+
+      <div className="border-t border-zinc-800 pt-3">
+        <button
+          onClick={() => book.mutate()}
+          disabled={book.isPending || !address.trim()}
+          className="w-full py-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all text-white font-black text-base shadow-lg shadow-amber-500/25 flex items-center justify-center gap-2"
+        >
+          {book.isPending
+            ? <Loader2 className="h-5 w-5 animate-spin" />
+            : <><Wrench className="h-5 w-5" />Book {movers} Helper{movers > 1 ? "s" : ""} · {hours}h</>
+          }
+        </button>
+        <p className="text-center text-xs text-zinc-600 mt-2">⚡ Most jobs booked in under 30 seconds</p>
+      </div>
+    </div>
+  );
+}
+
+// ── Snow stub panel ───────────────────────────────────────────────────────────
+
+function SnowPanel() {
+  const [, setLocation] = useLocation();
+  return (
+    <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-5 space-y-3">
       <div className="flex items-center gap-3">
-        <div className={`w-10 h-10 rounded-xl ${config.bg} flex items-center justify-center`}>
-          <Icon className={`h-5 w-5 ${config.color}`} />
+        <div className="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center">
+          <Snowflake className="h-5 w-5 text-cyan-400" />
         </div>
         <div>
-          <p className="text-white font-bold">{config.title}</p>
+          <p className="text-white font-bold">Snow Removal</p>
           <div className="flex items-center gap-1.5 mt-0.5">
             <Clock className="h-3 w-3 text-zinc-500" />
             <span className="text-zinc-500 text-xs">Coming soon</span>
           </div>
         </div>
       </div>
-      <p className="text-zinc-400 text-sm leading-relaxed">{config.body}</p>
+      <p className="text-zinc-400 text-sm leading-relaxed">
+        Residential and commercial snow plowing for driveways, walkways, and parking lots. Available seasonally.
+      </p>
       <button
-        onClick={() => setLocation(config.ctaPath)}
+        onClick={() => setLocation("/post-job")}
         className="w-full py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 active:scale-[0.97] transition-all text-white text-sm font-semibold flex items-center justify-center gap-2"
       >
-        {config.cta}
+        Post a Job Now
         <ChevronRight className="h-4 w-4" />
       </button>
     </div>
@@ -303,9 +460,9 @@ export default function ServiceSelector({ defaultService, user, onBooked }: Serv
             onBack={() => {}}
           />
         )}
-        {active === "moving" && <ComingSoonPanel service="moving" />}
-        {active === "labor" && <ComingSoonPanel service="labor" />}
-        {active === "snow" && <ComingSoonPanel service="snow" />}
+        {active === "moving" && <MovingFlow user={user} onBooked={handleBooked} />}
+        {active === "labor" && <LaborFlow user={user} onBooked={handleBooked} />}
+        {active === "snow" && <SnowPanel />}
       </div>
 
       {/* Speed caption */}
