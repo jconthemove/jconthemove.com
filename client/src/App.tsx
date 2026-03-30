@@ -1,4 +1,4 @@
-import { Component as ReactComponent, ReactNode } from "react";
+import { Component as ReactComponent, ReactNode, lazy, Suspense } from "react";
 import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -12,96 +12,107 @@ import { ComplianceCheck } from "@/components/compliance-check";
 import Header from "@/components/header";
 import BottomTabBar from "@/components/bottom-tab-bar";
 import PwaInstallPrompt from "@/components/pwa-install-prompt";
-import HomePage from "@/pages/home";
-import LegacyHomePage from "@/pages/_archive/home";
-import SplashPage from "@/pages/splash";
-import OnboardingPage from "@/pages/onboarding";
-import CustomerHomePage from "@/pages/customer-home";
-import MyJobsPage from "@/pages/my-jobs";
-import PostJobPage from "@/pages/post-job";
-import CustomerBookPage from "@/pages/customer/book";
-import CustomerWalletPage from "@/pages/customer/wallet";
-import CustomerEarnPage from "@/pages/customer/earn";
-import ServicePackagesPage from "@/pages/service-packages";
-import CrewJobsPage from "@/pages/crew-jobs";
-import CustomerRewardsPage from "@/pages/customer-rewards";
-import CustomerProfilePage from "@/pages/customer-profile";
-import Dashboard from "@/pages/dashboard";
-import RewardsPage from "@/pages/rewards";
-import ProfilePage from "@/pages/profile";
-import EmployeeHomePage from "@/pages/employee-home";
-import TeamHub from "@/pages/hub";
-import AdminControlPage from "@/pages/control";
-import EmployeeDashboard from "@/pages/employee-dashboard";
-import EmployeeAddJob from "@/pages/employee-add-job";
-import LeadsPage from "@/pages/leads";
-import CustomerPortal from "@/pages/customer-portal";
-import PendingApprovalPage from "@/pages/pending-approval";
-import InGodWeTrustPage from "@/pages/in-god-we-trust";
-import AdminTreasuryPage from "@/pages/admin-treasury";
-import AdminUsersPage from "@/pages/admin-users";
-import AdminLotteryPage from "@/pages/admin-lottery";
-import AdminTestimonialsPage from "@/pages/admin-testimonials";
-import AdminPromoCodesPage from "@/pages/admin-promo-codes";
-import AdminPipelinePage from "@/pages/admin-pipeline";
-import RewardsMarketplacePage from "@/pages/rewards-marketplace";
-import AdminRewardShopPage from "@/pages/admin-reward-shop";
-import AdminSystemCheckPage from "@/pages/admin-system-check";
-import AdminSquareCatalogPage from "@/pages/admin-square-catalog";
-import NotFound from "@/pages/not-found";
-import MobileLeadManager from "@/components/mobile-lead-manager";
-import CustomerMobileInterface from "@/components/customer-mobile-interface";
-
-import JobDetailPage from "@/pages/job-detail";
-import TermsOfService from "@/pages/terms";
-import PendingQuotesPage from "@/pages/pending-quotes";
-import EmployeesPage from "@/pages/employees";
-import LeadDetailPage from "@/pages/lead-detail";
-import EmployeeRegister from "@/pages/employee-register";
-import EmployeeLogin from "@/pages/employee-login";
-import CustomerLogin from "@/pages/customer-login";
-import LoginPage from "@/pages/login";
-import ForgotAccessPage from "@/pages/forgot-access";
-import LeaveReviewPage from "@/pages/leave-review";
-import QuotePage from "@/pages/quote";
-import SponsorsPage from "@/pages/sponsors";
-import ServicesPage from "@/pages/services";
-import GalleryPage from "@/pages/gallery";
-import ReviewsPage from "@/pages/reviews";
-import SwapPage from "@/pages/swap";
-import RequestSwapPage from "@/pages/request-swap";
-import MiningPage from "@/pages/mining";
-import SnowRemovalPage from "@/pages/snow-removal";
-import MobilePreviewPage from "@/pages/mobile-preview";
-import PiJackpotPage from "@/pages/pi-jackpot";
-import PrivacyPolicy from "@/pages/privacy";
-import NatureMadeJewls from "@/pages/nature-made-jewls";
-import JewelryDetailPage from "@/pages/jewelry-detail";
-import MovingEstimator from "@/pages/moving-estimator";
-import PaymentSuccessPage from "@/pages/payment-success";
-import PromoHalfDayPage from "@/pages/promo-half-day";
-import CartPage from "@/pages/cart";
-import BitcoinPaymentPage from "@/pages/bitcoin-payment";
-import AdminBtcPaymentsPage from "@/pages/admin-btc-payments";
-import StakingPage from "@/pages/staking";
-import AdminQuoteReviewPage from "@/pages/admin-quote-review";
 import { CartProvider } from "@/hooks/useCart";
 import { NotificationPrompt } from "@/components/notification-prompt";
 import { useMiningNotifications } from "@/hooks/useMiningNotifications";
 
+// Layouts (kept eager — they render the shell before page content)
 import CrewLayout from "@/layouts/CrewLayout";
 import AdminLayout from "@/layouts/AdminLayout";
-import CrewTodayPage from "@/pages/crew/today";
-import CrewJobsNewPage from "@/pages/crew/jobs";
-import CrewSchedulePage from "@/pages/crew/schedule";
-import CrewEarningsPage from "@/pages/crew/earnings";
-import AdminOverviewPage from "@/pages/admin/overview";
-import AdminJobsPage from "@/pages/admin/jobs";
-import AdminPeoplePage from "@/pages/admin/people";
-import AdminFinancePage from "@/pages/admin/finance";
-import AdminMarketplacePage from "@/pages/admin/marketplace";
-import AdminSystemPage from "@/pages/admin/system";
-import AdminSponsorsPage from "@/pages/admin/sponsors";
+
+// All pages are lazy-loaded — each page's JS only downloads when first visited
+const HomePage = lazy(() => import("@/pages/home"));
+const LegacyHomePage = lazy(() => import("@/pages/_archive/home"));
+const SplashPage = lazy(() => import("@/pages/splash"));
+const OnboardingPage = lazy(() => import("@/pages/onboarding"));
+const CustomerHomePage = lazy(() => import("@/pages/customer-home"));
+const MyJobsPage = lazy(() => import("@/pages/my-jobs"));
+const PostJobPage = lazy(() => import("@/pages/post-job"));
+const CustomerBookPage = lazy(() => import("@/pages/customer/book"));
+const CustomerWalletPage = lazy(() => import("@/pages/customer/wallet"));
+const CustomerEarnPage = lazy(() => import("@/pages/customer/earn"));
+const ServicePackagesPage = lazy(() => import("@/pages/service-packages"));
+const CrewJobsPage = lazy(() => import("@/pages/crew-jobs"));
+const CustomerRewardsPage = lazy(() => import("@/pages/customer-rewards"));
+const CustomerProfilePage = lazy(() => import("@/pages/customer-profile"));
+const Dashboard = lazy(() => import("@/pages/dashboard"));
+const RewardsPage = lazy(() => import("@/pages/rewards"));
+const ProfilePage = lazy(() => import("@/pages/profile"));
+const EmployeeHomePage = lazy(() => import("@/pages/employee-home"));
+const TeamHub = lazy(() => import("@/pages/hub"));
+const AdminControlPage = lazy(() => import("@/pages/control"));
+const EmployeeDashboard = lazy(() => import("@/pages/employee-dashboard"));
+const EmployeeAddJob = lazy(() => import("@/pages/employee-add-job"));
+const LeadsPage = lazy(() => import("@/pages/leads"));
+const CustomerPortal = lazy(() => import("@/pages/customer-portal"));
+const PendingApprovalPage = lazy(() => import("@/pages/pending-approval"));
+const InGodWeTrustPage = lazy(() => import("@/pages/in-god-we-trust"));
+const AdminTreasuryPage = lazy(() => import("@/pages/admin-treasury"));
+const AdminUsersPage = lazy(() => import("@/pages/admin-users"));
+const AdminLotteryPage = lazy(() => import("@/pages/admin-lottery"));
+const AdminTestimonialsPage = lazy(() => import("@/pages/admin-testimonials"));
+const AdminPromoCodesPage = lazy(() => import("@/pages/admin-promo-codes"));
+const AdminPipelinePage = lazy(() => import("@/pages/admin-pipeline"));
+const RewardsMarketplacePage = lazy(() => import("@/pages/rewards-marketplace"));
+const AdminRewardShopPage = lazy(() => import("@/pages/admin-reward-shop"));
+const AdminSystemCheckPage = lazy(() => import("@/pages/admin-system-check"));
+const AdminSquareCatalogPage = lazy(() => import("@/pages/admin-square-catalog"));
+const NotFound = lazy(() => import("@/pages/not-found"));
+const MobileLeadManager = lazy(() => import("@/components/mobile-lead-manager"));
+const CustomerMobileInterface = lazy(() => import("@/components/customer-mobile-interface"));
+const JobDetailPage = lazy(() => import("@/pages/job-detail"));
+const TermsOfService = lazy(() => import("@/pages/terms"));
+const PendingQuotesPage = lazy(() => import("@/pages/pending-quotes"));
+const EmployeesPage = lazy(() => import("@/pages/employees"));
+const LeadDetailPage = lazy(() => import("@/pages/lead-detail"));
+const EmployeeRegister = lazy(() => import("@/pages/employee-register"));
+const EmployeeLogin = lazy(() => import("@/pages/employee-login"));
+const CustomerLogin = lazy(() => import("@/pages/customer-login"));
+const LoginPage = lazy(() => import("@/pages/login"));
+const ForgotAccessPage = lazy(() => import("@/pages/forgot-access"));
+const LeaveReviewPage = lazy(() => import("@/pages/leave-review"));
+const QuotePage = lazy(() => import("@/pages/quote"));
+const SponsorsPage = lazy(() => import("@/pages/sponsors"));
+const ServicesPage = lazy(() => import("@/pages/services"));
+const GalleryPage = lazy(() => import("@/pages/gallery"));
+const ReviewsPage = lazy(() => import("@/pages/reviews"));
+const SwapPage = lazy(() => import("@/pages/swap"));
+const RequestSwapPage = lazy(() => import("@/pages/request-swap"));
+const MiningPage = lazy(() => import("@/pages/mining"));
+const SnowRemovalPage = lazy(() => import("@/pages/snow-removal"));
+const MobilePreviewPage = lazy(() => import("@/pages/mobile-preview"));
+const PiJackpotPage = lazy(() => import("@/pages/pi-jackpot"));
+const PrivacyPolicy = lazy(() => import("@/pages/privacy"));
+const NatureMadeJewls = lazy(() => import("@/pages/nature-made-jewls"));
+const JewelryDetailPage = lazy(() => import("@/pages/jewelry-detail"));
+const MovingEstimator = lazy(() => import("@/pages/moving-estimator"));
+const PaymentSuccessPage = lazy(() => import("@/pages/payment-success"));
+const PromoHalfDayPage = lazy(() => import("@/pages/promo-half-day"));
+const CartPage = lazy(() => import("@/pages/cart"));
+const BitcoinPaymentPage = lazy(() => import("@/pages/bitcoin-payment"));
+const AdminBtcPaymentsPage = lazy(() => import("@/pages/admin-btc-payments"));
+const StakingPage = lazy(() => import("@/pages/staking"));
+const AdminQuoteReviewPage = lazy(() => import("@/pages/admin-quote-review"));
+const CrewTodayPage = lazy(() => import("@/pages/crew/today"));
+const CrewJobsNewPage = lazy(() => import("@/pages/crew/jobs"));
+const CrewSchedulePage = lazy(() => import("@/pages/crew/schedule"));
+const CrewEarningsPage = lazy(() => import("@/pages/crew/earnings"));
+const AdminOverviewPage = lazy(() => import("@/pages/admin/overview"));
+const AdminJobsPage = lazy(() => import("@/pages/admin/jobs"));
+const AdminPeoplePage = lazy(() => import("@/pages/admin/people"));
+const AdminFinancePage = lazy(() => import("@/pages/admin/finance"));
+const AdminMarketplacePage = lazy(() => import("@/pages/admin/marketplace"));
+const AdminSystemPage = lazy(() => import("@/pages/admin/system"));
+const AdminSponsorsPage = lazy(() => import("@/pages/admin/sponsors"));
+
+// Thin fallback shown while a lazy page chunk is downloading
+function PageLoader() {
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="w-8 h-8 rounded-full border-2 border-orange-500 border-t-transparent animate-spin" />
+    </div>
+  );
+}
 
 // Landing page for unauthenticated users — uses the new homepage
 function LandingPage() {
@@ -188,9 +199,15 @@ class PageErrorBoundary extends ReactComponent<
     this.state = { hasError: false, error: "", componentStack: "" };
   }
   static getDerivedStateFromError(error: any) {
+    // Ignore React's synchronous suspension warning — Suspense handles this
+    if (error?.message?.includes("suspended while responding to synchronous input")) {
+      return { hasError: false, error: "", componentStack: "" };
+    }
     return { hasError: true, error: error?.message || "Something went wrong", componentStack: "" };
   }
   componentDidCatch(error: any, info: any) {
+    // Ignore React's synchronous suspension warning
+    if (error?.message?.includes("suspended while responding to synchronous input")) return;
     console.error("[PageErrorBoundary] Caught crash:", error, info);
     this.setState({ componentStack: info?.componentStack || "" });
     fetch("/api/client-error", {
@@ -678,7 +695,9 @@ function App() {
             <CartProvider>
               <TooltipProvider>
                 <PageErrorBoundary>
-                  <Router />
+                  <Suspense fallback={<PageLoader />}>
+                    <Router />
+                  </Suspense>
                 </PageErrorBoundary>
                 <Toaster />
                 <SilentErrorBoundary label="PwaInstallPrompt">
