@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Truck, Trash2, Snowflake, Sparkles, Wrench, HardHat, Layers, PaintBucket,
   CheckCircle2, Star, Shield, Zap, MapPin, Phone, Send, Gift, ChevronRight, Calculator, MessageSquare
@@ -86,6 +87,7 @@ export default function HomePage() {
   const queryClient = useQueryClient();
   const [photoFiles, setPhotoFiles] = useState<FileList | null>(null);
   const [entryMode, setEntryMode] = useState<"calculator" | "guided">("calculator");
+  const [quoteOpen, setQuoteOpen] = useState(false);
 
   function scrollToGetStarted(mode: "calculator" | "guided" = "calculator") {
     setEntryMode(mode);
@@ -123,6 +125,7 @@ export default function HomePage() {
       });
       form.reset();
       setPhotoFiles(null);
+      setQuoteOpen(false);
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
     },
     onError: (error: Error) => {
@@ -406,6 +409,21 @@ export default function HomePage() {
                   </button>
                 ))}
               </div>
+
+              {/* Custom quote strip */}
+              <button
+                onClick={() => setQuoteOpen(true)}
+                className="mt-4 w-full flex items-center gap-3 bg-slate-800/60 border border-dashed border-slate-600/70 hover:border-blue-500/60 hover:bg-slate-700/60 rounded-xl px-4 py-3 text-left transition-all group"
+              >
+                <div className="w-8 h-8 rounded-lg bg-blue-500/15 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-500/25 transition-colors">
+                  <Send className="h-4 w-4 text-blue-400" />
+                </div>
+                <div>
+                  <p className="text-white text-sm font-semibold leading-tight">Need a custom quote?</p>
+                  <p className="text-slate-500 text-xs mt-0.5">Specialty jobs, large moves, or anything unique</p>
+                </div>
+                <ChevronRight className="h-4 w-4 text-slate-600 group-hover:text-blue-400 ml-auto flex-shrink-0 transition-colors" />
+              </button>
             </div>
           </div>
         </div>
@@ -436,31 +454,26 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── MANUAL FALLBACK QUOTE FORM ── */}
-      <section id="quote" className="py-10 px-4 bg-slate-950/60">
-        <div className="max-w-3xl mx-auto">
-          <p className="text-slate-500 text-xs font-semibold uppercase tracking-widest text-center mb-2">Custom / Non-Calculator Jobs</p>
-          <h2 className="text-2xl md:text-3xl font-bold text-white text-center mb-2">Need a Custom Quote?</h2>
-          <p className="text-slate-400 text-sm text-center mb-2">For specialty jobs, large commercial moves, or anything outside the calculator — send us your details and we'll be in touch.</p>
-          <p className="text-slate-500 text-xs text-center mb-6">We respect fast · No spam · Real local crew</p>
+      {/* ── CUSTOM QUOTE DIALOG ── */}
+      <Dialog open={quoteOpen} onOpenChange={setQuoteOpen}>
+        <DialogContent className="bg-slate-900 border border-slate-700 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-white text-xl font-bold">Need a Custom Quote?</DialogTitle>
+            <p className="text-slate-400 text-sm">For specialty jobs, large moves, or anything outside the calculator — send us your details and we'll be in touch within 24 hours.</p>
+            <div className="flex flex-wrap gap-3 pt-1">
+              {[
+                { icon: Shield, label: "Licensed & Insured" },
+                { icon: Zap, label: "Fast response" },
+                { icon: CheckCircle2, label: "No obligation" },
+              ].map(({ icon: Icon, label }) => (
+                <div key={label} className="flex items-center gap-1.5 text-slate-400 text-xs">
+                  <Icon className="h-3 w-3 text-blue-400" />{label}
+                </div>
+              ))}
+            </div>
+          </DialogHeader>
 
-          {/* Mini trust badges */}
-          <div className="flex flex-wrap justify-center gap-4 mb-8">
-            {[
-              { icon: Shield, label: "Licensed and Insured" },
-              { icon: Zap, label: "Fast booking response" },
-              { icon: CheckCircle2, label: "No-obligation quote" },
-            ].map(({ icon: Icon, label }) => (
-              <div key={label} className="flex items-center gap-1.5 text-slate-300 text-xs">
-                <Icon className="h-3.5 w-3.5 text-blue-400" />
-                {label}
-              </div>
-            ))}
-          </div>
-
-          <Card className="bg-slate-800/80 border border-slate-700/60 shadow-2xl">
-            <CardContent className="p-6 md:p-8">
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5 mt-2">
 
                 {/* Service Type */}
                 <div>
@@ -672,11 +685,9 @@ export default function HomePage() {
                   <Send className="mr-2 h-5 w-5" />
                   {submitLead.isPending ? "Submitting..." : "Start My Move"}
                 </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </div>
-      </section>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* ── REWARDS CALLOUT ── */}
       <section className="py-8 px-4">
