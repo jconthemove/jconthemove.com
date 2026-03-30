@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Calendar as CalendarIcon, BookOpen, Store, Star, Camera, MapPin, Phone, Mail, Plus, Settings, Award, User, Snowflake, Coins, Loader2 } from "lucide-react";
+import { Calendar as CalendarIcon, BookOpen, Store, Star, Camera, MapPin, Phone, Mail, Plus, Settings, Award, User, Snowflake, Coins, Loader2, Trash2, CheckCircle2, XCircle, Bell } from "lucide-react";
 import { Link } from "wouter";
 import { useState, useEffect } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -114,6 +114,51 @@ export default function EmployeeHomePage() {
     queryKey: ["/api/leads"],
     staleTime: 0, // Always fetch fresh data
     refetchOnMount: true,
+  });
+
+  interface PendingJob {
+    id: string;
+    serviceType: string;
+    status: string;
+    fromAddress: string;
+    details?: string;
+    basePrice?: string;
+    crewSize?: number;
+    crewMembers?: string[];
+    createdAt: string;
+  }
+  const { data: pendingJobs = [], refetch: refetchPending } = useQuery<PendingJob[]>({
+    queryKey: ["/api/jobs/my-pending"],
+    refetchInterval: 10000,
+    staleTime: 0,
+  });
+
+  const acceptJobMutation = useMutation({
+    mutationFn: async (jobId: string) => {
+      const res = await apiRequest("POST", `/api/jobs/${jobId}/accept`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Job accepted!", description: "The team will be in touch with details." });
+      refetchPending();
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Could not accept job.", variant: "destructive" });
+    },
+  });
+
+  const declineJobMutation = useMutation({
+    mutationFn: async (jobId: string) => {
+      const res = await apiRequest("POST", `/api/jobs/${jobId}/decline`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Job declined", description: "We'll find another crew member." });
+      refetchPending();
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Could not decline job.", variant: "destructive" });
+    },
   });
 
   const { data: shopItems = [] } = useQuery<ShopItem[]>({
@@ -496,6 +541,73 @@ export default function EmployeeHomePage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* ── Pending Junk Job Assignments ── */}
+        {pendingJobs.length > 0 && (
+          <div className="space-y-3">
+            {pendingJobs.map(job => (
+              <Card key={job.id} className="border border-orange-500/40 bg-gradient-to-br from-orange-500/10 to-slate-900/80 backdrop-blur-sm shadow-xl shadow-orange-500/10 overflow-hidden relative">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-orange-500 to-amber-500" />
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 rounded-lg bg-orange-500/20 border border-orange-500/30 shrink-0">
+                      <Trash2 className="h-5 w-5 text-orange-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Bell className="h-4 w-4 text-orange-400 animate-pulse" />
+                        <span className="text-sm font-bold text-orange-300">New Job Assignment</span>
+                      </div>
+                      <p className="text-white font-semibold text-sm capitalize">{job.serviceType.replace("_", " ")} Removal</p>
+                      {job.fromAddress && (
+                        <p className="text-slate-400 text-xs mt-0.5 truncate">📍 {job.fromAddress}</p>
+                      )}
+                      {job.details && (
+                        <p className="text-slate-500 text-xs mt-0.5 line-clamp-2">{job.details}</p>
+                      )}
+                      {job.basePrice && (
+                        <p className="text-emerald-400 text-sm font-bold mt-1">${job.basePrice}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2 mt-3">
+                    <Button
+                      size="sm"
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold border-0"
+                      disabled={acceptJobMutation.isPending || declineJobMutation.isPending}
+                      onClick={() => acceptJobMutation.mutate(job.id)}
+                    >
+                      {acceptJobMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <>
+                          <CheckCircle2 className="h-4 w-4 mr-1" />
+                          Accept
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1 border-red-500/50 text-red-400 hover:bg-red-500/10 hover:border-red-500 font-bold"
+                      disabled={acceptJobMutation.isPending || declineJobMutation.isPending}
+                      onClick={() => declineJobMutation.mutate(job.id)}
+                    >
+                      {declineJobMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <>
+                          <XCircle className="h-4 w-4 mr-1" />
+                          Decline
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
 
         {/* Monthly Calendar */}
         <Card className="border border-slate-700/50 bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-sm shadow-xl overflow-hidden">

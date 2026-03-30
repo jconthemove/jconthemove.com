@@ -449,6 +449,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('⚠️ Loyalty tier migration error (non-fatal):', migErr);
   }
 
+  // Schema migration: add is_driver column to users
+  try {
+    await pool.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS is_driver BOOLEAN DEFAULT false;
+    `);
+    console.log('✅ is_driver column ready');
+  } catch (migErr) {
+    console.error('⚠️ is_driver migration error (non-fatal):', migErr);
+  }
+
   // Schema migration: add customer-selected package column to leads
   try {
     await pool.query(`
@@ -2449,6 +2459,205 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ── Live Crew Beacon ────────────────────────────────────────────────────────
+  // GET /api/crew/online — public count of workers with isAvailable = true
+  app.get("/api/crew/online", async (req, res) => {
+    try {
+      const [row] = await db.select({ count: sql<number>`count(*)` }).from(users)
+        .where(and(eq(users.isAvailable, true), eq(users.role, "employee")));
+      res.json({ count: Number(row?.count ?? 0) });
+    } catch (err) {
+      console.error("Error fetching online crew count:", err);
+      res.status(500).json({ count: 0 });
+    }
+  });
+
+  // ── Live Dispatch Engine ─────────────────────────────────────────────────────
+
+  // Tier → crew requirements map
+  const JUNK_TIER_CREW: Record<string, { movers: number; needsDriver: boolean; basePrice: number }> = {
+    small_pickup:   { movers: 1, needsDriver: false, basePrice: 150 },
+    pickup_load:    { movers: 2, needsDriver: true,  basePrice: 350 },
+    trailer_load:   { movers: 2, needsDriver: true,  basePrice: 750 },
+    full_load:      { movers: 3, needsDriver: true,  basePrice: 1000 },
+  };
+
+  /**
+   * Dispatch engine — fills `slotsNeeded` new crew slots for a job.
+   *
+   * @param leadId        The job to assign workers to.
+   * @param crewSize      Total workers the job requires (used to gate "assigned" status).
+   * @param slotsNeeded   How many NEW workers to find this call.
+   * @param needsDriver   When true, driver-capable workers are prioritised in ordering.
+   * @param existingCrew  Workers already on the job (kept as-is — union with new picks).
+   * @param excludeIds    Workers to skip entirely (e.g. those who declined).
+   */
+  async function runDispatch(
+    leadId: string,
+    crewSize: number,
+    slotsNeeded: number,
+    needsDriver: boolean,
+    existingCrew: string[] = [],
+    excludeIds: string[] = [],
+  ): Promise<string[]> {
+    const skipIds = [...new Set([...existingCrew, ...excludeIds])];
+
+    const whereClause = and(
+      eq(users.isAvailable, true),
+      eq(users.role, "employee"),
+      eq(users.status, "approved"),
+      skipIds.length > 0
+        ? sql`${users.id} != ALL(${skipIds}::text[])`
+        : undefined,
+    );
+
+    // When a driver is required, pull slightly more candidates so we can sort
+    // drivers to the front and still fill the job if mixed results come back.
+    const fetchLimit = Math.max(slotsNeeded * 3, slotsNeeded + 5);
+    const candidates = await db
+      .select({ id: users.id, firstName: users.firstName, isDriver: users.isDriver })
+      .from(users)
+      .where(whereClause)
+      .limit(fetchLimit);
+
+    let sorted = candidates;
+    if (needsDriver) {
+      // Drivers first; non-drivers fill remaining slots
+      sorted = [
+        ...candidates.filter(c => c.isDriver),
+        ...candidates.filter(c => !c.isDriver),
+      ];
+    }
+
+    const picked = sorted.slice(0, slotsNeeded);
+    const newIds = picked.map(w => w.id);
+
+    // Final crew = existing members kept + newly picked
+    const mergedCrew = [...existingCrew, ...newIds];
+
+    // Only mark the job "assigned" when the full required crew size is met
+    const fullyStaffed = mergedCrew.length >= crewSize;
+    await db.update(leads)
+      .set({
+        crewMembers: mergedCrew,
+        status: fullyStaffed ? "assigned" : "open",
+      })
+      .where(eq(leads.id, leadId));
+
+    // Notify only the newly assigned workers
+    for (const worker of picked) {
+      await db.insert(notifications).values({
+        userId: worker.id,
+        type: "job_assigned",
+        title: "New Job Assignment",
+        message: "You've been assigned to a job. Please accept or decline from your dashboard.",
+        data: { leadId },
+      });
+    }
+
+    return newIds;
+  }
+
+  // POST /api/jobs/create-junk — create a junk removal booking and auto-dispatch
+  app.post("/api/jobs/create-junk", isAuthenticatedAllowPending, async (req: any, res) => {
+    try {
+      const { tier, addOns, address, customerName, phone, email } = req.body;
+
+      // Strict input validation
+      if (!tier || !JUNK_TIER_CREW[tier]) {
+        return res.status(400).json({ error: "Invalid tier" });
+      }
+      if (!address || typeof address !== "string" || address.trim().length < 5) {
+        return res.status(400).json({ error: "A valid pickup address is required" });
+      }
+      const parseAddon = (val: unknown, max = 10): number => {
+        const n = Math.floor(Number(val) || 0);
+        if (n < 0 || n > max || !isFinite(n)) throw new Error("Invalid add-on quantity");
+        return n;
+      };
+      let mattressQty: number, fridgeQty: number, gymQty: number;
+      try {
+        mattressQty = parseAddon(addOns?.mattress);
+        fridgeQty   = parseAddon(addOns?.fridge);
+        gymQty      = parseAddon(addOns?.gym);
+      } catch {
+        return res.status(400).json({ error: "Add-on quantities must be non-negative integers (max 10 each)" });
+      }
+
+      const tierCfg = JUNK_TIER_CREW[tier];
+      const addOnTotal = mattressQty * 50 + fridgeQty * 100 + gymQty * 100;
+      const totalPrice = tierCfg.basePrice + addOnTotal;
+
+      const nameParts = (customerName || "").trim().split(" ");
+      const firstName = nameParts[0] || "Customer";
+      const lastName = nameParts.slice(1).join(" ") || "Junk";
+
+      const [lead] = await db.insert(leads).values({
+        firstName,
+        lastName,
+        email: email || "noreply@jconthemove.com",
+        phone: phone || "",
+        serviceType: "junk",
+        fromAddress: address || "",
+        status: "open",
+        crewSize: tierCfg.movers,
+        basePrice: String(totalPrice),
+        totalPrice: String(totalPrice),
+        details: `Tier: ${tier}. Add-ons: Mattress×${mattressQty}, Fridge×${fridgeQty}, Gym Equipment×${gymQty}`,
+        createdByUserId: (req.session as any).userId || req.user?.id || null,
+      }).returning();
+
+      // Auto-dispatch with driver preference for applicable tiers
+      const assignedCrew = await runDispatch(
+        lead.id,
+        tierCfg.movers,   // crewSize
+        tierCfg.movers,   // slotsNeeded (full fill on initial create)
+        tierCfg.needsDriver,
+        [],               // existingCrew
+        [],               // excludeIds
+      );
+
+      const dispatched = assignedCrew.length >= tierCfg.movers;
+      res.json({
+        jobId: lead.id,
+        status: dispatched ? "assigned" : "open",
+        crewCount: assignedCrew.length,
+        message: dispatched
+          ? "Crew assigned! They'll be in touch shortly."
+          : "We'll reach you shortly — our team will confirm your booking.",
+        totalPrice,
+      });
+    } catch (err: any) {
+      console.error("Error creating junk booking:", err);
+      res.status(500).json({ error: "Failed to create booking" });
+    }
+  });
+
+  // GET /api/jobs/:id/status — polling endpoint for job status
+  app.get("/api/jobs/:id/status", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const [lead] = await db.select({
+        id: leads.id,
+        status: leads.status,
+        crewMembers: leads.crewMembers,
+        crewSize: leads.crewSize,
+        serviceType: leads.serviceType,
+      }).from(leads).where(eq(leads.id, id));
+      if (!lead) return res.status(404).json({ error: "Job not found" });
+      res.json({
+        id: lead.id,
+        status: lead.status,
+        crewCount: Array.isArray(lead.crewMembers) ? lead.crewMembers.length : 0,
+        crewSize: lead.crewSize || 1,
+        serviceType: lead.serviceType,
+      });
+    } catch (err) {
+      console.error("Error fetching job status:", err);
+      res.status(500).json({ error: "Failed to fetch job status" });
+    }
+  });
+
   // Submit quote request
   app.post("/api/leads", async (req, res) => {
     try {
@@ -2686,6 +2895,122 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Access control error" });
     }
   };
+
+  // POST /api/jobs/:id/accept — crew member locks their slot on the job
+  app.post("/api/jobs/:id/accept", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const leadId = req.params.id;
+      const userId = req.currentUser.id;
+      const [lead] = await db.select().from(leads).where(eq(leads.id, leadId));
+      if (!lead) return res.status(404).json({ error: "Job not found" });
+      const crew: string[] = Array.isArray(lead.crewMembers) ? lead.crewMembers : [];
+      if (!crew.includes(userId)) return res.status(403).json({ error: "Not assigned to this job" });
+
+      // Persist acceptance: add to acceptedByEmployees array (idempotent)
+      const alreadyAccepted: string[] = Array.isArray(lead.acceptedByEmployees) ? lead.acceptedByEmployees : [];
+      if (!alreadyAccepted.includes(userId)) {
+        await db.update(leads)
+          .set({ acceptedByEmployees: [...alreadyAccepted, userId] })
+          .where(eq(leads.id, leadId));
+      }
+
+      // Lock worker — mark unavailable so they won't be dispatched to new jobs
+      await db.update(users).set({ isAvailable: false }).where(eq(users.id, userId));
+
+      // Mark notification read
+      await db.update(notifications)
+        .set({ read: true })
+        .where(and(eq(notifications.userId, userId), sql`data->>'leadId' = ${leadId}`));
+
+      res.json({ success: true, message: "Job accepted" });
+    } catch (err) {
+      console.error("Error accepting job:", err);
+      res.status(500).json({ error: "Failed to accept job" });
+    }
+  });
+
+  // POST /api/jobs/:id/decline — crew member declines; re-dispatch replaces them
+  app.post("/api/jobs/:id/decline", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const leadId = req.params.id;
+      const userId = req.currentUser.id;
+      const [lead] = await db.select().from(leads).where(eq(leads.id, leadId));
+      if (!lead) return res.status(404).json({ error: "Job not found" });
+      const crew: string[] = Array.isArray(lead.crewMembers) ? lead.crewMembers : [];
+      if (!crew.includes(userId)) return res.status(403).json({ error: "Not assigned to this job" });
+
+      // Confirmed slots stay; decliner is removed from crewMembers
+      const confirmedCrew: string[] = (Array.isArray(lead.acceptedByEmployees) ? lead.acceptedByEmployees : [])
+        .filter(id => id !== userId);
+      const remainingCrew = crew.filter(id => id !== userId);
+
+      await db.update(leads)
+        .set({
+          crewMembers: remainingCrew,
+          acceptedByEmployees: confirmedCrew,
+          status: "open",
+        })
+        .where(eq(leads.id, leadId));
+
+      // Restore availability — worker declined so they're free for other jobs again
+      await db.update(users).set({ isAvailable: true }).where(eq(users.id, userId));
+
+      // Mark notification read
+      await db.update(notifications)
+        .set({ read: true })
+        .where(and(eq(notifications.userId, userId), sql`data->>'leadId' = ${leadId}`));
+
+      // Re-dispatch: preserve ALL remaining workers (confirmed + pending), find a replacement
+      // Use crewSize >= 2 as a proxy for needsDriver (all multi-person tiers require a driver)
+      const crewSize = lead.crewSize || 1;
+      const slotsNeeded = crewSize - remainingCrew.length;
+      if (slotsNeeded > 0) {
+        await runDispatch(
+          leadId,
+          crewSize,
+          slotsNeeded,
+          crewSize >= 2, // needsDriver heuristic
+          remainingCrew, // existingCrew — keep ALL currently assigned workers, not just confirmed
+          [userId],      // excludeIds — skip the decliner
+        );
+      }
+
+      res.json({ success: true, message: "Job declined" });
+    } catch (err) {
+      console.error("Error declining job:", err);
+      res.status(500).json({ error: "Failed to decline job" });
+    }
+  });
+
+  // GET /api/jobs/my-pending — jobs assigned to the employee that they haven't yet accepted
+  app.get("/api/jobs/my-pending", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const userId = req.currentUser.id;
+      // Jobs where user is in crewMembers but NOT yet in acceptedByEmployees
+      const assignedJobs = await db.select({
+        id: leads.id,
+        serviceType: leads.serviceType,
+        status: leads.status,
+        fromAddress: leads.fromAddress,
+        details: leads.details,
+        basePrice: leads.basePrice,
+        crewSize: leads.crewSize,
+        crewMembers: leads.crewMembers,
+        acceptedByEmployees: leads.acceptedByEmployees,
+        createdAt: leads.createdAt,
+      }).from(leads)
+        .where(and(
+          sql`${userId} = ANY(${leads.crewMembers})`,
+          sql`NOT (${userId} = ANY(COALESCE(${leads.acceptedByEmployees}, ARRAY[]::text[])))`,
+          inArray(leads.status, ["assigned", "open"]),
+        ))
+        .orderBy(desc(leads.createdAt));
+      res.json(assignedJobs);
+    } catch (err) {
+      console.error("Error fetching pending jobs:", err);
+      res.status(500).json({ error: "Failed to fetch pending jobs" });
+    }
+  });
 
   const requireApprovedEmployee = async (req: any, res: any, next: any) => {
     try {
