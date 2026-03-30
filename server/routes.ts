@@ -2386,6 +2386,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // In-memory cache keyed by ZIP code
   const zipEtaCache = new Map<string, { distanceMiles: number; estimatedMinutes: number; availabilityLabel: string }>();
 
+  app.get("/api/crew/online", async (_req, res) => {
+    try {
+      const [crewRow] = await db.select({ count: sql<number>`count(*)` }).from(users)
+        .where(and(eq(users.isAvailable, true), eq(users.role, "employee")));
+      const count = Number(crewRow?.count ?? 0);
+      return res.json({ count });
+    } catch {
+      return res.json({ count: 0 });
+    }
+  });
+
   app.get("/api/eta", async (req, res) => {
     try {
       const zip = String(req.query.zip ?? "").trim().replace(/\D/g, "").slice(0, 5);
