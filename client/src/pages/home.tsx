@@ -9,7 +9,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Truck, Trash2, Snowflake, Sparkles, Wrench, HardHat, Layers, PaintBucket,
-  CheckCircle2, Star, Shield, Zap, MapPin, Phone, Send, Gift, ChevronRight, Calculator, MessageSquare
+  CheckCircle2, Star, Shield, Zap, MapPin, Phone, Send, Gift, ChevronRight, Calculator, MessageSquare,
+  Users, Clock, Package
 } from "lucide-react";
 import { Link } from "wouter";
 import { HomepageBookingCalculator } from "@/components/homepage-booking-calculator";
@@ -20,9 +21,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { insertLeadSchema, type InsertLead } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import job1 from "@assets/20210401_100524_HDR_1764946073184.jpg";
-import job2 from "@assets/20210401_100531_HDR_1764946073186.jpg";
-import job3 from "@assets/FB_IMG_1675268568106_1758501643336.jpg";
 
 const serviceOptions = [
   { value: "residential", label: "Moving", icon: Truck },
@@ -35,27 +33,60 @@ const serviceOptions = [
   { value: "painting", label: "Painting", icon: PaintBucket },
 ];
 
-const recentJobs = [
+const servicePackages = [
   {
-    photo: job1,
-    crew: 2,
-    hours: 3,
+    title: "2 Movers · 3 Hours",
+    badge: "Most Popular",
+    badgeColor: "bg-red-500 text-white",
     price: 450,
-    label: "2 Movers · 3 Hours",
+    discountPercent: 5,
+    icon: Users,
+    gradientFrom: "from-blue-800",
+    gradientTo: "to-blue-600",
+    bullets: [
+      "2 professional movers for 3 hours",
+      "Local moves up to 30 miles",
+      "Loading & unloading included",
+      "Furniture protection & care",
+    ],
+    ctaLabel: "Book 2 Movers Now",
+    ctaHref: "/post-job",
   },
   {
-    photo: job2,
-    crew: 3,
-    hours: 4,
+    title: "4 Movers · 2 Hours",
+    badge: "Fastest Option",
+    badgeColor: "bg-amber-500 text-white",
     price: 600,
-    label: "3 Movers · 4 Hours",
+    discountPercent: null,
+    icon: Clock,
+    gradientFrom: "from-slate-700",
+    gradientTo: "to-slate-500",
+    bullets: [
+      "4-man crew for maximum speed",
+      "Ideal for larger homes or offices",
+      "Truck & equipment included",
+      "Guaranteed on-time arrival",
+    ],
+    ctaLabel: "Book 4 Movers Now",
+    ctaHref: "/post-job",
   },
   {
-    photo: job3,
-    crew: 1,
-    hours: 2,
-    price: 150,
-    label: "Junk Removal · Same-Day",
+    title: "Single Item or Small Load",
+    badge: "Starting at $150",
+    badgeColor: "bg-emerald-600 text-white",
+    price: null,
+    discountPercent: null,
+    icon: Package,
+    gradientFrom: "from-teal-800",
+    gradientTo: "to-teal-600",
+    bullets: [
+      "Single furniture pieces or appliances",
+      "Small loads & estate cleanouts",
+      "Same-day availability",
+      "Eco-friendly disposal options",
+    ],
+    ctaLabel: "Get Junk Removal Quote",
+    ctaHref: "/quote?service=junk-removal",
   },
 ];
 
@@ -329,27 +360,83 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── RECENT JOBS ── */}
+      {/* ── POPULAR SERVICE PACKAGES ── */}
       <section className="py-10 px-4">
         <div className="max-w-5xl mx-auto">
-          <p className="text-blue-400 text-xs font-semibold uppercase tracking-widest mb-1">Recent Jobs</p>
-          <h2 className="text-2xl font-bold text-white mb-1">Recent Jobs</h2>
-          <p className="text-slate-400 text-sm mb-6">Real work from our crew across the Northwoods.</p>
+          <div className="flex items-center gap-3 mb-1">
+            <p className="text-blue-400 text-xs font-semibold uppercase tracking-widest">Services</p>
+            <span className="bg-red-500 text-white text-xs font-bold px-2.5 py-0.5 rounded-full">Popular Packages</span>
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-1">Popular Service Packages</h2>
+          <p className="text-slate-400 text-sm mb-6">Transparent flat-rate pricing — no hidden fees, no surprises.</p>
 
-          <div className="grid md:grid-cols-3 gap-4">
-            {recentJobs.map((job, i) => (
-              <div key={i} className="relative rounded-2xl overflow-hidden border border-slate-700/50 shadow-lg group">
-                <img
-                  src={job.photo}
-                  alt={job.label}
-                  className="w-full h-52 object-cover group-hover:scale-105 transition-transform duration-500"
-                />
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-4">
-                  <p className="text-white font-semibold text-sm">{job.label}</p>
-                  <p className="text-emerald-400 font-bold">${job.price}</p>
+          <div className="grid md:grid-cols-3 gap-5">
+            {servicePackages.map((pkg, i) => {
+              const Icon = pkg.icon;
+              const discountedPrice = pkg.price && pkg.discountPercent
+                ? pkg.price * (1 - pkg.discountPercent / 100)
+                : null;
+              const savings = pkg.price && pkg.discountPercent
+                ? pkg.price * (pkg.discountPercent / 100)
+                : null;
+              return (
+                <div key={i} className="flex flex-col rounded-2xl overflow-hidden border border-slate-700/50 shadow-lg bg-slate-900">
+                  {/* Image / icon placeholder */}
+                  <div className={`relative h-36 bg-gradient-to-br ${pkg.gradientFrom} ${pkg.gradientTo} flex items-center justify-center`}>
+                    <Icon className="h-14 w-14 text-white/30" />
+                    <span className={`absolute top-3 left-3 text-xs font-bold px-2.5 py-1 rounded-full ${pkg.badgeColor}`}>
+                      {pkg.badge}
+                    </span>
+                  </div>
+
+                  {/* Card body */}
+                  <div className="flex flex-col flex-1 p-5">
+                    <h3 className="text-white font-bold text-lg mb-3">{pkg.title}</h3>
+
+                    {/* Price box */}
+                    <div className="mb-4 rounded-xl bg-slate-800/70 border border-slate-700/50 p-3">
+                      {pkg.price ? (
+                        discountedPrice && savings ? (
+                          <>
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-slate-500 line-through text-sm">${pkg.price}</span>
+                              <span className="text-emerald-400 text-xs font-semibold">Save ${savings.toFixed(2)} (5% off)</span>
+                            </div>
+                            <p className="text-white font-extrabold text-2xl">${discountedPrice.toFixed(2)}</p>
+                            <p className="text-emerald-400 text-xs mt-0.5 font-medium">Instant online booking discount applied</p>
+                          </>
+                        ) : (
+                          <p className="text-white font-extrabold text-2xl">${pkg.price}</p>
+                        )
+                      ) : (
+                        <>
+                          <p className="text-white font-extrabold text-2xl">$150+</p>
+                          <p className="text-slate-400 text-xs mt-0.5">Price based on load size</p>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Bullet points */}
+                    <ul className="space-y-2 mb-5 flex-1">
+                      {pkg.bullets.map((bullet) => (
+                        <li key={bullet} className="flex items-start gap-2 text-slate-300 text-sm">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                          {bullet}
+                        </li>
+                      ))}
+                    </ul>
+
+                    {/* CTA button */}
+                    <Link href={pkg.ctaHref}>
+                      <Button className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold rounded-xl py-2.5">
+                        {pkg.ctaLabel}
+                        <ChevronRight className="h-4 w-4 ml-1" />
+                      </Button>
+                    </Link>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
