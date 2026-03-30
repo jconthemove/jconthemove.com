@@ -1,0 +1,96 @@
+23 - Merge Calculator & Guided Quote Entry
+
+What & Why
+Replace the current split homepage layout with a single unified "Get Started" section. Customers should choose between two equal-weight paths:
+- Instant Pricing
+- Guided Questions
+
+This removes confusion from having multiple competing entry points and gives visitors one clear place to begin.
+
+Done looks like
+- The homepage has one unified quote/booking section with a tab switch:
+  - Instant Pricing
+  - Guided Questions
+- Both tabs have equal visual weight and short descriptor copy:
+  - Instant Pricing: "Build your move and see pricing now."
+  - Guided Questions: "Not sure what you need? We’ll walk you through it."
+- Switching tabs renders the calculator or the embedded chatbot beneath the switch
+- The BookingChatbot supports embedded mode:
+  - no dialog-only chrome
+  - no close button
+  - renders cleanly inline
+- CTA buttons and service shortcut links scroll to this unified section
+- Residential / calculator-friendly shortcuts preselect Instant Pricing
+- Less pricing-friendly services can default to Guided Questions
+- The floating chatbot launcher is removed from the homepage so there is no duplicate guided entry point
+- The manual fallback quote form remains lower on the page for custom/non-calculator jobs
+- Existing pricing logic and backend submission behavior stay unchanged
+- Mobile layout stays clean and usable
+
+Out of scope
+- Changes to pricing logic
+- Changes to quote calculations
+- Backend API changes
+- Adding new guided-chatbot question steps
+- Redesigning the calculator itself
+
+Tasks
+
+1. Add embedded mode to BookingChatbot
+Update client/src/components/booking-chatbot.tsx so the component supports inline rendering.
+Add optional props:
+- embedded?: boolean
+- showCloseButton?: boolean
+- className?: string
+
+Behavior:
+- embedded defaults to false
+- when embedded is true, suppress dialog-style framing assumptions
+- hide the close button by default in embedded mode
+- keep existing chatbot question flow, quote generation, and submit behavior unchanged
+
+2. Build the unified entry section in home.tsx
+Update client/src/pages/home.tsx:
+- introduce entryMode state with values:
+  - "calculator"
+  - "guided"
+- replace the old separate calculator-first homepage section with a unified “Get Started” section
+- include two equal-weight tab buttons/cards for:
+  - Instant Pricing
+  - Guided Questions
+- render:
+  - HomepageBookingCalculator when entryMode === "calculator"
+  - BookingChatbot embedded when entryMode === "guided"
+
+3. Update CTA and shortcut behavior
+In client/src/pages/home.tsx:
+- update existing “Get Instant Quote” / quick-book / service shortcut actions so they scroll to the unified section
+- residential move shortcuts should select calculator mode
+- junk, snow, handyman, or less pricing-friendly services can select guided mode
+
+4. Remove duplicate floating chatbot launcher
+In client/src/pages/home.tsx:
+- remove the floating chatbot button
+- remove the homepage dialog wrapper used only for the old chatbot launcher
+- keep only the embedded guided path in the main unified section
+
+5. Keep the manual fallback form lower on the homepage
+- retain the existing QuoteForm section lower on the page
+- relabel it clearly as a manual/custom quote fallback so it does not compete with the main start section
+
+Relevant files
+- client/src/pages/home.tsx
+- client/src/components/booking-chatbot.tsx
+- client/src/components/homepage-booking-calculator.tsx
+
+Important note
+- Do not use client/src/pages/customer/book.tsx
+- That file does not exist in this repo and is not part of this task
+
+Acceptance check
+- Homepage shows one unified start section
+- Tabs switch cleanly
+- Calculator still works
+- Guided chatbot still works and submits
+- Manual quote form still exists below
+- No floating chatbot launcher remains
