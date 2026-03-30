@@ -611,6 +611,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('⚠️ Auto-compound migration error (non-fatal):', compoundErr);
   }
 
+  // Worker hour overrides table (date-specific custom hours)
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS worker_hour_overrides (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        date TEXT NOT NULL,
+        start_hour INTEGER NOT NULL,
+        end_hour INTEGER NOT NULL,
+        note TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(user_id, date)
+      );
+      CREATE INDEX IF NOT EXISTS idx_worker_hour_overrides_user ON worker_hour_overrides(user_id);
+    `);
+    console.log('✅ worker_hour_overrides table ready');
+  } catch (wErr) {
+    console.error('⚠️ worker_hour_overrides migration error (non-fatal):', wErr);
+  }
+
   // Lead history table for stage audit trail
   try {
     await pool.query(`
@@ -6670,6 +6690,70 @@ Thank you for your business!
     try {
       const goals = await storage.getWorkerGoals(req.params.userId);
       res.json(goals ?? null);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Worker calendar data: jobs + blocks + hour overrides + schedule for a given month
+  app.get("/api/workers/calendar", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const userId = req.currentUser.id;
+      const year = parseInt(String(req.query.year));
+      const month = parseInt(String(req.query.month));
+      const now = new Date();
+      const safeYear = isNaN(year) || year < 2000 || year > 2100 ? now.getFullYear() : year;
+      const safeMonth = isNaN(month) || month < 1 || month > 12 ? (now.getMonth() + 1) : month;
+      const data = await storage.getWorkerCalendarData(userId, safeYear, safeMonth);
+      res.json(data);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Upsert hour override for a specific date
+  app.put("/api/workers/hour-overrides", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const { date, startHour, endHour, note } = req.body;
+      if (!date || startHour === undefined || endHour === undefined) {
+        return res.status(400).json({ error: "date, startHour, endHour required" });
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        return res.status(400).json({ error: "date must be a valid YYYY-MM-DD string" });
+      }
+      // Round-trip check: if the date is a calendar impossibility (e.g. Feb 31)
+      // Date.parse rolls it forward; the formatted result will differ from the input.
+      const parsedMs = Date.parse(date);
+      if (isNaN(parsedMs)) {
+        return res.status(400).json({ error: "date must be a valid YYYY-MM-DD string" });
+      }
+      const roundTrip = new Date(parsedMs).toISOString().slice(0, 10);
+      if (roundTrip !== date) {
+        return res.status(400).json({ error: "date is not a real calendar date" });
+      }
+      const sh = parseInt(startHour);
+      const eh = parseInt(endHour);
+      if (isNaN(sh) || isNaN(eh) || sh < 0 || sh > 23 || eh < 0 || eh > 23) {
+        return res.status(400).json({ error: "startHour and endHour must be integers between 0 and 23" });
+      }
+      if (sh >= eh) {
+        return res.status(400).json({ error: "startHour must be less than endHour" });
+      }
+      const row = await storage.upsertWorkerHourOverride(req.currentUser.id, date, sh, eh, note);
+      res.json(row);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Delete an hour override
+  app.delete("/api/workers/hour-overrides/:id", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid override id" });
+      const ok = await storage.deleteWorkerHourOverride(id, req.currentUser.id);
+      if (!ok) return res.status(404).json({ error: "Override not found" });
+      res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }

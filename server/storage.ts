@@ -1,8 +1,8 @@
 import { type User, type InsertUser, type UpsertUser, type Lead, type InsertLead, type Contact, type InsertContact, type Notification, type InsertNotification, type TreasuryAccount, type InsertTreasuryAccount, type FundingDeposit, type InsertFundingDeposit, type ReserveTransaction, type InsertReserveTransaction, type FaucetConfig, type InsertFaucetConfig, type FaucetClaim, type InsertFaucetClaim, type FaucetWallet, type InsertFaucetWallet, type FaucetRevenue, type InsertFaucetRevenue, type EmployeeStats, type InsertEmployeeStats, type AchievementType, type EmployeeAchievement, type InsertEmployeeAchievement, type PointTransaction, type InsertPointTransaction, type WeeklyLeaderboard, type DailyCheckin, type InsertDailyCheckin, type WalletAccount, type InsertWalletAccount, type SupportedCurrency, type InsertSupportedCurrency, type UserWallet, type InsertUserWallet, type TreasuryWallet, type InsertTreasuryWallet, type WalletTransaction, type InsertWalletTransaction, type ShopItem, type InsertShopItem, type Review, type InsertReview, type Testimonial, type InsertTestimonial, type WalletPayout, type InsertWalletPayout, type TokenConversion, type InsertTokenConversion, type TreasuryLimit, type InsertTreasuryLimit, type SquareInvoice, type InsertSquareInvoice, type SnowCustomer, type InsertSnowCustomer, type SnowServiceType, type InsertSnowServiceType, type SnowServiceLog, type InsertSnowServiceLog, type StakingTier, type Stake, type InsertStake, stakingTiers, stakes, leads, contacts, users, notifications, walletAccounts, rewards, treasuryAccounts, fundingDeposits, reserveTransactions, priceHistory, faucetConfig, faucetClaims, faucetWallets, faucetRevenue, employeeStats, achievementTypes, employeeAchievements, pointTransactions, weeklyLeaderboards, dailyCheckins, supportedCurrencies, userWallets, treasuryWallets, walletTransactions, shopItems, cashoutRequests, fraudLogs, helpRequests, miningSessions, miningClaims, treasuryWithdrawals, reviews, testimonials, walletPayouts, tokenConversions, treasuryLimits, squareInvoices, buybackFund, snowCustomers, snowServiceTypes, snowServiceLogs } from "@shared/schema";
-import { type WorkerDayBlock, type WorkerScheduleRow, type WorkerGoal, workerDayBlocks, workerSchedule, workerGoals } from "@shared/schema";
+import { type WorkerDayBlock, type WorkerScheduleRow, type WorkerGoal, type WorkerHourOverride, workerDayBlocks, workerSchedule, workerGoals, workerHourOverrides } from "@shared/schema";
 import { type Sponsor, type InsertSponsor, sponsors } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, isNull, and, isNotNull, sql, gt, gte, inArray, or, lte } from "drizzle-orm";
+import { eq, desc, isNull, and, isNotNull, sql, gt, gte, inArray, not, or, lte } from "drizzle-orm";
 import { TREASURY_CONFIG } from "./constants";
 import { cryptoService } from "./services/crypto";
 import { creditGenerosityFund } from "./services/generosityFund";
@@ -256,6 +256,17 @@ export interface IStorage {
   upsertWorkerGoals(userId: string, goals: { weeklyJobGoal?: number; monthlyJobGoal?: number; preferredJobSize?: string; notes?: string; setByAdminId?: string }): Promise<WorkerGoal>;
   getWorkerJobStats(userId: string): Promise<{ thisWeek: number; thisMonth: number; allTime: number }>;
   getAllWorkersAvailability(): Promise<{ user: User; goals: WorkerGoal | null; thisWeek: number; thisMonth: number; blockedDates: string[]; schedule: WorkerScheduleRow[] }[]>;
+
+  // Worker hour overrides (date-specific custom hours)
+  getWorkerHourOverrides(userId: string): Promise<WorkerHourOverride[]>;
+  upsertWorkerHourOverride(userId: string, date: string, startHour: number, endHour: number, note?: string): Promise<WorkerHourOverride>;
+  deleteWorkerHourOverride(id: number, userId: string): Promise<boolean>;
+  getWorkerCalendarData(userId: string, year: number, month: number): Promise<{
+    jobs: { id: string; serviceType: string; fromAddress: string | null; confirmedFromAddress: string | null; confirmedDate: string | null; moveDate: string | null; confirmedHours: number | null; status: string; crewMembers: string[] | null; assignedToUserId: string | null; effectiveDate: string | null }[];
+    blocks: WorkerDayBlock[];
+    hourOverrides: WorkerHourOverride[];
+    schedule: WorkerScheduleRow[];
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3130,6 +3141,83 @@ export class DatabaseStorage implements IStorage {
   async updateSponsorFeatured(id: string, featured: boolean): Promise<Sponsor | undefined> {
     const [s] = await db.update(sponsors).set({ featured }).where(eq(sponsors.id, id)).returning();
     return s || undefined;
+  }
+
+  async getWorkerHourOverrides(userId: string): Promise<WorkerHourOverride[]> {
+    return await db.select().from(workerHourOverrides).where(eq(workerHourOverrides.userId, userId)).orderBy(workerHourOverrides.date);
+  }
+
+  async upsertWorkerHourOverride(userId: string, date: string, startHour: number, endHour: number, note?: string): Promise<WorkerHourOverride> {
+    const [row] = await db
+      .insert(workerHourOverrides)
+      .values({ userId, date, startHour, endHour, note: note ?? null })
+      .onConflictDoUpdate({
+        target: [workerHourOverrides.userId, workerHourOverrides.date],
+        set: { startHour, endHour, note: note ?? null },
+      })
+      .returning();
+    return row;
+  }
+
+  async deleteWorkerHourOverride(id: number, userId: string): Promise<boolean> {
+    const result = await db.delete(workerHourOverrides).where(and(eq(workerHourOverrides.id, id), eq(workerHourOverrides.userId, userId)));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async getWorkerCalendarData(userId: string, year: number, month: number): Promise<{
+    jobs: { id: string; serviceType: string; fromAddress: string | null; confirmedFromAddress: string | null; confirmedDate: string | null; moveDate: string | null; confirmedHours: number | null; status: string; crewMembers: string[] | null; assignedToUserId: string | null; effectiveDate: string | null }[];
+    blocks: WorkerDayBlock[];
+    hourOverrides: WorkerHourOverride[];
+    schedule: WorkerScheduleRow[];
+  }> {
+    const monthStr = String(month).padStart(2, "0");
+    const startDate = `${year}-${monthStr}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const endDate = `${year}-${monthStr}-${String(lastDay).padStart(2, "0")}`;
+
+    const [jobs, blocks, hourOverrides, schedule] = await Promise.all([
+      db.select({
+        id: leads.id,
+        serviceType: leads.serviceType,
+        fromAddress: leads.fromAddress,
+        confirmedFromAddress: leads.confirmedFromAddress,
+        confirmedDate: leads.confirmedDate,
+        moveDate: leads.moveDate,
+        confirmedHours: leads.confirmedHours,
+        status: leads.status,
+        crewMembers: leads.crewMembers,
+        assignedToUserId: leads.assignedToUserId,
+        effectiveDate: sql<string>`COALESCE(${leads.confirmedDate}, ${leads.moveDate})`,
+      }).from(leads).where(
+        and(
+          or(
+            eq(leads.assignedToUserId, userId),
+            sql`${userId} = ANY(COALESCE(${leads.crewMembers}, ARRAY[]::text[]))`
+          ),
+          or(
+            and(gte(leads.confirmedDate, startDate), lte(leads.confirmedDate, endDate)),
+            and(gte(leads.moveDate, startDate), lte(leads.moveDate, endDate))
+          ),
+          not(inArray(leads.status, ["completed", "cancelled", "paid"]))
+        )
+      ),
+      db.select().from(workerDayBlocks).where(
+        and(eq(workerDayBlocks.userId, userId), gte(workerDayBlocks.date, startDate), lte(workerDayBlocks.date, endDate))
+      ),
+      db.select().from(workerHourOverrides).where(
+        and(eq(workerHourOverrides.userId, userId), gte(workerHourOverrides.date, startDate), lte(workerHourOverrides.date, endDate))
+      ),
+      db.select().from(workerSchedule).where(eq(workerSchedule.userId, userId)),
+    ]);
+
+    // Post-filter jobs to only those whose effective date (confirmedDate ?? moveDate) falls within the viewed month.
+    // This prevents edge cases where both dates exist in different months from rendering in the wrong month.
+    const filteredJobs = jobs.filter(j => {
+      const eff = j.effectiveDate;
+      return eff !== null && eff >= startDate && eff <= endDate;
+    });
+
+    return { jobs: filteredJobs, blocks, hourOverrides, schedule };
   }
 }
 

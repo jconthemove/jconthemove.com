@@ -1,6 +1,6 @@
 import { db } from "../db";
-import { leads, users, reviews } from "@shared/schema";
-import { eq, and, sql, inArray } from "drizzle-orm";
+import { leads, users, reviews, workerDayBlocks, workerSchedule, workerHourOverrides } from "@shared/schema";
+import { eq, and, sql, inArray, or } from "drizzle-orm";
 
 export interface EmployeeWithStats {
   id: string;
@@ -18,6 +18,7 @@ export interface CrewSuggestion {
   employee: EmployeeWithStats;
   score: number;
   reason: string;
+  isAvailable: boolean;
 }
 
 export interface CrewAssignmentSuggestion {
@@ -156,6 +157,65 @@ class CrewSuggestionService {
   }
 
   /**
+   * Check if a worker is available on a specific date string (YYYY-MM-DD).
+   * Returns an object with available flag and optional reason.
+   */
+  async checkWorkerAvailabilityOnDate(userId: string, dateStr: string): Promise<{ available: boolean; reason?: string }> {
+    const results = await this.batchCheckAvailability([userId], dateStr);
+    return results.get(userId) ?? { available: true };
+  }
+
+  /**
+   * Batch-check availability for multiple employees on the same date.
+   * Uses 3 queries total regardless of employee count (eliminates N+1).
+   * Returns a Map<userId, { available, reason? }>.
+   */
+  async batchCheckAvailability(
+    userIds: string[],
+    dateStr: string
+  ): Promise<Map<string, { available: boolean; reason?: string }>> {
+    if (userIds.length === 0) return new Map();
+    const dayOfWeek = new Date(dateStr + "T12:00:00").getDay();
+
+    const [allBlocks, allSchedules, allOverrides] = await Promise.all([
+      db.select().from(workerDayBlocks).where(
+        and(inArray(workerDayBlocks.userId, userIds), eq(workerDayBlocks.date, dateStr))
+      ),
+      db.select().from(workerSchedule).where(
+        and(inArray(workerSchedule.userId, userIds), eq(workerSchedule.dayOfWeek, dayOfWeek))
+      ),
+      db.select().from(workerHourOverrides).where(
+        and(inArray(workerHourOverrides.userId, userIds), eq(workerHourOverrides.date, dateStr))
+      ),
+    ]);
+
+    const blocksByUser = new Map(allBlocks.map(b => [b.userId, b]));
+    const schedByUser = new Map(allSchedules.map(s => [s.userId, s]));
+    const overrideByUser = new Map(allOverrides.map(o => [o.userId, o]));
+
+    const result = new Map<string, { available: boolean; reason?: string }>();
+    for (const uid of userIds) {
+      const block = blocksByUser.get(uid);
+      if (block) {
+        result.set(uid, { available: false, reason: `Blocked: ${block.reason || "day off"}` });
+        continue;
+      }
+      const override = overrideByUser.get(uid);
+      if (override) {
+        result.set(uid, { available: true, reason: `Custom hours ${override.startHour}–${override.endHour}` });
+        continue;
+      }
+      const sched = schedByUser.get(uid);
+      if (sched && !sched.isAvailable) {
+        result.set(uid, { available: false, reason: "Not available this day of week" });
+        continue;
+      }
+      result.set(uid, { available: true });
+    }
+    return result;
+  }
+
+  /**
    * Generate crew assignment suggestions for a job
    */
   async suggestCrewForJob(jobId: string): Promise<CrewAssignmentSuggestion | null> {
@@ -177,30 +237,48 @@ class CrewSuggestionService {
       job.hasPiano
     );
 
+    // Get the job date for availability checking
+    const jobDate = job.confirmedDate || job.moveDate;
+
     // Get all employees with their stats
     const employees = await this.getEmployeesWithStats();
 
+    // Batch-fetch availability for all employees in 3 queries (not N+1)
+    const availabilityMap = jobDate
+      ? await this.batchCheckAvailability(employees.map(e => e.id), jobDate)
+      : new Map<string, { available: boolean; reason?: string }>();
+
     // Calculate scores for each employee
     const suggestions: CrewSuggestion[] = employees.map((employee) => {
-      const { score, reason } = this.calculateEmployeeScore(
+      const { score, reason: baseReason } = this.calculateEmployeeScore(
         employee,
         job.serviceType || 'residential',
         hasSpecialItems
       );
 
-      return {
-        employee,
-        score,
-        reason,
-      };
+      const avail = availabilityMap.get(employee.id) ?? { available: true };
+      let reason = baseReason;
+      let isAvailable = avail.available;
+
+      if (!avail.available) {
+        reason = `Unavailable on ${jobDate}` + (avail.reason ? ` (${avail.reason})` : "");
+      } else if (avail.reason) {
+        reason += ` • ${avail.reason}`;
+      }
+
+      return { employee, score, reason, isAvailable };
     });
 
-    // Sort by score (highest first)
-    suggestions.sort((a, b) => b.score - a.score);
+    // Sort by score (highest first), unavailable workers sink to the bottom
+    suggestions.sort((a, b) => {
+      if (a.isAvailable !== b.isAvailable) return a.isAvailable ? -1 : 1;
+      return b.score - a.score;
+    });
 
-    // Select top employees for recommended crew based on crew size
+    // Select top available employees for recommended crew based on crew size
     const crewSize = job.crewSize || 2;
-    const recommendedCrew = suggestions.slice(0, crewSize);
+    const availableSuggestions = suggestions.filter(s => s.isAvailable);
+    const recommendedCrew = availableSuggestions.slice(0, crewSize);
 
     return {
       jobId: job.id,

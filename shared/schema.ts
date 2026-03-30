@@ -2008,3 +2008,19 @@ export const workerGoals = pgTable("worker_goals", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 export type WorkerGoal = typeof workerGoals.$inferSelect;
+
+// ── Worker Hour Overrides (date-specific custom hours) ───────────────────────
+export const workerHourOverrides = pgTable("worker_hour_overrides", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  date: text("date").notNull(), // 'YYYY-MM-DD'
+  startHour: integer("start_hour").notNull(), // 0-23
+  endHour: integer("end_hour").notNull(),     // 0-23
+  note: text("note"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (t) => ({
+  uniq: unique().on(t.userId, t.date),
+}));
+export type WorkerHourOverride = typeof workerHourOverrides.$inferSelect;
+export const insertWorkerHourOverrideSchema = createInsertSchema(workerHourOverrides).omit({ id: true, createdAt: true });
+export type InsertWorkerHourOverride = z.infer<typeof insertWorkerHourOverrideSchema>;

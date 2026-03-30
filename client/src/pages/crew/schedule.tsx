@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -8,9 +9,76 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import {
-  Target, CalendarDays, Clock, TrendingUp, Calendar, Trophy, CheckCircle2, X, Loader2, Users, Edit3
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Target, CalendarDays, Clock, TrendingUp, Calendar, Trophy, CheckCircle2, X,
+  Loader2, Users, Edit3, ChevronLeft, ChevronRight, Briefcase, Ban, Settings2,
+  LayoutGrid, Rows3,
 } from "lucide-react";
 import type { User } from "@shared/schema";
+
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const DAY_NAMES_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"];
+
+const SERVICE_ICONS: Record<string, string> = {
+  residential: "🚛", commercial: "🏢", junk: "🗑️", snow: "❄️",
+  cleaning: "✨", handyman: "🔧", demolition: "⚒️", flooring: "🪵", painting: "🎨",
+};
+
+const SERVICE_LABELS: Record<string, string> = {
+  residential: "Residential Move", commercial: "Commercial Move",
+  junk: "Junk Removal", snow: "Snow Removal", cleaning: "Cleaning",
+  handyman: "Handyman", demolition: "Demolition", flooring: "Flooring", painting: "Painting",
+};
+
+function formatHour(h: number): string {
+  if (h === 0) return "12am";
+  if (h < 12) return `${h}am`;
+  if (h === 12) return "12pm";
+  return `${h - 12}pm`;
+}
+
+type CalendarJob = {
+  id: string;
+  serviceType: string;
+  fromAddress: string | null;
+  confirmedDate: string | null;
+  moveDate: string | null;
+  effectiveDate: string | null;
+  confirmedFromAddress: string | null;
+  status: string;
+  confirmedHours: number | null;
+  assignedToUserId: string | null;
+};
+
+type CalendarData = {
+  jobs: CalendarJob[];
+  blocks: { id: number; date: string; reason: string | null }[];
+  hourOverrides: { id: number; date: string; startHour: number; endHour: number; note: string | null }[];
+  schedule: { dayOfWeek: number; startHour: number | null; endHour: number | null; isAvailable: boolean | null }[];
+};
+
+type MyAvailability = {
+  blocks: { id: number; date: string; reason: string | null }[];
+  schedule: { dayOfWeek: number; startHour: number | null; endHour: number | null; isAvailable: boolean | null }[];
+  goals: { weeklyJobGoal: number | null; monthlyJobGoal: number | null; preferredJobSize: string | null } | null;
+  stats: { thisWeek: number; thisMonth: number; allTime: number };
+};
+
+type DayModalState = {
+  date: string;
+  isBlocked: boolean;
+  blockId?: number;
+  blockReason?: string;
+  hasJob: boolean;
+  jobs: CalendarJob[];
+  hourOverride?: { id: number; startHour: number; endHour: number; note: string | null };
+  defaultSchedule?: { startHour: number; endHour: number; isAvailable: boolean };
+  forWeek: boolean;
+};
 
 export default function CrewSchedulePage() {
   const { user } = useAuth();
@@ -18,8 +86,19 @@ export default function CrewSchedulePage() {
   const queryClient = useQueryClient();
   const isAdmin = ["admin", "business_owner"].includes(user?.role || "");
 
-  const [blockDate, setBlockDate] = useState("");
-  const [blockReason, setBlockReason] = useState("");
+  const today = new Date();
+  const [viewYear, setViewYear] = useState(today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(today.getMonth() + 1);
+  const [viewMode, setViewMode] = useState<"month" | "week" | "settings">("month");
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [dayModal, setDayModal] = useState<DayModalState | null>(null);
+
+  const [blockReasonInput, setBlockReasonInput] = useState("");
+  const [overrideStart, setOverrideStart] = useState(8);
+  const [overrideEnd, setOverrideEnd] = useState(17);
+  const [overrideNote, setOverrideNote] = useState("");
+  const [modalAction, setModalAction] = useState<"block" | "hours" | null>(null);
+
   const [goalWeekly, setGoalWeekly] = useState(0);
   const [goalMonthly, setGoalMonthly] = useState(0);
   const [goalJobSize, setGoalJobSize] = useState("any");
@@ -27,12 +106,71 @@ export default function CrewSchedulePage() {
   const [adminGoalWeekly, setAdminGoalWeekly] = useState(0);
   const [adminGoalMonthly, setAdminGoalMonthly] = useState(0);
 
-  const { data: myAvailability, refetch: refetchAvailability } = useQuery<{
-    blocks: { id: number; date: string; reason: string | null }[];
-    schedule: { dayOfWeek: number; startHour: number | null; endHour: number | null; isAvailable: boolean | null }[];
-    goals: { weeklyJobGoal: number | null; monthlyJobGoal: number | null; preferredJobSize: string | null } | null;
-    stats: { thisWeek: number; thisMonth: number; allTime: number };
-  }>({ queryKey: ["/api/workers/my-availability"] });
+  const { data: myAvailability, refetch: refetchAvailability } = useQuery<MyAvailability>({
+    queryKey: ["/api/workers/my-availability"],
+  });
+
+  const weekDays = useMemo(() => {
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay() + weekOffset * 7);
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(startOfWeek);
+      d.setDate(startOfWeek.getDate() + i);
+      return d;
+    });
+  }, [weekOffset]);
+
+  const weekMonthKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const d of weekDays) {
+      keys.add(`${d.getFullYear()}-${d.getMonth() + 1}`);
+    }
+    return Array.from(keys).map(k => {
+      const [y, m] = k.split("-").map(Number);
+      return { year: y, month: m };
+    });
+  }, [weekDays]);
+
+  async function fetchCalendarMonth(year: number, month: number): Promise<CalendarData> {
+    const res = await fetch(`/api/workers/calendar?year=${year}&month=${month}`, { credentials: "include" });
+    if (!res.ok) throw new Error("Failed to fetch calendar");
+    return res.json();
+  }
+
+  function mergeCalendarData(datasets: CalendarData[]): CalendarData {
+    const jobsMap = new Map<string, CalendarJob>();
+    const blocksMap = new Map<string, CalendarData["blocks"][0]>();
+    const overridesMap = new Map<string, CalendarData["hourOverrides"][0]>();
+    const scheduleMap = new Map<number, CalendarData["schedule"][0]>();
+    for (const d of datasets) {
+      for (const j of d.jobs) { if (!jobsMap.has(j.id)) jobsMap.set(j.id, j); }
+      for (const b of d.blocks) { blocksMap.set(b.date, b); }
+      for (const o of d.hourOverrides) { overridesMap.set(o.date, o); }
+      for (const s of d.schedule) { scheduleMap.set(s.dayOfWeek, s); }
+    }
+    return {
+      jobs: Array.from(jobsMap.values()),
+      blocks: Array.from(blocksMap.values()),
+      hourOverrides: Array.from(overridesMap.values()),
+      schedule: Array.from(scheduleMap.values()),
+    };
+  }
+
+  const calendarQueryKey = ["/api/workers/calendar", viewYear, viewMonth];
+  const { data: calendarData, isLoading: calendarLoading, refetch: refetchCalendar } = useQuery<CalendarData>({
+    queryKey: calendarQueryKey,
+    queryFn: () => fetchCalendarMonth(viewYear, viewMonth),
+  });
+
+  const weekDataQueryKey = ["/api/workers/calendar/week", ...weekMonthKeys.map(k => `${k.year}-${k.month}`)];
+  const { data: weekCalendarData, isLoading: weekCalendarLoading, refetch: refetchWeekCalendar } = useQuery<CalendarData>({
+    queryKey: weekDataQueryKey,
+    queryFn: async () => {
+      const datasets = await Promise.all(weekMonthKeys.map(k => fetchCalendarMonth(k.year, k.month)));
+      return mergeCalendarData(datasets);
+    },
+    enabled: viewMode === "week",
+  });
 
   const { data: allWorkersAvail = [] } = useQuery<{
     user: User & { isAvailable?: boolean };
@@ -48,7 +186,13 @@ export default function CrewSchedulePage() {
       const res = await apiRequest("POST", "/api/workers/day-blocks", { date, reason });
       return res.json();
     },
-    onSuccess: () => { refetchAvailability(); setBlockDate(""); setBlockReason(""); toast({ title: "Day blocked" }); },
+    onSuccess: () => {
+      refetchAvailability();
+      refetchCalendar();
+      refetchWeekCalendar();
+      setDayModal(null);
+      toast({ title: "Day blocked" });
+    },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
@@ -57,7 +201,13 @@ export default function CrewSchedulePage() {
       const res = await apiRequest("DELETE", `/api/workers/day-blocks/${id}`, {});
       return res.json();
     },
-    onSuccess: () => { refetchAvailability(); toast({ title: "Day unblocked" }); },
+    onSuccess: () => {
+      refetchAvailability();
+      refetchCalendar();
+      refetchWeekCalendar();
+      setDayModal(null);
+      toast({ title: "Day unblocked" });
+    },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
@@ -66,7 +216,7 @@ export default function CrewSchedulePage() {
       const res = await apiRequest("PUT", "/api/workers/schedule", payload);
       return res.json();
     },
-    onSuccess: () => refetchAvailability(),
+    onSuccess: () => { refetchAvailability(); refetchCalendar(); refetchWeekCalendar(); },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
@@ -92,11 +242,223 @@ export default function CrewSchedulePage() {
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  const upsertHourOverrideMutation = useMutation({
+    mutationFn: async ({ date, startHour, endHour, note }: { date: string; startHour: number; endHour: number; note?: string }) => {
+      const res = await apiRequest("PUT", "/api/workers/hour-overrides", { date, startHour, endHour, note });
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchCalendar();
+      refetchWeekCalendar();
+      setDayModal(null);
+      toast({ title: "Hours updated for this date" });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const deleteHourOverrideMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("DELETE", `/api/workers/hour-overrides/${id}`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchCalendar();
+      refetchWeekCalendar();
+      setDayModal(null);
+      toast({ title: "Hour override removed" });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  function goToPrevMonth() {
+    if (viewMonth === 1) { setViewYear(y => y - 1); setViewMonth(12); }
+    else setViewMonth(m => m - 1);
+  }
+  function goToNextMonth() {
+    if (viewMonth === 12) { setViewYear(y => y + 1); setViewMonth(1); }
+    else setViewMonth(m => m + 1);
+  }
+
+  const calendarGrid = useMemo(() => {
+    const firstDay = new Date(viewYear, viewMonth - 1, 1).getDay();
+    const daysInMonth = new Date(viewYear, viewMonth, 0).getDate();
+    const cells: (number | null)[] = [];
+    for (let i = 0; i < firstDay; i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+    while (cells.length % 7 !== 0) cells.push(null);
+    return cells;
+  }, [viewYear, viewMonth]);
+
+  function dateToStr(d: Date) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
+  function getDayStr(day: number) {
+    return `${viewYear}-${String(viewMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
+  function getActiveData(forWeek = false): CalendarData | undefined {
+    return forWeek ? weekCalendarData : calendarData;
+  }
+
+  function getEffectiveDate(j: CalendarJob): string | null {
+    return j.effectiveDate || j.confirmedDate || j.moveDate || null;
+  }
+
+  function getJobsForDate(dateStr: string, forWeek = false) {
+    const data = getActiveData(forWeek);
+    if (!data) return [];
+    return data.jobs.filter(j => getEffectiveDate(j) === dateStr);
+  }
+
+  function getBlockForDate(dateStr: string, forWeek = false) {
+    const data = getActiveData(forWeek);
+    if (!data) return undefined;
+    return data.blocks.find(b => b.date === dateStr);
+  }
+
+  function getHourOverrideForDate(dateStr: string, forWeek = false) {
+    const data = getActiveData(forWeek);
+    if (!data) return undefined;
+    return data.hourOverrides.find(o => o.date === dateStr);
+  }
+
+  function getDefaultSchedule(dayOfWeek: number, forWeek = false) {
+    const data = getActiveData(forWeek);
+    const s = data?.schedule.find(s => s.dayOfWeek === dayOfWeek);
+    return s ? { startHour: s.startHour ?? 8, endHour: s.endHour ?? 17, isAvailable: s.isAvailable ?? true } : undefined;
+  }
+
+  function openDayModal(dateStr: string, forWeek = false) {
+    const d = new Date(dateStr + "T12:00:00");
+    const dow = d.getDay();
+    const block = getBlockForDate(dateStr, forWeek);
+    const jobs = getJobsForDate(dateStr, forWeek);
+    const hourOverride = getHourOverrideForDate(dateStr, forWeek);
+    const defaultSchedule = getDefaultSchedule(dow, forWeek);
+
+    setBlockReasonInput(block?.reason ?? "");
+    setOverrideStart(hourOverride?.startHour ?? defaultSchedule?.startHour ?? 8);
+    setOverrideEnd(hourOverride?.endHour ?? defaultSchedule?.endHour ?? 17);
+    setOverrideNote(hourOverride?.note ?? "");
+    setModalAction(null);
+
+    setDayModal({
+      date: dateStr,
+      isBlocked: !!block,
+      blockId: block?.id,
+      blockReason: block?.reason ?? undefined,
+      hasJob: jobs.length > 0,
+      jobs,
+      hourOverride: hourOverride ? { id: hourOverride.id, startHour: hourOverride.startHour, endHour: hourOverride.endHour, note: hourOverride.note } : undefined,
+      defaultSchedule,
+      forWeek,
+    });
+  }
+
+  const todayStr = dateToStr(today);
+
+  function getJobTimeWindow(job: CalendarJob, forWeek = false) {
+    const data = getActiveData(forWeek);
+    const sched = data?.schedule;
+    const dateStr = getEffectiveDate(job);
+    if (!dateStr || !sched) return null;
+    const hourOverride = getHourOverrideForDate(dateStr, forWeek);
+    if (hourOverride) return `${formatHour(hourOverride.startHour)} – ${formatHour(hourOverride.endHour)}`;
+    const dow = new Date(dateStr + "T12:00:00").getDay();
+    const schedRow = sched.find(s => s.dayOfWeek === dow);
+    if (schedRow && schedRow.isAvailable) {
+      return `${formatHour(schedRow.startHour ?? 8)} – ${formatHour(schedRow.endHour ?? 17)}`;
+    }
+    return null;
+  }
+
+  function DayCell({ dateStr, compact = false, forWeek = false }: { dateStr: string; compact?: boolean; forWeek?: boolean }) {
+    const d = new Date(dateStr + "T12:00:00");
+    const block = getBlockForDate(dateStr, forWeek);
+    const jobs = getJobsForDate(dateStr, forWeek);
+    const hourOverride = getHourOverrideForDate(dateStr, forWeek);
+    const dow = d.getDay();
+    const sched = getDefaultSchedule(dow, forWeek);
+    const isScheduledOff = sched && !sched.isAvailable;
+    const isToday = dateStr === todayStr;
+    const isPast = dateStr < todayStr;
+
+    let bg = "bg-slate-800/30 hover:bg-slate-700/40 border-slate-700/30";
+    if (block) bg = "bg-red-950/50 border-red-800/50 hover:bg-red-900/50";
+    else if (jobs.length > 0) bg = "bg-blue-950/50 border-blue-700/40 hover:bg-blue-900/50";
+    else if (hourOverride) bg = "bg-amber-950/40 border-amber-700/30 hover:bg-amber-900/40";
+    else if (isScheduledOff) bg = "bg-slate-900/30 border-slate-800/30 opacity-40";
+
+    const cellTimeWindow = jobs.length === 1 ? getJobTimeWindow(jobs[0], forWeek) : null;
+    return (
+      <button
+        onClick={() => openDayModal(dateStr, forWeek)}
+        className={`relative rounded-lg border p-1 w-full ${compact ? "min-h-[56px]" : "min-h-[72px]"} flex flex-col items-center transition-colors ${bg} ${isToday ? "ring-1 ring-cyan-500" : ""} ${isPast ? "opacity-70" : ""}`}
+      >
+        <span className={`text-xs font-semibold ${isToday ? "text-cyan-400" : block ? "text-red-300" : "text-slate-200"}`}>
+          {d.getDate()}
+        </span>
+        <div className="flex flex-wrap gap-0.5 justify-center mt-0.5">
+          {block && <Ban className="h-3 w-3 text-red-400" />}
+          {!block && jobs.map((j, ji) => (
+            <span key={ji} className="text-[10px] leading-none">{SERVICE_ICONS[j.serviceType] || "📦"}</span>
+          ))}
+          {hourOverride && !block && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-0.5" />}
+        </div>
+        {jobs.length > 0 && !block && (
+          <p className="text-[8px] text-blue-300 mt-0.5 text-center leading-tight truncate w-full px-0.5">
+            {SERVICE_LABELS[jobs[0].serviceType]?.split(" ")[0] || "Job"}
+            {jobs.length > 1 ? ` +${jobs.length - 1}` : ""}
+          </p>
+        )}
+        {jobs.length > 0 && !block && (() => {
+          const addr = jobs[0].confirmedFromAddress || jobs[0].fromAddress;
+          return addr ? (
+            <p className="text-[7px] text-slate-500 leading-tight truncate w-full px-0.5 text-center">
+              {addr.split(",")[0]}
+            </p>
+          ) : null;
+        })()}
+        {cellTimeWindow && !block && (
+          <p className="text-[7px] text-cyan-600 leading-tight truncate w-full px-0.5 text-center">
+            {cellTimeWindow}
+          </p>
+        )}
+      </button>
+    );
+  }
+
   return (
     <div className="max-w-2xl mx-auto px-4 pt-6 space-y-4">
-      <div>
-        <h1 className="text-2xl font-black text-white">My Schedule</h1>
-        <p className="text-slate-400 text-sm">Manage availability and goals</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-black text-white">My Schedule</h1>
+          <p className="text-slate-400 text-sm">Calendar, availability & goals</p>
+        </div>
+        <div className="flex gap-1.5">
+          <button
+            onClick={() => setViewMode("month")}
+            className={`p-2 rounded-lg border transition-colors ${viewMode === "month" ? "border-blue-500 bg-blue-950/40 text-blue-400" : "border-slate-700 text-slate-400 hover:text-white"}`}
+            title="Month view"
+          >
+            <LayoutGrid className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => setViewMode("week")}
+            className={`p-2 rounded-lg border transition-colors ${viewMode === "week" ? "border-cyan-500 bg-cyan-950/40 text-cyan-400" : "border-slate-700 text-slate-400 hover:text-white"}`}
+            title="Week view"
+          >
+            <Rows3 className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => setViewMode("settings")}
+            className={`p-2 rounded-lg border transition-colors ${viewMode === "settings" ? "border-purple-500 bg-purple-950/40 text-purple-400" : "border-slate-700 text-slate-400 hover:text-white"}`}
+            title="Settings & Goals"
+          >
+            <Settings2 className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {/* Stats Row */}
@@ -114,215 +476,562 @@ export default function CrewSchedulePage() {
         ))}
       </div>
 
-      {/* Goal Progress */}
-      {myAvailability?.goals && (myAvailability.goals.weeklyJobGoal ?? 0) > 0 && (
-        <div className="bg-slate-800/40 border border-cyan-500/20 rounded-xl p-3 space-y-2">
-          <p className="text-xs text-cyan-300 font-semibold flex items-center gap-1"><Target className="h-3 w-3" /> Goal Progress</p>
-          <div>
-            <div className="flex justify-between text-xs text-slate-400 mb-1">
-              <span>Weekly: {myAvailability.stats.thisWeek} / {myAvailability.goals.weeklyJobGoal} jobs</span>
-              <span>{Math.round((myAvailability.stats.thisWeek / (myAvailability.goals.weeklyJobGoal || 1)) * 100)}%</span>
-            </div>
-            <div className="w-full bg-slate-700 rounded-full h-1.5">
-              <div className="bg-cyan-500 h-1.5 rounded-full" style={{ width: `${Math.min(100, (myAvailability.stats.thisWeek / (myAvailability.goals.weeklyJobGoal || 1)) * 100)}%` }} />
-            </div>
+      {viewMode === "month" && (
+        <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl p-4 space-y-3">
+          {/* Month navigation */}
+          <div className="flex items-center justify-between">
+            <button onClick={goToPrevMonth} className="text-slate-400 hover:text-white p-1">
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <h2 className="text-sm font-bold text-white">{MONTH_NAMES[viewMonth - 1]} {viewYear}</h2>
+            <button onClick={goToNextMonth} className="text-slate-400 hover:text-white p-1">
+              <ChevronRight className="h-5 w-5" />
+            </button>
           </div>
-          {(myAvailability.goals.monthlyJobGoal ?? 0) > 0 && (
-            <div>
-              <div className="flex justify-between text-xs text-slate-400 mb-1">
-                <span>Monthly: {myAvailability.stats.thisMonth} / {myAvailability.goals.monthlyJobGoal} jobs</span>
-                <span>{Math.round((myAvailability.stats.thisMonth / (myAvailability.goals.monthlyJobGoal || 1)) * 100)}%</span>
-              </div>
-              <div className="w-full bg-slate-700 rounded-full h-1.5">
-                <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${Math.min(100, (myAvailability.stats.thisMonth / (myAvailability.goals.monthlyJobGoal || 1)) * 100)}%` }} />
-              </div>
+
+          {/* Legend */}
+          <div className="flex items-center gap-3 text-[10px] text-slate-400 flex-wrap">
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-700 inline-block" /> Blocked</span>
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" /> Job</span>
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" /> Custom hrs</span>
+          </div>
+
+          {/* Day headers */}
+          <div className="grid grid-cols-7 gap-1">
+            {DAY_NAMES.map(d => (
+              <div key={d} className="text-center text-[10px] text-slate-500 font-semibold py-1">{d}</div>
+            ))}
+          </div>
+
+          {/* Calendar grid */}
+          {calendarLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-7 gap-1">
+              {calendarGrid.map((day, idx) => {
+                if (!day) return <div key={idx} />;
+                return <DayCell key={day} dateStr={getDayStr(day)} compact />;
+              })}
             </div>
           )}
         </div>
       )}
 
-      {/* My Goals */}
-      <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl p-4 space-y-3">
-        <p className="text-sm font-semibold text-white flex items-center gap-2"><Target className="h-4 w-4 text-cyan-400" /> My Job Goals</p>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-[10px] text-slate-400 uppercase tracking-wider">Weekly Goal</label>
-            <Input
-              type="number" min="0" max="50"
-              value={goalWeekly || myAvailability?.goals?.weeklyJobGoal || 0}
-              onChange={e => setGoalWeekly(parseInt(e.target.value) || 0)}
-              className="mt-1 h-8 text-sm bg-slate-700/50 border-slate-600 text-white"
-            />
+      {viewMode === "week" && (
+        <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl p-4 space-y-3">
+          {/* Week navigation */}
+          <div className="flex items-center justify-between">
+            <button onClick={() => setWeekOffset(o => o - 1)} className="text-slate-400 hover:text-white p-1">
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <div className="text-center">
+              <h2 className="text-sm font-bold text-white">
+                {weekDays[0].toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                {" — "}
+                {weekDays[6].toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              </h2>
+              {weekOffset !== 0 && (
+                <button onClick={() => setWeekOffset(0)} className="text-[10px] text-cyan-400 hover:underline">Back to today</button>
+              )}
+            </div>
+            <button onClick={() => setWeekOffset(o => o + 1)} className="text-slate-400 hover:text-white p-1">
+              <ChevronRight className="h-5 w-5" />
+            </button>
           </div>
-          <div>
-            <label className="text-[10px] text-slate-400 uppercase tracking-wider">Monthly Goal</label>
-            <Input
-              type="number" min="0" max="200"
-              value={goalMonthly || myAvailability?.goals?.monthlyJobGoal || 0}
-              onChange={e => setGoalMonthly(parseInt(e.target.value) || 0)}
-              className="mt-1 h-8 text-sm bg-slate-700/50 border-slate-600 text-white"
-            />
-          </div>
-        </div>
-        <div>
-          <label className="text-[10px] text-slate-400 uppercase tracking-wider">Preferred Job Size</label>
-          <Select value={goalJobSize || myAvailability?.goals?.preferredJobSize || "any"} onValueChange={setGoalJobSize}>
-            <SelectTrigger className="mt-1 h-8 text-sm bg-slate-700/50 border-slate-600 text-white">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-slate-800 border-slate-700">
-              {["any", "small", "medium", "large"].map(s => (
-                <SelectItem key={s} value={s} className="text-white capitalize">{s}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <Button size="sm"
-          onClick={() => saveGoalsMutation.mutate({
-            weeklyJobGoal: goalWeekly || myAvailability?.goals?.weeklyJobGoal || 0,
-            monthlyJobGoal: goalMonthly || myAvailability?.goals?.monthlyJobGoal || 0,
-            preferredJobSize: goalJobSize || myAvailability?.goals?.preferredJobSize || "any"
-          })}
-          disabled={saveGoalsMutation.isPending}
-          className="w-full bg-cyan-600 hover:bg-cyan-700 text-white h-8 text-sm"
-        >
-          {saveGoalsMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <CheckCircle2 className="h-3 w-3 mr-1" />} Save Goals
-        </Button>
-      </div>
 
-      {/* Block a Day Off */}
-      <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl p-4 space-y-3">
-        <p className="text-sm font-semibold text-white flex items-center gap-2"><CalendarDays className="h-4 w-4 text-red-400" /> Block a Day Off</p>
-        <div className="flex gap-2">
-          <Input
-            type="date"
-            value={blockDate}
-            onChange={e => setBlockDate(e.target.value)}
-            min={new Date().toISOString().split("T")[0]}
-            className="h-8 text-sm bg-slate-700/50 border-slate-600 text-white flex-1"
-          />
-          <Input
-            value={blockReason}
-            onChange={e => setBlockReason(e.target.value)}
-            placeholder="Reason (optional)"
-            className="h-8 text-sm bg-slate-700/50 border-slate-600 text-white flex-1"
-          />
-          <Button size="sm"
-            onClick={() => blockDate && addDayBlockMutation.mutate({ date: blockDate, reason: blockReason })}
-            disabled={!blockDate || addDayBlockMutation.isPending}
-            className="h-8 bg-red-700 hover:bg-red-600 text-white shrink-0"
-          >
-            {addDayBlockMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Block"}
-          </Button>
-        </div>
-        {(myAvailability?.blocks ?? []).length > 0 && (
-          <div className="space-y-1.5">
-            {myAvailability!.blocks.map(b => (
-              <div key={b.id} className="flex items-center justify-between bg-red-950/30 border border-red-800/30 rounded-lg px-3 py-1.5">
-                <div>
-                  <span className="text-sm text-white font-medium">{b.date}</span>
-                  {b.reason && <span className="text-xs text-slate-400 ml-2">— {b.reason}</span>}
-                </div>
-                <button onClick={() => removeDayBlockMutation.mutate(b.id)} className="text-red-400 hover:text-red-300">
-                  <X className="h-3.5 w-3.5" />
-                </button>
+          {/* Legend */}
+          <div className="flex items-center gap-3 text-[10px] text-slate-400 flex-wrap">
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-700 inline-block" /> Blocked</span>
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" /> Job</span>
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" /> Custom hrs</span>
+          </div>
+
+          {/* Day header row */}
+          <div className="grid grid-cols-7 gap-1">
+            {weekDays.map((d, i) => (
+              <div key={i} className={`text-center text-[10px] font-semibold py-1 ${dateToStr(d) === todayStr ? "text-cyan-400" : "text-slate-500"}`}>
+                {DAY_NAMES[i]}
               </div>
             ))}
           </div>
-        )}
-      </div>
 
-      {/* Weekly Availability */}
-      <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl p-4 space-y-3">
-        <p className="text-sm font-semibold text-white flex items-center gap-2"><Clock className="h-4 w-4 text-blue-400" /> Weekly Availability</p>
-        <p className="text-xs text-slate-500">Set your available hours for each day.</p>
-        <div className="space-y-2">
-          {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((day, dow) => {
-            const existing = (myAvailability?.schedule ?? []).find(s => s.dayOfWeek === dow);
-            const avail = existing?.isAvailable ?? true;
-            return (
-              <div key={dow} className={`flex items-center gap-2 p-2 rounded-lg border transition-all ${avail ? "border-slate-700/40 bg-slate-800/30" : "border-slate-800/30 bg-slate-900/50 opacity-50"}`}>
-                <button
-                  onClick={() => updateScheduleMutation.mutate({ dayOfWeek: dow, startHour: existing?.startHour ?? 8, endHour: existing?.endHour ?? 17, isAvailable: !avail })}
-                  className={`w-8 h-5 rounded-full transition-colors shrink-0 ${avail ? "bg-cyan-600" : "bg-slate-600"}`}
-                >
-                  <div className={`w-3.5 h-3.5 bg-white rounded-full mx-auto transition-transform ${avail ? "translate-x-1.5" : "-translate-x-1.5"}`} />
-                </button>
-                <span className="text-xs font-medium text-slate-300 w-7">{day}</span>
-                {avail && (
-                  <>
-                    <select
-                      value={existing?.startHour ?? 8}
-                      onChange={e => updateScheduleMutation.mutate({ dayOfWeek: dow, startHour: parseInt(e.target.value), endHour: existing?.endHour ?? 17, isAvailable: true })}
-                      className="text-xs bg-slate-700 border-0 text-white rounded px-1 py-0.5 flex-1"
-                    >
-                      {Array.from({ length: 24 }, (_, h) => (
-                        <option key={h} value={h}>{h === 0 ? "12am" : h < 12 ? `${h}am` : h === 12 ? "12pm" : `${h-12}pm`}</option>
-                      ))}
-                    </select>
-                    <span className="text-slate-500 text-xs">to</span>
-                    <select
-                      value={existing?.endHour ?? 17}
-                      onChange={e => updateScheduleMutation.mutate({ dayOfWeek: dow, startHour: existing?.startHour ?? 8, endHour: parseInt(e.target.value), isAvailable: true })}
-                      className="text-xs bg-slate-700 border-0 text-white rounded px-1 py-0.5 flex-1"
-                    >
-                      {Array.from({ length: 24 }, (_, h) => (
-                        <option key={h} value={h}>{h === 0 ? "12am" : h < 12 ? `${h}am` : h === 12 ? "12pm" : `${h-12}pm`}</option>
-                      ))}
-                    </select>
-                  </>
-                )}
-                {!avail && <span className="text-xs text-slate-500 ml-1">Off</span>}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Admin: all workers */}
-      {isAdmin && allWorkersAvail.length > 0 && (
-        <div className="bg-slate-800/40 border border-purple-500/20 rounded-xl p-4 space-y-3">
-          <p className="text-sm font-semibold text-white flex items-center gap-2"><Users className="h-4 w-4 text-purple-400" /> Crew Availability Overview</p>
-          {adminGoalTarget && (
-            <div className="flex gap-2 items-end bg-slate-700/40 rounded-xl p-3">
-              <div className="flex-1">
-                <label className="text-[10px] text-slate-400 uppercase">Weekly Goal</label>
-                <Input type="number" value={adminGoalWeekly} onChange={e => setAdminGoalWeekly(parseInt(e.target.value) || 0)} className="h-7 text-xs bg-slate-700/50 border-slate-600 text-white mt-0.5" />
-              </div>
-              <div className="flex-1">
-                <label className="text-[10px] text-slate-400 uppercase">Monthly Goal</label>
-                <Input type="number" value={adminGoalMonthly} onChange={e => setAdminGoalMonthly(parseInt(e.target.value) || 0)} className="h-7 text-xs bg-slate-700/50 border-slate-600 text-white mt-0.5" />
-              </div>
-              <Button size="sm" onClick={() => setAdminGoalsMutation.mutate({ userId: adminGoalTarget, weeklyJobGoal: adminGoalWeekly, monthlyJobGoal: adminGoalMonthly })} disabled={setAdminGoalsMutation.isPending} className="h-7 bg-purple-600 text-white text-xs">Save</Button>
-              <Button size="sm" variant="ghost" onClick={() => setAdminGoalTarget(null)} className="h-7 text-slate-400"><X className="h-3.5 w-3.5" /></Button>
+          {/* Week day cells */}
+          {weekCalendarLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
             </div>
-          )}
-          <div className="space-y-2">
-            {allWorkersAvail.map(w => {
-              const todayStr = new Date().toISOString().split("T")[0];
-              const isBlocked = w.blockedDates.includes(todayStr);
-              return (
-                <div key={w.user.id} className={`rounded-lg border p-3 ${isBlocked ? "border-red-800/30 bg-red-950/20" : "border-slate-700/30 bg-slate-800/20"}`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${w.user.isAvailable && !isBlocked ? "bg-green-400" : "bg-red-400"}`} />
-                      <span className="text-sm font-medium text-white">{w.user.firstName} {w.user.lastName || ""}</span>
-                      {isBlocked && <Badge className="bg-red-900/50 text-red-300 border-red-700/30 text-[10px]">Day Off</Badge>}
-                    </div>
-                    <button onClick={() => { setAdminGoalTarget(w.user.id); setAdminGoalWeekly(w.goals?.weeklyJobGoal || 0); setAdminGoalMonthly(w.goals?.monthlyJobGoal || 0); }} className="text-slate-400 hover:text-white">
-                      <Edit3 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs text-slate-400">
-                    <span>Week: <strong className="text-cyan-300">{w.thisWeek}</strong>{(w.goals?.weeklyJobGoal ?? 0) > 0 ? ` / ${w.goals?.weeklyJobGoal}` : ""} jobs</span>
-                    <span>Month: <strong className="text-blue-300">{w.thisMonth}</strong>{(w.goals?.monthlyJobGoal ?? 0) > 0 ? ` / ${w.goals?.monthlyJobGoal}` : ""} jobs</span>
-                  </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-7 gap-1">
+                {weekDays.map(d => <DayCell key={dateToStr(d)} dateStr={dateToStr(d)} forWeek />)}
+              </div>
+
+              {/* Job detail cards for the week */}
+              {weekDays.some(d => getJobsForDate(dateToStr(d), true).length > 0) && (
+                <div className="space-y-2 mt-2">
+                  <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider flex items-center gap-1">
+                    <Briefcase className="h-3.5 w-3.5 text-blue-400" /> This week's jobs
+                  </p>
+                  {weekDays.flatMap(d => {
+                    const dateStr = dateToStr(d);
+                    return getJobsForDate(dateStr, true).map(j => {
+                      const timeWindow = getJobTimeWindow(j, true);
+                      const pickup = j.confirmedFromAddress || j.fromAddress;
+                      return (
+                        <div key={j.id} className="bg-blue-950/40 border border-blue-700/30 rounded-lg p-3 space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">{SERVICE_ICONS[j.serviceType] || "📦"}</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="text-sm font-medium text-white">{SERVICE_LABELS[j.serviceType] || j.serviceType}</p>
+                                <Badge className="text-[10px] bg-blue-900/60 text-blue-300 border-blue-700/30">
+                                  {j.status.replace(/_/g, " ")}
+                                </Badge>
+                              </div>
+                              <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                                <span className="text-xs text-slate-500 flex items-center gap-1">
+                                  <CalendarDays className="h-3 w-3" />
+                                  {d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                                </span>
+                                {timeWindow && (
+                                  <span className="text-xs text-cyan-400 flex items-center gap-1">
+                                    <Clock className="h-3 w-3" />
+                                    Your window: {timeWindow}
+                                  </span>
+                                )}
+                                {j.confirmedHours && (
+                                  <span className="text-xs text-slate-400 flex items-center gap-1">
+                                    ~{j.confirmedHours}h
+                                  </span>
+                                )}
+                              </div>
+                              {pickup && (
+                                <p className="text-xs text-slate-400 mt-0.5 truncate">{pickup}</p>
+                              )}
+                              <Link
+                                href={`/lead/${j.id}`}
+                                className="inline-flex items-center gap-1 text-[11px] text-cyan-400 hover:text-cyan-300 underline underline-offset-2 mt-1"
+                              >
+                                View job details →
+                              </Link>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    });
+                  })}
                 </div>
-              );
-            })}
-          </div>
+              )}
+            </>
+          )}
         </div>
       )}
+
+      {viewMode === "settings" && (
+        <div className="space-y-4">
+          {/* Goal Progress */}
+          {myAvailability?.goals && (myAvailability.goals.weeklyJobGoal ?? 0) > 0 && (
+            <div className="bg-slate-800/40 border border-cyan-500/20 rounded-xl p-3 space-y-2">
+              <p className="text-xs text-cyan-300 font-semibold flex items-center gap-1"><Target className="h-3 w-3" /> Goal Progress</p>
+              <div>
+                <div className="flex justify-between text-xs text-slate-400 mb-1">
+                  <span>Weekly: {myAvailability.stats.thisWeek} / {myAvailability.goals.weeklyJobGoal} jobs</span>
+                  <span>{Math.round((myAvailability.stats.thisWeek / (myAvailability.goals.weeklyJobGoal || 1)) * 100)}%</span>
+                </div>
+                <div className="w-full bg-slate-700 rounded-full h-1.5">
+                  <div className="bg-cyan-500 h-1.5 rounded-full" style={{ width: `${Math.min(100, (myAvailability.stats.thisWeek / (myAvailability.goals.weeklyJobGoal || 1)) * 100)}%` }} />
+                </div>
+              </div>
+              {(myAvailability.goals.monthlyJobGoal ?? 0) > 0 && (
+                <div>
+                  <div className="flex justify-between text-xs text-slate-400 mb-1">
+                    <span>Monthly: {myAvailability.stats.thisMonth} / {myAvailability.goals.monthlyJobGoal} jobs</span>
+                    <span>{Math.round((myAvailability.stats.thisMonth / (myAvailability.goals.monthlyJobGoal || 1)) * 100)}%</span>
+                  </div>
+                  <div className="w-full bg-slate-700 rounded-full h-1.5">
+                    <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${Math.min(100, (myAvailability.stats.thisMonth / (myAvailability.goals.monthlyJobGoal || 1)) * 100)}%` }} />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* My Goals */}
+          <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl p-4 space-y-3">
+            <p className="text-sm font-semibold text-white flex items-center gap-2"><Target className="h-4 w-4 text-cyan-400" /> My Job Goals</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] text-slate-400 uppercase tracking-wider">Weekly Goal</label>
+                <Input
+                  type="number" min="0" max="50"
+                  value={goalWeekly || myAvailability?.goals?.weeklyJobGoal || 0}
+                  onChange={e => setGoalWeekly(parseInt(e.target.value) || 0)}
+                  className="mt-1 h-8 text-sm bg-slate-700/50 border-slate-600 text-white"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-slate-400 uppercase tracking-wider">Monthly Goal</label>
+                <Input
+                  type="number" min="0" max="200"
+                  value={goalMonthly || myAvailability?.goals?.monthlyJobGoal || 0}
+                  onChange={e => setGoalMonthly(parseInt(e.target.value) || 0)}
+                  className="mt-1 h-8 text-sm bg-slate-700/50 border-slate-600 text-white"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-[10px] text-slate-400 uppercase tracking-wider">Preferred Job Size</label>
+              <Select value={goalJobSize || myAvailability?.goals?.preferredJobSize || "any"} onValueChange={setGoalJobSize}>
+                <SelectTrigger className="mt-1 h-8 text-sm bg-slate-700/50 border-slate-600 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  {["any", "small", "medium", "large"].map(s => (
+                    <SelectItem key={s} value={s} className="text-white capitalize">{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button size="sm"
+              onClick={() => saveGoalsMutation.mutate({
+                weeklyJobGoal: goalWeekly || myAvailability?.goals?.weeklyJobGoal || 0,
+                monthlyJobGoal: goalMonthly || myAvailability?.goals?.monthlyJobGoal || 0,
+                preferredJobSize: goalJobSize || myAvailability?.goals?.preferredJobSize || "any"
+              })}
+              disabled={saveGoalsMutation.isPending}
+              className="w-full bg-cyan-600 hover:bg-cyan-700 text-white h-8 text-sm"
+            >
+              {saveGoalsMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <CheckCircle2 className="h-3 w-3 mr-1" />} Save Goals
+            </Button>
+          </div>
+
+          {/* Weekly Availability */}
+          <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl p-4 space-y-3">
+            <p className="text-sm font-semibold text-white flex items-center gap-2"><Clock className="h-4 w-4 text-blue-400" /> Weekly Availability</p>
+            <p className="text-xs text-slate-500">Set your default available hours for each day of the week.</p>
+            <div className="space-y-2">
+              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day, dow) => {
+                const existing = (myAvailability?.schedule ?? []).find(s => s.dayOfWeek === dow);
+                const avail = existing?.isAvailable ?? true;
+                return (
+                  <div key={dow} className={`flex items-center gap-2 p-2 rounded-lg border transition-all ${avail ? "border-slate-700/40 bg-slate-800/30" : "border-slate-800/30 bg-slate-900/50 opacity-50"}`}>
+                    <button
+                      onClick={() => updateScheduleMutation.mutate({ dayOfWeek: dow, startHour: existing?.startHour ?? 8, endHour: existing?.endHour ?? 17, isAvailable: !avail })}
+                      className={`w-8 h-5 rounded-full transition-colors shrink-0 ${avail ? "bg-cyan-600" : "bg-slate-600"}`}
+                    >
+                      <div className={`w-3.5 h-3.5 bg-white rounded-full mx-auto transition-transform ${avail ? "translate-x-1.5" : "-translate-x-1.5"}`} />
+                    </button>
+                    <span className="text-xs font-medium text-slate-300 w-7">{day}</span>
+                    {avail && (
+                      <>
+                        <select
+                          value={existing?.startHour ?? 8}
+                          onChange={e => updateScheduleMutation.mutate({ dayOfWeek: dow, startHour: parseInt(e.target.value), endHour: existing?.endHour ?? 17, isAvailable: true })}
+                          className="text-xs bg-slate-700 border-0 text-white rounded px-1 py-0.5 flex-1"
+                        >
+                          {Array.from({ length: 24 }, (_, h) => (
+                            <option key={h} value={h}>{formatHour(h)}</option>
+                          ))}
+                        </select>
+                        <span className="text-slate-500 text-xs">to</span>
+                        <select
+                          value={existing?.endHour ?? 17}
+                          onChange={e => updateScheduleMutation.mutate({ dayOfWeek: dow, startHour: existing?.startHour ?? 8, endHour: parseInt(e.target.value), isAvailable: true })}
+                          className="text-xs bg-slate-700 border-0 text-white rounded px-1 py-0.5 flex-1"
+                        >
+                          {Array.from({ length: 24 }, (_, h) => (
+                            <option key={h} value={h}>{formatHour(h)}</option>
+                          ))}
+                        </select>
+                      </>
+                    )}
+                    {!avail && <span className="text-xs text-slate-500 ml-1">Off</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Admin: all workers */}
+          {isAdmin && allWorkersAvail.length > 0 && (
+            <div className="bg-slate-800/40 border border-purple-500/20 rounded-xl p-4 space-y-3">
+              <p className="text-sm font-semibold text-white flex items-center gap-2"><Users className="h-4 w-4 text-purple-400" /> Crew Availability Overview</p>
+              {adminGoalTarget && (
+                <div className="flex gap-2 items-end bg-slate-700/40 rounded-xl p-3">
+                  <div className="flex-1">
+                    <label className="text-[10px] text-slate-400 uppercase">Weekly Goal</label>
+                    <Input type="number" value={adminGoalWeekly} onChange={e => setAdminGoalWeekly(parseInt(e.target.value) || 0)} className="h-7 text-xs bg-slate-700/50 border-slate-600 text-white mt-0.5" />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-[10px] text-slate-400 uppercase">Monthly Goal</label>
+                    <Input type="number" value={adminGoalMonthly} onChange={e => setAdminGoalMonthly(parseInt(e.target.value) || 0)} className="h-7 text-xs bg-slate-700/50 border-slate-600 text-white mt-0.5" />
+                  </div>
+                  <Button size="sm" onClick={() => setAdminGoalsMutation.mutate({ userId: adminGoalTarget, weeklyJobGoal: adminGoalWeekly, monthlyJobGoal: adminGoalMonthly })} disabled={setAdminGoalsMutation.isPending} className="h-7 bg-purple-600 text-white text-xs">Save</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setAdminGoalTarget(null)} className="h-7 text-slate-400"><X className="h-3.5 w-3.5" /></Button>
+                </div>
+              )}
+              <div className="space-y-2">
+                {allWorkersAvail.map(w => {
+                  const isBlocked = w.blockedDates.includes(todayStr);
+                  return (
+                    <div key={w.user.id} className={`rounded-lg border p-3 ${isBlocked ? "border-red-800/30 bg-red-950/20" : "border-slate-700/30 bg-slate-800/20"}`}>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full ${w.user.isAvailable && !isBlocked ? "bg-green-400" : "bg-red-400"}`} />
+                          <span className="text-sm font-medium text-white">{w.user.firstName} {w.user.lastName || ""}</span>
+                          {isBlocked && <Badge className="bg-red-900/50 text-red-300 border-red-700/30 text-[10px]">Day Off</Badge>}
+                        </div>
+                        <button onClick={() => { setAdminGoalTarget(w.user.id); setAdminGoalWeekly(w.goals?.weeklyJobGoal || 0); setAdminGoalMonthly(w.goals?.monthlyJobGoal || 0); }} className="text-slate-400 hover:text-white">
+                          <Edit3 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs text-slate-400">
+                        <span>Week: <strong className="text-cyan-300">{w.thisWeek}</strong>{(w.goals?.weeklyJobGoal ?? 0) > 0 ? ` / ${w.goals?.weeklyJobGoal}` : ""} jobs</span>
+                        <span>Month: <strong className="text-blue-300">{w.thisMonth}</strong>{(w.goals?.monthlyJobGoal ?? 0) > 0 ? ` / ${w.goals?.monthlyJobGoal}` : ""} jobs</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Day detail modal */}
+      <Dialog open={!!dayModal} onOpenChange={open => !open && setDayModal(null)}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-sm mx-auto">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <CalendarDays className="h-4 w-4 text-cyan-400" />
+              {dayModal && (() => {
+                const d = new Date(dayModal.date + "T12:00:00");
+                return `${DAY_NAMES_FULL[d.getDay()]}, ${d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`;
+              })()}
+            </DialogTitle>
+          </DialogHeader>
+
+          {dayModal && (
+            <div className="space-y-4">
+              {/* Jobs on this day */}
+              {dayModal.jobs.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider flex items-center gap-1">
+                    <Briefcase className="h-3.5 w-3.5 text-blue-400" /> Assigned Jobs
+                  </p>
+                  {dayModal.jobs.map(j => {
+                    const timeWindow = getJobTimeWindow(j, dayModal.forWeek);
+                    const pickup = j.confirmedFromAddress || j.fromAddress;
+                    return (
+                      <div key={j.id} className="bg-blue-950/40 border border-blue-700/30 rounded-lg p-3 space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">{SERVICE_ICONS[j.serviceType] || "📦"}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-white">{SERVICE_LABELS[j.serviceType] || j.serviceType}</p>
+                            <Badge className="text-[10px] bg-blue-900/60 text-blue-300 border-blue-700/30">
+                              {j.status.replace(/_/g, " ")}
+                            </Badge>
+                          </div>
+                        </div>
+                        {timeWindow && (
+                          <div className="flex items-center gap-1.5 text-xs text-cyan-400">
+                            <Clock className="h-3 w-3" />
+                            <span>Your availability: {timeWindow}</span>
+                          </div>
+                        )}
+                        {j.confirmedHours && (
+                          <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                            <Clock className="h-3 w-3 opacity-50" />
+                            <span>Est. duration: ~{j.confirmedHours}h</span>
+                          </div>
+                        )}
+                        {pickup && (
+                          <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                            <span className="text-slate-500">📍</span>
+                            <span className="truncate">{pickup}</span>
+                          </div>
+                        )}
+                        <Link
+                          href={`/lead/${j.id}`}
+                          className="inline-flex items-center gap-1 text-[11px] text-cyan-400 hover:text-cyan-300 underline underline-offset-2 mt-0.5"
+                          onClick={() => setDayModal(null)}
+                        >
+                          View job details →
+                        </Link>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Current status */}
+              {dayModal.isBlocked && (
+                <div className="bg-red-950/40 border border-red-800/30 rounded-lg p-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Ban className="h-4 w-4 text-red-400" />
+                    <div>
+                      <p className="text-sm text-red-300 font-medium">Day blocked</p>
+                      {dayModal.blockReason && <p className="text-xs text-slate-400">{dayModal.blockReason}</p>}
+                    </div>
+                  </div>
+                  <Button size="sm" variant="ghost"
+                    onClick={() => dayModal.blockId && removeDayBlockMutation.mutate(dayModal.blockId)}
+                    disabled={removeDayBlockMutation.isPending}
+                    className="text-red-400 hover:text-red-300 text-xs h-7"
+                  >
+                    {removeDayBlockMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Unblock"}
+                  </Button>
+                </div>
+              )}
+
+              {dayModal.hourOverride && !dayModal.isBlocked && (
+                <div className="bg-amber-950/30 border border-amber-700/30 rounded-lg p-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-amber-400" />
+                    <div>
+                      <p className="text-sm text-amber-300 font-medium">Custom hours</p>
+                      <p className="text-xs text-slate-400">{formatHour(dayModal.hourOverride.startHour)} – {formatHour(dayModal.hourOverride.endHour)}</p>
+                      {dayModal.hourOverride.note && <p className="text-xs text-slate-500">{dayModal.hourOverride.note}</p>}
+                    </div>
+                  </div>
+                  <Button size="sm" variant="ghost"
+                    onClick={() => dayModal.hourOverride && deleteHourOverrideMutation.mutate(dayModal.hourOverride.id)}
+                    disabled={deleteHourOverrideMutation.isPending}
+                    className="text-amber-400 hover:text-amber-300 text-xs h-7"
+                  >
+                    {deleteHourOverrideMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Reset"}
+                  </Button>
+                </div>
+              )}
+
+              {/* Show default schedule if no override */}
+              {!dayModal.isBlocked && !dayModal.hourOverride && dayModal.defaultSchedule && (
+                <div className="bg-slate-800/40 border border-slate-700/30 rounded-lg p-3 flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-slate-500" />
+                  <div>
+                    <p className="text-xs text-slate-400 font-medium">Default hours</p>
+                    <p className="text-xs text-slate-500">
+                      {dayModal.defaultSchedule.isAvailable
+                        ? `${formatHour(dayModal.defaultSchedule.startHour)} – ${formatHour(dayModal.defaultSchedule.endHour)}`
+                        : "Day off (weekly schedule)"}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              {!dayModal.isBlocked && (
+                <div className="space-y-2">
+                  {/* Block day */}
+                  {modalAction !== "hours" && (
+                    <div>
+                      {modalAction !== "block" ? (
+                        <Button size="sm" variant="outline"
+                          onClick={() => setModalAction("block")}
+                          className="w-full border-red-700/40 text-red-400 hover:bg-red-950/40 h-9"
+                        >
+                          <Ban className="h-3.5 w-3.5 mr-2" /> Block this day off
+                        </Button>
+                      ) : (
+                        <div className="space-y-2 bg-red-950/20 border border-red-800/30 rounded-lg p-3">
+                          <p className="text-xs text-red-300 font-semibold">Block {dayModal.date}</p>
+                          {dayModal.hasJob && (
+                            <div className="flex items-start gap-1.5 text-[11px] text-amber-300 bg-amber-950/30 border border-amber-700/30 rounded p-2">
+                              <span className="mt-0.5">⚠️</span>
+                              <span>You have {dayModal.jobs.length} job{dayModal.jobs.length > 1 ? "s" : ""} assigned on this day. Blocking it does not cancel the job — contact admin if needed.</span>
+                            </div>
+                          )}
+                          <Input
+                            value={blockReasonInput}
+                            onChange={e => setBlockReasonInput(e.target.value)}
+                            placeholder="Reason (optional)"
+                            className="h-8 text-sm bg-slate-700/50 border-slate-600 text-white"
+                          />
+                          <div className="flex gap-2">
+                            <Button size="sm" className="flex-1 bg-red-700 hover:bg-red-600 text-white h-8"
+                              onClick={() => addDayBlockMutation.mutate({ date: dayModal.date, reason: blockReasonInput })}
+                              disabled={addDayBlockMutation.isPending}
+                            >
+                              {addDayBlockMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Confirm Block"}
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => setModalAction(null)} className="h-8 text-slate-400">Cancel</Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Set custom hours */}
+                  {modalAction !== "block" && (
+                    <div>
+                      {modalAction !== "hours" ? (
+                        <Button size="sm" variant="outline"
+                          onClick={() => setModalAction("hours")}
+                          className="w-full border-amber-700/40 text-amber-400 hover:bg-amber-950/40 h-9"
+                        >
+                          <Clock className="h-3.5 w-3.5 mr-2" /> Set custom hours
+                        </Button>
+                      ) : (
+                        <div className="space-y-2 bg-amber-950/20 border border-amber-700/30 rounded-lg p-3">
+                          <p className="text-xs text-amber-300 font-semibold">Custom hours for {dayModal.date}</p>
+                          <div className="flex items-center gap-2">
+                            <select
+                              value={overrideStart}
+                              onChange={e => setOverrideStart(parseInt(e.target.value))}
+                              className="flex-1 text-xs bg-slate-700 border-0 text-white rounded px-2 py-1.5"
+                            >
+                              {Array.from({ length: 24 }, (_, h) => (
+                                <option key={h} value={h}>{formatHour(h)}</option>
+                              ))}
+                            </select>
+                            <span className="text-slate-500 text-xs">to</span>
+                            <select
+                              value={overrideEnd}
+                              onChange={e => setOverrideEnd(parseInt(e.target.value))}
+                              className="flex-1 text-xs bg-slate-700 border-0 text-white rounded px-2 py-1.5"
+                            >
+                              {Array.from({ length: 24 }, (_, h) => (
+                                <option key={h} value={h}>{formatHour(h)}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <Input
+                            value={overrideNote}
+                            onChange={e => setOverrideNote(e.target.value)}
+                            placeholder="Note (optional)"
+                            className="h-8 text-sm bg-slate-700/50 border-slate-600 text-white"
+                          />
+                          <div className="flex gap-2">
+                            <Button size="sm" className="flex-1 bg-amber-700 hover:bg-amber-600 text-white h-8"
+                              onClick={() => {
+                                if (overrideStart >= overrideEnd) {
+                                  toast({ title: "Invalid hours", description: "Start time must be before end time", variant: "destructive" });
+                                  return;
+                                }
+                                upsertHourOverrideMutation.mutate({ date: dayModal.date, startHour: overrideStart, endHour: overrideEnd, note: overrideNote || undefined });
+                              }}
+                              disabled={upsertHourOverrideMutation.isPending || overrideStart >= overrideEnd}
+                            >
+                              {upsertHourOverrideMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save Hours"}
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => setModalAction(null)} className="h-8 text-slate-400">Cancel</Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {dayModal.jobs.length === 0 && !dayModal.isBlocked && !dayModal.hourOverride && !modalAction && (
+                <p className="text-xs text-slate-500 text-center py-1">Open day — tap an option above to manage</p>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <div className="h-2" />
     </div>
