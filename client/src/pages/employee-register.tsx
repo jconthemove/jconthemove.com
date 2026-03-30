@@ -6,16 +6,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, UserPlus, Lock, Mail, User, Phone, Coins } from "lucide-react";
+import { Loader2, UserPlus, Lock, Mail, User, Phone, Coins, Calendar } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { apiRequest } from "@/lib/queryClient";
 import { WelcomeModal } from "@/components/welcome-modal";
+
+const CURRENT_YEAR = new Date().getFullYear();
+const MIN_YEAR = 1920;
+const MAX_YEAR = CURRENT_YEAR - 18;
 
 export default function EmployeeRegister() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [showWelcome, setShowWelcome] = useState(false);
   const [welcomeFirstName, setWelcomeFirstName] = useState("");
+  const [birthYear, setBirthYear] = useState(CURRENT_YEAR - 30);
+  const [tosAccepted, setTosAccepted] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -35,6 +41,8 @@ export default function EmployeeRegister() {
         lastName: data.lastName,
         phoneNumber: data.phoneNumber,
         rewardsEnrolled: data.rewardsEnrolled,
+        dateOfBirth: `${birthYear}-01-01`,
+        tosAccepted: true,
       });
       return response.json();
     },
@@ -62,7 +70,6 @@ export default function EmployeeRegister() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validation
     if (formData.password !== formData.confirmPassword) {
       toast({
         title: "Password Mismatch",
@@ -85,6 +92,24 @@ export default function EmployeeRegister() {
       toast({
         title: "Weak Password",
         description: "Password must contain both letters and numbers.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (birthYear > MAX_YEAR) {
+      toast({
+        title: "Age Requirement",
+        description: "You must be 18 or older to create an account.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!tosAccepted) {
+      toast({
+        title: "Terms Required",
+        description: "Please accept the Terms of Service to continue.",
         variant: "destructive",
       });
       return;
@@ -218,6 +243,45 @@ export default function EmployeeRegister() {
                   data-testid="input-confirm-password"
                 />
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-slate-300 flex items-center gap-1.5">
+                <Calendar className="h-4 w-4" />
+                Birth Year
+              </Label>
+              <div className="text-center text-2xl font-semibold tabular-nums text-white">
+                {birthYear}
+              </div>
+              <input
+                type="range"
+                min={MIN_YEAR}
+                max={MAX_YEAR}
+                step={1}
+                value={birthYear}
+                onChange={e => setBirthYear(Number(e.target.value))}
+                className="w-full accent-orange-500"
+              />
+              <div className="flex justify-between text-xs text-slate-400">
+                <span>{MIN_YEAR}</span>
+                <span>{MAX_YEAR}</span>
+              </div>
+              <p className="text-xs text-slate-400">You must be 18 years or older to use this service.</p>
+            </div>
+
+            <div className="flex items-start space-x-3 p-3 rounded-lg bg-slate-700/30 border border-slate-600">
+              <Checkbox
+                id="tos"
+                checked={tosAccepted}
+                onCheckedChange={(checked) => setTosAccepted(checked === true)}
+                className="mt-0.5 border-slate-400 data-[state=checked]:bg-orange-500 data-[state=checked]:border-orange-500"
+              />
+              <label htmlFor="tos" className="text-sm text-slate-400 cursor-pointer leading-snug">
+                I am 18 years of age or older and agree to the{" "}
+                <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-orange-400 underline hover:no-underline">
+                  Terms of Service
+                </a>
+              </label>
             </div>
 
             <div className="flex items-start space-x-3 p-3 rounded-lg bg-gradient-to-r from-orange-500/10 to-yellow-500/10 border border-orange-500/30">

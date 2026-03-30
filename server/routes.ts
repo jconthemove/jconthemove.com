@@ -993,12 +993,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     lastName: z.string().min(1, "Last name is required"),
     phoneNumber: z.string().min(10, "Phone number is required"),
     rewardsEnrolled: z.boolean().optional().default(false),
+    dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date of birth must be in YYYY-MM-DD format"),
+    tosAccepted: z.boolean().refine(v => v === true, { message: "You must accept the Terms of Service to register" }),
   });
 
   app.post("/api/auth/employee/register", async (req, res) => {
     try {
       const data = employeeRegisterSchema.parse(req.body);
-      
+
+      // Enforce age verification server-side with strict calendar date parsing
+      const [dobYear, dobMonth, dobDay] = data.dateOfBirth.split("-").map(Number);
+      const birthDate = new Date(dobYear, dobMonth - 1, dobDay);
+      // Validate it's a real calendar date (no overflow like month 99)
+      if (
+        isNaN(birthDate.getTime()) ||
+        birthDate.getFullYear() !== dobYear ||
+        birthDate.getMonth() !== dobMonth - 1 ||
+        birthDate.getDate() !== dobDay
+      ) {
+        return res.status(400).json({ error: "Invalid date of birth" });
+      }
+      const today = new Date();
+      if (birthDate >= today) {
+        return res.status(400).json({ error: "Date of birth must be in the past" });
+      }
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) age--;
+      if (age < 18) {
+        return res.status(400).json({ error: "You must be 18 years or older to register" });
+      }
+
       // Check if email already exists
       const existingUser = await db
         .select()
@@ -1022,6 +1047,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             firstName: data.firstName,
             lastName: data.lastName,
             phoneNumber: data.phoneNumber,
+            dateOfBirth: data.dateOfBirth || existingUser[0].dateOfBirth,
+            tosAccepted: data.tosAccepted ?? existingUser[0].tosAccepted,
+            tosAcceptedAt: data.tosAccepted && !existingUser[0].tosAccepted ? new Date() : existingUser[0].tosAcceptedAt,
           })
           .where(eq(users.id, existingUser[0].id))
           .returning();
@@ -1044,6 +1072,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: "pending",
           referralCode,
           rewardsEnrolled: data.rewardsEnrolled ?? false,
+          dateOfBirth: data.dateOfBirth || null,
+          tosAccepted: data.tosAccepted ?? false,
+          tosAcceptedAt: data.tosAccepted ? new Date() : null,
         }).returning();
         
         newUser = createdUser;
@@ -1354,12 +1385,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     lastName: z.string().min(1, "Last name is required"),
     phoneNumber: z.string().optional(),
     rewardsEnrolled: z.boolean().optional().default(false),
+    dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date of birth must be in YYYY-MM-DD format"),
+    tosAccepted: z.boolean().refine(v => v === true, { message: "You must accept the Terms of Service to register" }),
   });
 
   app.post("/api/auth/customer/register", async (req, res) => {
     try {
       const data = customerRegisterSchema.parse(req.body);
-      
+
+      // Enforce age verification server-side with strict calendar date parsing
+      const [dobYear, dobMonth, dobDay] = data.dateOfBirth.split("-").map(Number);
+      const birthDate = new Date(dobYear, dobMonth - 1, dobDay);
+      // Validate it's a real calendar date (no overflow like month 99)
+      if (
+        isNaN(birthDate.getTime()) ||
+        birthDate.getFullYear() !== dobYear ||
+        birthDate.getMonth() !== dobMonth - 1 ||
+        birthDate.getDate() !== dobDay
+      ) {
+        return res.status(400).json({ error: "Invalid date of birth" });
+      }
+      const today = new Date();
+      if (birthDate >= today) {
+        return res.status(400).json({ error: "Date of birth must be in the past" });
+      }
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) age--;
+      if (age < 18) {
+        return res.status(400).json({ error: "You must be 18 years or older to register" });
+      }
+
       // Check if email already exists
       const existingUser = await db
         .select()
@@ -1379,6 +1435,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             firstName: data.firstName,
             lastName: data.lastName,
             phoneNumber: data.phoneNumber || existingUser[0].phoneNumber,
+            dateOfBirth: data.dateOfBirth || existingUser[0].dateOfBirth,
+            tosAccepted: data.tosAccepted ?? existingUser[0].tosAccepted,
+            tosAcceptedAt: data.tosAccepted && !existingUser[0].tosAccepted ? new Date() : existingUser[0].tosAcceptedAt,
           })
           .where(eq(users.id, existingUser[0].id))
           .returning();
@@ -1399,6 +1458,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: 'active',
           referralCode,
           rewardsEnrolled: data.rewardsEnrolled ?? false,
+          dateOfBirth: data.dateOfBirth || null,
+          tosAccepted: data.tosAccepted ?? false,
+          tosAcceptedAt: data.tosAccepted ? new Date() : null,
         }).returning();
         newUser = createdUser;
 
@@ -1833,6 +1895,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const data = employeeRegisterSchema.parse(req.body);
 
+      // Enforce age verification server-side with strict calendar date parsing
+      const [dobYear, dobMonth, dobDay] = data.dateOfBirth.split("-").map(Number);
+      const birthDate = new Date(dobYear, dobMonth - 1, dobDay);
+      if (
+        isNaN(birthDate.getTime()) ||
+        birthDate.getFullYear() !== dobYear ||
+        birthDate.getMonth() !== dobMonth - 1 ||
+        birthDate.getDate() !== dobDay
+      ) {
+        return res.status(400).json({ error: "Invalid date of birth" });
+      }
+      const today = new Date();
+      if (birthDate >= today) {
+        return res.status(400).json({ error: "Date of birth must be in the past" });
+      }
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) age--;
+      if (age < 18) {
+        return res.status(400).json({ error: "You must be 18 years or older to register" });
+      }
+
       // Check if user already exists
       const [existingUser] = await db
         .select()
@@ -1857,7 +1941,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           passwordHash,
           role: 'customer',
           status: 'active',
-          tokenBalance: "0",
+          dateOfBirth: data.dateOfBirth,
+          tosAccepted: data.tosAccepted,
+          tosAcceptedAt: data.tosAccepted ? new Date() : null,
         })
         .returning();
 

@@ -1,16 +1,23 @@
 import { useState, type FormEvent } from "react";
 import { useLocation } from "wouter";
 import { useMutation } from "@tanstack/react-query";
-import { ArrowLeft, User, Mail, Phone, Loader2 } from "lucide-react";
+import { ArrowLeft, User, Mail, Phone, Loader2, Calendar } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { WelcomeModal } from "@/components/welcome-modal";
+import { Checkbox } from "@/components/ui/checkbox";
+
+const CURRENT_YEAR = new Date().getFullYear();
+const MIN_YEAR = 1920;
+const MAX_YEAR = CURRENT_YEAR - 18;
 
 export default function OnboardingPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [showWelcome, setShowWelcome] = useState(false);
   const [welcomeFirstName, setWelcomeFirstName] = useState("");
+  const [birthYear, setBirthYear] = useState(CURRENT_YEAR - 30);
+  const [tosAccepted, setTosAccepted] = useState(false);
   const [form, setForm] = useState({
     fullName: "",
     email: "",
@@ -33,6 +40,8 @@ export default function OnboardingPage() {
         lastName,
         phoneNumber: form.phone,
         rewardsEnrolled: true,
+        dateOfBirth: `${birthYear}-01-01`,
+        tosAccepted: true,
       });
       return res.json();
     },
@@ -57,6 +66,14 @@ export default function OnboardingPage() {
     }
     if (form.password.length < 8) {
       toast({ title: "Password too short", description: "Password must be at least 8 characters.", variant: "destructive" });
+      return;
+    }
+    if (birthYear > MAX_YEAR) {
+      toast({ title: "Age requirement", description: "You must be 18 or older to create an account.", variant: "destructive" });
+      return;
+    }
+    if (!tosAccepted) {
+      toast({ title: "Terms required", description: "Please accept the Terms of Service to continue.", variant: "destructive" });
       return;
     }
     registerMutation.mutate();
@@ -142,6 +159,45 @@ export default function OnboardingPage() {
                 onChange={e => set("password", e.target.value)}
                 className="w-full h-13 px-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder:text-zinc-400 text-base focus:outline-none focus:ring-2 focus:ring-jc-orange/30 focus:border-jc-orange transition-all"
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
+                <Calendar className="inline h-4 w-4 mr-1 -mt-0.5" />
+                Birth Year
+              </label>
+              <div className="text-center text-2xl font-semibold tabular-nums text-zinc-900 dark:text-white mb-2">
+                {birthYear}
+              </div>
+              <input
+                type="range"
+                min={MIN_YEAR}
+                max={MAX_YEAR}
+                step={1}
+                value={birthYear}
+                onChange={e => setBirthYear(Number(e.target.value))}
+                className="w-full accent-jc-orange"
+              />
+              <div className="flex justify-between text-xs text-zinc-400 mt-1">
+                <span>{MIN_YEAR}</span>
+                <span>{MAX_YEAR}</span>
+              </div>
+              <p className="text-xs text-zinc-400 mt-1">You must be 18 years or older to use this service.</p>
+            </div>
+
+            <div className="flex items-start space-x-3 p-3 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900">
+              <Checkbox
+                id="tos"
+                checked={tosAccepted}
+                onCheckedChange={(checked) => setTosAccepted(checked === true)}
+                className="mt-0.5 flex-shrink-0"
+              />
+              <label htmlFor="tos" className="text-sm text-zinc-600 dark:text-zinc-400 cursor-pointer leading-snug">
+                I am 18 years of age or older and agree to the{" "}
+                <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-jc-orange underline hover:no-underline">
+                  Terms of Service
+                </a>
+              </label>
             </div>
 
             <button
