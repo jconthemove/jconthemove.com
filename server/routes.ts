@@ -9705,6 +9705,58 @@ Thank you for your business!
     }
   });
 
+  // Auto-generate a 5% jewelry booking reward coupon for the current user
+  // Idempotent: returns existing unused code if one already exists for this user
+  app.post("/api/promo-codes/booking-jewelry-reward", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { promoCodes } = await import("@shared/schema");
+
+      // Check for an existing active, unused booking reward for this user
+      const existing = await db
+        .select()
+        .from(promoCodes)
+        .where(
+          and(
+            eq(promoCodes.referralUserId, userId),
+            eq(promoCodes.isActive, true),
+            sql`${promoCodes.code} LIKE 'JEWLS5-%'`,
+            sql`(${promoCodes.maxUses} IS NULL OR ${promoCodes.usesCount} < ${promoCodes.maxUses})`
+          )
+        )
+        .limit(1);
+
+      if (existing.length > 0) {
+        return res.json({ code: existing[0].code, discountPercentJewelry: 5, alreadyExisted: true });
+      }
+
+      // Generate a unique code: JEWLS5-XXXXXX
+      const suffix = Math.random().toString(36).toUpperCase().slice(2, 8);
+      const code = `JEWLS5-${suffix}`;
+
+      const expiresAt = new Date();
+      expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+
+      await db.insert(promoCodes).values({
+        code,
+        description: "5% off Nature Made Jewls — Thank you for booking with JC ON THE MOVE!",
+        discountPercent: "0.00",
+        discountPercentJewelry: "5.00",
+        rewardTokens: "0.00",
+        referralRewardTokens: "0.00",
+        referralUserId: userId,
+        maxUses: 1,
+        isActive: true,
+        expiresAt,
+      });
+
+      return res.json({ code, discountPercentJewelry: 5, alreadyExisted: false });
+    } catch (error: any) {
+      console.error("Error generating booking jewelry reward:", error);
+      res.status(500).json({ error: error.message || "Failed to generate coupon" });
+    }
+  });
+
   // Admin: list all promo codes
   app.get("/api/admin/promo-codes", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {

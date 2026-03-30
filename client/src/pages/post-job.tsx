@@ -102,8 +102,21 @@ function getWeeklyFeatured(items: JewelryItem[]): JewelryItem | null {
   return items[weekIndex % items.length];
 }
 
-function BookingSuccessScreen({ selectedServiceLabel, pkgId }: { selectedServiceLabel?: string; pkgId: string | null }) {
+function BookingSuccessScreen({ selectedServiceLabel, pkgId, jewelryCouponCode }: {
+  selectedServiceLabel?: string;
+  pkgId: string | null;
+  jewelryCouponCode?: string | null;
+}) {
   const [, setLocation] = useLocation();
+  const [copied, setCopied] = useState(false);
+
+  function copyCode() {
+    if (!jewelryCouponCode) return;
+    navigator.clipboard.writeText(jewelryCouponCode).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
 
   const { data: jewelryItems = [] } = useQuery<JewelryItem[]>({
     queryKey: ["/api/jewelry", "active"],
@@ -139,13 +152,46 @@ function BookingSuccessScreen({ selectedServiceLabel, pkgId }: { selectedService
           </div>
         )}
 
-        <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 p-4 mb-5 shadow-sm">
+        <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 p-4 mb-4 shadow-sm">
           <div className="flex items-center justify-center gap-2">
             <Coins className="h-5 w-5 text-jc-orange" />
             <span className="text-lg font-black text-jc-orange">+{POST_TOKENS} JCMOVES</span>
           </div>
           <p className="text-xs text-zinc-400 mt-1">Earned for posting this job</p>
         </div>
+
+        {/* 5% jewelry coupon reward */}
+        {jewelryCouponCode && (
+          <div className="mb-4 rounded-2xl border border-amber-300 dark:border-amber-700 bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-950/40 dark:to-yellow-950/30 p-4 text-left">
+            <div className="flex items-center gap-2 mb-2">
+              <Gem className="h-4 w-4 text-amber-500 flex-shrink-0" />
+              <span className="text-xs font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400">
+                Booking Reward — Ashley's Jewelry
+              </span>
+            </div>
+            <p className="text-sm text-zinc-700 dark:text-zinc-300 mb-3">
+              Enjoy <span className="font-bold text-amber-600 dark:text-amber-400">5% off</span> your first order at Nature Made Jewls. Valid for 1 year, one use.
+            </p>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 bg-white dark:bg-zinc-900 border border-amber-200 dark:border-amber-800 rounded-xl px-3 py-2">
+                <span className="font-mono font-bold text-sm tracking-widest text-zinc-900 dark:text-white select-all">
+                  {jewelryCouponCode}
+                </span>
+              </div>
+              <button
+                onClick={copyCode}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                  copied
+                    ? "bg-green-500 text-white"
+                    : "bg-amber-500 hover:bg-amber-400 text-white"
+                }`}
+              >
+                {copied ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Tag className="h-3.5 w-3.5" />}
+                {copied ? "Copied!" : "Copy"}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Weekly featured jewelry */}
         {featuredItem && (
@@ -230,6 +276,8 @@ export default function PostJobPage() {
   const [media, setMedia] = useState<UploadedMedia[]>([]);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [jewelryCouponCode, setJewelryCouponCode] = useState<string | null>(null);
 
   const [promoCode, setPromoCode] = useState("");
   const [promoResult, setPromoResult] = useState<{
@@ -441,11 +489,21 @@ export default function PostJobPage() {
       });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
       queryClient.invalidateQueries({ queryKey: ["/api/leads/my-requests"] });
       queryClient.invalidateQueries({ queryKey: ["/api/leads/available"] });
       queryClient.invalidateQueries({ queryKey: ["/api/rewards/wallet"] });
+      try {
+        const couponRes = await fetch("/api/promo-codes/booking-jewelry-reward", {
+          method: "POST",
+          credentials: "include",
+        });
+        if (couponRes.ok) {
+          const data = await couponRes.json();
+          setJewelryCouponCode(data.code || null);
+        }
+      } catch { /* non-blocking — success screen shows without coupon */ }
       setStep(5);
     },
     onError: (e: any) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
@@ -488,7 +546,7 @@ export default function PostJobPage() {
   }
 
   if (step === 5) {
-    return <BookingSuccessScreen selectedServiceLabel={selectedService?.label} pkgId={pkgId} />;
+    return <BookingSuccessScreen selectedServiceLabel={selectedService?.label} pkgId={pkgId} jewelryCouponCode={jewelryCouponCode} />;
   }
 
   const bars = getProgressBars();
