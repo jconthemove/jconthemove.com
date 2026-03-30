@@ -5,7 +5,7 @@ import {
   ArrowLeft, Truck, Trash2, Snowflake, Wrench, MapPin, Calendar, FileText,
   CheckCircle, Coins, Loader2, ChevronRight, Camera, X, Image, Video, Upload,
   Users, Clock, Package, CheckCircle2, Minus, Plus, HelpCircle, DollarSign,
-  Tag, AlertCircle
+  Tag, AlertCircle, Gem
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -82,6 +82,124 @@ interface Pricing {
 
 function getSearchParams(): URLSearchParams {
   return new URLSearchParams(window.location.search);
+}
+
+interface JewelryItem {
+  id: string;
+  title: string;
+  shortDescription?: string | null;
+  description?: string | null;
+  price?: string | null;
+  imageUrl?: string | null;
+  photos?: { url: string }[] | null;
+  category?: string | null;
+  inStock?: boolean;
+}
+
+function getWeeklyFeatured(items: JewelryItem[]): JewelryItem | null {
+  if (!items.length) return null;
+  const weekIndex = Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000));
+  return items[weekIndex % items.length];
+}
+
+function BookingSuccessScreen({ selectedServiceLabel, pkgId }: { selectedServiceLabel?: string; pkgId: string | null }) {
+  const [, setLocation] = useLocation();
+
+  const { data: jewelryItems = [] } = useQuery<JewelryItem[]>({
+    queryKey: ["/api/jewelry", "active"],
+    queryFn: async () => {
+      const res = await fetch("/api/jewelry?status=active");
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  const featuredItem = getWeeklyFeatured(jewelryItems.filter(i => i.inStock !== false));
+  const itemImage = featuredItem?.imageUrl ||
+    (Array.isArray(featuredItem?.photos) && featuredItem.photos.length > 0 ? featuredItem.photos[0].url : null);
+
+  return (
+    <div className="min-h-screen bg-jc-cream dark:bg-zinc-950 flex items-center justify-center px-6 py-12">
+      <div className="max-w-[390px] w-full text-center">
+        <div className="w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto mb-6">
+          <CheckCircle className="h-10 w-10 text-green-600" />
+        </div>
+        <h1 className="text-2xl font-black text-zinc-900 dark:text-white mb-2">Job Posted!</h1>
+        <p className="text-zinc-500 dark:text-zinc-400 mb-6">
+          Your {selectedServiceLabel || "service"} request has been submitted. We'll match you with a crew soon.
+        </p>
+
+        {pkgId && (
+          <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-2xl p-4 mb-4">
+            <div className="flex items-center justify-center gap-2">
+              <Package className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              <span className="text-sm font-bold text-blue-700 dark:text-blue-300">Package Selected</span>
+            </div>
+            <p className="text-xs text-zinc-500 mt-1">Your package preference has been noted for the crew</p>
+          </div>
+        )}
+
+        <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 p-4 mb-5 shadow-sm">
+          <div className="flex items-center justify-center gap-2">
+            <Coins className="h-5 w-5 text-jc-orange" />
+            <span className="text-lg font-black text-jc-orange">+{POST_TOKENS} JCMOVES</span>
+          </div>
+          <p className="text-xs text-zinc-400 mt-1">Earned for posting this job</p>
+        </div>
+
+        {/* Weekly featured jewelry */}
+        {featuredItem && (
+          <a
+            href="/nature-made-jewls"
+            className="block mb-5 rounded-2xl overflow-hidden border border-amber-200 dark:border-amber-900/50 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/20 shadow-sm hover:shadow-md transition-shadow"
+          >
+            <div className="px-4 pt-3 pb-1 flex items-center gap-2">
+              <Gem className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
+              <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400">
+                Featured This Week · Nature Made Jewls
+              </span>
+            </div>
+            <div className="flex items-center gap-3 px-4 pb-4">
+              {itemImage ? (
+                <img
+                  src={itemImage}
+                  alt={featuredItem.title}
+                  className="w-16 h-16 rounded-xl object-cover flex-shrink-0 border border-amber-200 dark:border-amber-800"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+                  <Gem className="h-7 w-7 text-amber-400" />
+                </div>
+              )}
+              <div className="text-left flex-1 min-w-0">
+                <p className="font-bold text-sm text-zinc-900 dark:text-white truncate">{featuredItem.title}</p>
+                {(featuredItem.shortDescription || featuredItem.description) && (
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 line-clamp-2">
+                    {featuredItem.shortDescription || featuredItem.description}
+                  </p>
+                )}
+                <div className="flex items-center justify-between mt-1.5">
+                  {featuredItem.price && (
+                    <span className="text-sm font-black text-amber-600 dark:text-amber-400">
+                      ${parseFloat(featuredItem.price).toFixed(2)}
+                    </span>
+                  )}
+                  <span className="text-xs text-amber-500 font-semibold ml-auto">Shop Now →</span>
+                </div>
+              </div>
+            </div>
+          </a>
+        )}
+
+        <button
+          onClick={() => setLocation("/")}
+          className="w-full h-14 rounded-2xl bg-jc-orange text-white font-bold text-lg shadow-lg shadow-jc-orange/30 hover:bg-jc-orange/90 active:scale-[0.98] transition-all"
+        >
+          Back to Home
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export default function PostJobPage() {
@@ -370,41 +488,7 @@ export default function PostJobPage() {
   }
 
   if (step === 5) {
-    return (
-      <div className="min-h-screen bg-jc-cream dark:bg-zinc-950 flex items-center justify-center px-6">
-        <div className="max-w-[390px] w-full text-center">
-          <div className="w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto mb-6">
-            <CheckCircle className="h-10 w-10 text-green-600" />
-          </div>
-          <h1 className="text-2xl font-black text-zinc-900 dark:text-white mb-2">Job Posted!</h1>
-          <p className="text-zinc-500 dark:text-zinc-400 mb-6">
-            Your {selectedService?.label || "service"} request has been submitted. We'll match you with a crew soon.
-          </p>
-          {pkgId && (
-            <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-2xl p-4 mb-4">
-              <div className="flex items-center justify-center gap-2">
-                <Package className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                <span className="text-sm font-bold text-blue-700 dark:text-blue-300">Package Selected</span>
-              </div>
-              <p className="text-xs text-zinc-500 mt-1">Your package preference has been noted for the crew</p>
-            </div>
-          )}
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 p-4 mb-6 shadow-sm">
-            <div className="flex items-center justify-center gap-2">
-              <Coins className="h-5 w-5 text-jc-orange" />
-              <span className="text-lg font-black text-jc-orange">+{POST_TOKENS} JCMOVES</span>
-            </div>
-            <p className="text-xs text-zinc-400 mt-1">Earned for posting this job</p>
-          </div>
-          <button
-            onClick={() => setLocation("/")}
-            className="w-full h-14 rounded-2xl bg-jc-orange text-white font-bold text-lg shadow-lg shadow-jc-orange/30 hover:bg-jc-orange/90 active:scale-[0.98] transition-all"
-          >
-            Back to Home
-          </button>
-        </div>
-      </div>
-    );
+    return <BookingSuccessScreen selectedServiceLabel={selectedService?.label} pkgId={pkgId} />;
   }
 
   const bars = getProgressBars();
