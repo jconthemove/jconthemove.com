@@ -1,0 +1,148 @@
+Perfect—this is the UI layer that ties your entire system together.
+
+This component becomes your:
+👉 front door
+👉 decision engine
+👉 conversion funnel
+
+🚀 UNIFIED SERVICE SELECTOR (PASTE-READY)
+/client/src/components/ServiceSelector.tsx
+"use client"
+
+import { useState } from "react"
+import JunkCards from "./JunkCards"
+// (you will plug these in next)
+const MovingEstimator = () => <div className="p-4">Moving Flow Coming</div>
+const LaborQuick = () => <div className="p-4">Labor Flow Coming</div>
+const SnowFlow = () => <div className="p-4">Snow Flow Coming</div>
+
+export default function ServiceSelector() {
+  const [selected, setSelected] = useState<string | null>(null)
+
+  const services = [
+    { id: "moving", label: "🚛 Moving Help", sub: "Full moves & loading" },
+    { id: "junk", label: "🧹 Junk Removal", sub: "Fast pickup & disposal" },
+    { id: "labor", label: "💪 Labor Only", sub: "Hourly help" },
+    { id: "snow", label: "❄️ Snow Removal", sub: "Seasonal services" }
+  ]
+
+  return (
+    <div className="w-full max-w-md mx-auto">
+
+      {/* SERVICE BUTTONS */}
+      <div className="grid grid-cols-2 gap-3 p-4">
+        {services.map(s => (
+          <button
+            key={s.id}
+            onClick={() => setSelected(s.id)}
+            className={`p-4 rounded-xl border text-left transition-all duration-200 ${
+              selected === s.id
+                ? "border-orange-500 bg-orange-500/10 scale-[1.03]"
+                : "border-neutral-800 bg-neutral-900"
+            }`}
+          >
+            <div className="font-semibold">{s.label}</div>
+            <div className="text-xs text-gray-400 mt-1">{s.sub}</div>
+          </button>
+        ))}
+      </div>
+
+      {/* DYNAMIC PANEL */}
+      <div className="px-4 pb-10">
+        <div className="transition-all duration-300 ease-in-out">
+
+          {!selected && (
+            <div className="text-center text-gray-400 mt-6">
+              Select a service to continue
+            </div>
+          )}
+
+          {selected === "junk" && <JunkCards />}
+          {selected === "moving" && <MovingEstimator />}
+          {selected === "labor" && <LaborQuick />}
+          {selected === "snow" && <SnowFlow />}
+
+        </div>
+      </div>
+    </div>
+  )
+}
+🎯 2. DROP INTO YOUR HOMEPAGE
+/client/src/pages/customer-home.tsx
+
+Replace your middle section with:
+
+import ServiceSelector from "../components/ServiceSelector"
+
+<ServiceSelector />
+⚡ 3. ANIMATED UX (WHAT THIS DOES)
+
+This component already includes:
+
+✅ Selection animation
+slight scale-up
+color highlight
+✅ Dynamic panel swap
+smooth transition
+no page reload
+✅ Mobile-first grid
+thumb-friendly
+clean layout
+🧠 4. CONVERSION FLOW (VERY IMPORTANT)
+
+This changes your UX from:
+
+❌ “scroll and figure it out”
+
+To:
+
+👉 guided decision funnel
+
+Real user flow:
+Lands on homepage
+Sees:
+What do you need help with?
+Taps:
+👉 Junk Removal
+Immediately sees:
+pricing tiers
+add-ons
+total
+book button
+💰 5. WHY THIS PRINTS MONEY
+
+Because it:
+
+✅ reduces confusion
+✅ speeds decisions
+✅ increases clicks
+✅ increases job size (via add-ons)
+✅ feels interactive + alive
+
+🔥 6. OPTIONAL (HIGH-CONVERSION UPGRADE)
+
+Add this under buttons:
+
+<div className="text-center text-xs text-gray-500 mt-2">
+  ⚡ Most jobs booked in under 30 seconds
+</div>
+🧠 7. FUTURE READY (IMPORTANT)
+
+This setup lets you plug in:
+
+moving estimator
+labor quick book
+snow scheduling
+sponsor routing
+token rewards
+
+WITHOUT changing layout again
+
+🧨 FINAL RESULT
+
+You now have:
+
+✅ unified entry
+✅ dynamic flows
+✅ junk engine integrated
+✅ scalable UI system

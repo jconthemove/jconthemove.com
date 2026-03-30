@@ -1,0 +1,192 @@
+Good—this is the final wiring layer that turns your selector into a multi-service booking engine.
+
+You already have:
+
+UI selector ✅
+Junk flow ✅
+Dispatch system ✅
+
+Now we connect each service → its own API → same dispatch engine
+
+🚀 1. FRONTEND: CENTRAL BOOKING HANDLER
+
+We’re going to standardize ALL flows into one function
+
+/client/src/lib/createJob.ts
+export async function createJob(payload) {
+  const res = await fetch(`/api/jobs/create-${payload.serviceType}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  })
+
+  return res.json()
+}
+🧠 2. UPDATE SERVICE FLOWS TO USE THIS
+✅ JUNK FLOW (update AddOns.tsx)
+import { createJob } from "../lib/createJob"
+
+const handleBooking = async () => {
+  const data = await createJob({
+    serviceType: "junk",
+    tier: selectedTier.id,
+    items,
+    totalPrice: total
+  })
+
+  if (data.success) {
+    setJobId(data.jobId)
+  }
+}
+✅ MOVING FLOW (example)
+/components/MovingEstimator.tsx
+import { createJob } from "../lib/createJob"
+
+const handleBookMoving = async () => {
+  const data = await createJob({
+    serviceType: "moving",
+    movers: 2,
+    hours: 3,
+    needsTruck: true
+  })
+
+  if (data.success) {
+    setJobId(data.jobId)
+  }
+}
+✅ LABOR FLOW
+const handleLabor = async () => {
+  const data = await createJob({
+    serviceType: "labor",
+    movers: 1,
+    hours: 2
+  })
+
+  if (data.success) {
+    setJobId(data.jobId)
+  }
+}
+⚙️ 3. BACKEND: SPLIT ROUTES PER SERVICE
+/server/routes.ts
+🧹 JUNK (already built)
+app.post("/api/jobs/create-junk", async (req, res) => {
+  // uses tierMap
+  // calls dispatchJunkJob
+})
+🚛 MOVING ROUTE
+app.post("/api/jobs/create-moving", async (req, res) => {
+  const { movers, hours, needsTruck } = req.body
+
+  const [job] = await db.insert(leads).values({
+    serviceType: "moving",
+    requiredMovers: movers,
+    requiresDriver: true,
+    requiresTruck: needsTruck,
+    estimatedHours: hours,
+    status: "open"
+  }).returning()
+
+  await dispatchGenericJob(job.id)
+
+  res.json({ success: true, jobId: job.id })
+})
+💪 LABOR ROUTE
+app.post("/api/jobs/create-labor", async (req, res) => {
+  const { movers, hours } = req.body
+
+  const [job] = await db.insert(leads).values({
+    serviceType: "labor",
+    requiredMovers: movers,
+    requiresDriver: false,
+    requiresTruck: false,
+    estimatedHours: hours,
+    status: "open"
+  }).returning()
+
+  await dispatchGenericJob(job.id)
+
+  res.json({ success: true, jobId: job.id })
+})
+🧠 4. UNIFIED DISPATCH (KEY UPGRADE)
+
+Instead of separate dispatch:
+
+/server/services/dispatchGeneric.ts
+export async function dispatchGenericJob(jobId) {
+  const job = await getJob(jobId)
+
+  const available = await getAvailableCrew(job)
+
+  const result = assembleCrew(available, job)
+
+  if (result.status === "fail") {
+    console.log("No crew available")
+    return
+  }
+
+  for (const member of result.crew) {
+    await db.insert(crewMembers).values({
+      jobId,
+      userId: member.id,
+      role: member.role
+    })
+  }
+
+  await db.update(leads)
+    .set({ status: "assigned" })
+    .where(eq(leads.id, jobId))
+}
+🔄 5. CUSTOMER STATUS (WORKS FOR ALL FLOWS)
+
+No changes needed.
+
+👉 Same polling:
+
+/api/jobs/:id/status
+🧠 6. WHAT THIS DOES (IMPORTANT)
+
+Now:
+
+Junk flow:
+
+👉 tier → crew → dispatch
+
+Moving flow:
+
+👉 movers + truck → dispatch
+
+Labor flow:
+
+👉 movers only → dispatch
+
+ALL go through:
+
+👉 same engine
+👉 same crew pool
+👉 same status system
+
+💰 7. BUSINESS IMPACT
+
+You now have:
+
+✅ multiple services
+✅ single workforce
+✅ shared dispatch
+✅ max utilization
+
+Example:
+Junk job ends → crew instantly available
+Moving job booked → same crew fills
+
+👉 zero idle time
+
+🧨 FINAL RESULT
+
+This system now behaves like:
+
+👉 Uber (routing)
+👉 DoorDash (dispatch)
+👉 TaskRabbit (labor)
+👉 + your own pricing + token system

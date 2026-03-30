@@ -1,0 +1,281 @@
+🚀 JC ON THE MOVE — FULL REPLIT BUILD PLAN
+
+This plan builds your system into:
+
+👉 Live dispatch + crew automation + pricing engine + booking UI
+
+And aligns with your goal:
+
+“Feels like Uber for labor, not a website”
+
+🧱 1. PROJECT STRUCTURE (REPLIT)
+/server
+  /routes
+    crew.ts
+    jobs.ts
+    dispatch.ts
+    market.ts
+  /services
+    crewEngine.ts
+    dispatchEngine.ts
+    pricingEngine.ts
+    demandEngine.ts
+  /db
+    schema.ts
+    client.ts
+
+/client
+  /components
+    Hero.tsx
+    LiveCrewBeacon.tsx
+    JunkCards.tsx
+    AddOns.tsx
+    PriceCalculator.tsx
+  /pages
+    Home.tsx
+    Book.tsx
+
+/shared
+  junkTiers.ts
+  specialtyItems.ts
+🗄️ 2. DATABASE SETUP (DRIZZLE + POSTGRES)
+REQUIRED TABLES
+contractors
+id
+isOnline
+lastActive
+rating
+contractor_capabilities
+contractorId
+capability
+contractor_preferences
+maxJobsPerWeek
+maxJobsPerMonth
+maxHoursPerDay
+autoAccept
+contractor_schedule
+date
+isAvailable
+jobs
+serviceType
+requiredMovers
+requiresDriver
+requiresTruck
+requiresTrailer
+estimatedHours
+status
+job_dispatch
+jobId
+contractorId
+status
+job_assignments
+jobId
+contractorId
+role
+⚙️ 3. CORE SYSTEM MODULES
+🧠 crewEngine.ts
+
+Handles:
+
+capability filtering
+availability
+capacity rules
+export async function getAvailableCrew(job) {
+  const online = await getOnlineContractors()
+
+  return online.filter(async (c) => {
+    if (!matchesJobRequirements(c, job)) return false
+    if (!(await canTakeJob(c.id, job))) return false
+    return true
+  })
+}
+🚛 crew auto-assembly (CRITICAL)
+export function assembleCrew(pool, job) {
+  const req = buildRequirements(job)
+
+  let crew = []
+
+  const driver = pickBestDriver(pool, req)
+  if (!driver) return { status: "fail" }
+
+  crew.push(driver)
+
+  const movers = pickMovers(pool, req.movers, crew)
+
+  if (movers.length < req.movers) {
+    return {
+      status: "partial",
+      crew,
+      missing: req.movers - movers.length
+    }
+  }
+
+  return {
+    status: "complete",
+    crew: [...crew, ...movers]
+  }
+}
+📡 dispatchEngine.ts
+export async function dispatchJob(jobId) {
+  const job = await getJob(jobId)
+
+  const pool = await getAvailableCrew(job)
+
+  const crew = assembleCrew(pool, job)
+
+  if (crew.status === "fail") {
+    triggerDemandBoost()
+    return
+  }
+
+  broadcastToCrew(job, crew)
+}
+💰 4. PRICING ENGINE
+junkTiers.ts
+export const JUNK_TIERS = {
+  light: { price: 150, maxWeight: 150 },
+  medium: { price: 350, maxWeight: 1000 },
+  large: { price: 750, maxWeight: 2500 },
+  xlarge: { price: 1000, maxWeight: 4000 }
+}
+specialtyItems.ts
+export const SPECIALTY_ITEMS = {
+  mattress: 50,
+  fridge: 100,
+  gym: 100
+}
+pricingEngine.ts
+export function calculatePrice(job) {
+  const tier = resolveJunkTier(job.weight)
+
+  let total = JUNK_TIERS[tier].price
+
+  for (const item of job.items) {
+    total += item.price * item.quantity
+  }
+
+  return total * getDemandMultiplier()
+}
+📈 5. DEMAND ENGINE (SURGE + ACTIVATION)
+demandEngine.ts
+export function getDemandMultiplier(pressure) {
+  if (pressure < 1.2) return 1
+  if (pressure < 1.5) return 1.15
+  return 1.3
+}
+Trigger system
+if (pressure > 1.3) {
+  notifyOfflineCrew()
+}
+📲 6. API ROUTES
+/api/crew/online
+
+Returns:
+
+{ "count": 5 }
+/api/jobs/create
+builds job
+calculates price
+triggers dispatch
+/api/jobs/respond
+accept / decline
+/api/market/status
+supply / demand / pressure
+🎨 7. FRONTEND (CUSTOMER-FIRST UI)
+🟢 LiveCrewBeacon.tsx
+<div className="fixed bottom-20 right-4">
+  <button className="bg-green-500 animate-pulse px-4 py-3 rounded-full">
+    🟢 {crewCount} Movers Online
+  </button>
+</div>
+🚛 HERO (HIGH-CONVERTING)
+<h1>Need Help Moving Today?</h1>
+
+<button>Get Price in 30 Seconds</button>
+<button>Talk to a Mover</button>
+💰 JunkCards.tsx
+[
+  { title: "Small Pickup", price: 150 },
+  { title: "Pickup Load", price: 350 },
+  { title: "Trailer Load", price: 750 },
+  { title: "Full Load", price: 1000 }
+]
+➕ AddOns.tsx
+Mattress (+$50)
+Fridge (+$100)
+Gym Equipment (+$100)
+
+Tires:
+Small / Medium / Large / XL
+⚡ Live Price Calculator
+Total: $460
+
+Updates instantly.
+
+🧠 8. CUSTOMER EXPERIENCE FLOW
+Land on homepage
+See:
+🟢 movers online
+“Get price in 30 sec”
+Select junk tier
+Add specialty items
+See live price
+Click book
+
+👉 Job auto-created + dispatched
+
+👷 9. CONTRACTOR EXPERIENCE
+Go online
+Receive job popup
+Accept / decline
+Auto-assigned role:
+driver
+mover
+💰 10. TOKEN SYSTEM (JCMOVES)
+On accept:
+awardTokens(50)
+On completion:
+awardTokens(job.value * 0.1)
+Bonus:
+high demand → +50%
+specialty items → +20%
+🔥 11. KEY BUSINESS RULES (LOCK THESE IN)
+No names shown → “JC ON THE MOVE Crew”
+Always prioritize:
+speed
+availability
+simplicity
+Specialty items:
+→ increase ticket size
+→ adjust crew if needed
+Construction:
+→ manual review
+🧨 12. DEPLOYMENT (IMPORTANT)
+
+Use your existing config:
+
+👉
+
+REQUIRED:
+NODE_ENV=production
+REPLIT_DOMAINS=yourdomain.com
+DATABASE_URL=...
+VITE_SOLANA_RPC_URL=...
+MOONSHOT_TOKEN_ADDRESS=...
+🚀 FINAL RESULT
+
+When you finish this:
+
+You don’t have:
+
+❌ a booking form
+❌ a service website
+
+You have:
+
+✅ live workforce
+✅ auto dispatch
+✅ smart pricing
+✅ crew assembly
+✅ demand balancing
+✅ revenue engine
