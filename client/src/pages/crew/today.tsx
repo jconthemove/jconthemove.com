@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import {
   Sun, Cloud, CloudSnow, CloudRain, Zap, Wind, BookOpen, RefreshCw,
   Wifi, WifiOff, Coins, MapPin, Calendar, ChevronRight, Loader2, Trophy,
+  Clock, CheckCircle, XCircle, Plus,
 } from "lucide-react";
 import { Link } from "wouter";
 import type { Lead, User } from "@shared/schema";
@@ -50,6 +51,38 @@ const SERVICE_ICONS: Record<string, string> = {
   handyman: "🔧", demolition: "⚒️", flooring: "🪵", painting: "🎨",
 };
 
+function isSummerSeason(): boolean {
+  const month = new Date().getMonth() + 1; // 1-12
+  return month >= 5 && month <= 9;
+}
+
+function getAvailableTimeSlots(): Date[] {
+  const now = new Date();
+  const maxHour = isSummerSeason() ? 20 : 18; // 8pm or 6pm
+  const slots: Date[] = [];
+  let hour = now.getHours() + 1; // next full hour
+  while (hour <= maxHour) {
+    const slot = new Date(now);
+    slot.setHours(hour, 0, 0, 0);
+    slots.push(slot);
+    hour += 1;
+  }
+  return slots;
+}
+
+function formatTime(date: Date): string {
+  return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+}
+
+function formatCountdown(until: Date): string {
+  const diff = until.getTime() - Date.now();
+  if (diff <= 0) return "Expiring…";
+  const h = Math.floor(diff / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  if (h > 0) return `${h}h ${m}m remaining`;
+  return `${m}m remaining`;
+}
+
 export default function CrewTodayPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -57,7 +90,71 @@ export default function CrewTodayPage() {
   const isAdmin = ["admin", "business_owner"].includes(user?.role || "");
   const [quoteIdx, setQuoteIdx] = useState(getDayOfYear() % ALL_QUOTES.length);
   const [scriptureClaimed, setScriptureClaimed] = useState(false);
-  const [dutyStatus, setDutyStatus] = useState<boolean>(Boolean((user as User & { isAvailable?: boolean })?.isAvailable));
+
+  const userRecord = user as User & { isAvailable?: boolean; availableUntil?: string | null };
+  const [dutyStatus, setDutyStatus] = useState<boolean>(Boolean(userRecord?.isAvailable));
+  const [availableUntil, setAvailableUntil] = useState<Date | null>(
+    userRecord?.availableUntil ? new Date(userRecord.availableUntil) : null
+  );
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [countdown, setCountdown] = useState<string>("");
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const timeSlots = useMemo(() => getAvailableTimeSlots(), [showTimePicker]);
+
+  // Sync duty state when user data arrives (handles page refresh while already online)
+  useEffect(() => {
+    if (!user) return;
+    const u = user as User & { isAvailable?: boolean; availableUntil?: string | null };
+    setDutyStatus(Boolean(u.isAvailable));
+    setAvailableUntil(u.availableUntil ? new Date(u.availableUntil) : null);
+  }, [user?.id]);
+
+  // Update countdown every minute
+  useEffect(() => {
+    if (!dutyStatus || !availableUntil) { setCountdown(""); return; }
+    const update = () => setCountdown(formatCountdown(availableUntil));
+    update();
+    const t = setInterval(update, 30_000);
+    return () => clearInterval(t);
+  }, [dutyStatus, availableUntil]);
+
+  // Heartbeat every 60 seconds while online
+  useEffect(() => {
+    if (dutyStatus) {
+      heartbeatRef.current = setInterval(async () => {
+        try {
+          const res = await apiRequest("POST", "/api/crew/heartbeat", {});
+          const data = await res.json();
+          if (data.expired) {
+            setDutyStatus(false);
+            setAvailableUntil(null);
+            queryClient.invalidateQueries({ queryKey: ["/api/employees/available"] });
+            toast({ title: "⏰ Shift Ended", description: "Your availability window has expired." });
+          }
+        } catch {
+          // silent
+        }
+      }, 60_000);
+    } else {
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+    }
+    return () => { if (heartbeatRef.current) clearInterval(heartbeatRef.current); };
+  }, [dutyStatus]);
+
+  // Client-side expiry check
+  useEffect(() => {
+    if (!availableUntil || !dutyStatus) return;
+    const msUntilExpiry = availableUntil.getTime() - Date.now();
+    if (msUntilExpiry <= 0) { setDutyStatus(false); setAvailableUntil(null); return; }
+    const t = setTimeout(() => {
+      setDutyStatus(false);
+      setAvailableUntil(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/employees/available"] });
+      toast({ title: "⏰ Shift Ended", description: "Your availability window has expired." });
+    }, msUntilExpiry);
+    return () => clearTimeout(t);
+  }, [availableUntil, dutyStatus]);
 
   const { data: leads = [] } = useQuery<Lead[]>({
     queryKey: [isAdmin ? "/api/leads" : "/api/leads/my-jobs"],
@@ -100,18 +197,45 @@ export default function CrewTodayPage() {
     },
   });
 
-  const toggleDutyMutation = useMutation({
-    mutationFn: async (next: boolean) => {
-      const res = await apiRequest("PATCH", "/api/auth/user/availability", { isAvailable: next });
+  const goOnlineMutation = useMutation({
+    mutationFn: async (until: Date) => {
+      const res = await apiRequest("POST", "/api/crew/go-online", { availableUntil: until.toISOString() });
       return res.json();
     },
-    onSuccess: (data) => {
-      setDutyStatus(data.isAvailable);
+    onSuccess: (_, until) => {
+      setDutyStatus(true);
+      setAvailableUntil(until);
+      setShowTimePicker(false);
       queryClient.invalidateQueries({ queryKey: ["/api/employees/available"] });
-      toast({
-        title: data.isAvailable ? "🟢 You're ON DUTY" : "🔴 You're OFF DUTY",
-        description: data.isAvailable ? "Customers can see you're available" : "You won't appear in available crews",
-      });
+      toast({ title: `🟢 Online until ${formatTime(until)}`, description: "You'll appear for job dispatch." });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const goOfflineMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/crew/go-offline", {});
+      return res.json();
+    },
+    onSuccess: () => {
+      setDutyStatus(false);
+      setAvailableUntil(null);
+      setShowTimePicker(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/employees/available"] });
+      toast({ title: "🔴 You're OFF DUTY", description: "You won't appear in available crews." });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const extendMutation = useMutation({
+    mutationFn: async (until: Date) => {
+      const res = await apiRequest("POST", "/api/crew/go-online", { availableUntil: until.toISOString() });
+      return res.json();
+    },
+    onSuccess: (_, until) => {
+      setAvailableUntil(until);
+      setShowTimePicker(false);
+      toast({ title: `⏰ Extended until ${formatTime(until)}` });
     },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
@@ -135,7 +259,7 @@ export default function CrewTodayPage() {
     });
     return employees
       .filter(e => counts[e.id])
-      .map(e => ({ ...e, count: counts[e.id] }))
+      .map(e => ({ ...e, count: counts[e.id] as number }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 3);
   }, [completedLeads, employees]);
@@ -148,6 +272,7 @@ export default function CrewTodayPage() {
   const wxInfo = wx ? getWeatherInfo(wx.weather_code) : null;
   const WxIcon = wxInfo?.Icon ?? Cloud;
   const medals = ["🥇", "🥈", "🥉"];
+  const isPending = goOnlineMutation.isPending || goOfflineMutation.isPending || extendMutation.isPending;
 
   return (
     <div className="max-w-2xl mx-auto px-4 pt-6 space-y-5">
@@ -180,21 +305,91 @@ export default function CrewTodayPage() {
           ))}
         </div>
 
-        <button
-          onClick={() => toggleDutyMutation.mutate(!dutyStatus)}
-          disabled={toggleDutyMutation.isPending}
-          className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all active:scale-[0.98] ${
-            dutyStatus ? "bg-green-500/15 border-green-500/40 text-green-300" : "bg-slate-800/60 border-slate-600/40 text-slate-400"
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            {dutyStatus ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
-            <span className="text-sm font-bold">{dutyStatus ? "ON DUTY — visible to customers" : "OFF DUTY — hidden from customers"}</span>
+        {/* Availability Toggle */}
+        {dutyStatus ? (
+          <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Wifi className="h-4 w-4 text-green-400" />
+                <span className="text-green-300 text-sm font-bold">
+                  ON DUTY{availableUntil ? ` — until ${formatTime(availableUntil)}` : ""}
+                </span>
+              </div>
+              <div className="w-10 h-5 rounded-full bg-green-500 relative">
+                <div className="absolute top-0.5 left-5 w-4 h-4 rounded-full bg-white shadow" />
+              </div>
+            </div>
+            {countdown && (
+              <p className="text-xs text-green-400/70 flex items-center gap-1">
+                <Clock className="h-3 w-3" /> {countdown}
+              </p>
+            )}
+            <div className="flex gap-2 pt-1">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isPending}
+                onClick={() => setShowTimePicker(v => !v)}
+                className="flex-1 border-green-500/30 text-green-300 hover:bg-green-500/10 h-7 text-xs"
+              >
+                <Plus className="h-3 w-3 mr-1" /> Extend
+              </Button>
+              <Button
+                size="sm"
+                disabled={isPending}
+                onClick={() => goOfflineMutation.mutate()}
+                className="flex-1 bg-red-600/20 hover:bg-red-600/30 text-red-300 border-0 h-7 text-xs"
+              >
+                {goOfflineMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <><XCircle className="h-3 w-3 mr-1" /> Go Offline</>}
+              </Button>
+            </div>
           </div>
-          <div className={`w-10 h-5 rounded-full transition-colors relative ${dutyStatus ? "bg-green-500" : "bg-slate-600"}`}>
-            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${dutyStatus ? "left-5" : "left-0.5"}`} />
+        ) : (
+          <button
+            onClick={() => setShowTimePicker(v => !v)}
+            disabled={isPending}
+            className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-slate-600/40 bg-slate-800/60 text-slate-400 transition-all active:scale-[0.98]"
+          >
+            <div className="flex items-center gap-2">
+              <WifiOff className="h-4 w-4" />
+              <span className="text-sm font-bold">OFF DUTY — tap to set availability</span>
+            </div>
+            <div className="w-10 h-5 rounded-full bg-slate-600 relative">
+              <div className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow" />
+            </div>
+          </button>
+        )}
+
+        {/* Time Picker */}
+        {showTimePicker && (
+          <div className="mt-3 bg-slate-900/80 border border-slate-700/50 rounded-xl p-3">
+            <p className="text-slate-400 text-xs font-semibold mb-2 uppercase tracking-wider">
+              {dutyStatus ? "Extend until…" : "Available until…"}
+            </p>
+            {timeSlots.length === 0 ? (
+              <p className="text-slate-500 text-xs">No time slots available today (past closing time).</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {timeSlots.map(slot => (
+                  <button
+                    key={slot.toISOString()}
+                    disabled={isPending}
+                    onClick={() => dutyStatus ? extendMutation.mutate(slot) : goOnlineMutation.mutate(slot)}
+                    className="px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/40 border border-blue-500/30 text-blue-300 text-sm font-semibold transition-colors disabled:opacity-50"
+                  >
+                    {formatTime(slot)}
+                  </button>
+                ))}
+              </div>
+            )}
+            <button
+              onClick={() => setShowTimePicker(false)}
+              className="mt-2 text-slate-500 text-xs hover:text-slate-400"
+            >
+              Cancel
+            </button>
           </div>
-        </button>
+        )}
       </div>
 
       {/* Today's Jobs */}

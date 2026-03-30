@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -46,7 +46,7 @@ interface User {
 }
 
 interface UserDetails {
-  user: User;
+  user: User & { capabilities?: string[] };
   wallet: {
     tokenBalance: string;
     totalEarnings: string;
@@ -342,6 +342,26 @@ export default function AdminUsersPage() {
         variant: "destructive"
       });
     }
+  });
+
+  const [draftCapabilities, setDraftCapabilities] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    setDraftCapabilities(null);
+  }, [selectedUser]);
+
+  const updateCapabilitiesMutation = useMutation({
+    mutationFn: async ({ userId, capabilities }: { userId: string; capabilities: string[] }) => {
+      const response = await apiRequest("PATCH", `/api/users/${userId}/capabilities`, { capabilities });
+      return await response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Capabilities updated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users", selectedUser, "details"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed", description: error.message || "Could not update capabilities", variant: "destructive" });
+    },
   });
 
   if (authLoading) {
@@ -938,6 +958,68 @@ export default function AdminUsersPage() {
                               </div>
                             ))}
                           </div>
+                        </CardContent>
+                      </Card>
+                    )}
+                    {/* Crew Capabilities — only for employees/admins */}
+                    {(userDetails.user.role === 'employee' || userDetails.user.role === 'admin' || userDetails.user.role === 'business_owner') && (
+                      <Card>
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-base flex items-center gap-2">
+                            🛠️ Crew Capabilities
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          {(() => {
+                            const ALL_CAPS: { key: string; label: string; emoji: string }[] = [
+                              { key: "mover", label: "Mover", emoji: "💪" },
+                              { key: "driver", label: "Driver", emoji: "🚛" },
+                              { key: "truck_small", label: "Truck (Small)", emoji: "🚐" },
+                              { key: "truck_large", label: "Truck (Large)", emoji: "🚚" },
+                              { key: "trailer_small", label: "Trailer (Small)", emoji: "🏕️" },
+                              { key: "trailer_large", label: "Trailer (Large)", emoji: "🏗️" },
+                              { key: "uhaul", label: "Uhaul Access", emoji: "🔑" },
+                            ];
+                            const current = userDetails.user.capabilities || [];
+                            const working = draftCapabilities !== null ? draftCapabilities : current;
+                            return (
+                              <>
+                                <div className="flex flex-wrap gap-2">
+                                  {ALL_CAPS.map(cap => {
+                                    const isOn = working.includes(cap.key);
+                                    return (
+                                      <button
+                                        key={cap.key}
+                                        onClick={() => {
+                                          const base = draftCapabilities !== null ? draftCapabilities : current;
+                                          const next = isOn ? base.filter(c => c !== cap.key) : [...base, cap.key];
+                                          setDraftCapabilities(next);
+                                        }}
+                                        className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all ${
+                                          isOn
+                                            ? "bg-blue-600/20 border-blue-500/50 text-blue-300"
+                                            : "bg-slate-800/50 border-slate-600/30 text-slate-500 hover:text-slate-300"
+                                        }`}
+                                      >
+                                        <span>{cap.emoji}</span> {cap.label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                                <Button
+                                  size="sm"
+                                  disabled={updateCapabilitiesMutation.isPending || draftCapabilities === null}
+                                  onClick={() => {
+                                    updateCapabilitiesMutation.mutate({ userId: userDetails.user.id, capabilities: working });
+                                    setDraftCapabilities(null);
+                                  }}
+                                  className="w-full mt-1 bg-blue-600 hover:bg-blue-500 text-white h-8 text-xs"
+                                >
+                                  {updateCapabilitiesMutation.isPending ? "Saving…" : "Save Capabilities"}
+                                </Button>
+                              </>
+                            );
+                          })()}
                         </CardContent>
                       </Card>
                     )}

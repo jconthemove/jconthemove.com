@@ -67,6 +67,16 @@ function pendingStakeRewards(stake: Stake) {
   return parseFloat(stake.amount) * parseFloat(stake.dailyRate) * daysSince;
 }
 
+const ALL_CAPABILITIES: { key: string; label: string; emoji: string }[] = [
+  { key: "mover", label: "Mover", emoji: "💪" },
+  { key: "driver", label: "Driver", emoji: "🚛" },
+  { key: "truck_small", label: "Truck (Small)", emoji: "🚐" },
+  { key: "truck_large", label: "Truck (Large)", emoji: "🚚" },
+  { key: "trailer_small", label: "Trailer (Small)", emoji: "🏕️" },
+  { key: "trailer_large", label: "Trailer (Large)", emoji: "🏗️" },
+  { key: "uhaul", label: "Uhaul Access", emoji: "🔑" },
+];
+
 export default function CrewEarningsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -76,6 +86,8 @@ export default function CrewEarningsPage() {
   const { data: miningStatus } = useQuery<MiningStatus>({ queryKey: ["/api/mining/status"], refetchInterval: 15000, refetchIntervalInBackground: false, retry: 1 });
   const { data: rewardsHistory } = useQuery<RewardHistory[]>({ queryKey: ["/api/rewards/history"] });
   const { data: stakes = [] } = useQuery<Stake[]>({ queryKey: ["/api/staking/my-stakes"], retry: 1 });
+
+  const userCapabilities: string[] = user?.capabilities ?? [];
 
   useEffect(() => {
     if (!miningStatus?.currentSession) { setAnimatedTokens(0); return; }
@@ -134,6 +146,20 @@ export default function CrewEarningsPage() {
         <h1 className="text-2xl font-black text-white">Earnings</h1>
         <p className="text-slate-400 text-sm">Your JCMOVES balance and history</p>
       </div>
+
+      {/* Crew Capabilities (read-only) */}
+      {userCapabilities.length > 0 && (
+        <div className="rounded-2xl bg-slate-800/40 border border-slate-700/30 p-4">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">🛠️ Your Capabilities</p>
+          <div className="flex flex-wrap gap-2">
+            {ALL_CAPABILITIES.filter(cap => userCapabilities.includes(cap.key)).map(cap => (
+              <span key={cap.key} className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-600/20 border border-blue-500/30 text-blue-300 text-xs font-semibold">
+                {cap.emoji} {cap.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Balance Summary */}
       <div className="grid grid-cols-3 gap-3">

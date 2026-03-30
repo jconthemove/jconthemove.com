@@ -1,47 +1,54 @@
-import { useState, useEffect } from "react";
-import { Circle } from "lucide-react";
+import { useCrewStatus } from "@/hooks/useCrewStatus";
 
 export default function LiveCrewBeacon() {
-  const [crewCount, setCrewCount] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading } = useCrewStatus(5000);
 
-  useEffect(() => {
-    let active = true;
+  const count = data?.count ?? 0;
+  const tierEmoji = data?.tierEmoji ?? "⏳";
+  const tierLabel = data?.tierLabel ?? "Limited";
+  const tier = data?.tier ?? "limited";
 
-    async function fetchCrew() {
-      try {
-        const res = await fetch("/api/crew/online");
-        if (res.ok) {
-          const data = await res.json();
-          if (active) setCrewCount(typeof data?.count === "number" ? data.count : null);
-        }
-      } catch {
-        if (active) setCrewCount(null);
-      } finally {
-        if (active) setLoading(false);
-      }
-    }
+  const tierColors = {
+    high: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
+    medium: "bg-yellow-500/10 border-yellow-500/20 text-yellow-400",
+    limited: "bg-orange-500/10 border-orange-500/20 text-orange-400",
+  };
 
-    fetchCrew();
-    const interval = setInterval(fetchCrew, 30_000);
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
-  }, []);
+  const dotColors = {
+    high: "bg-emerald-400",
+    medium: "bg-yellow-400",
+    limited: "bg-orange-400",
+  };
 
-  const count = crewCount ?? 3;
+  const pingColors = {
+    high: "bg-emerald-400",
+    medium: "bg-yellow-400",
+    limited: "bg-orange-400",
+  };
 
   return (
-    <div className="flex items-center justify-center gap-2 py-2.5 px-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl">
-      <span className="relative flex h-2.5 w-2.5">
-        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
-      </span>
-      <span className="text-emerald-400 text-sm font-semibold">
-        {loading ? "Checking crew..." : `${count} Mover${count !== 1 ? "s" : ""} Online`}
-      </span>
-      <span className="text-zinc-500 text-xs">· Available now</span>
+    <div className={`flex items-center justify-between gap-2 py-2.5 px-4 border rounded-2xl ${tierColors[tier]}`}>
+      <div className="flex items-center gap-2">
+        <span className="relative flex h-2.5 w-2.5">
+          <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${pingColors[tier]} opacity-75`} />
+          <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${dotColors[tier]}`} />
+        </span>
+        <span className="text-sm font-bold">
+          JC ON THE MOVE Crew
+        </span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        {isLoading ? (
+          <span className="text-xs opacity-60">Checking…</span>
+        ) : (
+          <>
+            <span className="text-sm font-semibold">
+              {count} Mover{count !== 1 ? "s" : ""} Available
+            </span>
+            <span className="text-xs opacity-70">· {tierEmoji} {tierLabel}</span>
+          </>
+        )}
+      </div>
     </div>
   );
 }

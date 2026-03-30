@@ -460,6 +460,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('⚠️ is_driver migration error (non-fatal):', migErr);
   }
 
+  // Schema migration: add crew availability window + capabilities columns
+  try {
+    await pool.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS available_until TIMESTAMP;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active TIMESTAMP;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS capabilities TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
+    `);
+    console.log('✅ crew availability window + capabilities columns ready');
+  } catch (migErr) {
+    console.error('⚠️ crew availability migration error (non-fatal):', migErr);
+  }
+
   // Schema migration: add customer-selected package column to leads
   try {
     await pool.query(`
@@ -2387,11 +2399,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // In-memory cache keyed by ZIP code
   const zipEtaCache = new Map<string, { distanceMiles: number; estimatedMinutes: number; availabilityLabel: string }>();
 
+  // ── Crew Availability System ────────────────────────────────────────────────
+  // POST /api/crew/go-online — worker sets availability window
+  app.post("/api/crew/go-online", isAuthenticated, (req: any, res: any, next: any) => requireEmployee(req, res, next), async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId || req.user?.id;
+      const { availableUntil } = req.body;
+      if (!availableUntil) return res.status(400).json({ message: "availableUntil is required" });
+      const until = new Date(availableUntil);
+      if (isNaN(until.getTime()) || until <= new Date()) {
+        return res.status(400).json({ message: "availableUntil must be a future timestamp" });
+      }
+      const now = new Date();
+      const [updated] = await db.update(users)
+        .set({ isAvailable: true, availableUntil: until, lastActive: now })
+        .where(eq(users.id, userId))
+        .returning({ id: users.id, isAvailable: users.isAvailable, availableUntil: users.availableUntil, lastActive: users.lastActive });
+      if (!updated) return res.status(404).json({ message: "User not found" });
+      return res.json({ success: true, ...updated });
+    } catch (err: any) {
+      console.error("go-online error:", err);
+      return res.status(500).json({ message: "Failed to go online" });
+    }
+  });
+
+  // POST /api/crew/heartbeat — refresh lastActive timestamp
+  app.post("/api/crew/heartbeat", isAuthenticated, (req: any, res: any, next: any) => requireEmployee(req, res, next), async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId || req.user?.id;
+      const now = new Date();
+      // Auto-expire if availableUntil has passed
+      const [worker] = await db.select({ availableUntil: users.availableUntil }).from(users).where(eq(users.id, userId));
+      if (worker?.availableUntil && new Date(worker.availableUntil) <= now) {
+        await db.update(users).set({ isAvailable: false, lastActive: now }).where(eq(users.id, userId));
+        return res.json({ success: true, expired: true });
+      }
+      await db.update(users).set({ lastActive: now }).where(eq(users.id, userId));
+      return res.json({ success: true, expired: false });
+    } catch (err: any) {
+      console.error("heartbeat error:", err);
+      return res.status(500).json({ message: "Failed to send heartbeat" });
+    }
+  });
+
+  // POST /api/crew/go-offline — worker manually goes offline
+  app.post("/api/crew/go-offline", isAuthenticated, (req: any, res: any, next: any) => requireEmployee(req, res, next), async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId || req.user?.id;
+      await db.update(users).set({ isAvailable: false, availableUntil: null, lastActive: new Date() }).where(eq(users.id, userId));
+      return res.json({ success: true });
+    } catch (err: any) {
+      console.error("go-offline error:", err);
+      return res.status(500).json({ message: "Failed to go offline" });
+    }
+  });
+
+  // GET /api/crew/online — public count of workers actively online
+  // Workers qualify if: isAvailable=true AND lastActive within 5min AND availableUntil in future
   app.get("/api/crew/online", async (_req, res) => {
     try {
-      const [crewRow] = await db.select({ count: sql<number>`count(*)` }).from(users)
-        .where(and(eq(users.isAvailable, true), eq(users.role, "employee")));
-      const count = Number(crewRow?.count ?? 0);
+      const now = new Date();
+      const fiveMinAgo = new Date(now.getTime() - 5 * 60 * 1000);
+      const { rows } = await pool.query(
+        `SELECT COUNT(*) AS count FROM users
+         WHERE is_available = true
+           AND role = 'employee'
+           AND last_active IS NOT NULL
+           AND last_active >= $1
+           AND available_until IS NOT NULL
+           AND available_until > $2`,
+        [fiveMinAgo, now]
+      );
+      const count = parseInt(rows[0]?.count ?? "0", 10);
       return res.json({ count });
     } catch {
       return res.json({ count: 0 });
@@ -2468,19 +2547,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (err) {
       console.error("ETA lookup error:", err);
       return res.status(500).json({ error: "Could not calculate ETA right now." });
-    }
-  });
-
-  // ── Live Crew Beacon ────────────────────────────────────────────────────────
-  // GET /api/crew/online — public count of workers with isAvailable = true
-  app.get("/api/crew/online", async (req, res) => {
-    try {
-      const [row] = await db.select({ count: sql<number>`count(*)` }).from(users)
-        .where(and(eq(users.isAvailable, true), eq(users.role, "employee")));
-      res.json({ count: Number(row?.count ?? 0) });
-    } catch (err) {
-      console.error("Error fetching online crew count:", err);
-      res.status(500).json({ count: 0 });
     }
   });
 
@@ -3473,6 +3539,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update worker capability flags (admin only)
+  app.patch('/api/users/:id/capabilities', isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const requestingUser = await storage.getUser((req.session as any).userId);
+      if (!requestingUser || !["admin", "business_owner"].includes(requestingUser.role || "")) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+      const { id } = req.params;
+      const { capabilities } = req.body;
+      const validCaps = ["mover", "driver", "truck_small", "truck_large", "trailer_small", "trailer_large", "uhaul"];
+      if (!Array.isArray(capabilities) || capabilities.some(c => !validCaps.includes(c))) {
+        return res.status(400).json({ error: "Invalid capabilities array" });
+      }
+      const [updated] = await db.update(users).set({ capabilities }).where(eq(users.id, id)).returning({ id: users.id, capabilities: users.capabilities });
+      if (!updated) return res.status(404).json({ error: "User not found" });
+      return res.json({ success: true, capabilities: updated.capabilities });
+    } catch (err: any) {
+      console.error("capabilities update error:", err);
+      return res.status(500).json({ error: "Failed to update capabilities" });
+    }
+  });
+
   // Get detailed user information for admin (balance, rewards, transactions, jobs)
   app.get('/api/admin/users/:id/details', isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
@@ -3552,7 +3640,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           username: user.username,
           role: user.role,
           createdAt: user.createdAt,
-          referralCount: user.referralCount
+          referralCount: user.referralCount,
+          capabilities: user.capabilities || []
         },
         wallet: {
           tokenBalance: tokenBalance.toFixed(8),
@@ -16137,6 +16226,27 @@ Thank you for your business!
       res.status(500).json({ error: e.message });
     }
   });
+
+  // ── Crew Auto-Expire Background Job ─────────────────────────────────────────
+  // Runs every 60 seconds — marks workers offline when availableUntil has passed or lastActive is stale (>5min)
+  setInterval(async () => {
+    try {
+      const now = new Date();
+      const staleThreshold = new Date(now.getTime() - 5 * 60 * 1000);
+      await pool.query(
+        `UPDATE users SET is_available = false
+         WHERE is_available = true
+           AND role = 'employee'
+           AND (
+             (available_until IS NOT NULL AND available_until <= $1)
+             OR (last_active IS NOT NULL AND last_active < $2)
+           )`,
+        [now, staleThreshold]
+      );
+    } catch (e) {
+      console.error('[CrewExpire] auto-expire error:', e);
+    }
+  }, 60_000);
 
   // ── JCMOVES Lottery System ────────────────────────────────────────────────────
   await ensureLotteryTables();

@@ -145,8 +145,10 @@ export const users = pgTable("users", {
   personalWalletAddress: text("personal_wallet_address"), // User's personal Phantom wallet address (if walletMode = 'personal')
   companyWalletId: varchar("company_wallet_id"), // Foreign key to userWallets for company-assigned wallet (if walletMode = 'company')
   isAvailable: boolean("is_available").default(false), // Worker duty status: true = available for jobs right now
+  availableUntil: timestamp("available_until"), // When the availability window expires (set on go-online)
+  lastActive: timestamp("last_active"), // Last heartbeat timestamp (updated every 60s while online)
+  capabilities: text("capabilities").array().default(sql`ARRAY[]::text[]`), // Capability flags: 'mover','driver','truck_small','truck_large','trailer_small','trailer_large','uhaul'
   isDriver: boolean("is_driver").default(false), // Whether this employee can drive the truck
-  capabilities: text("capabilities").array().default(sql`ARRAY[]::text[]`), // Capability flags: 'mover', 'driver', 'truck_small', 'truck_large', 'trailer_small', 'trailer_large', 'uhaul_access'
   rewardsEnrolled: boolean("rewards_enrolled").notNull().default(false),
   loyaltyTier: text("loyalty_tier").default("bronze"), // 'bronze', 'silver', 'gold', 'vip'
   totalCompletedSpend: decimal("total_completed_spend", { precision: 10, scale: 2 }).default("0.00"),
