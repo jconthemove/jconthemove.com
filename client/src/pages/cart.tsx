@@ -517,9 +517,6 @@ export default function CartPage() {
                   >
                     <div className="min-w-0">
                       <span className="font-mono font-bold text-amber-300 text-sm tracking-wide">{c.code}</span>
-                      {c.description && (
-                        <p className="text-amber-500/80 text-xs truncate mt-0.5">{c.description}</p>
-                      )}
                     </div>
                     <span className="text-xs font-bold text-amber-400 bg-amber-900/60 border border-amber-700/40 rounded-lg px-2 py-1 shrink-0">
                       {promoLoading && promoInput === c.code ? (
