@@ -10,11 +10,26 @@ import { Button } from "@/components/ui/button";
 import {
   Sun, Cloud, CloudSnow, CloudRain, Zap, Wind, BookOpen, RefreshCw,
   Wifi, WifiOff, Coins, MapPin, Calendar, ChevronRight, Loader2, Trophy,
-  Clock, CheckCircle, XCircle, Plus, LogOut,
+  Clock, CheckCircle, XCircle, Plus, LogOut, Briefcase, Users, CheckCircle2,
 } from "lucide-react";
 import { apiRequest, clearTokens, queryClient as qc } from "@/lib/queryClient";
 import { Link } from "wouter";
 import type { Lead, User } from "@shared/schema";
+
+type JobBoardLead = {
+  id: string;
+  serviceType: string;
+  fromAddress: string | null;
+  toAddress: string | null;
+  moveDate: string | null;
+  crewSize: number | null;
+  status: string;
+  price: string | null;
+  details: string | null;
+  estimatedTokens: number;
+  alreadyApplied: boolean;
+  crewSlotsFilled: number;
+};
 
 const SCRIPTURES = [
   { text: "Commit your work to the Lord, and your plans will be established.", ref: "Proverbs 16:3" },
@@ -161,6 +176,34 @@ export default function CrewTodayPage() {
     queryKey: [isAdmin ? "/api/leads" : "/api/leads/my-jobs"],
   });
 
+  const { data: boardJobs = [] } = useQuery<JobBoardLead[]>({
+    queryKey: ["/api/leads/job-board"],
+    staleTime: 0,
+    refetchOnMount: true,
+  });
+
+  const [applyingId, setApplyingId] = useState<string | null>(null);
+  const applyMutation = useMutation({
+    mutationFn: async (leadId: string) => {
+      const res = await apiRequest("POST", `/api/leads/${leadId}/crew-apply`, {});
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Failed to sign up" }));
+        throw new Error(err.error || "Failed to sign up");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads/job-board"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads/my-jobs"] });
+      setApplyingId(null);
+      toast({ title: "✅ Signed up!", description: "The admin will confirm your assignment." });
+    },
+    onError: (e: Error) => {
+      setApplyingId(null);
+      toast({ title: "Couldn't sign up", description: e.message, variant: "destructive" });
+    },
+  });
+
   const { data: employees = [] } = useQuery<User[]>({ queryKey: ["/api/employees"] });
   const { data: wallet } = useQuery<{ balance: string }>({ queryKey: ["/api/rewards/wallet"] });
 
@@ -243,6 +286,17 @@ export default function CrewTodayPage() {
 
   const today = new Date();
   const todayStr = today.toDateString();
+
+  const upcomingBoardJobs = useMemo(() => {
+    return boardJobs
+      .filter(j => !j.alreadyApplied && (j.crewSize || 2) > j.crewSlotsFilled)
+      .sort((a, b) => {
+        const da = a.moveDate ? new Date(a.moveDate.split("T")[0]).getTime() : Infinity;
+        const db = b.moveDate ? new Date(b.moveDate.split("T")[0]).getTime() : Infinity;
+        return da - db;
+      });
+  }, [boardJobs]);
+
   const todayJobs = leads.filter(l => {
     const dateStr = l.confirmedDate || l.moveDate;
     if (!dateStr) return false;
@@ -437,14 +491,80 @@ export default function CrewTodayPage() {
         </div>
       )}
 
-      {todayJobs.length === 0 && (
+      {todayJobs.length === 0 && upcomingBoardJobs.length === 0 && (
         <div className="rounded-2xl bg-slate-800/30 border border-slate-700/30 p-6 text-center">
           <Calendar className="h-10 w-10 text-slate-500 mx-auto mb-2" />
           <p className="text-slate-400 font-medium">No jobs scheduled for today</p>
-          <p className="text-slate-500 text-sm mt-1">Check the Jobs tab for available work</p>
-          <Link href="/crew/jobs">
-            <Button size="sm" className="mt-3 bg-blue-600 hover:bg-blue-500">View Jobs</Button>
-          </Link>
+          <p className="text-slate-500 text-sm mt-1">New jobs will appear here when they're posted</p>
+        </div>
+      )}
+
+      {/* Available Jobs to Sign Up For */}
+      {upcomingBoardJobs.length > 0 && (
+        <div className="rounded-2xl bg-gradient-to-br from-blue-950/60 via-slate-900 to-slate-950 border border-blue-500/20 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Briefcase className="h-4 w-4 text-blue-400" />
+              <span className="text-blue-300 text-sm font-bold uppercase tracking-wider">Available Jobs</span>
+              <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30 text-xs">{upcomingBoardJobs.length} open</Badge>
+            </div>
+            <Link href="/crew/jobs">
+              <span className="text-slate-500 text-xs hover:text-slate-300 transition-colors">See all →</span>
+            </Link>
+          </div>
+          <div className="space-y-3">
+            {upcomingBoardJobs.slice(0, 5).map(job => {
+              const slotsOpen = (job.crewSize || 2) - job.crewSlotsFilled;
+              const dateLabel = job.moveDate
+                ? new Date(job.moveDate.split("T")[0] + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+                : "Date TBD";
+              return (
+                <div key={job.id} className="bg-white/[0.04] rounded-xl p-3 border border-white/5 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl leading-none">{SERVICE_ICONS[job.serviceType] ?? "🚛"}</span>
+                      <div>
+                        <p className="text-white text-sm font-semibold capitalize">{job.serviceType.replace(/-/g, " ")} Job</p>
+                        <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                          <span className="text-slate-400 text-xs flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />{dateLabel}
+                          </span>
+                          {job.fromAddress && (
+                            <span className="text-slate-400 text-xs flex items-center gap-1">
+                              <MapPin className="h-3 w-3" />
+                              <span className="truncate max-w-[130px]">{job.fromAddress}</span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-orange-400 font-bold text-xs flex items-center gap-1 justify-end">
+                        <Coins className="h-3 w-3" />~{job.estimatedTokens.toLocaleString()}
+                      </p>
+                      <p className="text-slate-500 text-[10px]">JCMOVES</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-yellow-400 text-xs flex items-center gap-1">
+                      <Users className="h-3 w-3" />
+                      {slotsOpen} slot{slotsOpen !== 1 ? "s" : ""} open · {job.crewSize || 2} needed
+                    </span>
+                    <Button
+                      size="sm"
+                      disabled={applyingId === job.id && applyMutation.isPending}
+                      onClick={() => { setApplyingId(job.id); applyMutation.mutate(job.id); }}
+                      className="h-7 text-xs bg-blue-600 hover:bg-blue-500 text-white font-semibold px-3"
+                    >
+                      {applyingId === job.id && applyMutation.isPending
+                        ? <Loader2 className="h-3 w-3 animate-spin" />
+                        : "Sign Up"}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
