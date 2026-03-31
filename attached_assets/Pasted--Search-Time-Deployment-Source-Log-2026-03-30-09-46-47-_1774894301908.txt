@@ -1,0 +1,174 @@
+
+Search
+Time
+Deployment
+Source
+Log
+2026-03-30 09:46:47.58
+99b00c40
+User
+2:46:47 PM [express] GET /api/leads/my-jobs 403 in 328ms :: {"message":"Business owner access requir…
+2026-03-30 13:00:51.21
+36c0b1be
+User
+🎟️ Lottery tables ready
+2026-03-30 13:00:51.30
+36c0b1be
+User
+Application routes registered successfully
+2026-03-30 13:00:51.30
+36c0b1be
+User
+Configuring static file serving for production...
+2026-03-30 13:00:51.31
+36c0b1be
+User
+Static file serving configured successfully
+2026-03-30 13:00:51.31
+36c0b1be
+User
+Starting server on port 5000...
+2026-03-30 13:00:51.31
+36c0b1be
+User
+✅ JC ON THE MOVE application started successfully
+2026-03-30 13:00:51.46
+36c0b1be
+User
+6:00:51 PM [express] serving on port 5000
+2026-03-30 13:00:51.50
+36c0b1be
+User
+✅ Reward shop already seeded — skipping
+2026-03-30 13:00:56.97
+36c0b1be
+System
+system: received signal terminated
+2026-03-30 13:01:00.05
+36c0b1be
+System
+metasidecar: loaded enterprise status from environment is_enterprise=false
+2026-03-30 13:01:00.05
+36c0b1be
+System
+starting up user application
+2026-03-30 13:01:00.05
+36c0b1be
+System
+forwarding local port 5000 to external port 80 (mapped as 1104)
+2026-03-30 13:01:01.85
+36c0b1be
+User
+> rest-express@1.0.0 start
+2026-03-30 13:01:01.85
+36c0b1be
+User
+> NODE_ENV=production node dist/index.js
+2026-03-30 13:01:08.62
+36c0b1be
+User
+bigint: Failed to load bindings, pure JS will be used (try npm run rebuild?)
+2026-03-30 13:01:20.18
+36c0b1be
+User
+SendGrid email service initialized successfully
+2026-03-30 13:01:20.21
+36c0b1be
+User
+🪙 Token Mint: BHZW4jds7NSe5Fqvw9Z4pvt423EJSx63k8MT11F2moon
+2026-03-30 13:01:20.21
+36c0b1be
+User
+🔗 SolanaTransferService initialized
+2026-03-30 13:01:20.21
+36c0b1be
+User
+📍 RPC: https://api.mainnet-beta.solana.com
+2026-03-30 13:01:20.30
+36c0b1be
+User
+✅ Primary Treasury initialized: 2eouZ3mWGGW1Jettcra6L5ZkaCzqvfpNh9XT7CHva1Ry
+2026-03-30 13:01:20.30
+36c0b1be
+User
+✅ JC MOVES BANKS initialized: 2eouZ3mWGGW1Jettcra6L5ZkaCzqvfpNh9XT7CHva1Ry
+2026-03-30 13:01:20.30
+36c0b1be
+User
+✅ IN GOD WE TRUST initialized: 9uYZS21Q1MVVpLzYSZrc6Sg3TngQr2Ga9kgXJUn4a3Wp
+2026-03-30 13:01:20.30
+36c0b1be
+User
+🔄 JupiterSwapService initialized
+2026-03-30 13:01:20.30
+36c0b1be
+User
+Initializing application server...
+2026-03-30 13:01:20.47
+36c0b1be
+User
+Gmail email service available (primary)
+2026-03-30 13:01:20.54
+36c0b1be
+User
+✅ Loyalty tier columns ready
+2026-03-30 13:01:20.59
+36c0b1be
+User
+✅ is_driver column ready
+2026-03-30 13:01:20.64
+36c0b1be
+User
+✅ crew availability window + capabilities columns ready
+2026-03-30 13:01:20.68
+36c0b1be
+User
+✅ Leads selected_package_id column ready
+2026-03-30 13:01:21.54
+36c0b1be
+User
+🤝 Nominees table ready
+2026-03-30 13:01:21.96
+36c0b1be
+User
+✅ Promo code MATTMOVES linked to dawsonsdad8176@gmail.com
+2026-03-30 13:01:22.05
+36c0b1be
+User
+✅ Promo code TIM linked to timothymewbourn3@gmail.com
+2026-03-30 13:01:22.13
+36c0b1be
+User
+✅ Promo code TIMMOVES linked to timothymewbourn3@gmail.com
+2026-03-30 13:01:22.22
+36c0b1be
+User
+✅ Promo code TIMTHEMOVER linked to timothymewbourn3@gmail.com
+2026-03-30 13:01:22.31
+36c0b1be
+User
+✅ Quantum Spin jackpots seeded
+2026-03-30 13:01:32.31
+36c0b1be
+User
+[COOKIE-IN] GET /api/auth/user | proto=https secure=true | jc.sid=true connect.sid=true | raw="connect.sid=s%3AxIPVrX2uLWDXp583qx5pLNPr6YLnohUC.3YbbgluzD9ouASgJBlNBjm2JaA2Ac2OXF772VCgtSWE; jc.sid=s%3AgW_VQ-zxQGwLVaB"
+2026-03-30 13:01:32.35
+36c0b1be
+User
+[AUTH CHECK] Path: /api/auth/user | Session ID: gW_VQ-zx | Has cookie: true
+2026-03-30 13:01:34.76
+36c0b1be
+User
+[AUTH CHECK] Path: /api/admin/stats | Session ID: gW_VQ-zx | Has cookie: true
+2026-03-30 13:01:34.77
+36c0b1be
+User
+[AUTH CHECK] Path: /api/admin/payouts/pending | Session ID: gW_VQ-zx | Has cookie: true
+2026-03-30 13:01:34.78
+36c0b1be
+User
+[AUTH CHECK] Path: /api/admin/btc-payments | Session ID: gW_VQ-zx | Has cookie: true
+2026-03-30 13:01:34.78
+36c0b1be
+User
+[AUTH CHECK] Path: /api/solana/balance | Session ID: gW_VQ-zx | Has cookie: true

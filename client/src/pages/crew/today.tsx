@@ -10,8 +10,9 @@ import { Button } from "@/components/ui/button";
 import {
   Sun, Cloud, CloudSnow, CloudRain, Zap, Wind, BookOpen, RefreshCw,
   Wifi, WifiOff, Coins, MapPin, Calendar, ChevronRight, Loader2, Trophy,
-  Clock, CheckCircle, XCircle, Plus,
+  Clock, CheckCircle, XCircle, Plus, LogOut,
 } from "lucide-react";
+import { apiRequest, clearTokens, queryClient as qc } from "@/lib/queryClient";
 import { Link } from "wouter";
 import type { Lead, User } from "@shared/schema";
 
@@ -274,6 +275,13 @@ export default function CrewTodayPage() {
   const medals = ["🥇", "🥈", "🥉"];
   const isPending = goOnlineMutation.isPending || goOfflineMutation.isPending || extendMutation.isPending;
 
+  async function handleLogout() {
+    try { await apiRequest("POST", "/api/auth/logout", {}); } catch { /* ignore */ }
+    clearTokens();
+    qc.clear();
+    window.location.href = "/";
+  }
+
   return (
     <div className="max-w-2xl mx-auto px-4 pt-6 space-y-5">
       {/* Hero */}
@@ -284,10 +292,19 @@ export default function CrewTodayPage() {
             <h1 className="text-3xl font-black text-white">{firstName}</h1>
             <p className="text-slate-400 text-sm mt-1">🚛 Ready to move mountains today?</p>
           </div>
-          <div className="text-right">
-            <p className="text-xs text-slate-500">Balance</p>
-            <p className="text-xl font-black text-purple-400">{tokenBalance}</p>
-            <p className="text-xs text-slate-500">JCMOVES</p>
+          <div className="text-right flex flex-col items-end gap-2">
+            <div>
+              <p className="text-xs text-slate-500">Balance</p>
+              <p className="text-xl font-black text-purple-400">{tokenBalance}</p>
+              <p className="text-xs text-slate-500">JCMOVES</p>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 text-slate-500 hover:text-red-400 transition-colors text-xs py-1 px-2 rounded-lg hover:bg-red-500/10"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              <span>Log out</span>
+            </button>
           </div>
         </div>
 
