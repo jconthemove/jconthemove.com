@@ -2,68 +2,11 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Truck, Trash2, Snowflake, Sparkles, Wrench, HardHat, Layers, PaintBucket,
-  CheckCircle2, Star, Shield, Zap, MapPin, Phone, Gift, ChevronRight,
-  Users, Clock, Package, ArrowRight, CalendarCheck, MessageCircle
+  CheckCircle2, Star, Shield, Zap, MapPin, Phone, Gift,
+  ArrowRight, CalendarCheck, MessageCircle
 } from "lucide-react";
 import { Link } from "wouter";
 
-
-const servicePackages = [
-  {
-    title: "2 Movers · 3 Hours",
-    badge: "Most Popular",
-    badgeColor: "bg-red-500 text-white",
-    price: 450,
-    discountPercent: 5,
-    icon: Users,
-    gradientFrom: "from-blue-800",
-    gradientTo: "to-blue-600",
-    bullets: [
-      "2 professional movers for 3 hours",
-      "Local moves up to 30 miles",
-      "Loading & unloading included",
-      "Furniture protection & care",
-    ],
-    ctaLabel: "Book 2 Movers Now",
-    ctaHref: "/book",
-  },
-  {
-    title: "4 Movers · 2 Hours",
-    badge: "Fastest Option",
-    badgeColor: "bg-amber-500 text-white",
-    price: 600,
-    discountPercent: null,
-    icon: Clock,
-    gradientFrom: "from-slate-700",
-    gradientTo: "to-slate-500",
-    bullets: [
-      "4-man crew for maximum speed",
-      "Ideal for larger homes or offices",
-      "Truck & equipment included",
-      "Guaranteed on-time arrival",
-    ],
-    ctaLabel: "Book 4 Movers Now",
-    ctaHref: "/book",
-  },
-  {
-    title: "Single Item or Small Load",
-    badge: "Starting at $150",
-    badgeColor: "bg-emerald-600 text-white",
-    price: null,
-    discountPercent: null,
-    icon: Package,
-    gradientFrom: "from-teal-800",
-    gradientTo: "to-teal-600",
-    bullets: [
-      "Single furniture pieces or appliances",
-      "Small loads & estate cleanouts",
-      "Same-day availability",
-      "Eco-friendly disposal options",
-    ],
-    ctaLabel: "Get Junk Removal Quote",
-    ctaHref: "/quote?service=junk-removal",
-  },
-];
 
 const testimonials = [
   {
@@ -203,6 +146,7 @@ export default function HomePage() {
                   { icon: Shield, label: "Licensed & Insured" },
                   { icon: Star, label: "5-Star Local Reputation" },
                   { icon: Zap, label: "Fast Response" },
+                  { icon: CheckCircle2, label: "20+ Years Experience" },
                 ].map(({ icon: Icon, label }) => (
                   <div key={label} className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-full px-3 py-1.5">
                     <Icon className="h-3.5 w-3.5 text-blue-400" />
@@ -288,26 +232,8 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Right: Two-action CTA card */}
+            {/* Right: CTA card */}
             <div className="flex flex-col gap-4">
-              <Link href="/book" className="block">
-                <div className="group bg-blue-600 hover:bg-blue-500 border border-blue-500 rounded-2xl p-6 shadow-2xl cursor-pointer transition-all duration-200 hover:shadow-blue-500/20 hover:shadow-xl">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center">
-                      <CalendarCheck className="h-5 w-5 text-white" />
-                    </div>
-                    <ArrowRight className="h-5 w-5 text-white/60 group-hover:text-white group-hover:translate-x-1 transition-all" />
-                  </div>
-                  <p className="text-white font-extrabold text-xl mb-1">Book a Job</p>
-                  <p className="text-blue-100 text-sm">Pick your service, movers, and date. Lock in pricing instantly — deposit online, rest on move day.</p>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {["Moving", "Junk Removal", "Handyman", "Snow Removal"].map(s => (
-                      <span key={s} className="text-[11px] font-medium bg-white/15 text-white rounded-full px-2.5 py-0.5">{s}</span>
-                    ))}
-                  </div>
-                </div>
-              </Link>
-
               <Link href="/quote" className="block">
                 <div className="group bg-slate-800/80 hover:bg-slate-700/80 border border-slate-600/60 hover:border-slate-500 rounded-2xl p-6 shadow-xl cursor-pointer transition-all duration-200">
                   <div className="flex items-center justify-between mb-3">
@@ -330,124 +256,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── WHY PEOPLE CHOOSE US ── */}
-      <section className="py-10 px-4 bg-slate-950/50">
-        <div className="max-w-5xl mx-auto">
-          <p className="text-blue-400 text-xs font-semibold uppercase tracking-widest text-center mb-2">Trust</p>
-          <h2 className="text-2xl md:text-3xl font-bold text-white text-center mb-8">Why People Choose JC ON THE MOVE</h2>
-
-          {/* Stat blocks */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            {[
-              { value: "500+", label: "Jobs Completed" },
-              { value: "5.0", label: "Average Rating" },
-              { value: "Same-Day", label: "Availability" },
-              { value: "Ironwood", label: "Based in Ironwood, MI" },
-            ].map(({ value, label }) => (
-              <div key={label} className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4 text-center">
-                <p className="text-white font-extrabold text-2xl md:text-3xl">{value}</p>
-                <p className="text-slate-400 text-xs mt-1">{label}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Trust lines */}
-          <div className="flex flex-wrap justify-center gap-x-10 gap-y-3">
-            {[
-              "No hidden fees.",
-              "Professional, uniformed crews.",
-              "Fast scheduling & clear communication.",
-            ].map((line) => (
-              <div key={line} className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-emerald-400 flex-shrink-0" />
-                <span className="text-slate-300 text-sm">{line}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── POPULAR SERVICE PACKAGES ── */}
-      <section className="py-10 px-4">
-        <div className="max-w-5xl mx-auto">
-          <div className="flex items-center gap-3 mb-1">
-            <p className="text-blue-400 text-xs font-semibold uppercase tracking-widest">Services</p>
-            <span className="bg-red-500 text-white text-xs font-bold px-2.5 py-0.5 rounded-full">Popular Packages</span>
-          </div>
-          <h2 className="text-2xl font-bold text-white mb-1">Popular Service Packages</h2>
-          <p className="text-slate-400 text-sm mb-6">Transparent flat-rate pricing — no hidden fees, no surprises.</p>
-
-          <div className="grid md:grid-cols-3 gap-5">
-            {servicePackages.map((pkg, i) => {
-              const Icon = pkg.icon;
-              const discountedPrice = pkg.price && pkg.discountPercent
-                ? pkg.price * (1 - pkg.discountPercent / 100)
-                : null;
-              const savings = pkg.price && pkg.discountPercent
-                ? pkg.price * (pkg.discountPercent / 100)
-                : null;
-              return (
-                <div key={i} className="flex flex-col rounded-2xl overflow-hidden border border-slate-700/50 shadow-lg bg-slate-900">
-                  {/* Image / icon placeholder */}
-                  <div className={`relative h-36 bg-gradient-to-br ${pkg.gradientFrom} ${pkg.gradientTo} flex items-center justify-center`}>
-                    <Icon className="h-14 w-14 text-white/30" />
-                    <span className={`absolute top-3 left-3 text-xs font-bold px-2.5 py-1 rounded-full ${pkg.badgeColor}`}>
-                      {pkg.badge}
-                    </span>
-                  </div>
-
-                  {/* Card body */}
-                  <div className="flex flex-col flex-1 p-5">
-                    <h3 className="text-white font-bold text-lg mb-3">{pkg.title}</h3>
-
-                    {/* Price box */}
-                    <div className="mb-4 rounded-xl bg-slate-800/70 border border-slate-700/50 p-3">
-                      {pkg.price ? (
-                        discountedPrice && savings ? (
-                          <>
-                            <div className="flex items-baseline gap-2">
-                              <span className="text-slate-500 line-through text-sm">${pkg.price}</span>
-                              <span className="text-emerald-400 text-xs font-semibold">Save ${savings.toFixed(2)} (5% off)</span>
-                            </div>
-                            <p className="text-white font-extrabold text-2xl">${discountedPrice.toFixed(2)}</p>
-                            <p className="text-emerald-400 text-xs mt-0.5 font-medium">Instant online booking discount applied</p>
-                          </>
-                        ) : (
-                          <p className="text-white font-extrabold text-2xl">${pkg.price}</p>
-                        )
-                      ) : (
-                        <>
-                          <p className="text-white font-extrabold text-2xl">$150+</p>
-                          <p className="text-slate-400 text-xs mt-0.5">Price based on load size</p>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Bullet points */}
-                    <ul className="space-y-2 mb-5 flex-1">
-                      {pkg.bullets.map((bullet) => (
-                        <li key={bullet} className="flex items-start gap-2 text-slate-300 text-sm">
-                          <CheckCircle2 className="h-4 w-4 text-emerald-400 flex-shrink-0 mt-0.5" />
-                          {bullet}
-                        </li>
-                      ))}
-                    </ul>
-
-                    {/* CTA button */}
-                    <Link href={pkg.ctaHref}>
-                      <Button className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold rounded-xl py-2.5">
-                        {pkg.ctaLabel}
-                        <ChevronRight className="h-4 w-4 ml-1" />
-                      </Button>
-                    </Link>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
       {/* ── SERVICES GRID ── */}
       <section className="py-10 px-4 bg-slate-950/60">
         <div className="max-w-5xl mx-auto">
@@ -460,7 +268,7 @@ export default function HomePage() {
               { icon: Trash2,      label: "Junk Removal", sub: "Haul away & disposal",  href: "/book",                  iconCls: "text-orange-400", borderCls: "hover:border-orange-500/50" },
               { icon: Sparkles,    label: "Move-In/Out",  sub: "Cleaning & labor",      href: "/quote?service=cleaning", iconCls: "text-teal-400",   borderCls: "hover:border-teal-500/50"   },
               { icon: Snowflake,   label: "Snow Removal", sub: "Plowing & shoveling",   href: "/quote?service=snow",    iconCls: "text-cyan-400",   borderCls: "hover:border-cyan-500/50"   },
-              { icon: Wrench,      label: "Handyman",     sub: "General repairs",       href: "/book",                  iconCls: "text-yellow-400", borderCls: "hover:border-yellow-500/50" },
+              { icon: Wrench,      label: "Handyman",     sub: "General repairs",       href: "/quote?service=handyman", iconCls: "text-yellow-400", borderCls: "hover:border-yellow-500/50" },
               { icon: HardHat,     label: "Light Demo",   sub: "Tear-out & cleanout",   href: "/quote?service=demolition", iconCls: "text-red-400", borderCls: "hover:border-red-500/50"    },
               { icon: Layers,      label: "Flooring",     sub: "Install & removal",     href: "/quote?service=flooring", iconCls: "text-purple-400", borderCls: "hover:border-purple-500/50" },
               { icon: PaintBucket, label: "Painting",     sub: "Interior & exterior",   href: "/quote?service=painting", iconCls: "text-pink-400",  borderCls: "hover:border-pink-500/50"   },
@@ -475,27 +283,6 @@ export default function HomePage() {
             ))}
           </div>
 
-          {/* Mid-page CTA strip */}
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link href="/book">
-              <Button className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-8 py-3 rounded-xl text-base w-full sm:w-auto">
-                <CalendarCheck className="h-4 w-4 mr-2" />
-                Book a Job
-              </Button>
-            </Link>
-            <Link href="/quote">
-              <Button variant="outline" className="border-slate-600 text-white hover:bg-slate-700 font-semibold px-8 py-3 rounded-xl text-base w-full sm:w-auto">
-                <MessageCircle className="h-4 w-4 mr-2" />
-                Get a Custom Quote
-              </Button>
-            </Link>
-            <a href="tel:+19062859312">
-              <Button variant="ghost" className="text-slate-400 hover:text-white hover:bg-slate-800 px-8 py-3 rounded-xl text-base w-full sm:w-auto">
-                <Phone className="h-4 w-4 mr-2" />
-                (906) 285-9312
-              </Button>
-            </a>
-          </div>
         </div>
       </section>
 
@@ -578,7 +365,7 @@ export default function HomePage() {
               </Link>
               <Link href="/book">
                 <button className="border border-slate-600 text-slate-300 hover:bg-slate-700/60 font-semibold px-6 py-3 rounded-xl text-base transition-all w-full sm:w-auto text-center">
-                  Book &amp; Earn Rewards
+                  Start Earning Rewards
                 </button>
               </Link>
             </div>
@@ -593,7 +380,7 @@ export default function HomePage() {
             <Link href="/book">
               <Button className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-8 py-4 rounded-xl text-lg">
                 <CalendarCheck className="h-5 w-5 mr-2" />
-                Book a Job →
+                Get Started →
               </Button>
             </Link>
           </div>
