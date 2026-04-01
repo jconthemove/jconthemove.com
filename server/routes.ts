@@ -25,6 +25,7 @@ import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposit
 import { getFaucetPayService } from "./services/faucetpay";
 import { getAdvertisingService } from "./services/advertising";
 import { FAUCET_CONFIG, calculateJCMovesReward, getTierFromSpend, getTierFromPoints, LOYALTY_TIERS, TIER_POINT_AWARDS, type TierPointActivity } from "./constants";
+import { fetchZipLocation, calculateMovingPrice } from "@shared/pricing";
 import { walletService } from "./services/wallet";
 import { solanaMonitor } from "./services/solana-monitor";
 import { crewSuggestionService } from "./services/crew-suggestions";
@@ -13019,6 +13020,214 @@ Thank you for your business!
       console.error("Error creating promo checkout:", error);
       const errorMsg = error?.errors?.[0]?.detail || error.message || "Failed to create checkout";
       res.status(500).json({ error: errorMsg });
+    }
+  });
+
+  // POST /api/bookings/deposit/create — booking calculator deposit checkout
+  app.post("/api/bookings/deposit/create", async (req: any, res) => {
+    try {
+      const {
+        firstName, lastName, email, phone,
+        moveDate, fromAddress, toAddress, details,
+        movers, hours, addOns, truckSize,
+        pickupZip, dropoffZip, promoCode,
+      } = req.body;
+
+      if (!firstName || !lastName || !email || !phone) {
+        return res.status(400).json({ error: "Missing required contact fields (name, email, phone)." });
+      }
+      if (!fromAddress || !moveDate) {
+        return res.status(400).json({ error: "Pickup address and move date are required." });
+      }
+      if (!pickupZip || String(pickupZip).replace(/\D/g, "").length < 5) {
+        return res.status(400).json({ error: "A valid pickup ZIP code is required to calculate pricing." });
+      }
+      if (!movers || !hours) {
+        return res.status(400).json({ error: "Mover count and hours are required." });
+      }
+
+      const squareToken = process.env.SQUARE_ACCESS_TOKEN;
+      if (!squareToken) {
+        return res.status(500).json({ error: "Payment processing is not configured. Please call us at 906-285-9312 to book." });
+      }
+
+      // Resolve ZIP codes to lat/lng for accurate travel pricing
+      const pickupLocation = await fetchZipLocation(String(pickupZip).trim()).catch(() => null);
+      if (!pickupLocation) {
+        return res.status(400).json({ error: "Could not resolve pickup ZIP code. Please check and try again." });
+      }
+
+      let dropoffLocation = null;
+      if (dropoffZip && String(dropoffZip).trim().length >= 5) {
+        dropoffLocation = await fetchZipLocation(String(dropoffZip).trim()).catch(() => null);
+      }
+
+      // Look up promo discount if a code was provided
+      let promoInput = null;
+      if (promoCode) {
+        const normalizedCode = String(promoCode).trim().toUpperCase();
+        const [promoRow] = await db.select().from(promoCodes)
+          .where(and(eq(promoCodes.code, normalizedCode), eq(promoCodes.isActive, true)))
+          .limit(1);
+        if (promoRow) {
+          promoInput = {
+            code: normalizedCode,
+            discountPercent: promoRow.discountPercent ? Number(promoRow.discountPercent) : null,
+            description: promoRow.description,
+          };
+        }
+      }
+
+      // Compute server-side price so the deposit can't be tampered with
+      const parsedMovers = Math.max(1, Math.min(10, parseInt(movers) || 2));
+      const parsedHours = Math.max(2, Math.min(12, parseFloat(hours) || 3));
+      const safeAddOns = {
+        truck: Boolean(addOns?.truck),
+        packing: Boolean(addOns?.packing),
+        stairs: Boolean(addOns?.stairs),
+        piano: Boolean(addOns?.piano),
+        hotTub: Boolean(addOns?.hotTub),
+        assembly: Boolean(addOns?.assembly),
+      };
+      const safeTruckSize = (truckSize === "large" || truckSize === "sixteen") ? truckSize : "sixteen";
+
+      const pricing = calculateMovingPrice({
+        movers: parsedMovers,
+        hours: parsedHours,
+        addOns: safeAddOns,
+        truckSize: safeTruckSize,
+        pickup: pickupLocation,
+        dropoff: dropoffLocation,
+        promo: promoInput,
+      });
+
+      const depositAmount = Math.round(pricing.grandTotal * 0.3 * 100) / 100;
+      const depositCents = BigInt(Math.round(depositAmount * 100));
+
+      // Build description for the lead
+      const addOnNames = Object.entries(safeAddOns)
+        .filter(([, v]) => v)
+        .map(([k]) => k)
+        .join(", ");
+      const detailText = [
+        `[DEPOSIT BOOKING] ${parsedMovers} movers, ${pricing.billableHours} hrs`,
+        safeAddOns.truck ? `Truck (${safeTruckSize})` : null,
+        addOnNames ? `Add-ons: ${addOnNames}` : null,
+        `Grand total: $${pricing.grandTotal} | Deposit paid: $${depositAmount}`,
+        details || null,
+      ].filter(Boolean).join(". ");
+
+      const lead = await storage.createLead({
+        firstName,
+        lastName,
+        email,
+        phone,
+        serviceType: safeAddOns.truck ? "residential" : "residential",
+        fromAddress,
+        toAddress: toAddress || "",
+        moveDate,
+        details: detailText,
+        propertySize: "calculator-booking",
+        crewSize: parsedMovers,
+        truckConfig: safeAddOns.truck ? "company_truck" : "none",
+        basePrice: pricing.laborSubtotal.toFixed(2),
+        totalPrice: pricing.grandTotal.toFixed(2),
+      });
+
+      const { SquareClient, SquareEnvironment } = await import("square");
+      const { randomUUID } = await import("crypto");
+
+      const client = new SquareClient({
+        token: squareToken,
+        environment: SquareEnvironment.Production,
+      });
+
+      const locationsResponse = await client.locations.list();
+      const locations = locationsResponse.locations;
+      if (!locations || locations.length === 0) {
+        return res.status(500).json({ error: "Payment setup incomplete. Please call us at 906-285-9312." });
+      }
+      const locationId = locations[0].id!;
+
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+      const host = req.headers['x-forwarded-host'] || req.headers.host;
+      const baseUrl = `${protocol}://${host}`;
+
+      const paymentLinkResponse = await client.checkout.paymentLinks.create({
+        idempotencyKey: randomUUID(),
+        quickPay: {
+          name: `JC ON THE MOVE — ${parsedMovers} Mover${parsedMovers > 1 ? "s" : ""}, ${pricing.billableHours} hrs — 30% Deposit`,
+          priceMoney: { amount: depositCents, currency: "USD" },
+          locationId,
+        },
+        checkoutOptions: {
+          redirectUrl: `${baseUrl}/payment-success?type=booking&leadId=${lead.id}`,
+          allowTipping: false,
+          merchantSupportEmail: "upmichiganstatemovers@gmail.com",
+        },
+        paymentNote: `Move deposit — ${firstName} ${lastName} — ${moveDate} — Lead ${lead.id} — Full: $${pricing.grandTotal}`,
+      });
+
+      const paymentLink = paymentLinkResponse.result?.paymentLink || paymentLinkResponse.paymentLink;
+      if (!paymentLink?.url) {
+        return res.status(500).json({ error: "Failed to create payment link. Please call 906-285-9312." });
+      }
+
+      // Send confirmation emails (fire-and-forget)
+      const emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #1e293b; color: #e2e8f0; padding: 30px; border-radius: 12px;">
+          <h1 style="color: #facc15; text-align: center;">JC ON THE MOVE LLC</h1>
+          <h2 style="color: white; text-align: center;">Deposit Received — Move Reserved</h2>
+          <div style="background: #334155; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="color: #facc15; margin-top: 0;">Booking Summary</h3>
+            <p><strong>Crew:</strong> ${parsedMovers} Mover${parsedMovers > 1 ? "s" : ""}</p>
+            <p><strong>Hours booked:</strong> ${pricing.billableHours} hrs</p>
+            ${safeAddOns.truck ? `<p><strong>Truck:</strong> Included (${safeTruckSize === "large" ? "Large" : "16ft"})</p>` : ""}
+            <p><strong>Full total:</strong> $${pricing.grandTotal}</p>
+            <p><strong>Deposit paid:</strong> $${depositAmount} (30%)</p>
+            <p><strong>Balance due on move day:</strong> $${Math.round((pricing.grandTotal - depositAmount) * 100) / 100}</p>
+          </div>
+          <div style="background: #334155; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="color: #60a5fa; margin-top: 0;">Your Move Info</h3>
+            <p><strong>Name:</strong> ${firstName} ${lastName}</p>
+            <p><strong>Date:</strong> ${moveDate}</p>
+            <p><strong>Pickup:</strong> ${fromAddress}</p>
+            ${toAddress ? `<p><strong>Drop-off:</strong> ${toAddress}</p>` : ""}
+            ${details ? `<p><strong>Notes:</strong> ${details}</p>` : ""}
+          </div>
+          <p style="text-align: center; color: #94a3b8; font-size: 13px; margin-top: 25px;">
+            Questions? Call <a href="tel:906-285-9312" style="color: #60a5fa;">906-285-9312</a> or email
+            <a href="mailto:upmichiganstatemovers@gmail.com" style="color: #60a5fa;">upmichiganstatemovers@gmail.com</a>
+          </p>
+        </div>`;
+      sendEmail({
+        to: email,
+        from: process.env.COMPANY_EMAIL || "michigankid906@gmail.com",
+        subject: "JC ON THE MOVE — Move Deposit Confirmed",
+        html: emailHtml,
+        text: `JC ON THE MOVE - Deposit Confirmed\n\nHi ${firstName},\n\n${parsedMovers} movers, ${pricing.billableHours} hrs\nDate: ${moveDate}\nPickup: ${fromAddress}${toAddress ? `\nDrop-off: ${toAddress}` : ""}\nFull total: $${pricing.grandTotal} | Deposit paid: $${depositAmount}\nBalance due on move day: $${Math.round((pricing.grandTotal - depositAmount) * 100) / 100}\n\nCall 906-285-9312 with questions.`,
+      }).catch(err => console.error("Customer deposit email failed:", err));
+      sendEmail({
+        to: process.env.COMPANY_EMAIL || "michigankid906@gmail.com",
+        from: process.env.COMPANY_EMAIL || "michigankid906@gmail.com",
+        subject: `New Move Deposit — ${firstName} ${lastName} — ${moveDate}`,
+        html: `<h2>New Move Deposit Received</h2><p><strong>${firstName} ${lastName}</strong><br>Phone: ${phone}<br>Email: ${email}</p><p>Date: ${moveDate}<br>From: ${fromAddress}${toAddress ? `<br>To: ${toAddress}` : ""}</p><p>Crew: ${parsedMovers} movers, ${pricing.billableHours} hrs | Full: $${pricing.grandTotal} | Deposit: $${depositAmount}</p><p>Lead ID: ${lead.id}</p>`,
+        text: `New Move Deposit\n${firstName} ${lastName}\n${phone} | ${email}\nDate: ${moveDate}\nFrom: ${fromAddress}\nCrew: ${parsedMovers} movers, ${pricing.billableHours} hrs | Full: $${pricing.grandTotal} | Deposit: $${depositAmount}\nLead: ${lead.id}`,
+      }).catch(err => console.error("Business deposit email failed:", err));
+
+      console.log(`Deposit checkout created: ${firstName} ${lastName} (${moveDate}) | $${depositAmount} of $${pricing.grandTotal} | Lead ${lead.id}`);
+
+      res.json({
+        success: true,
+        checkoutUrl: paymentLink.url,
+        invoiceId: lead.id,
+        depositAmount,
+        grandTotal: pricing.grandTotal,
+      });
+    } catch (error: any) {
+      console.error("Error creating deposit checkout:", error);
+      const msg = error?.errors?.[0]?.detail || error.message || "Failed to create checkout";
+      res.status(500).json({ error: msg });
     }
   });
 
