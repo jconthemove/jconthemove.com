@@ -1,15 +1,55 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Sparkles, X } from "lucide-react";
 import { Link } from "wouter";
 import QuoteForm, { serviceOptions } from "@/components/QuoteForm";
+import { useAuth } from "@/hooks/useAuth";
+
+function AccountCTABanner({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <div className="mt-6 relative rounded-2xl overflow-hidden border border-orange-500/40 bg-gradient-to-br from-orange-950/60 to-slate-900/80 p-5">
+      <button
+        onClick={onDismiss}
+        className="absolute top-3 right-3 text-slate-400 hover:text-white transition-colors"
+        aria-label="Dismiss"
+      >
+        <X className="h-4 w-4" />
+      </button>
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-xl bg-orange-500/20 flex items-center justify-center flex-shrink-0">
+          <Sparkles className="h-5 w-5 text-orange-400" />
+        </div>
+        <div className="flex-1 min-w-0 pr-4">
+          <h3 className="text-white font-bold text-base mb-1">Track your jobs & earn rewards</h3>
+          <p className="text-slate-400 text-sm mb-3">
+            Create a free account to view your quote history and earn JCMOVES rewards on every service.
+          </p>
+          <div className="flex gap-2 flex-wrap">
+            <Link href="/login">
+              <Button size="sm" className="bg-orange-500 hover:bg-orange-400 text-white font-bold rounded-xl h-9 px-4">
+                Create Free Account
+              </Button>
+            </Link>
+            <Link href="/login">
+              <Button size="sm" variant="ghost" className="text-slate-400 hover:text-white rounded-xl h-9 px-4">
+                Sign In
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function QuotePage() {
   const [location] = useLocation();
   const [prefilledService, setPrefilledService] = useState<string>("");
   const [prefilledDate, setPrefilledDate] = useState<string>("");
   const [prefilledPromoCode, setPrefilledPromoCode] = useState<string>("");
+  const [showAccountCTA, setShowAccountCTA] = useState(false);
+  const { isAuthenticated } = useAuth();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -36,6 +76,9 @@ export default function QuotePage() {
     setPrefilledService("");
     setPrefilledDate("");
     setPrefilledPromoCode("");
+    if (!isAuthenticated) {
+      setShowAccountCTA(true);
+    }
   };
 
   return (
@@ -64,6 +107,10 @@ export default function QuotePage() {
           prefilledPromoCode={prefilledPromoCode}
           onSuccess={handleSuccess}
         />
+
+        {showAccountCTA && !isAuthenticated && (
+          <AccountCTABanner onDismiss={() => setShowAccountCTA(false)} />
+        )}
 
         <div className="mt-8 text-center text-slate-300">
           <p className="mb-2">Need immediate help?</p>

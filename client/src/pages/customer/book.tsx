@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Truck, Trash2, Snowflake, Wrench, ArrowLeft, ArrowRight, CheckCircle, MapPin, Calendar, Plus, Minus, Loader2, Zap, Clock, Users, Home, Building2, ChevronRight, MessageSquare, ListOrdered } from "lucide-react";
+import { Truck, Trash2, Snowflake, Wrench, ArrowLeft, ArrowRight, CheckCircle, MapPin, Calendar, Plus, Minus, Loader2, Zap, Clock, Users, Home, Building2, ChevronRight, MessageSquare, ListOrdered, Sparkles, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,6 +66,43 @@ const STEP_LABELS: Record<BookStep, string> = {
   confirm: "Confirm",
 };
 
+function BookingAccountCTA({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <div className="relative rounded-2xl overflow-hidden border border-orange-500/40 bg-gradient-to-br from-orange-950/60 to-zinc-900/80 p-5 mt-4">
+      <button
+        onClick={onDismiss}
+        className="absolute top-3 right-3 text-zinc-400 hover:text-white transition-colors"
+        aria-label="Dismiss"
+      >
+        <X className="h-4 w-4" />
+      </button>
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-xl bg-orange-500/20 flex items-center justify-center flex-shrink-0">
+          <Sparkles className="h-5 w-5 text-orange-400" />
+        </div>
+        <div className="flex-1 min-w-0 pr-4">
+          <h3 className="text-white font-bold text-base mb-1">Create a free account to track your jobs</h3>
+          <p className="text-zinc-400 text-sm mb-3">
+            Sign up to view your booking history and earn JCMOVES rewards on every service.
+          </p>
+          <div className="flex gap-2 flex-wrap">
+            <Link href="/login">
+              <Button size="sm" className="bg-orange-500 hover:bg-orange-400 text-white font-bold rounded-xl h-9 px-4">
+                Create Free Account
+              </Button>
+            </Link>
+            <Link href="/login">
+              <Button size="sm" variant="ghost" className="text-zinc-400 hover:text-white rounded-xl h-9 px-4">
+                Sign In
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CustomerBookPage() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
@@ -77,11 +114,15 @@ export default function CustomerBookPage() {
   const [serviceType, setServiceType] = useState("");
   const [selectedPkgId, setSelectedPkgId] = useState<string | null>(null);
   const [addonQtys, setAddonQtys] = useState<Record<string, number>>({});
+  const [showAccountCTA, setShowAccountCTA] = useState(false);
   const [form, setForm] = useState({
     fromAddress: "",
     toAddress: "",
     moveDate: "",
     details: "",
+    guestName: "",
+    guestEmail: "",
+    guestPhone: "",
   });
 
   const { data: pricing } = useQuery<Pricing>({ queryKey: ["/api/pricing"], retry: 2 });
@@ -137,12 +178,18 @@ export default function CustomerBookPage() {
       const activeAddons = [...(isMoving ? movingAddons : junkAddons)].filter(a => (addonQtys[a.id] || 0) > 0);
       const addonLines = activeAddons.map(a => ({ id: a.id, name: a.name, qty: addonQtys[a.id], unitPrice: a.unitPrice, total: addonQtys[a.id] * a.unitPrice }));
 
+      const guestNameParts = form.guestName.trim().split(" ");
+      const firstName = user?.firstName || guestNameParts[0] || "Guest";
+      const lastName = user?.lastName || guestNameParts.slice(1).join(" ") || "User";
+      const email = user?.email || form.guestEmail || "";
+      const phone = user?.phoneNumber || form.guestPhone || "";
+
       return await apiRequest("POST", "/api/leads", {
         serviceType,
-        firstName: user?.firstName || "",
-        lastName: user?.lastName || "",
-        email: user?.email || "",
-        phone: user?.phone || "",
+        firstName,
+        lastName,
+        email,
+        phone,
         fromAddress: form.fromAddress,
         toAddress: form.toAddress,
         moveDate: form.moveDate,
@@ -161,8 +208,13 @@ export default function CustomerBookPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customer/my-leads"] });
       toast({ title: "Booking submitted!", description: "We'll confirm your details soon. You earned 50 JCMOVES!" });
-      setLocation("/jobs");
+      if (!user) {
+        setShowAccountCTA(true);
+      } else {
+        setLocation("/jobs");
+      }
     },
     onError: () => {
       toast({ title: "Error", description: "Something went wrong. Please try again.", variant: "destructive" });
@@ -558,11 +610,29 @@ export default function CustomerBookPage() {
                 <Label htmlFor="details" className="text-sm mb-1.5 block">Additional Details <span className="text-muted-foreground">(optional)</span></Label>
                 <Textarea id="details" placeholder="Stairs, elevator, special items, access instructions..." rows={3} value={form.details} onChange={e => setForm(f => ({ ...f, details: e.target.value }))} />
               </div>
+
+              {!user && (
+                <div className="space-y-3 pt-2 border-t border-border">
+                  <p className="text-sm font-semibold">Your Contact Info</p>
+                  <div>
+                    <Label htmlFor="guestName" className="text-sm mb-1.5 block">Full Name</Label>
+                    <Input id="guestName" placeholder="John Doe" value={form.guestName} onChange={e => setForm(f => ({ ...f, guestName: e.target.value }))} />
+                  </div>
+                  <div>
+                    <Label htmlFor="guestEmail" className="text-sm mb-1.5 block">Email Address</Label>
+                    <Input id="guestEmail" type="email" placeholder="you@example.com" value={form.guestEmail} onChange={e => setForm(f => ({ ...f, guestEmail: e.target.value }))} />
+                  </div>
+                  <div>
+                    <Label htmlFor="guestPhone" className="text-sm mb-1.5 block">Phone <span className="text-muted-foreground">(optional)</span></Label>
+                    <Input id="guestPhone" type="tel" placeholder="(555) 123-4567" value={form.guestPhone} onChange={e => setForm(f => ({ ...f, guestPhone: e.target.value }))} />
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex gap-3">
               <Button variant="outline" className="flex-1" onClick={prevStep}>Back</Button>
-              <Button className="flex-1" disabled={!form.fromAddress || !form.moveDate} onClick={nextStep}>
+              <Button className="flex-1" disabled={!form.fromAddress || !form.moveDate || (!user && !form.guestEmail)} onClick={nextStep}>
                 Review <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
             </div>
@@ -658,6 +728,10 @@ export default function CustomerBookPage() {
             </div>
 
             <p className="text-xs text-center text-muted-foreground">By submitting, you agree to our Terms of Service. Final pricing confirmed at time of service.</p>
+
+            {showAccountCTA && !user && (
+              <BookingAccountCTA onDismiss={() => setShowAccountCTA(false)} />
+            )}
           </div>
         )}
       </div>

@@ -473,6 +473,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('⚠️ crew availability migration error (non-fatal):', migErr);
   }
 
+  // Schema migration: add past_jobs_notice_seen column to users (one-time first-login notice)
+  try {
+    await pool.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS past_jobs_notice_seen BOOLEAN DEFAULT false;
+    `);
+    console.log('✅ past_jobs_notice_seen column ready');
+  } catch (migErr) {
+    console.error('⚠️ past_jobs_notice_seen migration error (non-fatal):', migErr);
+  }
+
   // Schema migration: add customer-selected package column to leads
   try {
     await pool.query(`
@@ -1299,10 +1309,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       (req.session as any).userEmail = user.email;
       (req.session as any).userRole = user.role;
 
+      // Count past leads for one-time first-login notice (customers only)
+      let pastJobsCount = 0;
+      if (user.role === 'customer') {
+        try {
+          const flagRow = await pool.query(`SELECT past_jobs_notice_seen FROM users WHERE id = $1`, [user.id]);
+          const noticeSeen = flagRow.rows[0]?.past_jobs_notice_seen ?? false;
+          if (!noticeSeen) {
+            // Mark as seen immediately so it only runs once regardless of past lead count
+            await pool.query(`UPDATE users SET past_jobs_notice_seen = true WHERE id = $1`, [user.id]);
+            const pastLeads = await storage.getLeadsByEmail(user.email);
+            pastJobsCount = pastLeads.length;
+          }
+        } catch (_) {}
+      }
+
       req.session.save((err) => {
         if (err) return res.status(500).json({ error: "Login failed. Please try again." });
         res.json({
           success: true,
+          pastJobsCount,
           user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role, status: user.status }
         });
       });
@@ -1709,6 +1735,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       (req.session as any).userEmail = user.email;
       (req.session as any).userRole = user.role;
 
+      // Count past leads for one-time first-login notice
+      let pastJobsCount = 0;
+      try {
+        const flagRow = await pool.query(`SELECT past_jobs_notice_seen FROM users WHERE id = $1`, [user.id]);
+        const noticeSeen = flagRow.rows[0]?.past_jobs_notice_seen ?? false;
+        if (!noticeSeen) {
+          // Mark as seen immediately so it only runs once regardless of past lead count
+          await pool.query(`UPDATE users SET past_jobs_notice_seen = true WHERE id = $1`, [user.id]);
+          const pastLeads = await storage.getLeadsByEmail(user.email);
+          pastJobsCount = pastLeads.length;
+        }
+      } catch (_) {}
+
       req.session.save((saveErr) => {
         if (saveErr) {
           return res.status(500).json({ error: "Login failed" });
@@ -1716,6 +1755,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         res.json({
           success: true,
+          pastJobsCount,
           user: {
             id: user.id,
             email: user.email,
@@ -4439,6 +4479,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching customer requests:", error);
       res.status(500).json({ error: "Failed to fetch your requests" });
+    }
+  });
+
+  // Customer my-leads endpoint — returns leads for the authenticated customer, ordered by creation date descending
+  app.get("/api/customer/my-leads", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      if (!userId) return res.status(401).json({ error: "User not authenticated" });
+      const user = await storage.getUser(userId);
+      if (!user || !user.email) return res.status(404).json({ error: "User not found" });
+      if (user.role !== 'customer' && user.role !== 'admin' && user.role !== 'business_owner') {
+        return res.status(403).json({ error: "Access restricted to customer accounts" });
+      }
+      const customerLeads = await db
+        .select()
+        .from(leads)
+        .where(eq(leads.email, user.email))
+        .orderBy(desc(leads.createdAt));
+      const transformedLeads = customerLeads.map(lead => ({
+        id: lead.id,
+        fullName: `${lead.firstName} ${lead.lastName}`,
+        email: lead.email,
+        phone: lead.phone || '',
+        moveDate: lead.moveDate || '',
+        serviceType: lead.serviceType,
+        pickupAddress: lead.fromAddress || '',
+        dropoffAddress: lead.toAddress || '',
+        status: lead.status,
+        estimatedTotal: lead.totalPrice || '',
+        crewSize: lead.crewSize || null,
+        createdAt: lead.createdAt?.toISOString() || ''
+      }));
+      res.json(transformedLeads);
+    } catch (error) {
+      console.error("Error fetching customer leads:", error);
+      res.status(500).json({ error: "Failed to fetch your jobs" });
     }
   });
 

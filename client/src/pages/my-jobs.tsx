@@ -165,7 +165,7 @@ export default function MyJobsPage() {
   const [filter, setFilter] = useState<"all" | "active" | "done">("all");
 
   const { data: jobs = [], isLoading, isError, refetch } = useQuery<CustomerJob[]>({
-    queryKey: ["/api/leads/my-requests"],
+    queryKey: ["/api/customer/my-leads"],
     retry: 2,
   });
 

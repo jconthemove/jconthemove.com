@@ -644,6 +644,9 @@ function Router() {
       {/* Quote page - accessible to all */}
       <Route path="/quote" component={QuotePage} />
       
+      {/* Book page - accessible to all (shows account CTA for unauthenticated users after booking) */}
+      {!isAuthenticated && <Route path="/book" component={CustomerBookPage} />}
+      
       {/* Sponsors page - accessible to all */}
       <Route path="/sponsors" component={SponsorsPage} />
       

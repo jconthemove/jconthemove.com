@@ -36,12 +36,20 @@ export default function CustomerLogin() {
       return response.json();
     },
     onSuccess: async (data: any) => {
-      toast({
-        title: "Welcome Back!",
-        description: `Logged in as ${data.user.firstName || data.user.email}`,
-      });
-
       queryClient.setQueryData(["/api/auth/user"], data.user);
+
+      if (data.pastJobsCount && data.pastJobsCount > 0) {
+        toast({
+          title: `We found ${data.pastJobsCount} previous job${data.pastJobsCount === 1 ? "" : "s"} linked to your email`,
+          description: `They're now in My Jobs — tap the Jobs tab to view them.`,
+        });
+      } else {
+        toast({
+          title: "Welcome Back!",
+          description: `Logged in as ${data.user.firstName || data.user.email}`,
+        });
+      }
+
       setLocation("/customer-portal");
     },
     onError: (error: any) => {

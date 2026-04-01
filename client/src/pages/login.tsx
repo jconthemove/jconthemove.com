@@ -65,7 +65,14 @@ export default function LoginPage() {
     },
     onSuccess: (data: any) => {
       queryClient.setQueryData(["/api/auth/user"], data.user);
-      toast({ title: "Welcome back!", description: `Signed in as ${data.user.firstName || data.user.email}` });
+      if (data.pastJobsCount && data.pastJobsCount > 0 && data.user.role === 'customer') {
+        toast({
+          title: `We found ${data.pastJobsCount} previous job${data.pastJobsCount === 1 ? "" : "s"} linked to your email`,
+          description: "They're now in My Jobs — tap the Jobs tab to view them.",
+        });
+      } else {
+        toast({ title: "Welcome back!", description: `Signed in as ${data.user.firstName || data.user.email}` });
+      }
       setLocation(roleDestination(data.user.role, data.user.status));
     },
     onError: (e: any) => {
