@@ -114,6 +114,7 @@ export default function CustomerBookPage() {
   const [step, setStep] = useState<BookStep>("service");
   const [serviceType, setServiceType] = useState("");
   const [junkSizeHint, setJunkSizeHint] = useState<string | null>(null);
+  const [movingSizeHint, setMovingSizeHint] = useState<string | null>(null);
   const [selectedPkgId, setSelectedPkgId] = useState<string | null>(null);
   const [addonQtys, setAddonQtys] = useState<Record<string, number>>({});
   const [showAccountCTA, setShowAccountCTA] = useState(false);
@@ -383,15 +384,25 @@ export default function CustomerBookPage() {
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   {[
-                    { icon: Home, label: "Studio / 1BR", sub: "Up to 500 sq ft" },
-                    { icon: Home, label: "2–3 Bedroom", sub: "500–1,200 sq ft" },
-                    { icon: Building2, label: "Large Home", sub: "1,200–2,500 sq ft" },
-                    { icon: Building2, label: "Office / Commercial", sub: "Any size" },
+                    { id: "studio",     icon: Home,      label: "Studio / 1BR",       sub: "Up to 500 sq ft" },
+                    { id: "2br",        icon: Home,      label: "2–3 Bedroom",         sub: "500–1,200 sq ft" },
+                    { id: "large",      icon: Building2, label: "Large Home",           sub: "1,200–2,500 sq ft" },
+                    { id: "commercial", icon: Building2, label: "Office / Commercial",  sub: "Any size" },
                   ].map(opt => {
                     const Icon = opt.icon;
+                    const isSelected = movingSizeHint === opt.id;
                     return (
-                      <button key={opt.label} className="flex flex-col items-start gap-1.5 p-4 rounded-2xl border-2 border-muted hover:border-primary/40 text-left transition-all">
-                        <Icon className="h-5 w-5 text-muted-foreground" />
+                      <button
+                        key={opt.id}
+                        onClick={() => { setMovingSizeHint(opt.id); nextStep(); }}
+                        className={cn(
+                          "flex flex-col items-start gap-1.5 p-4 rounded-2xl border-2 text-left transition-all",
+                          isSelected
+                            ? "border-primary bg-primary/5"
+                            : "border-muted hover:border-primary/40"
+                        )}
+                      >
+                        <Icon className={cn("h-5 w-5", isSelected ? "text-primary" : "text-muted-foreground")} />
                         <p className="font-medium text-sm">{opt.label}</p>
                         <p className="text-xs text-muted-foreground">{opt.sub}</p>
                       </button>
