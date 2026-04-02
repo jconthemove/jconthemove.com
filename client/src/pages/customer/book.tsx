@@ -113,6 +113,7 @@ export default function CustomerBookPage() {
   const [bookingMode, setBookingMode] = useState<"choose" | "chatbot" | "form">("choose");
   const [step, setStep] = useState<BookStep>("service");
   const [serviceType, setServiceType] = useState("");
+  const [junkSizeHint, setJunkSizeHint] = useState<string | null>(null);
   const [selectedPkgId, setSelectedPkgId] = useState<string | null>(null);
   const [addonQtys, setAddonQtys] = useState<Record<string, number>>({});
   const [showAccountCTA, setShowAccountCTA] = useState(false);
@@ -405,18 +406,30 @@ export default function CustomerBookPage() {
               <div className="space-y-3">
                 <div className="space-y-2">
                   {[
-                    { label: "A few small items", sub: "Furniture, appliances, boxes" },
-                    { label: "Half a room", sub: "Garage partial, attic, etc." },
-                    { label: "Full room or more", sub: "Complete cleanout, estate" },
-                  ].map(opt => (
-                    <button key={opt.label} className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-muted hover:border-primary/40 text-left transition-all">
-                      <div>
-                        <p className="font-medium text-sm">{opt.label}</p>
-                        <p className="text-xs text-muted-foreground">{opt.sub}</p>
-                      </div>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                    </button>
-                  ))}
+                    { id: "small",  label: "A few small items", sub: "Furniture, appliances, boxes" },
+                    { id: "medium", label: "Half a room",        sub: "Garage partial, attic, etc." },
+                    { id: "large",  label: "Full room or more",  sub: "Complete cleanout, estate" },
+                  ].map(opt => {
+                    const isSelected = junkSizeHint === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        onClick={() => { setJunkSizeHint(opt.id); nextStep(); }}
+                        className={cn(
+                          "w-full flex items-center justify-between p-4 rounded-2xl border-2 text-left transition-all",
+                          isSelected
+                            ? "border-primary bg-primary/5"
+                            : "border-muted hover:border-primary/40"
+                        )}
+                      >
+                        <div>
+                          <p className="font-medium text-sm">{opt.label}</p>
+                          <p className="text-xs text-muted-foreground">{opt.sub}</p>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
