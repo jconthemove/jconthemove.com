@@ -146,7 +146,7 @@ const JUNK_PACKAGES = [
   { id: "junk_single_item", label: "Single Item",     desc: "1–2 large items · up to $300 for pickup truck load", low: 100, high: 200,  tag: "Quick" },
   { id: "junk_quarter",     label: "¼ Truck Load",    desc: "Small cleanout",                                     low: 300, high: 500 },
   { id: "junk_half",        label: "½ Truck Load",    desc: "One room / garage cleanout",                         low: 500, high: 800,  tag: "Popular" },
-  { id: "junk_full",        label: "Full Truck Load", desc: "Estate cleanout / full demo",                        low: 1000, high: 0,   tag: "Best Value" },
+  { id: "junk_full",        label: "Full Truck Load", desc: "Large enclosed trailer · 1 driver + 2 helpers",      low: 1000, high: 0,   tag: "Best Value" },
 ];
 
 const JUNK_ADDONS = [

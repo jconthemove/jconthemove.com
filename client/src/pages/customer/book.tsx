@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Truck, Trash2, Snowflake, Wrench, ArrowLeft, ArrowRight, CheckCircle, MapPin, Calendar, Plus, Minus, Loader2, Zap, Clock, Users, Home, Building2, ChevronRight, MessageSquare, ListOrdered, Sparkles, X } from "lucide-react";
@@ -53,7 +53,7 @@ const FALLBACK_JUNK: JunkPackage[] = [
   { id: "junk_single_item", label: "Single Item",     desc: "1–2 large items · up to $300 for pickup truck load", low: 100, high: 200,  tag: "Quick" },
   { id: "junk_quarter",     label: "¼ Truck Load",    desc: "Small cleanout",                                     low: 300, high: 500 },
   { id: "junk_half",        label: "½ Truck Load",    desc: "One room / garage cleanout",                         low: 500, high: 800,  tag: "Popular" },
-  { id: "junk_full",        label: "Full Truck Load", desc: "Estate cleanout / full demo",                        low: 1000, high: 0,   tag: "Best Value" },
+  { id: "junk_full",        label: "Full Truck Load", desc: "Large enclosed trailer · 1 driver + 2 helpers",      low: 1000, high: 0,   tag: "Best Value" },
 ];
 
 type BookStep = "service" | "estimate" | "packages" | "details" | "confirm";
@@ -113,6 +113,17 @@ export default function CustomerBookPage() {
   const [bookingMode, setBookingMode] = useState<"choose" | "chatbot" | "form">("choose");
   const [step, setStep] = useState<BookStep>("service");
   const [serviceType, setServiceType] = useState("");
+
+  // Pre-select service + skip to estimate step when ?service= is in the URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const svc = params.get("service");
+    if (svc && ["moving", "junk"].includes(svc)) {
+      setServiceType(svc);
+      setBookingMode("form");
+      setStep("estimate");
+    }
+  }, []);
   const [junkSizeHint, setJunkSizeHint] = useState<string | null>(null);
   const [movingSizeHint, setMovingSizeHint] = useState<string | null>(null);
   const [selectedPkgId, setSelectedPkgId] = useState<string | null>(null);

@@ -264,8 +264,8 @@ export default function HomePage() {
           <p className="text-slate-400 text-sm text-center mb-8">Tap any service to start booking or get a quote.</p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             {[
-              { icon: Truck,       label: "Moving",       sub: "Local & long distance", href: "/book",                  iconCls: "text-blue-400",   borderCls: "hover:border-blue-500/50"   },
-              { icon: Trash2,      label: "Junk Removal", sub: "Haul away & disposal",  href: "/book",                  iconCls: "text-orange-400", borderCls: "hover:border-orange-500/50" },
+              { icon: Truck,       label: "Moving",       sub: "Local & long distance", href: "/book?service=moving", iconCls: "text-blue-400",   borderCls: "hover:border-blue-500/50"   },
+              { icon: Trash2,      label: "Junk Removal", sub: "Haul away & disposal",  href: "/book?service=junk",   iconCls: "text-orange-400", borderCls: "hover:border-orange-500/50" },
               { icon: Sparkles,    label: "Move-In/Out",  sub: "Cleaning & labor",      href: "/quote?service=cleaning", iconCls: "text-teal-400",   borderCls: "hover:border-teal-500/50"   },
               { icon: Snowflake,   label: "Snow Removal", sub: "Plowing & shoveling",   href: "/quote?service=snow",    iconCls: "text-cyan-400",   borderCls: "hover:border-cyan-500/50"   },
               { icon: Wrench,      label: "Handyman",     sub: "General repairs",       href: "/quote?service=handyman", iconCls: "text-yellow-400", borderCls: "hover:border-yellow-500/50" },
