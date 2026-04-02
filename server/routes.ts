@@ -3469,7 +3469,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (typeof isAvailable !== 'boolean') {
         return res.status(400).json({ message: "isAvailable must be a boolean" });
       }
-      const [updated] = await db.update(users).set({ isAvailable }).where(eq(users.id, userId)).returning();
+      const now = new Date();
+      // When going ON DUTY, also stamp lastActive and set availableUntil 12 hours out
+      // so the public /api/crew/online count reflects this worker correctly
+      const extraFields = isAvailable
+        ? { lastActive: now, availableUntil: new Date(now.getTime() + 12 * 60 * 60 * 1000) }
+        : { availableUntil: null };
+      const [updated] = await db.update(users)
+        .set({ isAvailable, ...extraFields })
+        .where(eq(users.id, userId))
+        .returning();
       if (!updated) return res.status(404).json({ message: "User not found" });
       res.json({ isAvailable: updated.isAvailable });
     } catch (error: any) {
@@ -6590,8 +6599,19 @@ Thank you for your business!
   app.get("/api/leads/my-jobs", isAuthenticated, requireEmployee, async (req: any, res) => {
     try {
       const employeeId = req.currentUser.id;
+      // Assigned leads (crew member explicitly on the job)
       const assignedLeads = await storage.getAssignedLeads(employeeId);
-      res.json(await enrichLeadsWithPhone(assignedLeads));
+      const assignedIds = new Set(assignedLeads.map((l: any) => l.id));
+      // All open unassigned leads (new + available) so they show in calendar & stats
+      const openLeads = await db.select().from(leads)
+        .where(inArray(leads.status, ["new", "available", "quoted"]))
+        .orderBy(desc(leads.createdAt));
+      // Merge: assigned leads first, then open leads not already in assigned list
+      const merged = [
+        ...assignedLeads,
+        ...openLeads.filter((l: any) => !assignedIds.has(l.id)),
+      ];
+      res.json(await enrichLeadsWithPhone(merged));
     } catch (error) {
       console.error("Error fetching assigned leads:", error);
       res.status(500).json({ error: "Failed to fetch assigned jobs" });
