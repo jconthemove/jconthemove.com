@@ -143,18 +143,18 @@ const MOVING_SPECIAL_ITEMS = [
 ];
 
 const JUNK_PACKAGES = [
-  { id: "junk_single_item", label: "Single Item", desc: "1–2 large items (couch, fridge, mattress)", low: 75, high: 150, tag: "Quick" },
-  { id: "junk_quarter", label: "¼ Truck Load", desc: "Small cleanout or a few boxes/furniture", low: 100, high: 200 },
-  { id: "junk_half", label: "½ Truck Load", desc: "One room / garage cleanout", low: 150, high: 300, tag: "Popular" },
-  { id: "junk_full", label: "Full Truck Load", desc: "Estate cleanout, full demo haul, large project", low: 300, high: 600, tag: "Best Value" },
+  { id: "junk_single_item", label: "Single Item",     desc: "1–2 large items · up to $300 for pickup truck load", low: 100, high: 200,  tag: "Quick" },
+  { id: "junk_quarter",     label: "¼ Truck Load",    desc: "Small cleanout",                                     low: 300, high: 500 },
+  { id: "junk_half",        label: "½ Truck Load",    desc: "One room / garage cleanout",                         low: 500, high: 800,  tag: "Popular" },
+  { id: "junk_full",        label: "Full Truck Load", desc: "Estate cleanout / full demo",                        low: 1000, high: 0,   tag: "Best Value" },
 ];
 
 const JUNK_ADDONS = [
-  { id: "appliance_recycle", name: "Appliance Recycling Fee", description: "Proper disposal of fridges, ACs, TVs", unitPrice: 35, qtyOptions: [1, 2, 3] },
-  { id: "hazmat", name: "Hazardous Surcharge", description: "Paint, batteries, chemicals, electronics", unitPrice: 50, qtyOptions: [1] },
-  { id: "extra_labor", name: "Extra Labor Hour", description: "Additional hour beyond estimate", unitPrice: 70, qtyOptions: [1, 2] },
-  { id: "dumpster_bag", name: "Cleanout Dumpster Bag", description: "Bag drop + pickup for large volumes", unitPrice: 100, qtyOptions: [1, 2] },
-  { id: "teardown", name: "Light Demolition / Teardown", description: "Sheds, decks, swing sets", unitPrice: 150, qtyOptions: [1] },
+  { id: "appliance_recycle", name: "Appliance Recycling Fee",     description: "Proper disposal of fridges, ACs, TVs",         unitPrice: 75,  openPrice: false, qtyOptions: [1, 2, 3] },
+  { id: "hazmat",            name: "Hazardous Surcharge",         description: "Paint, batteries, chemicals — quoted on site",  unitPrice: 300, openPrice: true,  qtyOptions: [1] },
+  { id: "extra_labor",       name: "Extra Labor Hour",            description: "$70/hr per mover · applies when job has stairs", unitPrice: 70,  openPrice: false, qtyOptions: [1, 2] },
+  { id: "dumpster_bag",      name: "Cleanout Dumpster Bag",       description: "Handles up to 2,000 lbs",                      unitPrice: 400, openPrice: false, qtyOptions: [1, 2] },
+  { id: "teardown",          name: "Light Demolition / Teardown", description: "Starting price · haul away billed separately",  unitPrice: 500, openPrice: true,  qtyOptions: [1] },
 ];
 
 const EARN_RATE = 15; // JCMOVES per $1
@@ -252,7 +252,9 @@ function JunkPackageCard({ pkg, selected, onSelect }: {
           <p className="text-xs text-slate-400 mt-0.5">{pkg.desc}</p>
         </div>
         <div className="text-right flex-shrink-0">
-          <p className="text-xs text-slate-500">${pkg.low}–${pkg.high}</p>
+          <p className="text-xs text-slate-500">
+            {pkg.high > 0 ? `$${pkg.low.toLocaleString()}–$${pkg.high.toLocaleString()}` : `$${pkg.low.toLocaleString()}+`}
+          </p>
         </div>
       </div>
       {selected && <div className="mt-2 flex justify-end"><CheckCircle2 className="h-4 w-4 text-blue-400" /></div>}
@@ -710,7 +712,7 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
                           {addon.name}
                         </span>
                         <span className="text-emerald-400 text-sm font-semibold flex-shrink-0">
-                          +${addon.unitPrice}{addon.qtyOptions.length > 1 && qty > 0 ? ` × ${qty}` : ""}
+                          +${addon.unitPrice}{'openPrice' in addon && addon.openPrice ? "+" : ""}{addon.qtyOptions.length > 1 && qty > 0 ? ` × ${qty}` : ""}
                         </span>
                       </div>
                       <p className="text-xs text-slate-500 mt-0.5">{addon.description}</p>

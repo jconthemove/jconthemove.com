@@ -22,8 +22,8 @@ const SERVICES = [
 ];
 
 interface MovingPackage { id: string; movers: number; hours: number; label: string; tag?: string; }
-interface JunkPackage { id: string; label: string; desc: string; low: number; high: number; tag?: string; }
-interface Addon { id: string; name: string; description?: string; unitPrice: number; qtyOptions: number[]; }
+interface JunkPackage { id: string; label: string; desc: string; low: number; high: number; tag?: string; openPrice?: boolean; }
+interface Addon { id: string; name: string; description?: string; unitPrice: number; openPrice?: boolean; qtyOptions: number[]; }
 interface CatalogDefs { movingPackages: MovingPackage[]; junkPackages: JunkPackage[]; movingAddons: Addon[]; junkAddons: Addon[]; }
 interface Pricing { ratePerMoverHour: number; jc222Price: number; shortJobFull: number; }
 
@@ -50,10 +50,10 @@ const FALLBACK_MOVING: MovingPackage[] = [
   { id: "moving_3m_7h", movers: 3, hours: 7, label: "3 Movers × 7 hrs",  tag: "20% Off"        },
 ];
 const FALLBACK_JUNK: JunkPackage[] = [
-  { id: "junk_single_item", label: "Single Item",     desc: "1–2 large items",              low: 75,  high: 150, tag: "Quick" },
-  { id: "junk_quarter",     label: "¼ Truck Load",    desc: "Small cleanout",                low: 100, high: 200 },
-  { id: "junk_half",        label: "½ Truck Load",    desc: "One room / garage cleanout",    low: 150, high: 300, tag: "Popular" },
-  { id: "junk_full",        label: "Full Truck Load", desc: "Estate cleanout / full demo",   low: 300, high: 600, tag: "Best Value" },
+  { id: "junk_single_item", label: "Single Item",     desc: "1–2 large items · up to $300 for pickup truck load", low: 100, high: 200,  tag: "Quick" },
+  { id: "junk_quarter",     label: "¼ Truck Load",    desc: "Small cleanout",                                     low: 300, high: 500 },
+  { id: "junk_half",        label: "½ Truck Load",    desc: "One room / garage cleanout",                         low: 500, high: 800,  tag: "Popular" },
+  { id: "junk_full",        label: "Full Truck Load", desc: "Estate cleanout / full demo",                        low: 1000, high: 0,   tag: "Best Value" },
 ];
 
 type BookStep = "service" | "estimate" | "packages" | "details" | "confirm";
@@ -529,7 +529,9 @@ export default function CustomerBookPage() {
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="font-bold text-primary">${pkg.low}–${pkg.high}</p>
+                        <p className="font-bold text-primary">
+                          {pkg.high > 0 ? `$${pkg.low.toLocaleString()}–$${pkg.high.toLocaleString()}` : `$${pkg.low.toLocaleString()}+`}
+                        </p>
                         {isSelected && <CheckCircle className="h-4 w-4 text-primary ml-auto mt-0.5" />}
                       </div>
                     </button>
@@ -548,7 +550,7 @@ export default function CustomerBookPage() {
                     <div key={addon.id} className="flex items-center justify-between p-3 rounded-xl border border-muted bg-muted/20">
                       <div className="flex-1 min-w-0 mr-3">
                         <p className="text-sm font-medium">{addon.name}</p>
-                        <p className="text-xs text-muted-foreground">${addon.unitPrice} each</p>
+                        <p className="text-xs text-muted-foreground">${addon.unitPrice}{addon.openPrice ? '+' : ''} each</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <button onClick={() => setAddonQtys(q => ({ ...q, [addon.id]: Math.max(0, (q[addon.id] || 0) - 1) }))} className="h-7 w-7 rounded-full border border-muted flex items-center justify-center hover:bg-muted">

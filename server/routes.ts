@@ -15979,10 +15979,10 @@ Thank you for your business!
       { id: "moving_3m_6h", movers: 3, hours: 6, label: "3 Movers × 6 hrs" },
     ],
     junkPackages: [
-      { id: "junk_single_item", label: "Single Item", desc: "1–2 large items", low: 75, high: 150, tag: "Quick" },
-      { id: "junk_quarter",     label: "¼ Truck Load",  desc: "Small cleanout",           low: 100, high: 200 },
-      { id: "junk_half",        label: "½ Truck Load",  desc: "One room / garage cleanout", low: 150, high: 300, tag: "Popular" },
-      { id: "junk_full",        label: "Full Truck Load", desc: "Estate cleanout / full demo", low: 300, high: 600, tag: "Best Value" },
+      { id: "junk_single_item", label: "Single Item",     desc: "1–2 large items · up to $300 for pickup truck load", low: 100, high: 200, tag: "Quick" },
+      { id: "junk_quarter",     label: "¼ Truck Load",    desc: "Small cleanout",                                     low: 300, high: 500 },
+      { id: "junk_half",        label: "½ Truck Load",    desc: "One room / garage cleanout",                         low: 500, high: 800, tag: "Popular" },
+      { id: "junk_full",        label: "Full Truck Load", desc: "Estate cleanout / full demo",                        low: 1000, high: 0,  tag: "Best Value" },
     ],
     movingAddons: [
       { id: "mattress_bag",     name: "Mattress Bag(s)",               unitPrice: 20,  category: "supplies", qtyOptions: [1,2,3,4] },
@@ -15995,11 +15995,11 @@ Thank you for your business!
       { id: "appliance_connect", name: "Appliance Connection",         unitPrice: 50,  category: "labor",    qtyOptions: [1] },
     ],
     junkAddons: [
-      { id: "appliance_recycle", name: "Appliance Recycling Fee",     unitPrice: 35, qtyOptions: [1,2,3] },
-      { id: "hazmat",            name: "Hazardous Surcharge",         unitPrice: 50, qtyOptions: [1] },
-      { id: "extra_labor",       name: "Extra Labor Hour",            unitPrice: 70, qtyOptions: [1,2] },
-      { id: "dumpster_bag",      name: "Cleanout Dumpster Bag",       unitPrice: 100, qtyOptions: [1,2] },
-      { id: "teardown",          name: "Light Demolition / Teardown", unitPrice: 150, qtyOptions: [1] },
+      { id: "appliance_recycle", name: "Appliance Recycling Fee",     unitPrice: 75,  openPrice: false, qtyOptions: [1,2,3] },
+      { id: "hazmat",            name: "Hazardous Surcharge",         unitPrice: 300, openPrice: true,  qtyOptions: [1] },
+      { id: "extra_labor",       name: "Extra Labor Hour",            unitPrice: 70,  openPrice: false, qtyOptions: [1,2] },
+      { id: "dumpster_bag",      name: "Cleanout Dumpster Bag",       unitPrice: 400, openPrice: false, qtyOptions: [1,2] },
+      { id: "teardown",          name: "Light Demolition / Teardown", unitPrice: 500, openPrice: true,  qtyOptions: [1] },
     ],
     specialItems: [
       { id: "hot_tub",    name: "Hot Tub",            baseFee: 250, key: "hasHotTub",    feeKey: "hotTubFee" },
