@@ -3110,13 +3110,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Role-based access control middleware
   const requireBusinessOwner = async (req: any, res: any, next: any) => {
     try {
-      const userId = (req.session as any).userId;
-      if (!userId) {
-        return res.status(401).json({ message: "Not authenticated" });
+      // Prefer user already resolved by isAuthenticated (JWT or session)
+      let user = req.user || req.currentUser || null;
+      if (!user) {
+        const userId = (req.session as any).userId;
+        if (!userId) {
+          return res.status(401).json({ message: "Not authenticated" });
+        }
+        user = await storage.getUser(userId);
       }
 
-      const user = await storage.getUser(userId);
-      
       // Allow both admin and business_owner roles for treasury access
       const hasBusinessOwnerAccess = user && (user.role === 'admin' || user.role === 'business_owner');
       
@@ -3139,11 +3142,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const requireEmployee = async (req: any, res: any, next: any) => {
     try {
-      const userId = (req.session as any).userId;
-      if (!userId) {
-        return res.status(401).json({ message: "Not authenticated" });
+      // Prefer user already resolved by isAuthenticated (JWT or session)
+      // Fall back to session lookup for legacy routes that skip isAuthenticated
+      let user = req.user || req.currentUser || null;
+      if (!user) {
+        const userId = (req.session as any).userId;
+        if (!userId) {
+          return res.status(401).json({ message: "Not authenticated" });
+        }
+        user = await storage.getUser(userId);
       }
-      const user = await storage.getUser(userId);
       if (!user || (user.role !== 'employee' && user.role !== 'admin' && user.role !== 'business_owner')) {
         return res.status(403).json({ message: "Employee access required" });
       }
@@ -3272,14 +3280,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const requireApprovedEmployee = async (req: any, res: any, next: any) => {
     try {
-      const userId = (req.session as any).userId;
-      if (!userId) {
-        return res.status(401).json({ message: "Not authenticated" });
+      let user = req.user || req.currentUser || null;
+      if (!user) {
+        const userId = (req.session as any).userId;
+        if (!userId) return res.status(401).json({ message: "Not authenticated" });
+        user = await storage.getUser(userId);
       }
-      const user = await storage.getUser(userId);
       
-      // Admins always have access
-      if (user && user.role === 'admin') {
+      // Admins and business_owners always have access
+      if (user && (user.role === 'admin' || user.role === 'business_owner')) {
         req.currentUser = user;
         return next();
       }
@@ -3298,13 +3307,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const requireAdmin = async (req: any, res: any, next: any) => {
     try {
-      const userId = (req.session as any).userId;
-      if (!userId) {
-        return res.status(401).json({ message: "Not authenticated" });
+      let user = req.user || req.currentUser || null;
+      if (!user) {
+        const userId = (req.session as any).userId;
+        if (!userId) return res.status(401).json({ message: "Not authenticated" });
+        user = await storage.getUser(userId);
       }
-      const user = await storage.getUser(userId);
-      // Only admin role has administrative access
-      if (!user || user.role !== 'admin') {
+      // Only admin or business_owner roles have administrative access
+      if (!user || (user.role !== 'admin' && user.role !== 'business_owner')) {
         return res.status(403).json({ message: "Administrator access required" });
       }
       req.currentUser = user;
@@ -3317,11 +3327,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Treasury access - allows admin, employee, and business_owner (not customers)
   const requireTreasuryAccess = async (req: any, res: any, next: any) => {
     try {
-      const userId = (req.session as any).userId;
-      if (!userId) {
-        return res.status(401).json({ message: "Not authenticated" });
+      let user = req.user || req.currentUser || null;
+      if (!user) {
+        const userId = (req.session as any).userId;
+        if (!userId) return res.status(401).json({ message: "Not authenticated" });
+        user = await storage.getUser(userId);
       }
-      const user = await storage.getUser(userId);
       
       // Allow admin, employee, and business_owner roles
       const hasTreasuryAccess = user && (user.role === 'admin' || user.role === 'employee' || user.role === 'business_owner');
