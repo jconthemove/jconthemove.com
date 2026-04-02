@@ -31,12 +31,14 @@ export function clearTokens() {
   } catch {}
 }
 
-async function throwIfResNotOk(res: Response) {
+async function throwIfResNotOk(res: Response, redirectOn401 = true) {
   if (!res.ok) {
     if (res.status === 401) {
       clearTokens();
-      window.location.href = "/";
-      throw new Error("Session expired. Redirecting to login...");
+      if (redirectOn401) {
+        window.location.href = "/";
+      }
+      throw new Error("Your session has expired. Please log in again to continue.");
     }
     const text = (await res.text()) || res.statusText;
     throw new Error(`${res.status}: ${text}`);
@@ -66,7 +68,9 @@ export async function apiRequest(
     credentials: "include",
   });
 
-  await throwIfResNotOk(res);
+  // Don't auto-redirect on 401 for explicit API calls (mutations, POST/PUT/DELETE).
+  // The calling code's onError handler will show an appropriate message instead.
+  await throwIfResNotOk(res, false);
   return res;
 }
 

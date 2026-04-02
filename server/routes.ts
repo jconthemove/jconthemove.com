@@ -3029,7 +3029,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/leads/marketplace", isAuthenticatedAllowPending, async (req: any, res) => {
     try {
-      const leadData = insertLeadSchema.parse(req.body);
+      console.log("[marketplace] incoming body keys:", Object.keys(req.body || {}));
+      console.log("[marketplace] serviceType:", req.body?.serviceType, "fromAddress:", req.body?.fromAddress, "phone:", JSON.stringify(req.body?.phone), "email:", JSON.stringify(req.body?.email));
+      const parseResult = insertLeadSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        console.error("[marketplace] Zod validation failed:", JSON.stringify(parseResult.error.errors, null, 2));
+        return res.status(400).json({ error: "Invalid lead data", details: parseResult.error.errors });
+      }
+      const leadData = parseResult.data;
       const lead = await storage.createLead(leadData);
 
       await storage.updateLeadStatus(lead.id, "available");
@@ -6630,7 +6637,7 @@ Thank you for your business!
         moveDate: leads.moveDate,
         crewSize: leads.crewSize,
         status: leads.status,
-        price: leads.price,
+        basePrice: leads.basePrice,
         details: leads.details,
         crewMembers: leads.crewMembers,
         confirmedDate: leads.confirmedDate,
@@ -6646,7 +6653,7 @@ Thank you for your business!
 
       const masked = openLeads.map(lead => ({
         ...lead,
-        estimatedTokens: lead.price ? Math.floor(Number(lead.price) * 15) + 1500 : 1500,
+        estimatedTokens: lead.basePrice ? Math.floor(Number(lead.basePrice) * 15) + 1500 : 1500,
         alreadyApplied: Array.isArray(lead.crewMembers) && lead.crewMembers.includes(userId),
         crewSlotsFilled: Array.isArray(lead.crewMembers) ? lead.crewMembers.length : 0,
       }));

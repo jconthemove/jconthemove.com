@@ -506,7 +506,21 @@ export default function PostJobPage() {
       } catch { /* non-blocking — success screen shows without coupon */ }
       setStep(5);
     },
-    onError: (e: any) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+    onError: (e: any) => {
+      const msg = e?.message || "";
+      if (msg.toLowerCase().includes("session") || msg.includes("401") || msg.toLowerCase().includes("log in")) {
+        toast({
+          title: "Session expired",
+          description: "Please log in again — your job description is still here.",
+          variant: "destructive",
+          action: (
+            <a href="/login" className="underline font-semibold text-white">Log in</a>
+          ) as any,
+        });
+      } else {
+        toast({ title: "Submission failed", description: msg || "Something went wrong. Please try again.", variant: "destructive" });
+      }
+    },
   });
 
   const selectedService = SERVICES.find(s => s.value === form.serviceType);
