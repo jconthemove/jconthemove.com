@@ -50,9 +50,10 @@ const FALLBACK_MOVING: MovingPackage[] = [
   { id: "moving_3m_7h", movers: 3, hours: 7, label: "3 Movers × 7 hrs",  tag: "20% Off"        },
 ];
 const FALLBACK_JUNK: JunkPackage[] = [
-  { id: "junk_small", label: "Small Load", desc: "¼ truck or less", low: 100, high: 175, tag: "Quick Pickup" },
-  { id: "junk_medium", label: "Medium Load", desc: "½ truck", low: 200, high: 300, tag: "Most Popular" },
-  { id: "junk_large", label: "Large Load", desc: "Full truck", low: 350, high: 500, tag: "Full Cleanout" },
+  { id: "junk_single_item", label: "Single Item",     desc: "1–2 large items",              low: 75,  high: 150, tag: "Quick" },
+  { id: "junk_quarter",     label: "¼ Truck Load",    desc: "Small cleanout",                low: 100, high: 200 },
+  { id: "junk_half",        label: "½ Truck Load",    desc: "One room / garage cleanout",    low: 150, high: 300, tag: "Popular" },
+  { id: "junk_full",        label: "Full Truck Load", desc: "Estate cleanout / full demo",   low: 300, high: 600, tag: "Best Value" },
 ];
 
 type BookStep = "service" | "estimate" | "packages" | "details" | "confirm";
