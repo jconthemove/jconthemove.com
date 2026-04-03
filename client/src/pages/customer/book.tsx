@@ -159,8 +159,9 @@ export default function CustomerBookPage() {
     : junkPackages.find(p => p.id === selectedPkgId);
 
   const calcMovingPrice = (pkg: MovingPackage): number => {
+    if ((pkg as any).isJc222) return jc222Price;
     const base = pkg.movers * pkg.hours * ratePerMoverHour;
-    const floored = base < shortJobFull ? shortJobFull : base;
+    const floored = Math.round(base / 10) * 10;
     const discount = getHourDiscount(pkg.hours);
     return discount ? Math.round(floored * (1 - discount.pct / 100)) : floored;
   };
@@ -497,12 +498,12 @@ export default function CustomerBookPage() {
             {isMoving && (
               <div className="space-y-2">
                 {movingPackages.map(pkg => {
-                  const fullPrice = (() => {
-                    const base = pkg.movers * pkg.hours * ratePerMoverHour;
-                    return base < shortJobFull ? shortJobFull : base;
-                  })();
+                  const isJc222 = !!(pkg as any).isJc222;
+                  const fullPrice = isJc222
+                    ? shortJobFull
+                    : Math.round((pkg.movers * pkg.hours * ratePerMoverHour) / 10) * 10;
                   const price = calcMovingPrice(pkg);
-                  const discount = getHourDiscount(pkg.hours);
+                  const discount = isJc222 ? null : getHourDiscount(pkg.hours);
                   const savings = fullPrice - price;
                   const isSelected = selectedPkgId === pkg.id;
                   return (

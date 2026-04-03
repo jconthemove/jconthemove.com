@@ -2913,7 +2913,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/leads", async (req, res) => {
     try {
       const leadData = insertLeadSchema.parse(req.body);
-      const lead = await storage.createLead(leadData);
+      // Always start as "new" so crew job board can see it immediately
+      const lead = await storage.createLead({ ...leadData, status: "new" });
       
       // Send email notification
       const emailContent = generateLeadNotificationEmail(lead);
@@ -6622,7 +6623,7 @@ Thank you for your business!
       const assignedIds = new Set(assignedLeads.map((l: any) => l.id));
       // All open unassigned leads (new + available) so they show in calendar & stats
       const openLeads = await db.select().from(leads)
-        .where(inArray(leads.status, ["new", "available", "quoted"]))
+        .where(inArray(leads.status, ["new", "quote_requested", "available", "quoted"]))
         .orderBy(desc(leads.createdAt));
       // Merge: assigned leads first, then open leads not already in assigned list
       const merged = [
@@ -6657,7 +6658,7 @@ Thank you for your business!
         .from(leads)
         .where(
           and(
-            inArray(leads.status, ["new", "quoted", "available", "in_progress"]),
+            inArray(leads.status, ["new", "quote_requested", "quoted", "available", "in_progress"]),
           )
         )
         .orderBy(desc(leads.createdAt));
