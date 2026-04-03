@@ -63,8 +63,8 @@ function getWeatherInfo(code: number) {
 }
 
 const SERVICE_ICONS: Record<string, string> = {
-  residential: "🚛", junk: "🗑️", snow: "❄️", cleaning: "✨",
-  handyman: "🔧", demolition: "⚒️", flooring: "🪵", painting: "🎨",
+  moving: "🚛", labor: "💪", residential: "🏠", junk: "🗑️", snow: "❄️",
+  cleaning: "✨", handyman: "🔧", demolition: "⚒️", flooring: "🪵", painting: "🎨",
 };
 
 function isSummerSeason(): boolean {
@@ -174,12 +174,15 @@ export default function CrewTodayPage() {
 
   const { data: leads = [] } = useQuery<Lead[]>({
     queryKey: [isAdmin ? "/api/leads" : "/api/leads/my-jobs"],
+    refetchInterval: 15000,
+    staleTime: 0,
   });
 
   const { data: boardJobs = [] } = useQuery<JobBoardLead[]>({
     queryKey: ["/api/leads/job-board"],
     staleTime: 0,
     refetchOnMount: true,
+    refetchInterval: 15000,
   });
 
   const [applyingId, setApplyingId] = useState<string | null>(null);
@@ -305,6 +308,12 @@ export default function CrewTodayPage() {
     return d.toDateString() === todayStr && !["cancelled", "completed", "paid"].includes(l.status);
   });
 
+  const myAssignments = leads.filter(l => {
+    if (["cancelled", "completed", "paid"].includes(l.status)) return false;
+    const members: string[] = Array.isArray(l.crewMembers) ? (l.crewMembers as string[]) : [];
+    return members.includes(String(user?.id)) || l.assignedToUserId === String(user?.id);
+  });
+
   const completedLeads = leads.filter(l => l.status === "completed");
   const leaderboard = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -365,7 +374,7 @@ export default function CrewTodayPage() {
         <div className="grid grid-cols-3 gap-3 mb-4">
           {[
             { label: "Today", value: todayJobs.length, color: "text-orange-400", icon: "🔥" },
-            { label: "Active", value: leads.filter(l => !["completed", "cancelled", "paid"].includes(l.status)).length, color: "text-blue-400", icon: "📋" },
+            { label: "Assigned", value: myAssignments.length, color: "text-blue-400", icon: "📋" },
             { label: "Done", value: completedLeads.length, color: "text-green-400", icon: "✅" },
           ].map(s => (
             <div key={s.label} className="bg-white/[0.04] rounded-xl p-3 text-center border border-white/5">
@@ -463,6 +472,49 @@ export default function CrewTodayPage() {
         )}
       </div>
 
+      {/* Active Assignments — jobs assigned to this crew member regardless of date */}
+      {myAssignments.length > 0 && (
+        <div className="rounded-2xl bg-slate-800/40 border border-orange-500/30 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <CheckCircle2 className="h-4 w-4 text-orange-400" />
+            <span className="text-orange-300 font-bold text-sm uppercase tracking-wider">My Assignments</span>
+            <Badge className="bg-orange-500/20 text-orange-300 border-orange-500/30 text-xs">{myAssignments.length}</Badge>
+          </div>
+          <div className="space-y-2">
+            {myAssignments.map(job => {
+              const dateLabel = (job.confirmedDate || job.moveDate)
+                ? new Date(((job.confirmedDate || job.moveDate) as string).split("T")[0] + "T12:00:00")
+                    .toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+                : "Date TBD";
+              return (
+                <Link key={job.id} href={`/lead/${job.id}`}>
+                  <div className="flex items-center gap-3 bg-white/[0.03] rounded-xl p-3 border border-orange-500/10 cursor-pointer hover:bg-white/[0.06] transition-colors">
+                    <span className="text-2xl">{SERVICE_ICONS[job.serviceType] ?? "🚛"}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-sm font-semibold truncate capitalize">
+                        {job.serviceType?.replace(/-/g, " ")} Job
+                      </p>
+                      <p className="text-slate-400 text-xs flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />{dateLabel}
+                        {job.fromAddress && (
+                          <><MapPin className="h-3 w-3 ml-2" /><span className="truncate max-w-[100px]">{job.fromAddress}</span></>
+                        )}
+                      </p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <Badge className={`text-[10px] ${job.status === "in_progress" ? "bg-green-500/20 text-green-300 border-green-500/30" : "bg-orange-500/20 text-orange-300 border-orange-500/30"}`}>
+                        {job.status.replace(/_/g, " ")}
+                      </Badge>
+                      <ChevronRight className="h-4 w-4 text-slate-500 mt-1 ml-auto" />
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Today's Jobs */}
       {todayJobs.length > 0 && (
         <div className="rounded-2xl bg-slate-800/40 border border-orange-500/20 p-4">
@@ -491,11 +543,11 @@ export default function CrewTodayPage() {
         </div>
       )}
 
-      {todayJobs.length === 0 && upcomingBoardJobs.length === 0 && (
+      {todayJobs.length === 0 && upcomingBoardJobs.length === 0 && myAssignments.length === 0 && (
         <div className="rounded-2xl bg-slate-800/30 border border-slate-700/30 p-6 text-center">
           <Calendar className="h-10 w-10 text-slate-500 mx-auto mb-2" />
-          <p className="text-slate-400 font-medium">No jobs scheduled for today</p>
-          <p className="text-slate-500 text-sm mt-1">New jobs will appear here when they're posted</p>
+          <p className="text-slate-400 font-medium">No jobs scheduled yet</p>
+          <p className="text-slate-500 text-sm mt-1">New jobs will appear here automatically</p>
         </div>
       )}
 
