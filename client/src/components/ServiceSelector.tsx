@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Truck, Trash2, Wrench, Snowflake, ChevronRight, Clock, ArrowLeft, Loader2, Plus, Minus, Users, AlertCircle } from "lucide-react";
+import AddressAutocomplete from "@/components/AddressAutocomplete";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { createJob } from "@/lib/createJob";
@@ -9,8 +10,8 @@ import { createJob } from "@/lib/createJob";
 // ── Junk booking types ────────────────────────────────────────────────────────
 
 const JUNK_TIERS = [
-  { key: "small_pickup",  label: "Small Pickup",  price: 150,  desc: "Fits a truck bed",   tag: "Quick & Easy"  },
-  { key: "pickup_load",   label: "Pickup Load",   price: 350,  desc: "Full pickup load",   tag: "Most Popular"  },
+  { key: "small_pickup",  label: "Small Pickup",  price: 150,  desc: "Less than ½ a pickup truck",   tag: "Quick & Easy"  },
+  { key: "pickup_load",   label: "Pickup Load",   price: 350,  desc: "Full pickup truck load",        tag: "Most Popular"  },
   { key: "trailer_load",  label: "Trailer Load",  price: 750,  desc: "Large trailer",      tag: "Full Cleanout" },
   { key: "full_load",     label: "Full Load",     price: 1000, desc: "Max capacity haul",  tag: "Best Value"    },
 ];
@@ -143,27 +144,15 @@ function JunkFlow({ user, onBooked, onBack }: { user: any; onBooked: (id: string
             </div>
           ))}
 
-          <div>
-            <label className="text-xs text-zinc-500 font-semibold block mb-1">
-              Pickup Address <span className="text-red-400">*</span>
-            </label>
-            <input
-              type="text"
-              value={address}
-              onChange={e => setAddress(e.target.value)}
-              onBlur={() => setAddressTouched(true)}
-              placeholder="123 Main St, City, State"
-              className={`w-full bg-zinc-800 border rounded-xl px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none transition-colors ${
-                addressError ? "border-red-500 focus:border-red-400" : "border-zinc-700 focus:border-orange-500"
-              }`}
-            />
-            {addressError && (
-              <p className="flex items-center gap-1 text-red-400 text-xs mt-1">
-                <AlertCircle className="h-3 w-3" />
-                Enter a full street address (e.g. 123 Main St, Ironwood, MI)
-              </p>
-            )}
-          </div>
+          <AddressAutocomplete
+            value={address}
+            onChange={setAddress}
+            onBlur={() => setAddressTouched(true)}
+            label="Pickup Address"
+            required
+            error={addressError}
+            errorMessage="Enter a full street address (e.g. 123 Main St, Ironwood, MI)"
+          />
 
           <div className="border-t border-zinc-800 pt-3">
             <div className="flex items-center justify-between mb-3">
@@ -276,27 +265,15 @@ function MovingFlow({ user, onBooked }: { user: any; onBooked: (id: string, pric
         </div>
       </div>
 
-      <div>
-        <label className="text-xs text-zinc-500 font-semibold block mb-1">
-          Pickup Address <span className="text-red-400">*</span>
-        </label>
-        <input
-          type="text"
-          value={address}
-          onChange={e => setAddress(e.target.value)}
-          onBlur={() => setAddressTouched(true)}
-          placeholder="123 Main St, City, State"
-          className={`w-full bg-zinc-800 border rounded-xl px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none transition-colors ${
-            addressError ? "border-red-500 focus:border-red-400" : "border-zinc-700 focus:border-blue-500"
-          }`}
-        />
-        {addressError && (
-          <p className="flex items-center gap-1 text-red-400 text-xs mt-1">
-            <AlertCircle className="h-3 w-3" />
-            Enter a full street address (e.g. 123 Main St, Ironwood, MI)
-          </p>
-        )}
-      </div>
+      <AddressAutocomplete
+        value={address}
+        onChange={setAddress}
+        onBlur={() => setAddressTouched(true)}
+        label="Pickup Address"
+        required
+        error={addressError}
+        errorMessage="Enter a full street address (e.g. 123 Main St, Ironwood, MI)"
+      />
 
       <div>
         <label className="text-xs text-zinc-500 font-semibold block mb-1">

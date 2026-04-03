@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { BookingChatbot } from "@/components/booking-chatbot";
+import AddressAutocomplete from "@/components/AddressAutocomplete";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -144,6 +145,7 @@ export default function CustomerBookPage() {
 
   const ratePerMoverHour = pricing?.ratePerMoverHour ?? 60;
   const shortJobFull = pricing?.shortJobFull ?? 300;
+  const jc222Price = pricing?.jc222Price ?? 222;
 
   const movingPackages = catalog?.movingPackages?.length ? catalog.movingPackages : FALLBACK_MOVING;
   const junkPackages = catalog?.junkPackages?.length ? catalog.junkPackages : FALLBACK_JUNK;
@@ -628,16 +630,23 @@ export default function CustomerBookPage() {
             </div>
 
             <div className="space-y-3">
-              <div>
-                <Label htmlFor="fromAddress" className="flex items-center gap-1.5 mb-1.5 text-sm"><MapPin className="h-3.5 w-3.5" />Pickup / From Address</Label>
-                <Input id="fromAddress" placeholder="123 Main St, City, State" value={form.fromAddress} onChange={e => setForm(f => ({ ...f, fromAddress: e.target.value }))} />
-              </div>
+              <AddressAutocomplete
+                dark={false}
+                label="Pickup / From Address"
+                required
+                value={form.fromAddress}
+                onChange={v => setForm(f => ({ ...f, fromAddress: v }))}
+                placeholder="123 Main St, City, State"
+              />
 
               {isMoving && (
-                <div>
-                  <Label htmlFor="toAddress" className="flex items-center gap-1.5 mb-1.5 text-sm"><MapPin className="h-3.5 w-3.5" />Delivery / To Address</Label>
-                  <Input id="toAddress" placeholder="456 New St, City, State" value={form.toAddress} onChange={e => setForm(f => ({ ...f, toAddress: e.target.value }))} />
-                </div>
+                <AddressAutocomplete
+                  dark={false}
+                  label="Delivery / To Address"
+                  value={form.toAddress}
+                  onChange={v => setForm(f => ({ ...f, toAddress: v }))}
+                  placeholder="456 New St, City, State"
+                />
               )}
 
               <div>
