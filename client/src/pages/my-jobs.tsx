@@ -4,7 +4,8 @@ import { useLocation } from "wouter";
 import {
   MapPin, Calendar, Loader2, Truck, Trash2, Snowflake, Wrench,
   Plus, CheckCircle, Clock, AlertCircle, Users, DollarSign, X,
-  Package, ChevronRight, RefreshCw, Coins, HelpCircle
+  Package, ChevronRight, RefreshCw, Coins, HelpCircle, Phone,
+  FileText, Star, ArrowRight, Info
 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { LucideIcon } from "lucide-react";
@@ -20,44 +21,156 @@ interface CustomerJob {
   moveDate: string;
   status: string;
   estimatedTotal: string;
+  quotedPrice: string;
   crewSize?: number | null;
+  details?: string;
+  notes?: string;
   createdAt: string;
 }
 
+// ── Service config — covers all serviceType values ────────────────────────────
 const SERVICE_CONFIG: Record<string, { icon: LucideIcon; color: string; bg: string; label: string }> = {
-  residential: { icon: Truck,        color: "text-blue-400",   bg: "bg-blue-500/15",   label: "Moving"        },
-  junk:        { icon: Trash2,       color: "text-orange-400", bg: "bg-orange-500/15", label: "Junk Removal"  },
-  snow:        { icon: Snowflake,    color: "text-cyan-400",   bg: "bg-cyan-500/15",   label: "Snow Removal"  },
-  handyman:    { icon: Wrench,       color: "text-amber-400",  bg: "bg-amber-500/15",  label: "Handyman"      },
-  cleaning:    { icon: Package,      color: "text-green-400",  bg: "bg-green-500/15",  label: "Cleaning"      },
-  demolition:  { icon: Truck,        color: "text-red-400",    bg: "bg-red-500/15",    label: "Demolition"    },
-  custom:      { icon: HelpCircle,   color: "text-violet-400", bg: "bg-violet-500/15", label: "Custom Job"    },
+  moving:      { icon: Truck,      color: "text-blue-400",   bg: "bg-blue-500/15",   label: "Moving"       },
+  residential: { icon: Truck,      color: "text-blue-400",   bg: "bg-blue-500/15",   label: "Moving"       },
+  labor:       { icon: Wrench,     color: "text-amber-400",  bg: "bg-amber-500/15",  label: "Labor Only"   },
+  handyman:    { icon: Wrench,     color: "text-amber-400",  bg: "bg-amber-500/15",  label: "Labor Only"   },
+  junk:        { icon: Trash2,     color: "text-orange-400", bg: "bg-orange-500/15", label: "Junk Removal" },
+  snow:        { icon: Snowflake,  color: "text-cyan-400",   bg: "bg-cyan-500/15",   label: "Snow Removal" },
+  cleaning:    { icon: Package,    color: "text-green-400",  bg: "bg-green-500/15",  label: "Cleaning"     },
+  demolition:  { icon: Truck,      color: "text-red-400",    bg: "bg-red-500/15",    label: "Demolition"   },
+  custom:      { icon: HelpCircle, color: "text-violet-400", bg: "bg-violet-500/15", label: "Custom Job"   },
 };
 
-function getStatus(status: string) {
+function getSvcConfig(type: string) {
+  return SERVICE_CONFIG[type] ?? SERVICE_CONFIG.moving;
+}
+
+// ── Status config ──────────────────────────────────────────────────────────────
+type StatusInfo = {
+  label: string;
+  cls: string;
+  icon: LucideIcon;
+  banner: {
+    bg: string;
+    border: string;
+    iconColor: string;
+    headline: string;
+    body: string;
+  };
+};
+
+function getStatus(status: string): StatusInfo {
   switch (status) {
-    case "completed": case "paid":
-      return { label: "Done",        cls: "bg-green-500/15 text-green-400",  icon: CheckCircle  };
-    case "confirmed": case "accepted": case "in_progress": case "available":
-      return { label: "In Progress", cls: "bg-blue-500/15 text-blue-400",    icon: Clock        };
+    case "completed":
+    case "paid":
+      return {
+        label: "Done",
+        cls: "bg-green-500/15 text-green-400",
+        icon: CheckCircle,
+        banner: {
+          bg: "bg-green-500/10", border: "border-green-500/20", iconColor: "text-green-400",
+          headline: "Job Complete!",
+          body: "Your job is finished. Tokens will be credited to your wallet shortly. Thank you for choosing JC on the Move!",
+        },
+      };
+    case "in_progress":
+      return {
+        label: "In Progress",
+        cls: "bg-blue-500/15 text-blue-400",
+        icon: Clock,
+        banner: {
+          bg: "bg-blue-500/10", border: "border-blue-500/20", iconColor: "text-blue-400",
+          headline: "Your crew is working now",
+          body: "Everything is underway. Questions or concerns? Call or text us anytime: (906) 285-9312",
+        },
+      };
+    case "available":
+    case "confirmed":
+    case "accepted":
+      return {
+        label: "Crew Assigned",
+        cls: "bg-blue-500/15 text-blue-400",
+        icon: Users,
+        banner: {
+          bg: "bg-blue-500/10", border: "border-blue-500/20", iconColor: "text-blue-400",
+          headline: "Crew confirmed!",
+          body: "Your crew is set and ready to go. They'll reach out 30 minutes before arrival to confirm. Call us with any changes: (906) 285-9312",
+        },
+      };
+    case "quoted":
+      return {
+        label: "Quote Ready",
+        cls: "bg-emerald-500/15 text-emerald-400",
+        icon: DollarSign,
+        banner: {
+          bg: "bg-emerald-500/10", border: "border-emerald-500/20", iconColor: "text-emerald-400",
+          headline: "Your quote is ready!",
+          body: "We've reviewed your request and put together a price. Call us to confirm and schedule your crew.",
+        },
+      };
     case "cancelled":
-      return { label: "Cancelled",   cls: "bg-red-500/15 text-red-400",      icon: AlertCircle  };
+      return {
+        label: "Cancelled",
+        cls: "bg-red-500/15 text-red-400",
+        icon: AlertCircle,
+        banner: {
+          bg: "bg-red-500/10", border: "border-red-500/20", iconColor: "text-red-400",
+          headline: "Job cancelled",
+          body: "This job was cancelled. Book a new service whenever you're ready.",
+        },
+      };
     default:
-      return { label: "Submitted",   cls: "bg-orange-500/15 text-orange-400", icon: Clock       };
+      return {
+        label: "Submitted",
+        cls: "bg-orange-500/15 text-orange-400",
+        icon: Clock,
+        banner: {
+          bg: "bg-orange-500/10", border: "border-orange-500/20", iconColor: "text-orange-400",
+          headline: "We're reviewing your request",
+          body: "Our team will reach out within a few hours to confirm details and send your quote. Watch for a call or text from (906) 285-9312.",
+        },
+      };
   }
 }
 
-function JobSheet({ job, open, onClose, onNewJob }: { job: CustomerJob; open: boolean; onClose: () => void; onNewJob: () => void }) {
-  const svc = SERVICE_CONFIG[job.serviceType] || SERVICE_CONFIG.residential;
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function isJustZip(addr: string) {
+  return /^\d{5}(-\d{4})?$/.test(addr.trim());
+}
+
+function formatAddress(addr: string) {
+  if (!addr || isJustZip(addr)) return null;
+  return addr;
+}
+
+// ── JobSheet ──────────────────────────────────────────────────────────────────
+function JobSheet({ job, open, onClose, onNewJob }: {
+  job: CustomerJob; open: boolean; onClose: () => void; onNewJob: () => void;
+}) {
+  const svc = getSvcConfig(job.serviceType);
   const Icon = svc.icon;
   const st = getStatus(job.status);
   const StatusIcon = st.icon;
-  const hasCost = job.estimatedTotal && parseFloat(job.estimatedTotal) > 0;
-  const estimatedTokens = hasCost ? Math.floor(parseFloat(job.estimatedTotal) * 15) : 0;
+
+  const price = parseFloat(job.quotedPrice || job.estimatedTotal || "0");
+  const hasCost = price > 0;
+  const estimatedTokens = hasCost ? Math.floor(price * 15) + 1500 : 0;
+
+  const pickupAddr = formatAddress(job.pickupAddress);
+  const dropoffAddr = formatAddress(job.dropoffAddress);
+
+  const jobDescription = job.details || job.notes || "";
+  const showReschedule = ["new", "quote_requested", "quoted", "available", "confirmed"].includes(job.status);
+  const isQuoted = job.status === "quoted";
+  const isActive = ["available", "confirmed", "in_progress", "accepted"].includes(job.status);
+  const isDone = ["completed", "paid"].includes(job.status);
 
   return (
     <Sheet open={open} onOpenChange={onClose}>
-      <SheetContent side="bottom" className="bg-zinc-900 border-zinc-800 rounded-t-3xl pb-10 max-h-[85vh] overflow-y-auto">
+      <SheetContent
+        side="bottom"
+        className="bg-zinc-900 border-zinc-800 rounded-t-3xl pb-10 max-h-[90vh] overflow-y-auto"
+      >
         <SheetHeader className="text-left mb-4">
           <div className="flex items-center gap-3">
             <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${svc.bg}`}>
@@ -73,64 +186,115 @@ function JobSheet({ job, open, onClose, onNewJob }: { job: CustomerJob; open: bo
           </div>
         </SheetHeader>
 
-        <div className="space-y-4">
-          {/* Details */}
+        <div className="space-y-3">
+
+          {/* Status banner */}
+          <div className={`rounded-2xl border p-4 ${st.banner.bg} ${st.banner.border}`}>
+            <div className="flex items-start gap-3">
+              <StatusIcon className={`h-5 w-5 mt-0.5 flex-shrink-0 ${st.banner.iconColor}`} />
+              <div>
+                <p className="text-white font-bold text-sm">{st.banner.headline}</p>
+                <p className="text-zinc-400 text-xs mt-0.5 leading-relaxed">{st.banner.body}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Quote price highlight — shown when quoted */}
+          {isQuoted && hasCost && (
+            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-4">
+              <p className="text-xs text-zinc-400 mb-1 font-semibold uppercase tracking-widest">Your Quote</p>
+              <p className="text-3xl font-black text-emerald-400">${price.toFixed(0)}</p>
+              <p className="text-xs text-zinc-500 mt-1">Call to confirm: <span className="text-white font-semibold">(906) 285-9312</span></p>
+            </div>
+          )}
+
+          {/* Job details block */}
           <div className="bg-zinc-800/50 rounded-2xl p-4 space-y-3">
-            {job.pickupAddress && (
+
+            {pickupAddr && (
               <div className="flex items-start gap-3">
                 <MapPin className="h-4 w-4 text-zinc-500 mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="text-xs text-zinc-500 mb-0.5">From</p>
-                  <p className="text-sm text-white">{job.pickupAddress}</p>
+                  <p className="text-xs text-zinc-500 mb-0.5">{job.serviceType === "moving" || job.serviceType === "residential" ? "Pickup Address" : "Address"}</p>
+                  <p className="text-sm text-white">{pickupAddr}</p>
                 </div>
               </div>
             )}
-            {job.dropoffAddress && (
+
+            {dropoffAddr && (
               <div className="flex items-start gap-3">
                 <MapPin className="h-4 w-4 text-zinc-500 mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="text-xs text-zinc-500 mb-0.5">To</p>
-                  <p className="text-sm text-white">{job.dropoffAddress}</p>
+                  <p className="text-xs text-zinc-500 mb-0.5">Drop-off Address</p>
+                  <p className="text-sm text-white">{dropoffAddr}</p>
                 </div>
               </div>
             )}
+
             {job.moveDate && (
               <div className="flex items-center gap-3">
                 <Calendar className="h-4 w-4 text-zinc-500 flex-shrink-0" />
                 <div>
-                  <p className="text-xs text-zinc-500 mb-0.5">Date</p>
-                  <p className="text-sm text-white">
-                    {new Date(job.moveDate).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+                  <p className="text-xs text-zinc-500 mb-0.5">Scheduled Date</p>
+                  <p className="text-sm text-white font-semibold">
+                    {new Date(job.moveDate).toLocaleDateString("en-US", {
+                      weekday: "long", month: "long", day: "numeric", year: "numeric"
+                    })}
                   </p>
                 </div>
               </div>
             )}
+
             {job.crewSize && (
               <div className="flex items-center gap-3">
                 <Users className="h-4 w-4 text-zinc-500 flex-shrink-0" />
                 <div>
-                  <p className="text-xs text-zinc-500 mb-0.5">Crew</p>
-                  <p className="text-sm text-white">{job.crewSize} movers</p>
+                  <p className="text-xs text-zinc-500 mb-0.5">Crew Size</p>
+                  <p className="text-sm text-white">
+                    {job.crewSize} {svc.label === "Labor Only" ? "helper" : "mover"}{job.crewSize > 1 ? "s" : ""}
+                  </p>
                 </div>
               </div>
             )}
+
+            {jobDescription && (
+              <div className="flex items-start gap-3">
+                <FileText className="h-4 w-4 text-zinc-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-xs text-zinc-500 mb-0.5">Job Description</p>
+                  <p className="text-sm text-white leading-relaxed">{jobDescription}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center gap-3">
+              <Calendar className="h-4 w-4 text-zinc-500 flex-shrink-0" />
+              <div>
+                <p className="text-xs text-zinc-500 mb-0.5">Submitted</p>
+                <p className="text-sm text-zinc-400">
+                  {new Date(job.createdAt).toLocaleDateString("en-US", {
+                    month: "short", day: "numeric", year: "numeric"
+                  })}
+                </p>
+              </div>
+            </div>
           </div>
 
-          {/* Cost + tokens */}
-          {hasCost && (
+          {/* Price + tokens (non-quoted) */}
+          {hasCost && !isQuoted && (
             <div className="flex gap-3">
               <div className="flex-1 bg-zinc-800/50 rounded-2xl p-4">
                 <div className="flex items-center gap-2 mb-1">
                   <DollarSign className="h-4 w-4 text-green-400" />
-                  <p className="text-xs text-zinc-500">Estimated</p>
+                  <p className="text-xs text-zinc-500">{isDone ? "Final Total" : "Estimated"}</p>
                 </div>
-                <p className="text-xl font-black text-green-400">${parseFloat(job.estimatedTotal).toFixed(0)}</p>
+                <p className="text-xl font-black text-green-400">${price.toFixed(0)}</p>
               </div>
               {estimatedTokens > 0 && (
                 <div className="flex-1 bg-zinc-800/50 rounded-2xl p-4">
                   <div className="flex items-center gap-2 mb-1">
                     <Coins className="h-4 w-4 text-orange-400" />
-                    <p className="text-xs text-zinc-500">Earn</p>
+                    <p className="text-xs text-zinc-500">{isDone ? "Earned" : "Earn"}</p>
                   </div>
                   <p className="text-xl font-black text-orange-400">~{estimatedTokens.toLocaleString()}</p>
                   <p className="text-[10px] text-zinc-600">JCMOVES</p>
@@ -139,12 +303,34 @@ function JobSheet({ job, open, onClose, onNewJob }: { job: CustomerJob; open: bo
             </div>
           )}
 
+          {/* Call to confirm button when quoted */}
+          {isQuoted && (
+            <a
+              href="tel:+19062859312"
+              className="w-full flex items-center justify-center gap-2 h-12 rounded-2xl bg-emerald-500 hover:bg-emerald-400 active:scale-[0.98] transition-all text-white font-bold text-sm"
+            >
+              <Phone className="h-4 w-4" />
+              Call to Confirm Booking
+            </a>
+          )}
+
           {/* Actions */}
-          {["quote_requested", "available", "confirmed", "accepted", "new"].includes(job.status) && (
+          {showReschedule && !isQuoted && (
             <button className="w-full flex items-center justify-center gap-2 h-11 rounded-2xl border border-zinc-700 text-zinc-300 text-sm font-semibold hover:bg-zinc-800 active:scale-[0.98] transition-all">
               <RefreshCw className="h-4 w-4" />
               Request Reschedule
             </button>
+          )}
+
+          {/* Need help — always visible when active */}
+          {(isActive || isQuoted) && (
+            <a
+              href="tel:+19062859312"
+              className="w-full flex items-center justify-center gap-2 h-11 rounded-2xl border border-zinc-700 text-zinc-400 text-sm font-semibold hover:bg-zinc-800 active:scale-[0.98] transition-all"
+            >
+              <Phone className="h-4 w-4" />
+              Call JC on the Move
+            </a>
           )}
 
           <button
@@ -159,6 +345,7 @@ function JobSheet({ job, open, onClose, onNewJob }: { job: CustomerJob; open: bo
   );
 }
 
+// ── MyJobsPage ────────────────────────────────────────────────────────────────
 export default function MyJobsPage() {
   const [, setLocation] = useLocation();
   const [selectedJob, setSelectedJob] = useState<CustomerJob | null>(null);
@@ -173,7 +360,7 @@ export default function MyJobsPage() {
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .filter(j => {
       if (filter === "active") return !["completed", "cancelled", "paid"].includes(j.status);
-      if (filter === "done") return ["completed", "paid"].includes(j.status);
+      if (filter === "done")   return ["completed", "paid"].includes(j.status);
       return true;
     });
 
@@ -194,14 +381,14 @@ export default function MyJobsPage() {
 
         {/* Filter pills */}
         <div className="flex gap-2 mb-5">
-          {[
+          {([
             { value: "all",    label: "All"    },
             { value: "active", label: "Active" },
             { value: "done",   label: "Done"   },
-          ].map(f => (
+          ] as const).map(f => (
             <button
               key={f.value}
-              onClick={() => setFilter(f.value as typeof filter)}
+              onClick={() => setFilter(f.value)}
               className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${
                 filter === f.value
                   ? "bg-orange-500 text-white"
@@ -243,16 +430,20 @@ export default function MyJobsPage() {
         ) : (
           <div className="grid grid-cols-2 gap-3">
             {filtered.map(job => {
-              const svc = SERVICE_CONFIG[job.serviceType] || SERVICE_CONFIG.residential;
+              const svc = getSvcConfig(job.serviceType);
               const Icon = svc.icon;
               const st = getStatus(job.status);
+              const price = parseFloat(job.estimatedTotal || "0");
+
+              const pickupAddr = formatAddress(job.pickupAddress);
+              const shortDesc = (job.details || job.notes || "").slice(0, 40);
+
               return (
                 <button
                   key={job.id}
                   onClick={() => setSelectedJob(job)}
                   className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 text-left hover:border-zinc-700 active:scale-[0.97] transition-all"
                 >
-                  {/* Icon + status */}
                   <div className="flex items-start justify-between mb-3">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${svc.bg}`}>
                       <Icon className={`h-5 w-5 ${svc.color}`} />
@@ -262,23 +453,26 @@ export default function MyJobsPage() {
                     </span>
                   </div>
 
-                  {/* Service name */}
                   <p className="font-bold text-white text-sm leading-tight mb-1">{svc.label}</p>
 
-                  {/* Date or address — one line */}
                   {job.moveDate ? (
                     <p className="text-xs text-zinc-500 flex items-center gap-1">
                       <Calendar className="h-3 w-3" />
                       {new Date(job.moveDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                     </p>
-                  ) : job.pickupAddress ? (
-                    <p className="text-xs text-zinc-500 truncate">{job.pickupAddress}</p>
-                  ) : null}
+                  ) : pickupAddr ? (
+                    <p className="text-xs text-zinc-500 truncate">{pickupAddr}</p>
+                  ) : shortDesc ? (
+                    <p className="text-xs text-zinc-500 truncate">{shortDesc}</p>
+                  ) : (
+                    <p className="text-xs text-zinc-600 italic">Details on file</p>
+                  )}
 
-                  {/* Price if available */}
-                  {job.estimatedTotal && parseFloat(job.estimatedTotal) > 0 && (
-                    <p className="text-xs font-semibold text-green-400 mt-1">
-                      ${parseFloat(job.estimatedTotal).toFixed(0)} est.
+                  {price > 0 && (
+                    <p className={`text-xs font-semibold mt-1 ${
+                      job.status === "quoted" ? "text-emerald-400" : "text-green-400"
+                    }`}>
+                      ${price.toFixed(0)} {job.status === "quoted" ? "quoted" : "est."}
                     </p>
                   )}
 

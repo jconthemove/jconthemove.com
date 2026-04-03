@@ -4584,8 +4584,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         pickupAddress: lead.fromAddress || '',
         dropoffAddress: lead.toAddress || '',
         status: lead.status,
-        estimatedTotal: lead.totalPrice || '',
+        estimatedTotal: lead.totalPrice || lead.basePrice || '',
+        quotedPrice: lead.totalPrice || lead.basePrice || '',
         crewSize: lead.crewSize || null,
+        details: lead.details || '',
+        notes: lead.quoteNotes || '',
         createdAt: lead.createdAt?.toISOString() || ''
       }));
       res.json(transformedLeads);
