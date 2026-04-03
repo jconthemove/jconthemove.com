@@ -133,6 +133,55 @@ app.use((req, res, next) => {
       res.sendFile(filePath);
     });
 
+    // Bridge root public assets that Vite doesn't copy from this repo layout.
+    // This keeps the PWA manifest, icons, and fallback page available in production.
+    const resolveStaticAsset = (...relativePaths: string[]) => {
+      for (const relativePath of relativePaths) {
+        const candidatePath = path.resolve(process.cwd(), relativePath);
+        if (fs.existsSync(candidatePath)) {
+          return candidatePath;
+        }
+      }
+      return null;
+    };
+
+    app.get('/manifest.json', (_req, res) => {
+      const filePath = resolveStaticAsset('dist/public/manifest.json', 'public/manifest.json');
+      if (!filePath) {
+        return res.sendStatus(404);
+      }
+      res.type('application/manifest+json');
+      res.sendFile(filePath);
+    });
+
+    app.get('/offline.html', (_req, res) => {
+      const filePath = resolveStaticAsset('dist/public/offline.html', 'public/offline.html');
+      if (!filePath) {
+        return res.sendStatus(404);
+      }
+      res.type('text/html');
+      res.sendFile(filePath);
+    });
+
+    app.get('/favicon.ico', (_req, res) => {
+      const filePath = resolveStaticAsset('dist/public/favicon.ico', 'public/favicon.ico');
+      if (!filePath) {
+        return res.sendStatus(404);
+      }
+      res.sendFile(filePath);
+    });
+
+    app.get('/icons/:iconName', (req, res) => {
+      const filePath = resolveStaticAsset(
+        path.join('dist/public/icons', req.params.iconName),
+        path.join('public/icons', req.params.iconName),
+      );
+      if (!filePath) {
+        return res.sendStatus(404);
+      }
+      res.sendFile(filePath);
+    });
+
     // Setup Vite for development or serve static files for production
     if (app.get("env") === "development") {
       console.log('Setting up Vite development server...');
