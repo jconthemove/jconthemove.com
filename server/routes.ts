@@ -4602,6 +4602,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Employee-only routes MUST be registered before /:id to avoid being captured by the parametric route
+  app.get("/api/leads/available", isAuthenticated, requireEmployee, async (req, res) => {
+    try {
+      const availableLeads = await storage.getAvailableLeads();
+      res.json(await enrichLeadsWithPhone(availableLeads));
+    } catch (error) {
+      console.error("Error fetching available leads:", error);
+      res.status(500).json({ error: "Failed to fetch available jobs" });
+    }
+  });
+
+  app.get("/api/leads/my-jobs", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const employeeId = req.currentUser.id;
+      const assignedLeads = await storage.getAssignedLeads(employeeId);
+      const assignedIds = new Set(assignedLeads.map((l: any) => l.id));
+      const openLeads = await db.select().from(leads)
+        .where(inArray(leads.status, ["new", "quote_requested", "available", "quoted", "open", "assigned"]))
+        .orderBy(desc(leads.createdAt));
+      const merged = [
+        ...assignedLeads,
+        ...openLeads.filter((l: any) => !assignedIds.has(l.id)),
+      ];
+      res.json(await enrichLeadsWithPhone(merged));
+    } catch (error) {
+      console.error("Error fetching assigned leads:", error);
+      res.status(500).json({ error: "Failed to fetch assigned jobs" });
+    }
+  });
+
+  app.get("/api/leads/job-board", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const userId = req.currentUser.id;
+      const openLeads = await db.select({
+        id: leads.id,
+        serviceType: leads.serviceType,
+        fromAddress: leads.fromAddress,
+        toAddress: leads.toAddress,
+        moveDate: leads.moveDate,
+        crewSize: leads.crewSize,
+        status: leads.status,
+        basePrice: leads.basePrice,
+        details: leads.details,
+        crewMembers: leads.crewMembers,
+        confirmedDate: leads.confirmedDate,
+        createdAt: leads.createdAt,
+      })
+        .from(leads)
+        .where(
+          and(
+            inArray(leads.status, ["new", "quote_requested", "quoted", "available", "open", "assigned", "in_progress"]),
+          )
+        )
+        .orderBy(desc(leads.createdAt));
+
+      const masked = openLeads.map(lead => ({
+        ...lead,
+        estimatedTokens: lead.basePrice ? Math.floor(Number(lead.basePrice) * 15) + 1500 : 1500,
+        alreadyApplied: Array.isArray(lead.crewMembers) && lead.crewMembers.includes(userId),
+        crewSlotsFilled: Array.isArray(lead.crewMembers) ? lead.crewMembers.length : 0,
+      }));
+
+      res.json(masked);
+    } catch (error) {
+      console.error("Error fetching job board:", error);
+      res.status(500).json({ error: "Failed to fetch job board" });
+    }
+  });
+
   // Get single lead by ID (business owner only)
   app.get("/api/leads/:id", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
@@ -6660,78 +6729,6 @@ Thank you for your business!
       phone: l.phone || phoneMap[l.email] || null,
     }));
   }
-
-  app.get("/api/leads/available", isAuthenticated, requireEmployee, async (req, res) => {
-    try {
-      const availableLeads = await storage.getAvailableLeads();
-      res.json(await enrichLeadsWithPhone(availableLeads));
-    } catch (error) {
-      console.error("Error fetching available leads:", error);
-      res.status(500).json({ error: "Failed to fetch available jobs" });
-    }
-  });
-
-  app.get("/api/leads/my-jobs", isAuthenticated, requireEmployee, async (req: any, res) => {
-    try {
-      const employeeId = req.currentUser.id;
-      // Assigned leads (crew member explicitly on the job)
-      const assignedLeads = await storage.getAssignedLeads(employeeId);
-      const assignedIds = new Set(assignedLeads.map((l: any) => l.id));
-      // All open unassigned leads (new + available) so they show in calendar & stats
-      const openLeads = await db.select().from(leads)
-        .where(inArray(leads.status, ["new", "quote_requested", "available", "quoted", "open", "assigned"]))
-        .orderBy(desc(leads.createdAt));
-      // Merge: assigned leads first, then open leads not already in assigned list
-      const merged = [
-        ...assignedLeads,
-        ...openLeads.filter((l: any) => !assignedIds.has(l.id)),
-      ];
-      res.json(await enrichLeadsWithPhone(merged));
-    } catch (error) {
-      console.error("Error fetching assigned leads:", error);
-      res.status(500).json({ error: "Failed to fetch assigned jobs" });
-    }
-  });
-
-  // Job board — open jobs employees can sign up for (personal info masked)
-  app.get("/api/leads/job-board", isAuthenticated, requireEmployee, async (req: any, res) => {
-    try {
-      const userId = req.currentUser.id;
-      const openLeads = await db.select({
-        id: leads.id,
-        serviceType: leads.serviceType,
-        fromAddress: leads.fromAddress,
-        toAddress: leads.toAddress,
-        moveDate: leads.moveDate,
-        crewSize: leads.crewSize,
-        status: leads.status,
-        basePrice: leads.basePrice,
-        details: leads.details,
-        crewMembers: leads.crewMembers,
-        confirmedDate: leads.confirmedDate,
-        createdAt: leads.createdAt,
-      })
-        .from(leads)
-        .where(
-          and(
-            inArray(leads.status, ["new", "quote_requested", "quoted", "available", "open", "assigned", "in_progress"]),
-          )
-        )
-        .orderBy(desc(leads.createdAt));
-
-      const masked = openLeads.map(lead => ({
-        ...lead,
-        estimatedTokens: lead.basePrice ? Math.floor(Number(lead.basePrice) * 15) + 1500 : 1500,
-        alreadyApplied: Array.isArray(lead.crewMembers) && lead.crewMembers.includes(userId),
-        crewSlotsFilled: Array.isArray(lead.crewMembers) ? lead.crewMembers.length : 0,
-      }));
-
-      res.json(masked);
-    } catch (error) {
-      console.error("Error fetching job board:", error);
-      res.status(500).json({ error: "Failed to fetch job board" });
-    }
-  });
 
   // Worker signs up for a job (adds self to crewMembers)
   app.post("/api/leads/:id/crew-apply", isAuthenticated, requireEmployee, async (req: any, res) => {
