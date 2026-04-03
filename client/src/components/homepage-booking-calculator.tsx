@@ -10,6 +10,7 @@ import {
   calculateMovingPrice,
   DEFAULT_ADD_ONS,
   fetchZipLocation,
+  getDiscountRate,
   getMinimumLaborHours,
   getMinimumMovers,
   PRICING_BASE,
@@ -176,8 +177,7 @@ export function HomepageBookingCalculator({ preset }: Props) {
     const billableMovers = Math.max(movers, minimumMovers);
     const billableHours = Math.max(hours, minimumHours);
     const laborSubtotal = billableMovers * PRICING_BASE.laborRatePerMoverHour * billableHours;
-    const discountRate =
-      billableHours >= 5 ? 0.1 : billableHours >= 4 ? 0.075 : billableHours >= 3 ? 0.05 : 0;
+    const discountRate = getDiscountRate(billableHours);
     const discountAmount = Math.round(laborSubtotal * discountRate * 100) / 100;
     const addOnTotal =
       (addOns.truck
@@ -422,34 +422,44 @@ export function HomepageBookingCalculator({ preset }: Props) {
                 );
               })}
             </div>
-            <p className="mt-3 text-xs text-slate-500 italic">Most common job: 2 movers for 3 hours ≈ $450</p>
+            <p className="mt-3 text-xs text-slate-500 italic">Most common job: 2 movers for 3 hours ≈ $470</p>
           </div>
 
           <div>
             <p className="mb-3 text-base font-semibold text-slate-200">Hours</p>
             <div className="grid grid-cols-4 gap-2 md:grid-cols-7">
-              {HOURS.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setHours(option)}
-                  disabled={option < minimumHours}
-                  className={`relative rounded-xl border px-3 py-4 text-sm font-semibold transition ${
-                    hours === option
-                      ? "border-emerald-400 bg-emerald-500/10 text-emerald-100"
-                      : option < minimumHours
-                        ? "cursor-not-allowed border-white/5 bg-white/[0.03] text-slate-500"
-                        : "border-white/10 bg-white/5 text-slate-300 hover:border-white/20"
-                  }`}
-                >
-                  {option === 3 && (
-                    <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 whitespace-nowrap bg-emerald-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
-                      Most common choice
-                    </span>
-                  )}
-                  {option}h
-                </button>
-              ))}
+              {HOURS.map((option) => {
+                const discountPct = Math.round(getDiscountRate(option) * 100);
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setHours(option)}
+                    disabled={option < minimumHours}
+                    className={`relative rounded-xl border px-3 py-3 text-sm font-semibold transition ${
+                      hours === option
+                        ? "border-emerald-400 bg-emerald-500/10 text-emerald-100"
+                        : option < minimumHours
+                          ? "cursor-not-allowed border-white/5 bg-white/[0.03] text-slate-500"
+                          : "border-white/10 bg-white/5 text-slate-300 hover:border-white/20"
+                    }`}
+                  >
+                    {option === 3 && (
+                      <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 whitespace-nowrap bg-emerald-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+                        Most common
+                      </span>
+                    )}
+                    <span className="block">{option}h</span>
+                    {discountPct > 0 ? (
+                      <span className={`block text-[10px] font-medium mt-0.5 ${hours === option ? "text-emerald-300" : option < minimumHours ? "text-slate-600" : "text-emerald-400"}`}>
+                        -{discountPct}%
+                      </span>
+                    ) : (
+                      <span className="block text-[10px] mt-0.5 opacity-0">0%</span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
             <p className="mt-2 text-xs text-slate-400">
               {addOns.truck

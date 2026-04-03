@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { PRICING_BASE } from "@shared/pricing";
 import {
   ArrowLeft, Truck, Package2, Users, Clock,
   RotateCcw, ChevronRight, Star, AlertCircle, MapPin,
@@ -39,7 +40,7 @@ interface Pricing {
 }
 
 const DEFAULT_PRICING: Pricing = {
-  ratePerMoverHour: 60,
+  ratePerMoverHour: PRICING_BASE.laborRatePerMoverHour,
   shortJobRate: 150,
   shortJobFull: 300,
   jc222Price: 222,

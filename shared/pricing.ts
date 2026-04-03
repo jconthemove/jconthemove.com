@@ -1,5 +1,5 @@
 export const PRICING_BASE = {
-  laborRatePerMoverHour: 75,
+  laborRatePerMoverHour: 85,
   travelRatePerCrewHour: 100,
   truckSmallAddOnFlat: 300,
   truckLargeAddOnFlat: 600,
@@ -117,9 +117,12 @@ export function getTruckAddOnCost(addOns: PricingAddOns, truckSize?: TruckSize |
 }
 
 export function getDiscountRate(hours: number) {
-  if (hours >= 5) return 0.1;
-  if (hours >= 4) return 0.075;
-  if (hours >= 3) return 0.05;
+  if (hours >= 8) return 0.3;
+  if (hours >= 7) return 0.27;
+  if (hours >= 6) return 0.23;
+  if (hours >= 5) return 0.2;
+  if (hours >= 4) return 0.15;
+  if (hours >= 3) return 0.08;
   return 0;
 }
 
