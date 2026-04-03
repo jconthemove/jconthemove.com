@@ -193,8 +193,16 @@ function JobSheet({ job, open, onClose, onNewJob }: {
             <div className="flex items-start gap-3">
               <StatusIcon className={`h-5 w-5 mt-0.5 flex-shrink-0 ${st.banner.iconColor}`} />
               <div>
-                <p className="text-white font-bold text-sm">{st.banner.headline}</p>
-                <p className="text-zinc-400 text-xs mt-0.5 leading-relaxed">{st.banner.body}</p>
+                <p className="text-white font-bold text-sm">
+                  {job.status === "quoted" && job.serviceType === "junk"
+                    ? "Price locked in!"
+                    : st.banner.headline}
+                </p>
+                <p className="text-zinc-400 text-xs mt-0.5 leading-relaxed">
+                  {job.status === "quoted" && job.serviceType === "junk"
+                    ? "Your pickup price is set — no review needed. Call us to schedule your crew."
+                    : st.banner.body}
+                </p>
               </div>
             </div>
           </div>
@@ -251,7 +259,9 @@ function JobSheet({ job, open, onClose, onNewJob }: {
                 <div>
                   <p className="text-xs text-zinc-500 mb-0.5">Crew Size</p>
                   <p className="text-sm text-white">
-                    {job.crewSize} {svc.label === "Labor Only" ? "helper" : "mover"}{job.crewSize > 1 ? "s" : ""}
+                    {job.crewSize}{" "}
+                    {svc.label === "Labor Only" ? "helper" : svc.label === "Junk Removal" ? "crew member" : "mover"}
+                    {job.crewSize > 1 ? "s" : ""}
                   </p>
                 </div>
               </div>
@@ -310,7 +320,7 @@ function JobSheet({ job, open, onClose, onNewJob }: {
               className="w-full flex items-center justify-center gap-2 h-12 rounded-2xl bg-emerald-500 hover:bg-emerald-400 active:scale-[0.98] transition-all text-white font-bold text-sm"
             >
               <Phone className="h-4 w-4" />
-              Call to Confirm Booking
+              {job.serviceType === "junk" ? "Call to Schedule Pickup" : "Call to Confirm Booking"}
             </a>
           )}
 

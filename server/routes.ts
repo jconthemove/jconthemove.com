@@ -2733,18 +2733,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const customerEmail = email || "noreply@jconthemove.com";
       const customerPhone = phone || "";
 
+      const tierLabel: Record<string, string> = {
+        small_pickup: "Small Pickup Load", pickup_load: "Pickup Load",
+        trailer_load: "Trailer Load", full_load: "Full Load",
+      };
       const [lead] = await db.insert(leads).values({
         firstName,
         lastName,
         email: customerEmail,
         phone: customerPhone,
         serviceType: "junk",
-        fromAddress: address || "",
-        status: "new",
+        fromAddress: addrTrimmed,
+        status: "quoted",   // price is fixed at booking — no review needed
         crewSize: tierCfg.movers,
         basePrice: String(totalPrice),
         totalPrice: String(totalPrice),
-        details: `Tier: ${tier}. Add-ons: Mattress×${mattressQty}, Fridge×${fridgeQty}, Gym Equipment×${gymQty}`,
+        details: `${tierLabel[tier] ?? tier} junk removal — $${totalPrice}${addOnTotal > 0 ? ` (includes add-ons: Mattress×${mattressQty}, Fridge×${fridgeQty}, Gym Equipment×${gymQty})` : ""}`,
         createdByUserId: (req.session as any).userId || req.user?.id || null,
       }).returning();
 
@@ -2772,11 +2776,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const dispatched = assignedCrew.length >= tierCfg.movers;
       res.json({
         jobId: lead.id,
-        status: dispatched ? "available" : "new",
+        status: dispatched ? "available" : "quoted",
         crewCount: assignedCrew.length,
         message: dispatched
-          ? "Crew assigned! They'll be in touch shortly."
-          : "We'll reach you shortly — our team will confirm your booking.",
+          ? "Crew assigned! They'll contact you to confirm pickup."
+          : `Price confirmed at $${totalPrice}. Call us to schedule your pickup: (906) 285-9312`,
         totalPrice,
       });
     } catch (err: any) {

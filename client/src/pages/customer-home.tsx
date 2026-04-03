@@ -9,12 +9,16 @@ import LiveCrewBeacon from "@/components/LiveCrewBeacon";
 // ── Job Status Card (post-booking polling) ────────────────────────────────────
 
 function JobStatusCard({ jobId, totalPrice, onDismiss }: { jobId: string; totalPrice: number; onDismiss: () => void }) {
-  const { data, isLoading } = useQuery<{ status: string; crewCount: number; crewSize: number }>({
+  const { data, isLoading } = useQuery<{ status: string; crewCount: number; crewSize: number; serviceType: string }>({
     queryKey: ["/api/jobs", jobId, "status"],
     queryFn: () => fetch(`/api/jobs/${jobId}/status`).then(r => r.json()),
-    refetchInterval: 3000,
+    refetchInterval: 4000,
   });
-  const assigned = data?.status === "assigned" && (data?.crewCount ?? 0) > 0;
+
+  const status = data?.status ?? "";
+  const crewReady = ["available", "assigned", "in_progress"].includes(status) && (data?.crewCount ?? 0) > 0;
+  const priceConfirmed = status === "quoted";
+  const isJunk = data?.serviceType === "junk";
 
   return (
     <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-4">
@@ -27,23 +31,37 @@ function JobStatusCard({ jobId, totalPrice, onDismiss }: { jobId: string; totalP
           <Loader2 className="h-4 w-4 animate-spin" />
           <span className="text-sm">Checking status…</span>
         </div>
-      ) : assigned ? (
+      ) : crewReady ? (
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xl">🟢</span>
             <span className="font-bold text-white">Crew Assigned!</span>
           </div>
-          <p className="text-sm text-zinc-400">{data?.crewCount} mover{(data?.crewCount ?? 1) > 1 ? "s" : ""} assigned to your job.</p>
-          <p className="text-xs text-zinc-500 mt-1">We'll be in touch shortly to confirm the details.</p>
+          <p className="text-sm text-zinc-400">
+            {data?.crewCount} {isJunk ? "crew member" : "mover"}{(data?.crewCount ?? 1) > 1 ? "s" : ""} assigned · Total: <span className="text-white font-semibold">${totalPrice}</span>
+          </p>
+          <p className="text-xs text-zinc-500 mt-1">They'll be in touch to confirm details.</p>
+        </div>
+      ) : priceConfirmed ? (
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xl">✅</span>
+            <span className="font-bold text-white">Price Confirmed!</span>
+          </div>
+          <p className="text-sm text-zinc-400">Total: <span className="text-white font-semibold">${totalPrice}</span></p>
+          <p className="text-xs text-zinc-500 mt-1">
+            {isJunk ? "Call us to schedule your pickup:" : "Call to confirm:"}{" "}
+            <a href="tel:+19062859312" className="text-orange-400 font-semibold">(906) 285-9312</a>
+          </p>
         </div>
       ) : (
         <div>
           <div className="flex items-center gap-2 mb-1">
             <Search className="h-5 w-5 text-orange-400 animate-pulse" />
-            <span className="font-bold text-white">Finding crew…</span>
+            <span className="font-bold text-white">Booking received!</span>
           </div>
-          <p className="text-sm text-zinc-400">Job submitted · Total: <span className="text-white font-semibold">${totalPrice}</span></p>
-          <p className="text-xs text-zinc-500 mt-0.5">Hang tight — we're assembling your crew.</p>
+          <p className="text-sm text-zinc-400">Total: <span className="text-white font-semibold">${totalPrice}</span></p>
+          <p className="text-xs text-zinc-500 mt-0.5">Our team will reach out to confirm — watch for a call from (906) 285-9312.</p>
         </div>
       )}
     </div>
