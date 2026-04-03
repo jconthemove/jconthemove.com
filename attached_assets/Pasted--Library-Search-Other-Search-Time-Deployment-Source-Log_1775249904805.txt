@@ -1,0 +1,137 @@
+
+Library
+Search
+Other
+Search
+Time
+Deployment
+Source
+Log
+2026-04-03 15:56:29.49
+7a9f4383
+User
+8:56:29 PM [express] GET /api/auth/user 200 in 510ms :: {"id":"e92d8c51-fc10-4161-b0bb-eb0e4ec3e6e7"…
+2026-04-03 15:56:40.96
+7a9f4383
+User
+[AUTH CHECK] Path: /api/mining/status | Session ID: UtI6ynmA | Has cookie: true
+2026-04-03 15:56:41.40
+7a9f4383
+User
+[AUTH CHECK] ✅ User authenticated and approved: customer
+2026-04-03 15:56:41.69
+7a9f4383
+User
+8:56:41 PM [express] GET /api/mining/status 304 in 1117ms :: {"currentSession":{"id":"21cd2fae-3e0d-…
+2026-04-03 15:56:45.31
+7a9f4383
+User
+[AUTH CHECK] 🔑 JWT auth — userId: 48383454
+2026-04-03 15:56:45.63
+7a9f4383
+User
+[AUTH CHECK] ✅ User authenticated and approved: employee
+2026-04-03 15:56:45.74
+7a9f4383
+User
+8:56:45 PM [express] POST /api/crew/go-online 200 in 483ms :: {"success":true,"id":"48383454","isAva…
+2026-04-03 15:56:50.47
+7a9f4383
+User
+[AUTH CHECK] Path: /api/rewards/wallet | Session ID: UtI6ynmA | Has cookie: true
+2026-04-03 15:56:50.74
+7a9f4383
+User
+[AUTH CHECK] ✅ User authenticated and approved: customer
+2026-04-03 15:56:50.85
+7a9f4383
+User
+8:56:50 PM [express] GET /api/rewards/wallet 304 in 426ms :: {"id":"a5dc27c9-dff6-4198-8aaa-128f4232…
+2026-04-03 15:56:50.94
+7a9f4383
+User
+8:56:50 PM [express] GET /api/crew/online 200 in 486ms :: {"count":1}
+2026-04-03 15:56:56.19
+7a9f4383
+User
+8:56:56 PM [express] GET /api/crew/online 304 in 164ms :: {"count":1}
+2026-04-03 15:57:01.49
+7a9f4383
+User
+8:57:01 PM [express] GET /api/crew/online 304 in 166ms :: {"count":1}
+2026-04-03 15:57:06.71
+7a9f4383
+User
+[AUTH CHECK] Path: /api/jobs/create-moving | Session ID: UtI6ynmA | Has cookie: true
+2026-04-03 15:57:06.98
+7a9f4383
+User
+[AUTH CHECK] ✅ User authenticated (allow pending): customer status: active
+2026-04-03 15:57:07.28
+7a9f4383
+User
+8:57:07 PM [express] POST /api/jobs/create-moving 200 in 630ms :: {"jobId":"2cd45dd1-9257-449b-b304-…
+2026-04-03 15:57:07.36
+7a9f4383
+User
+8:57:07 PM [express] GET /api/crew/online 304 in 683ms :: {"count":1}
+2026-04-03 15:57:07.67
+7a9f4383
+User
+8:57:07 PM [express] GET /api/jobs/2cd45dd1-9257-449b-b304-9e3204057294/status 200 in 169ms :: {"id"…
+2026-04-03 15:57:10.92
+7a9f4383
+User
+8:57:10 PM [express] GET /api/jobs/2cd45dd1-9257-449b-b304-9e3204057294/status 304 in 168ms :: {"id"…
+2026-04-03 15:57:12.71
+7a9f4383
+User
+8:57:12 PM [express] GET /api/crew/online 304 in 166ms :: {"count":1}
+2026-04-03 15:57:13.60
+7a9f4383
+User
+[COOKIE-IN] GET /api/auth/user | proto=https secure=true | jc.sid=true connect.sid=true | raw="connect.sid=s%3Am7opAMJw7ijcbYEK6S1EX-49scPKonIy.lVSpqcQ0sLyo34BSHRQdJGaDVFCv5ht30ndF1qUCi%2Bc; jc.sid=s%3AMT0jbMmeZrD1W"
+2026-04-03 15:57:13.65
+7a9f4383
+User
+[AUTH CHECK] Path: /api/auth/user | Session ID: MT0jbMme | Has cookie: true
+2026-04-03 15:57:13.98
+7a9f4383
+User
+[AUTH CHECK] ✅ User authenticated (allow pending): employee status: approved
+2026-04-03 15:57:13.98
+7a9f4383
+User
+✅ Authentication successful - Fetching user data for userId: 48383454
+2026-04-03 15:57:14.09
+7a9f4383
+User
+📤 Returning user data for michigankid906@gmail.com
+2026-04-03 15:57:14.09
+7a9f4383
+User
+User data retrieved: found - michigankid906@gmail.com with role employee
+2026-04-03 15:57:14.15
+7a9f4383
+User
+8:57:14 PM [express] GET /api/auth/user 200 in 550ms :: {"id":"48383454","email":"michigankid906@gma…
+2026-04-03 15:57:14.25
+7a9f4383
+User
+8:57:14 PM [express] GET /api/jobs/2cd45dd1-9257-449b-b304-9e3204057294/status 304 in 166ms :: {"id"…
+2026-04-03 15:57:14.73
+7a9f4383
+User
+[AUTH CHECK] 🔑 JWT auth — userId: 48383454
+2026-04-03 15:57:14.84
+7a9f4383
+User
+[AUTH CHECK] ✅ User authenticated and approved: employee
+2026-04-03 15:57:15.12
+7a9f4383
+User
+8:57:15 PM [express] GET /api/mining/status 304 in 446ms :: {"currentSession":{"id":"3761411e-5f57-4…
+2026-04-03 15:57:17.62
+7a9f4383
+User
+8:57:17 PM [express] GET /api/jobs/2cd45dd1-9257-449b-b304-9e3204057294/status 304 in 165ms :: {"id"…
