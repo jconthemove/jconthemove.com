@@ -2702,12 +2702,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { tier, addOns, address, customerName, phone, email } = req.body;
 
-      // Strict input validation
       if (!tier || !JUNK_TIER_CREW[tier]) {
         return res.status(400).json({ error: "Invalid tier" });
       }
-      if (!address || typeof address !== "string" || address.trim().length < 5) {
-        return res.status(400).json({ error: "A valid pickup address is required" });
+      const addrTrimmed = typeof address === "string" ? address.trim() : "";
+      if (!addrTrimmed || addrTrimmed.length < 8 || !/[a-zA-Z]/.test(addrTrimmed) || !/\d/.test(addrTrimmed)) {
+        return res.status(400).json({ error: "A full street address is required (e.g. 123 Main St, Ironwood, MI)" });
       }
       const parseAddon = (val: unknown, max = 10): number => {
         const n = Math.floor(Number(val) || 0);
@@ -2730,15 +2730,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const nameParts = (customerName || "").trim().split(" ");
       const firstName = nameParts[0] || "Customer";
       const lastName = nameParts.slice(1).join(" ") || "Junk";
+      const customerEmail = email || "noreply@jconthemove.com";
+      const customerPhone = phone || "";
 
       const [lead] = await db.insert(leads).values({
         firstName,
         lastName,
-        email: email || "noreply@jconthemove.com",
-        phone: phone || "",
+        email: customerEmail,
+        phone: customerPhone,
         serviceType: "junk",
         fromAddress: address || "",
-        status: "open",
+        status: "new",
         crewSize: tierCfg.movers,
         basePrice: String(totalPrice),
         totalPrice: String(totalPrice),
@@ -2748,18 +2750,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Auto-dispatch with driver preference for applicable tiers
       const assignedCrew = await runDispatch(
-        lead.id,
-        tierCfg.movers,   // crewSize
-        tierCfg.movers,   // slotsNeeded (full fill on initial create)
-        tierCfg.needsDriver,
-        [],               // existingCrew
-        [],               // excludeIds
+        lead.id, tierCfg.movers, tierCfg.movers, tierCfg.needsDriver, [], [],
       );
+
+      // Notify admin via email
+      const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
+      try {
+        await sendEmail({
+          to: companyEmail, from: companyEmail,
+          subject: `New Junk Removal Booking — ${firstName} ${lastName}`,
+          text: `New junk removal job submitted.\n\nCustomer: ${firstName} ${lastName}\nPhone: ${customerPhone}\nEmail: ${customerEmail}\nAddress: ${address}\nTier: ${tier}\nTotal: $${totalPrice}\n\nView job in admin panel.`,
+          html: `<h2>New Junk Removal Booking</h2><p><b>Customer:</b> ${firstName} ${lastName}<br><b>Phone:</b> ${customerPhone}<br><b>Email:</b> ${customerEmail}<br><b>Address:</b> ${address}<br><b>Tier:</b> ${tier}<br><b>Total:</b> $${totalPrice}</p>`,
+        });
+      } catch (emailErr) { console.error("Admin email failed:", emailErr); }
+
+      // Notify admin via SMS
+      try {
+        await smsService.notifyNewQuote({ customerName: `${firstName} ${lastName}`, serviceType: "junk", phone: customerPhone || undefined });
+      } catch (smsErr) { console.error("Admin SMS failed:", smsErr); }
 
       const dispatched = assignedCrew.length >= tierCfg.movers;
       res.json({
         jobId: lead.id,
-        status: dispatched ? "assigned" : "open",
+        status: dispatched ? "available" : "new",
         crewCount: assignedCrew.length,
         message: dispatched
           ? "Crew assigned! They'll be in touch shortly."
@@ -2775,49 +2788,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // POST /api/jobs/create-moving — create a moving job and auto-dispatch
   app.post("/api/jobs/create-moving", isAuthenticatedAllowPending, async (req: any, res) => {
     try {
-      const { movers, hours, address, customerName, phone, email } = req.body;
+      const { movers, hours, address, notes, customerName, phone, email } = req.body;
 
       const moverCount = Math.floor(Number(movers) || 0);
       const hourCount  = Math.floor(Number(hours)  || 0);
 
-      if (moverCount < 1 || moverCount > 10) {
-        return res.status(400).json({ error: "Mover count must be between 1 and 10" });
+      if (moverCount < 1 || moverCount > 10) return res.status(400).json({ error: "Mover count must be between 1 and 10" });
+      if (hourCount < 1 || hourCount > 24)   return res.status(400).json({ error: "Hours must be between 1 and 24" });
+      const addrTrimmed = typeof address === "string" ? address.trim() : "";
+      if (!addrTrimmed || addrTrimmed.length < 8 || !/[a-zA-Z]/.test(addrTrimmed) || !/\d/.test(addrTrimmed)) {
+        return res.status(400).json({ error: "A full street address is required (e.g. 123 Main St, Ironwood, MI)" });
       }
-      if (hourCount < 1 || hourCount > 24) {
-        return res.status(400).json({ error: "Hours must be between 1 and 24" });
-      }
-      if (!address || typeof address !== "string" || address.trim().length < 5) {
-        return res.status(400).json({ error: "A valid pickup address is required" });
-      }
+
+      // Calculate price from live pricing config
+      const { rows: pricingRows } = await pool.query(
+        `SELECT setting_key, setting_value FROM spin_config WHERE setting_key IN ('pricing_rate_per_mover_hour') LIMIT 1`
+      );
+      const ratePerMoverHour = parseFloat(pricingRows[0]?.setting_value ?? "65");
+      const totalPrice = Math.round(moverCount * hourCount * ratePerMoverHour);
 
       const nameParts = (customerName || "").trim().split(" ");
       const firstName = nameParts[0] || "Customer";
       const lastName = nameParts.slice(1).join(" ") || "Moving";
+      const customerEmail = email || "noreply@jconthemove.com";
+      const customerPhone = phone || "";
 
       const [lead] = await db.insert(leads).values({
-        firstName,
-        lastName,
-        email: email || "noreply@jconthemove.com",
-        phone: phone || "",
+        firstName, lastName,
+        email: customerEmail,
+        phone: customerPhone,
         serviceType: "moving",
         fromAddress: address.trim(),
-        status: "open",
+        status: "new",
         crewSize: moverCount,
-        details: `Moving job: ${moverCount} mover${moverCount > 1 ? "s" : ""}, ${hourCount} hour${hourCount > 1 ? "s" : ""}`,
+        basePrice: String(totalPrice),
+        totalPrice: String(totalPrice),
+        details: `Moving job: ${moverCount} mover${moverCount > 1 ? "s" : ""}, ${hourCount} hour${hourCount > 1 ? "s" : ""}${notes ? ` — ${notes}` : ""}`,
         createdByUserId: (req.session as any).userId || req.user?.id || null,
       }).returning();
 
-      const assignedCrew = await dispatchGenericJob({
-        leadId: lead.id,
-        kind: "moving",
-        crewSize: moverCount,
-      });
+      const assignedCrew = await dispatchGenericJob({ leadId: lead.id, kind: "moving", crewSize: moverCount });
+
+      // Notify admin
+      const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
+      try {
+        await sendEmail({
+          to: companyEmail, from: companyEmail,
+          subject: `New Moving Booking — ${firstName} ${lastName} (${moverCount} movers, ${hourCount} hrs)`,
+          text: `New moving job submitted.\n\nCustomer: ${firstName} ${lastName}\nPhone: ${customerPhone}\nEmail: ${customerEmail}\nAddress: ${address}\nMovers: ${moverCount}, Hours: ${hourCount}\nEstimated Total: $${totalPrice}\n\nView in admin panel.`,
+          html: `<h2>New Moving Booking</h2><p><b>Customer:</b> ${firstName} ${lastName}<br><b>Phone:</b> ${customerPhone}<br><b>Email:</b> ${customerEmail}<br><b>Address:</b> ${address}<br><b>Movers:</b> ${moverCount} × ${hourCount} hrs<br><b>Estimated Total:</b> $${totalPrice}</p>`,
+        });
+      } catch (e) { console.error("Admin email failed:", e); }
+      try {
+        await smsService.notifyNewQuote({ customerName: `${firstName} ${lastName}`, serviceType: "moving", phone: customerPhone || undefined });
+      } catch (e) { console.error("Admin SMS failed:", e); }
 
       const dispatched = assignedCrew.length >= moverCount;
       res.json({
         jobId: lead.id,
-        status: dispatched ? "assigned" : "open",
+        status: dispatched ? "available" : "new",
         crewCount: assignedCrew.length,
+        totalPrice,
         message: dispatched
           ? "Crew assigned! They'll be in touch shortly."
           : "We'll reach you shortly — our team will confirm your booking.",
@@ -2831,49 +2862,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // POST /api/jobs/create-labor — create a labor-only job and auto-dispatch
   app.post("/api/jobs/create-labor", isAuthenticatedAllowPending, async (req: any, res) => {
     try {
-      const { movers, hours, address, customerName, phone, email } = req.body;
+      const { movers, hours, address, notes, customerName, phone, email } = req.body;
 
       const moverCount = Math.floor(Number(movers) || 0);
       const hourCount  = Math.floor(Number(hours)  || 0);
 
-      if (moverCount < 1 || moverCount > 10) {
-        return res.status(400).json({ error: "Mover count must be between 1 and 10" });
+      if (moverCount < 1 || moverCount > 10) return res.status(400).json({ error: "Mover count must be between 1 and 10" });
+      if (hourCount < 1 || hourCount > 24)   return res.status(400).json({ error: "Hours must be between 1 and 24" });
+      const addrTrimmed = typeof address === "string" ? address.trim() : "";
+      if (!addrTrimmed || addrTrimmed.length < 8 || !/[a-zA-Z]/.test(addrTrimmed) || !/\d/.test(addrTrimmed)) {
+        return res.status(400).json({ error: "A full street address is required (e.g. 123 Main St, Ironwood, MI)" });
       }
-      if (hourCount < 1 || hourCount > 24) {
-        return res.status(400).json({ error: "Hours must be between 1 and 24" });
-      }
-      if (!address || typeof address !== "string" || address.trim().length < 5) {
-        return res.status(400).json({ error: "A valid pickup address is required" });
-      }
+
+      // Calculate price from live pricing config (labor uses same per-mover-hour rate)
+      const { rows: pricingRows } = await pool.query(
+        `SELECT setting_value FROM spin_config WHERE setting_key='pricing_rate_per_mover_hour' LIMIT 1`
+      );
+      const ratePerMoverHour = parseFloat(pricingRows[0]?.setting_value ?? "65");
+      const totalPrice = Math.round(moverCount * hourCount * ratePerMoverHour);
 
       const nameParts = (customerName || "").trim().split(" ");
       const firstName = nameParts[0] || "Customer";
       const lastName = nameParts.slice(1).join(" ") || "Labor";
+      const customerEmail = email || "noreply@jconthemove.com";
+      const customerPhone = phone || "";
 
       const [lead] = await db.insert(leads).values({
-        firstName,
-        lastName,
-        email: email || "noreply@jconthemove.com",
-        phone: phone || "",
-        serviceType: "handyman",
+        firstName, lastName,
+        email: customerEmail,
+        phone: customerPhone,
+        serviceType: "labor",
         fromAddress: address.trim(),
-        status: "open",
+        status: "new",
         crewSize: moverCount,
-        details: `Labor job: ${moverCount} helper${moverCount > 1 ? "s" : ""}, ${hourCount} hour${hourCount > 1 ? "s" : ""}`,
+        basePrice: String(totalPrice),
+        totalPrice: String(totalPrice),
+        details: `Labor only: ${moverCount} helper${moverCount > 1 ? "s" : ""}, ${hourCount} hour${hourCount > 1 ? "s" : ""}${notes ? ` — ${notes}` : ""}`,
         createdByUserId: (req.session as any).userId || req.user?.id || null,
       }).returning();
 
-      const assignedCrew = await dispatchGenericJob({
-        leadId: lead.id,
-        kind: "labor",
-        crewSize: moverCount,
-      });
+      const assignedCrew = await dispatchGenericJob({ leadId: lead.id, kind: "labor", crewSize: moverCount });
+
+      // Notify admin
+      const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
+      try {
+        await sendEmail({
+          to: companyEmail, from: companyEmail,
+          subject: `New Labor Booking — ${firstName} ${lastName} (${moverCount} helper${moverCount > 1 ? "s" : ""}, ${hourCount} hrs)`,
+          text: `New labor-only job submitted.\n\nCustomer: ${firstName} ${lastName}\nPhone: ${customerPhone}\nEmail: ${customerEmail}\nAddress: ${address}\nHelpers: ${moverCount}, Hours: ${hourCount}\nEstimated Total: $${totalPrice}\n\nView in admin panel.`,
+          html: `<h2>New Labor Booking</h2><p><b>Customer:</b> ${firstName} ${lastName}<br><b>Phone:</b> ${customerPhone}<br><b>Email:</b> ${customerEmail}<br><b>Address:</b> ${address}<br><b>Helpers:</b> ${moverCount} × ${hourCount} hrs<br><b>Estimated Total:</b> $${totalPrice}</p>`,
+        });
+      } catch (e) { console.error("Admin email failed:", e); }
+      try {
+        await smsService.notifyNewQuote({ customerName: `${firstName} ${lastName}`, serviceType: "labor", phone: customerPhone || undefined });
+      } catch (e) { console.error("Admin SMS failed:", e); }
 
       const dispatched = assignedCrew.length >= moverCount;
       res.json({
         jobId: lead.id,
-        status: dispatched ? "assigned" : "open",
+        status: dispatched ? "available" : "new",
         crewCount: assignedCrew.length,
+        totalPrice,
         message: dispatched
           ? "Crew assigned! They'll be in touch shortly."
           : "We'll reach you shortly — our team will confirm your booking.",
@@ -6623,7 +6672,7 @@ Thank you for your business!
       const assignedIds = new Set(assignedLeads.map((l: any) => l.id));
       // All open unassigned leads (new + available) so they show in calendar & stats
       const openLeads = await db.select().from(leads)
-        .where(inArray(leads.status, ["new", "quote_requested", "available", "quoted"]))
+        .where(inArray(leads.status, ["new", "quote_requested", "available", "quoted", "open", "assigned"]))
         .orderBy(desc(leads.createdAt));
       // Merge: assigned leads first, then open leads not already in assigned list
       const merged = [
@@ -6658,7 +6707,7 @@ Thank you for your business!
         .from(leads)
         .where(
           and(
-            inArray(leads.status, ["new", "quote_requested", "quoted", "available", "in_progress"]),
+            inArray(leads.status, ["new", "quote_requested", "quoted", "available", "open", "assigned", "in_progress"]),
           )
         )
         .orderBy(desc(leads.createdAt));

@@ -84,7 +84,7 @@ export async function dispatchGenericJob(opts: DispatchGenericOptions): Promise<
   await db.update(leads)
     .set({
       crewMembers: mergedCrew,
-      status: fullyStaffed ? "assigned" : "open",
+      status: fullyStaffed ? "available" : "new",
     })
     .where(eq(leads.id, leadId));
 

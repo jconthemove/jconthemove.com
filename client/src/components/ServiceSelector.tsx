@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { useMutation } from "@tanstack/react-query";
-import { Truck, Trash2, Wrench, Snowflake, ChevronRight, Clock, ArrowLeft, Loader2, Plus, Minus, Users } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Truck, Trash2, Wrench, Snowflake, ChevronRight, Clock, ArrowLeft, Loader2, Plus, Minus, Users, AlertCircle } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { createJob } from "@/lib/createJob";
@@ -24,6 +24,17 @@ const ADD_ONS = [
 const MOVER_OPTIONS = [1, 2, 3, 4, 5];
 const HOUR_OPTIONS  = [2, 3, 4, 5, 6, 8];
 
+// ── Address validation ────────────────────────────────────────────────────────
+// Must have at least one digit AND at least one letter AND be >= 8 chars
+// This blocks bare zip codes like "49938" or empty entries
+function isValidAddress(addr: string): boolean {
+  const trimmed = addr.trim();
+  if (trimmed.length < 8) return false;
+  const hasLetter = /[a-zA-Z]/.test(trimmed);
+  const hasDigit  = /\d/.test(trimmed);
+  return hasLetter && hasDigit;
+}
+
 // ── JunkFlow ──────────────────────────────────────────────────────────────────
 
 function JunkFlow({ user, onBooked, onBack }: { user: any; onBooked: (id: string, price: number) => void; onBack: () => void }) {
@@ -31,13 +42,18 @@ function JunkFlow({ user, onBooked, onBack }: { user: any; onBooked: (id: string
   const [tier, setTier] = useState<string | null>(null);
   const [addOns, setAddOns] = useState<Record<string, number>>({ mattress: 0, fridge: 0, gym: 0 });
   const [address, setAddress] = useState("");
+  const [addressTouched, setAddressTouched] = useState(false);
 
   const tierPrice = JUNK_TIERS.find(t => t.key === tier)?.price ?? 0;
   const addOnTotal = ADD_ONS.reduce((s, a) => s + (addOns[a.key] || 0) * a.price, 0);
   const total = tierPrice + addOnTotal;
 
+  const addressError = addressTouched && !isValidAddress(address);
+
   const book = useMutation({
     mutationFn: async () => {
+      if (!tier) throw new Error("Please select a load size.");
+      if (!isValidAddress(address)) throw new Error("Please enter a full street address.");
       const res = await apiRequest("POST", "/api/jobs/create-junk", {
         tier, addOns, address,
         customerName: `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Customer",
@@ -50,15 +66,16 @@ function JunkFlow({ user, onBooked, onBack }: { user: any; onBooked: (id: string
       toast({ title: "Booking submitted!", description: data.message });
       onBooked(data.jobId, data.totalPrice ?? total);
     },
-    onError: () => toast({ title: "Booking failed", description: "Please try again.", variant: "destructive" }),
+    onError: (err: any) => toast({ title: "Booking failed", description: err.message || "Please try again.", variant: "destructive" }),
   });
 
   const changeQty = (key: string, d: number) =>
     setAddOns(p => ({ ...p, [key]: Math.max(0, (p[key] || 0) + d) }));
 
+  const canSubmit = !!tier && isValidAddress(address) && !book.isPending;
+
   return (
     <div className="space-y-3">
-      {/* Back */}
       <button
         onClick={onBack}
         className="flex items-center gap-1.5 text-zinc-500 text-sm hover:text-zinc-300 transition-colors"
@@ -66,7 +83,6 @@ function JunkFlow({ user, onBooked, onBack }: { user: any; onBooked: (id: string
         <ArrowLeft className="h-4 w-4" /> Change service
       </button>
 
-      {/* Tier cards */}
       <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Choose load size</p>
       <div className="grid grid-cols-2 gap-2">
         {JUNK_TIERS.map(t => (
@@ -99,7 +115,6 @@ function JunkFlow({ user, onBooked, onBack }: { user: any; onBooked: (id: string
         ))}
       </div>
 
-      {/* Add-ons + checkout */}
       {tier && (
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-4">
           <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Add-ons</p>
@@ -129,14 +144,25 @@ function JunkFlow({ user, onBooked, onBack }: { user: any; onBooked: (id: string
           ))}
 
           <div>
-            <label className="text-xs text-zinc-500 font-semibold block mb-1">Pickup Address</label>
+            <label className="text-xs text-zinc-500 font-semibold block mb-1">
+              Pickup Address <span className="text-red-400">*</span>
+            </label>
             <input
               type="text"
               value={address}
               onChange={e => setAddress(e.target.value)}
+              onBlur={() => setAddressTouched(true)}
               placeholder="123 Main St, City, State"
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500"
+              className={`w-full bg-zinc-800 border rounded-xl px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none transition-colors ${
+                addressError ? "border-red-500 focus:border-red-400" : "border-zinc-700 focus:border-orange-500"
+              }`}
             />
+            {addressError && (
+              <p className="flex items-center gap-1 text-red-400 text-xs mt-1">
+                <AlertCircle className="h-3 w-3" />
+                Enter a full street address (e.g. 123 Main St, Ironwood, MI)
+              </p>
+            )}
           </div>
 
           <div className="border-t border-zinc-800 pt-3">
@@ -145,8 +171,8 @@ function JunkFlow({ user, onBooked, onBack }: { user: any; onBooked: (id: string
               <span className="text-white font-black text-xl">${total}</span>
             </div>
             <button
-              onClick={() => book.mutate()}
-              disabled={book.isPending || !address.trim()}
+              onClick={() => { setAddressTouched(true); book.mutate(); }}
+              disabled={!canSubmit}
               className="w-full py-3.5 rounded-xl bg-orange-500 hover:bg-orange-400 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all text-white font-black text-base shadow-lg shadow-orange-500/25 flex items-center justify-center gap-2"
             >
               {book.isPending
@@ -175,23 +201,40 @@ function MovingFlow({ user, onBooked }: { user: any; onBooked: (id: string, pric
   const [movers, setMovers] = useState(2);
   const [hours, setHours] = useState(4);
   const [address, setAddress] = useState("");
+  const [description, setDescription] = useState("");
+  const [addressTouched, setAddressTouched] = useState(false);
+  const [descTouched, setDescTouched] = useState(false);
+
+  const { data: pricing } = useQuery<{ ratePerMoverHour: number }>({ queryKey: ["/api/pricing"] });
+  const rate = pricing?.ratePerMoverHour ?? 60;
+  const estimatedPrice = movers * hours * rate;
+
+  const addressError  = addressTouched  && !isValidAddress(address);
+  const descError     = descTouched     && description.trim().length < 10;
 
   const book = useMutation({
-    mutationFn: () => createJob({
-      serviceType: "moving",
-      movers,
-      hours,
-      address,
-      customerName: `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Customer",
-      phone: user?.phoneNumber || "",
-      email: user?.email || "",
-    }),
+    mutationFn: () => {
+      if (!isValidAddress(address)) throw new Error("Please enter a full street address.");
+      if (description.trim().length < 10) throw new Error("Please describe what needs to be moved.");
+      return createJob({
+        serviceType: "moving",
+        movers,
+        hours,
+        address,
+        notes: description,
+        customerName: `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Customer",
+        phone: user?.phoneNumber || "",
+        email: user?.email || "",
+      });
+    },
     onSuccess: (data) => {
       toast({ title: "Booking submitted!", description: data.message });
-      onBooked(data.jobId, data.totalPrice ?? 0);
+      onBooked(data.jobId, data.totalPrice ?? estimatedPrice);
     },
     onError: (err: any) => toast({ title: "Booking failed", description: err.message || "Please try again.", variant: "destructive" }),
   });
+
+  const canSubmit = isValidAddress(address) && description.trim().length >= 10 && !book.isPending;
 
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-5">
@@ -234,28 +277,66 @@ function MovingFlow({ user, onBooked }: { user: any; onBooked: (id: string, pric
       </div>
 
       <div>
-        <label className="text-xs text-zinc-500 font-semibold block mb-1">Pickup Address</label>
+        <label className="text-xs text-zinc-500 font-semibold block mb-1">
+          Pickup Address <span className="text-red-400">*</span>
+        </label>
         <input
           type="text"
           value={address}
           onChange={e => setAddress(e.target.value)}
+          onBlur={() => setAddressTouched(true)}
           placeholder="123 Main St, City, State"
-          className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-blue-500"
+          className={`w-full bg-zinc-800 border rounded-xl px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none transition-colors ${
+            addressError ? "border-red-500 focus:border-red-400" : "border-zinc-700 focus:border-blue-500"
+          }`}
         />
+        {addressError && (
+          <p className="flex items-center gap-1 text-red-400 text-xs mt-1">
+            <AlertCircle className="h-3 w-3" />
+            Enter a full street address (e.g. 123 Main St, Ironwood, MI)
+          </p>
+        )}
       </div>
 
-      <div className="border-t border-zinc-800 pt-3">
+      <div>
+        <label className="text-xs text-zinc-500 font-semibold block mb-1">
+          What needs to be moved? <span className="text-red-400">*</span>
+        </label>
+        <textarea
+          value={description}
+          onChange={e => setDescription(e.target.value)}
+          onBlur={() => setDescTouched(true)}
+          placeholder="e.g. 2-bedroom apartment, have a couch, dresser, and boxes. Moving from Ironwood to Hurley."
+          rows={3}
+          className={`w-full bg-zinc-800 border rounded-xl px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none transition-colors resize-none ${
+            descError ? "border-red-500 focus:border-red-400" : "border-zinc-700 focus:border-blue-500"
+          }`}
+        />
+        {descError && (
+          <p className="flex items-center gap-1 text-red-400 text-xs mt-1">
+            <AlertCircle className="h-3 w-3" />
+            Please describe your move (at least a few words)
+          </p>
+        )}
+      </div>
+
+      <div className="border-t border-zinc-800 pt-3 space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-zinc-400 text-sm font-medium">Estimated Total</span>
+          <span className="text-white font-black text-xl">${estimatedPrice}</span>
+        </div>
+        <p className="text-zinc-600 text-xs">{movers} mover{movers > 1 ? "s" : ""} × {hours}h @ ${rate}/mover/hr · Final price confirmed on-site</p>
         <button
-          onClick={() => book.mutate()}
-          disabled={book.isPending || !address.trim()}
+          onClick={() => { setAddressTouched(true); setDescTouched(true); book.mutate(); }}
+          disabled={!canSubmit}
           className="w-full py-3.5 rounded-xl bg-blue-500 hover:bg-blue-400 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all text-white font-black text-base shadow-lg shadow-blue-500/25 flex items-center justify-center gap-2"
         >
           {book.isPending
             ? <Loader2 className="h-5 w-5 animate-spin" />
-            : <><Truck className="h-5 w-5" />Book {movers} Mover{movers > 1 ? "s" : ""} · {hours}h</>
+            : <><Truck className="h-5 w-5" />Book {movers} Mover{movers > 1 ? "s" : ""} · ${estimatedPrice}</>
           }
         </button>
-        <p className="text-center text-xs text-zinc-600 mt-2">⚡ Most jobs booked in under 30 seconds</p>
+        <p className="text-center text-xs text-zinc-600">⚡ Most jobs booked in under 30 seconds</p>
       </div>
     </div>
   );
@@ -268,23 +349,40 @@ function LaborFlow({ user, onBooked }: { user: any; onBooked: (id: string, price
   const [movers, setMovers] = useState(2);
   const [hours, setHours] = useState(3);
   const [address, setAddress] = useState("");
+  const [description, setDescription] = useState("");
+  const [addressTouched, setAddressTouched] = useState(false);
+  const [descTouched, setDescTouched] = useState(false);
+
+  const { data: pricing } = useQuery<{ ratePerMoverHour: number }>({ queryKey: ["/api/pricing"] });
+  const rate = pricing?.ratePerMoverHour ?? 60;
+  const estimatedPrice = movers * hours * rate;
+
+  const addressError = addressTouched && !isValidAddress(address);
+  const descError    = descTouched    && description.trim().length < 10;
 
   const book = useMutation({
-    mutationFn: () => createJob({
-      serviceType: "labor",
-      movers,
-      hours,
-      address,
-      customerName: `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Customer",
-      phone: user?.phoneNumber || "",
-      email: user?.email || "",
-    }),
+    mutationFn: () => {
+      if (!isValidAddress(address)) throw new Error("Please enter a full street address.");
+      if (description.trim().length < 10) throw new Error("Please describe the work needed.");
+      return createJob({
+        serviceType: "labor",
+        movers,
+        hours,
+        address,
+        notes: description,
+        customerName: `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Customer",
+        phone: user?.phoneNumber || "",
+        email: user?.email || "",
+      });
+    },
     onSuccess: (data) => {
       toast({ title: "Booking submitted!", description: data.message });
-      onBooked(data.jobId, data.totalPrice ?? 0);
+      onBooked(data.jobId, data.totalPrice ?? estimatedPrice);
     },
     onError: (err: any) => toast({ title: "Booking failed", description: err.message || "Please try again.", variant: "destructive" }),
   });
+
+  const canSubmit = isValidAddress(address) && description.trim().length >= 10 && !book.isPending;
 
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-5">
@@ -327,28 +425,66 @@ function LaborFlow({ user, onBooked }: { user: any; onBooked: (id: string, price
       </div>
 
       <div>
-        <label className="text-xs text-zinc-500 font-semibold block mb-1">Job Address</label>
+        <label className="text-xs text-zinc-500 font-semibold block mb-1">
+          Job Address <span className="text-red-400">*</span>
+        </label>
         <input
           type="text"
           value={address}
           onChange={e => setAddress(e.target.value)}
+          onBlur={() => setAddressTouched(true)}
           placeholder="123 Main St, City, State"
-          className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-amber-500"
+          className={`w-full bg-zinc-800 border rounded-xl px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none transition-colors ${
+            addressError ? "border-red-500 focus:border-red-400" : "border-zinc-700 focus:border-amber-500"
+          }`}
         />
+        {addressError && (
+          <p className="flex items-center gap-1 text-red-400 text-xs mt-1">
+            <AlertCircle className="h-3 w-3" />
+            Enter a full street address (e.g. 123 Main St, Ironwood, MI)
+          </p>
+        )}
       </div>
 
-      <div className="border-t border-zinc-800 pt-3">
+      <div>
+        <label className="text-xs text-zinc-500 font-semibold block mb-1">
+          What work is needed? <span className="text-red-400">*</span>
+        </label>
+        <textarea
+          value={description}
+          onChange={e => setDescription(e.target.value)}
+          onBlur={() => setDescTouched(true)}
+          placeholder="e.g. Help loading a storage unit, moving furniture between rooms, yard cleanup..."
+          rows={3}
+          className={`w-full bg-zinc-800 border rounded-xl px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none transition-colors resize-none ${
+            descError ? "border-red-500 focus:border-red-400" : "border-zinc-700 focus:border-amber-500"
+          }`}
+        />
+        {descError && (
+          <p className="flex items-center gap-1 text-red-400 text-xs mt-1">
+            <AlertCircle className="h-3 w-3" />
+            Please describe the work needed (at least a few words)
+          </p>
+        )}
+      </div>
+
+      <div className="border-t border-zinc-800 pt-3 space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-zinc-400 text-sm font-medium">Estimated Total</span>
+          <span className="text-white font-black text-xl">${estimatedPrice}</span>
+        </div>
+        <p className="text-zinc-600 text-xs">{movers} helper{movers > 1 ? "s" : ""} × {hours}h @ ${rate}/helper/hr · Final price confirmed on-site</p>
         <button
-          onClick={() => book.mutate()}
-          disabled={book.isPending || !address.trim()}
+          onClick={() => { setAddressTouched(true); setDescTouched(true); book.mutate(); }}
+          disabled={!canSubmit}
           className="w-full py-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all text-white font-black text-base shadow-lg shadow-amber-500/25 flex items-center justify-center gap-2"
         >
           {book.isPending
             ? <Loader2 className="h-5 w-5 animate-spin" />
-            : <><Wrench className="h-5 w-5" />Book {movers} Helper{movers > 1 ? "s" : ""} · {hours}h</>
+            : <><Wrench className="h-5 w-5" />Book {movers} Helper{movers > 1 ? "s" : ""} · ${estimatedPrice}</>
           }
         </button>
-        <p className="text-center text-xs text-zinc-600 mt-2">⚡ Most jobs booked in under 30 seconds</p>
+        <p className="text-center text-xs text-zinc-600">⚡ Most jobs booked in under 30 seconds</p>
       </div>
     </div>
   );
@@ -421,7 +557,6 @@ export default function ServiceSelector({ defaultService, user, onBooked }: Serv
 
   return (
     <div className="space-y-4">
-      {/* Service tab row */}
       <div className="grid grid-cols-4 gap-2">
         {SERVICES.map(svc => {
           const Icon = svc.icon;
@@ -451,7 +586,6 @@ export default function ServiceSelector({ defaultService, user, onBooked }: Serv
         })}
       </div>
 
-      {/* Dynamic panel */}
       <div className="min-h-[180px]">
         {active === "junk" && (
           <JunkFlow
@@ -465,7 +599,6 @@ export default function ServiceSelector({ defaultService, user, onBooked }: Serv
         {active === "snow" && <SnowPanel />}
       </div>
 
-      {/* Speed caption */}
       <p className="text-center text-zinc-600 text-xs font-medium">
         ⚡ Most jobs booked in under 30 seconds
       </p>
