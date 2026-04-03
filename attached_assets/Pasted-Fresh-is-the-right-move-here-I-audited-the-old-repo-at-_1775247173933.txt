@@ -1,0 +1,71 @@
+Fresh is the right move here. I audited the old repo at JC-ON-THE-MOVE and the Render screenshots point to the same root problem: the app is trying to carry too many systems at once, and the booking flow is getting broken by route drift and incomplete database migration.
+
+I set up a clean rebuild workspace at JCONTHEMOVE-FRESH. The most important pieces are the rebuild plan at rebuild-plan.md, the trimmed schema at v1-schema.md, and a fresh mobile starter in mobile/package.json with the first screens under mobile/app.
+
+The recommendation is simple:
+
+keep booking, jobs, crew, admin, notifications
+delay wallets, rewards, staking, lottery, and blockchain
+rebuild around a small set of stable routes like POST /jobs, GET /jobs, and PATCH /jobs/:id/status
+I did not run installs or tests yet, so this is a scaffold plus a cleanup strategy, not a running app yet. If you want, I can take the next step now and build the actual Book a Job form plus the clean backend API shape for v1 inside this fresh workspace.
+
+
+18 files changed
++819
+-0
+Undo
+JCONTHEMOVE-FRESH/README.md
+JCONTHEMOVE-FRESH/docs/rebuild-plan.md
+JCONTHEMOVE-FRESH/docs/v1-schema.md
+JCONTHEMOVE-FRESH/mobile/app.json
+JCONTHEMOVE-FRESH/mobile/app/(tabs)/_layout.tsx
+JCONTHEMOVE-FRESH/mobile/app/(tabs)/book.tsx
+JCONTHEMOVE-FRESH/mobile/app/(tabs)/crew.tsx
+JCONTHEMOVE-FRESH/mobile/app/(tabs)/home.tsx
+JCONTHEMOVE-FRESH/mobile/app/(tabs)/jobs.tsx
+JCONTHEMOVE-FRESH/mobile/app/(tabs)/profile.tsx
+JCONTHEMOVE-FRESH/mobile/app/_layout.tsx
+JCONTHEMOVE-FRESH/mobile/app/index.tsx
+JCONTHEMOVE-FRESH/mobile/babel.config.js
+JCONTHEMOVE-FRESH/mobile/package.json
+JCONTHEMOVE-FRESH/mobile/src/data.ts
+JCONTHEMOVE-FRESH/mobile/src/theme.ts
+JCONTHEMOVE-FRESH/mobile/src/ui.tsx
+JCONTHEMOVE-FRESH/mobile/tsconfig.json
+ask me if you need information and i will extract from replit
+
+
+
+Perfect. The fastest way to make this rebuild real is for me to ask for only the business-critical pieces from Replit, not everything.
+
+Please pull these 8 things for me:
+
+The exact customer flow you want in v1.
+Example: home -> book job -> confirmation -> my jobs
+
+The exact crew flow you want in v1.
+Example: login -> assigned jobs -> job detail -> mark arrived -> mark complete
+
+The exact admin flow you want in v1.
+Example: view jobs -> assign crew -> update status -> close job
+
+The minimum fields required for a new booking form.
+I currently assume:
+first name, last name, email, phone, service type, from address, to address, preferred date, property size, details, promo code
+
+The job statuses you actually use.
+I currently suggest:
+requested, quoted, scheduled, in_progress, completed, canceled
+
+The tables from Replit you believe are truly required for launch.
+If easier, just send table names only.
+
+The API routes or route names that currently matter most.
+Especially anything around:
+auth, jobs, crew, admin, notifications
+
+Any branding rules to preserve.
+Colors, wording, logo text, tone, tabs, and whether this should feel more like:
+customer app, crew app, or all-in-one app
+
+If you send those, I can turn this into a real v1 build plan and start wiring the actual app screens next.
