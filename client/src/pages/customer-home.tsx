@@ -107,7 +107,7 @@ export default function CustomerHomePage() {
         {/* Hero CTAs */}
         <div className="grid grid-cols-2 gap-3">
           <button
-            onClick={() => setLocation("/moving-estimator")}
+            onClick={() => setLocation("/moving-estimator?moving=1")}
             className="flex flex-col items-center gap-1.5 py-4 px-3 rounded-2xl bg-orange-500 hover:bg-orange-400 active:scale-[0.97] transition-all shadow-lg shadow-orange-500/20"
           >
             <Calculator className="h-6 w-6 text-white" />
@@ -167,7 +167,7 @@ export default function CustomerHomePage() {
             </div>
           </div>
           <button
-            onClick={() => setLocation("/moving-estimator")}
+            onClick={() => setLocation("/moving-estimator?moving=1")}
             className="flex items-center gap-1 bg-orange-500 hover:bg-orange-400 active:scale-[0.97] transition-all text-white font-bold text-xs px-3 py-2 rounded-xl whitespace-nowrap"
           >
             Start <ChevronRight className="h-3.5 w-3.5" />

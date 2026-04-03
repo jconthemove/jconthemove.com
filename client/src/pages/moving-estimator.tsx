@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -69,6 +69,7 @@ interface DriveInfo {
 
 interface Sel {
   service?: Service;
+  hasTruck?: boolean;
   truckSize?: TruckSize;
   loadType?: LoadType;
   stairs?: boolean;
@@ -100,6 +101,10 @@ function haversine(lat1: number, lng1: number, lat2: number, lng2: number): numb
 }
 
 function roundHalf(n: number) { return Math.ceil(n * 2) / 2; }
+function roundTenth(n: number) { return Math.round(n * 10) / 10; }
+
+const LOCAL_ROUND_TRIP_THRESHOLD = 5;
+const LOCAL_FLAT_DRIVE_HOURS = 0.15;
 
 function computeDrive(sel: Sel, driveSpeedMph = 50): DriveInfo | undefined {
   if (!sel.pickup) return undefined;
@@ -107,22 +112,29 @@ function computeDrive(sel: Sel, driveSpeedMph = 50): DriveInfo | undefined {
   const pickupMiles = haversine(BASE_LAT, BASE_LNG, p.lat, p.lng);
   if (sel.loadType === "loadOnly" || !sel.dropoff) {
     const total = pickupMiles * 2;
-    return { pickupMiles, dropoffMiles: 0, returnMiles: pickupMiles, totalMiles: total, totalDriveHours: roundHalf(total / driveSpeedMph) };
+    const isLocal = total < LOCAL_ROUND_TRIP_THRESHOLD;
+    const totalDriveHours = isLocal ? LOCAL_FLAT_DRIVE_HOURS : roundTenth(total / driveSpeedMph);
+    return { pickupMiles, dropoffMiles: 0, returnMiles: pickupMiles, totalMiles: total, totalDriveHours };
   }
   const d = sel.dropoff;
   const dropoffMiles = haversine(p.lat, p.lng, d.lat, d.lng);
   const returnMiles = haversine(d.lat, d.lng, BASE_LAT, BASE_LNG);
   const total = pickupMiles + dropoffMiles + returnMiles;
-  return { pickupMiles, dropoffMiles, returnMiles, totalMiles: total, totalDriveHours: roundHalf(total / driveSpeedMph) };
+  const isLocal = total < LOCAL_ROUND_TRIP_THRESHOLD;
+  const totalDriveHours = isLocal ? LOCAL_FLAT_DRIVE_HOURS : roundTenth(total / driveSpeedMph);
+  return { pickupMiles, dropoffMiles, returnMiles, totalMiles: total, totalDriveHours };
 }
 
 function isShortJob(sel: Sel): boolean {
-  return sel.service === "moving" && sel.truckSize === "small" && sel.loadType === "loadOnly";
+  return sel.service === "moving" && sel.hasTruck === true && sel.truckSize === "small" && sel.loadType === "loadOnly";
 }
 
 function getOptions(sel: Sel): Option[] {
   const bonus = sel.stairs ? 1 : 0;
   if (sel.service !== "moving") return [];
+  if (sel.hasTruck === false) {
+    return [{ movers: 2 + bonus, hours: 2 }, { movers: 3 + bonus, hours: 2, tag: "Most Popular" }, { movers: 4 + bonus, hours: 2, tag: "Fastest" }];
+  }
   if (sel.truckSize === "small" && sel.loadType === "loadOnly")
     return [{ movers: 2 + bonus, hours: 2, tag: "JC222 Available" }];
   if (sel.truckSize === "large" && sel.loadType === "loadOnly")
@@ -133,18 +145,31 @@ function getOptions(sel: Sel): Option[] {
 }
 
 // ── Build chat message list ────────────────────────────────────────────────
-function buildMessages(sel: Sel): Msg[] {
+function buildMessages(sel: Sel, skipServiceSelect = false): Msg[] {
   const msgs: Msg[] = [];
-  msgs.push({
-    role: "bot",
-    text: "Hi! I'm your moving estimate assistant 🚛\n\nLet's figure out your crew, time, and drive cost. What service do you need?",
-    choices: [
-      { label: "Moving Help", value: "moving", icon: "🚛" },
-      { label: "Junk Removal", value: "junk", icon: "♻️" },
-    ],
-  });
-  if (!sel.service) return msgs;
-  msgs.push({ role: "user", text: sel.service === "moving" ? "🚛 Moving Help" : "♻️ Junk Removal" });
+
+  if (!skipServiceSelect) {
+    msgs.push({
+      role: "bot",
+      text: "Hi! I'm your moving estimate assistant 🚛\n\nLet's figure out your crew, time, and drive cost. What service do you need?",
+      choices: [
+        { label: "Moving Help", value: "moving", icon: "🚛" },
+        { label: "Junk Removal", value: "junk", icon: "♻️" },
+      ],
+    });
+    if (!sel.service) return msgs;
+    msgs.push({ role: "user", text: sel.service === "moving" ? "🚛 Moving Help" : "♻️ Junk Removal" });
+  } else {
+    msgs.push({
+      role: "bot",
+      text: "Hi! I'm your moving estimate assistant 🚛\n\nLet's get your Moving Help estimate. Labor only, or do you need a truck too?",
+      choices: [
+        { label: "Labor Only", value: "laborOnly", icon: "💪" },
+        { label: "Labor + Truck", value: "laborTruck", icon: "🚛" },
+      ],
+    });
+    if (sel.hasTruck === undefined) return msgs;
+  }
 
   if (sel.service === "junk") {
     msgs.push({
@@ -164,6 +189,66 @@ function buildMessages(sel: Sel): Msg[] {
     });
     if (!sel.pickup) return msgs;
     msgs.push({ role: "user", text: `📍 ${sel.pickup.zip} — ${sel.pickup.city}` });
+    msgs.push({ role: "bot", text: "", isResult: true });
+    return msgs;
+  }
+
+  if (skipServiceSelect) {
+    msgs.push({ role: "user", text: sel.hasTruck ? "🚛 Labor + Truck" : "💪 Labor Only" });
+
+    if (sel.hasTruck) {
+      msgs.push({
+        role: "bot",
+        text: "What size truck will you need?",
+        choices: [
+          { label: "Small Truck", value: "small", icon: "🚐" },
+          { label: "Large Truck", value: "large", icon: "🚛" },
+        ],
+      });
+      if (!sel.truckSize) return msgs;
+      msgs.push({ role: "user", text: sel.truckSize === "small" ? "🚐 Small Truck" : "🚛 Large Truck" });
+
+      msgs.push({
+        role: "bot",
+        text: "Loading only, or loading AND unloading at the destination?",
+        choices: [
+          { label: "Load Only", value: "loadOnly", icon: "⬆️" },
+          { label: "Load & Unload", value: "loadUnload", icon: "↕️" },
+        ],
+      });
+      if (!sel.loadType) return msgs;
+      msgs.push({ role: "user", text: sel.loadType === "loadOnly" ? "⬆️ Load Only" : "↕️ Load & Unload" });
+    }
+
+    msgs.push({
+      role: "bot",
+      text: "Are there stairs involved at pickup or drop-off?",
+      choices: [
+        { label: "Yes, stairs", value: "yes", icon: "🪜" },
+        { label: "No stairs", value: "no", icon: "✅" },
+      ],
+    });
+    if (sel.stairs === undefined) return msgs;
+    msgs.push({ role: "user", text: sel.stairs ? "🪜 Yes, there are stairs" : "✅ No stairs" });
+
+    msgs.push({
+      role: "bot",
+      text: `What's the zip code for the PICKUP location?\n(We're based in Ironwood, MI ${BASE_ZIP} — we'll calculate exact drive time from there.)`,
+      isZipInput: "pickup",
+    });
+    if (!sel.pickup) return msgs;
+    msgs.push({ role: "user", text: `📍 ${sel.pickup.zip} — ${sel.pickup.city}` });
+
+    if (sel.hasTruck && sel.loadType === "loadUnload") {
+      msgs.push({
+        role: "bot",
+        text: "And the zip code for the DROP-OFF location?",
+        isZipInput: "dropoff",
+      });
+      if (!sel.dropoff) return msgs;
+      msgs.push({ role: "user", text: `📍 ${sel.dropoff.zip} — ${sel.dropoff.city}` });
+    }
+
     msgs.push({ role: "bot", text: "", isResult: true });
     return msgs;
   }
@@ -261,8 +346,25 @@ function Disclaimer({ drive, shortJob, pricing }: { drive?: DriveInfo; shortJob?
   );
 }
 
-function ResultCard({ sel, pricing }: { sel: Sel; pricing: Pricing }) {
+function BookNowButton({ label, href, promo = false, compact = false }: { label: string; href: string; promo?: boolean; compact?: boolean }) {
+  return (
+    <Link href={href}>
+      <Button
+        className={`w-full font-bold ${compact ? "text-xs py-2" : "text-sm py-2.5"} ${
+          promo
+            ? "bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 text-white"
+            : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
+        }`}
+      >
+        {label} <ChevronRight className="h-4 w-4 ml-1" />
+      </Button>
+    </Link>
+  );
+}
+
+function ResultCard({ sel, pricing, compact = false }: { sel: Sel; pricing: Pricing; compact?: boolean }) {
   const drive = sel.driveInfo;
+  const bookUrl = "/book?service=residential";
 
   if (sel.service === "junk") {
     const isSmall = sel.junkSize === "small";
@@ -291,6 +393,9 @@ function ResultCard({ sel, pricing }: { sel: Sel; pricing: Pricing }) {
               <div className="text-slate-400 font-semibold">Total estimate</div>
               <div className="text-emerald-400 font-bold text-base">${(laborLow + driveCost).toLocaleString()}–${(laborHigh + driveCost).toLocaleString()}</div>
             </>}
+          </div>
+          <div className="px-4 pb-4">
+            <BookNowButton label="Book Junk Removal" href="/book?service=junk" compact={compact} />
           </div>
         </div>
         {pricing.junkAddons.length > 0 && (
@@ -348,38 +453,53 @@ function ResultCard({ sel, pricing }: { sel: Sel; pricing: Pricing }) {
           </p>
           <p className="text-yellow-200/80">Jobs under 3 hours with 2 movers are billed at <span className="font-semibold text-white">${pricing.shortJobRate}/hr flat</span> — to unlock the ${pricing.ratePerMoverHour}/mover/hr rate, book a large truck or a load & unload job.</p>
         </div>
-        <div className="rounded-xl overflow-hidden border border-slate-700/60">
-          <div className="px-4 py-3 flex items-center justify-between border-b border-slate-700/40">
+        <div className="rounded-xl overflow-hidden border border-slate-700/60 divide-y divide-slate-700/40">
+          <div className="px-4 py-4 flex items-center justify-between bg-slate-800/60">
             <div>
-              <p className="text-slate-400 text-xs uppercase tracking-wide">Regular Price</p>
-              <p className="text-sm text-slate-300 mt-0.5">
+              <p className="text-slate-400 text-xs uppercase tracking-wide mb-1">Standard Rate</p>
+              <p className="text-sm text-slate-300">
                 <Users className="h-3.5 w-3.5 inline text-teal-400 mr-1" />{opt0.movers} movers ·
-                <Clock className="h-3.5 w-3.5 inline text-blue-400 mx-1" />{opt0.hours} hrs ·
-                ${pricing.shortJobRate}/hr flat
+                <Clock className="h-3.5 w-3.5 inline text-blue-400 mx-1" />{opt0.hours} hrs
               </p>
+              <p className="text-xs text-slate-500 mt-0.5">${pricing.shortJobRate}/hr flat{drive ? ` · +$${driveCost0} drive` : ""}</p>
             </div>
-            <div className="text-right">
-              <p className="text-slate-500 line-through text-sm">${pricing.shortJobFull.toLocaleString()}</p>
-              {drive && <p className="text-amber-400 text-xs">+${driveCost0} drive</p>}
-              <p className="text-slate-500 line-through text-sm font-bold">${fullTotal.toLocaleString()} total</p>
+            <div className="text-right shrink-0 ml-3">
+              <p className="text-slate-400 line-through text-sm">${fullTotal.toLocaleString()}</p>
             </div>
           </div>
-          <div className="px-4 py-4 bg-gradient-to-r from-teal-900/40 to-emerald-900/30 flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <Badge className="bg-teal-500/30 text-teal-300 border-teal-500/50 font-mono font-bold text-sm px-2">
-                  JC222
-                </Badge>
-                <span className="text-teal-300 text-xs font-semibold">Promo Price</span>
+          <div className="px-4 pt-3 pb-4 bg-gradient-to-br from-teal-900/40 to-emerald-900/30">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <div className="flex items-center gap-2 mb-0.5">
+                  <Badge className="bg-teal-500/30 text-teal-300 border-teal-500/50 font-mono font-bold text-sm px-2">JC222</Badge>
+                  <span className="text-teal-300 text-xs font-semibold">Promo Price</span>
+                </div>
+                <p className="text-xs text-slate-400">
+                  <Users className="h-3 w-3 inline text-teal-400 mr-1" />{opt0.movers} movers ·
+                  <Clock className="h-3 w-3 inline text-blue-400 mx-1" />{opt0.hours} hrs{drive ? ` · +$${driveCost0} drive` : ""}
+                </p>
               </div>
-              <p className="text-xs text-slate-400">Use code <span className="font-mono text-teal-300 font-bold">JC222</span> at booking</p>
+              <div className="text-right ml-3">
+                <p className="text-emerald-400 font-black text-2xl leading-none">${promoTotal.toLocaleString()}</p>
+                <p className="text-emerald-600 text-xs mt-0.5">Save ${fullTotal - promoTotal}</p>
+              </div>
             </div>
-            <div className="text-right">
-              <p className="text-emerald-400 font-black text-2xl">${pricing.jc222Price}</p>
-              {drive && <p className="text-amber-400 text-xs">+${driveCost0} drive</p>}
-              <p className="text-emerald-300 font-bold text-base">${promoTotal.toLocaleString()} total</p>
-              <p className="text-emerald-600 text-xs">Save ${fullTotal - promoTotal}</p>
+            <BookNowButton label="Book Now — JC222 ($272 Promo)" href={bookUrl} promo compact={compact} />
+          </div>
+          <div className="px-4 pt-3 pb-4 bg-slate-800/40">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <p className="text-slate-400 text-xs uppercase tracking-wide mb-0.5">Standard Booking</p>
+                <p className="text-xs text-slate-400">
+                  <Users className="h-3 w-3 inline text-teal-400 mr-1" />{opt0.movers} movers ·
+                  <Clock className="h-3 w-3 inline text-blue-400 mx-1" />{opt0.hours} hrs{drive ? ` · +$${driveCost0} drive` : ""}
+                </p>
+              </div>
+              <div className="text-right ml-3">
+                <p className="text-slate-200 font-bold text-xl leading-none">${fullTotal.toLocaleString()}</p>
+              </div>
             </div>
+            <BookNowButton label={`Book Now — Standard ($${fullTotal.toLocaleString()})`} href={bookUrl} compact={compact} />
           </div>
         </div>
         {pricing.customItems.length > 0 && (
@@ -408,37 +528,43 @@ function ResultCard({ sel, pricing }: { sel: Sel; pricing: Pricing }) {
         <Star className="h-3.5 w-3.5 text-teal-400" />
         <span>Qualifies for <span className="font-bold">${pricing.ratePerMoverHour}/mover/hr</span> standard rate</span>
       </div>
-      <div className="rounded-xl overflow-hidden border border-slate-700/60">
-        <div className="bg-slate-800/80 px-3 py-2 grid grid-cols-5 text-slate-400 text-xs uppercase tracking-wide font-medium">
-          <span>Movers</span>
-          <span>Hours</span>
-          <span>Labor</span>
-          <span>{drive ? "Drive" : ""}</span>
-          <span>Total</span>
-        </div>
+      <div className="space-y-3">
         {options.map((opt, i) => {
           const labor = opt.movers * opt.hours * pricing.ratePerMoverHour;
           const driveCost = drive ? Math.round(drive.totalDriveHours * opt.movers * pricing.ratePerMoverHour) : 0;
           const total = labor + driveCost;
+          const isPopular = opt.tag === "Most Popular";
           return (
-            <div key={i} className={`border-t border-slate-700/40 px-3 py-3 grid grid-cols-5 gap-1 items-center text-sm ${opt.tag === "Most Popular" ? "bg-teal-900/20" : ""}`}>
-              <div className="flex items-center gap-1">
-                <Users className="h-3.5 w-3.5 text-teal-400" />
-                <span className="font-bold text-white">{opt.movers}</span>
+            <div key={i} className={`rounded-xl border overflow-hidden ${isPopular ? "border-teal-500/50" : "border-slate-700/60"}`}>
+              <div className={`px-4 pt-3 pb-1 ${isPopular ? "bg-teal-900/30" : "bg-slate-800/60"}`}>
+                <div className="flex items-start justify-between">
+                  <div>
+                    {opt.tag && (
+                      <Badge className={`mb-1.5 text-[10px] px-1.5 py-0.5 ${isPopular ? "bg-teal-600/40 text-teal-300 border-teal-500/40" : "bg-slate-700/50 text-slate-400 border-slate-600/40"}`}>
+                        {isPopular && <Star className="h-2 w-2 mr-0.5" />}{opt.tag}
+                      </Badge>
+                    )}
+                    <div className="flex items-center gap-3 text-sm">
+                      <span className="flex items-center gap-1 text-white font-semibold">
+                        <Users className="h-3.5 w-3.5 text-teal-400" /> {opt.movers} movers
+                      </span>
+                      <span className="flex items-center gap-1 text-slate-300">
+                        <Clock className="h-3.5 w-3.5 text-blue-400" /> {opt.hours} hrs
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1 text-xs text-slate-400">
+                      <span>Labor: <span className="text-slate-200">${labor.toLocaleString()}</span></span>
+                      {drive && <span>· Drive: <span className="text-amber-400">+${driveCost.toLocaleString()}</span></span>}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0 ml-3">
+                    <p className={`font-black text-2xl leading-none ${isPopular ? "text-emerald-400" : "text-slate-200"}`}>${total.toLocaleString()}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">total</p>
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center gap-1">
-                <Clock className="h-3.5 w-3.5 text-blue-400" />
-                <span className="text-slate-200">{opt.hours}h</span>
-              </div>
-              <div className="text-slate-300">${labor.toLocaleString()}</div>
-              <div className="text-amber-400 text-xs">{drive ? `+$${driveCost.toLocaleString()}` : "—"}</div>
-              <div className="flex flex-col gap-0.5">
-                <span className="font-bold text-emerald-400">${total.toLocaleString()}</span>
-                {opt.tag && (
-                  <Badge className={`text-[10px] px-1 py-0 h-4 w-fit ${opt.tag === "Most Popular" ? "bg-teal-600/40 text-teal-300 border-teal-500/40" : "bg-slate-700/50 text-slate-400 border-slate-600/40"}`}>
-                    {opt.tag === "Most Popular" && <Star className="h-2 w-2 mr-0.5" />}{opt.tag}
-                  </Badge>
-                )}
+              <div className={`px-4 pb-3 pt-2 ${isPopular ? "bg-teal-900/20" : "bg-slate-800/40"}`}>
+                <BookNowButton label={`Book Now — ${opt.movers} Movers ($${total.toLocaleString()})`} href={bookUrl} promo={isPopular} compact={compact} />
               </div>
             </div>
           );
@@ -475,14 +601,15 @@ async function fetchZip(zip: string): Promise<ZipInfo> {
 }
 
 // ── Shared chat logic hook ─────────────────────────────────────────────────
-function useChatLogic(pricing: Pricing) {
-  const [sel, setSel] = useState<Sel>({});
+function useChatLogic(pricing: Pricing, skipServiceSelect = false) {
+  const initialSel: Sel = skipServiceSelect ? { service: "moving" } : {};
+  const [sel, setSel] = useState<Sel>(initialSel);
   const [zipInput, setZipInput] = useState("");
   const [zipLoading, setZipLoading] = useState(false);
   const [zipError, setZipError] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const messages = buildMessages(sel);
+  const messages = buildMessages(sel, skipServiceSelect);
   const isComplete = messages.some(m => m.isResult);
   const activeZipStep = !isComplete ? messages.findLast(m => m.isZipInput)?.isZipInput : undefined;
 
@@ -492,6 +619,7 @@ function useChatLogic(pricing: Pricing) {
 
   function handleChoice(step: string, value: string) {
     if (step === "service") setSel({ service: value as Service });
+    else if (step === "hasTruck") setSel(s => ({ ...s, hasTruck: value === "laborTruck" }));
     else if (step === "truckSize") setSel(s => ({ ...s, truckSize: value as TruckSize }));
     else if (step === "loadType") setSel(s => ({ ...s, loadType: value as LoadType }));
     else if (step === "stairs") setSel(s => ({ ...s, stairs: value === "yes" }));
@@ -501,6 +629,13 @@ function useChatLogic(pricing: Pricing) {
   function getStepKey(msgIndex: number): string {
     const botChoiceMsgs = messages.slice(0, msgIndex + 1).filter(m => m.role === "bot" && m.choices);
     const idx = botChoiceMsgs.length - 1;
+    if (skipServiceSelect) {
+      if (sel.service === "moving") {
+        if (sel.hasTruck) return (["hasTruck", "truckSize", "loadType", "stairs"] as const)[idx] ?? "hasTruck";
+        return (["hasTruck", "stairs"] as const)[idx] ?? "hasTruck";
+      }
+      return (["junkSize"] as const)[idx] ?? "junkSize";
+    }
     if (sel.service === "moving") return (["service", "truckSize", "loadType", "stairs"] as const)[idx] ?? "service";
     return (["service", "junkSize"] as const)[idx] ?? "service";
   }
@@ -515,7 +650,7 @@ function useChatLogic(pricing: Pricing) {
       if (activeZipStep === "pickup") {
         setSel(s => {
           const updated = { ...s, pickup: info };
-          if (s.loadType !== "loadUnload") updated.driveInfo = computeDrive(updated, pricing.driveSpeedMph);
+          if (s.hasTruck === false || s.loadType !== "loadUnload") updated.driveInfo = computeDrive(updated, pricing.driveSpeedMph);
           return updated;
         });
       } else if (activeZipStep === "dropoff") {
@@ -533,7 +668,7 @@ function useChatLogic(pricing: Pricing) {
     }
   }
 
-  function restart() { setSel({}); setZipInput(""); setZipError(""); }
+  function restart() { setSel(initialSel); setZipInput(""); setZipError(""); }
 
   return { sel, messages, activeZipStep, zipInput, setZipInput, zipLoading, zipError, setZipError, bottomRef, handleChoice, getStepKey, handleZipSubmit, restart };
 }
@@ -572,26 +707,16 @@ function ChatUI({
                   {msg.isResult ? (
                     <div className={`${compact ? "bg-slate-800/80 border border-slate-700/60 rounded-2xl p-4" : ""}`}>
                       {!compact && <Card className="bg-slate-800/80 border-slate-700/60 p-4">
-                        <ResultCard sel={sel} pricing={pricing} />
-                        <div className="mt-5 space-y-2">
-                          <Link href="/quote">
-                            <Button className="w-full bg-gradient-to-r from-teal-500 to-blue-600 hover:from-teal-600 hover:to-blue-700 font-semibold">
-                              Get My Free Official Quote <ChevronRight className="h-4 w-4 ml-1" />
-                            </Button>
-                          </Link>
+                        <ResultCard sel={sel} pricing={pricing} compact={false} />
+                        <div className="mt-4">
                           <Button variant="outline" onClick={restart} className="w-full border-slate-600 text-slate-300 hover:bg-slate-700 gap-2 text-sm">
                             <RotateCcw className="h-3.5 w-3.5" /> Start Over
                           </Button>
                         </div>
                       </Card>}
                       {compact && <>
-                        <ResultCard sel={sel} pricing={pricing} />
-                        <div className="mt-4 space-y-2">
-                          <Link href="/quote">
-                            <Button className="w-full bg-gradient-to-r from-teal-500 to-blue-600 hover:from-teal-600 hover:to-blue-700 font-semibold text-sm">
-                              Get My Free Official Quote <ChevronRight className="h-4 w-4 ml-1" />
-                            </Button>
-                          </Link>
+                        <ResultCard sel={sel} pricing={pricing} compact={true} />
+                        <div className="mt-3">
                           <Button variant="outline" size="sm" onClick={restart} className="w-full border-slate-600 text-slate-300 hover:bg-slate-700 gap-1 text-xs">
                             <RotateCcw className="h-3 w-3" /> Start Over
                           </Button>
@@ -694,7 +819,7 @@ export function MovingEstimatorChat() {
     junkAddons:       pricingData.junkAddons        ?? [],
   } : DEFAULT_PRICING;
 
-  const logic = useChatLogic(pricing);
+  const logic = useChatLogic(pricing, true);
   return <ChatUI logic={logic} pricing={pricing} compact />;
 }
 
@@ -1007,6 +1132,8 @@ function AdminPricingEditor({ pricing }: { pricing: Pricing }) {
 export default function MovingEstimator() {
   const { user } = useAuth();
   const isAdmin = ["admin", "business_owner"].includes(user?.role || "");
+  const search = useSearch();
+  const skipServiceSelect = new URLSearchParams(search).has("moving");
 
   const { data: pricingData } = useQuery<any>({ queryKey: ["/api/pricing"], staleTime: 60000 });
   const pricing: Pricing = pricingData ? {
@@ -1023,7 +1150,7 @@ export default function MovingEstimator() {
     junkAddons:       pricingData.junkAddons        ?? [],
   } : DEFAULT_PRICING;
 
-  const logic = useChatLogic(pricing);
+  const logic = useChatLogic(pricing, skipServiceSelect);
   const { sel, activeZipStep, zipInput, setZipInput, zipLoading, zipError, setZipError, handleZipSubmit, restart } = logic;
 
   return (
