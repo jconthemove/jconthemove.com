@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   Coins, TrendingUp, Gift, Clock, ShoppingBag, Loader2, CheckCircle,
-  Zap, Award, Users, Share2, Sparkles, Trophy, Copy, Check
+  Zap, Award, Users, Share2, Sparkles, Trophy, Copy, Check, AlertTriangle
 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -128,6 +128,7 @@ export default function CustomerRewardsPage() {
   const [redeemResult, setRedeemResult] = useState<RedeemResult | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
   const [pendingItem, setPendingItem] = useState<ShopItem | null>(null);
+  const [confirmItem, setConfirmItem] = useState<ShopItem | null>(null);
 
   const { data: wallet, isLoading: walletLoading } = useQuery<WalletAccount>({
     queryKey: ["/api/rewards/wallet"],
@@ -265,9 +266,7 @@ export default function CustomerRewardsPage() {
                         <button
                           disabled={!canAfford || isRedeeming}
                           onClick={() => {
-                            setRedeemingId(item.id);
-                            setPendingItem(shopItem);
-                            redeemMutation.mutate(item.id);
+                            if (canAfford) setConfirmItem(shopItem);
                           }}
                           className={`w-full py-1.5 rounded-xl text-[11px] font-bold transition-all active:scale-95 ${
                             canAfford
@@ -332,6 +331,69 @@ export default function CustomerRewardsPage() {
           </>
         )}
       </div>
+
+      {/* ── Pre-redeem confirmation sheet ── */}
+      <Sheet open={!!confirmItem} onOpenChange={open => { if (!open) setConfirmItem(null); }}>
+        <SheetContent side="bottom" className="rounded-t-2xl px-5 pb-8">
+          {confirmItem && (() => {
+            const { item } = confirmItem;
+            const currentBalance = tokenBalance;
+            const newBalance = currentBalance - item.tokenPrice;
+            return (
+              <>
+                <SheetHeader className="text-left mb-5">
+                  <SheetTitle className="text-lg font-black flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5 text-jc-orange" />
+                    Confirm Redemption
+                  </SheetTitle>
+                </SheetHeader>
+                <div className="space-y-4">
+                  <div className="bg-zinc-50 dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-4">
+                    <p className="text-sm font-bold text-zinc-900 dark:text-white mb-1">{item.name}</p>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">{item.shortDesc}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center py-2 border-b border-zinc-100 dark:border-zinc-800">
+                      <span className="text-sm text-zinc-500">Token cost</span>
+                      <span className="text-sm font-black text-jc-orange">−{fmt(item.tokenPrice)} JCMOVES</span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-zinc-100 dark:border-zinc-800">
+                      <span className="text-sm text-zinc-500">Current balance</span>
+                      <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">{fmt(currentBalance, 2)} JCMOVES</span>
+                    </div>
+                    <div className="flex justify-between items-center py-2">
+                      <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Balance after</span>
+                      <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">{fmt(Math.max(0, newBalance), 2)} JCMOVES</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-3 pt-1">
+                    <button
+                      onClick={() => setConfirmItem(null)}
+                      className="flex-1 py-3 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-semibold text-sm"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      disabled={redeemMutation.isPending}
+                      onClick={() => {
+                        setRedeemingId(item.id);
+                        setPendingItem(confirmItem);
+                        setConfirmItem(null);
+                        redeemMutation.mutate(item.id);
+                      }}
+                      className="flex-1 py-3 rounded-2xl bg-jc-orange text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-60"
+                    >
+                      {redeemMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin mx-auto" />
+                      ) : "Confirm Redemption"}
+                    </button>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
+        </SheetContent>
+      </Sheet>
 
       {/* ── Redemption result sheet ── */}
       <Sheet open={!!redeemResult} onOpenChange={() => { setRedeemResult(null); setCopiedCode(false); }}>

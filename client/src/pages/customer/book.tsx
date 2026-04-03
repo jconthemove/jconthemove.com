@@ -145,7 +145,6 @@ export default function CustomerBookPage() {
 
   const ratePerMoverHour = pricing?.ratePerMoverHour ?? 60;
   const shortJobFull = pricing?.shortJobFull ?? 300;
-  const jc222Price = pricing?.jc222Price ?? 222;
 
   const movingPackages = catalog?.movingPackages?.length ? catalog.movingPackages : FALLBACK_MOVING;
   const junkPackages = catalog?.junkPackages?.length ? catalog.junkPackages : FALLBACK_JUNK;
@@ -161,7 +160,7 @@ export default function CustomerBookPage() {
     : junkPackages.find(p => p.id === selectedPkgId);
 
   const calcMovingPrice = (pkg: MovingPackage): number => {
-    if ((pkg as any).isJc222) return jc222Price;
+    if ((pkg as any).isJc222) return pricing?.jc222Price ?? 222;
     const base = pkg.movers * pkg.hours * ratePerMoverHour;
     const floored = Math.round(base / 10) * 10;
     const discount = getHourDiscount(pkg.hours);
