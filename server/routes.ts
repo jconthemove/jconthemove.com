@@ -4802,23 +4802,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get single lead by ID — business owners see all; crew members see only their assigned jobs
+  // Get single lead by ID — business owners/admins see all; crew members see only their assigned jobs
   app.get("/api/leads/:id", isAuthenticated, async (req: any, res) => {
     try {
       const { id } = req.params;
-      const currentUser = req.currentUser;
-      const lead = await storage.getLead(id);
 
-      if (!lead) {
-        return res.status(404).json({ error: "Lead not found" });
+      // Resolve user from JWT (req.user), role middleware (req.currentUser), or session fallback
+      let user = req.user || req.currentUser || null;
+      if (!user) {
+        const sessionUserId = (req.session as any)?.userId;
+        if (sessionUserId) user = await storage.getUser(sessionUserId);
       }
 
-      const isOwner = currentUser?.role === "business_owner" || currentUser?.role === "admin";
+      if (!user) return res.status(401).json({ error: "Not authenticated" });
+
+      const lead = await storage.getLead(id);
+      if (!lead) return res.status(404).json({ error: "Lead not found" });
+
+      const isOwner = user.role === "admin" || user.role === "business_owner" || user.email === "upmichiganstatemovers@gmail.com";
       const isAssignedCrew =
-        currentUser?.role === "employee" &&
+        (user.role === "employee" || user.role === "admin" || user.role === "business_owner") &&
         (
-          (Array.isArray(lead.crewMembers) && lead.crewMembers.includes(currentUser.id)) ||
-          lead.assignedToUserId === currentUser.id
+          (Array.isArray(lead.crewMembers) && lead.crewMembers.includes(user.id)) ||
+          lead.assignedToUserId === user.id
         );
 
       if (!isOwner && !isAssignedCrew) {

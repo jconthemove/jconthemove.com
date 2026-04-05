@@ -234,12 +234,13 @@ export default function LeadDetailPage() {
     staleTime: 0, // Always fetch fresh data
   });
   
-  // If lead is not found, clear the leads cache so list updates
+  // If lead returns null (unauthenticated 401→returnNull), clear the leads cache so list updates
+  // Note: do NOT invalidate on isError — that causes an infinite refetch loop when access is denied
   useEffect(() => {
-    if (isError || (lead === null && !isLoading)) {
+    if (lead === null && !isLoading && !isError) {
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
     }
-  }, [isError, lead, isLoading]);
+  }, [lead, isLoading, isError]);
 
   const { data: rewards = [] } = useQuery<Reward[]>({
     queryKey: ["/api/rewards"],
