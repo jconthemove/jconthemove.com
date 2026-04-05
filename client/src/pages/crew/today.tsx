@@ -527,6 +527,38 @@ export default function CrewTodayPage() {
         )}
       </div>
 
+      {/* Daily Scripture */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-950/80 via-slate-900 to-slate-950 border border-indigo-500/20 p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <BookOpen className="h-4 w-4 text-indigo-400" />
+          <span className="text-indigo-300 text-xs font-bold uppercase tracking-wider">Daily Inspiration</span>
+        </div>
+        <blockquote className="text-white text-base font-medium leading-relaxed mb-2 italic">
+          "{ALL_QUOTES[quoteIdx].text}"
+        </blockquote>
+        <p className="text-indigo-400 text-sm font-semibold">— {ALL_QUOTES[quoteIdx].ref}</p>
+        <div className="flex gap-2 mt-4 flex-wrap">
+          <Button
+            size="sm" variant="outline"
+            onClick={() => setQuoteIdx(i => (i + 1) % ALL_QUOTES.length)}
+            className="border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/10 h-8 text-xs"
+          >
+            <RefreshCw className="h-3 w-3 mr-1.5" /> New Verse
+          </Button>
+          <Button
+            size="sm"
+            disabled={scriptureClaimed || scriptureClaimMutation.isPending}
+            onClick={() => scriptureClaimMutation.mutate()}
+            className={`h-8 text-xs font-bold border-0 ${
+              scriptureClaimed ? "bg-green-600/20 text-green-400 cursor-default" : "bg-indigo-600 hover:bg-indigo-500 text-white"
+            }`}
+          >
+            {scriptureClaimMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> :
+              scriptureClaimed ? "✅ Claimed!" : "🪙 Claim Reward"}
+          </Button>
+        </div>
+      </div>
+
       {/* Active Assignments — jobs assigned to this crew member regardless of date */}
       {myAssignments.length > 0 && (
         <div className="rounded-2xl bg-slate-800/40 border border-orange-500/30 p-4">
@@ -757,38 +789,6 @@ export default function CrewTodayPage() {
           </div>
         </div>
       )}
-
-      {/* Daily Scripture */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-950/80 via-slate-900 to-slate-950 border border-indigo-500/20 p-5">
-        <div className="flex items-center gap-2 mb-3">
-          <BookOpen className="h-4 w-4 text-indigo-400" />
-          <span className="text-indigo-300 text-xs font-bold uppercase tracking-wider">Daily Inspiration</span>
-        </div>
-        <blockquote className="text-white text-base font-medium leading-relaxed mb-2 italic">
-          "{ALL_QUOTES[quoteIdx].text}"
-        </blockquote>
-        <p className="text-indigo-400 text-sm font-semibold">— {ALL_QUOTES[quoteIdx].ref}</p>
-        <div className="flex gap-2 mt-4 flex-wrap">
-          <Button
-            size="sm" variant="outline"
-            onClick={() => setQuoteIdx(i => (i + 1) % ALL_QUOTES.length)}
-            className="border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/10 h-8 text-xs"
-          >
-            <RefreshCw className="h-3 w-3 mr-1.5" /> New Verse
-          </Button>
-          <Button
-            size="sm"
-            disabled={scriptureClaimed || scriptureClaimMutation.isPending}
-            onClick={() => scriptureClaimMutation.mutate()}
-            className={`h-8 text-xs font-bold border-0 ${
-              scriptureClaimed ? "bg-green-600/20 text-green-400 cursor-default" : "bg-indigo-600 hover:bg-indigo-500 text-white"
-            }`}
-          >
-            {scriptureClaimMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> :
-              scriptureClaimed ? "✅ Claimed!" : "🪙 Claim Reward"}
-          </Button>
-        </div>
-      </div>
 
       {/* Weather */}
       <div className={`rounded-2xl p-5 border ${wxInfo?.isSnow ? "bg-gradient-to-br from-cyan-950/60 via-slate-900 to-slate-950 border-cyan-500/30" : "bg-slate-800/40 border-slate-700/40"}`}>

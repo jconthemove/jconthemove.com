@@ -4802,19 +4802,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get single lead by ID (business owner only)
-  app.get("/api/leads/:id", isAuthenticated, requireBusinessOwner, async (req, res) => {
+  // Get single lead by ID — business owners see all; crew members see only their assigned jobs
+  app.get("/api/leads/:id", isAuthenticated, async (req: any, res) => {
     try {
       const { id } = req.params;
-      console.log(`📋 Fetching lead ${id}...`);
+      const currentUser = req.currentUser;
       const lead = await storage.getLead(id);
-      
+
       if (!lead) {
-        console.log(`❌ Lead ${id} not found`);
         return res.status(404).json({ error: "Lead not found" });
       }
-      
-      console.log(`✅ Found lead ${id}: ${lead.firstName} ${lead.lastName}`);
+
+      const isOwner = currentUser?.role === "business_owner" || currentUser?.role === "admin";
+      const isAssignedCrew =
+        currentUser?.role === "employee" &&
+        (
+          (Array.isArray(lead.crewMembers) && lead.crewMembers.includes(currentUser.id)) ||
+          lead.assignedToUserId === currentUser.id
+        );
+
+      if (!isOwner && !isAssignedCrew) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
       res.json(lead);
     } catch (error) {
       console.error("Error fetching lead:", error);
