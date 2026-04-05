@@ -38,7 +38,7 @@ function isValidAddress(addr: string): boolean {
 
 // ── JunkFlow ──────────────────────────────────────────────────────────────────
 
-function JunkFlow({ user, onBooked, onBack }: { user: any; onBooked: (id: string, price: number) => void; onBack: () => void }) {
+export function JunkFlow({ user, onBooked, onBack }: { user: any; onBooked: (id: string, price: number) => void; onBack: () => void }) {
   const { toast } = useToast();
   const [tier, setTier] = useState<string | null>(null);
   const [addOns, setAddOns] = useState<Record<string, number>>({ mattress: 0, fridge: 0, gym: 0 });
@@ -185,7 +185,7 @@ function JunkFlow({ user, onBooked, onBack }: { user: any; onBooked: (id: string
 
 // ── MovingFlow ────────────────────────────────────────────────────────────────
 
-function MovingFlow({ user, onBooked }: { user: any; onBooked: (id: string, price: number) => void }) {
+export function MovingFlow({ user, onBooked }: { user: any; onBooked: (id: string, price: number) => void }) {
   const { toast } = useToast();
   const [movers, setMovers] = useState(2);
   const [hours, setHours] = useState(4);

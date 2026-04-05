@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
-import { Coins, Phone, MessageSquare, Calculator, ChevronRight, Loader2, Search, Calendar, DollarSign } from "lucide-react";
-import ServiceSelector from "@/components/ServiceSelector";
+import { Coins, Phone, MessageSquare, ChevronRight, Loader2, Search, Truck, Trash2, Wrench, Snowflake, X } from "lucide-react";
+import { JunkFlow, MovingFlow } from "@/components/ServiceSelector";
 import LiveCrewBeacon from "@/components/LiveCrewBeacon";
 
 // ── Job Status Card (post-booking polling) ────────────────────────────────────
@@ -79,8 +79,6 @@ interface TrashSub {
   status: string;
 }
 
-const TRASH_DAY_NAMES = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-
 function getNextServiceDate(serviceDayOfWeek: number): string {
   const now = new Date();
   const today = now.getDay();
@@ -91,10 +89,13 @@ function getNextServiceDate(serviceDayOfWeek: number): string {
   return next.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 
+type ExpandedService = "moving" | "junk" | null;
+
 export default function CustomerHomePage() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const [activeBooking, setActiveBooking] = useState<{ jobId: string; totalPrice: number } | null>(null);
+  const [expanded, setExpanded] = useState<ExpandedService>(null);
 
   const { data: wallet } = useQuery<{ tokenBalance: string }>({
     queryKey: ["/api/rewards/wallet"],
@@ -107,6 +108,16 @@ export default function CustomerHomePage() {
   });
 
   const tokenBalance = parseFloat(wallet?.tokenBalance || "0");
+  const isApril = new Date().getMonth() === 3;
+
+  function handleBooked(id: string, price: number) {
+    setExpanded(null);
+    setActiveBooking({ jobId: id, totalPrice: price });
+  }
+
+  function toggleExpand(svc: ExpandedService) {
+    setExpanded(prev => prev === svc ? null : svc);
+  }
 
   return (
     <div className="min-h-screen bg-zinc-950 pb-28">
@@ -133,30 +144,19 @@ export default function CustomerHomePage() {
         {/* Hero CTAs */}
         <div className="grid grid-cols-2 gap-3">
           <button
-            onClick={() => setLocation("/moving-estimator?moving=1")}
-            className="flex flex-col items-center gap-1.5 py-4 px-3 rounded-2xl bg-orange-500 hover:bg-orange-400 active:scale-[0.97] transition-all shadow-lg shadow-orange-500/20"
+            onClick={() => window.open("tel:+19062226009", "_self")}
+            className="flex items-center justify-center gap-2 py-4 px-3 rounded-2xl bg-orange-500 hover:bg-orange-400 active:scale-[0.97] transition-all shadow-lg shadow-orange-500/20"
           >
-            <Calculator className="h-6 w-6 text-white" />
-            <span className="text-white font-black text-sm leading-tight text-center">
-              Get Price in<br />30 Seconds
-            </span>
+            <Phone className="h-5 w-5 text-white" />
+            <span className="text-white font-black text-sm">Call a Mover</span>
           </button>
-          <div className="grid grid-rows-2 gap-2">
-            <button
-              onClick={() => window.open("tel:+19062226009", "_self")}
-              className="flex items-center justify-center gap-2 py-2 px-3 rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 active:scale-[0.97] transition-all"
-            >
-              <Phone className="h-4 w-4 text-emerald-400" />
-              <span className="text-white font-bold text-sm">Call a Mover</span>
-            </button>
-            <button
-              onClick={() => window.open("sms:+19062226009", "_self")}
-              className="flex items-center justify-center gap-2 py-2 px-3 rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 active:scale-[0.97] transition-all"
-            >
-              <MessageSquare className="h-4 w-4 text-blue-400" />
-              <span className="text-white font-bold text-sm">Text a Mover</span>
-            </button>
-          </div>
+          <button
+            onClick={() => window.open("sms:+19062226009", "_self")}
+            className="flex items-center justify-center gap-2 py-4 px-3 rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 active:scale-[0.97] transition-all"
+          >
+            <MessageSquare className="h-5 w-5 text-blue-400" />
+            <span className="text-white font-bold text-sm">Text a Mover</span>
+          </button>
         </div>
 
         {/* Live crew beacon */}
@@ -171,107 +171,139 @@ export default function CustomerHomePage() {
           />
         )}
 
-        {/* Service selector */}
+        {/* Unified service grid */}
         <div>
-          <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-3">What do you need?</h2>
-          <ServiceSelector
-            defaultService="junk"
-            user={user}
-            onBooked={(id, price) => setActiveBooking({ jobId: id, totalPrice: price })}
-          />
-        </div>
+          <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-3">Services</h2>
+          <div className="grid grid-cols-2 gap-3">
 
-        {/* Window Cleaning Card */}
-        {(() => {
-          const isApril = new Date().getMonth() === 3;
-          return (
+            {/* Moving */}
+            <button
+              onClick={() => toggleExpand("moving")}
+              className={`relative flex flex-col items-start gap-2 p-4 rounded-2xl border transition-all active:scale-[0.97] text-left ${
+                expanded === "moving"
+                  ? "bg-blue-500/15 border-blue-500 ring-1 ring-blue-500"
+                  : "bg-zinc-900 border-zinc-800 hover:border-zinc-700"
+              }`}
+            >
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${expanded === "moving" ? "bg-blue-500" : "bg-zinc-800"}`}>
+                <Truck className={`h-5 w-5 ${expanded === "moving" ? "text-white" : "text-zinc-400"}`} />
+              </div>
+              <div>
+                <p className={`font-bold text-sm ${expanded === "moving" ? "text-white" : "text-white"}`}>Moving</p>
+                <p className="text-zinc-500 text-xs leading-snug">Full-service movers</p>
+              </div>
+              {expanded === "moving" && <X className="absolute top-3 right-3 h-4 w-4 text-blue-400" />}
+            </button>
+
+            {/* Junk Removal */}
+            <button
+              onClick={() => toggleExpand("junk")}
+              className={`relative flex flex-col items-start gap-2 p-4 rounded-2xl border transition-all active:scale-[0.97] text-left ${
+                expanded === "junk"
+                  ? "bg-orange-500/15 border-orange-500 ring-1 ring-orange-500"
+                  : "bg-zinc-900 border-zinc-800 hover:border-zinc-700"
+              }`}
+            >
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${expanded === "junk" ? "bg-orange-500" : "bg-zinc-800"}`}>
+                <Trash2 className={`h-5 w-5 ${expanded === "junk" ? "text-white" : "text-zinc-400"}`} />
+              </div>
+              <div>
+                <p className="font-bold text-sm text-white">Junk Removal</p>
+                <p className="text-zinc-500 text-xs leading-snug">Pickup & haul away</p>
+              </div>
+              {expanded === "junk" && <X className="absolute top-3 right-3 h-4 w-4 text-orange-400" />}
+            </button>
+
+            {/* Labor Only */}
+            <button
+              onClick={() => setLocation("/post-job")}
+              className="flex flex-col items-start gap-2 p-4 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
+            >
+              <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center">
+                <Wrench className="h-5 w-5 text-amber-400" />
+              </div>
+              <div>
+                <p className="font-bold text-sm text-white">Labor Only</p>
+                <p className="text-zinc-500 text-xs leading-snug">Helpers by the hour</p>
+              </div>
+            </button>
+
+            {/* Snow Removal */}
+            <button
+              onClick={() => setLocation("/post-job")}
+              className="flex flex-col items-start gap-2 p-4 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
+            >
+              <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center">
+                <Snowflake className="h-5 w-5 text-cyan-400" />
+              </div>
+              <div>
+                <p className="font-bold text-sm text-white">Snow Removal</p>
+                <p className="text-zinc-500 text-xs leading-snug">Post a job</p>
+              </div>
+            </button>
+
+            {/* Window Cleaning */}
             <button
               onClick={() => setLocation("/window-cleaning")}
-              className="w-full flex items-center justify-between bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 hover:border-zinc-700 active:scale-[0.98] transition-all"
+              className="relative flex flex-col items-start gap-2 p-4 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
             >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-orange-500/15 flex items-center justify-center flex-shrink-0 text-xl">
-                  🪟
-                </div>
-                <div className="text-left">
-                  <div className="flex items-center gap-2">
-                    <p className="text-white font-bold text-sm">Clean Windows with JC</p>
-                    {isApril && (
-                      <span className="text-[9px] font-bold bg-orange-500 text-white px-1.5 py-0.5 rounded-full">
-                        April Special — 20% Off
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-zinc-500 text-xs">Streak-free window cleaning · $5/pane</p>
-                </div>
+              {isApril && (
+                <span className="absolute -top-2 left-3 text-[9px] font-bold bg-orange-500 text-white px-2 py-0.5 rounded-full whitespace-nowrap">
+                  April Special — 20% Off
+                </span>
+              )}
+              <div className="w-10 h-10 rounded-xl bg-orange-500/15 flex items-center justify-center text-xl">
+                🪟
               </div>
-              <ChevronRight className="h-4 w-4 text-zinc-600 flex-shrink-0" />
+              <div>
+                <p className="font-bold text-sm text-white">Clean Windows</p>
+                <p className="text-zinc-500 text-xs leading-snug">Streak-free · $5/pane</p>
+              </div>
             </button>
-          );
-        })()}
 
-        {/* Trash Valet Card */}
-        {trashSub ? (
-          <button
-            onClick={() => setLocation("/trash-valet")}
-            className="w-full flex items-center justify-between bg-zinc-900 border border-emerald-500/20 rounded-2xl px-4 py-3 hover:border-emerald-500/40 active:scale-[0.98] transition-all"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center flex-shrink-0 text-xl">
+            {/* Trash Valet */}
+            <button
+              onClick={() => setLocation("/trash-valet")}
+              className={`relative flex flex-col items-start gap-2 p-4 rounded-2xl border transition-all active:scale-[0.97] text-left ${
+                trashSub
+                  ? "bg-zinc-900 border-emerald-500/20 hover:border-emerald-500/40"
+                  : "bg-zinc-900 border-zinc-800 hover:border-zinc-700"
+              }`}
+            >
+              {trashSub && (
+                <span className="absolute -top-2 left-3 text-[9px] font-bold bg-emerald-600 text-white px-2 py-0.5 rounded-full">
+                  Active
+                </span>
+              )}
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl ${trashSub ? "bg-emerald-500/10" : "bg-orange-500/10"}`}>
                 🗑️
               </div>
-              <div className="text-left">
-                <div className="flex items-center gap-2">
-                  <p className="text-white font-bold text-sm">Trash Valet</p>
-                  <span className="text-[9px] font-bold bg-emerald-600 text-white px-1.5 py-0.5 rounded-full">Active</span>
-                </div>
-                <p className="text-zinc-500 text-xs">
-                  ${parseFloat(trashSub.finalMonthlyPrice).toFixed(2)}/mo · Next: {getNextServiceDate(trashSub.serviceDayOfWeek)}
-                </p>
-                {trashSub.nextBillingDate && (
-                  <p className="text-zinc-600 text-[10px]">Billing: {trashSub.nextBillingDate}</p>
+              <div>
+                <p className="font-bold text-sm text-white">Trash Valet</p>
+                {trashSub ? (
+                  <p className="text-zinc-500 text-xs leading-snug">
+                    Next: {getNextServiceDate(trashSub.serviceDayOfWeek)}
+                  </p>
+                ) : (
+                  <p className="text-zinc-500 text-xs leading-snug">Curbside pull-out · from $30/mo</p>
                 )}
               </div>
-            </div>
-            <ChevronRight className="h-4 w-4 text-zinc-600 flex-shrink-0" />
-          </button>
-        ) : (
-          <button
-            onClick={() => setLocation("/trash-valet")}
-            className="w-full flex items-center justify-between bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 hover:border-zinc-700 active:scale-[0.98] transition-all"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center flex-shrink-0 text-xl">
-                🗑️
-              </div>
-              <div className="text-left">
-                <p className="text-white font-bold text-sm">Trash Valet</p>
-                <p className="text-zinc-500 text-xs">Weekly curbside pull-out &amp; return · from $30/mo</p>
-              </div>
-            </div>
-            <ChevronRight className="h-4 w-4 text-zinc-600 flex-shrink-0" />
-          </button>
-        )}
+            </button>
 
-        {/* Instant estimate CTA block */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-orange-500/15 flex items-center justify-center flex-shrink-0">
-              <Calculator className="h-5 w-5 text-orange-400" />
-            </div>
-            <div>
-              <p className="text-white font-bold text-sm">Get an Instant Estimate</p>
-              <p className="text-zinc-500 text-xs">Live moving price calculator</p>
-            </div>
           </div>
-          <button
-            onClick={() => setLocation("/moving-estimator?moving=1")}
-            className="flex items-center gap-1 bg-orange-500 hover:bg-orange-400 active:scale-[0.97] transition-all text-white font-bold text-xs px-3 py-2 rounded-xl whitespace-nowrap"
-          >
-            Start <ChevronRight className="h-3.5 w-3.5" />
-          </button>
         </div>
 
+        {/* Inline booking flows — expand below the grid */}
+        {expanded === "moving" && (
+          <div>
+            <MovingFlow user={user} onBooked={handleBooked} />
+          </div>
+        )}
+        {expanded === "junk" && (
+          <div>
+            <JunkFlow user={user} onBooked={handleBooked} onBack={() => setExpanded(null)} />
+          </div>
+        )}
         {/* Earn strip */}
         <button
           onClick={() => setLocation("/earn")}
