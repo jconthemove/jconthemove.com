@@ -81,6 +81,9 @@ const RequestSwapPage = lazy(() => import("@/pages/request-swap"));
 const MiningPage = lazy(() => import("@/pages/mining"));
 const SnowRemovalPage = lazy(() => import("@/pages/snow-removal"));
 const WindowCleaningPage = lazy(() => import("@/pages/window-cleaning"));
+const TrashValetPage = lazy(() => import("@/pages/trash-valet"));
+const TrashValetBookPage = lazy(() => import("@/pages/trash-valet/book"));
+const AdminTrashValetPage = lazy(() => import("@/pages/admin-trash-valet"));
 const MobilePreviewPage = lazy(() => import("@/pages/mobile-preview"));
 const PiJackpotPage = lazy(() => import("@/pages/pi-jackpot"));
 const PrivacyPolicy = lazy(() => import("@/pages/privacy"));
@@ -565,6 +568,17 @@ function AuthenticatedApp() {
               <PageWrapper component={SnowRemovalPage} />
             </RouteGuard>
           </Route>
+          <Route path="/admin-trash-valet">
+            <RouteGuard allowedRoles={['admin', 'business_owner']}>
+              <PageWrapper component={AdminTrashValetPage} />
+            </RouteGuard>
+          </Route>
+          <Route path="/trash-valet/book">
+            <PageWrapper component={TrashValetBookPage} />
+          </Route>
+          <Route path="/trash-valet">
+            <PageWrapper component={TrashValetPage} />
+          </Route>
           <Route path="/window-cleaning">
             <PageWrapper component={WindowCleaningPage} />
           </Route>
@@ -653,6 +667,10 @@ function Router() {
       
       {/* Book page - accessible to all (shows account CTA for unauthenticated users after booking) */}
       {!isAuthenticated && <Route path="/book" component={CustomerBookPage} />}
+
+      {/* Trash Valet pages - accessible to all */}
+      <Route path="/trash-valet/book" component={TrashValetBookPage} />
+      <Route path="/trash-valet" component={TrashValetPage} />
 
       {/* Window Cleaning booking page - accessible to all */}
       <Route path="/window-cleaning" component={WindowCleaningPage} />

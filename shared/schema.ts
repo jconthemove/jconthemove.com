@@ -2024,3 +2024,85 @@ export const workerHourOverrides = pgTable("worker_hour_overrides", {
 export type WorkerHourOverride = typeof workerHourOverrides.$inferSelect;
 export const insertWorkerHourOverrideSchema = createInsertSchema(workerHourOverrides).omit({ id: true, createdAt: true });
 export type InsertWorkerHourOverride = z.infer<typeof insertWorkerHourOverrideSchema>;
+
+// ── Trash Valet Subscriptions ─────────────────────────────────────────────────
+export const trashSubscriptions = pgTable("trash_subscriptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  customerName: text("customer_name").notNull(),
+  phone: text("phone").notNull(),
+  email: text("email").notNull(),
+  address: text("address").notNull(),
+  city: text("city").notNull().default(""),
+  state: text("state").notNull().default("MI"),
+  zip: text("zip").notNull().default(""),
+  lat: decimal("lat", { precision: 10, scale: 7 }),
+  lng: decimal("lng", { precision: 10, scale: 7 }),
+  distanceMiles: decimal("distance_miles", { precision: 6, scale: 3 }),
+  travelSurchargeMonthly: decimal("travel_surcharge_monthly", { precision: 6, scale: 2 }).notNull().default("0"),
+  cans: integer("cans").notNull().default(1),
+  bagCount: integer("bag_count").notNull().default(0),
+  recyclingEnabled: boolean("recycling_enabled").notNull().default(false),
+  recyclingAnchorDate: date("recycling_anchor_date"),
+  serviceDayOfWeek: integer("service_day_of_week").notNull().default(1),
+  recyclingDayOfWeek: integer("recycling_day_of_week"),
+  serviceNotes: text("service_notes"),
+  planType: text("plan_type").notNull().default("monthly"),
+  weeklyBasePrice: decimal("weekly_base_price", { precision: 8, scale: 2 }).notNull(),
+  projectedMonthlyPrice: decimal("projected_monthly_price", { precision: 8, scale: 2 }).notNull(),
+  monthlyMinimumApplied: boolean("monthly_minimum_applied").notNull().default(false),
+  finalMonthlyPrice: decimal("final_monthly_price", { precision: 8, scale: 2 }).notNull(),
+  billingStatus: text("billing_status").notNull().default("active"),
+  nextBillingDate: date("next_billing_date"),
+  status: text("status").notNull().default("active"),
+  pauseStartDate: date("pause_start_date"),
+  pauseEndDate: date("pause_end_date"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_trash_subs_status").on(table.status),
+  index("idx_trash_subs_address").on(table.address),
+]);
+
+export const insertTrashSubscriptionSchema = createInsertSchema(trashSubscriptions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type TrashSubscription = typeof trashSubscriptions.$inferSelect;
+export type InsertTrashSubscription = z.infer<typeof insertTrashSubscriptionSchema>;
+
+// ── Trash Valet Jobs ──────────────────────────────────────────────────────────
+export const trashJobs = pgTable("trash_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  subscriptionId: varchar("subscription_id").notNull().references(() => trashSubscriptions.id),
+  serviceWeekOf: date("service_week_of").notNull(),
+  serviceType: text("service_type").notNull().default("trash_valet"),
+  cans: integer("cans").notNull(),
+  bagCount: integer("bag_count").notNull().default(0),
+  isRecyclingWeek: boolean("is_recycling_week").notNull().default(false),
+  weeklyBasePrice: decimal("weekly_base_price", { precision: 8, scale: 2 }).notNull(),
+  recyclingCharge: decimal("recycling_charge", { precision: 8, scale: 2 }).notNull().default("0"),
+  travelChargePortion: decimal("travel_charge_portion", { precision: 8, scale: 2 }).notNull().default("0"),
+  jobValue: decimal("job_value", { precision: 8, scale: 2 }).notNull(),
+  pullOutDate: date("pull_out_date"),
+  returnDate: date("return_date"),
+  pulledOutAt: timestamp("pulled_out_at"),
+  returnedAt: timestamp("returned_at"),
+  status: text("status").notNull().default("scheduled"),
+  completedBy: varchar("completed_by").references(() => users.id),
+  completedAt: timestamp("completed_at"),
+  photoUrl: text("photo_url"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_trash_jobs_sub").on(table.subscriptionId),
+  index("idx_trash_jobs_week").on(table.serviceWeekOf),
+  index("idx_trash_jobs_status").on(table.status),
+]);
+
+export const insertTrashJobSchema = createInsertSchema(trashJobs).omit({
+  id: true,
+  createdAt: true,
+});
+export type TrashJob = typeof trashJobs.$inferSelect;
+export type InsertTrashJob = z.infer<typeof insertTrashJobSchema>;

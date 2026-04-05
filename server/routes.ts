@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import crypto from "crypto";
 import { getEasternDateStr, getEasternDayStart, getEasternDayEnd } from "./utils/dateUtils";
@@ -1857,7 +1857,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         : '***-***-' + matchedUser.phoneNumber!.slice(-4);
 
       res.json({ success: true, method, masked });
-    } catch (err: any) {
+    } catch (err) {
       console.error("Recovery request error:", err);
       res.status(500).json({ error: "Failed to send recovery code. Please try again." });
     }
@@ -1897,7 +1897,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await new Promise<void>((resolve, reject) => req.session.save(e => e ? reject(e) : resolve()));
 
       res.json({ success: true, resetToken });
-    } catch (err: any) {
+    } catch (err) {
       console.error("Recovery verify error:", err);
       res.status(500).json({ error: "Verification failed. Please try again." });
     }
@@ -1929,7 +1929,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`🔐 Password reset successful for user ${sess.pendingResetUserId || 'unknown'}`);
       res.json({ success: true, message: "Password reset successfully. You can now log in." });
-    } catch (err: any) {
+    } catch (err) {
       console.error("Recovery reset error:", err);
       res.status(500).json({ error: "Password reset failed. Please try again." });
     }
@@ -2489,7 +2489,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .returning({ id: users.id, isAvailable: users.isAvailable, availableUntil: users.availableUntil, lastActive: users.lastActive });
       if (!updated) return res.status(404).json({ message: "User not found" });
       return res.json({ success: true, ...updated });
-    } catch (err: any) {
+    } catch (err) {
       console.error("go-online error:", err);
       return res.status(500).json({ message: "Failed to go online" });
     }
@@ -2508,7 +2508,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       await db.update(users).set({ lastActive: now }).where(eq(users.id, userId));
       return res.json({ success: true, expired: false });
-    } catch (err: any) {
+    } catch (err) {
       console.error("heartbeat error:", err);
       return res.status(500).json({ message: "Failed to send heartbeat" });
     }
@@ -2520,7 +2520,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = (req.session as any).userId || req.user?.id;
       await db.update(users).set({ isAvailable: false, availableUntil: null, lastActive: new Date() }).where(eq(users.id, userId));
       return res.json({ success: true });
-    } catch (err: any) {
+    } catch (err) {
       console.error("go-offline error:", err);
       return res.status(500).json({ message: "Failed to go offline" });
     }
@@ -2794,7 +2794,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           : `Price confirmed at $${totalPrice}. Call us to schedule your pickup: (906) 285-9312`,
         totalPrice,
       });
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error creating junk booking:", err);
       res.status(500).json({ error: "Failed to create booking" });
     }
@@ -2868,7 +2868,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ? "Crew assigned! They'll be in touch shortly."
           : "We'll reach you shortly — our team will confirm your booking.",
       });
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error creating moving booking:", err);
       res.status(500).json({ error: "Failed to create booking" });
     }
@@ -2942,7 +2942,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ? "Crew assigned! They'll be in touch shortly."
           : "We'll reach you shortly — our team will confirm your booking.",
       });
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error creating labor booking:", err);
       res.status(500).json({ error: "Failed to create booking" });
     }
@@ -3062,7 +3062,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         promoApplied: quote.promoApplied,
         message: "Booking received! Our team will reach out to confirm.",
       });
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error creating window cleaning booking:", err);
       res.status(500).json({ error: "Failed to create booking" });
     }
@@ -3828,7 +3828,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const [updated] = await db.update(users).set({ capabilities }).where(eq(users.id, id)).returning({ id: users.id, capabilities: users.capabilities });
       if (!updated) return res.status(404).json({ error: "User not found" });
       return res.json({ success: true, capabilities: updated.capabilities });
-    } catch (err: any) {
+    } catch (err) {
       console.error("capabilities update error:", err);
       return res.status(500).json({ error: "Failed to update capabilities" });
     }
@@ -5189,7 +5189,7 @@ Thank you for your business!
         isCompleted: l.status === 'completed',
       }));
       res.json({ results });
-    } catch (err: any) {
+    } catch (err) {
       console.error("Review lookup error:", err);
       res.status(500).json({ error: "Lookup failed. Please try again." });
     }
@@ -5275,7 +5275,7 @@ Thank you for your business!
         .where(conditions.length ? and(...conditions) : undefined);
 
       res.json({ pipeline, total: Number(totalCount[0]?.count || 0) });
-    } catch (err: any) {
+    } catch (err) {
       console.error("Pipeline fetch error:", err);
       res.status(500).json({ error: err.message || "Failed to load pipeline" });
     }
@@ -5344,7 +5344,7 @@ Thank you for your business!
       const [lead] = await db.select().from(leads).where(eq(leads.reviewToken, req.params.token)).limit(1);
       if (!lead) return res.status(404).json({ error: "Invalid review link" });
       await submitPublicReview(lead, req.body, res);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error submitting review by token:", err);
       res.status(500).json({ error: err.message || "Failed to submit review" });
     }
@@ -5356,7 +5356,7 @@ Thank you for your business!
       const lead = await storage.getLead(req.params.jobId);
       if (!lead || lead.status !== 'completed') return res.status(404).json({ error: "Job not found" });
       await submitPublicReview(lead, req.body, res);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error submitting review by jobId:", err);
       res.status(500).json({ error: err.message || "Failed to submit review" });
     }
@@ -5736,7 +5736,7 @@ Thank you for your business!
         [id]
       );
       res.json({ records: rows });
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error fetching disbursement summary:", err);
       res.status(500).json({ error: err.message });
     }
@@ -5758,7 +5758,7 @@ Thank you for your business!
         return res.json({ ok: true, note: "Already fully disbursed — no action taken" });
       }
       res.json({ ok: true, summary });
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error retrying disbursement:", err);
       res.status(500).json({ error: err.message });
     }
@@ -5860,7 +5860,7 @@ Thank you for your business!
         totalAwarded: total,
         note: awarded.length === 0 ? "Customer already has all completion rewards for this job" : `Awarded ${total} JCMOVES total`,
       });
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error awarding customer tokens:", err);
       res.status(500).json({ error: err.message });
     }
@@ -12275,7 +12275,7 @@ Thank you for your business!
             monthKey: serviceDate.toISOString().slice(0, 7).replace('-', '/') + '/01',
           });
           added.push(`${row.date} - ${customerName}`);
-        } catch (err: any) {
+        } catch (err) {
           errors.push(`Failed to add ${row.date} - ${customerName}: ${err.message}`);
         }
       }
@@ -12980,7 +12980,7 @@ Thank you for your business!
       const { rows } = await pool.query(`SELECT setting_value FROM spin_config WHERE setting_key='square_catalog_mappings' LIMIT 1`);
       const mappings = rows.length > 0 ? JSON.parse(rows[0].setting_value) : {};
       res.json({ mappings });
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error fetching catalog mappings:", err);
       res.json({ mappings: {} });
     }
@@ -12997,7 +12997,7 @@ Thank you for your business!
         [json]
       );
       res.json({ success: true, mappings });
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error saving catalog mappings:", err);
       res.status(500).json({ error: err.message });
     }
@@ -13066,7 +13066,7 @@ Thank you for your business!
       }
 
       res.json({ success: true, squareOrderId, orderState: orderResponse.order?.state });
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error creating Square order:", err);
       // Non-fatal — order totals already saved locally on lead; return gracefully
       res.json({ success: false, squareOrderId: null, error: err.message });
@@ -13102,7 +13102,7 @@ Thank you for your business!
           })),
         }));
       res.json({ items });
-    } catch (err: any) {
+    } catch (err) {
       console.error("Square catalog error:", err);
       res.status(200).json({ items: [], error: err.message });
     }
@@ -13133,7 +13133,7 @@ Thank you for your business!
       }
 
       res.json({ success: true, ...result });
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error creating itemized invoice:", err);
       res.status(500).json({ error: err.message });
     }
@@ -13737,7 +13737,7 @@ Thank you for your business!
     try {
       const activeSponsors = await storage.getSponsors("active");
       res.json(activeSponsors);
-    } catch (err: any) {
+    } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
@@ -13750,7 +13750,7 @@ Thank you for your business!
       }
       const allSponsors = await storage.getSponsors();
       res.json(allSponsors);
-    } catch (err: any) {
+    } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
@@ -13764,7 +13764,7 @@ Thank you for your business!
       const sponsor = await storage.updateSponsorStatus(req.params.id, "active");
       if (!sponsor) return res.status(404).json({ error: "Sponsor not found" });
       res.json(sponsor);
-    } catch (err: any) {
+    } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
@@ -13778,7 +13778,7 @@ Thank you for your business!
       const sponsor = await storage.updateSponsorStatus(req.params.id, "cancelled");
       if (!sponsor) return res.status(404).json({ error: "Sponsor not found" });
       res.json(sponsor);
-    } catch (err: any) {
+    } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
@@ -13793,7 +13793,7 @@ Thank you for your business!
       if (!current) return res.status(404).json({ error: "Sponsor not found" });
       const sponsor = await storage.updateSponsorFeatured(req.params.id, !current.featured);
       res.json(sponsor);
-    } catch (err: any) {
+    } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
@@ -13813,7 +13813,7 @@ Thank you for your business!
       const host = req.headers["x-forwarded-host"] || req.headers.host;
       const url = `${protocol}://${host}/api/object-storage/${encodeURIComponent(key)}`;
       res.json({ success: true, url, key });
-    } catch (err: any) {
+    } catch (err) {
       console.error("Sponsor card upload error:", err);
       res.status(500).json({ error: err.message || "Upload failed" });
     }
@@ -13997,7 +13997,7 @@ Thank you for your business!
         } catch {}
       }
       res.json({ address: btcAddress, btcPrice, timestamp: Date.now() });
-    } catch (err: any) {
+    } catch (err) {
       res.status(500).json({ error: err.message || "Failed to load tip info" });
     }
   });
@@ -16096,7 +16096,7 @@ Thank you for your business!
 
       const estimated = Math.ceil(totalOneWay * 1.25); // road-factor multiplier
       return res.json({ miles: estimated, straight: Math.round(totalOneWay), route });
-    } catch (err: any) {
+    } catch (err) {
       return res.json({ miles: 0, error: err.message });
     }
   });
@@ -17038,6 +17038,483 @@ Thank you for your business!
       );
       res.json({ ok: true });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ── Trash Valet Routes ────────────────────────────────────────────────────────
+
+  // Helper: verify caller is admin or business_owner
+  async function requireAdminRole(req: Request, res: Response): Promise<boolean> {
+    const userId = (req.session as Record<string, unknown>)?.userId as string | undefined || req.user?.id;
+    if (!userId) { res.status(401).json({ error: "Authentication required" }); return false; }
+    const user = await storage.getUser(userId);
+    if (!user || (user.role !== "admin" && user.role !== "business_owner")) {
+      res.status(403).json({ error: "Admin access required" }); return false;
+    }
+    return true;
+  }
+
+  // Helper: verify caller is employee, admin, or business_owner (crew access)
+  async function requireCrewRole(req: Request, res: Response): Promise<boolean> {
+    const userId = (req.session as Record<string, unknown>)?.userId as string | undefined || req.user?.id;
+    if (!userId) { res.status(401).json({ error: "Authentication required" }); return false; }
+    const user = await storage.getUser(userId);
+    if (!user || !["employee", "admin", "business_owner"].includes(user.role || "")) {
+      res.status(403).json({ error: "Crew access required" }); return false;
+    }
+    return true;
+  }
+
+  // POST /api/trash/quote — calculate pricing breakdown (public)
+  app.post("/api/trash/quote", async (req, res) => {
+    try {
+      const { calculateTrashValetQuote } = await import("../shared/trashValetPricing");
+      const { cans, bagCount, recyclingEnabled, recyclingAnchorDate, lat, lng, planType, targetWeekOf } = req.body;
+      const quote = calculateTrashValetQuote({
+        cans: Number(cans) || 0,
+        bagCount: Number(bagCount) || 0,
+        recyclingEnabled: !!recyclingEnabled,
+        recyclingAnchorDate: recyclingAnchorDate || null,
+        lat: lat != null ? Number(lat) : null,
+        lng: lng != null ? Number(lng) : null,
+        planType: planType === "yearly" ? "yearly" : "monthly",
+        targetWeekOf: targetWeekOf || null,
+      });
+      res.json(quote);
+    } catch (err) {
+      console.error("Trash quote error:", err);
+      res.status(500).json({ error: "Failed to calculate quote" });
+    }
+  });
+
+  // POST /api/trash/subscribe — create subscription + first job (public, no auth required)
+  app.post("/api/trash/subscribe", async (req, res) => {
+    try {
+      const { calculateTrashValetQuote } = await import("../shared/trashValetPricing");
+      const { trashSubscriptions, trashJobs } = await import("@shared/schema");
+      const {
+        customerName, phone, email, address, city, state, zip,
+        cans, bagCount, recyclingEnabled, recyclingAnchorDate,
+        serviceDayOfWeek, recyclingDayOfWeek, serviceNotes, planType, promoCode,
+      } = req.body;
+
+      if (!customerName || !phone || !address) {
+        return res.status(400).json({ error: "Name, phone, and address are required" });
+      }
+
+      const normalizedAddr = (address || "").trim().toLowerCase();
+      const existing = await db.select().from(trashSubscriptions)
+        .where(and(
+          sql`LOWER(TRIM(${trashSubscriptions.address})) = ${normalizedAddr}`,
+          sql`${trashSubscriptions.status} = 'active'`
+        ));
+      if (existing.length > 0) {
+        return res.status(409).json({ error: "An active subscription already exists for this address." });
+      }
+
+      // Optional promo code validation (lookup against existing promo codes table)
+      let promoDiscount = 0;
+      let promoCodeUsed: string | null = null;
+      if (promoCode && promoCode.trim()) {
+        try {
+          const { rows: promoRows } = await pool.query(
+            `SELECT * FROM promo_codes WHERE UPPER(code) = UPPER($1) AND is_active = true LIMIT 1`,
+            [promoCode.trim()]
+          );
+          if (promoRows.length > 0) {
+            promoCodeUsed = promoRows[0].code;
+            promoDiscount = parseFloat(promoRows[0].discount_amount || "0");
+          }
+        } catch (_) { /* promo codes table may not exist, ignore */ }
+      }
+
+      // Server-side geocode from address for reliable travel surcharge calculation
+      let resolvedLat: number | null = null;
+      let resolvedLng: number | null = null;
+      try {
+        const fullAddr = [address, city, state || "MI", zip].filter(Boolean).join(" ");
+        const geoUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(fullAddr)}&format=json&limit=1&countrycodes=us`;
+        const geoResp = await fetch(geoUrl, { headers: { "User-Agent": "JCOnTheMove/1.0 contact@jcontmove.com" } });
+        if (geoResp.ok) {
+          const geoData = await geoResp.json() as Array<{ lat: string; lon: string }>;
+          if (geoData.length > 0) {
+            resolvedLat = parseFloat(geoData[0].lat);
+            resolvedLng = parseFloat(geoData[0].lon);
+          }
+        }
+      } catch { /* geocode failure is non-fatal — surcharge defaults to 0 */ }
+
+      const quote = calculateTrashValetQuote({
+        cans: Number(cans) || 1,
+        bagCount: Number(bagCount) || 0,
+        recyclingEnabled: !!recyclingEnabled,
+        recyclingAnchorDate: recyclingAnchorDate || null,
+        lat: resolvedLat,
+        lng: resolvedLng,
+        planType: planType === "yearly" ? "yearly" : "monthly",
+      });
+
+      const effectiveMonthlyPrice = Math.max(0, quote.finalMonthlyPrice - promoDiscount);
+      const today = new Date().toISOString().split("T")[0];
+      const [sub] = await db.insert(trashSubscriptions).values({
+        customerName: customerName.trim(),
+        phone: phone.trim(),
+        email: (email || "").trim(),
+        address: address.trim(),
+        city: (city || "").trim(),
+        state: (state || "MI").trim(),
+        zip: (zip || "").trim(),
+        lat: resolvedLat != null ? String(resolvedLat) : null,
+        lng: resolvedLng != null ? String(resolvedLng) : null,
+        distanceMiles: quote.distanceMiles != null ? String(quote.distanceMiles) : null,
+        travelSurchargeMonthly: String(quote.travelSurchargeMonthly),
+        cans: Number(cans) || 1,
+        bagCount: Number(bagCount) || 0,
+        recyclingEnabled: !!recyclingEnabled,
+        recyclingAnchorDate: recyclingAnchorDate || null,
+        serviceDayOfWeek: Number(serviceDayOfWeek) || 1,
+        recyclingDayOfWeek: recyclingDayOfWeek != null ? Number(recyclingDayOfWeek) : null,
+        serviceNotes: serviceNotes ? String(serviceNotes).trim() : null,
+        planType: planType === "yearly" ? "yearly" : "monthly",
+        weeklyBasePrice: String(quote.weeklyBasePrice),
+        projectedMonthlyPrice: String(quote.projectedMonthlyPrice),
+        monthlyMinimumApplied: quote.monthlyMinimumApplied,
+        finalMonthlyPrice: String(effectiveMonthlyPrice),
+        billingStatus: "active",
+        status: "active",
+        nextBillingDate: today,
+      }).returning();
+
+      // First job: schedule for the next upcoming service day (always in the future)
+      const { isRecyclingWeek: checkRecycling } = await import("../shared/trashValetPricing");
+      const serviceDate = new Date();
+      const targetDay = Number(serviceDayOfWeek) || 1;
+      let dayDiff = targetDay - serviceDate.getDay();
+      if (dayDiff <= 0) dayDiff += 7; // always pick a future date
+      serviceDate.setDate(serviceDate.getDate() + dayDiff);
+
+      // Normalize serviceWeekOf to Sunday of that week (matching admin generate-week convention)
+      const weekSunday = new Date(serviceDate);
+      weekSunday.setDate(serviceDate.getDate() - serviceDate.getDay());
+      const weekOfStr = weekSunday.toISOString().split("T")[0];
+
+      // Recycling flag computed from the scheduled service date
+      let recyclingWeek = false;
+      if (recyclingEnabled && recyclingAnchorDate) {
+        recyclingWeek = checkRecycling(recyclingAnchorDate, serviceDate);
+      }
+      // Recompute quote with the scheduled week to get accurate recyclingCharge
+      const weekQuote = calculateTrashValetQuote({
+        cans: Number(cans) || 1,
+        bagCount: Number(bagCount) || 0,
+        recyclingEnabled: !!recyclingEnabled,
+        recyclingAnchorDate: recyclingAnchorDate || null,
+        lat: resolvedLat,
+        lng: resolvedLng,
+        planType: planType === "yearly" ? "yearly" : "monthly",
+        targetWeekOf: weekOfStr,
+      });
+
+      const [job] = await db.insert(trashJobs).values({
+        subscriptionId: sub.id,
+        serviceWeekOf: weekOfStr,
+        serviceType: "trash_valet",
+        cans: Number(cans) || 1,
+        bagCount: Number(bagCount) || 0,
+        isRecyclingWeek: weekQuote.isRecyclingWeek,
+        weeklyBasePrice: String(weekQuote.weeklyBasePrice),
+        recyclingCharge: String(weekQuote.recyclingCharge),
+        travelChargePortion: String(weekQuote.travelChargePortion),
+        jobValue: String(weekQuote.jobValue),
+        status: "scheduled",
+      }).returning();
+
+      const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
+      const dayNames = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+      try {
+        await sendEmail({
+          to: companyEmail, from: companyEmail,
+          subject: `New Trash Valet Subscription — ${customerName}`,
+          text: `New trash valet subscription.\n\nCustomer: ${customerName}\nPhone: ${phone}\nEmail: ${email}\nAddress: ${address}, ${city}, ${state} ${zip}\nCans: ${cans}, Bags: ${bagCount}\nRecycling: ${recyclingEnabled ? "Yes" : "No"}\nService Day: ${dayNames[Number(serviceDayOfWeek)] || serviceDayOfWeek}\nMonthly Price: $${effectiveMonthlyPrice}${promoCodeUsed ? ` (promo: ${promoCodeUsed})` : ""}\nPlan: ${planType}\n\nView in admin panel at /admin-trash-valet`,
+          html: `<h2>New Trash Valet Subscription</h2><p><b>Customer:</b> ${customerName}<br><b>Phone:</b> ${phone}<br><b>Email:</b> ${email}<br><b>Address:</b> ${address}, ${city}, ${state} ${zip}<br><b>Cans:</b> ${cans} | <b>Bags:</b> ${bagCount}<br><b>Recycling:</b> ${recyclingEnabled ? "Yes" : "No"}<br><b>Service Day:</b> ${dayNames[Number(serviceDayOfWeek)] || serviceDayOfWeek}<br><b>Monthly Price:</b> $${effectiveMonthlyPrice}${promoCodeUsed ? ` (promo: ${promoCodeUsed})` : ""}<br><b>Plan:</b> ${planType}</p>`,
+        });
+      } catch (emailErr) { console.error("Admin email failed:", emailErr); }
+      try {
+        await smsService.notifyNewQuote({ customerName, serviceType: "trash valet", phone: phone || undefined });
+      } catch (smsErr) { console.error("Admin SMS failed:", smsErr); }
+
+      res.json({ subscriptionId: sub.id, jobId: job.id, quote: { ...quote, finalMonthlyPrice: effectiveMonthlyPrice }, promoApplied: promoCodeUsed });
+    } catch (err) {
+      console.error("Error creating trash valet subscription:", err);
+      res.status(500).json({ error: "Failed to create subscription" });
+    }
+  });
+
+  // GET /api/trash/subscriptions — admin only, filterable by status
+  app.get("/api/trash/subscriptions", isAuthenticated, async (req, res) => {
+    if (!await requireAdminRole(req, res)) return;
+    try {
+      const { trashSubscriptions } = await import("@shared/schema");
+      const { status } = req.query;
+      let rows;
+      if (status && status !== "all") {
+        rows = await db.select().from(trashSubscriptions)
+          .where(eq(trashSubscriptions.status, String(status)))
+          .orderBy(desc(trashSubscriptions.createdAt));
+      } else {
+        rows = await db.select().from(trashSubscriptions)
+          .orderBy(desc(trashSubscriptions.createdAt));
+      }
+      res.json(rows);
+    } catch (err) {
+      console.error("Error fetching trash subscriptions:", err);
+      res.status(500).json({ error: "Failed to fetch subscriptions" });
+    }
+  });
+
+  // GET /api/trash/jobs — admin/crew access, filterable by week + status
+  // Defaults to current week (Sunday-anchored) when no week param is provided
+  app.get("/api/trash/jobs", isAuthenticated, async (req, res) => {
+    if (!await requireCrewRole(req, res)) return;
+    try {
+      const { trashJobs, trashSubscriptions } = await import("@shared/schema");
+      const { week, status } = req.query;
+      // Default to current week's Sunday when no week filter supplied
+      const defaultWeek = (() => {
+        const d = new Date();
+        d.setDate(d.getDate() - d.getDay());
+        return d.toISOString().split("T")[0];
+      })();
+      const weekFilter = week ? String(week) : defaultWeek;
+      const conditions: ReturnType<typeof eq>[] = [eq(trashJobs.serviceWeekOf, weekFilter)];
+      if (status && status !== "all") conditions.push(eq(trashJobs.status, String(status)));
+
+      const rows = await db
+        .select({ job: trashJobs, sub: trashSubscriptions })
+        .from(trashJobs)
+        .innerJoin(trashSubscriptions, eq(trashJobs.subscriptionId, trashSubscriptions.id))
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(desc(trashJobs.serviceWeekOf));
+      res.json(rows);
+    } catch (err) {
+      console.error("Error fetching trash jobs:", err);
+      res.status(500).json({ error: "Failed to fetch jobs" });
+    }
+  });
+
+  // POST /api/trash/generate-week — admin only, idempotent job generation
+  app.post("/api/trash/generate-week", isAuthenticated, async (req, res) => {
+    if (!await requireAdminRole(req, res)) return;
+    try {
+      const { trashSubscriptions, trashJobs } = await import("@shared/schema");
+      const { isRecyclingWeek: checkRecycling } = await import("../shared/trashValetPricing");
+      const { targetWeek } = req.body;
+      if (!targetWeek || !/^\d{4}-\d{2}-\d{2}$/.test(targetWeek)) {
+        return res.status(400).json({ error: "targetWeek is required in YYYY-MM-DD format" });
+      }
+
+      const activeSubs = await db.select().from(trashSubscriptions)
+        .where(eq(trashSubscriptions.status, "active"));
+
+      let created = 0;
+      let skipped = 0;
+      for (const sub of activeSubs) {
+        const existing = await db.select({ id: trashJobs.id }).from(trashJobs)
+          .where(and(eq(trashJobs.subscriptionId, sub.id), eq(trashJobs.serviceWeekOf, targetWeek)));
+        if (existing.length > 0) { skipped++; continue; }
+
+        const { calculateTrashValetQuote: calcQuote } = await import("../shared/trashValetPricing");
+        const weekQuote = calcQuote({
+          cans: sub.cans,
+          bagCount: sub.bagCount,
+          recyclingEnabled: sub.recyclingEnabled,
+          recyclingAnchorDate: sub.recyclingAnchorDate || null,
+          lat: sub.lat != null ? Number(sub.lat) : null,
+          lng: sub.lng != null ? Number(sub.lng) : null,
+          planType: (sub.planType as "monthly" | "yearly") || "monthly",
+          targetWeekOf: targetWeek,
+        });
+        const recyclingWeek = weekQuote.isRecyclingWeek;
+        const recyclingCharge = weekQuote.recyclingCharge;
+        const travelChargePortion = weekQuote.travelChargePortion;
+        const jobValue = weekQuote.jobValue;
+
+        await db.insert(trashJobs).values({
+          subscriptionId: sub.id,
+          serviceWeekOf: targetWeek,
+          serviceType: "trash_valet",
+          cans: sub.cans,
+          bagCount: sub.bagCount,
+          isRecyclingWeek: recyclingWeek,
+          weeklyBasePrice: String(sub.weeklyBasePrice),
+          recyclingCharge: String(recyclingCharge.toFixed(2)),
+          travelChargePortion: String(travelChargePortion.toFixed(2)),
+          jobValue: String(jobValue.toFixed(2)),
+          status: "scheduled",
+        });
+        created++;
+      }
+      res.json({ created, skipped, targetWeek });
+    } catch (err) {
+      console.error("Error generating trash week:", err);
+      res.status(500).json({ error: "Failed to generate week" });
+    }
+  });
+
+  // PATCH /api/trash/subscriptions/:id/pause — admin only
+  app.patch("/api/trash/subscriptions/:id/pause", isAuthenticated, async (req, res) => {
+    if (!await requireAdminRole(req, res)) return;
+    try {
+      const { trashSubscriptions } = await import("@shared/schema");
+      const { pauseStartDate, pauseEndDate } = req.body;
+      const [updated] = await db.update(trashSubscriptions)
+        .set({ status: "paused", pauseStartDate: pauseStartDate || null, pauseEndDate: pauseEndDate || null, updatedAt: new Date() })
+        .where(eq(trashSubscriptions.id, req.params.id))
+        .returning();
+      if (!updated) return res.status(404).json({ error: "Subscription not found" });
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to pause subscription" });
+    }
+  });
+
+  // PATCH /api/trash/subscriptions/:id/activate — admin only
+  app.patch("/api/trash/subscriptions/:id/activate", isAuthenticated, async (req, res) => {
+    if (!await requireAdminRole(req, res)) return;
+    try {
+      const { trashSubscriptions } = await import("@shared/schema");
+      const [updated] = await db.update(trashSubscriptions)
+        .set({ status: "active", pauseStartDate: null, pauseEndDate: null, updatedAt: new Date() })
+        .where(eq(trashSubscriptions.id, req.params.id))
+        .returning();
+      if (!updated) return res.status(404).json({ error: "Subscription not found" });
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to activate subscription" });
+    }
+  });
+
+  // PATCH /api/trash/subscriptions/:id/cancel — admin only
+  app.patch("/api/trash/subscriptions/:id/cancel", isAuthenticated, async (req, res) => {
+    if (!await requireAdminRole(req, res)) return;
+    try {
+      const { trashSubscriptions } = await import("@shared/schema");
+      const [updated] = await db.update(trashSubscriptions)
+        .set({ status: "cancelled", updatedAt: new Date() })
+        .where(eq(trashSubscriptions.id, req.params.id))
+        .returning();
+      if (!updated) return res.status(404).json({ error: "Subscription not found" });
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to cancel subscription" });
+    }
+  });
+
+  // PATCH /api/trash/jobs/:id/pull-out — crew (employee/admin) marks pull-out
+  app.patch("/api/trash/jobs/:id/pull-out", isAuthenticated, async (req, res) => {
+    if (!await requireCrewRole(req, res)) return;
+    try {
+      const { trashJobs } = await import("@shared/schema");
+      const [updated] = await db.update(trashJobs)
+        .set({ pulledOutAt: new Date(), status: "pulled_out" })
+        .where(eq(trashJobs.id, req.params.id))
+        .returning();
+      if (!updated) return res.status(404).json({ error: "Job not found" });
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to update job" });
+    }
+  });
+
+  // PATCH /api/trash/jobs/:id/return — crew (employee/admin) marks return
+  app.patch("/api/trash/jobs/:id/return", isAuthenticated, async (req, res) => {
+    if (!await requireCrewRole(req, res)) return;
+    try {
+      const { trashJobs } = await import("@shared/schema");
+      const [updated] = await db.update(trashJobs)
+        .set({ returnedAt: new Date(), status: "returned" })
+        .where(eq(trashJobs.id, req.params.id))
+        .returning();
+      if (!updated) return res.status(404).json({ error: "Job not found" });
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to update job" });
+    }
+  });
+
+  // PATCH /api/trash/jobs/:id/complete — crew (employee/admin) completes job, awards tokens
+  app.patch("/api/trash/jobs/:id/complete", isAuthenticated, async (req, res) => {
+    if (!await requireCrewRole(req, res)) return;
+    try {
+      const { trashJobs, trashSubscriptions } = await import("@shared/schema");
+      const userId = (req.session as Record<string, unknown>)?.userId as string | undefined || req.user?.id;
+      const { photoUrl, notes } = req.body;
+
+      const [job] = await db.select().from(trashJobs).where(eq(trashJobs.id, req.params.id));
+      if (!job) return res.status(404).json({ error: "Job not found" });
+
+      // Idempotent: if already completed, return existing record
+      if (job.status === "completed") return res.json(job);
+
+      const [updated] = await db.update(trashJobs)
+        .set({
+          status: "completed",
+          completedBy: userId || null,
+          completedAt: new Date(),
+          photoUrl: photoUrl ? String(photoUrl) : job.photoUrl,
+          notes: notes ? String(notes) : job.notes,
+        })
+        .where(eq(trashJobs.id, req.params.id))
+        .returning();
+
+      // Award 500 JCMOVES to the completing crew member
+      if (userId) {
+        try {
+          await storage.creditWalletTokens(userId, 500);
+        } catch (e) { console.error("Crew token award failed:", e); }
+      }
+
+      // Award 15 JCMOVES per $1 jobValue to customer if they have an account
+      try {
+        const [sub] = await db.select().from(trashSubscriptions)
+          .where(eq(trashSubscriptions.id, job.subscriptionId));
+        if (sub?.email) {
+          const customerRows = await db.select().from(users)
+            .where(sql`LOWER(${users.email}) = ${sub.email.toLowerCase()}`)
+            .limit(1);
+          if (customerRows.length > 0) {
+            const customerTokens = Math.floor(parseFloat(String(job.jobValue)) * 15);
+            if (customerTokens > 0) {
+              await storage.creditWalletTokens(customerRows[0].id, customerTokens);
+            }
+          }
+        }
+      } catch (e) { console.error("Customer token award failed:", e); }
+
+      res.json(updated);
+    } catch (err) {
+      console.error("Error completing trash job:", err);
+      res.status(500).json({ error: "Failed to complete job" });
+    }
+  });
+
+  // GET /api/trash/my-subscription — customer's own active subscription
+  app.get("/api/trash/my-subscription", isAuthenticated, async (req, res) => {
+    try {
+      const { trashSubscriptions } = await import("@shared/schema");
+      const userId = (req.session as Record<string, unknown>)?.userId as string | undefined || req.user?.id;
+      const user = await storage.getUser(userId);
+      if (!user?.email) return res.json(null);
+      const subs = await db.select().from(trashSubscriptions)
+        .where(and(
+          sql`LOWER(${trashSubscriptions.email}) = ${user.email.toLowerCase()}`,
+          eq(trashSubscriptions.status, "active")
+        ))
+        .orderBy(desc(trashSubscriptions.createdAt))
+        .limit(1);
+      res.json(subs[0] || null);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch subscription" });
+    }
   });
 
   const httpServer = createServer(app);

@@ -31,6 +31,29 @@ type JobBoardLead = {
   crewSlotsFilled: number;
 };
 
+type TrashJobSub = {
+  customerName: string;
+  address: string;
+  city: string;
+  phone: string;
+};
+
+type TrashJob = {
+  id: string;
+  subscriptionId: string;
+  serviceWeekOf: string;
+  status: string;
+  cans: number;
+  bagCount: number;
+  isRecyclingWeek: boolean;
+  jobValue: string;
+};
+
+type TrashJobRow = {
+  job: TrashJob;
+  sub: TrashJobSub;
+};
+
 const SCRIPTURES = [
   { text: "Commit your work to the Lord, and your plans will be established.", ref: "Proverbs 16:3" },
   { text: "Whatever you do, work heartily, as for the Lord and not for men.", ref: "Colossians 3:23" },
@@ -65,7 +88,7 @@ function getWeatherInfo(code: number) {
 const SERVICE_ICONS: Record<string, string> = {
   moving: "🚛", labor: "💪", residential: "🏠", junk: "🗑️", snow: "❄️",
   cleaning: "✨", handyman: "🔧", demolition: "⚒️", flooring: "🪵", painting: "🎨",
-  window_cleaning: "🪟",
+  window_cleaning: "🪟", trash_valet: "🗑️",
 };
 
 function isSummerSeason(): boolean {
@@ -210,6 +233,37 @@ export default function CrewTodayPage() {
 
   const { data: employees = [] } = useQuery<User[]>({ queryKey: ["/api/employees"] });
   const { data: wallet } = useQuery<{ balance: string }>({ queryKey: ["/api/rewards/wallet"] });
+
+  // Trash Valet: fetch this week's jobs (API returns { job, sub }[] shape)
+  const { data: trashJobsData = [] } = useQuery<TrashJobRow[]>({
+    queryKey: ["/api/trash/jobs"],
+    refetchInterval: 30000,
+    staleTime: 0,
+  });
+  // API already defaults to current week — no need to client-filter by date
+  const trashJobsThisWeek = trashJobsData.filter(row => row.job.status !== "cancelled");
+
+  // Photo URL state per job (for complete action)
+  const [trashPhotoUrls, setTrashPhotoUrls] = useState<Record<string, string>>({});
+
+  const trashActionMutation = useMutation<unknown, Error, { jobId: string; action: string; photoUrl?: string }>({
+    mutationFn: async ({ jobId, action, photoUrl }) => {
+      const body = photoUrl ? { photoUrl } : {};
+      const res = await apiRequest("PATCH", `/api/trash/jobs/${jobId}/${action}`, body);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Action failed" }));
+        throw new Error((err as { error?: string }).error || "Action failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/trash/jobs"] });
+      toast({ title: "✅ Updated", description: "Trash job status updated." });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Failed", description: e.message, variant: "destructive" });
+    },
+  });
 
   const { data: weather } = useQuery({
     queryKey: ["weather-ironwood"],
@@ -544,11 +598,94 @@ export default function CrewTodayPage() {
         </div>
       )}
 
-      {todayJobs.length === 0 && upcomingBoardJobs.length === 0 && myAssignments.length === 0 && (
+      {todayJobs.length === 0 && upcomingBoardJobs.length === 0 && myAssignments.length === 0 && trashJobsThisWeek.length === 0 && (
         <div className="rounded-2xl bg-slate-800/30 border border-slate-700/30 p-6 text-center">
           <Calendar className="h-10 w-10 text-slate-500 mx-auto mb-2" />
           <p className="text-slate-400 font-medium">No jobs scheduled yet</p>
           <p className="text-slate-500 text-sm mt-1">New jobs will appear here automatically</p>
+        </div>
+      )}
+
+      {/* Trash Valet Jobs — this week */}
+      {trashJobsThisWeek.length > 0 && (
+        <div className="rounded-2xl bg-slate-800/40 border border-emerald-500/30 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-emerald-400 font-bold text-sm uppercase tracking-wider">🗑️ Trash Valet</span>
+            <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-xs">{trashJobsThisWeek.length}</Badge>
+          </div>
+          <div className="space-y-3">
+            {trashJobsThisWeek.map((row: TrashJobRow) => {
+              const tj = row.job;
+              const sub = row.sub;
+              return (
+              <div key={tj.id} className="bg-white/[0.03] rounded-xl p-3 border border-emerald-500/10 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white text-sm font-semibold truncate">{sub?.customerName || "Customer"}</p>
+                    <p className="text-slate-400 text-xs flex items-center gap-1">
+                      <MapPin className="h-3 w-3" />
+                      <span className="truncate">{sub?.address}{sub?.city ? `, ${sub.city}` : ""}</span>
+                    </p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      <Badge className="bg-slate-700/60 text-slate-300 border-0 text-[10px]">{tj.cans} can{tj.cans !== 1 ? "s" : ""}</Badge>
+                      {tj.bagCount > 0 && <Badge className="bg-slate-700/60 text-slate-300 border-0 text-[10px]">{tj.bagCount} bags</Badge>}
+                      {tj.isRecyclingWeek && <Badge className="bg-green-500/20 text-green-300 border-green-500/30 text-[10px]">♻️ Recycling</Badge>}
+                    </div>
+                  </div>
+                  <Badge className={`text-[10px] flex-shrink-0 ${
+                    tj.status === "completed" ? "bg-green-500/20 text-green-300 border-green-500/30"
+                    : tj.status === "pulled_out" ? "bg-orange-500/20 text-orange-300 border-orange-500/30"
+                    : tj.status === "returned" ? "bg-blue-500/20 text-blue-300 border-blue-500/30"
+                    : "bg-slate-500/20 text-slate-300 border-slate-500/30"
+                  }`}>{tj.status.replace(/_/g, " ")}</Badge>
+                </div>
+                {tj.status !== "completed" && (
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      {tj.status === "scheduled" && (
+                        <Button
+                          size="sm"
+                          className="flex-1 bg-orange-500/20 text-orange-300 border border-orange-500/30 hover:bg-orange-500/30 text-xs h-7"
+                          onClick={() => trashActionMutation.mutate({ jobId: tj.id, action: "pull-out" })}
+                          disabled={trashActionMutation.isPending}
+                        >Pull Out</Button>
+                      )}
+                      {tj.status === "pulled_out" && (
+                        <Button
+                          size="sm"
+                          className="flex-1 bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 text-xs h-7"
+                          onClick={() => trashActionMutation.mutate({ jobId: tj.id, action: "return" })}
+                          disabled={trashActionMutation.isPending}
+                        >Returned</Button>
+                      )}
+                    </div>
+                    {(tj.status === "pulled_out" || tj.status === "returned") && (
+                      <div className="space-y-1.5">
+                        <input
+                          type="url"
+                          placeholder="Photo URL (optional)"
+                          value={trashPhotoUrls[tj.id] ?? ""}
+                          onChange={(e) => setTrashPhotoUrls(prev => ({ ...prev, [tj.id]: e.target.value }))}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500"
+                        />
+                        <Button
+                          size="sm"
+                          className="w-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30 text-xs h-7"
+                          onClick={() => trashActionMutation.mutate({
+                            jobId: tj.id,
+                            action: "complete",
+                            photoUrl: trashPhotoUrls[tj.id] || undefined,
+                          })}
+                          disabled={trashActionMutation.isPending}
+                        >✓ Mark Complete</Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

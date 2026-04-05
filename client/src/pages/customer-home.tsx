@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
-import { Coins, Phone, MessageSquare, Calculator, ChevronRight, Loader2, Search } from "lucide-react";
+import { Coins, Phone, MessageSquare, Calculator, ChevronRight, Loader2, Search, Calendar, DollarSign } from "lucide-react";
 import ServiceSelector from "@/components/ServiceSelector";
 import LiveCrewBeacon from "@/components/LiveCrewBeacon";
 
@@ -70,6 +70,27 @@ function JobStatusCard({ jobId, totalPrice, onDismiss }: { jobId: string; totalP
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+interface TrashSub {
+  id: string;
+  finalMonthlyPrice: string;
+  planType: string;
+  serviceDayOfWeek: number;
+  nextBillingDate: string | null;
+  status: string;
+}
+
+const TRASH_DAY_NAMES = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+function getNextServiceDate(serviceDayOfWeek: number): string {
+  const now = new Date();
+  const today = now.getDay();
+  let daysUntil = serviceDayOfWeek - today;
+  if (daysUntil <= 0) daysUntil += 7;
+  const next = new Date(now);
+  next.setDate(now.getDate() + daysUntil);
+  return next.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+}
+
 export default function CustomerHomePage() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
@@ -78,6 +99,11 @@ export default function CustomerHomePage() {
   const { data: wallet } = useQuery<{ tokenBalance: string }>({
     queryKey: ["/api/rewards/wallet"],
     retry: 2,
+  });
+
+  const { data: trashSub } = useQuery<TrashSub | null>({
+    queryKey: ["/api/trash/my-subscription"],
+    retry: 1,
   });
 
   const tokenBalance = parseFloat(wallet?.tokenBalance || "0");
@@ -183,6 +209,49 @@ export default function CustomerHomePage() {
             </button>
           );
         })()}
+
+        {/* Trash Valet Card */}
+        {trashSub ? (
+          <button
+            onClick={() => setLocation("/trash-valet")}
+            className="w-full flex items-center justify-between bg-zinc-900 border border-emerald-500/20 rounded-2xl px-4 py-3 hover:border-emerald-500/40 active:scale-[0.98] transition-all"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center flex-shrink-0 text-xl">
+                🗑️
+              </div>
+              <div className="text-left">
+                <div className="flex items-center gap-2">
+                  <p className="text-white font-bold text-sm">Trash Valet</p>
+                  <span className="text-[9px] font-bold bg-emerald-600 text-white px-1.5 py-0.5 rounded-full">Active</span>
+                </div>
+                <p className="text-zinc-500 text-xs">
+                  ${parseFloat(trashSub.finalMonthlyPrice).toFixed(2)}/mo · Next: {getNextServiceDate(trashSub.serviceDayOfWeek)}
+                </p>
+                {trashSub.nextBillingDate && (
+                  <p className="text-zinc-600 text-[10px]">Billing: {trashSub.nextBillingDate}</p>
+                )}
+              </div>
+            </div>
+            <ChevronRight className="h-4 w-4 text-zinc-600 flex-shrink-0" />
+          </button>
+        ) : (
+          <button
+            onClick={() => setLocation("/trash-valet")}
+            className="w-full flex items-center justify-between bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 hover:border-zinc-700 active:scale-[0.98] transition-all"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center flex-shrink-0 text-xl">
+                🗑️
+              </div>
+              <div className="text-left">
+                <p className="text-white font-bold text-sm">Trash Valet</p>
+                <p className="text-zinc-500 text-xs">Weekly curbside pull-out &amp; return · from $30/mo</p>
+              </div>
+            </div>
+            <ChevronRight className="h-4 w-4 text-zinc-600 flex-shrink-0" />
+          </button>
+        )}
 
         {/* Instant estimate CTA block */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between">
