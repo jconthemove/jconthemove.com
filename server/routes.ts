@@ -2605,20 +2605,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // GET /api/crew/online — public count of workers actively online
-  // Workers qualify if: isAvailable=true AND lastActive within 5min AND availableUntil in future
+  // Workers qualify if: isAvailable=true AND availableUntil in future
   app.get("/api/crew/online", async (_req, res) => {
     try {
       const now = new Date();
-      const fiveMinAgo = new Date(now.getTime() - 5 * 60 * 1000);
       const { rows } = await pool.query(
         `SELECT COUNT(*) AS count FROM users
          WHERE is_available = true
            AND role = 'employee'
-           AND last_active IS NOT NULL
-           AND last_active >= $1
            AND available_until IS NOT NULL
-           AND available_until > $2`,
-        [fiveMinAgo, now]
+           AND available_until > $1`,
+        [now]
       );
       const count = parseInt(rows[0]?.count ?? "0", 10);
       return res.json({ count });
