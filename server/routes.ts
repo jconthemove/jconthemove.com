@@ -7354,7 +7354,7 @@ Thank you for your business!
   // Get wallet balance
   app.get("/api/rewards/wallet", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = (req.session as any).userId;
+      const userId = req.user?.id || (req.session as any).userId;
       
       const wallet = await db
         .select()

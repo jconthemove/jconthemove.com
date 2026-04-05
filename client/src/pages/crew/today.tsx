@@ -232,7 +232,7 @@ export default function CrewTodayPage() {
   });
 
   const { data: employees = [] } = useQuery<User[]>({ queryKey: ["/api/employees"] });
-  const { data: wallet } = useQuery<{ balance: string }>({ queryKey: ["/api/rewards/wallet"] });
+  const { data: wallet } = useQuery<{ balance: string }>({ queryKey: ["/api/rewards/balance"] });
 
   // Trash Valet: fetch this week's jobs (API returns { job, sub }[] shape)
   const { data: trashJobsData = [] } = useQuery<TrashJobRow[]>({
