@@ -155,6 +155,35 @@ export default function CustomerHomePage() {
           />
         </div>
 
+        {/* Window Cleaning Card */}
+        {(() => {
+          const isApril = new Date().getMonth() === 3;
+          return (
+            <button
+              onClick={() => setLocation("/window-cleaning")}
+              className="w-full flex items-center justify-between bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 hover:border-zinc-700 active:scale-[0.98] transition-all"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-orange-500/15 flex items-center justify-center flex-shrink-0 text-xl">
+                  🪟
+                </div>
+                <div className="text-left">
+                  <div className="flex items-center gap-2">
+                    <p className="text-white font-bold text-sm">Clean Windows with JC</p>
+                    {isApril && (
+                      <span className="text-[9px] font-bold bg-orange-500 text-white px-1.5 py-0.5 rounded-full">
+                        April Special — 20% Off
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-zinc-500 text-xs">Streak-free window cleaning · $5/pane</p>
+                </div>
+              </div>
+              <ChevronRight className="h-4 w-4 text-zinc-600 flex-shrink-0" />
+            </button>
+          );
+        })()}
+
         {/* Instant estimate CTA block */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between">
           <div className="flex items-center gap-3">

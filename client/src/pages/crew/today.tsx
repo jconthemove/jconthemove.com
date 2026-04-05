@@ -65,6 +65,7 @@ function getWeatherInfo(code: number) {
 const SERVICE_ICONS: Record<string, string> = {
   moving: "🚛", labor: "💪", residential: "🏠", junk: "🗑️", snow: "❄️",
   cleaning: "✨", handyman: "🔧", demolition: "⚒️", flooring: "🪵", painting: "🎨",
+  window_cleaning: "🪟",
 };
 
 function isSummerSeason(): boolean {

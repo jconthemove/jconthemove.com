@@ -224,6 +224,17 @@ async function seedDefaultPromoCodes() {
         referralRewardTokens: '50.00',
         isActive: true,
       },
+      {
+        code: 'CLEANWINDOWS',
+        description: 'April window cleaning promo — 20% off window cleaning service',
+        discountPercent: '20.00',
+        discountPercentJewelry: '0.00',
+        rewardTokens: '0.00',
+        referralRewardTokens: '0.00',
+        isActive: true,
+        maxUses: 500,
+        expiresAt: new Date('2026-04-30T23:59:59Z'),
+      },
     ];
     for (const promo of defaults) {
       const existing = await db.select({ id: promoCodes.id }).from(promoCodes)
@@ -2933,6 +2944,126 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (err: any) {
       console.error("Error creating labor booking:", err);
+      res.status(500).json({ error: "Failed to create booking" });
+    }
+  });
+
+  // POST /api/window-cleaning/quote — create a window cleaning booking
+  const windowCleaningBookingSchema = z.object({
+    firstName:       z.string().trim().min(1, "First name is required"),
+    lastName:        z.string().trim().default("Customer"),
+    email:           z.string().trim().email().optional().or(z.literal("")).default(""),
+    phone:           z.string().trim().min(7, "A valid phone number is required"),
+    address:         z.string().trim().min(8, "A full street address is required (e.g. 123 Main St, City, MI)"),
+    standardWindows: z.coerce.number().int().min(0).default(0),
+    largeWindows:    z.coerce.number().int().min(0).default(0),
+    ladderWindows:   z.coerce.number().int().min(0).default(0),
+    includeInside:   z.boolean().default(true),
+    includeOutside:  z.boolean().default(true),
+    seasonMode:      z.enum(["normal", "winter_inside_only"]).default("normal"),
+    promoCode:       z.string().trim().default(""),
+  });
+
+  app.post("/api/window-cleaning/quote", async (req: any, res) => {
+    try {
+      const parseResult = windowCleaningBookingSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        const firstError = parseResult.error.errors[0];
+        return res.status(400).json({ error: firstError?.message || "Invalid request", errors: parseResult.error.errors });
+      }
+
+      const {
+        firstName, lastName, email, phone, address,
+        standardWindows, largeWindows, ladderWindows,
+        includeInside, includeOutside, seasonMode, promoCode,
+      } = parseResult.data;
+
+      const { calculateWindowCleaningQuote } = await import("@shared/windowCleaningPricing");
+      const isApril = new Date().getMonth() === 3;
+
+      let validatedPromoCode = "";
+      if (promoCode.length > 0) {
+        const now = new Date();
+        const [promoRecord] = await db.select().from(promoCodes)
+          .where(eq(promoCodes.code, promoCode.toUpperCase()))
+          .limit(1);
+        if (
+          promoRecord &&
+          promoRecord.isActive &&
+          (!promoRecord.expiresAt || promoRecord.expiresAt > now) &&
+          (!promoRecord.maxUses || promoRecord.usesCount < promoRecord.maxUses)
+        ) {
+          validatedPromoCode = promoCode.toUpperCase();
+        }
+      }
+
+      const quote = calculateWindowCleaningQuote({
+        standardWindows,
+        largeWindows,
+        ladderWindows,
+        includeInside,
+        includeOutside,
+        seasonMode,
+        promoCode: validatedPromoCode,
+      }, isApril);
+
+      const details = JSON.stringify({
+        standardWindows, largeWindows, ladderWindows,
+        includeInside, includeOutside, seasonMode,
+        paneCount: quote.paneCount,
+        subtotal: quote.subtotal,
+        discountAmount: quote.discountAmount,
+        discountPercent: quote.discountPercent,
+        promoApplied: quote.promoApplied,
+        promoCode: promoCode || null,
+      });
+
+      const customerEmail = email.length > 0 ? email : "noreply@jconthemove.com";
+      const customerPhone = phone;
+
+      const [lead] = await db.insert(leads).values({
+        firstName,
+        lastName: lastName || "Customer",
+        email: customerEmail,
+        phone: customerPhone,
+        serviceType: "window_cleaning",
+        fromAddress: address,
+        status: "quote_requested",
+        basePrice: String(quote.total),
+        totalPrice: String(quote.total),
+        details,
+        promoCode: promoCode.toUpperCase() || null,
+        createdByUserId: (req.session as any)?.userId || req.user?.id || null,
+      }).returning();
+
+      const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
+      const customerName = `${firstName} ${lastName}`.trim();
+      try {
+        await sendEmail({
+          to: companyEmail,
+          from: companyEmail,
+          subject: `New Window Cleaning Booking — ${customerName}`,
+          text: `New window cleaning job submitted.\n\nCustomer: ${customerName}\nPhone: ${customerPhone}\nEmail: ${customerEmail}\nAddress: ${address}\nWindows: ${standardWindows} standard, ${largeWindows} large, ${ladderWindows} ladder\nInside: ${includeInside}, Outside: ${includeOutside}, Season: ${seasonMode}\nPanes: ${quote.paneCount}\nTotal: $${quote.total}${quote.promoApplied ? ` (${quote.discountPercent}% promo applied)` : ""}\n\nView job in admin panel.`,
+          html: `<h2>New Window Cleaning Booking</h2><p><b>Customer:</b> ${customerName}<br><b>Phone:</b> ${customerPhone}<br><b>Email:</b> ${customerEmail}<br><b>Address:</b> ${address}<br><b>Windows:</b> ${standardWindows} standard, ${largeWindows} large, ${ladderWindows} ladder<br><b>Inside:</b> ${includeInside}, <b>Outside:</b> ${includeOutside}<br><b>Season:</b> ${seasonMode}<br><b>Total:</b> $${quote.total}${quote.promoApplied ? ` <em>(${quote.discountPercent}% promo applied)</em>` : ""}</p>`,
+        });
+      } catch (emailErr) { console.error("Admin email failed:", emailErr); }
+
+      try {
+        await smsService.notifyNewQuote({ customerName, serviceType: "window_cleaning", phone: customerPhone || undefined });
+      } catch (smsErr) { console.error("Admin SMS failed:", smsErr); }
+
+      res.json({
+        jobId: lead.id,
+        paneCount: quote.paneCount,
+        subtotal: quote.subtotal,
+        discountAmount: quote.discountAmount,
+        discountPercent: quote.discountPercent,
+        total: quote.total,
+        promoApplied: quote.promoApplied,
+        message: "Booking received! Our team will reach out to confirm.",
+      });
+    } catch (err: any) {
+      console.error("Error creating window cleaning booking:", err);
       res.status(500).json({ error: "Failed to create booking" });
     }
   });

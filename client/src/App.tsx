@@ -80,6 +80,7 @@ const SwapPage = lazy(() => import("@/pages/swap"));
 const RequestSwapPage = lazy(() => import("@/pages/request-swap"));
 const MiningPage = lazy(() => import("@/pages/mining"));
 const SnowRemovalPage = lazy(() => import("@/pages/snow-removal"));
+const WindowCleaningPage = lazy(() => import("@/pages/window-cleaning"));
 const MobilePreviewPage = lazy(() => import("@/pages/mobile-preview"));
 const PiJackpotPage = lazy(() => import("@/pages/pi-jackpot"));
 const PrivacyPolicy = lazy(() => import("@/pages/privacy"));
@@ -304,6 +305,9 @@ function CustomerApp() {
           </Route>
           <Route path="/post-job">
             <PostJobPage />
+          </Route>
+          <Route path="/window-cleaning">
+            <WindowCleaningPage />
           </Route>
           <Route path="/packages">
             <ServicePackagesPage />
@@ -561,6 +565,9 @@ function AuthenticatedApp() {
               <PageWrapper component={SnowRemovalPage} />
             </RouteGuard>
           </Route>
+          <Route path="/window-cleaning">
+            <PageWrapper component={WindowCleaningPage} />
+          </Route>
           <Route path="/mobile-preview">
             <RouteGuard allowedRoles={['admin', 'business_owner']}>
               <MobilePreviewPage />
@@ -646,6 +653,9 @@ function Router() {
       
       {/* Book page - accessible to all (shows account CTA for unauthenticated users after booking) */}
       {!isAuthenticated && <Route path="/book" component={CustomerBookPage} />}
+
+      {/* Window Cleaning booking page - accessible to all */}
+      <Route path="/window-cleaning" component={WindowCleaningPage} />
       
       {/* Sponsors page - accessible to all */}
       <Route path="/sponsors" component={SponsorsPage} />
