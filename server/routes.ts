@@ -672,6 +672,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('⚠️ lead_history migration error (non-fatal):', lhErr);
   }
 
+  // Trash Valet tables
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS trash_subscriptions (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        customer_name TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        email TEXT NOT NULL,
+        address TEXT NOT NULL,
+        city TEXT NOT NULL DEFAULT '',
+        state TEXT NOT NULL DEFAULT 'MI',
+        zip TEXT NOT NULL DEFAULT '',
+        lat DECIMAL(10,7),
+        lng DECIMAL(10,7),
+        distance_miles DECIMAL(6,3),
+        travel_surcharge_monthly DECIMAL(6,2) NOT NULL DEFAULT 0,
+        cans INTEGER NOT NULL DEFAULT 1,
+        bag_count INTEGER NOT NULL DEFAULT 0,
+        recycling_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+        recycling_anchor_date DATE,
+        service_day_of_week INTEGER NOT NULL DEFAULT 1,
+        recycling_day_of_week INTEGER,
+        service_notes TEXT,
+        plan_type TEXT NOT NULL DEFAULT 'monthly',
+        weekly_base_price DECIMAL(8,2) NOT NULL,
+        projected_monthly_price DECIMAL(8,2) NOT NULL,
+        monthly_minimum_applied BOOLEAN NOT NULL DEFAULT FALSE,
+        final_monthly_price DECIMAL(8,2) NOT NULL,
+        billing_status TEXT NOT NULL DEFAULT 'active',
+        next_billing_date DATE,
+        status TEXT NOT NULL DEFAULT 'active',
+        pause_start_date DATE,
+        pause_end_date DATE,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_trash_subs_status ON trash_subscriptions(status);
+      CREATE INDEX IF NOT EXISTS idx_trash_subs_address ON trash_subscriptions(address);
+    `);
+    console.log('🗑️ trash_subscriptions table ready');
+  } catch (tsErr) {
+    console.error('⚠️ trash_subscriptions migration error (non-fatal):', tsErr);
+  }
+
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS trash_jobs (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        subscription_id VARCHAR NOT NULL REFERENCES trash_subscriptions(id),
+        service_week_of DATE NOT NULL,
+        service_type TEXT NOT NULL DEFAULT 'trash_valet',
+        cans INTEGER NOT NULL,
+        bag_count INTEGER NOT NULL DEFAULT 0,
+        is_recycling_week BOOLEAN NOT NULL DEFAULT FALSE,
+        weekly_base_price DECIMAL(8,2) NOT NULL,
+        recycling_charge DECIMAL(8,2) NOT NULL DEFAULT 0,
+        travel_charge_portion DECIMAL(8,2) NOT NULL DEFAULT 0,
+        job_value DECIMAL(8,2) NOT NULL,
+        pull_out_date DATE,
+        return_date DATE,
+        pulled_out_at TIMESTAMP,
+        returned_at TIMESTAMP,
+        status TEXT NOT NULL DEFAULT 'scheduled',
+        completed_by VARCHAR REFERENCES users(id),
+        completed_at TIMESTAMP,
+        photo_url TEXT,
+        notes TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_trash_jobs_sub ON trash_jobs(subscription_id);
+      CREATE INDEX IF NOT EXISTS idx_trash_jobs_week ON trash_jobs(service_week_of);
+      CREATE INDEX IF NOT EXISTS idx_trash_jobs_status ON trash_jobs(status);
+    `);
+    console.log('🗑️ trash_jobs table ready');
+  } catch (tjErr) {
+    console.error('⚠️ trash_jobs migration error (non-fatal):', tjErr);
+  }
+
   // Seed staking tiers and treasury user on startup (ensures production has them)
   await ensureStakingTiersSeeded();
   await ensureStakingTreasuryUser();
