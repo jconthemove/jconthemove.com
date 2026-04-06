@@ -11,9 +11,8 @@ import {
   MapPin, Calendar, Loader2, ChevronRight, Briefcase,
   Coins, Users, CheckCircle2, ClipboardList, Plus, Truck
 } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { getStatusColors } from "@/lib/job-status";
-import QuoteForm from "@/components/QuoteForm";
 import type { Lead } from "@shared/schema";
 
 const SERVICE_ICONS: Record<string, string> = {
@@ -146,8 +145,8 @@ export default function CrewJobsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [, navigate] = useLocation();
   const isAdmin = ["admin", "business_owner"].includes(user?.role || "");
-  const [showAddForm, setShowAddForm] = useState(false);
   const [applyingId, setApplyingId] = useState<string | null>(null);
 
   const { data: myJobs = [], isLoading: myJobsLoading } = useQuery<Lead[]>({
@@ -188,28 +187,6 @@ export default function CrewJobsPage() {
   const completedJobs = useMemo(() =>
     myJobs.filter(l => l.status === "completed"), [myJobs]);
 
-  if (showAddForm) {
-    return (
-      <div className="max-w-2xl mx-auto px-4 pt-6">
-        <div className="flex items-center gap-3 mb-4">
-          <Button variant="ghost" size="sm" onClick={() => setShowAddForm(false)} className="text-slate-400">
-            ← Back
-          </Button>
-          <h2 className="text-white font-bold">Add New Lead</h2>
-        </div>
-        <QuoteForm
-          variant="employee"
-          onSuccess={() => {
-            queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
-            queryClient.invalidateQueries({ queryKey: ["/api/leads/my-jobs"] });
-            setShowAddForm(false);
-            toast({ title: "✅ Lead added!" });
-          }}
-        />
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-2xl mx-auto px-4 pt-6 pb-8">
       <div className="flex items-center justify-between mb-5">
@@ -217,7 +194,7 @@ export default function CrewJobsPage() {
           <h1 className="text-2xl font-black text-white">Jobs</h1>
           <p className="text-slate-400 text-sm">Your assignments & open job board</p>
         </div>
-        <Button size="sm" className="bg-blue-600 hover:bg-blue-500" onClick={() => setShowAddForm(true)}>
+        <Button size="sm" className="bg-blue-600 hover:bg-blue-500" onClick={() => navigate("/post-job")}>
           <Plus className="h-4 w-4 mr-1" /> Add Lead
         </Button>
       </div>

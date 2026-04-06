@@ -11323,7 +11323,7 @@ Thank you for your business!
       const newStreak = yesterdayClaim.length > 0 ? prevStreak + 1 : 1;
 
       const baseReward = 100;
-      const streakBonus = newStreak % 7 === 0 ? 300 : 0;
+      const streakBonus = newStreak % 7 === 0 ? 500 : 0;
       const rewardAmount = baseReward + streakBonus;
 
       await storage.creditWalletTokens(userId, rewardAmount);
@@ -11359,6 +11359,54 @@ Thank you for your business!
           ? "Service temporarily unavailable — please try again in a moment"
           : "Unable to claim reward right now — please try again";
       res.status(500).json({ error: friendly });
+    }
+  });
+
+  // Get current scripture streak and today's claim status
+  app.get("/api/mining/scripture-streak", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { rewards: rewardsTable } = await import("@shared/schema");
+      const todayStart = getEasternDayStart();
+      const todayEnd = getEasternDayEnd();
+
+      const todayClaim = await db.select({ metadata: rewardsTable.metadata })
+        .from(rewardsTable)
+        .where(
+          and(
+            eq(rewardsTable.userId, userId),
+            eq(rewardsTable.rewardType, 'scripture_claim'),
+            gte(rewardsTable.earnedDate, todayStart),
+            lte(rewardsTable.earnedDate, todayEnd)
+          )
+        )
+        .limit(1);
+
+      const claimedToday = todayClaim.length > 0;
+      const currentStreak = claimedToday ? ((todayClaim[0].metadata as any)?.streak || 1) : 0;
+
+      if (!claimedToday) {
+        const ydayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
+        const ydayEnd = new Date(todayStart.getTime() - 1);
+        const yesterdayClaim = await db.select({ metadata: rewardsTable.metadata })
+          .from(rewardsTable)
+          .where(
+            and(
+              eq(rewardsTable.userId, userId),
+              eq(rewardsTable.rewardType, 'scripture_claim'),
+              gte(rewardsTable.earnedDate, ydayStart),
+              lte(rewardsTable.earnedDate, ydayEnd)
+            )
+          )
+          .limit(1);
+        const prevStreak = yesterdayClaim.length > 0 ? ((yesterdayClaim[0].metadata as any)?.streak || 0) : 0;
+        return res.json({ claimedToday, streak: prevStreak, nextStreak: prevStreak + 1 });
+      }
+
+      res.json({ claimedToday, streak: currentStreak, nextStreak: currentStreak + 1 });
+    } catch (error) {
+      console.error("Error fetching scripture streak:", error);
+      res.status(500).json({ error: "Unable to fetch streak" });
     }
   });
 
