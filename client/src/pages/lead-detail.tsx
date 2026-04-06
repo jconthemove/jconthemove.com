@@ -107,6 +107,7 @@ interface Lead {
   quoteSentAt?: string;
   quoteViewedAt?: string;
   arrivalWindow?: string;
+  squarePaymentUrl?: string;
 }
 
 interface Reward {
@@ -249,6 +250,8 @@ export default function LeadDetailPage() {
   const [activeTab, setActiveTab] = useState("details");
   const [quoteNote, setQuoteNote] = useState("");
   const [quoteSentAt, setQuoteSentAt] = useState<string | null>(null);
+  const [squarePaymentUrl, setSquarePaymentUrl] = useState<string | null>(null);
+  const [copiedPaymentLink, setCopiedPaymentLink] = useState(false);
   const [showJobOrderBuilderSheet, setShowJobOrderBuilderSheet] = useState(false);
   // Crew & Service Plan inline state
   const [planCrewSize, setPlanCrewSize] = useState(2);
@@ -353,6 +356,7 @@ export default function LeadDetailPage() {
       setPlanArrivalWindow(lead.arrivalWindow || "");
       setPlanConfirmedDate(lead.confirmedDate || lead.moveDate || "");
       if (lead.quoteSentAt) setQuoteSentAt(lead.quoteSentAt);
+      if (lead.squarePaymentUrl) setSquarePaymentUrl(lead.squarePaymentUrl);
       // Truck/trailer from truckConfig
       if (lead.truckConfig) {
         setPlanHasTruck(lead.truckConfig === "company_truck" || lead.truckConfig === "customer_truck");
@@ -419,12 +423,14 @@ export default function LeadDetailPage() {
     onSuccess: async ({ res }) => {
       const data = await res.json();
       setQuoteSentAt(data.quoteSentAt);
+      if (data.paymentUrl) setSquarePaymentUrl(data.paymentUrl);
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
       queryClient.invalidateQueries({ queryKey: ["/api/leads", params?.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/leads", params?.id, "history"] });
+      const invoiceNote = data.squareInvoiceCreated ? " + invoice" : "";
       toast({
-        title: "Quote sent!",
-        description: `Email: ${data.emailSent ? "✓" : "✗"}  SMS: ${data.smsSent ? "✓" : "✗"}`,
+        title: `Quote${invoiceNote} sent!`,
+        description: `Email: ${data.emailSent ? "✓" : "✗"}  SMS: ${data.smsSent ? "✓" : "✗"}${data.paymentUrl ? "  💳 Pay link included" : ""}`,
       });
     },
     onError: (error: Error) => {
@@ -936,6 +942,20 @@ export default function LeadDetailPage() {
               <Badge className="bg-green-600/20 text-green-300 border-green-500/30 text-[10px]">
                 <CheckCircle className="h-3 w-3 mr-1" /> Quote Sent
               </Badge>
+            )}
+            {(squarePaymentUrl || lead.squarePaymentUrl) && (
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(squarePaymentUrl || lead.squarePaymentUrl || "");
+                  setCopiedPaymentLink(true);
+                  setTimeout(() => setCopiedPaymentLink(false), 2000);
+                }}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-600/20 border border-emerald-500/30 text-emerald-400 text-[10px] hover:bg-emerald-600/30 transition-colors"
+                title="Copy customer payment link"
+              >
+                {copiedPaymentLink ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                Pay link
+              </button>
             )}
             <div className="ml-auto">
               <Button
@@ -1541,11 +1561,38 @@ export default function LeadDetailPage() {
 
                   {/* Already sent status */}
                   {(quoteSentAt || lead.quoteSentAt) && (
-                    <div className="flex items-center gap-2 text-sm text-green-400 bg-green-600/10 border border-green-500/20 rounded-lg px-3 py-2">
-                      <CheckCircle className="h-4 w-4 shrink-0" />
-                      <span>
-                        Quote sent {new Date(quoteSentAt || lead.quoteSentAt!).toLocaleString()}
-                      </span>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-sm text-green-400 bg-green-600/10 border border-green-500/20 rounded-lg px-3 py-2">
+                        <CheckCircle className="h-4 w-4 shrink-0" />
+                        <span>
+                          {(squarePaymentUrl || lead.squarePaymentUrl) ? "Quote + invoice sent" : "Quote sent"}{" "}
+                          {new Date(quoteSentAt || lead.quoteSentAt!).toLocaleString()}
+                        </span>
+                      </div>
+                      {(squarePaymentUrl || lead.squarePaymentUrl) && (
+                        <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-900/20 border border-emerald-500/30">
+                          <span className="text-xs text-emerald-400 font-medium shrink-0">Customer pay link:</span>
+                          <a
+                            href={squarePaymentUrl || lead.squarePaymentUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-emerald-300 underline truncate flex-1"
+                          >
+                            {(squarePaymentUrl || lead.squarePaymentUrl)?.replace("https://", "")}
+                          </a>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(squarePaymentUrl || lead.squarePaymentUrl || "");
+                              setCopiedPaymentLink(true);
+                              setTimeout(() => setCopiedPaymentLink(false), 2000);
+                            }}
+                            className="text-emerald-400 hover:text-emerald-300 shrink-0"
+                            title="Copy payment link"
+                          >
+                            {copiedPaymentLink ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -1561,7 +1608,7 @@ export default function LeadDetailPage() {
                       ) : (
                         <Mail className="h-4 w-4 mr-2" />
                       )}
-                      {quoteSentAt || lead.quoteSentAt ? "Re-send Email" : "Send Email"}
+                      {(quoteSentAt || lead.quoteSentAt) ? "Re-send Quote" : "Send Quote"}
                     </Button>
                     <Button
                       variant="outline"
@@ -1574,7 +1621,7 @@ export default function LeadDetailPage() {
                       ) : (
                         <MessageSquare className="h-4 w-4 mr-2" />
                       )}
-                      {quoteSentAt || lead.quoteSentAt ? "Re-send SMS" : "Send SMS"}
+                      {(quoteSentAt || lead.quoteSentAt) ? "Re-send SMS" : "Send SMS"}
                     </Button>
                   </div>
 
@@ -1588,8 +1635,8 @@ export default function LeadDetailPage() {
               </Card>
             )}
 
-            {/* Invoice (Admin Only) */}
-            {hasAdminAccess && (
+            {/* Invoice (Admin Only) — hidden when payment URL already embedded in quote email */}
+            {hasAdminAccess && !(squarePaymentUrl || lead.squarePaymentUrl) && (
               <Card className="border-emerald-500/30">
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-2 text-base">

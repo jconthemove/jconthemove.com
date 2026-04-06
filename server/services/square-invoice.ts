@@ -2,7 +2,7 @@ import { SquareClient, SquareEnvironment } from "square";
 import { storage } from "../storage";
 import type { InsertSquareInvoice, Lead } from "@shared/schema";
 
-export type InvoiceDeliveryMethod = "email" | "sms" | "both";
+export type InvoiceDeliveryMethod = "email" | "sms" | "both" | "none";
 
 function getSquareClient(): SquareClient {
   return new SquareClient({
@@ -15,6 +15,7 @@ function getSquareClient(): SquareClient {
 
 function primarySquareDeliveryMethod(method: InvoiceDeliveryMethod): string {
   if (method === "sms") return "SMS";
+  if (method === "none") return "SHARE_MANUALLY";
   return "EMAIL";
 }
 

@@ -526,6 +526,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('⚠️ Leads quote dispatch migration error (non-fatal):', migErr);
   }
 
+  // Schema migration: square payment URL on leads
+  try {
+    await pool.query(`
+      ALTER TABLE leads ADD COLUMN IF NOT EXISTS square_payment_url TEXT;
+    `);
+    console.log('✅ Leads square_payment_url column ready');
+  } catch (migErr) {
+    console.error('⚠️ Leads square_payment_url migration error (non-fatal):', migErr);
+  }
+
   // Schema migration: spin_results extended columns + jackpots + spin_config tables
   try {
     await pool.query(`
@@ -7377,7 +7387,32 @@ Thank you for your business!
       const totalFormatted = `$${price.toFixed(2)}`;
       const crewLine = lead.crewSize ? `${lead.crewSize} mover${lead.crewSize !== 1 ? "s" : ""}` : null;
       const dateLine = lead.confirmedDate || lead.moveDate || null;
-      const windowLine = lead.arrivalWindow || null;
+      const windowLine = (lead as any).arrivalWindow || null;
+
+      // ── Optional: create a Square invoice silently (no Square delivery email) ──
+      const { squareInvoiceService } = await import('./services/square-invoice');
+      // Re-use existing payment URL if one was already created (avoids duplicate invoices on re-send)
+      const existingPaymentUrl = (lead as any).squarePaymentUrl as string | null | undefined;
+      let squarePaymentUrl: string | null = existingPaymentUrl || null;
+      let squareInvoiceCreated = false;
+      if (!existingPaymentUrl && squareInvoiceService.isConfigured()) {
+        try {
+          const invoiceResult = await squareInvoiceService.createInvoiceForLead(
+            lead as any,
+            price,
+            `${serviceLabel} — ${customerName}`,
+            undefined,
+            "none"   // SHARE_MANUALLY: creates invoice but Square sends NO email/SMS
+          );
+          squarePaymentUrl = invoiceResult.invoiceUrl || null;
+          squareInvoiceCreated = true;
+          if (squarePaymentUrl) {
+            await pool.query(`UPDATE leads SET square_payment_url = $1 WHERE id = $2`, [squarePaymentUrl, id]);
+          }
+        } catch (sqErr) {
+          console.error("Square invoice creation error (non-fatal, sending quote anyway):", sqErr);
+        }
+      }
 
       // Build email HTML
       const detailRows = [
@@ -7390,6 +7425,16 @@ Thank you for your business!
 
       const noteSection = message ? `<p style="margin:16px 0;padding:12px;background:#f9f9f9;border-left:3px solid #f97316;border-radius:4px;color:#333">${message}</p>` : "";
 
+      // Pay Online button — only injected when Square invoice was created
+      const payButtonSection = squarePaymentUrl
+        ? `<div style="text-align:center;margin:20px 0">
+             <a href="${squarePaymentUrl}" target="_blank" style="display:inline-block;background:#f97316;color:#fff;font-weight:700;font-size:15px;padding:14px 32px;border-radius:8px;text-decoration:none">
+               Pay Online Now →
+             </a>
+             <p style="margin:8px 0 0;font-size:12px;color:#aaa">Secure payment · Card, bank, or CashApp</p>
+           </div>`
+        : "";
+
       const emailHtml = `
         <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#222">
           <div style="background:#f97316;padding:20px 24px;border-radius:8px 8px 0 0">
@@ -7401,8 +7446,9 @@ Thank you for your business!
             <p style="margin:0 0 16px">Thanks for reaching out! Here's your quote from JC on the Move:</p>
             <table style="width:100%;border-collapse:collapse;margin-bottom:16px">${detailRows}</table>
             ${noteSection}
+            ${payButtonSection}
             <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:16px;text-align:center;margin-top:16px">
-              <p style="margin:0 0 8px;font-weight:600;color:#c2410c">To confirm your booking:</p>
+              <p style="margin:0 0 8px;font-weight:600;color:#c2410c">${squarePaymentUrl ? "Or call / text us:" : "To confirm your booking:"}</p>
               <p style="margin:0;font-size:18px;font-weight:700;color:#f97316">Call or text (906) 285-9312</p>
             </div>
             <p style="margin-top:20px;font-size:12px;color:#999">JC on the Move · Serving the Upper Peninsula</p>
@@ -7419,7 +7465,7 @@ Thank you for your business!
           from: "jconthemove@gmail.com",
           subject: `Your JC on the Move Quote — ${serviceLabel}`,
           html: emailHtml,
-          text: `Hi ${lead.firstName}, your JC on the Move quote is ready: ${totalFormatted} total for ${serviceLabel}${crewLine ? `, ${crewLine}` : ""}${dateLine ? `, on ${dateLine}` : ""}${windowLine ? `, arriving ${windowLine}` : ""}. Call or text (906) 285-9312 to confirm. — JC on the Move`,
+          text: `Hi ${lead.firstName}, your JC on the Move quote is ready: ${totalFormatted} total for ${serviceLabel}${crewLine ? `, ${crewLine}` : ""}${dateLine ? `, on ${dateLine}` : ""}${windowLine ? `, arriving ${windowLine}` : ""}.${squarePaymentUrl ? ` Pay online: ${squarePaymentUrl}` : ""} Or call / text (906) 285-9312 to confirm. — JC on the Move`,
         });
       } catch (err) {
         console.error("Quote email send error:", err);
@@ -7427,7 +7473,7 @@ Thank you for your business!
 
       if (lead.phone) {
         try {
-          const smsBody = `Hi ${lead.firstName}, your JC on the Move quote is ready: ${totalFormatted} total for ${serviceLabel}. Call or text (906) 285-9312 to confirm. — JC on the Move`;
+          const smsBody = `Hi ${lead.firstName}, your JC on the Move quote is ready: ${totalFormatted} total for ${serviceLabel}.${squarePaymentUrl ? ` Pay online: ${squarePaymentUrl}` : " Call or text (906) 285-9312 to confirm."} — JC on the Move`;
           const smsResult = await smsService.sendSMS(lead.phone, smsBody);
           smsSent = smsResult.success;
         } catch (err) {
@@ -7437,7 +7483,7 @@ Thank you for your business!
 
       // Invalidate cache so frontend refreshes
       const updatedLead = await storage.getLead(id);
-      res.json({ success: true, quoteSentAt: now.toISOString(), emailSent, smsSent, lead: updatedLead });
+      res.json({ success: true, quoteSentAt: now.toISOString(), emailSent, smsSent, squareInvoiceCreated, paymentUrl: squarePaymentUrl, lead: updatedLead });
     } catch (error) {
       console.error("Error sending quote:", error);
       res.status(500).json({ error: "Failed to send quote" });
