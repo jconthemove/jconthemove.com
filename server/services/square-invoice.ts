@@ -2,13 +2,45 @@ import { SquareClient, SquareEnvironment } from "square";
 import { storage } from "../storage";
 import type { InsertSquareInvoice, Lead } from "@shared/schema";
 
+export type InvoiceDeliveryMethod = "email" | "sms" | "both";
+
 function getSquareClient(): SquareClient {
   return new SquareClient({
     token: process.env.SQUARE_ACCESS_TOKEN || "",
-    environment: process.env.SQUARE_ENVIRONMENT === "production" 
-      ? SquareEnvironment.Production 
+    environment: process.env.SQUARE_ENVIRONMENT === "production"
+      ? SquareEnvironment.Production
       : SquareEnvironment.Sandbox,
   });
+}
+
+function primarySquareDeliveryMethod(method: InvoiceDeliveryMethod): string {
+  if (method === "sms") return "SMS";
+  return "EMAIL";
+}
+
+async function applyDualDelivery(
+  client: SquareClient,
+  invoiceId: string,
+  version: number,
+  lead: Pick<Lead, "phone">
+): Promise<void> {
+  if (!lead.phone) {
+    console.warn("[dual-delivery] Skipping SMS — no phone on file for lead");
+    return;
+  }
+  try {
+    await client.invoices.update({
+      invoiceId,
+      invoice: {
+        version,
+        deliveryMethod: "SMS",
+      },
+      idempotencyKey: `sms-delivery-${invoiceId}-${Date.now()}`,
+    });
+  } catch (smsErr: unknown) {
+    const msg = smsErr instanceof Error ? smsErr.message : String(smsErr);
+    console.warn("[dual-delivery] Could not send additional SMS delivery:", msg);
+  }
 }
 
 export class SquareInvoiceService {
@@ -16,7 +48,7 @@ export class SquareInvoiceService {
 
   async getLocationId(): Promise<string> {
     if (this.locationId) return this.locationId;
-    
+
     try {
       const client = getSquareClient();
       const response = await client.locations.list();
@@ -29,20 +61,21 @@ export class SquareInvoiceService {
         throw new Error("Location ID is missing");
       }
       return this.locationId;
-    } catch (error: any) {
-      console.error("Error fetching Square locations:", error);
-      const env = process.env.SQUARE_ENVIRONMENT || 'sandbox';
-      if (error.message?.includes('401') || error.message?.includes('UNAUTHORIZED') || error.message?.includes('AUTHENTICATION_ERROR')) {
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error("Error fetching Square locations:", msg);
+      const env = process.env.SQUARE_ENVIRONMENT || "sandbox";
+      if (msg.includes("401") || msg.includes("UNAUTHORIZED") || msg.includes("AUTHENTICATION_ERROR")) {
         throw new Error(`Square authentication failed. Your access token may be invalid or expired. Make sure SQUARE_ACCESS_TOKEN matches your ${env} environment. Get a new token from developer.squareup.com.`);
       }
-      throw new Error(`Failed to get Square location: ${error.message}`);
+      throw new Error(`Failed to get Square location: ${msg}`);
     }
   }
 
   async createOrGetCustomer(email: string, name: string, phone?: string): Promise<string> {
     try {
       const client = getSquareClient();
-      
+
       const searchResponse = await client.customers.search({
         query: {
           filter: {
@@ -54,7 +87,14 @@ export class SquareInvoiceService {
       });
 
       if (searchResponse.customers && searchResponse.customers.length > 0) {
-        return searchResponse.customers[0].id!;
+        const existing = searchResponse.customers[0];
+        if (phone && !existing.phoneNumber) {
+          await client.customers.update({
+            customerId: existing.id!,
+            phoneNumber: phone,
+          });
+        }
+        return existing.id!;
       }
 
       const nameParts = name.split(" ");
@@ -70,9 +110,10 @@ export class SquareInvoiceService {
       });
 
       return createResponse.customer!.id!;
-    } catch (error: any) {
-      console.error("Error creating/getting Square customer:", error);
-      throw new Error(`Failed to create customer: ${error.message}`);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error("Error creating/getting Square customer:", msg);
+      throw new Error(`Failed to create customer: ${msg}`);
     }
   }
 
@@ -80,12 +121,13 @@ export class SquareInvoiceService {
     lead: Lead,
     amount: number,
     description?: string,
-    dueDate?: string
+    dueDate?: string,
+    deliveryMethod: InvoiceDeliveryMethod = "email"
   ): Promise<{ invoiceId: string; invoiceUrl: string; squareInvoiceId: string }> {
     const client = getSquareClient();
     const locationId = await this.getLocationId();
     const customerName = `${lead.firstName} ${lead.lastName}`;
-    const customerId = await this.createOrGetCustomer(lead.email, customerName, lead.phone);
+    const customerId = await this.createOrGetCustomer(lead.email, customerName, lead.phone || undefined);
 
     const amountInCents = BigInt(Math.round(amount * 100));
 
@@ -108,6 +150,7 @@ export class SquareInvoiceService {
     });
 
     const orderId = orderResponse.order!.id!;
+    const squareDelivery = primarySquareDeliveryMethod(deliveryMethod);
 
     const invoiceResponse = await client.invoices.create({
       idempotencyKey: `invoice-${lead.id}-${Date.now()}`,
@@ -123,7 +166,7 @@ export class SquareInvoiceService {
             dueDate: dueDate || this.getDefaultDueDate(),
           },
         ],
-        deliveryMethod: "EMAIL",
+        deliveryMethod: squareDelivery,
         acceptedPaymentMethods: {
           card: true,
           bankAccount: true,
@@ -145,6 +188,10 @@ export class SquareInvoiceService {
     });
 
     const publishedInvoice = publishResponse.invoice!;
+
+    if (deliveryMethod === "both") {
+      await applyDualDelivery(client, publishedInvoice.id!, publishedInvoice.version!, lead);
+    }
 
     const invoiceData: InsertSquareInvoice = {
       leadId: lead.id,
@@ -176,7 +223,8 @@ export class SquareInvoiceService {
     phone: string | undefined,
     amount: number,
     description: string,
-    dueDate?: string
+    dueDate?: string,
+    deliveryMethod: InvoiceDeliveryMethod = "email"
   ): Promise<{ invoiceId: string; invoiceUrl: string; squareInvoiceId: string }> {
     const client = getSquareClient();
     const locationId = await this.getLocationId();
@@ -203,6 +251,7 @@ export class SquareInvoiceService {
     });
 
     const orderId = orderResponse.order!.id!;
+    const squareDelivery = primarySquareDeliveryMethod(deliveryMethod);
 
     const invoiceResponse = await client.invoices.create({
       idempotencyKey: `invoice-standalone-${Date.now()}`,
@@ -218,7 +267,7 @@ export class SquareInvoiceService {
             dueDate: dueDate || this.getDefaultDueDate(),
           },
         ],
-        deliveryMethod: "EMAIL",
+        deliveryMethod: squareDelivery,
         acceptedPaymentMethods: {
           card: true,
           bankAccount: true,
@@ -240,6 +289,10 @@ export class SquareInvoiceService {
     });
 
     const publishedInvoice = publishResponse.invoice!;
+
+    if (deliveryMethod === "both" && phone) {
+      await applyDualDelivery(client, publishedInvoice.id!, publishedInvoice.version!, { phone });
+    }
 
     const invoiceData: InsertSquareInvoice = {
       squareInvoiceId: publishedInvoice.id!,
@@ -275,7 +328,8 @@ export class SquareInvoiceService {
   async createItemizedInvoiceForLead(
     lead: Lead,
     lineItems: Array<{ id?: string; name: string; qty: number; unitPrice: number; total: number }>,
-    dueDate?: string
+    dueDate?: string,
+    deliveryMethod: InvoiceDeliveryMethod = "email"
   ): Promise<{ invoiceId: string; invoiceUrl: string; squareInvoiceId: string }> {
     const client = getSquareClient();
     const locationId = await this.getLocationId();
@@ -314,6 +368,7 @@ export class SquareInvoiceService {
     });
 
     const orderId = orderResponse.order!.id!;
+    const squareDelivery = primarySquareDeliveryMethod(deliveryMethod);
 
     const invoiceResponse = await client.invoices.create({
       idempotencyKey: `invoice-itemized-${lead.id}-${Date.now()}`,
@@ -322,7 +377,7 @@ export class SquareInvoiceService {
         locationId,
         primaryRecipient: { customerId },
         paymentRequests: [{ requestType: "BALANCE", dueDate: dueDate || this.getDefaultDueDate() }],
-        deliveryMethod: "EMAIL",
+        deliveryMethod: squareDelivery,
         acceptedPaymentMethods: { card: true, bankAccount: true, squareGiftCard: false, buyNowPayLater: false, cashAppPay: true },
         title: `Invoice - JC ON THE MOVE`,
         description: `Moving service for ${customerName}`,
@@ -336,6 +391,10 @@ export class SquareInvoiceService {
       idempotencyKey: `publish-itemized-${squareInvoice.id}-${Date.now()}`,
     });
     const publishedInvoice = publishResponse.invoice!;
+
+    if (deliveryMethod === "both") {
+      await applyDualDelivery(client, publishedInvoice.id!, publishedInvoice.version!, lead);
+    }
 
     const invoiceData: InsertSquareInvoice = {
       leadId: lead.id,
@@ -365,9 +424,10 @@ export class SquareInvoiceService {
       const client = getSquareClient();
       const response = await client.invoices.get({ invoiceId: squareInvoiceId });
       return response.invoice?.status || "UNKNOWN";
-    } catch (error: any) {
-      console.error("Error getting invoice status:", error);
-      throw new Error(`Failed to get invoice status: ${error.message}`);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error("Error getting invoice status:", msg);
+      throw new Error(`Failed to get invoice status: ${msg}`);
     }
   }
 
@@ -376,7 +436,7 @@ export class SquareInvoiceService {
       const client = getSquareClient();
       const getResponse = await client.invoices.get({ invoiceId: squareInvoiceId });
       const version = getResponse.invoice?.version;
-      
+
       if (!version) {
         throw new Error("Could not get invoice version");
       }
@@ -387,9 +447,10 @@ export class SquareInvoiceService {
       });
 
       await storage.updateSquareInvoiceStatus(squareInvoiceId, "canceled");
-    } catch (error: any) {
-      console.error("Error canceling invoice:", error);
-      throw new Error(`Failed to cancel invoice: ${error.message}`);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error("Error canceling invoice:", msg);
+      throw new Error(`Failed to cancel invoice: ${msg}`);
     }
   }
 
@@ -398,22 +459,23 @@ export class SquareInvoiceService {
       const client = getSquareClient();
       const response = await client.invoices.get({ invoiceId: squareInvoiceId });
       const invoice = response.invoice;
-      
+
       if (!invoice) {
         throw new Error("Invoice not found");
       }
 
       const status = this.mapSquareStatus(invoice.status || "DRAFT");
       await storage.updateSquareInvoiceStatus(squareInvoiceId, status);
-      
+
       return status;
-    } catch (error: any) {
-      console.error("Error syncing invoice status:", error);
-      throw new Error(`Failed to sync invoice status: ${error.message}`);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error("Error syncing invoice status:", msg);
+      throw new Error(`Failed to sync invoice status: ${msg}`);
     }
   }
 
-  private mapSquareStatus(squareStatus: string): string {
+  mapSquareStatus(squareStatus: string): string {
     const statusMap: Record<string, string> = {
       DRAFT: "draft",
       UNPAID: "sent",

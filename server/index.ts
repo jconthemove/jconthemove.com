@@ -39,6 +39,7 @@ app.use(cors({
 // CRITICAL SECURITY: Handle webhook routes BEFORE global JSON parser
 // This preserves raw body bytes needed for HMAC signature validation
 app.use('/api/advertising/webhook', express.raw({ type: 'application/json' }));
+app.use('/api/webhooks/square', express.raw({ type: 'application/json' }));
 
 // Increase body size limit to support video uploads (4GB limit to accommodate large videos and base64 overhead)
 app.use(express.json({ limit: '4096mb' }));

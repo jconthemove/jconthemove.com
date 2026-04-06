@@ -20,6 +20,20 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { JobOrderBuilder } from "@/components/JobOrderBuilder";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+interface SquareInvoice {
+  id: string;
+  squareInvoiceId: string;
+  status: string;
+  amount: string;
+  invoiceUrl: string | null;
+  customerEmail: string;
+  dueDate: string | null;
+  paidAt: string | null;
+  sentAt: string | null;
+  createdAt: string;
+}
 
 interface LeadHistoryEntry {
   id: number;
@@ -219,6 +233,7 @@ export default function LeadDetailPage() {
   const [showInvoiceDialog, setShowInvoiceDialog] = useState(false);
   const [invoiceAmount, setInvoiceAmount] = useState("");
   const [invoiceDescription, setInvoiceDescription] = useState("");
+  const [invoiceDeliveryMethod, setInvoiceDeliveryMethod] = useState<"email" | "sms" | "both">("email");
   const [orderApplied, setOrderApplied] = useState(false);
   const [showBtcDialog, setShowBtcDialog] = useState(false);
   const [btcAmount, setBtcAmount] = useState("");
@@ -267,6 +282,17 @@ export default function LeadDetailPage() {
   const { data: employees = [] } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
     enabled: hasAdminAccess,
+  });
+
+  const { data: leadInvoices = [] } = useQuery<SquareInvoice[]>({
+    queryKey: ["/api/invoices/lead", params?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/invoices/lead/${params?.id}`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!params?.id && hasAdminAccess,
+    refetchInterval: 60000,
   });
 
   const { data: leadHistory = [], isLoading: historyLoading } = useQuery<LeadHistoryEntry[]>({
@@ -433,26 +459,35 @@ export default function LeadDetailPage() {
       if (lead?.orderLineItems && lead.orderLineItems.length > 0) {
         return await apiRequest("POST", `/api/square/invoice-lead/${params?.id}`, {
           lineItems: lead.orderLineItems,
+          deliveryMethod: invoiceDeliveryMethod,
         });
       }
       return await apiRequest("POST", `/api/invoices/lead/${params?.id}`, {
         amount,
         description: invoiceDescription || `${lead?.serviceType} - ${lead?.firstName} ${lead?.lastName}`,
+        deliveryMethod: invoiceDeliveryMethod,
       });
     },
     onSuccess: async (response) => {
       const data = await response.json();
+      const deliveryDesc = invoiceDeliveryMethod === "both"
+        ? "Square will send the invoice by email and text message."
+        : invoiceDeliveryMethod === "sms"
+          ? "Square will send the invoice via text message."
+          : "Square will send the invoice by email.";
       toast({
         title: "Invoice Sent!",
-        description: data.invoiceUrl 
-          ? "Invoice has been created and sent to the customer via Square." 
+        description: data.invoiceUrl
+          ? deliveryDesc
           : "Invoice created successfully.",
       });
       setShowInvoiceDialog(false);
       setInvoiceAmount("");
       setInvoiceDescription("");
+      setInvoiceDeliveryMethod("email");
       queryClient.invalidateQueries({ queryKey: ["/api/leads", params?.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices/lead", params?.id] });
       if (data.invoiceUrl) {
         window.open(data.invoiceUrl, '_blank');
       }
@@ -723,7 +758,7 @@ export default function LeadDetailPage() {
 
   const getCurrentStep = () => {
     if (!lead) return 1;
-    if (lead.status === "completed") return 4;
+    if (lead.status === "completed" || lead.status === "paid") return 4;
     if (lead.status === "in_progress") return 3;
     if (lead.status === "available") return 2;
     return 1;
@@ -848,8 +883,8 @@ export default function LeadDetailPage() {
               {lead.serviceType === "junk" && "Junk Removal"}
               {!["residential", "commercial", "junk"].includes(lead.serviceType) && lead.serviceType}
             </Badge>
-            <Badge variant={lead.status === "completed" ? "default" : "secondary"}>
-              {lead.status.charAt(0).toUpperCase() + lead.status.slice(1).replace(/_/g, " ")}
+            <Badge className={lead.status === "paid" ? "bg-green-600 text-white" : lead.status === "completed" ? "" : ""} variant={lead.status === "completed" ? "default" : "secondary"}>
+              {lead.status === "paid" ? "Paid (Confirmed)" : lead.status.charAt(0).toUpperCase() + lead.status.slice(1).replace(/_/g, " ")}
             </Badge>
           </div>
 
@@ -1558,19 +1593,55 @@ export default function LeadDetailPage() {
               <Card className="border-emerald-500/30">
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-2 text-base">
-                    <FileText className="h-4 w-4 text-emerald-500" /> Invoice
+                    <FileText className="h-4 w-4 text-emerald-500" /> Square Invoice
                   </CardTitle>
-                  <CardDescription>Send a Square invoice to the customer</CardDescription>
+                  <CardDescription>Send a Square invoice directly to the customer</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="p-3 bg-muted/50 rounded-lg space-y-1 text-sm">
                     <div className="flex justify-between"><span className="text-muted-foreground">Customer</span><span className="font-medium">{lead.firstName} {lead.lastName}</span></div>
                     <div className="flex justify-between"><span className="text-muted-foreground">Email</span><span className="font-medium">{lead.email}</span></div>
+                    {lead.phone && (
+                      <div className="flex justify-between"><span className="text-muted-foreground">Phone</span><span className="font-medium">{lead.phone}</span></div>
+                    )}
                     {(lead.totalPrice || lead.basePrice) && (
                       <div className="flex justify-between"><span className="text-muted-foreground">Amount</span><span className="font-bold text-emerald-600 dark:text-emerald-400">${parseFloat(lead.totalPrice || lead.basePrice || "0").toFixed(2)}</span></div>
                     )}
                   </div>
-                  <Button onClick={() => { const price = lead.totalPrice || lead.basePrice || ""; setInvoiceAmount(price ? parseFloat(price).toString() : ""); setInvoiceDescription(`${lead.serviceType} - ${lead.firstName} ${lead.lastName}`); setShowInvoiceDialog(true); }} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white">
+
+                  {leadInvoices.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sent Invoices</p>
+                      {leadInvoices.map((inv) => {
+                        const statusColors: Record<string, string> = {
+                          draft: "bg-slate-600/20 text-slate-300 border-slate-500/30",
+                          sent: "bg-blue-600/20 text-blue-300 border-blue-500/30",
+                          paid: "bg-green-600/20 text-green-300 border-green-500/30",
+                          canceled: "bg-red-600/20 text-red-300 border-red-500/30",
+                          failed: "bg-red-600/20 text-red-300 border-red-500/30",
+                        };
+                        const badgeCls = statusColors[inv.status] ?? "bg-slate-600/20 text-slate-300 border-slate-500/30";
+                        return (
+                          <div key={inv.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-muted/30 border border-muted text-sm">
+                            <div className="min-w-0">
+                              <p className="font-medium truncate">${parseFloat(inv.amount).toFixed(2)}</p>
+                              <p className="text-[10px] text-muted-foreground">{new Date(inv.createdAt).toLocaleDateString()}</p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Badge className={`text-[10px] px-1.5 py-0 capitalize ${badgeCls}`}>{inv.status}</Badge>
+                              {inv.invoiceUrl && (
+                                <a href={inv.invoiceUrl} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground">
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <Button onClick={() => { const price = lead.totalPrice || lead.basePrice || ""; setInvoiceAmount(price ? parseFloat(price).toString() : ""); setInvoiceDescription(`${lead.serviceType} - ${lead.firstName} ${lead.lastName}`); setInvoiceDeliveryMethod("email"); setShowInvoiceDialog(true); }} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white">
                     <Send className="h-4 w-4 mr-2" /> Send Invoice via Square
                   </Button>
                 </CardContent>
@@ -1889,10 +1960,30 @@ export default function LeadDetailPage() {
               Send Invoice via Square
             </DialogTitle>
             <DialogDescription>
-              This will create a Square invoice and email it to {lead.firstName} {lead.lastName} ({lead.email}) for payment.
+              Square will deliver this invoice directly to {lead.firstName} {lead.lastName}. Choose how they receive it below.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            <div>
+              <Label>Delivery Method</Label>
+              <Select value={invoiceDeliveryMethod} onValueChange={(v) => setInvoiceDeliveryMethod(v as "email" | "sms" | "both")}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="email">
+                    <span className="flex items-center gap-2"><Mail className="h-3.5 w-3.5" /> Email only — {lead.email}</span>
+                  </SelectItem>
+                  <SelectItem value="sms" disabled={!lead.phone}>
+                    <span className="flex items-center gap-2"><Phone className="h-3.5 w-3.5" /> Text (SMS) only{lead.phone ? ` — ${lead.phone}` : " — no phone on file"}</span>
+                  </SelectItem>
+                  <SelectItem value="both" disabled={!lead.phone}>
+                    <span className="flex items-center gap-2"><Send className="h-3.5 w-3.5" /> Email + Text{!lead.phone ? " — no phone on file" : ""}</span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-muted-foreground mt-1">Square sends the invoice natively — no third-party service needed.</p>
+            </div>
             <div>
               <Label>Amount ($)</Label>
               <div className="relative">

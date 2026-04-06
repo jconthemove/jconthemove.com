@@ -12149,19 +12149,24 @@ Thank you for your business!
   app.post("/api/invoices/lead/:leadId", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
     try {
       const { leadId } = req.params;
-      const { amount, description, dueDate } = req.body;
+      const { amount, description, dueDate, deliveryMethod } = req.body;
 
       if (!amount || amount <= 0) {
         return res.status(400).json({ error: "Valid amount is required" });
       }
+
+      const { squareInvoiceService } = await import('./services/square-invoice');
+      const VALID_DELIVERY = ["email", "sms", "both"] as const;
+      type DeliveryMethod = typeof VALID_DELIVERY[number];
+      const dm: DeliveryMethod = (VALID_DELIVERY as readonly string[]).includes(deliveryMethod)
+        ? (deliveryMethod as DeliveryMethod)
+        : "email";
 
       const lead = await storage.getLead(leadId);
       if (!lead) {
         return res.status(404).json({ error: "Lead not found" });
       }
 
-      const { squareInvoiceService } = await import('./services/square-invoice');
-      
       if (!squareInvoiceService.isConfigured()) {
         return res.status(503).json({ 
           error: "Square is not configured. Please add SQUARE_ACCESS_TOKEN to your environment secrets." 
@@ -12172,7 +12177,8 @@ Thank you for your business!
         lead,
         amount,
         description,
-        dueDate
+        dueDate,
+        dm
       );
 
       res.json({
@@ -12317,6 +12323,94 @@ Thank you for your business!
     } catch (error) {
       console.error("Error checking Square config:", error);
       res.status(500).json({ error: "Failed to check configuration" });
+    }
+  });
+
+  // ── Square payment webhook ───────────────────────────────────────────────
+  // Listens for Square invoice events (payment_made, updated, etc.).
+  // SQUARE_WEBHOOK_SIGNATURE_KEY must be set; requests without a valid
+  // HMAC-SHA256 signature are rejected with 401.
+  app.post("/api/webhooks/square", async (req: Request, res: Response) => {
+    try {
+      const rawBody = req.body as Buffer;
+      const bodyStr = rawBody.toString("utf8");
+
+      let event: Record<string, unknown>;
+      try {
+        event = JSON.parse(bodyStr) as Record<string, unknown>;
+      } catch {
+        return res.status(400).json({ error: "Invalid JSON body" });
+      }
+
+      const signatureKey = process.env.SQUARE_WEBHOOK_SIGNATURE_KEY;
+      if (!signatureKey) {
+        console.error("[Square webhook] SQUARE_WEBHOOK_SIGNATURE_KEY is not configured — rejecting event");
+        return res.status(401).json({ error: "Webhook signature key not configured" });
+      }
+
+      const signature = req.headers["x-square-hmacsha256-signature"];
+      if (!signature || typeof signature !== "string") {
+        console.warn("[Square webhook] Missing or malformed signature header");
+        return res.status(401).json({ error: "Missing signature" });
+      }
+
+      const notificationUrl =
+        process.env.SQUARE_WEBHOOK_URL || `https://${req.headers.host}/api/webhooks/square`;
+      const hmac = crypto.createHmac("sha256", signatureKey);
+      hmac.update(notificationUrl + bodyStr);
+      const expectedBuf = hmac.digest();
+      const receivedBuf = Buffer.from(signature, "base64");
+      const signatureValid =
+        expectedBuf.length === receivedBuf.length &&
+        crypto.timingSafeEqual(expectedBuf, receivedBuf);
+      if (!signatureValid) {
+        console.warn("[Square webhook] Signature mismatch — rejecting event");
+        return res.status(401).json({ error: "Invalid signature" });
+      }
+
+      const eventType = typeof event.type === "string" ? event.type : "";
+      const data = (event.data as Record<string, unknown> | undefined)?.object as Record<string, unknown> | undefined;
+
+      console.log(`[Square webhook] Received event: ${eventType}`);
+
+      const { squareInvoiceService } = await import("./services/square-invoice");
+
+      if (eventType === "invoice.payment_made" || eventType === "invoice.paid") {
+        const invoice = (data?.invoice as Record<string, unknown> | undefined);
+        const squareInvoiceId = typeof invoice?.id === "string" ? invoice.id : undefined;
+        if (squareInvoiceId) {
+          const localInvoice = await storage.getSquareInvoiceBySquareId(squareInvoiceId);
+          if (localInvoice) {
+            await storage.updateSquareInvoiceStatus(squareInvoiceId, "paid", new Date());
+            console.log(`[Square webhook] Invoice ${squareInvoiceId} marked as paid`);
+
+            if (localInvoice.leadId) {
+              const lead = await storage.getLead(localInvoice.leadId);
+              if (lead && lead.status !== "paid" && lead.status !== "completed") {
+                await storage.updateLeadStatus(localInvoice.leadId, "paid");
+                console.log(`[Square webhook] Lead ${localInvoice.leadId} status updated to paid`);
+              }
+            }
+          } else {
+            console.warn(`[Square webhook] No local invoice found for Square ID: ${squareInvoiceId}`);
+          }
+        }
+      } else if (eventType === "invoice.updated") {
+        const invoice = (data?.invoice as Record<string, unknown> | undefined);
+        const squareInvoiceId = typeof invoice?.id === "string" ? invoice.id : undefined;
+        const squareStatus = typeof invoice?.status === "string" ? invoice.status : undefined;
+        if (squareInvoiceId && squareStatus) {
+          const mappedStatus = squareInvoiceService.mapSquareStatus(squareStatus);
+          await storage.updateSquareInvoiceStatus(squareInvoiceId, mappedStatus);
+          console.log(`[Square webhook] Invoice ${squareInvoiceId} status synced to ${mappedStatus}`);
+        }
+      }
+
+      res.status(200).json({ received: true });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error("[Square webhook] Error processing event:", msg);
+      res.status(500).json({ error: "Webhook processing failed" });
     }
   });
 
@@ -13400,21 +13494,28 @@ Thank you for your business!
       const lead = await storage.getLead(leadId);
       if (!lead) return res.status(404).json({ error: "Lead not found" });
 
-      const { lineItems, dueDate } = req.body as {
+      const { lineItems, dueDate, deliveryMethod } = req.body as {
         lineItems?: Array<{ name: string; qty: number; unitPrice: number; total: number }>;
         dueDate?: string;
+        deliveryMethod?: string;
       };
 
       const { squareInvoiceService } = await import("./services/square-invoice");
 
+      const VALID_DELIVERY = ["email", "sms", "both"] as const;
+      type DeliveryMethod = typeof VALID_DELIVERY[number];
+      const dm: DeliveryMethod = (VALID_DELIVERY as readonly string[]).includes(deliveryMethod ?? "")
+        ? (deliveryMethod as DeliveryMethod)
+        : "email";
+
       let result: { invoiceId: string; invoiceUrl: string; squareInvoiceId: string };
 
       if (lineItems && lineItems.length > 0) {
-        result = await squareInvoiceService.createItemizedInvoiceForLead(lead, lineItems, dueDate);
+        result = await squareInvoiceService.createItemizedInvoiceForLead(lead, lineItems, dueDate, dm);
       } else {
         const amount = parseFloat(lead.totalPrice || lead.basePrice || "0");
         if (!amount) return res.status(400).json({ error: "No price set on lead and no lineItems provided" });
-        result = await squareInvoiceService.createInvoiceForLead(lead, amount, undefined, dueDate);
+        result = await squareInvoiceService.createInvoiceForLead(lead, amount, undefined, dueDate, dm);
       }
 
       res.json({ success: true, ...result });
