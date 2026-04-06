@@ -556,6 +556,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('⚠️ Leads order_number migration error (non-fatal):', migErr);
   }
 
+  // Schema migration: square_invoice_number column on square_invoices (added after initial table creation)
+  try {
+    await pool.query(`
+      ALTER TABLE square_invoices ADD COLUMN IF NOT EXISTS square_invoice_number VARCHAR;
+    `);
+    console.log('✅ square_invoices.square_invoice_number column ready');
+  } catch (migErr) {
+    console.error('⚠️ square_invoices.square_invoice_number migration error (non-fatal):', migErr);
+  }
+
   // Schema migration: spin_results extended columns + jackpots + spin_config tables
   try {
     await pool.query(`
