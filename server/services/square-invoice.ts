@@ -197,6 +197,7 @@ export class SquareInvoiceService {
     const invoiceData: InsertSquareInvoice = {
       leadId: lead.id,
       squareInvoiceId: publishedInvoice.id!,
+      squareInvoiceNumber: publishedInvoice.invoiceNumber ?? undefined,
       squareOrderId: orderId,
       customerId,
       customerEmail: lead.email,
@@ -297,6 +298,7 @@ export class SquareInvoiceService {
 
     const invoiceData: InsertSquareInvoice = {
       squareInvoiceId: publishedInvoice.id!,
+      squareInvoiceNumber: publishedInvoice.invoiceNumber ?? undefined,
       squareOrderId: orderId,
       customerId,
       customerEmail: email,
@@ -400,6 +402,7 @@ export class SquareInvoiceService {
     const invoiceData: InsertSquareInvoice = {
       leadId: lead.id,
       squareInvoiceId: publishedInvoice.id!,
+      squareInvoiceNumber: publishedInvoice.invoiceNumber ?? undefined,
       squareOrderId: orderId,
       customerId,
       customerEmail: lead.email,

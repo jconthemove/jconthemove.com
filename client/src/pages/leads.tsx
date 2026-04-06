@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
-import { ArrowLeft, Home, Building, Trash2, Mail, Phone, MapPin, Calendar as CalendarIcon, ChevronRight, Coins, TrendingUp, CheckCheck, Search, X } from "lucide-react";
+import { ArrowLeft, Home, Building, Trash2, Mail, Phone, MapPin, Calendar as CalendarIcon, ChevronRight, Coins, TrendingUp, CheckCheck, Search, X, Square, CheckSquare, Settings, Archive, ArchiveRestore } from "lucide-react";
 import { formatOrderNumber } from "@shared/schema";
 import { getStatusColors } from "@/lib/job-status";
 import { JobCard } from "@/components/JobCard";
@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -53,6 +54,13 @@ export default function LeadsPage() {
   const [isQuickViewOpen, setIsQuickViewOpen] = useState(false);
   const [isManageDialogOpen, setIsManageDialogOpen] = useState(false);
   const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
+  const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
+  const isAdmin = ["admin", "business_owner"].includes(currentUser?.role || "");
+  const [orderSearch, setOrderSearch] = useState("");
+  const [orderSearchQuery, setOrderSearchQuery] = useState("");
+  const [lookupResult, setLookupResult] = useState<Lead | null>(null);
+  const [lookupError, setLookupError] = useState("");
 
   const serviceOptions = [
     { value: "residential", label: "Residential Moving", icon: Home },
@@ -60,12 +68,44 @@ export default function LeadsPage() {
     { value: "junk", label: "Junk Removal", icon: Trash2 },
   ];
 
-  // Fetch all leads (always fetch fresh to avoid showing deleted leads)
-  const { data: leads = [], isLoading } = useQuery<Lead[]>({
+  // Fetch all active leads (excludes archived)
+  const { data: leads = [], isLoading, isError, refetch: refetchLeads } = useQuery<Lead[]>({
     queryKey: ["/api/leads"],
-    staleTime: 0, // Always fetch fresh data
+    staleTime: 0,
     refetchOnMount: true,
+    retry: 2,
   });
+
+  // Fetch archived leads (admin only, lazy)
+  const { data: archivedLeads = [], isLoading: isLoadingArchived } = useQuery<Lead[]>({
+    queryKey: ["/api/leads/archived"],
+    staleTime: 30000,
+    enabled: isAdmin,
+  });
+
+  // Order number / email lookup
+  const orderLookup = useMutation({
+    mutationFn: async (q: string) => {
+      const response = await apiRequest("GET", `/api/leads/lookup?q=${encodeURIComponent(q)}`);
+      return response.json();
+    },
+    onSuccess: (data: Lead) => {
+      setLookupResult(data);
+      setLookupError("");
+    },
+    onError: () => {
+      setLookupResult(null);
+      setLookupError("No job found. Try the order number (JC-000001) or the customer's email address.");
+    },
+  });
+
+  const handleOrderSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!orderSearch.trim()) return;
+    setLookupError("");
+    setLookupResult(null);
+    orderLookup.mutate(orderSearch.trim());
+  };
 
   // Fetch employees
   const { data: employees = [] } = useQuery<User[]>({
@@ -174,6 +214,45 @@ export default function LeadsPage() {
     },
   });
 
+  const bulkDeleteLeads = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const response = await apiRequest("DELETE", "/api/leads", { ids });
+      return response.json();
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "Jobs archived",
+        description: `${data.deleted} job${data.deleted !== 1 ? "s" : ""} archived successfully.`,
+      });
+      setSelectedLeadIds(new Set());
+      setBulkDeleteConfirm(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads/archived"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to archive jobs. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const unarchiveLead = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await apiRequest("PATCH", `/api/leads/${id}/unarchive`);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Job restored", description: "The job has been moved back to active leads." });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads/archived"] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to restore the job.", variant: "destructive" });
+    },
+  });
+
   const onSubmit = form.handleSubmit((data) => {
     submitLead.mutate(data);
   });
@@ -242,13 +321,13 @@ export default function LeadsPage() {
             <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block shadow shadow-green-500/60" /> Completed</span>
           </div>
 
-          {/* Search bar */}
-          <div className="relative mb-4">
+          {/* Search bar — filters visible leads in real time */}
+          <div className="relative mb-3">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 pointer-events-none" />
             <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by order # (e.g. JC-1001), name, or phone…"
+              placeholder="Filter by order # (JC-000001), name, phone, or email…"
               className="pl-9 pr-9 bg-slate-800/60 border-slate-700 text-white placeholder:text-slate-500 focus-visible:ring-blue-500/40"
             />
             {searchQuery && (
@@ -261,12 +340,47 @@ export default function LeadsPage() {
             )}
           </div>
 
+          {/* Order / Customer Lookup — server-side exact lookup by order number or email */}
+          <form onSubmit={handleOrderSearch} className="mb-4">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                <Input
+                  value={orderSearch}
+                  onChange={e => setOrderSearch(e.target.value)}
+                  placeholder="Look up exact order by order number (JC-000001) or email…"
+                  className="pl-9 bg-slate-800/60 border-slate-600 text-white placeholder:text-slate-500"
+                />
+              </div>
+              <Button type="submit" disabled={orderLookup.isPending} className="shrink-0">
+                {orderLookup.isPending ? "Searching…" : "Look Up"}
+              </Button>
+            </div>
+            {lookupError && <p className="text-sm text-red-400 mt-1.5 pl-1">{lookupError}</p>}
+          </form>
+
+          {lookupResult && (
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm text-slate-400 font-medium">Lookup result:</p>
+                <button onClick={() => { setLookupResult(null); setOrderSearch(""); }} className="text-xs text-slate-500 hover:text-slate-300">Clear</button>
+              </div>
+              <JobCard lead={lookupResult} onDelete={isAdmin ? setLeadToDelete : undefined} />
+            </div>
+          )}
+
           <Tabs defaultValue="view" className="space-y-6">
-            <TabsList className="bg-slate-800/80 border border-slate-700">
+            <TabsList className="bg-slate-800/80 border border-slate-700 flex-wrap h-auto gap-1">
               <TabsTrigger value="view" data-testid="tab-view-leads">Active Leads</TabsTrigger>
               <TabsTrigger value="completed" data-testid="tab-completed-leads" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
                 Completed ({leads.filter(l => l.status === 'completed').length})
               </TabsTrigger>
+              {isAdmin && (
+                <TabsTrigger value="archived" className="data-[state=active]:bg-slate-600 data-[state=active]:text-white">
+                  <Archive className="h-3.5 w-3.5 mr-1.5" />
+                  Archived ({archivedLeads.length})
+                </TabsTrigger>
+              )}
               <TabsTrigger value="add" data-testid="tab-add-lead">+ Book a Job</TabsTrigger>
             </TabsList>
 
@@ -276,6 +390,16 @@ export default function LeadsPage() {
                   <CardContent className="text-center py-12">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mx-auto"></div>
                     <p className="mt-4 text-slate-400">Loading leads...</p>
+                  </CardContent>
+                </Card>
+              ) : isError ? (
+                <Card className="bg-slate-800/50 border-red-800/40">
+                  <CardContent className="text-center py-12">
+                    <p className="text-red-400 font-semibold mb-2">Failed to load leads</p>
+                    <p className="text-slate-400 text-sm mb-4">There was a problem fetching the jobs list. Please try again.</p>
+                    <Button variant="outline" size="sm" onClick={() => refetchLeads()} className="border-slate-600 text-slate-300 hover:text-white">
+                      Retry
+                    </Button>
                   </CardContent>
                 </Card>
               ) : filteredLeads.filter(l => l.status !== 'completed').length === 0 ? (
@@ -294,34 +418,98 @@ export default function LeadsPage() {
                     </div>
                   </CardContent>
                 </Card>
-              ) : (
-                <Card className="bg-slate-800/50 border-slate-700">
-                  <CardHeader>
-                    <CardTitle className="text-2xl text-white">
-                      Active Leads ({filteredLeads.filter(l => l.status !== 'completed').length}{searchQuery ? ` of ${leads.filter(l => l.status !== 'completed').length}` : ""})
-                    </CardTitle>
-                    <CardDescription className="text-slate-400">Customer leads in progress</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {[...filteredLeads]
-                        .filter(l => !["completed", "cancelled", "paid"].includes(l.status))
-                        .sort((a, b) => {
-                          // Red → Yellow → Green sort order
-                          const ORDER: Record<string, number> = {
-                            new: 0, contacted: 1, quote_requested: 2, quoted: 3,
-                            confirmed: 10, available: 11, accepted: 12, in_progress: 13,
-                          };
-                          const aIdx = ORDER[a.status] ?? 99;
-                          const bIdx = ORDER[b.status] ?? 99;
-                          if (aIdx !== bIdx) return aIdx - bIdx;
-                          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-                        })
-                        .map(lead => <JobCard key={lead.id} lead={lead} onDelete={setLeadToDelete} />)}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
+              ) : (() => {
+                const activeLeads = [...filteredLeads]
+                  .filter(l => !["completed", "cancelled", "paid"].includes(l.status))
+                  .sort((a, b) => {
+                    const ORDER: Record<string, number> = {
+                      new: 0, contacted: 1, quote_requested: 2, quoted: 3,
+                      confirmed: 10, available: 11, accepted: 12, in_progress: 13,
+                    };
+                    const aIdx = ORDER[a.status] ?? 99;
+                    const bIdx = ORDER[b.status] ?? 99;
+                    if (aIdx !== bIdx) return aIdx - bIdx;
+                    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+                  });
+                const totalActive = leads.filter(l => !["completed", "cancelled", "paid"].includes(l.status)).length;
+                const allSelected = activeLeads.length > 0 && activeLeads.every(l => selectedLeadIds.has(String(l.id)));
+                const someSelected = selectedLeadIds.size > 0;
+                const toggleAll = () => {
+                  if (allSelected) {
+                    setSelectedLeadIds(new Set());
+                  } else {
+                    setSelectedLeadIds(new Set(activeLeads.map(l => String(l.id))));
+                  }
+                };
+                const toggleOne = (id: string) => {
+                  setSelectedLeadIds(prev => {
+                    const next = new Set(prev);
+                    if (next.has(id)) next.delete(id);
+                    else next.add(id);
+                    return next;
+                  });
+                };
+                return (
+                  <Card className="bg-slate-800/50 border-slate-700">
+                    <CardHeader>
+                      <div className="flex items-center justify-between flex-wrap gap-3">
+                        <div>
+                          <CardTitle className="text-2xl text-white">
+                            Active Leads ({activeLeads.length}{searchQuery ? ` of ${totalActive}` : ""})
+                          </CardTitle>
+                          <CardDescription className="text-slate-400">Customer leads in progress</CardDescription>
+                        </div>
+                        {isAdmin && (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={toggleAll}
+                              className="text-slate-400 hover:text-white gap-1.5 h-8"
+                            >
+                              {allSelected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                              {allSelected ? "Deselect All" : "Select All"}
+                            </Button>
+                            {someSelected && (
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => setBulkDeleteConfirm(true)}
+                                className="gap-1.5 h-8"
+                                data-testid="button-bulk-delete"
+                              >
+                                <Archive className="h-4 w-4" />
+                                Archive {selectedLeadIds.size} Selected
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {activeLeads.map(lead => (
+                          <div key={lead.id} className="flex items-start gap-2">
+                            {isAdmin && (
+                              <div className="mt-4 shrink-0" onClick={e => e.stopPropagation()}>
+                                <Checkbox
+                                  checked={selectedLeadIds.has(String(lead.id))}
+                                  onCheckedChange={() => toggleOne(String(lead.id))}
+                                  data-testid={`checkbox-lead-${lead.id}`}
+                                  className="border-slate-500"
+                                />
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <JobCard lead={lead} onDelete={isAdmin ? setLeadToDelete : undefined} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
             </TabsContent>
 
             <TabsContent value="completed">
@@ -368,6 +556,58 @@ export default function LeadsPage() {
                 </Card>
               )}
             </TabsContent>
+
+            {isAdmin && (
+              <TabsContent value="archived">
+                {isLoadingArchived ? (
+                  <Card className="bg-slate-800/50 border-slate-700">
+                    <CardContent className="text-center py-12">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-500 mx-auto"></div>
+                      <p className="mt-4 text-slate-400">Loading archived jobs…</p>
+                    </CardContent>
+                  </Card>
+                ) : archivedLeads.length === 0 ? (
+                  <Card className="bg-slate-800/50 border-slate-700">
+                    <CardContent className="py-12 text-center">
+                      <Archive className="h-10 w-10 text-slate-600 mx-auto mb-3" />
+                      <p className="text-slate-400">No archived jobs yet.</p>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card className="bg-slate-800/50 border-slate-700/60">
+                    <CardHeader>
+                      <CardTitle className="text-xl text-white flex items-center gap-2">
+                        <Archive className="h-5 w-5 text-slate-400" />
+                        Archived Jobs ({archivedLeads.length})
+                      </CardTitle>
+                      <CardDescription className="text-slate-400">Jobs removed from active views — no data is lost. Restore any job to make it active again.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {archivedLeads.map(lead => (
+                          <div key={lead.id} className="flex items-start gap-2">
+                            <div className="flex-1 min-w-0">
+                              <JobCard lead={lead} showContact compact />
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => unarchiveLead.mutate(String(lead.id))}
+                              disabled={unarchiveLead.isPending}
+                              className="shrink-0 border-slate-600 text-slate-300 hover:text-white mt-3"
+                              title="Restore this job to active leads"
+                            >
+                              <ArchiveRestore className="h-4 w-4 mr-1.5" />
+                              Restore
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </TabsContent>
+            )}
 
             <TabsContent value="add">
               {/* Booking Confirmation Banner */}
@@ -733,15 +973,15 @@ export default function LeadsPage() {
         onSave={handleSaveQuote}
       />
 
-      {/* Delete Confirmation Dialog */}
+      {/* Archive Confirmation Dialog (single lead) */}
       <AlertDialog open={!!leadToDelete} onOpenChange={(open) => !open && setLeadToDelete(null)}>
         <AlertDialogContent data-testid="dialog-delete-confirm">
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogTitle>Archive this job?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete the lead for{" "}
-              <strong>{leadToDelete?.firstName} {leadToDelete?.lastName}</strong>.
-              This action cannot be undone.
+              The job for{" "}
+              <strong>{leadToDelete?.firstName} {leadToDelete?.lastName}</strong>{" "}
+              will be moved to the Archived tab. No data is lost — you can restore it at any time.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -750,10 +990,36 @@ export default function LeadsPage() {
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={() => leadToDelete && deleteLead.mutate(leadToDelete.id)}
-              className="bg-destructive hover:bg-destructive/90"
+              className="bg-slate-600 hover:bg-slate-500"
               data-testid="button-confirm-delete"
             >
-              {deleteLead.isPending ? "Deleting..." : "Delete Lead"}
+              {deleteLead.isPending ? "Archiving…" : "Archive Job"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Archive Confirmation Dialog */}
+      <AlertDialog open={bulkDeleteConfirm} onOpenChange={(open) => !open && setBulkDeleteConfirm(false)}>
+        <AlertDialogContent data-testid="dialog-bulk-delete-confirm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Archive {selectedLeadIds.size} job{selectedLeadIds.size !== 1 ? "s" : ""}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong>{selectedLeadIds.size} selected job{selectedLeadIds.size !== 1 ? "s" : ""}</strong>{" "}
+              will be moved to the Archived tab. No data is lost — you can restore any of them at any time.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-bulk-delete">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => bulkDeleteLeads.mutate(Array.from(selectedLeadIds))}
+              className="bg-slate-600 hover:bg-slate-500"
+              data-testid="button-confirm-bulk-delete"
+              disabled={bulkDeleteLeads.isPending}
+            >
+              {bulkDeleteLeads.isPending ? "Archiving…" : `Archive ${selectedLeadIds.size} Job${selectedLeadIds.size !== 1 ? "s" : ""}`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

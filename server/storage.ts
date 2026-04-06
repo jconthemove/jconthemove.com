@@ -52,11 +52,14 @@ export interface IStorage {
   
   createLead(lead: InsertLead): Promise<Lead>;
   getLeads(): Promise<Lead[]>;
+  getArchivedLeads(): Promise<Lead[]>;
   getLead(id: string): Promise<Lead | undefined>;
   getLeadsByEmail(email: string): Promise<Lead[]>;
   updateLeadStatus(id: string, status: string): Promise<Lead | undefined>;
   updateLeadQuote(id: string, quoteData: any): Promise<Lead | undefined>;
-  deleteLead(id: string): Promise<boolean>;
+  deleteLead(id: string): Promise<boolean>; // soft-archive
+  lookupLeadByOrderNumber(orderNumber: string): Promise<Lead | undefined>;
+  nextOrderNumber(): Promise<string>;
   
   // Job assignment operations
   assignLeadToEmployee(leadId: string, employeeId: string): Promise<Lead | undefined>;
@@ -316,10 +319,20 @@ export class DatabaseStorage implements IStorage {
     return user || undefined;
   }
 
+  async nextOrderNumber(): Promise<string> {
+    const [{ max_num }] = await db.execute<{ max_num: number }>(sql`
+      SELECT COALESCE(MAX(CAST(SUBSTRING(order_number FROM 4) AS INTEGER)), 0) AS max_num
+      FROM leads WHERE order_number IS NOT NULL
+    `);
+    const next = (max_num ?? 0) + 1;
+    return `JC-${String(next).padStart(6, '0')}`;
+  }
+
   async createLead(insertLead: InsertLead): Promise<Lead> {
+    const orderNumber = await this.nextOrderNumber();
     const [lead] = await db
       .insert(leads)
-      .values(insertLead)
+      .values({ ...insertLead, orderNumber })
       .returning();
     return lead;
   }
@@ -328,7 +341,16 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(leads)
+      .where(isNull(leads.archivedAt))
       .orderBy(desc(leads.createdAt));
+  }
+
+  async getArchivedLeads(): Promise<Lead[]> {
+    return await db
+      .select()
+      .from(leads)
+      .where(isNotNull(leads.archivedAt))
+      .orderBy(desc(leads.archivedAt));
   }
 
   async getLead(id: string): Promise<Lead | undefined> {
@@ -336,9 +358,21 @@ export class DatabaseStorage implements IStorage {
     return lead || undefined;
   }
 
+  async lookupLeadByOrderNumber(orderNumber: string): Promise<Lead | undefined> {
+    const normalized = orderNumber.trim().toUpperCase();
+    const [lead] = await db.select().from(leads).where(eq(leads.orderNumber, normalized));
+    return lead || undefined;
+  }
+
   async deleteLead(id: string): Promise<boolean> {
-    const result = await db.delete(leads).where(eq(leads.id, id));
-    return result.rowCount !== null && result.rowCount > 0;
+    // Soft-archive: set archivedAt timestamp so the lead disappears from active views
+    // but remains in the database for records
+    const [result] = await db
+      .update(leads)
+      .set({ archivedAt: new Date() })
+      .where(and(eq(leads.id, id), isNull(leads.archivedAt)))
+      .returning({ id: leads.id });
+    return !!result;
   }
 
   async getLeadsByEmail(email: string): Promise<Lead[]> {
@@ -353,7 +387,7 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(leads)
-      .where(eq(leads.status, status))
+      .where(and(eq(leads.status, status), isNull(leads.archivedAt)))
       .orderBy(desc(leads.lastQuoteUpdatedAt), desc(leads.createdAt));
   }
 
@@ -1044,7 +1078,7 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(leads)
-      .where(isNull(leads.assignedToUserId))
+      .where(and(isNull(leads.assignedToUserId), isNull(leads.archivedAt)))
       .orderBy(desc(leads.createdAt));
   }
 
@@ -1053,9 +1087,12 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(leads)
       .where(
-        or(
-          eq(leads.assignedToUserId, employeeId),
-          sql`${employeeId} = ANY(${leads.crewMembers})`
+        and(
+          or(
+            eq(leads.assignedToUserId, employeeId),
+            sql`${employeeId} = ANY(${leads.crewMembers})`
+          ),
+          isNull(leads.archivedAt)
         )
       )
       .orderBy(desc(leads.createdAt));

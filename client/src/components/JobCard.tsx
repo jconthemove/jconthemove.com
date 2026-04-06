@@ -33,7 +33,7 @@ export function getServiceBadgeColor(serviceType: string): string {
 export interface JobCardProps {
   lead: {
     id: string | number;
-    orderNumber?: number | null;
+    orderNumber?: string | null;
     firstName?: string;
     lastName?: string;
     serviceType?: string;
@@ -52,6 +52,7 @@ export interface JobCardProps {
     tokenAllocation?: string;
     redemptionId?: string | null;
     createdAt?: string | Date;
+    archivedAt?: string | Date | null;
   };
   onDelete?: (lead: JobCardProps["lead"]) => void;
   showContact?: boolean;
@@ -87,24 +88,18 @@ export function JobCard({ lead, onDelete, showContact = true, showTokens = true,
             <h3 className={`font-bold ${compact ? "text-sm" : "text-base"} text-white group-hover:text-blue-300 transition-colors`}>
               {lead.firstName} {lead.lastName}
             </h3>
-            {lead.orderNumber != null && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigator.clipboard.writeText(formatOrderNumber(lead.orderNumber!));
-                }}
-                className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 border border-slate-600/50 rounded px-1.5 py-0.5 transition-colors"
-                title="Copy order number"
-              >
-                <Hash className="h-3 w-3" />
-                {formatOrderNumber(lead.orderNumber)}
-                <Copy className="h-2.5 w-2.5 opacity-60" />
-              </button>
+            {lead.orderNumber && (
+              <span className="text-xs font-mono text-slate-400 bg-slate-700/60 border border-slate-600/50 rounded px-1.5 py-0.5 select-all">
+                {lead.orderNumber}
+              </span>
             )}
             <Badge className={badgeColor}>{serviceLabel}</Badge>
             <Badge className={sc.badgeBg}>{sc.label}</Badge>
             {lead.redemptionId && (
               <Badge className="bg-orange-500/20 text-orange-400 border border-orange-500/30 text-xs">🎁 Rewards</Badge>
+            )}
+            {lead.archivedAt && (
+              <Badge className="bg-slate-600/30 text-slate-400 border border-slate-600/40 text-xs">Archived</Badge>
             )}
           </div>
 

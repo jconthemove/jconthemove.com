@@ -719,6 +719,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       CREATE INDEX IF NOT EXISTS idx_lead_history_lead_id ON lead_history(lead_id);
     `);
+    // Performance index: speeds up the admin GET /api/leads ORDER BY created_at DESC query
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_leads_created_at ON leads(created_at DESC);
+    `);
+    // Order number system: human-readable JC-XXXXXX identifiers + soft-delete archive
+    await pool.query(`
+      ALTER TABLE leads ADD COLUMN IF NOT EXISTS order_number VARCHAR UNIQUE;
+      ALTER TABLE leads ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP;
+      CREATE INDEX IF NOT EXISTS idx_leads_archived_at ON leads(archived_at);
+      CREATE INDEX IF NOT EXISTS idx_leads_order_number ON leads(order_number);
+    `);
+    // Backfill order numbers for all existing leads that don't have one (ordered by created_at)
+    const { rows: unNumbered } = await pool.query(
+      `SELECT id FROM leads WHERE order_number IS NULL ORDER BY created_at ASC`
+    );
+    if (unNumbered.length > 0) {
+      const { rows: [{ max_num }] } = await pool.query(
+        `SELECT COALESCE(MAX(CAST(SUBSTRING(order_number FROM 4) AS INTEGER)), 0) AS max_num FROM leads WHERE order_number IS NOT NULL`
+      );
+      let counter = (max_num as number) + 1;
+      for (const row of unNumbered) {
+        const num = String(counter).padStart(6, '0');
+        await pool.query(`UPDATE leads SET order_number = $1 WHERE id = $2`, [`JC-${num}`, row.id]);
+        counter++;
+      }
+      console.log(`✅ Backfilled ${unNumbered.length} order numbers (JC-${String((max_num as number) + 1).padStart(6,'0')} → JC-${String(counter - 1).padStart(6,'0')})`);
+    }
     console.log('✅ lead_history table ready');
   } catch (lhErr) {
     console.error('⚠️ lead_history migration error (non-fatal):', lhErr);
@@ -4756,7 +4783,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get all leads (business owner only)
+  // Get all leads (business owner only) — excludes archived
   app.get("/api/leads", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
       console.log('📋 Fetching all leads...');
@@ -4766,6 +4793,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching leads:", error);
       res.status(500).json({ error: "Failed to fetch leads" });
+    }
+  });
+
+  // Get archived (soft-deleted) leads — admin only
+  app.get("/api/leads/archived", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const archived = await storage.getArchivedLeads();
+      res.json(archived);
+    } catch (error) {
+      console.error("Error fetching archived leads:", error);
+      res.status(500).json({ error: "Failed to fetch archived leads" });
+    }
+  });
+
+  // Order / customer lookup by order number or email — admin + employees
+  app.get("/api/leads/lookup", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const q = String(req.query.q || "").trim();
+      if (!q) return res.status(400).json({ error: "Query parameter 'q' is required" });
+      // Try order number first (JC-XXXXXX format)
+      if (/^JC-\d+$/i.test(q)) {
+        const lead = await storage.lookupLeadByOrderNumber(q.toUpperCase());
+        if (!lead) return res.status(404).json({ error: "No job found with that order number" });
+        return res.json(lead);
+      }
+      // Fall back to email lookup
+      const byEmail = await storage.getLeadsByEmail(q.toLowerCase());
+      if (byEmail.length === 0) return res.status(404).json({ error: "No jobs found for that email" });
+      return res.json(byEmail[0]); // return most recent
+    } catch (error) {
+      console.error("Error looking up lead:", error);
+      res.status(500).json({ error: "Lookup failed" });
     }
   });
 
@@ -5738,6 +5797,40 @@ Thank you for your business!
     } catch (error) {
       console.error("Error deleting lead:", error);
       res.status(500).json({ error: "Failed to delete lead" });
+    }
+  });
+
+  // Unarchive (restore) a lead — admin only
+  app.patch("/api/leads/:id/unarchive", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const [lead] = await db.update(leads).set({ archivedAt: null }).where(eq(leads.id, id)).returning();
+      if (!lead) return res.status(404).json({ error: "Lead not found" });
+      res.json(lead);
+    } catch (error) {
+      console.error("Error unarchiving lead:", error);
+      res.status(500).json({ error: "Failed to restore lead" });
+    }
+  });
+
+  // Bulk archive leads (business owner only)
+  app.delete("/api/leads", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ error: "ids must be a non-empty array" });
+      }
+      console.log(`🗑️ Bulk deleting ${ids.length} leads...`);
+      let deleted = 0;
+      for (const id of ids) {
+        const ok = await storage.deleteLead(String(id));
+        if (ok) deleted++;
+      }
+      console.log(`✅ Bulk deleted ${deleted}/${ids.length} leads`);
+      res.json({ success: true, deleted, total: ids.length });
+    } catch (error) {
+      console.error("Error bulk deleting leads:", error);
+      res.status(500).json({ error: "Failed to bulk delete leads" });
     }
   });
 

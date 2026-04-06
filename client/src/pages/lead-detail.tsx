@@ -26,6 +26,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 interface SquareInvoice {
   id: string;
   squareInvoiceId: string;
+  squareInvoiceNumber: string | null;
   status: string;
   amount: string;
   invoiceUrl: string | null;
@@ -1685,6 +1686,9 @@ export default function LeadDetailPage() {
                           <div key={inv.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-muted/30 border border-muted text-sm">
                             <div className="min-w-0">
                               <p className="font-medium truncate">${parseFloat(inv.amount).toFixed(2)}</p>
+                              {inv.squareInvoiceNumber && (
+                                <p className="text-[10px] font-mono text-slate-400">{inv.squareInvoiceNumber}</p>
+                              )}
                               <p className="text-[10px] text-muted-foreground">{new Date(inv.createdAt).toLocaleDateString()}</p>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">

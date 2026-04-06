@@ -102,6 +102,12 @@ export const leads = pgTable("leads", {
   arrivalWindow: text("arrival_window"), // e.g. "9:00 AM – 11:00 AM"
   squarePaymentUrl: text("square_payment_url"), // hosted Square payment page URL embedded in quote email
 
+  // Human-readable order number (e.g. JC-000042)
+  orderNumber: varchar("order_number").unique(),
+
+  // Soft-delete: set when admin archives a job instead of permanently deleting
+  archivedAt: timestamp("archived_at"),
+
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
 
@@ -1308,6 +1314,7 @@ export const squareInvoices = pgTable("square_invoices", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   leadId: varchar("lead_id").references(() => leads.id),
   squareInvoiceId: varchar("square_invoice_id").unique(), // Square's invoice ID
+  squareInvoiceNumber: varchar("square_invoice_number"), // Human-readable number on the invoice (e.g. INV-000001)
   squareOrderId: varchar("square_order_id"), // Square's order ID
   customerId: varchar("customer_id"), // Square customer ID
   customerEmail: text("customer_email").notNull(),
