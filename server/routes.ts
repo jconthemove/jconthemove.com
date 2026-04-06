@@ -292,8 +292,9 @@ async function ensureJackpotsSeeded() {
         ('coupon_10pct_expiry_days',  '90',  '10%/$25 off coupon expiry in days'),
         ('coupon_25pct_expiry_days',  '30',  '25% off coupon expiry in days'),
         ('coffee_card_expiry_days',   '90',  'Coffee gift card expiry in days'),
-        ('pricing_rate_per_mover_hour', '60', 'Base labor rate per mover per hour ($)'),
+        ('pricing_rate_per_mover_hour', '85', 'Base labor rate per mover per hour ($)'),
         ('pricing_truck_add',           '60', 'Additional hourly charge when truck is included ($)'),
+        ('pricing_drive_rate',          '40', 'Drive time rate per mover per hour ($)'),
         ('pricing_min_hours_1',          '5', 'Minimum hours for 1-mover crew'),
         ('pricing_min_hours_2',          '4', 'Minimum hours for 2-mover crew'),
         ('pricing_min_hours_3',          '3', 'Minimum hours for 3-mover crew'),
@@ -316,6 +317,19 @@ async function ensureJackpotsSeeded() {
       UPDATE spin_config SET setting_value = '50'
       WHERE setting_key = 'pricing_drive_speed_mph' AND setting_value = '35';
     `);
+    // Force-correct production pricing values (overrides any previously saved bad values)
+    await pool.query(`
+      UPDATE spin_config SET setting_value = '85'
+      WHERE setting_key = 'pricing_rate_per_mover_hour' AND setting_value::numeric < 85;
+      UPDATE spin_config SET setting_value = '300'
+      WHERE setting_key = 'pricing_short_job_full' AND setting_value::numeric > 300;
+      UPDATE spin_config SET setting_value = '222'
+      WHERE setting_key = 'pricing_jc222_price' AND setting_value::numeric > 222;
+      INSERT INTO spin_config (setting_key, setting_value, description)
+      VALUES ('pricing_drive_rate', '40', 'Drive time rate per mover per hour ($)')
+      ON CONFLICT (setting_key) DO NOTHING;
+    `);
+    console.log('✅ Pricing values corrected to production-ready defaults');
   } catch (err) {
     console.error('Failed to seed jackpots:', err);
   }
@@ -16674,7 +16688,7 @@ Thank you for your business!
       try { junkAddons = JSON.parse(config['pricing_junk_addons'] || '[]'); } catch {}
       const n = (key: string, fallback: number) => parseFloat(config[key] ?? String(fallback));
       res.json({
-        ratePerMoverHour: n('pricing_rate_per_mover_hour', 60),
+        ratePerMoverHour: n('pricing_rate_per_mover_hour', 85),
         truckAdd:         n('pricing_truck_add',           60),
         minHours: {
           1: n('pricing_min_hours_1', 5),
@@ -16686,6 +16700,7 @@ Thank you for your business!
         shortJobRate:  n('pricing_short_job_rate',   150),
         shortJobFull:  n('pricing_short_job_full',   300),
         jc222Price:    n('pricing_jc222_price',      222),
+        driveRate:     n('pricing_drive_rate',        40),
         driveSpeedMph: n('pricing_drive_speed_mph',   50),
         junkSmallLow:  n('pricing_junk_small_low',   100),
         junkSmallHigh: n('pricing_junk_small_high',  200),

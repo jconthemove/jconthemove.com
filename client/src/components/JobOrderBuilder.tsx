@@ -17,9 +17,11 @@ import { cn } from "@/lib/utils";
 
 interface Pricing {
   ratePerMoverHour: number;
+  truckAdd: number;
   shortJobRate: number;
   shortJobFull: number;
   jc222Price: number;
+  driveRate: number;
   driveSpeedMph: number;
   junkSmallLow: number;
   junkSmallHigh: number;
@@ -110,8 +112,8 @@ interface JobOrderBuilderProps {
   }) => void;
 }
 
-const MOVING_PACKAGES: { id: string; movers: number; hours: number; label: string; tag?: string }[] = [
-  { id: "moving_2m_2h", movers: 2, hours: 2, label: "2 Movers × 2 hrs",  tag: "Quick Job"      },
+const MOVING_PACKAGES: { id: string; movers: number; hours: number; label: string; tag?: string; isJc222?: boolean }[] = [
+  { id: "moving_2m_2h", movers: 2, hours: 2, label: "JC222 Special",     tag: "Best Deal", isJc222: true },
   { id: "moving_2m_3h", movers: 2, hours: 3, label: "2 Movers × 3 hrs",  tag: "10% Off"        },
   { id: "moving_3m_3h", movers: 3, hours: 3, label: "3 Movers × 3 hrs",  tag: "Most Popular"   },
   { id: "moving_2m_4h", movers: 2, hours: 4, label: "2 Movers × 4 hrs"                         },
@@ -165,6 +167,44 @@ function PackageCard({ pkg, selected, pricing, onSelect }: {
   pricing: Pricing;
   onSelect: () => void;
 }) {
+  if (pkg.isJc222) {
+    return (
+      <button
+        onClick={onSelect}
+        className={cn(
+          "w-full text-left rounded-xl border-2 p-3 transition-all",
+          selected
+            ? "border-amber-500 bg-amber-950/40 ring-1 ring-amber-500/40"
+            : "border-amber-700/50 bg-amber-900/20 hover:border-amber-600"
+        )}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-sm font-semibold text-white">{pkg.label}</span>
+              <Badge className="text-[10px] px-1.5 py-0 h-4 border bg-amber-600/30 text-amber-300 border-amber-500/40">
+                Best Deal
+              </Badge>
+            </div>
+            <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
+              <span className="flex items-center gap-1"><Users className="h-3 w-3" />{pkg.movers} movers</span>
+              <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{pkg.hours} hrs</span>
+            </div>
+            <p className="text-[11px] text-amber-400/80 mt-0.5">Promo rate — flat price</p>
+          </div>
+          <div className="text-right flex-shrink-0">
+            <p className="font-bold text-amber-400 text-base">${pricing.jc222Price.toLocaleString()}</p>
+          </div>
+        </div>
+        {selected && (
+          <div className="mt-2 flex justify-end">
+            <CheckCircle2 className="h-4 w-4 text-amber-400" />
+          </div>
+        )}
+      </button>
+    );
+  }
+
   const base = pkg.movers * pkg.hours * pricing.ratePerMoverHour;
   const floored = base < pricing.shortJobFull ? pricing.shortJobFull : base;
   const discountPct = getHourDiscount(pkg.hours);
@@ -304,6 +344,7 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
 
   const [driveMiles, setDriveMiles] = useState<string>("");
   const [driveAutoCalc, setDriveAutoCalc] = useState(false);
+  const [truckIncluded, setTruckIncluded] = useState(false);
 
   const [quoteNotes, setQuoteNotes] = useState(lead.quoteNotes ?? "");
   const [showAddons, setShowAddons] = useState(true);
@@ -339,20 +380,36 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
   const driveLineItem = useMemo((): LineItem | null => {
     const miles = parseFloat(driveMiles);
     if (!miles || miles <= 0 || !pricing) return null;
-    const DRIVE_RATE = 40; // $40/hr/mover
+    const driveRate = pricing.driveRate || 40;
     const crewSize = selectedPkg !== null ? movingPackages[selectedPkg]?.movers ?? 2 : 2;
     const roundTripMiles = miles * 2;
     const driveHours = Math.ceil(roundTripMiles / (pricing.driveSpeedMph || 45) * 2) / 2; // round to 0.5
-    const fee = Math.round(driveHours * crewSize * DRIVE_RATE);
+    const fee = Math.round(driveHours * crewSize * driveRate);
     return {
       id: "drive_time",
-      name: `Drive Time — ${miles} mi × 2 (round trip) ÷ ${pricing.driveSpeedMph || 45}mph × ${crewSize} movers @ $${DRIVE_RATE}/hr`,
+      name: `Drive Time — ${miles} mi × 2 (round trip) ÷ ${pricing.driveSpeedMph || 45}mph × ${crewSize} movers @ $${driveRate}/hr`,
       qty: 1,
       unitPrice: fee,
       total: fee,
       category: "drive",
     };
   }, [driveMiles, pricing, selectedPkg]);
+
+  const truckLineItem = useMemo((): LineItem | null => {
+    if (!truckIncluded || !pricing || selectedPkg === null) return null;
+    const pkg = movingPackages[selectedPkg];
+    if (!pkg) return null;
+    const hours = pkg.hours;
+    const fee = Math.round(pricing.truckAdd * hours);
+    return {
+      id: "drive_truck",
+      name: `Truck — ${hours} hrs @ $${pricing.truckAdd}/hr`,
+      qty: 1,
+      unitPrice: fee,
+      total: fee,
+      category: "truck",
+    };
+  }, [truckIncluded, pricing, selectedPkg, movingPackages]);
 
   const summary = useMemo((): OrderSummary | null => {
     if (!pricing) return null;
@@ -362,13 +419,22 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
     if (isMoving) {
       if (selectedPkg === null) return null;
       const pkg = movingPackages[selectedPkg];
-      const base = pkg.movers * pkg.hours * pricing.ratePerMoverHour;
-      const floored = base < pricing.shortJobFull ? pricing.shortJobFull : base;
-      const discountPct = getHourDiscount(pkg.hours);
-      const laborTotal = discountPct > 0 ? Math.round(floored * (1 - discountPct / 100)) : floored;
-      const laborLabel = discountPct > 0
-        ? `Labor — ${pkg.movers} Movers × ${pkg.hours} hrs (${discountPct}% off)`
-        : `Labor — ${pkg.movers} Movers × ${pkg.hours} hrs @ $${pricing.ratePerMoverHour}/mover/hr`;
+
+      let laborTotal: number;
+      let laborLabel: string;
+
+      if (pkg.isJc222) {
+        laborTotal = pricing.jc222Price;
+        laborLabel = `JC222 Special — ${pkg.movers} Movers × ${pkg.hours} hrs (promo rate)`;
+      } else {
+        const base = pkg.movers * pkg.hours * pricing.ratePerMoverHour;
+        const floored = base < pricing.shortJobFull ? pricing.shortJobFull : base;
+        const discountPct = getHourDiscount(pkg.hours);
+        laborTotal = discountPct > 0 ? Math.round(floored * (1 - discountPct / 100)) : floored;
+        laborLabel = discountPct > 0
+          ? `Labor — ${pkg.movers} Movers × ${pkg.hours} hrs (${discountPct}% off)`
+          : `Labor — ${pkg.movers} Movers × ${pkg.hours} hrs @ $${pricing.ratePerMoverHour}/mover/hr`;
+      }
 
       lineItems.push({
         id: pkg.id,
@@ -379,6 +445,7 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
         category: "labor",
       });
 
+      if (truckLineItem) lineItems.push(truckLineItem);
       if (driveLineItem) lineItems.push(driveLineItem);
 
       movingAddons.forEach(addon => {
@@ -485,7 +552,7 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
     }
 
     return null;
-  }, [pricing, selectedPkg, selectedJunkPkg, addonQty, specialItems, specialFees, junkCustomPrice, isMoving, isJunk, driveLineItem, movingPackages, junkPackages, movingAddons, junkAddons, specialItemsDefs]);
+  }, [pricing, selectedPkg, selectedJunkPkg, addonQty, specialItems, specialFees, junkCustomPrice, isMoving, isJunk, driveLineItem, truckLineItem, movingPackages, junkPackages, movingAddons, junkAddons, specialItemsDefs]);
 
   const handleApply = async () => {
     if (!summary) return;
@@ -632,6 +699,28 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
           )}
         </div>
 
+        {/* ── Truck Toggle (moving only) ── */}
+        {isMoving && (
+          <div className="flex items-center gap-3 rounded-xl border border-slate-700/50 bg-slate-800/40 px-3 py-2.5">
+            <Checkbox
+              id="truck-included"
+              checked={truckIncluded}
+              onCheckedChange={(v) => setTruckIncluded(!!v)}
+              className="border-slate-600 data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
+            />
+            <label htmlFor="truck-included" className="flex-1 text-sm text-slate-300 cursor-pointer select-none flex items-center gap-2">
+              <Truck className="h-4 w-4 text-blue-400" />
+              Truck included
+              {truckLineItem && (
+                <span className="ml-auto text-emerald-400 font-bold text-sm">+${truckLineItem.total}</span>
+              )}
+            </label>
+            {pricing && (
+              <span className="text-[10px] text-slate-500">${pricing.truckAdd}/hr</span>
+            )}
+          </div>
+        )}
+
         <Separator className="bg-slate-700/50" />
 
         {/* ── Drive Time ── */}
@@ -666,7 +755,7 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
           </div>
           {driveLineItem && (
             <p className="text-[11px] text-slate-500 mt-1">
-              {driveMiles} mi × 2 (round trip) ÷ {pricing.driveSpeedMph || 45}mph × {driveLineItem.name.match(/(\d+) movers/)?.[1] || "?"} movers @ $40/hr
+              {driveMiles} mi × 2 (round trip) ÷ {pricing.driveSpeedMph || 45}mph × {driveLineItem.name.match(/(\d+) movers/)?.[1] || "?"} movers @ ${pricing.driveRate || 40}/hr
             </p>
           )}
           {!driveMiles && pickupAddr && (

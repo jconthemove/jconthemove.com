@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 interface Pricing {
   ratePerMoverHour: number;
   truckAdd: number;
+  driveRate: number;
   shortJobFull: number;
   shortJobRate: number;
   jc222Price: number;
@@ -16,8 +17,9 @@ interface Pricing {
 }
 
 const DEFAULTS = {
-  rate_per_mover_hour: "60",
+  rate_per_mover_hour: "85",
   truck_add: "60",
+  drive_rate: "40",
   short_job_full: "300",
   jc222_price: "222",
   min_hours_1: "5",
@@ -49,6 +51,7 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
     setDraft({
       rate_per_mover_hour: String(pricing.ratePerMoverHour),
       truck_add:           String(pricing.truckAdd),
+      drive_rate:          String(pricing.driveRate ?? 40),
       short_job_full:      String(pricing.shortJobFull ?? 300),
       jc222_price:         String(pricing.jc222Price ?? 222),
       min_hours_1:         String(pricing.minHours?.[1] ?? 5),
@@ -82,12 +85,12 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
   });
 
   async function handleReset() {
-    if (!confirm("Reset ALL pricing to factory defaults?\n\nRate: $60/mover·hr · Truck: $60 · Min job: $300 · JC222: $222\n\nThis overwrites your current settings.")) return;
+    if (!confirm("Reset ALL pricing to factory defaults?\n\nRate: $85/mover·hr · Truck: $60 · Drive: $40 · Min job: $300 · JC222: $222\n\nThis overwrites your current settings.")) return;
     setResetting(true);
     try {
       await saveMutation.mutateAsync(DEFAULTS);
       setDraft({ ...DEFAULTS });
-      toast({ title: "Pricing reset to defaults", description: "Rate $60/hr · Floor $300 · JC222 $222" });
+      toast({ title: "Pricing reset to defaults", description: "Rate $85/hr · Truck $60/hr · Drive $40/hr · Floor $300 · JC222 $222" });
     } finally {
       setResetting(false);
     }
@@ -122,18 +125,20 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
       {(open || alwaysOpen) && (
         <div className={`space-y-4 ${!alwaysOpen ? "mt-4" : ""}`}>
 
-          {/* Row 1: labor rate + truck */}
+          {/* Row 1: labor rate */}
+          <div>
+            <label className="text-xs text-slate-400 block mb-1">Rate per mover/hr ($)</label>
+            <Input
+              type="number"
+              value={draft.rate_per_mover_hour}
+              onChange={e => set("rate_per_mover_hour", e.target.value)}
+              className="bg-slate-900 border-slate-700 text-white h-9 text-sm"
+            />
+            <p className="text-[10px] text-slate-600 mt-0.5">$85 = current standard rate</p>
+          </div>
+
+          {/* Row 2: truck + drive rate */}
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-slate-400 block mb-1">Rate per mover/hr ($)</label>
-              <Input
-                type="number"
-                value={draft.rate_per_mover_hour}
-                onChange={e => set("rate_per_mover_hour", e.target.value)}
-                className="bg-slate-900 border-slate-700 text-white h-9 text-sm"
-              />
-              <p className="text-[10px] text-slate-600 mt-0.5">$60 = $1/mover/min</p>
-            </div>
             <div>
               <label className="text-xs text-slate-400 block mb-1">Truck add-on/hr ($)</label>
               <Input
@@ -142,6 +147,17 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
                 onChange={e => set("truck_add", e.target.value)}
                 className="bg-slate-900 border-slate-700 text-white h-9 text-sm"
               />
+              <p className="text-[10px] text-slate-600 mt-0.5">Added when truck is toggled on</p>
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">Drive rate/mover/hr ($)</label>
+              <Input
+                type="number"
+                value={draft.drive_rate}
+                onChange={e => set("drive_rate", e.target.value)}
+                className="bg-slate-900 border-slate-700 text-white h-9 text-sm"
+              />
+              <p className="text-[10px] text-slate-600 mt-0.5">Drive time labor rate</p>
             </div>
           </div>
 
@@ -241,7 +257,7 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
           </div>
 
           <p className="text-[10px] text-slate-600 text-center">
-            Default: $60/mover/hr · $60 truck · $300 min · $222 JC222
+            Default: $85/mover/hr · $60 truck · $40 drive · $300 min · $222 JC222
           </p>
         </div>
       )}
