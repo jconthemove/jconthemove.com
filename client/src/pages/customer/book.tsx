@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Truck, Trash2, Snowflake, Wrench, ArrowLeft, ArrowRight, CheckCircle, MapPin, Calendar, Plus, Minus, Loader2, Zap, Clock, Users, Home, Building2, ChevronRight, MessageSquare, ListOrdered, Sparkles, X } from "lucide-react";
+import { Truck, Trash2, Snowflake, Wrench, ArrowLeft, ArrowRight, CheckCircle, MapPin, Calendar, Plus, Minus, Loader2, Zap, Clock, Users, Home, Building2, ChevronRight, MessageSquare, ListOrdered, Sparkles, X, Phone } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,7 @@ const SERVICES = [
   { value: "junk", label: "Junk Removal", sub: "Haul away & disposal", icon: Trash2, color: "bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-700 text-orange-700 dark:text-orange-300" },
   { value: "snow", label: "Snow Removal", sub: "Plowing & shoveling", icon: Snowflake, color: "bg-cyan-50 dark:bg-cyan-900/20 border-cyan-200 dark:border-cyan-700 text-cyan-700 dark:text-cyan-300" },
   { value: "handyman", label: "Handyman", sub: "General repairs", icon: Wrench, color: "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700 text-amber-700 dark:text-amber-300" },
+  { value: "labor", label: "Labor Only", sub: "Loading · Unloading · Packing", icon: Users, color: "bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-700 text-purple-700 dark:text-purple-300" },
 ];
 
 interface MovingPackage { id: string; movers: number; hours: number; label: string; tag?: string; }
@@ -27,6 +28,37 @@ interface JunkPackage { id: string; label: string; desc: string; low: number; hi
 interface Addon { id: string; name: string; description?: string; unitPrice: number; openPrice?: boolean; qtyOptions: number[]; }
 interface CatalogDefs { movingPackages: MovingPackage[]; junkPackages: JunkPackage[]; movingAddons: Addon[]; junkAddons: Addon[]; }
 interface Pricing { ratePerMoverHour: number; jc222Price: number; shortJobFull: number; }
+
+interface SizeTier {
+  id: string;
+  label: string;
+  desc: string;
+  low: number;
+  high: number;
+  tag?: string;
+  isCustom?: boolean;
+}
+
+const SNOW_TIERS: SizeTier[] = [
+  { id: "snow_small",  label: "Small",  desc: "Single driveway",              low: 35,  high: 75,  tag: "Quick" },
+  { id: "snow_medium", label: "Medium", desc: "Residential / multi-car",      low: 75,  high: 150 },
+  { id: "snow_large",  label: "Large",  desc: "Estate or light commercial",   low: 150, high: 300, tag: "Popular" },
+  { id: "snow_custom", label: "Custom", desc: "We'll quote on-site",          low: 0,   high: 0,   isCustom: true },
+];
+
+const HANDYMAN_TIERS: SizeTier[] = [
+  { id: "handyman_small",  label: "Small",  desc: "1–2 hour task",            low: 75,  high: 150, tag: "Quick" },
+  { id: "handyman_medium", label: "Medium", desc: "Half-day project",         low: 150, high: 350 },
+  { id: "handyman_large",  label: "Large",  desc: "Full-day or multi-day",    low: 350, high: 700, tag: "Popular" },
+  { id: "handyman_custom", label: "Custom", desc: "We'll quote on-site",      low: 0,   high: 0,   isCustom: true },
+];
+
+const LABOR_TIERS: SizeTier[] = [
+  { id: "labor_small",  label: "Small",  desc: "2 hrs · studio or small load",    low: 100, high: 175, tag: "Quick" },
+  { id: "labor_medium", label: "Medium", desc: "3–4 hrs · 2–3 bedroom load",      low: 175, high: 350 },
+  { id: "labor_large",  label: "Large",  desc: "5–7 hrs · full home load",        low: 350, high: 600, tag: "Popular" },
+  { id: "labor_custom", label: "Custom", desc: "We'll quote on-site",             low: 0,   high: 0,   isCustom: true },
+];
 
 // Hour-based discount tiers: book more hours, save more
 const HOUR_TIERS = [
@@ -105,6 +137,40 @@ function BookingAccountCTA({ onDismiss }: { onDismiss: () => void }) {
   );
 }
 
+function SizeTierCards({ tiers, selectedId, onSelect }: { tiers: SizeTier[]; selectedId: string | null; onSelect: (id: string) => void }) {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      {tiers.map(tier => {
+        const isSelected = selectedId === tier.id;
+        return (
+          <button
+            key={tier.id}
+            onClick={() => onSelect(tier.id)}
+            className={cn(
+              "relative flex flex-col items-start gap-1.5 p-4 rounded-2xl border-2 text-left transition-all",
+              isSelected ? "border-primary bg-primary/5 shadow-sm" : "border-muted hover:border-primary/40"
+            )}
+          >
+            {isSelected && <CheckCircle className="absolute top-2 right-2 h-4 w-4 text-primary" />}
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="font-semibold text-sm">{tier.label}</p>
+              {tier.tag && <Badge className="text-[10px] px-1.5 py-0">{tier.tag}</Badge>}
+            </div>
+            <p className="text-xs text-muted-foreground">{tier.desc}</p>
+            {tier.isCustom ? (
+              <p className="text-xs font-medium text-muted-foreground mt-0.5">We'll quote on-site</p>
+            ) : (
+              <p className="text-sm font-bold text-primary mt-0.5">
+                ${tier.low}–${tier.high}
+              </p>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function CustomerBookPage() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
@@ -125,8 +191,10 @@ export default function CustomerBookPage() {
       setStep("estimate");
     }
   }, []);
+
   const [junkSizeHint, setJunkSizeHint] = useState<string | null>(null);
   const [movingSizeHint, setMovingSizeHint] = useState<string | null>(null);
+  const [sizeTierId, setSizeTierId] = useState<string | null>(null);
   const [selectedPkgId, setSelectedPkgId] = useState<string | null>(null);
   const [addonQtys, setAddonQtys] = useState<Record<string, number>>({});
   const [showAccountCTA, setShowAccountCTA] = useState(false);
@@ -135,10 +203,31 @@ export default function CustomerBookPage() {
     toAddress: "",
     moveDate: "",
     details: "",
-    guestName: "",
-    guestEmail: "",
-    guestPhone: "",
+    contactName: "",
+    contactEmail: "",
+    contactPhone: "",
   });
+
+  // Reset size/package state when service type changes to prevent stale cross-service tier data
+  useEffect(() => {
+    setSizeTierId(null);
+    setSelectedPkgId(null);
+    setAddonQtys({});
+    setJunkSizeHint(null);
+    setMovingSizeHint(null);
+  }, [serviceType]);
+
+  // Pre-fill contact info from user profile when user logs in or component mounts
+  useEffect(() => {
+    if (user) {
+      setForm(f => ({
+        ...f,
+        contactName: f.contactName || `${user.firstName || ""} ${user.lastName || ""}`.trim(),
+        contactEmail: f.contactEmail || user.email || "",
+        contactPhone: f.contactPhone || user.phoneNumber || "",
+      }));
+    }
+  }, [user]);
 
   const { data: pricing } = useQuery<Pricing>({ queryKey: ["/api/pricing"], retry: 2 });
   const { data: catalog } = useQuery<CatalogDefs>({ queryKey: ["/api/pricing/catalog-definitions"], retry: 2 });
@@ -153,11 +242,19 @@ export default function CustomerBookPage() {
 
   const isMoving = serviceType === "residential";
   const isJunk = serviceType === "junk";
+  const isSnow = serviceType === "snow";
+  const isHandyman = serviceType === "handyman";
+  const isLabor = serviceType === "labor";
   const needsPackages = isMoving || isJunk;
+  const needsSizeTiers = isSnow || isHandyman || isLabor;
 
   const selectedPkg = isMoving
     ? movingPackages.find(p => p.id === selectedPkgId)
     : junkPackages.find(p => p.id === selectedPkgId);
+
+  const selectedSizeTier = needsSizeTiers
+    ? (isSnow ? SNOW_TIERS : isHandyman ? HANDYMAN_TIERS : LABOR_TIERS).find(t => t.id === sizeTierId)
+    : null;
 
   const calcMovingPrice = (pkg: MovingPackage): number => {
     if ((pkg as any).isJc222) return pricing?.jc222Price ?? 222;
@@ -194,11 +291,21 @@ export default function CustomerBookPage() {
       const activeAddons = [...(isMoving ? movingAddons : junkAddons)].filter(a => (addonQtys[a.id] || 0) > 0);
       const addonLines = activeAddons.map(a => ({ id: a.id, name: a.name, qty: addonQtys[a.id], unitPrice: a.unitPrice, total: addonQtys[a.id] * a.unitPrice }));
 
-      const guestNameParts = form.guestName.trim().split(" ");
-      const firstName = user?.firstName || guestNameParts[0] || "Guest";
-      const lastName = user?.lastName || guestNameParts.slice(1).join(" ") || "User";
-      const email = user?.email || form.guestEmail || "";
-      const phone = user?.phoneNumber || form.guestPhone || "";
+      const nameParts = form.contactName.trim().split(" ");
+      const firstName = nameParts[0] || "Guest";
+      const lastName = nameParts.slice(1).join(" ") || "User";
+      const email = form.contactEmail || "";
+      const phone = form.contactPhone || "";
+
+      // For size-tier services, validate tier belongs to current service before submitting
+      if (needsSizeTiers && !selectedSizeTier) {
+        throw new Error("Please select a size tier before submitting.");
+      }
+
+      const effectivePkgId = needsSizeTiers ? (sizeTierId ?? undefined) : (selectedPkgId ?? undefined);
+      const effectiveBasePrice = needsSizeTiers && selectedSizeTier
+        ? (selectedSizeTier.isCustom ? 0 : selectedSizeTier.high)
+        : (totalPrice ?? undefined);
 
       return await apiRequest("POST", "/api/leads", {
         serviceType,
@@ -210,8 +317,8 @@ export default function CustomerBookPage() {
         toAddress: form.toAddress,
         moveDate: form.moveDate,
         details: form.details,
-        selectedPackageId: selectedPkgId,
-        basePrice: totalPrice ? totalPrice.toFixed(2) : undefined,
+        selectedPackageId: effectivePkgId,
+        basePrice: effectiveBasePrice !== undefined ? String(effectiveBasePrice) : undefined,
         totalPrice: totalPrice ? totalPrice.toFixed(2) : undefined,
         crewSize,
         confirmedHours,
@@ -256,6 +363,12 @@ export default function CustomerBookPage() {
     const idx = effectiveSteps.indexOf(s);
     if (idx <= effectiveIdx) setStep(s);
   };
+
+  const canProceedFromDetails =
+    !!form.fromAddress &&
+    !!form.moveDate &&
+    !!form.contactName.trim() &&
+    !!form.contactPhone.trim();
 
   if (bookingMode === "chatbot") {
     return (
@@ -458,17 +571,24 @@ export default function CustomerBookPage() {
               </div>
             )}
 
-            {!isMoving && !isJunk && (
-              <Card>
-                <CardContent className="py-8 text-center">
-                  <p className="text-muted-foreground text-sm">We'll send a crew to assess and provide a free estimate on-site.</p>
-                </CardContent>
-              </Card>
+            {needsSizeTiers && (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">Select a size to get a rough price estimate.</p>
+                <SizeTierCards
+                  tiers={isSnow ? SNOW_TIERS : isHandyman ? HANDYMAN_TIERS : LABOR_TIERS}
+                  selectedId={sizeTierId}
+                  onSelect={(id) => setSizeTierId(id)}
+                />
+              </div>
             )}
 
             <div className="flex gap-3">
               <Button variant="outline" className="flex-1" onClick={prevStep}>Back</Button>
-              <Button className="flex-1" onClick={nextStep}>
+              <Button
+                className="flex-1"
+                onClick={nextStep}
+                disabled={needsSizeTiers && !sizeTierId}
+              >
                 {needsPackages ? "See Packages" : "Enter Details"} <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
             </div>
@@ -488,8 +608,8 @@ export default function CustomerBookPage() {
               <div className="flex items-stretch gap-2">
                 {HOUR_TIERS.map(tier => (
                   <div key={tier.pct} className="flex-1 bg-green-500/10 border border-green-500/20 rounded-xl p-2.5 text-center">
-                    <p className="text-green-500 font-black text-sm">{tier.label}</p>
-                    <p className="text-muted-foreground text-[10px] mt-0.5">{tier.desc}</p>
+                    <p className="text-xs font-bold text-green-600">{tier.label}</p>
+                    <p className="text-[10px] text-muted-foreground">{tier.desc}</p>
                   </div>
                 ))}
               </div>
@@ -658,28 +778,32 @@ export default function CustomerBookPage() {
                 <Textarea id="details" placeholder="Stairs, elevator, special items, access instructions..." rows={3} value={form.details} onChange={e => setForm(f => ({ ...f, details: e.target.value }))} />
               </div>
 
-              {!user && (
-                <div className="space-y-3 pt-2 border-t border-border">
-                  <p className="text-sm font-semibold">Your Contact Info</p>
-                  <div>
-                    <Label htmlFor="guestName" className="text-sm mb-1.5 block">Full Name</Label>
-                    <Input id="guestName" placeholder="John Doe" value={form.guestName} onChange={e => setForm(f => ({ ...f, guestName: e.target.value }))} />
-                  </div>
-                  <div>
-                    <Label htmlFor="guestEmail" className="text-sm mb-1.5 block">Email Address</Label>
-                    <Input id="guestEmail" type="email" placeholder="you@example.com" value={form.guestEmail} onChange={e => setForm(f => ({ ...f, guestEmail: e.target.value }))} />
-                  </div>
-                  <div>
-                    <Label htmlFor="guestPhone" className="text-sm mb-1.5 block">Phone <span className="text-muted-foreground">(optional)</span></Label>
-                    <Input id="guestPhone" type="tel" placeholder="(555) 123-4567" value={form.guestPhone} onChange={e => setForm(f => ({ ...f, guestPhone: e.target.value }))} />
-                  </div>
+              {/* Contact info — always shown for all users, pre-filled when logged in */}
+              <div className="space-y-3 pt-2 border-t border-border">
+                <p className="text-sm font-semibold">Your Contact Info</p>
+                {user && (
+                  <p className="text-xs text-muted-foreground">Pre-filled from your profile — update if needed.</p>
+                )}
+                <div>
+                  <Label htmlFor="contactName" className="text-sm mb-1.5 block">Full Name <span className="text-destructive">*</span></Label>
+                  <Input id="contactName" placeholder="John Doe" value={form.contactName} onChange={e => setForm(f => ({ ...f, contactName: e.target.value }))} />
                 </div>
-              )}
+                <div>
+                  <Label htmlFor="contactPhone" className="flex items-center gap-1.5 text-sm mb-1.5">
+                    <Phone className="h-3.5 w-3.5" />Phone <span className="text-destructive">*</span>
+                  </Label>
+                  <Input id="contactPhone" type="tel" placeholder="(555) 123-4567" value={form.contactPhone} onChange={e => setForm(f => ({ ...f, contactPhone: e.target.value }))} />
+                </div>
+                <div>
+                  <Label htmlFor="contactEmail" className="text-sm mb-1.5 block">Email Address <span className="text-muted-foreground">(optional)</span></Label>
+                  <Input id="contactEmail" type="email" placeholder="you@example.com" value={form.contactEmail} onChange={e => setForm(f => ({ ...f, contactEmail: e.target.value }))} />
+                </div>
+              </div>
             </div>
 
             <div className="flex gap-3">
               <Button variant="outline" className="flex-1" onClick={prevStep}>Back</Button>
-              <Button className="flex-1" disabled={!form.fromAddress || !form.moveDate || (!user && !form.guestEmail)} onClick={nextStep}>
+              <Button className="flex-1" disabled={!canProceedFromDetails} onClick={nextStep}>
                 Review <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
             </div>
@@ -710,6 +834,18 @@ export default function CustomerBookPage() {
                   </div>
                 )}
 
+                {/* Size tier for snow/handyman/labor */}
+                {selectedSizeTier && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Size</span>
+                    <span className="text-sm font-medium">
+                      {selectedSizeTier.label}
+                      {!selectedSizeTier.isCustom && ` · ~$${selectedSizeTier.low}–${selectedSizeTier.high}`}
+                      {selectedSizeTier.isCustom && " · We'll quote on-site"}
+                    </span>
+                  </div>
+                )}
+
                 {/* Addons */}
                 {(isMoving ? movingAddons : junkAddons).filter(a => (addonQtys[a.id] || 0) > 0).map(a => (
                   <div key={a.id} className="flex items-center justify-between">
@@ -733,6 +869,17 @@ export default function CustomerBookPage() {
                 <div className="flex items-center gap-2">
                   <Calendar className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm">{form.moveDate ? new Date(form.moveDate + "T00:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }) : "Date not set"}</span>
+                </div>
+
+                <hr className="border-muted" />
+
+                {/* Contact info */}
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <div className="text-sm">
+                    <p className="font-medium">{form.contactName}</p>
+                    <p className="text-muted-foreground">{form.contactPhone}</p>
+                  </div>
                 </div>
 
                 {/* Total */}
