@@ -355,8 +355,8 @@ export default function LeadDetailPage() {
       setPlanHours(lead.confirmedHours || 3);
       setPlanArrivalWindow(lead.arrivalWindow || "");
       setPlanConfirmedDate(lead.confirmedDate || lead.moveDate || "");
-      if (lead.quoteSentAt) setQuoteSentAt(lead.quoteSentAt);
-      if (lead.squarePaymentUrl) setSquarePaymentUrl(lead.squarePaymentUrl);
+      setQuoteSentAt(lead.quoteSentAt || null);
+      setSquarePaymentUrl(lead.squarePaymentUrl || null);
       // Truck/trailer from truckConfig
       if (lead.truckConfig) {
         setPlanHasTruck(lead.truckConfig === "company_truck" || lead.truckConfig === "customer_truck");
