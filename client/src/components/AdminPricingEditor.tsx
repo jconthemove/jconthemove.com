@@ -64,8 +64,12 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
 
   const saveMutation = useMutation({
     mutationFn: async (values: typeof DEFAULTS) => {
+      const entries = Object.entries(values).filter(([, v]) => {
+        const n = parseFloat(v);
+        return !isNaN(n) && isFinite(n);
+      });
       await Promise.all(
-        Object.entries(values).map(([key, value]) =>
+        entries.map(([key, value]) =>
           apiRequest("PATCH", `/api/admin/pricing/${key}`, { value: parseFloat(value) })
         )
       );
@@ -78,7 +82,7 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
   });
 
   async function handleReset() {
-    if (!confirm("Reset ALL pricing to factory defaults? This will overwrite your current settings.")) return;
+    if (!confirm("Reset ALL pricing to factory defaults?\n\nRate: $60/mover·hr · Truck: $60 · Min job: $300 · JC222: $222\n\nThis overwrites your current settings.")) return;
     setResetting(true);
     try {
       await saveMutation.mutateAsync(DEFAULTS);
