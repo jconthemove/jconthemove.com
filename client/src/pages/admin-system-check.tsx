@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
-import { CheckCircle2, Circle, ArrowLeft, RefreshCw, AlertTriangle, CheckCheck } from "lucide-react";
+import { CheckCircle2, Circle, ArrowLeft, RefreshCw, AlertTriangle, CheckCheck, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { AdminPricingEditor } from "@/components/AdminPricingEditor";
 
 const STORAGE_KEY = "jcmoves-system-check-v2";
 
@@ -140,6 +141,7 @@ function saveChecks(checks: Record<string, boolean>) {
 
 export default function AdminSystemCheckPage() {
   const [checks, setChecks] = useState<Record<string, boolean>>(loadChecks);
+  const [tab, setTab] = useState<"checklist" | "pricing">("checklist");
   const { toast } = useToast();
 
   useEffect(() => { saveChecks(checks); }, [checks]);
@@ -182,6 +184,7 @@ export default function AdminSystemCheckPage() {
 
   return (
     <div className="min-h-screen bg-background pb-16">
+      {/* Header */}
       <div className="bg-card border-b border-border sticky top-0 z-20 px-4 py-4">
         <div className="max-w-3xl mx-auto flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3">
@@ -192,101 +195,148 @@ export default function AdminSystemCheckPage() {
             </Link>
             <div>
               <h1 className="text-base font-bold flex items-center gap-2">
-                <CheckCheck className="h-5 w-5 text-green-500" /> System Health Checklist
+                <CheckCheck className="h-5 w-5 text-green-500" /> System &amp; Config
               </h1>
-              <p className="text-xs text-muted-foreground">{checkedCount}/{totalCount} verified — {pct}% complete</p>
+              {tab === "checklist" && (
+                <p className="text-xs text-muted-foreground">{checkedCount}/{totalCount} verified — {pct}% complete</p>
+              )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" className="text-xs" onClick={resetAll}>
-              <RefreshCw className="h-3.5 w-3.5 mr-1" /> Reset All
-            </Button>
-            <Button
-              size="sm"
-              className="bg-blue-600 hover:bg-blue-700 text-white text-xs"
-              disabled={sendTestEmailsMutation.isPending}
-              onClick={() => sendTestEmailsMutation.mutate()}
-            >
-              {sendTestEmailsMutation.isPending ? "Sending…" : "📧 Send Test Emails"}
-            </Button>
-          </div>
+          {tab === "checklist" && (
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" className="text-xs" onClick={resetAll}>
+                <RefreshCw className="h-3.5 w-3.5 mr-1" /> Reset All
+              </Button>
+              <Button
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white text-xs"
+                disabled={sendTestEmailsMutation.isPending}
+                onClick={() => sendTestEmailsMutation.mutate()}
+              >
+                {sendTestEmailsMutation.isPending ? "Sending…" : "📧 Send Test Emails"}
+              </Button>
+            </div>
+          )}
         </div>
-        <div className="max-w-3xl mx-auto mt-3">
-          <div className="w-full bg-muted rounded-full h-2">
-            <div
-              className="bg-gradient-to-r from-green-500 to-emerald-400 h-2 rounded-full transition-all duration-500"
-              style={{ width: `${pct}%` }}
-            />
-          </div>
+
+        {/* Tab bar */}
+        <div className="max-w-3xl mx-auto mt-3 flex gap-1 border border-border rounded-lg p-1 bg-muted/40">
+          <button
+            onClick={() => setTab("checklist")}
+            className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-medium py-1.5 rounded-md transition-colors ${
+              tab === "checklist"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <CheckCheck className="h-3.5 w-3.5" /> Checklist
+          </button>
+          <button
+            onClick={() => setTab("pricing")}
+            className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-medium py-1.5 rounded-md transition-colors ${
+              tab === "pricing"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Settings2 className="h-3.5 w-3.5" /> Pricing
+          </button>
         </div>
+
+        {tab === "checklist" && (
+          <div className="max-w-3xl mx-auto mt-3">
+            <div className="w-full bg-muted rounded-full h-2">
+              <div
+                className="bg-gradient-to-r from-green-500 to-emerald-400 h-2 rounded-full transition-all duration-500"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
-      <div className="max-w-3xl mx-auto px-4 py-5 space-y-6">
-        {pct < 100 && (
-          <div className="flex items-center gap-2 text-amber-400 text-sm bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-3">
-            <AlertTriangle className="h-4 w-4 shrink-0" />
-            <span>{totalCount - checkedCount} items still need verification. Check each feature and tick it off when confirmed working.</span>
-          </div>
-        )}
-        {pct === 100 && (
-          <div className="flex items-center gap-2 text-green-400 text-sm bg-green-500/10 border border-green-500/20 rounded-lg px-4 py-3">
-            <CheckCircle2 className="h-4 w-4 shrink-0" />
-            <span>All systems verified! Great work.</span>
-          </div>
-        )}
+      {/* Tab: Checklist */}
+      {tab === "checklist" && (
+        <div className="max-w-3xl mx-auto px-4 py-5 space-y-6">
+          {pct < 100 && (
+            <div className="flex items-center gap-2 text-amber-400 text-sm bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-3">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>{totalCount - checkedCount} items still need verification. Check each feature and tick it off when confirmed working.</span>
+            </div>
+          )}
+          {pct === 100 && (
+            <div className="flex items-center gap-2 text-green-400 text-sm bg-green-500/10 border border-green-500/20 rounded-lg px-4 py-3">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              <span>All systems verified! Great work.</span>
+            </div>
+          )}
 
-        {SECTIONS.map((section) => {
-          const sectionItems = section.items;
-          const sectionDone = sectionItems.filter(i => checks[i.id]).length;
-          const sectionTotal = sectionItems.length;
-          const sectionComplete = sectionDone === sectionTotal;
+          {SECTIONS.map((section) => {
+            const sectionItems = section.items;
+            const sectionDone = sectionItems.filter(i => checks[i.id]).length;
+            const sectionTotal = sectionItems.length;
+            const sectionComplete = sectionDone === sectionTotal;
 
-          return (
-            <div key={section.id} className={`border rounded-xl overflow-hidden ${colorClasses[section.color]}`}>
-              <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">{section.icon}</span>
-                  <h2 className="font-semibold text-sm">{section.title}</h2>
+            return (
+              <div key={section.id} className={`border rounded-xl overflow-hidden ${colorClasses[section.color]}`}>
+                <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{section.icon}</span>
+                    <h2 className="font-semibold text-sm">{section.title}</h2>
+                  </div>
+                  <Badge className={`text-xs ${badgeColors[section.color]} border-0`}>
+                    {sectionComplete ? "✓ Complete" : `${sectionDone}/${sectionTotal}`}
+                  </Badge>
                 </div>
-                <Badge className={`text-xs ${badgeColors[section.color]} border-0`}>
-                  {sectionComplete ? "✓ Complete" : `${sectionDone}/${sectionTotal}`}
-                </Badge>
+                <div className="divide-y divide-border/40">
+                  {sectionItems.map((item) => {
+                    const done = !!checks[item.id];
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => toggle(item.id)}
+                        className={`w-full flex items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/20 ${done ? "opacity-60" : ""}`}
+                      >
+                        <div className="mt-0.5 shrink-0">
+                          {done
+                            ? <CheckCircle2 className="h-5 w-5 text-green-500" />
+                            : <Circle className="h-5 w-5 text-muted-foreground" />
+                          }
+                        </div>
+                        <div className="min-w-0">
+                          <p className={`text-sm font-medium leading-tight ${done ? "line-through text-muted-foreground" : ""}`}>
+                            {item.label}
+                          </p>
+                          {item.note && (
+                            <p className="text-xs text-muted-foreground mt-0.5">{item.note}</p>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              <div className="divide-y divide-border/40">
-                {sectionItems.map((item) => {
-                  const done = !!checks[item.id];
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => toggle(item.id)}
-                      className={`w-full flex items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/20 ${done ? "opacity-60" : ""}`}
-                    >
-                      <div className="mt-0.5 shrink-0">
-                        {done
-                          ? <CheckCircle2 className="h-5 w-5 text-green-500" />
-                          : <Circle className="h-5 w-5 text-muted-foreground" />
-                        }
-                      </div>
-                      <div className="min-w-0">
-                        <p className={`text-sm font-medium leading-tight ${done ? "line-through text-muted-foreground" : ""}`}>
-                          {item.label}
-                        </p>
-                        {item.note && (
-                          <p className="text-xs text-muted-foreground mt-0.5">{item.note}</p>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
 
-        <p className="text-center text-xs text-muted-foreground pb-4">
-          Checkboxes saved locally in this browser. Use "Reset All" to start fresh.
-        </p>
-      </div>
+          <p className="text-center text-xs text-muted-foreground pb-4">
+            Checkboxes saved locally in this browser. Use "Reset All" to start fresh.
+          </p>
+        </div>
+      )}
+
+      {/* Tab: Pricing */}
+      {tab === "pricing" && (
+        <div className="max-w-xl mx-auto px-4 py-6 space-y-4">
+          <div>
+            <h2 className="text-sm font-semibold mb-0.5">Pricing Configuration</h2>
+            <p className="text-xs text-muted-foreground">
+              Changes take effect immediately on the booking page and quote builder.
+            </p>
+          </div>
+          <AdminPricingEditor alwaysOpen />
+        </div>
+      )}
     </div>
   );
 }

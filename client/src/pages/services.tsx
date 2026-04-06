@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useCart } from "@/hooks/useCart";
+import { AdminPricingEditor } from "@/components/AdminPricingEditor";
 import {
   Truck, Users, Clock, DollarSign, CheckCircle, Star,
   ChevronRight, ArrowLeft, Phone, Zap, Shield, Award,
@@ -72,123 +73,6 @@ interface PricingConfig {
   ratePerMoverHour: number;
   truckAdd: number;
   minHours: Record<number, number>;
-}
-
-// ─── Admin Pricing Editor ────────────────────────────────────────────────────
-function AdminPricingEditor({ pricing }: { pricing: PricingConfig }) {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const [draft, setDraft] = useState({
-    rate_per_mover_hour: String(pricing.ratePerMoverHour),
-    truck_add: String(pricing.truckAdd),
-    min_hours_1: String(pricing.minHours[1]),
-    min_hours_2: String(pricing.minHours[2]),
-    min_hours_3: String(pricing.minHours[3]),
-    min_hours_4: String(pricing.minHours[4]),
-    min_hours_5: String(pricing.minHours[5]),
-  });
-  const [open, setOpen] = useState(false);
-
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      await Promise.all(
-        Object.entries(draft).map(([key, value]) =>
-          apiRequest("PATCH", `/api/admin/pricing/${key}`, { value: parseFloat(value) })
-        )
-      );
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/pricing"] });
-      toast({ title: "✅ Pricing updated!", description: "Changes are live on the booking page." });
-      setOpen(false);
-    },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
-  });
-
-  return (
-    <div className="rounded-2xl bg-slate-800/50 border border-amber-500/30 p-5 mt-4">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between text-left"
-      >
-        <div className="flex items-center gap-2">
-          <Settings className="h-4 w-4 text-amber-400" />
-          <span className="font-bold text-amber-300 text-sm">Admin: Edit Pricing</span>
-        </div>
-        {open ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
-      </button>
-
-      {open && (
-        <div className="mt-4 space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-slate-400 block mb-1">Rate per mover/hr ($)</label>
-              <Input
-                type="number"
-                value={draft.rate_per_mover_hour}
-                onChange={e => setDraft(d => ({ ...d, rate_per_mover_hour: e.target.value }))}
-                className="bg-slate-900 border-slate-700 text-white h-9 text-sm"
-              />
-              <p className="text-xs text-slate-600 mt-0.5">$1/mover/min = $60/hr per mover</p>
-            </div>
-            <div>
-              <label className="text-xs text-slate-400 block mb-1">Truck add-on/hr ($)</label>
-              <Input
-                type="number"
-                value={draft.truck_add}
-                onChange={e => setDraft(d => ({ ...d, truck_add: e.target.value }))}
-                className="bg-slate-900 border-slate-700 text-white h-9 text-sm"
-              />
-            </div>
-          </div>
-
-          <div>
-            <p className="text-xs text-slate-400 mb-2 font-semibold">Minimum Hours by Crew Size</p>
-            <div className="grid grid-cols-5 gap-2">
-              {([1, 2, 3, 4, 5] as const).map(n => {
-                const key = `min_hours_${n}` as keyof typeof draft;
-                return (
-                  <div key={n} className="text-center">
-                    <label className="text-xs text-slate-500 block mb-1">{n} Mover{n > 1 ? "s" : ""}</label>
-                    <Input
-                      type="number"
-                      value={draft[key]}
-                      onChange={e => setDraft(d => ({ ...d, [key]: e.target.value }))}
-                      className="bg-slate-900 border-slate-700 text-white h-9 text-sm text-center"
-                    />
-                    <p className="text-[10px] text-slate-600 mt-0.5">hrs min</p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="bg-slate-900/50 rounded-lg p-3 text-xs text-slate-400">
-            <p className="font-semibold text-slate-300 mb-1">Preview (Labor Only):</p>
-            {([1, 2, 3, 4, 5] as const).map(n => {
-              const rate = n * parseFloat(draft.rate_per_mover_hour || "60");
-              const min = parseFloat(draft[`min_hours_${n}` as keyof typeof draft] || "2");
-              return (
-                <div key={n} className="flex justify-between">
-                  <span>{n} Mover{n > 1 ? "s" : ""}</span>
-                  <span className="text-white">${rate}/hr · ${rate * min} min ({min}hr)</span>
-                </div>
-              );
-            })}
-          </div>
-
-          <Button
-            onClick={() => saveMutation.mutate()}
-            disabled={saveMutation.isPending}
-            className="w-full bg-amber-500 hover:bg-amber-400 text-black font-bold"
-          >
-            <Save className="h-4 w-4 mr-2" />
-            {saveMutation.isPending ? "Saving..." : "Save Pricing Changes"}
-          </Button>
-        </div>
-      )}
-    </div>
-  );
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -527,7 +411,7 @@ export default function ServicesPage() {
           </div>
 
           {/* Admin pricing editor — only visible to admins */}
-          {hasAdminAccess && <AdminPricingEditor pricing={pricing} />}
+          {hasAdminAccess && <AdminPricingEditor />}
         </div>
 
         {/* ── ADD-ONS ───────────────────────────────────────────────────── */}

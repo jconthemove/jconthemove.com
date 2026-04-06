@@ -597,6 +597,9 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
                   />
                 ))}
               </div>
+              <p className="text-[10px] text-slate-600 mt-2 text-center">
+                Prices calculated at ${pricing.ratePerMoverHour}/mover·hr · ${pricing.shortJobFull} min job floor
+              </p>
             </>
           )}
 
