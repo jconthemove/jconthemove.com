@@ -308,7 +308,12 @@ async function ensureJackpotsSeeded() {
         ('pricing_junk_small_high',      '200', 'Junk removal small load estimate high ($)'),
         ('pricing_junk_large_low',       '200', 'Junk removal full truckload estimate low ($)'),
         ('pricing_junk_large_high',      '600', 'Junk removal full truckload estimate high ($)'),
-        ('pricing_custom_items',         '[]',  'Custom additional items/services JSON array')
+        ('pricing_custom_items',         '[]',  'Custom additional items/services JSON array'),
+        ('pricing_jc272_price',          '272', 'JC272 promo price for outside-10-mi jobs ($)'),
+        ('pricing_jc222_miles',          '10',  'Distance threshold in miles for JC222 vs JC272'),
+        ('pricing_jc222_minutes',        '82',  'Duration cap in minutes for JC promo qualification'),
+        ('pricing_jc222_weight_limit',   '200', 'Light-item weight limit in lbs for JC promo qualification'),
+        ('pricing_heavy_item_flat',      '350', 'Heavy-item flat rate floor ($)')
       ON CONFLICT (setting_key) DO NOTHING;
     `);
     console.log('✅ Quantum Spin jackpots seeded');
@@ -16697,15 +16702,20 @@ Thank you for your business!
           4: n('pricing_min_hours_4', 2),
           5: n('pricing_min_hours_5', 2),
         },
-        shortJobRate:  n('pricing_short_job_rate',   150),
-        shortJobFull:  n('pricing_short_job_full',   300),
-        jc222Price:    n('pricing_jc222_price',      222),
-        driveRate:     n('pricing_drive_rate',        40),
-        driveSpeedMph: n('pricing_drive_speed_mph',   50),
-        junkSmallLow:  n('pricing_junk_small_low',   100),
-        junkSmallHigh: n('pricing_junk_small_high',  200),
-        junkLargeLow:  n('pricing_junk_large_low',   200),
-        junkLargeHigh: n('pricing_junk_large_high',  600),
+        shortJobRate:       n('pricing_short_job_rate',       150),
+        shortJobFull:       n('pricing_short_job_full',       300),
+        jc222Price:         n('pricing_jc222_price',          222),
+        jc272Price:         n('pricing_jc272_price',          272),
+        jc222Miles:         n('pricing_jc222_miles',           10),
+        jc222Minutes:       n('pricing_jc222_minutes',         82),
+        jc222WeightLimit:   n('pricing_jc222_weight_limit',   200),
+        heavyItemFlat:      n('pricing_heavy_item_flat',      350),
+        driveRate:          n('pricing_drive_rate',            40),
+        driveSpeedMph:      n('pricing_drive_speed_mph',       50),
+        junkSmallLow:       n('pricing_junk_small_low',       100),
+        junkSmallHigh:      n('pricing_junk_small_high',      200),
+        junkLargeLow:       n('pricing_junk_large_low',       200),
+        junkLargeHigh:      n('pricing_junk_large_high',      600),
         customItems,
         junkAddons,
       });
@@ -16766,7 +16776,10 @@ Thank you for your business!
   // Admin can override via PUT /api/admin/pricing/catalog-definitions.
   const DEFAULT_CATALOG_DEFINITIONS = {
     movingPackages: [
-      { id: "moving_2m_2h", movers: 2, hours: 2, label: "JC222 Special", tag: "Best Deal", isJc222: true },
+      { id: "moving_jc222", movers: 2, hours: 2, label: "JC222 — Local (≤10 mi)", tag: "Promo", isPromo: true, promoKey: "jc222", durationMinutes: 82 },
+      { id: "moving_jc272", movers: 2, hours: 2, label: "JC272 — Outside 10 mi",  tag: "Promo", isPromo: true, promoKey: "jc272", durationMinutes: 82 },
+      { id: "moving_heavy", movers: 3, hours: 2, label: "Heavy Item (Safe/Piano/Hot Tub)", tag: "Specialty", isHeavyItem: true },
+      { id: "moving_2m_2h", movers: 2, hours: 2, label: "2 Movers × 2 hrs", tag: "Quick Job" },
       { id: "moving_2m_3h", movers: 2, hours: 3, label: "2 Movers × 3 hrs", tag: "Short Move" },
       { id: "moving_2m_4h", movers: 2, hours: 4, label: "2 Movers × 4 hrs" },
       { id: "moving_3m_3h", movers: 3, hours: 3, label: "3 Movers × 3 hrs", tag: "Most Popular" },

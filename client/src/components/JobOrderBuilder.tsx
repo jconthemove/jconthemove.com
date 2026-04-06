@@ -21,6 +21,11 @@ interface Pricing {
   shortJobRate: number;
   shortJobFull: number;
   jc222Price: number;
+  jc272Price: number;
+  jc222Miles: number;
+  jc222Minutes: number;
+  jc222WeightLimit: number;
+  heavyItemFlat: number;
   driveRate: number;
   driveSpeedMph: number;
   junkSmallLow: number;
@@ -112,8 +117,11 @@ interface JobOrderBuilderProps {
   }) => void;
 }
 
-const MOVING_PACKAGES: { id: string; movers: number; hours: number; label: string; tag?: string; isJc222?: boolean }[] = [
-  { id: "moving_2m_2h", movers: 2, hours: 2, label: "JC222 Special",     tag: "Best Deal", isJc222: true },
+const MOVING_PACKAGES: { id: string; movers: number; hours: number; label: string; tag?: string; isPromo?: boolean; promoKey?: string; durationMinutes?: number; isHeavyItem?: boolean }[] = [
+  { id: "moving_jc222", movers: 2, hours: 2, label: "JC222 — Local (≤10 mi)", tag: "Promo", isPromo: true, promoKey: "jc222", durationMinutes: 82 },
+  { id: "moving_jc272", movers: 2, hours: 2, label: "JC272 — Outside 10 mi",  tag: "Promo", isPromo: true, promoKey: "jc272", durationMinutes: 82 },
+  { id: "moving_heavy", movers: 3, hours: 2, label: "Heavy Item (Safe/Piano/Hot Tub)", tag: "Specialty", isHeavyItem: true },
+  { id: "moving_2m_2h", movers: 2, hours: 2, label: "2 Movers × 2 hrs",  tag: "Quick Job"      },
   { id: "moving_2m_3h", movers: 2, hours: 3, label: "2 Movers × 3 hrs",  tag: "10% Off"        },
   { id: "moving_3m_3h", movers: 3, hours: 3, label: "3 Movers × 3 hrs",  tag: "Most Popular"   },
   { id: "moving_2m_4h", movers: 2, hours: 4, label: "2 Movers × 4 hrs"                         },
@@ -167,49 +175,27 @@ function PackageCard({ pkg, selected, pricing, onSelect }: {
   pricing: Pricing;
   onSelect: () => void;
 }) {
-  if (pkg.isJc222) {
-    return (
-      <button
-        onClick={onSelect}
-        className={cn(
-          "w-full text-left rounded-xl border-2 p-3 transition-all",
-          selected
-            ? "border-amber-500 bg-amber-950/40 ring-1 ring-amber-500/40"
-            : "border-amber-700/50 bg-amber-900/20 hover:border-amber-600"
-        )}
-      >
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-sm font-semibold text-white">{pkg.label}</span>
-              <Badge className="text-[10px] px-1.5 py-0 h-4 border bg-amber-600/30 text-amber-300 border-amber-500/40">
-                Best Deal
-              </Badge>
-            </div>
-            <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
-              <span className="flex items-center gap-1"><Users className="h-3 w-3" />{pkg.movers} movers</span>
-              <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{pkg.hours} hrs</span>
-            </div>
-            <p className="text-[11px] text-amber-400/80 mt-0.5">Promo rate — flat price</p>
-          </div>
-          <div className="text-right flex-shrink-0">
-            <p className="font-bold text-amber-400 text-base">${pricing.jc222Price.toLocaleString()}</p>
-          </div>
-        </div>
-        {selected && (
-          <div className="mt-2 flex justify-end">
-            <CheckCircle2 className="h-4 w-4 text-amber-400" />
-          </div>
-        )}
-      </button>
-    );
+  const isPromo = (pkg as any).isPromo === true;
+  const isHeavyItem = (pkg as any).isHeavyItem === true;
+
+  let displayPrice: number;
+  let savings = 0;
+  let floored = 0;
+
+  if (isPromo) {
+    displayPrice = (pkg as any).promoKey === "jc272" ? pricing.jc272Price : pricing.jc222Price;
+  } else if (isHeavyItem) {
+    displayPrice = pricing.heavyItemFlat;
+  } else {
+    const base = pkg.movers * pkg.hours * pricing.ratePerMoverHour;
+    floored = base < pricing.shortJobFull ? pricing.shortJobFull : base;
+    const discountPct = getHourDiscount(pkg.hours);
+    displayPrice = discountPct > 0 ? Math.round(floored * (1 - discountPct / 100)) : floored;
+    savings = floored - displayPrice;
   }
 
-  const base = pkg.movers * pkg.hours * pricing.ratePerMoverHour;
-  const floored = base < pricing.shortJobFull ? pricing.shortJobFull : base;
-  const discountPct = getHourDiscount(pkg.hours);
-  const labor = discountPct > 0 ? Math.round(floored * (1 - discountPct / 100)) : floored;
-  const savings = floored - labor;
+  const discountPct = (!isPromo && !isHeavyItem) ? getHourDiscount(pkg.hours) : 0;
+  const durationMinutes = (pkg as any).durationMinutes as number | undefined;
 
   return (
     <button
@@ -217,7 +203,15 @@ function PackageCard({ pkg, selected, pricing, onSelect }: {
       className={cn(
         "w-full text-left rounded-xl border-2 p-3 transition-all",
         selected
-          ? "border-blue-500 bg-blue-950/40 ring-1 ring-blue-500/40"
+          ? isPromo
+            ? "border-amber-500 bg-amber-950/30 ring-1 ring-amber-500/40"
+            : isHeavyItem
+            ? "border-orange-500 bg-orange-950/30 ring-1 ring-orange-500/40"
+            : "border-blue-500 bg-blue-950/40 ring-1 ring-blue-500/40"
+          : isPromo
+          ? "border-amber-500/40 bg-amber-950/10 hover:border-amber-500/60"
+          : isHeavyItem
+          ? "border-orange-500/30 bg-orange-950/10 hover:border-orange-500/50"
           : "border-slate-700/50 bg-slate-800/40 hover:border-slate-600"
       )}
     >
@@ -230,7 +224,17 @@ function PackageCard({ pkg, selected, pricing, onSelect }: {
                 {discountPct}% Off
               </Badge>
             )}
-            {!discountPct && pkg.tag && (
+            {isPromo && (
+              <Badge className="text-[10px] px-1.5 py-0 h-4 border bg-amber-600/30 text-amber-300 border-amber-500/40">
+                Promo
+              </Badge>
+            )}
+            {isHeavyItem && (
+              <Badge className="text-[10px] px-1.5 py-0 h-4 border bg-orange-600/30 text-orange-300 border-orange-500/40">
+                Specialty
+              </Badge>
+            )}
+            {!discountPct && !isPromo && !isHeavyItem && pkg.tag && (
               <Badge className={cn(
                 "text-[10px] px-1.5 py-0 h-4 border",
                 pkg.tag === "Most Popular" ? "bg-teal-600/30 text-teal-300 border-teal-500/40" :
@@ -242,17 +246,29 @@ function PackageCard({ pkg, selected, pricing, onSelect }: {
           </div>
           <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
             <span className="flex items-center gap-1"><Users className="h-3 w-3" />{pkg.movers} movers</span>
-            <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{pkg.hours} hrs</span>
+            {durationMinutes ? (
+              <span className="flex items-center gap-1"><Clock className="h-3 w-3" />1 hr 22 min</span>
+            ) : (
+              <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{pkg.hours} hrs{isHeavyItem ? " min" : ""}</span>
+            )}
           </div>
           {savings > 0 && (
             <p className="text-[11px] text-green-400/80 mt-0.5">Save ${savings}</p>
+          )}
+          {isPromo && (
+            <p className="text-[11px] text-amber-400/80 mt-0.5">Flat rate · no formula · screening required</p>
+          )}
+          {isHeavyItem && (
+            <p className="text-[11px] text-orange-400/80 mt-0.5">3 movers · 2 hr minimum · flat floor</p>
           )}
         </div>
         <div className="text-right flex-shrink-0">
           {savings > 0 && (
             <p className="text-slate-500 line-through text-xs">${floored}</p>
           )}
-          <p className="font-bold text-emerald-400 text-base">${labor.toLocaleString()}</p>
+          <p className={cn("font-bold text-base", isPromo ? "text-amber-400" : isHeavyItem ? "text-orange-400" : "text-emerald-400")}>
+            ${displayPrice.toLocaleString()}
+          </p>
         </div>
       </div>
       {selected && (
@@ -342,6 +358,8 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
     poolTableFee: parseFloat(lead.poolTableFee ?? "0") || 200,
   });
 
+  const [promoScreening, setPromoScreening] = useState({ weightOk: false, timeOk: false });
+
   const [driveMiles, setDriveMiles] = useState<string>("");
   const [driveAutoCalc, setDriveAutoCalc] = useState(false);
   const [truckIncluded, setTruckIncluded] = useState(false);
@@ -423,9 +441,13 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
       let laborTotal: number;
       let laborLabel: string;
 
-      if (pkg.isJc222) {
-        laborTotal = pricing.jc222Price;
-        laborLabel = `JC222 Special — ${pkg.movers} Movers × ${pkg.hours} hrs (promo rate)`;
+      if ((pkg as any).isPromo) {
+        const promoPrice = (pkg as any).promoKey === "jc272" ? pricing.jc272Price : pricing.jc222Price;
+        laborTotal = promoPrice;
+        laborLabel = `${pkg.label} — Flat Rate Promo`;
+      } else if ((pkg as any).isHeavyItem) {
+        laborTotal = pricing.heavyItemFlat;
+        laborLabel = `Heavy Item — 3 Movers × 2 hrs minimum (flat floor $${pricing.heavyItemFlat})`;
       } else {
         const base = pkg.movers * pkg.hours * pricing.ratePerMoverHour;
         const floored = base < pricing.shortJobFull ? pricing.shortJobFull : base;
@@ -660,10 +682,89 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
                     pkg={pkg}
                     selected={selectedPkg === i}
                     pricing={pricing}
-                    onSelect={() => setSelectedPkg(i)}
+                    onSelect={() => {
+                      setSelectedPkg(i);
+                      if (!(pkg as any).isPromo) {
+                        setPromoScreening({ weightOk: false, timeOk: false });
+                      }
+                    }}
                   />
                 ))}
               </div>
+
+              {/* Promo Screening Checklist */}
+              {selectedPkg !== null && (movingPackages[selectedPkg] as any)?.isPromo && (
+                <div className="mt-3 rounded-xl border border-amber-500/40 bg-amber-950/20 p-3 space-y-3">
+                  <p className="text-xs font-semibold text-amber-300 flex items-center gap-1.5">
+                    <AlertTriangle className="h-3.5 w-3.5" /> Promo Screening — Staff Must Confirm
+                  </p>
+                  <div className="space-y-2">
+                    <div
+                      className="flex items-start gap-2.5 cursor-pointer"
+                      onClick={() => setPromoScreening(s => ({ ...s, weightOk: !s.weightOk }))}
+                    >
+                      <Checkbox
+                        checked={promoScreening.weightOk}
+                        onCheckedChange={v => setPromoScreening(s => ({ ...s, weightOk: !!v }))}
+                        className="mt-0.5 flex-shrink-0"
+                      />
+                      <span className="text-sm text-slate-200">
+                        Item is under <span className="font-bold text-amber-300">{pricing.jc222WeightLimit} lbs</span> — light item confirmed
+                      </span>
+                    </div>
+                    <div
+                      className="flex items-start gap-2.5 cursor-pointer"
+                      onClick={() => setPromoScreening(s => ({ ...s, timeOk: !s.timeOk }))}
+                    >
+                      <Checkbox
+                        checked={promoScreening.timeOk}
+                        onCheckedChange={v => setPromoScreening(s => ({ ...s, timeOk: !!v }))}
+                        className="mt-0.5 flex-shrink-0"
+                      />
+                      <span className="text-sm text-slate-200">
+                        Total time (drive there + drive back + work) fits in <span className="font-bold text-amber-300">{pricing.jc222Minutes} min</span>
+                      </span>
+                    </div>
+                  </div>
+                  {(!promoScreening.weightOk || !promoScreening.timeOk) && (
+                    <div className="rounded-lg border border-red-500/40 bg-red-950/30 p-2.5 mt-1">
+                      <p className="text-xs text-red-300 font-semibold flex items-center gap-1 mb-1">
+                        <AlertTriangle className="h-3 w-3" /> Promo not yet qualified
+                      </p>
+                      <p className="text-[11px] text-slate-400 mb-2">
+                        Both boxes must be checked for the promo price to apply. If the job doesn't qualify, select one of these alternatives:
+                      </p>
+                      <div className="flex flex-col gap-1.5">
+                        <button
+                          className="text-left text-xs bg-slate-800/60 border border-slate-600/50 rounded-lg px-2.5 py-1.5 text-slate-300 hover:border-slate-500"
+                          onClick={() => {
+                            const stdIdx = movingPackages.findIndex(p => p.id === "moving_2m_2h");
+                            if (stdIdx >= 0) { setSelectedPkg(stdIdx); setPromoScreening({ weightOk: false, timeOk: false }); }
+                          }}
+                        >
+                          Switch to standard 2 movers × 2 hrs (${Math.max(2 * 2 * pricing.ratePerMoverHour, pricing.shortJobFull)})
+                        </button>
+                        <button
+                          className="text-left text-xs bg-orange-950/30 border border-orange-500/30 rounded-lg px-2.5 py-1.5 text-orange-300 hover:border-orange-500/50"
+                          onClick={() => {
+                            const heavyIdx = movingPackages.findIndex(p => (p as any).isHeavyItem);
+                            if (heavyIdx >= 0) { setSelectedPkg(heavyIdx); setPromoScreening({ weightOk: false, timeOk: false }); }
+                          }}
+                        >
+                          Switch to Heavy Item flat rate — 3 movers, 2 hrs min, ${pricing.heavyItemFlat}+
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {promoScreening.weightOk && promoScreening.timeOk && (
+                    <div className="rounded-lg border border-green-500/40 bg-green-950/20 p-2 flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-400 flex-shrink-0" />
+                      <p className="text-xs text-green-300 font-semibold">Promo qualified — flat rate applies</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <p className="text-[10px] text-slate-600 mt-2 text-center">
                 Prices calculated at ${pricing.ratePerMoverHour}/mover·hr · ${pricing.shortJobFull} min job floor
               </p>

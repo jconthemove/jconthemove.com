@@ -13,6 +13,11 @@ interface Pricing {
   shortJobFull: number;
   shortJobRate: number;
   jc222Price: number;
+  jc272Price: number;
+  jc222Miles: number;
+  jc222Minutes: number;
+  jc222WeightLimit: number;
+  heavyItemFlat: number;
   minHours: Record<number, number>;
 }
 
@@ -22,6 +27,11 @@ const DEFAULTS = {
   drive_rate: "40",
   short_job_full: "300",
   jc222_price: "222",
+  jc272_price: "272",
+  jc222_miles: "10",
+  jc222_minutes: "82",
+  jc222_weight_limit: "200",
+  heavy_item_flat: "350",
   min_hours_1: "5",
   min_hours_2: "4",
   min_hours_3: "3",
@@ -54,6 +64,11 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
       drive_rate:          String(pricing.driveRate ?? 40),
       short_job_full:      String(pricing.shortJobFull ?? 300),
       jc222_price:         String(pricing.jc222Price ?? 222),
+      jc272_price:         String(pricing.jc272Price ?? 272),
+      jc222_miles:         String(pricing.jc222Miles ?? 10),
+      jc222_minutes:       String(pricing.jc222Minutes ?? 82),
+      jc222_weight_limit:  String(pricing.jc222WeightLimit ?? 200),
+      heavy_item_flat:     String(pricing.heavyItemFlat ?? 350),
       min_hours_1:         String(pricing.minHours?.[1] ?? 5),
       min_hours_2:         String(pricing.minHours?.[2] ?? 4),
       min_hours_3:         String(pricing.minHours?.[3] ?? 3),
@@ -85,12 +100,12 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
   });
 
   async function handleReset() {
-    if (!confirm("Reset ALL pricing to factory defaults?\n\nRate: $85/mover·hr · Truck: $60 · Drive: $40 · Min job: $300 · JC222: $222\n\nThis overwrites your current settings.")) return;
+    if (!confirm("Reset ALL pricing to factory defaults?\n\nRate: $85/mover·hr · Truck: $60 · Drive: $40 · Min job: $300 · JC222: $222 · JC272: $272 · Heavy: $350\n\nThis overwrites your current settings.")) return;
     setResetting(true);
     try {
       await saveMutation.mutateAsync(DEFAULTS);
       setDraft({ ...DEFAULTS });
-      toast({ title: "Pricing reset to defaults", description: "Rate $85/hr · Truck $60/hr · Drive $40/hr · Floor $300 · JC222 $222" });
+      toast({ title: "Pricing reset to defaults", description: "Rate $85/hr · Truck $60/hr · Drive $40/hr · Floor $300 · JC222 $222 · JC272 $272 · Heavy $350" });
     } finally {
       setResetting(false);
     }
@@ -99,6 +114,8 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
   const rate = parseFloat(draft.rate_per_mover_hour || "60");
   const floor = parseFloat(draft.short_job_full || "300");
   const jc222 = parseFloat(draft.jc222_price || "222");
+  const jc272 = parseFloat(draft.jc272_price || "272");
+  const heavyFlat = parseFloat(draft.heavy_item_flat || "350");
 
   const SAMPLE_PKGS = [
     { movers: 2, hours: 2 },
@@ -181,7 +198,68 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
                 onChange={e => set("jc222_price", e.target.value)}
                 className="bg-slate-900 border-slate-700 text-white h-9 text-sm"
               />
-              <p className="text-[10px] text-slate-600 mt-0.5">JC222 Special — default $222</p>
+              <p className="text-[10px] text-slate-600 mt-0.5">Local (≤10 mi) — default $222</p>
+            </div>
+          </div>
+
+          {/* Row 3: JC272 + Heavy Item flat */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">JC272 promo price ($)</label>
+              <Input
+                type="number"
+                value={draft.jc272_price}
+                onChange={e => set("jc272_price", e.target.value)}
+                className="bg-slate-900 border-slate-700 text-white h-9 text-sm"
+              />
+              <p className="text-[10px] text-slate-600 mt-0.5">Outside 10 mi — default $272</p>
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">Heavy item flat floor ($)</label>
+              <Input
+                type="number"
+                value={draft.heavy_item_flat}
+                onChange={e => set("heavy_item_flat", e.target.value)}
+                className="bg-slate-900 border-slate-700 text-white h-9 text-sm"
+              />
+              <p className="text-[10px] text-slate-600 mt-0.5">3 movers · 2 hr min — default $350</p>
+            </div>
+          </div>
+
+          {/* Row 4: Distance threshold + Duration cap + Weight limit */}
+          <div>
+            <p className="text-xs text-slate-400 mb-2 font-semibold">JC Promo Screening Settings</p>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Distance (mi)</label>
+                <Input
+                  type="number"
+                  value={draft.jc222_miles}
+                  onChange={e => set("jc222_miles", e.target.value)}
+                  className="bg-slate-900 border-slate-700 text-white h-9 text-sm text-center"
+                />
+                <p className="text-[10px] text-slate-600 mt-0.5">JC222/272 split</p>
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Duration (min)</label>
+                <Input
+                  type="number"
+                  value={draft.jc222_minutes}
+                  onChange={e => set("jc222_minutes", e.target.value)}
+                  className="bg-slate-900 border-slate-700 text-white h-9 text-sm text-center"
+                />
+                <p className="text-[10px] text-slate-600 mt-0.5">Max total time</p>
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Weight (lbs)</label>
+                <Input
+                  type="number"
+                  value={draft.jc222_weight_limit}
+                  onChange={e => set("jc222_weight_limit", e.target.value)}
+                  className="bg-slate-900 border-slate-700 text-white h-9 text-sm text-center"
+                />
+                <p className="text-[10px] text-slate-600 mt-0.5">Light-item limit</p>
+              </div>
             </div>
           </div>
 
@@ -224,8 +302,24 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
                 );
               })}
               <div className="flex justify-between text-slate-400 border-t border-slate-700/50 pt-1 mt-1">
-                <span>JC222 Special</span>
+                <span>JC222 Local (≤{draft.jc222_miles} mi)</span>
                 <span className="text-amber-400 font-medium">${jc222}</span>
+              </div>
+              <div className="flex justify-between text-slate-400">
+                <span>JC272 Outside {draft.jc222_miles} mi</span>
+                <span className="text-amber-400 font-medium">${jc272}</span>
+              </div>
+              <div className="flex justify-between text-slate-400">
+                <span>Heavy Item flat floor</span>
+                <span className="text-orange-400 font-medium">${heavyFlat}</span>
+              </div>
+              <div className="flex justify-between text-slate-400">
+                <span>Promo duration cap</span>
+                <span className="text-slate-300">{draft.jc222_minutes} min</span>
+              </div>
+              <div className="flex justify-between text-slate-400">
+                <span>Light-item weight limit</span>
+                <span className="text-slate-300">{draft.jc222_weight_limit} lbs</span>
               </div>
               <div className="flex justify-between text-slate-400">
                 <span>Min job floor</span>
@@ -257,7 +351,7 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
           </div>
 
           <p className="text-[10px] text-slate-600 text-center">
-            Default: $85/mover/hr · $60 truck · $40 drive · $300 min · $222 JC222
+            Default: $85/mover/hr · $60 truck · $40 drive · $300 min · $222 JC222 · $272 JC272 · $350 Heavy · 82 min cap · 200 lb limit
           </p>
         </div>
       )}
