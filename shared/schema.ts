@@ -149,6 +149,7 @@ export const users = pgTable("users", {
   lastActive: timestamp("last_active"), // Last heartbeat timestamp (updated every 60s while online)
   capabilities: text("capabilities").array().default(sql`ARRAY[]::text[]`), // Capability flags: 'mover','driver','truck_small','truck_large','trailer_small','trailer_large','uhaul'
   isDriver: boolean("is_driver").default(false), // Whether this employee can drive the truck
+  acceptedJobTypes: text("accepted_job_types").array().default(sql`ARRAY['moving','junk','snow','handyman','labor','cleaning','demolition']::text[]`), // Job types this worker will accept
   rewardsEnrolled: boolean("rewards_enrolled").notNull().default(false),
   loyaltyTier: text("loyalty_tier").default("bronze"), // 'bronze', 'silver', 'gold', 'vip'
   totalCompletedSpend: decimal("total_completed_spend", { precision: 10, scale: 2 }).default("0.00"),

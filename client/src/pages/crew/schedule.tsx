@@ -66,6 +66,7 @@ type MyAvailability = {
   schedule: { dayOfWeek: number; startHour: number | null; endHour: number | null; isAvailable: boolean | null }[];
   goals: { weeklyJobGoal: number | null; monthlyJobGoal: number | null; preferredJobSize: string | null } | null;
   stats: { thisWeek: number; thisMonth: number; allTime: number };
+  acceptedJobTypes: string[];
 };
 
 type DayModalState = {
@@ -105,6 +106,17 @@ export default function CrewSchedulePage() {
   const [adminGoalTarget, setAdminGoalTarget] = useState<string | null>(null);
   const [adminGoalWeekly, setAdminGoalWeekly] = useState(0);
   const [adminGoalMonthly, setAdminGoalMonthly] = useState(0);
+
+  const ALL_JOB_TYPES = [
+    { key: "moving", label: "Moving", icon: "🚛" },
+    { key: "junk", label: "Junk Removal", icon: "🗑️" },
+    { key: "snow", label: "Snow Removal", icon: "❄️" },
+    { key: "handyman", label: "Handyman", icon: "🔧" },
+    { key: "labor", label: "Labor Only", icon: "💪" },
+    { key: "cleaning", label: "Cleaning", icon: "✨" },
+    { key: "demolition", label: "Demolition", icon: "⚒️" },
+  ];
+  const [selectedJobTypes, setSelectedJobTypes] = useState<string[] | null>(null);
 
   const { data: myAvailability, refetch: refetchAvailability } = useQuery<MyAvailability>({
     queryKey: ["/api/workers/my-availability"],
@@ -226,6 +238,15 @@ export default function CrewSchedulePage() {
       return res.json();
     },
     onSuccess: () => { refetchAvailability(); toast({ title: "Goals saved!" }); },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const saveJobTypesMutation = useMutation({
+    mutationFn: async (jobTypes: string[]) => {
+      const res = await apiRequest("PUT", "/api/workers/job-types", { jobTypes });
+      return res.json();
+    },
+    onSuccess: () => { refetchAvailability(); toast({ title: "✅ Job preferences saved!" }); },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
@@ -706,6 +727,58 @@ export default function CrewSchedulePage() {
               {saveGoalsMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <CheckCircle2 className="h-3 w-3 mr-1" />} Save Goals
             </Button>
           </div>
+
+          {/* Job Types I Accept */}
+          {!isAdmin && (() => {
+            const effectiveJobTypes = selectedJobTypes ?? myAvailability?.acceptedJobTypes ?? ALL_JOB_TYPES.map(t => t.key);
+            const toggleJobType = (key: string) => {
+              setSelectedJobTypes(prev => {
+                const current = prev ?? (myAvailability?.acceptedJobTypes ?? ALL_JOB_TYPES.map(t => t.key));
+                return current.includes(key) ? current.filter(k => k !== key) : [...current, key];
+              });
+            };
+            return (
+              <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl p-4 space-y-3">
+                <p className="text-sm font-semibold text-white flex items-center gap-2">✅ Job Types I Accept</p>
+                <p className="text-xs text-slate-500">Only jobs matching these types will be offered to you</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSelectedJobTypes(ALL_JOB_TYPES.map(t => t.key))}
+                    className="text-[10px] text-cyan-400 hover:text-cyan-300 underline"
+                  >Select All</button>
+                  <span className="text-slate-600 text-[10px]">·</span>
+                  <button
+                    onClick={() => setSelectedJobTypes([])}
+                    className="text-[10px] text-slate-400 hover:text-slate-300 underline"
+                  >Clear All</button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {ALL_JOB_TYPES.map(({ key, label, icon }) => {
+                    const checked = effectiveJobTypes.includes(key);
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => toggleJobType(key)}
+                        className={`flex items-center gap-2 p-2 rounded-lg border text-left transition-all ${checked ? "border-cyan-600/50 bg-cyan-600/10" : "border-slate-700/40 bg-slate-900/30 opacity-50"}`}
+                      >
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${checked ? "bg-cyan-600 border-cyan-600" : "border-slate-500"}`}>
+                          {checked && <span className="text-white text-[9px] font-bold">✓</span>}
+                        </div>
+                        <span className="text-xs text-slate-300">{icon} {label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <Button size="sm"
+                  onClick={() => saveJobTypesMutation.mutate(effectiveJobTypes)}
+                  disabled={saveJobTypesMutation.isPending}
+                  className="w-full bg-cyan-600 hover:bg-cyan-700 text-white h-8 text-sm"
+                >
+                  {saveJobTypesMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <CheckCircle2 className="h-3 w-3 mr-1" />} Save Job Types
+                </Button>
+              </div>
+            );
+          })()}
 
           {/* Weekly Availability */}
           <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl p-4 space-y-3">

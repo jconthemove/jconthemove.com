@@ -494,6 +494,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('⚠️ past_jobs_notice_seen migration error (non-fatal):', migErr);
   }
 
+  // Schema migration: add accepted_job_types column to users
+  try {
+    await pool.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS accepted_job_types text[] DEFAULT ARRAY['moving','junk','snow','handyman','labor','cleaning','demolition']::text[];
+    `);
+    console.log('✅ accepted_job_types column ready');
+  } catch (migErr) {
+    console.error('⚠️ accepted_job_types migration error (non-fatal):', migErr);
+  }
+
   // Schema migration: add customer-selected package column to leads
   try {
     await pool.query(`
@@ -6986,13 +6996,15 @@ Thank you for your business!
   app.get("/api/workers/my-availability", isAuthenticated, requireEmployee, async (req: any, res) => {
     try {
       const userId = req.currentUser.id;
-      const [blocks, schedule, goals, stats] = await Promise.all([
+      const [blocks, schedule, goals, stats, userRow] = await Promise.all([
         storage.getWorkerDayBlocks(userId),
         storage.getWorkerSchedule(userId),
         storage.getWorkerGoals(userId),
         storage.getWorkerJobStats(userId),
+        pool.query(`SELECT accepted_job_types FROM users WHERE id = $1`, [userId]),
       ]);
-      res.json({ blocks, schedule, goals: goals ?? null, stats });
+      const acceptedJobTypes = userRow.rows[0]?.accepted_job_types ?? ['moving','junk','snow','handyman','labor','cleaning','demolition'];
+      res.json({ blocks, schedule, goals: goals ?? null, stats, acceptedJobTypes });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -7049,6 +7061,24 @@ Thank you for your business!
       const { weeklyJobGoal, monthlyJobGoal, preferredJobSize, notes } = req.body;
       const goals = await storage.upsertWorkerGoals(req.currentUser.id, { weeklyJobGoal, monthlyJobGoal, preferredJobSize, notes });
       res.json(goals);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Worker updates their accepted job types
+  const KNOWN_JOB_TYPES = ['moving', 'junk', 'snow', 'handyman', 'labor', 'cleaning', 'demolition'];
+  app.put("/api/workers/job-types", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const { jobTypes } = req.body;
+      if (!Array.isArray(jobTypes)) return res.status(400).json({ error: "jobTypes must be an array" });
+      const invalid = jobTypes.filter((t: string) => !KNOWN_JOB_TYPES.includes(t));
+      if (invalid.length > 0) return res.status(400).json({ error: `Unknown job types: ${invalid.join(", ")}` });
+      await pool.query(
+        `UPDATE users SET accepted_job_types = $1 WHERE id = $2`,
+        [jobTypes, req.currentUser.id]
+      );
+      res.json({ success: true, acceptedJobTypes: jobTypes });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
