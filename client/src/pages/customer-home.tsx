@@ -121,7 +121,7 @@ export default function CustomerHomePage() {
 
   return (
     <div className="min-h-screen bg-zinc-950 pb-28">
-      <div className="max-w-[430px] mx-auto px-4 pt-6 space-y-5">
+      <div className="max-w-[430px] mx-auto px-4 pt-4 space-y-4">
 
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -142,20 +142,20 @@ export default function CustomerHomePage() {
         </div>
 
         {/* Hero CTAs */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="flex items-center gap-2">
           <button
             onClick={() => window.open("tel:+19062226009", "_self")}
-            className="flex items-center justify-center gap-2 py-4 px-3 rounded-2xl bg-orange-500 hover:bg-orange-400 active:scale-[0.97] transition-all shadow-lg shadow-orange-500/20"
+            className="flex items-center gap-1.5 py-1.5 px-3 rounded-full bg-orange-500/15 border border-orange-500/30 hover:bg-orange-500/25 active:scale-[0.97] transition-all"
           >
-            <Phone className="h-5 w-5 text-white" />
-            <span className="text-white font-black text-sm">Call a Mover</span>
+            <Phone className="h-3.5 w-3.5 text-orange-400" />
+            <span className="text-orange-300 font-semibold text-xs">Call a Mover</span>
           </button>
           <button
             onClick={() => window.open("sms:+19062226009", "_self")}
-            className="flex items-center justify-center gap-2 py-4 px-3 rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 active:scale-[0.97] transition-all"
+            className="flex items-center gap-1.5 py-1.5 px-3 rounded-full bg-zinc-800 border border-zinc-700 hover:border-zinc-600 active:scale-[0.97] transition-all"
           >
-            <MessageSquare className="h-5 w-5 text-blue-400" />
-            <span className="text-white font-bold text-sm">Text a Mover</span>
+            <MessageSquare className="h-3.5 w-3.5 text-blue-400" />
+            <span className="text-zinc-300 font-semibold text-xs">Text a Mover</span>
           </button>
         </div>
 
@@ -173,20 +173,20 @@ export default function CustomerHomePage() {
 
         {/* Unified service grid */}
         <div>
-          <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-3">Services</h2>
-          <div className="grid grid-cols-2 gap-3">
+          <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2">Services</h2>
+          <div className="grid grid-cols-2 gap-2">
 
             {/* Moving */}
             <button
               onClick={() => toggleExpand("moving")}
-              className={`relative flex flex-col items-start gap-2 p-4 rounded-2xl border transition-all active:scale-[0.97] text-left ${
+              className={`relative flex flex-col items-start gap-1.5 p-3 rounded-2xl border transition-all active:scale-[0.97] text-left ${
                 expanded === "moving"
                   ? "bg-blue-500/15 border-blue-500 ring-1 ring-blue-500"
                   : "bg-zinc-900 border-zinc-800 hover:border-zinc-700"
               }`}
             >
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${expanded === "moving" ? "bg-blue-500" : "bg-zinc-800"}`}>
-                <Truck className={`h-5 w-5 ${expanded === "moving" ? "text-white" : "text-zinc-400"}`} />
+              <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${expanded === "moving" ? "bg-blue-500" : "bg-zinc-800"}`}>
+                <Truck className={`h-4 w-4 ${expanded === "moving" ? "text-white" : "text-zinc-400"}`} />
               </div>
               <div>
                 <p className={`font-bold text-sm ${expanded === "moving" ? "text-white" : "text-white"}`}>Moving</p>
@@ -198,14 +198,14 @@ export default function CustomerHomePage() {
             {/* Junk Removal */}
             <button
               onClick={() => toggleExpand("junk")}
-              className={`relative flex flex-col items-start gap-2 p-4 rounded-2xl border transition-all active:scale-[0.97] text-left ${
+              className={`relative flex flex-col items-start gap-1.5 p-3 rounded-2xl border transition-all active:scale-[0.97] text-left ${
                 expanded === "junk"
                   ? "bg-orange-500/15 border-orange-500 ring-1 ring-orange-500"
                   : "bg-zinc-900 border-zinc-800 hover:border-zinc-700"
               }`}
             >
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${expanded === "junk" ? "bg-orange-500" : "bg-zinc-800"}`}>
-                <Trash2 className={`h-5 w-5 ${expanded === "junk" ? "text-white" : "text-zinc-400"}`} />
+              <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${expanded === "junk" ? "bg-orange-500" : "bg-zinc-800"}`}>
+                <Trash2 className={`h-4 w-4 ${expanded === "junk" ? "text-white" : "text-zinc-400"}`} />
               </div>
               <div>
                 <p className="font-bold text-sm text-white">Junk Removal</p>
@@ -217,10 +217,10 @@ export default function CustomerHomePage() {
             {/* Labor Only */}
             <button
               onClick={() => setLocation("/post-job")}
-              className="flex flex-col items-start gap-2 p-4 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
+              className="flex flex-col items-start gap-1.5 p-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
             >
-              <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center">
-                <Wrench className="h-5 w-5 text-amber-400" />
+              <div className="w-8 h-8 rounded-xl bg-zinc-800 flex items-center justify-center">
+                <Wrench className="h-4 w-4 text-amber-400" />
               </div>
               <div>
                 <p className="font-bold text-sm text-white">Labor Only</p>
@@ -231,10 +231,10 @@ export default function CustomerHomePage() {
             {/* Snow Removal */}
             <button
               onClick={() => setLocation("/post-job")}
-              className="flex flex-col items-start gap-2 p-4 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
+              className="flex flex-col items-start gap-1.5 p-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
             >
-              <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center">
-                <Snowflake className="h-5 w-5 text-cyan-400" />
+              <div className="w-8 h-8 rounded-xl bg-zinc-800 flex items-center justify-center">
+                <Snowflake className="h-4 w-4 text-cyan-400" />
               </div>
               <div>
                 <p className="font-bold text-sm text-white">Snow Removal</p>
@@ -245,14 +245,14 @@ export default function CustomerHomePage() {
             {/* Window Cleaning */}
             <button
               onClick={() => setLocation("/window-cleaning")}
-              className="relative flex flex-col items-start gap-2 p-4 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
+              className="relative flex flex-col items-start gap-1.5 p-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
             >
               {isApril && (
                 <span className="absolute -top-2 left-3 text-[9px] font-bold bg-orange-500 text-white px-2 py-0.5 rounded-full whitespace-nowrap">
                   April Special — 20% Off
                 </span>
               )}
-              <div className="w-10 h-10 rounded-xl bg-orange-500/15 flex items-center justify-center text-xl">
+              <div className="w-8 h-8 rounded-xl bg-orange-500/15 flex items-center justify-center text-base">
                 🪟
               </div>
               <div>
@@ -264,7 +264,7 @@ export default function CustomerHomePage() {
             {/* Trash Valet */}
             <button
               onClick={() => setLocation("/trash-valet")}
-              className={`relative flex flex-col items-start gap-2 p-4 rounded-2xl border transition-all active:scale-[0.97] text-left ${
+              className={`relative flex flex-col items-start gap-1.5 p-3 rounded-2xl border transition-all active:scale-[0.97] text-left ${
                 trashSub
                   ? "bg-zinc-900 border-emerald-500/20 hover:border-emerald-500/40"
                   : "bg-zinc-900 border-zinc-800 hover:border-zinc-700"
@@ -275,7 +275,7 @@ export default function CustomerHomePage() {
                   Active
                 </span>
               )}
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl ${trashSub ? "bg-emerald-500/10" : "bg-orange-500/10"}`}>
+              <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-base ${trashSub ? "bg-emerald-500/10" : "bg-orange-500/10"}`}>
                 🗑️
               </div>
               <div>
