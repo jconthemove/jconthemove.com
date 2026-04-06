@@ -3652,7 +3652,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update user compliance (age verification and TOS)
   app.post('/api/auth/user/compliance', isAuthenticatedAllowPending, async (req: any, res) => {
     try {
-      const userId = (req.session as any).userId;
+      const userId = req.user?.id || (req.session as any).userId;
       const { dateOfBirth, tosAccepted } = req.body;
 
       if (!dateOfBirth || typeof tosAccepted !== 'boolean') {

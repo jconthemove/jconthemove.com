@@ -143,6 +143,44 @@ function formatAddress(addr: string) {
   return addr;
 }
 
+// Strip leading emoji chars (like "🔥 ", "✅ ") from chatbot answer text
+function stripEmoji(str: string): string {
+  return str.replace(/^[\p{Emoji}\s]+/u, "").trim();
+}
+
+// Parse chatbot JSON details into structured, human-readable lines
+type DetailLine = { label: string; value: string };
+
+function parseChatbotDetails(raw: string): DetailLine[] | null {
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed._source !== "chatbot" || !parsed.answers) return null;
+    const a = parsed.answers;
+    const lines: DetailLine[] = [];
+
+    if (a.serviceType) lines.push({ label: "Service", value: stripEmoji(a.serviceType) });
+    if (a.homeSize)    lines.push({ label: "Home size", value: a.homeSize });
+    if (a.moveDate)    lines.push({ label: "Preferred date", value: stripEmoji(a.moveDate) });
+    if (a.fromZip)     lines.push({ label: "ZIP / From", value: a.fromZip });
+    if (a.originFloor) lines.push({ label: "Floor", value: a.originFloor });
+    if (a.parkingDistance) lines.push({ label: "Parking", value: stripEmoji(a.parkingDistance) });
+
+    if (Array.isArray(a.furniture) && a.furniture.length > 0) {
+      lines.push({ label: "Large furniture", value: a.furniture.join(", ") });
+    }
+    if (a.boxCount)    lines.push({ label: "Boxes", value: a.boxCount });
+    if (Array.isArray(a.specialItems) && a.specialItems.some((s: string) => !s.toLowerCase().includes("none"))) {
+      lines.push({ label: "Special items", value: a.specialItems.filter((s: string) => !s.toLowerCase().includes("none")).join(", ") });
+    }
+    if (a.packingHelp) lines.push({ label: "Packing help", value: stripEmoji(a.packingHelp) });
+    if (a.notes && a.notes !== "(none)") lines.push({ label: "Notes", value: a.notes });
+
+    return lines.length > 0 ? lines : null;
+  } catch {
+    return null;
+  }
+}
+
 // ── JobSheet ──────────────────────────────────────────────────────────────────
 function JobSheet({ job, open, onClose, onNewJob }: {
   job: CustomerJob; open: boolean; onClose: () => void; onNewJob: () => void;
@@ -159,7 +197,9 @@ function JobSheet({ job, open, onClose, onNewJob }: {
   const pickupAddr = formatAddress(job.pickupAddress);
   const dropoffAddr = formatAddress(job.dropoffAddress);
 
-  const jobDescription = job.details || job.notes || "";
+  const rawDescription = job.details || job.notes || "";
+  const chatbotLines = rawDescription ? parseChatbotDetails(rawDescription) : null;
+  const jobDescription = chatbotLines ? "" : rawDescription;
   const showReschedule = ["new", "quote_requested", "quoted", "available", "confirmed"].includes(job.status);
   const isQuoted = job.status === "quoted";
   const isActive = ["available", "confirmed", "in_progress", "accepted"].includes(job.status);
@@ -263,6 +303,23 @@ function JobSheet({ job, open, onClose, onNewJob }: {
                     {svc.label === "Labor Only" ? "helper" : svc.label === "Junk Removal" ? "crew member" : "mover"}
                     {job.crewSize > 1 ? "s" : ""}
                   </p>
+                </div>
+              </div>
+            )}
+
+            {chatbotLines && chatbotLines.length > 0 && (
+              <div className="flex items-start gap-3">
+                <FileText className="h-4 w-4 text-zinc-500 mt-0.5 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-zinc-500 mb-2">Job Details</p>
+                  <div className="space-y-1.5">
+                    {chatbotLines.map((line, i) => (
+                      <div key={i} className="flex gap-2">
+                        <span className="text-xs text-zinc-500 w-24 flex-shrink-0 pt-0.5">{line.label}</span>
+                        <span className="text-xs text-white leading-relaxed">{line.value}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
@@ -446,7 +503,11 @@ export default function MyJobsPage() {
               const price = parseFloat(job.estimatedTotal || "0");
 
               const pickupAddr = formatAddress(job.pickupAddress);
-              const shortDesc = (job.details || job.notes || "").slice(0, 40);
+              const rawDesc = job.details || job.notes || "";
+              const chatbotParsed = rawDesc ? parseChatbotDetails(rawDesc) : null;
+              const shortDesc = chatbotParsed
+                ? (chatbotParsed[0]?.value || "").slice(0, 40)
+                : rawDesc.slice(0, 40);
 
               return (
                 <button

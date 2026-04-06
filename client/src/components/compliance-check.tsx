@@ -25,7 +25,17 @@ export function ComplianceCheck({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user) return;
 
-    if (user.tosAccepted && user.dateOfBirth) {
+    // Staff accounts (admin, business_owner, employee) bypass compliance check —
+    // they verified at account creation during the onboarding / approval flow.
+    const isStaff = ["admin", "business_owner", "employee"].includes(user.role ?? "");
+    if (isStaff) {
+      setShowComplianceModal(false);
+      return;
+    }
+
+    // For customer accounts, only require tosAccepted — dateOfBirth may be null
+    // for accounts created before this field was added.
+    if (user.tosAccepted) {
       setShowComplianceModal(false);
       return;
     }
