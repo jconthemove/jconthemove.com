@@ -313,7 +313,29 @@ async function ensureJackpotsSeeded() {
         ('pricing_jc222_miles',          '10',  'Distance threshold in miles for JC222 vs JC272'),
         ('pricing_jc222_minutes',        '82',  'Duration cap in minutes for JC promo qualification'),
         ('pricing_jc222_weight_limit',   '200', 'Light-item weight limit in lbs for JC promo qualification'),
-        ('pricing_heavy_item_flat',      '350', 'Heavy-item flat rate floor ($)')
+        ('pricing_heavy_item_flat',      '100', 'Flat surcharge added for heavy items (400+ lbs) ($)'),
+        -- Specialty item flat fees (canonical source)
+        ('pricing_specialty_piano',      '200', 'Piano move flat surcharge ($)'),
+        ('pricing_specialty_hot_tub',    '250', 'Hot tub move flat surcharge ($)'),
+        ('pricing_specialty_safe',       '175', 'Heavy safe (300+ lbs) flat surcharge ($)'),
+        ('pricing_specialty_pool_table', '200', 'Pool table move flat surcharge ($)'),
+        -- Weight tier thresholds
+        ('pricing_weight_light_max',     '200', 'Max weight (lbs) for Light tier (below = light, qualifies for JC222 promo)'),
+        ('pricing_weight_heavy_min',     '400', 'Min weight (lbs) for Heavy tier (at or above = heavy, 3-mover minimum)'),
+        -- Access / difficulty add-on rates
+        ('pricing_stairs_per_flight',     '25', 'Charge per stair flight ($)'),
+        ('pricing_long_carry_flat',       '50', 'Long carry (>75 ft) flat charge ($)'),
+        ('pricing_elevator_flat',         '30', 'Elevator usage flat charge ($)'),
+        ('pricing_tight_access_flat',     '50', 'Tight access / narrow stairwell flat charge ($)'),
+        -- Distance tier thresholds and rates
+        ('pricing_local_miles_max',       '10', 'Max miles for Local tier (≤ this = local, no surcharge)'),
+        ('pricing_regional_miles_max',    '50', 'Max miles for Regional tier (> local and ≤ this = regional)'),
+        ('pricing_regional_surcharge_per_mile', '1', 'Regional distance surcharge per loaded mile ($)'),
+        ('pricing_long_distance_rate_per_mile', '4', 'Long distance flat rate per loaded mile ($)'),
+        ('pricing_long_distance_min_miles', '100', 'Minimum miles billed for long-distance jobs'),
+        -- Fuel surcharge
+        ('pricing_fuel_surcharge_flat',    '0', 'Flat fuel surcharge added when distance exceeds threshold ($, 0 = disabled)'),
+        ('pricing_fuel_surcharge_min_miles', '30', 'Minimum one-way miles to trigger fuel surcharge')
       ON CONFLICT (setting_key) DO NOTHING;
     `);
     console.log('✅ Quantum Spin jackpots seeded');
@@ -16718,6 +16740,29 @@ Thank you for your business!
         junkLargeHigh:      n('pricing_junk_large_high',      600),
         customItems,
         junkAddons,
+        // Specialty item canonical rates
+        specialtyPiano:     n('pricing_specialty_piano',      200),
+        specialtyHotTub:    n('pricing_specialty_hot_tub',    250),
+        specialtySafe:      n('pricing_specialty_safe',       175),
+        specialtyPoolTable: n('pricing_specialty_pool_table', 200),
+        // Weight tiers
+        weightLightMax:  n('pricing_weight_light_max',  200),
+        weightHeavyMin:  n('pricing_weight_heavy_min',  400),
+        heavyItemFlat:   n('pricing_heavy_item_flat',   100),
+        // Access / difficulty add-on rates
+        stairsPerFlight:   n('pricing_stairs_per_flight',    25),
+        longCarryFlat:     n('pricing_long_carry_flat',      50),
+        elevatorFlat:      n('pricing_elevator_flat',        30),
+        tightAccessFlat:   n('pricing_tight_access_flat',    50),
+        // Distance tier thresholds and rates
+        localMilesMax:              n('pricing_local_miles_max',               10),
+        regionalMilesMax:           n('pricing_regional_miles_max',            50),
+        regionalSurchargePerMile:   n('pricing_regional_surcharge_per_mile',    1),
+        longDistanceRatePerMile:    n('pricing_long_distance_rate_per_mile',    4),
+        longDistanceMinMiles:       n('pricing_long_distance_min_miles',      100),
+        // Fuel surcharge
+        fuelSurchargeFlat:     n('pricing_fuel_surcharge_flat',      0),
+        fuelSurchargeMinMiles: n('pricing_fuel_surcharge_min_miles', 30),
       });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -16802,6 +16847,7 @@ Thank you for your business!
       { id: "long_carry",       name: "Long Carry (>75 ft)",           unitPrice: 50,  category: "access",   qtyOptions: [1] },
       { id: "stairs",           name: "Stairs / Flights",              unitPrice: 25,  category: "access",   qtyOptions: [1,2,3,4] },
       { id: "elevator",         name: "Elevator Fee",                  unitPrice: 30,  category: "access",   qtyOptions: [1] },
+      { id: "tight_access",     name: "Tight Access / Narrow Stairwell", unitPrice: 50, category: "access",  qtyOptions: [1] },
       { id: "assembly",         name: "Furniture Assembly/Disassembly", unitPrice: 75, category: "labor",    qtyOptions: [1] },
       { id: "appliance_connect", name: "Appliance Connection",         unitPrice: 50,  category: "labor",    qtyOptions: [1] },
     ],

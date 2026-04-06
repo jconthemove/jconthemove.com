@@ -11,7 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   Users, Clock, DollarSign, Truck, Package2, Zap, AlertTriangle,
   CheckCircle2, Star, ShoppingCart, ChevronDown, ChevronUp,
-  Wrench, Sofa, Navigation
+  Wrench, Sofa, Navigation, Info
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +34,28 @@ interface Pricing {
   junkLargeHigh: number;
   customItems: { id: string; name: string; value: number }[];
   junkAddons: { id: string; name: string; value: number }[];
+  // Specialty item canonical rates
+  specialtyPiano: number;
+  specialtyHotTub: number;
+  specialtySafe: number;
+  specialtyPoolTable: number;
+  // Weight tiers
+  weightLightMax: number;
+  weightHeavyMin: number;
+  // Access / difficulty add-on rates
+  stairsPerFlight: number;
+  longCarryFlat: number;
+  elevatorFlat: number;
+  tightAccessFlat: number;
+  // Distance tier thresholds and rates
+  localMilesMax: number;
+  regionalMilesMax: number;
+  regionalSurchargePerMile: number;
+  longDistanceRatePerMile: number;
+  longDistanceMinMiles: number;
+  // Fuel surcharge
+  fuelSurchargeFlat: number;
+  fuelSurchargeMinMiles: number;
 }
 
 interface Lead {
@@ -81,6 +103,7 @@ interface OrderSummary {
   lineItems: LineItem[];
   packageLabel: string;
   tokenEstimate: number;
+  crewBumpReason?: string;
 }
 
 // Hour-based discount tiers
@@ -135,21 +158,22 @@ const MOVING_PACKAGES: { id: string; movers: number; hours: number; label: strin
 ];
 
 const MOVING_ADDONS = [
-  { id: "mattress_bag", name: "Mattress Bag(s)", description: "Protect mattresses during transport", unitPrice: 20, category: "supplies", qtyOptions: [1, 2, 3, 4] },
-  { id: "wardrobe_boxes", name: "Wardrobe Boxes", description: "Keep clothes on hangers during move", unitPrice: 25, category: "supplies", qtyOptions: [1, 2, 3, 4] },
-  { id: "packing_supplies", name: "Packing Tape & Supplies", description: "Tape, wrap, and moving blankets", unitPrice: 40, category: "supplies", qtyOptions: [1] },
-  { id: "long_carry", name: "Long Carry (>75 ft)", description: "Extra charge when elevator/distance exceeds 75 ft", unitPrice: 50, category: "access", qtyOptions: [1] },
-  { id: "stairs", name: "Stairs / Flights", description: "+$25 per additional floor above ground", unitPrice: 25, category: "access", qtyOptions: [1, 2, 3, 4] },
-  { id: "elevator", name: "Elevator Fee", description: "Building elevator usage/waiting time", unitPrice: 30, category: "access", qtyOptions: [1] },
-  { id: "assembly", name: "Furniture Assembly/Disassembly", description: "Beds, desks, and large furniture", unitPrice: 75, category: "labor", qtyOptions: [1] },
-  { id: "appliance_connect", name: "Appliance Connection", description: "Washer, dryer, fridge water line hookup", unitPrice: 50, category: "labor", qtyOptions: [1] },
+  { id: "mattress_bag",    name: "Mattress Bag(s)",                description: "Protect mattresses during transport",             unitPrice: 20, category: "supplies", qtyOptions: [1, 2, 3, 4] },
+  { id: "wardrobe_boxes",  name: "Wardrobe Boxes",                 description: "Keep clothes on hangers during move",             unitPrice: 25, category: "supplies", qtyOptions: [1, 2, 3, 4] },
+  { id: "packing_supplies",name: "Packing Tape & Supplies",        description: "Tape, wrap, and moving blankets",                 unitPrice: 40, category: "supplies", qtyOptions: [1] },
+  { id: "long_carry",      name: "Long Carry (>75 ft)",            description: "Extra charge when distance exceeds 75 ft",        unitPrice: 50, category: "access",   qtyOptions: [1] },
+  { id: "stairs",          name: "Stairs / Flights",               description: "+$25 per additional floor above ground",          unitPrice: 25, category: "access",   qtyOptions: [1, 2, 3, 4] },
+  { id: "elevator",        name: "Elevator Fee",                   description: "Building elevator usage/waiting time",            unitPrice: 30, category: "access",   qtyOptions: [1] },
+  { id: "tight_access",   name: "Tight Access / Narrow Stairwell", description: "Flat surcharge for difficult access situations",  unitPrice: 50, category: "access",   qtyOptions: [1] },
+  { id: "assembly",        name: "Furniture Assembly/Disassembly", description: "Beds, desks, and large furniture",                unitPrice: 75, category: "labor",    qtyOptions: [1] },
+  { id: "appliance_connect",name: "Appliance Connection",          description: "Washer, dryer, fridge water line hookup",         unitPrice: 50, category: "labor",    qtyOptions: [1] },
 ];
 
 const MOVING_SPECIAL_ITEMS = [
-  { id: "hot_tub", name: "Hot Tub", description: "Specialty rigging required", baseFee: 250, key: "hasHotTub" as const, feeKey: "hotTubFee" as const },
-  { id: "piano", name: "Piano", description: "Upright or grand piano move", baseFee: 200, key: "hasPiano" as const, feeKey: "pianoFee" as const },
-  { id: "heavy_safe", name: "Heavy Safe (300+ lbs)", description: "Gun safe or floor safe", baseFee: 175, key: "hasHeavySafe" as const, feeKey: "heavySafeFee" as const },
-  { id: "pool_table", name: "Pool Table", description: "Disassemble, move, and reassemble", baseFee: 200, key: "hasPoolTable" as const, feeKey: "poolTableFee" as const },
+  { id: "hot_tub",    name: "Hot Tub",              description: "Specialty rigging required",         baseFee: 250, key: "hasHotTub"    as const, feeKey: "hotTubFee"    as const, pricingKey: "specialtyHotTub"    as const, crewMin: 3 },
+  { id: "piano",      name: "Piano",                description: "Upright or grand piano move",        baseFee: 200, key: "hasPiano"     as const, feeKey: "pianoFee"     as const, pricingKey: "specialtyPiano"     as const, crewMin: 3 },
+  { id: "heavy_safe", name: "Heavy Safe (300+ lbs)",description: "Gun safe or floor safe",             baseFee: 175, key: "hasHeavySafe" as const, feeKey: "heavySafeFee" as const, pricingKey: "specialtySafe"      as const, crewMin: 3 },
+  { id: "pool_table", name: "Pool Table",           description: "Disassemble, move, and reassemble",  baseFee: 200, key: "hasPoolTable" as const, feeKey: "poolTableFee" as const, pricingKey: "specialtyPoolTable" as const, crewMin: 2 },
 ];
 
 const JUNK_PACKAGES = [
@@ -360,6 +384,10 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
 
   const [promoScreening, setPromoScreening] = useState({ weightOk: false, timeOk: false });
 
+  // Crew override: null = auto, otherwise staff-overridden minimum
+  const [crewOverride, setCrewOverride] = useState<number | null>(null);
+  const [crewOverrideConfirmed, setCrewOverrideConfirmed] = useState(false);
+
   const [driveMiles, setDriveMiles] = useState<string>("");
   const [driveAutoCalc, setDriveAutoCalc] = useState(false);
   const [truckIncluded, setTruckIncluded] = useState(false);
@@ -369,6 +397,17 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
 
   const pickupAddr = lead.confirmedFromAddress || lead.fromAddress;
   const dropoffAddr = lead.confirmedToAddress || lead.toAddress;
+
+  // Sync special fees from pricing config when pricing loads
+  useEffect(() => {
+    if (!pricing) return;
+    setSpecialFees(prev => ({
+      hotTubFee:    parseFloat(lead.hotTubFee    ?? "0") || pricing.specialtyHotTub    || prev.hotTubFee,
+      pianoFee:     parseFloat(lead.pianoFee     ?? "0") || pricing.specialtyPiano     || prev.pianoFee,
+      heavySafeFee: parseFloat(lead.heavySafeFee ?? "0") || pricing.specialtySafe      || prev.heavySafeFee,
+      poolTableFee: parseFloat(lead.poolTableFee ?? "0") || pricing.specialtyPoolTable || prev.poolTableFee,
+    }));
+  }, [pricing]);
 
   useEffect(() => {
     if (!pickupAddr || driveMiles) return;
@@ -395,23 +434,95 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
     }
   }, [pricing, lead.crewSize, lead.basePrice, isMoving, movingPackages]);
 
-  const driveLineItem = useMemo((): LineItem | null => {
+  // Compute crew auto-minimum based on specialty items and stairs (truck jobs)
+  const autoCrewMinimum = useMemo(() => {
+    if (!pricing) return { min: 2, reason: null as string | null };
+    const reasons: string[] = [];
+    let min = 2;
+
+    if (specialItems.hasPiano) { min = Math.max(min, 3); reasons.push("Piano requires 3-mover minimum"); }
+    if (specialItems.hasHotTub) { min = Math.max(min, 3); reasons.push("Hot Tub requires 3-mover minimum"); }
+    if (specialItems.hasHeavySafe) { min = Math.max(min, 3); reasons.push("Heavy Safe requires 3-mover minimum"); }
+
+    const stairsQty = addonQty["stairs"] ?? 0;
+    if (truckIncluded && stairsQty > 0) {
+      min = Math.max(min, 3);
+      reasons.push("Stairs on truck job bumps crew +1 (min 3)");
+    }
+
+    return { min, reason: reasons.length > 0 ? reasons.join("; ") : null };
+  }, [specialItems, addonQty, truckIncluded, pricing]);
+
+  // Determine effective crew for selected package (respects override with confirmation)
+  const effectiveCrewMin = crewOverrideConfirmed && crewOverride !== null
+    ? crewOverride
+    : autoCrewMinimum.min;
+
+  const driveLineItem = useMemo((): LineItem[] => {
     const miles = parseFloat(driveMiles);
-    if (!miles || miles <= 0 || !pricing) return null;
-    const driveRate = pricing.driveRate || 40;
-    const crewSize = selectedPkg !== null ? movingPackages[selectedPkg]?.movers ?? 2 : 2;
-    const roundTripMiles = miles * 2;
-    const driveHours = Math.ceil(roundTripMiles / (pricing.driveSpeedMph || 45) * 2) / 2; // round to 0.5
-    const fee = Math.round(driveHours * crewSize * driveRate);
-    return {
-      id: "drive_time",
-      name: `Drive Time — ${miles} mi × 2 (round trip) ÷ ${pricing.driveSpeedMph || 45}mph × ${crewSize} movers @ $${driveRate}/hr`,
-      qty: 1,
-      unitPrice: fee,
-      total: fee,
-      category: "drive",
-    };
-  }, [driveMiles, pricing, selectedPkg]);
+    if (!miles || miles <= 0 || !pricing) return [];
+    const items: LineItem[] = [];
+    const crewSize = selectedPkg !== null ? Math.max(movingPackages[selectedPkg]?.movers ?? 2, effectiveCrewMin) : effectiveCrewMin;
+
+    // Distance tier classification
+    const isRegional = miles > pricing.localMilesMax && miles <= pricing.regionalMilesMax;
+    const isLongDistance = miles > pricing.regionalMilesMax;
+
+    if (isLongDistance) {
+      // Long distance: per-mile flat rate, 100-mile minimum
+      const billedMiles = Math.max(Math.ceil(miles), pricing.longDistanceMinMiles);
+      const fee = Math.round(billedMiles * pricing.longDistanceRatePerMile);
+      items.push({
+        id: "long_distance_travel",
+        name: `Long Distance — ${billedMiles} mi billed @ $${pricing.longDistanceRatePerMile}/mi`,
+        qty: 1,
+        unitPrice: fee,
+        total: fee,
+        category: "drive",
+      });
+    } else {
+      // Local / regional: drive time rate
+      const driveRate = pricing.driveRate || 40;
+      const roundTripMiles = miles * 2;
+      const driveHours = Math.ceil(roundTripMiles / (pricing.driveSpeedMph || 45) * 2) / 2;
+      const fee = Math.round(driveHours * crewSize * driveRate);
+      const tierLabel = isRegional ? "Regional Drive Time" : "Drive Time";
+      items.push({
+        id: "drive_time",
+        name: `${tierLabel} — ${miles} mi × 2 ÷ ${pricing.driveSpeedMph || 45}mph × ${crewSize} movers @ $${driveRate}/hr`,
+        qty: 1,
+        unitPrice: fee,
+        total: fee,
+        category: "drive",
+      });
+
+      if (isRegional && pricing.regionalSurchargePerMile > 0) {
+        const regionalFee = Math.round(miles * pricing.regionalSurchargePerMile);
+        items.push({
+          id: "regional_surcharge",
+          name: `Regional travel surcharge — ${miles} mi @ $${pricing.regionalSurchargePerMile}/mi`,
+          qty: 1,
+          unitPrice: regionalFee,
+          total: regionalFee,
+          category: "drive",
+        });
+      }
+    }
+
+    // Fuel surcharge
+    if (pricing.fuelSurchargeFlat > 0 && miles >= pricing.fuelSurchargeMinMiles) {
+      items.push({
+        id: "fuel_surcharge",
+        name: `Fuel surcharge — ${miles} mi trip`,
+        qty: 1,
+        unitPrice: pricing.fuelSurchargeFlat,
+        total: pricing.fuelSurchargeFlat,
+        category: "drive",
+      });
+    }
+
+    return items;
+  }, [driveMiles, pricing, selectedPkg, effectiveCrewMin, movingPackages]);
 
   const truckLineItem = useMemo((): LineItem | null => {
     if (!truckIncluded || !pricing || selectedPkg === null) return null;
@@ -429,6 +540,41 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
     };
   }, [truckIncluded, pricing, selectedPkg, movingPackages]);
 
+  // Build add-on line items with pricing-config-driven unit prices
+  const addonLineItems = useMemo((): LineItem[] => {
+    if (!pricing) return [];
+    const items: LineItem[] = [];
+    const activeAddons = isMoving ? movingAddons : junkAddons;
+
+    activeAddons.forEach(addon => {
+      const qty = addonQty[addon.id] ?? 0;
+      if (qty <= 0) return;
+
+      // Override unit price from pricing config for access add-ons
+      let unitPrice = addon.unitPrice;
+      if (addon.id === "stairs")       unitPrice = pricing.stairsPerFlight   ?? unitPrice;
+      if (addon.id === "long_carry")   unitPrice = pricing.longCarryFlat     ?? unitPrice;
+      if (addon.id === "elevator")     unitPrice = pricing.elevatorFlat      ?? unitPrice;
+      if (addon.id === "tight_access") unitPrice = pricing.tightAccessFlat   ?? unitPrice;
+
+      // Build descriptive name for access add-ons
+      let name = addon.name;
+      if (addon.id === "stairs" && qty > 1) name = `Stairs · ${qty} flights`;
+      if (addon.id === "stairs" && qty === 1) name = `Stairs · 1 flight`;
+
+      items.push({
+        id: addon.id,
+        name,
+        qty,
+        unitPrice,
+        total: unitPrice * qty,
+        category: addon.category ?? "addon",
+      });
+    });
+
+    return items;
+  }, [addonQty, pricing, isMoving, movingAddons, junkAddons]);
+
   const summary = useMemo((): OrderSummary | null => {
     if (!pricing) return null;
 
@@ -438,10 +584,14 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
       if (selectedPkg === null) return null;
       const pkg = movingPackages[selectedPkg];
 
+      // Enforce crew minimum
+      const effectiveMovers = Math.max(pkg.movers, effectiveCrewMin);
+      const crewBumpReason = effectiveMovers > pkg.movers ? autoCrewMinimum.reason ?? undefined : undefined;
+
       let laborTotal: number;
       let laborLabel: string;
 
-      if ((pkg as any).isPromo) {
+      if ((pkg as any).isPromo || pkg.isJc222) {
         const promoPrice = (pkg as any).promoKey === "jc272" ? pricing.jc272Price : pricing.jc222Price;
         laborTotal = promoPrice;
         laborLabel = `${pkg.label} — Flat Rate Promo`;
@@ -449,13 +599,13 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
         laborTotal = pricing.heavyItemFlat;
         laborLabel = `Heavy Item — 3 Movers × 2 hrs minimum (flat floor $${pricing.heavyItemFlat})`;
       } else {
-        const base = pkg.movers * pkg.hours * pricing.ratePerMoverHour;
+        const base = effectiveMovers * pkg.hours * pricing.ratePerMoverHour;
         const floored = base < pricing.shortJobFull ? pricing.shortJobFull : base;
         const discountPct = getHourDiscount(pkg.hours);
         laborTotal = discountPct > 0 ? Math.round(floored * (1 - discountPct / 100)) : floored;
         laborLabel = discountPct > 0
-          ? `Labor — ${pkg.movers} Movers × ${pkg.hours} hrs (${discountPct}% off)`
-          : `Labor — ${pkg.movers} Movers × ${pkg.hours} hrs @ $${pricing.ratePerMoverHour}/mover/hr`;
+          ? `Labor — ${effectiveMovers} Movers × ${pkg.hours} hrs (${discountPct}% off)`
+          : `Labor — ${effectiveMovers} Movers × ${pkg.hours} hrs @ $${pricing.ratePerMoverHour}/mover/hr`;
       }
 
       lineItems.push({
@@ -468,28 +618,17 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
       });
 
       if (truckLineItem) lineItems.push(truckLineItem);
-      if (driveLineItem) lineItems.push(driveLineItem);
+      driveLineItem.forEach(li => lineItems.push(li));
 
-      movingAddons.forEach(addon => {
-        const qty = addonQty[addon.id] ?? 0;
-        if (qty > 0) {
-          lineItems.push({
-            id: addon.id,
-            name: addon.name,
-            qty,
-            unitPrice: addon.unitPrice,
-            total: addon.unitPrice * qty,
-            category: addon.category,
-          });
-        }
-      });
+      addonLineItems.forEach(li => lineItems.push(li));
 
       specialItemsDefs.forEach(item => {
         if (specialItems[item.key]) {
-          const fee = specialFees[item.feeKey] ?? item.baseFee;
+          const fee = specialFees[item.feeKey] ?? (pricing[(item as any).pricingKey] ?? item.baseFee);
+          const crewNote = item.crewMin >= 3 ? " · 3-mover min" : item.crewMin === 2 ? " · 2-mover min" : "";
           lineItems.push({
             id: item.id,
-            name: `${item.name} (specialty move)`,
+            name: `${item.name} surcharge${crewNote}`,
             qty: 1,
             unitPrice: fee,
             total: fee,
@@ -505,11 +644,12 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
         laborTotal,
         addonsTotal,
         grandTotal,
-        crewSize: pkg.movers,
+        crewSize: effectiveMovers,
         confirmedHours: pkg.hours,
         lineItems,
         packageLabel: pkg.label,
         tokenEstimate: Math.round(grandTotal * EARN_RATE),
+        crewBumpReason,
       };
     }
 
@@ -542,21 +682,9 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
         return null;
       }
 
-      if (driveLineItem) lineItems.push(driveLineItem);
+      driveLineItem.forEach(li => lineItems.push(li));
 
-      junkAddons.forEach(addon => {
-        const qty = addonQty[addon.id] ?? 0;
-        if (qty > 0) {
-          lineItems.push({
-            id: addon.id,
-            name: addon.name,
-            qty,
-            unitPrice: addon.unitPrice,
-            total: addon.unitPrice * qty,
-            category: "addon",
-          });
-        }
-      });
+      addonLineItems.forEach(li => lineItems.push(li));
 
       const grandTotal = lineItems.reduce((s, i) => s + i.total, 0);
       const addonsTotal = grandTotal - laborTotal;
@@ -574,7 +702,9 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
     }
 
     return null;
-  }, [pricing, selectedPkg, selectedJunkPkg, addonQty, specialItems, specialFees, junkCustomPrice, isMoving, isJunk, driveLineItem, truckLineItem, movingPackages, junkPackages, movingAddons, junkAddons, specialItemsDefs]);
+  }, [pricing, selectedPkg, selectedJunkPkg, addonQty, specialItems, specialFees, junkCustomPrice,
+      isMoving, isJunk, driveLineItem, truckLineItem, addonLineItems, movingPackages, junkPackages,
+      specialItemsDefs, effectiveCrewMin, autoCrewMinimum]);
 
   const handleApply = async () => {
     if (!summary) return;
@@ -639,6 +769,10 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
 
   const activeAddons = isMoving ? movingAddons : junkAddons;
 
+  // Detect crew bump situation
+  const selectedPkgMovers = selectedPkg !== null ? movingPackages[selectedPkg]?.movers ?? 2 : 2;
+  const hasCrwBump = isMoving && autoCrewMinimum.min > selectedPkgMovers && selectedPkg !== null;
+
   return (
     <Card className="border-blue-500/30 bg-gradient-to-br from-slate-900/80 to-slate-800/60">
       <CardHeader className="pb-3">
@@ -684,6 +818,8 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
                     pricing={pricing}
                     onSelect={() => {
                       setSelectedPkg(i);
+                      setCrewOverride(null);
+                      setCrewOverrideConfirmed(false);
                       if (!(pkg as any).isPromo) {
                         setPromoScreening({ weightOk: false, timeOk: false });
                       }
@@ -800,6 +936,50 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
           )}
         </div>
 
+        {/* ── Crew Auto-Minimum Notice ── */}
+        {isMoving && hasCrwBump && (
+          <div className="rounded-xl border border-amber-500/40 bg-amber-950/30 p-3 space-y-2">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-400 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-amber-300">Crew minimum bumped to {autoCrewMinimum.min} movers</p>
+                <p className="text-xs text-amber-400/70 mt-0.5">{autoCrewMinimum.reason}</p>
+              </div>
+            </div>
+            {!crewOverrideConfirmed ? (
+              <div className="flex gap-2 pt-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs border-amber-500/40 text-amber-300 hover:bg-amber-950/40 h-7 px-3"
+                  onClick={() => {
+                    if (confirm(`Override crew minimum from ${autoCrewMinimum.min} to ${selectedPkgMovers}? This overrides the safety minimum for specialty/heavy items. This will be noted.\n\nContinue with ${selectedPkgMovers} movers?`)) {
+                      setCrewOverride(selectedPkgMovers);
+                      setCrewOverrideConfirmed(true);
+                    }
+                  }}
+                >
+                  Override to {selectedPkgMovers} movers
+                </Button>
+                <span className="text-[10px] text-slate-500 self-center">Quote will use {autoCrewMinimum.min} movers</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 pt-1">
+                <Info className="h-3.5 w-3.5 text-slate-400" />
+                <span className="text-xs text-slate-400">Override active — using {crewOverride} movers</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs text-slate-500 h-6 px-2 ml-auto hover:text-amber-400"
+                  onClick={() => { setCrewOverride(null); setCrewOverrideConfirmed(false); }}
+                >
+                  Undo
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── Truck Toggle (moving only) ── */}
         {isMoving && (
           <div className="flex items-center gap-3 rounded-xl border border-slate-700/50 bg-slate-800/40 px-3 py-2.5">
@@ -847,16 +1027,23 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
               />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">mi</span>
             </div>
-            {driveLineItem && (
+            {driveLineItem.length > 0 && (
               <div className="flex-shrink-0 text-right">
-                <p className="text-emerald-400 font-bold text-sm">${driveLineItem.total}</p>
-                <p className="text-slate-500 text-[10px]">drive fee</p>
+                <p className="text-emerald-400 font-bold text-sm">${driveLineItem.reduce((s, li) => s + li.total, 0)}</p>
+                <p className="text-slate-500 text-[10px]">travel fee</p>
               </div>
             )}
           </div>
-          {driveLineItem && (
-            <p className="text-[11px] text-slate-500 mt-1">
-              {driveMiles} mi × 2 (round trip) ÷ {pricing.driveSpeedMph || 45}mph × {driveLineItem.name.match(/(\d+) movers/)?.[1] || "?"} movers @ ${pricing.driveRate || 40}/hr
+          {/* Distance tier label */}
+          {driveMiles && parseFloat(driveMiles) > 0 && (
+            <p className="text-[11px] mt-1">
+              {parseFloat(driveMiles) <= pricing.localMilesMax ? (
+                <span className="text-green-400/70">Local rate (≤{pricing.localMilesMax} mi) — no surcharge</span>
+              ) : parseFloat(driveMiles) <= pricing.regionalMilesMax ? (
+                <span className="text-amber-400/70">Regional ({pricing.localMilesMax}–{pricing.regionalMilesMax} mi) — surcharge applies</span>
+              ) : (
+                <span className="text-red-400/70">Long Distance ({'>'}  {pricing.regionalMilesMax} mi) — per-mile rate, {pricing.longDistanceMinMiles}-mi minimum billing</span>
+              )}
             </p>
           )}
           {!driveMiles && pickupAddr && (
@@ -883,6 +1070,14 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
               {activeAddons.map(addon => {
                 const qty = addonQty[addon.id] ?? 0;
                 const checked = qty > 0;
+
+                // Get pricing-config-driven unit price for display
+                let displayPrice = addon.unitPrice;
+                if (addon.id === "stairs")       displayPrice = pricing.stairsPerFlight   ?? displayPrice;
+                if (addon.id === "long_carry")   displayPrice = pricing.longCarryFlat     ?? displayPrice;
+                if (addon.id === "elevator")     displayPrice = pricing.elevatorFlat      ?? displayPrice;
+                if (addon.id === "tight_access") displayPrice = pricing.tightAccessFlat   ?? displayPrice;
+
                 return (
                   <div
                     key={addon.id}
@@ -905,7 +1100,7 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
                           {addon.name}
                         </span>
                         <span className="text-emerald-400 text-sm font-semibold flex-shrink-0">
-                          +${addon.unitPrice}{'openPrice' in addon && addon.openPrice ? "+" : ""}{addon.qtyOptions.length > 1 && qty > 0 ? ` × ${qty}` : ""}
+                          +${displayPrice}{'openPrice' in addon && addon.openPrice ? "+" : ""}{addon.qtyOptions.length > 1 && qty > 0 ? ` × ${qty}` : ""}
                         </span>
                       </div>
                       <p className="text-xs text-slate-500 mt-0.5">{addon.description}</p>
@@ -941,6 +1136,13 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
               <div className="space-y-2">
                 {specialItemsDefs.map(item => {
                   const checked = specialItems[item.key] ?? false;
+                  // Use canonical pricing from config
+                  const canonicalFee = pricing[(item as any).pricingKey as keyof Pricing] as number ?? item.baseFee;
+                  const crewNote = (item as any).crewMin >= 3
+                    ? "· enforces 3-mover minimum"
+                    : (item as any).crewMin === 2
+                    ? "· 2-mover minimum"
+                    : "";
                   return (
                     <div
                       key={item.id}
@@ -963,10 +1165,10 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
                             {item.name}
                           </span>
                           <span className="text-amber-400 text-sm font-semibold flex-shrink-0">
-                            +${specialFees[item.feeKey] ?? item.baseFee}
+                            +${specialFees[item.feeKey] ?? canonicalFee}
                           </span>
                         </div>
-                        <p className="text-xs text-slate-500 mt-0.5">{item.description}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">{item.description} {crewNote && <span className="text-amber-500/70">{crewNote}</span>}</p>
                       </div>
                       {checked && (
                         <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -976,7 +1178,7 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
                             min="0"
                             step="25"
                             className="w-20 h-7 text-xs bg-slate-700 border-slate-600 text-white"
-                            value={specialFees[item.feeKey] ?? item.baseFee}
+                            value={specialFees[item.feeKey] ?? canonicalFee}
                             onChange={(e) => setSpecialFees(prev => ({ ...prev, [item.feeKey]: parseFloat(e.target.value) || 0 }))}
                           />
                         </div>
@@ -1012,6 +1214,12 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
                 {summary.lineItems.length} item{summary.lineItems.length !== 1 ? "s" : ""}
               </Badge>
             </div>
+            {summary.crewBumpReason && (
+              <div className="px-4 py-2 bg-amber-950/30 border-b border-amber-500/20 flex items-center gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-400 flex-shrink-0" />
+                <span className="text-[11px] text-amber-400">{summary.crewBumpReason} — crew adjusted to {summary.crewSize}</span>
+              </div>
+            )}
             <div className="px-4 py-3 space-y-1.5">
               {summary.lineItems.map(li => (
                 <div key={li.id} className="flex justify-between text-sm">
@@ -1029,7 +1237,7 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
               </div>
               {summary.addonsTotal > 0 && (
                 <div className="flex justify-between text-sm text-slate-400">
-                  <span>Add-ons</span>
+                  <span>Add-ons & surcharges</span>
                   <span>+${summary.addonsTotal.toFixed(2)}</span>
                 </div>
               )}

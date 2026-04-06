@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Settings, Save, ChevronDown, ChevronUp, RotateCcw } from "lucide-react";
+import { Settings, Save, ChevronDown, ChevronUp, RotateCcw, AlertTriangle } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -19,6 +19,29 @@ interface Pricing {
   jc222WeightLimit: number;
   heavyItemFlat: number;
   minHours: Record<number, number>;
+  // Specialty item canonical rates
+  specialtyPiano: number;
+  specialtyHotTub: number;
+  specialtySafe: number;
+  specialtyPoolTable: number;
+  // Weight tiers
+  weightLightMax: number;
+  weightHeavyMin: number;
+  heavyItemFlat: number;
+  // Access / difficulty add-on rates
+  stairsPerFlight: number;
+  longCarryFlat: number;
+  elevatorFlat: number;
+  tightAccessFlat: number;
+  // Distance tier thresholds and rates
+  localMilesMax: number;
+  regionalMilesMax: number;
+  regionalSurchargePerMile: number;
+  longDistanceRatePerMile: number;
+  longDistanceMinMiles: number;
+  // Fuel surcharge
+  fuelSurchargeFlat: number;
+  fuelSurchargeMinMiles: number;
 }
 
 const DEFAULTS = {
@@ -37,6 +60,29 @@ const DEFAULTS = {
   min_hours_3: "3",
   min_hours_4: "2",
   min_hours_5: "2",
+  // Specialty items
+  specialty_piano: "200",
+  specialty_hot_tub: "250",
+  specialty_safe: "175",
+  specialty_pool_table: "200",
+  // Weight tiers
+  weight_light_max: "200",
+  weight_heavy_min: "400",
+  heavy_item_flat: "100",
+  // Access add-ons
+  stairs_per_flight: "25",
+  long_carry_flat: "50",
+  elevator_flat: "30",
+  tight_access_flat: "50",
+  // Distance tiers
+  local_miles_max: "10",
+  regional_miles_max: "50",
+  regional_surcharge_per_mile: "1",
+  long_distance_rate_per_mile: "4",
+  long_distance_min_miles: "100",
+  // Fuel surcharge
+  fuel_surcharge_flat: "0",
+  fuel_surcharge_min_miles: "30",
 };
 
 function getHourDiscount(hours: number): number {
@@ -51,6 +97,7 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(alwaysOpen);
   const [resetting, setResetting] = useState(false);
+  const [difficultyOpen, setDifficultyOpen] = useState(false);
 
   const { data: pricing } = useQuery<Pricing>({ queryKey: ["/api/pricing"] });
 
@@ -74,6 +121,29 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
       min_hours_3:         String(pricing.minHours?.[3] ?? 3),
       min_hours_4:         String(pricing.minHours?.[4] ?? 2),
       min_hours_5:         String(pricing.minHours?.[5] ?? 2),
+      // Specialty items
+      specialty_piano:      String(pricing.specialtyPiano     ?? 200),
+      specialty_hot_tub:    String(pricing.specialtyHotTub    ?? 250),
+      specialty_safe:       String(pricing.specialtySafe      ?? 175),
+      specialty_pool_table: String(pricing.specialtyPoolTable ?? 200),
+      // Weight tiers
+      weight_light_max:  String(pricing.weightLightMax  ?? 200),
+      weight_heavy_min:  String(pricing.weightHeavyMin  ?? 400),
+      heavy_item_flat:   String(pricing.heavyItemFlat   ?? 100),
+      // Access add-ons
+      stairs_per_flight:   String(pricing.stairsPerFlight   ?? 25),
+      long_carry_flat:     String(pricing.longCarryFlat     ?? 50),
+      elevator_flat:       String(pricing.elevatorFlat      ?? 30),
+      tight_access_flat:   String(pricing.tightAccessFlat   ?? 50),
+      // Distance tiers
+      local_miles_max:             String(pricing.localMilesMax             ?? 10),
+      regional_miles_max:          String(pricing.regionalMilesMax          ?? 50),
+      regional_surcharge_per_mile: String(pricing.regionalSurchargePerMile  ?? 1),
+      long_distance_rate_per_mile: String(pricing.longDistanceRatePerMile   ?? 4),
+      long_distance_min_miles:     String(pricing.longDistanceMinMiles      ?? 100),
+      // Fuel surcharge
+      fuel_surcharge_flat:      String(pricing.fuelSurchargeFlat     ?? 0),
+      fuel_surcharge_min_miles: String(pricing.fuelSurchargeMinMiles ?? 30),
     });
   }, [pricing]);
 
@@ -100,12 +170,12 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
   });
 
   async function handleReset() {
-    if (!confirm("Reset ALL pricing to factory defaults?\n\nRate: $85/mover·hr · Truck: $60 · Drive: $40 · Min job: $300 · JC222: $222 · JC272: $272 · Heavy: $350\n\nThis overwrites your current settings.")) return;
+    if (!confirm("Reset ALL pricing to factory defaults?\n\nRate: $85/mover·hr · Truck: $60 · Drive: $40 · Min job: $300 · JC222: $222 · JC272: $272 · Heavy: $100\n\nThis overwrites your current settings.")) return;
     setResetting(true);
     try {
       await saveMutation.mutateAsync(DEFAULTS);
       setDraft({ ...DEFAULTS });
-      toast({ title: "Pricing reset to defaults", description: "Rate $85/hr · Truck $60/hr · Drive $40/hr · Floor $300 · JC222 $222 · JC272 $272 · Heavy $350" });
+      toast({ title: "Pricing reset to defaults", description: "Rate $85/hr · Truck $60/hr · Drive $40/hr · Floor $300 · JC222 $222 · JC272 $272 · Heavy $100" });
     } finally {
       setResetting(false);
     }
@@ -178,7 +248,7 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
             </div>
           </div>
 
-          {/* Row 2: floor + JC222 */}
+          {/* Row 3: floor + JC222 */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-slate-400 block mb-1">Min job price ($)</label>
@@ -326,6 +396,176 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
                 <span className="text-slate-300">${floor}</span>
               </div>
             </div>
+          </div>
+
+          {/* ── Difficulty & Surcharges section ── */}
+          <div className="rounded-xl border border-slate-700/50 overflow-hidden">
+            <button
+              onClick={() => setDifficultyOpen(!difficultyOpen)}
+              className="w-full flex items-center justify-between px-3 py-2.5 bg-slate-700/40 text-left"
+            >
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
+                <span className="text-xs font-semibold text-amber-300">Difficulty & Surcharges</span>
+              </div>
+              {difficultyOpen ? <ChevronUp className="h-3.5 w-3.5 text-slate-400" /> : <ChevronDown className="h-3.5 w-3.5 text-slate-400" />}
+            </button>
+
+            {difficultyOpen && (
+              <div className="px-3 py-3 space-y-4 bg-slate-900/40">
+
+                {/* Specialty Item Rates */}
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 mb-2">Specialty Item Flat Surcharges ($)</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[11px] text-slate-500 block mb-1">Piano</label>
+                      <Input type="number" value={draft.specialty_piano}
+                        onChange={e => set("specialty_piano", e.target.value)}
+                        className="bg-slate-900 border-slate-700 text-white h-8 text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-slate-500 block mb-1">Hot Tub</label>
+                      <Input type="number" value={draft.specialty_hot_tub}
+                        onChange={e => set("specialty_hot_tub", e.target.value)}
+                        className="bg-slate-900 border-slate-700 text-white h-8 text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-slate-500 block mb-1">Heavy Safe (300+ lbs)</label>
+                      <Input type="number" value={draft.specialty_safe}
+                        onChange={e => set("specialty_safe", e.target.value)}
+                        className="bg-slate-900 border-slate-700 text-white h-8 text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-slate-500 block mb-1">Pool Table</label>
+                      <Input type="number" value={draft.specialty_pool_table}
+                        onChange={e => set("specialty_pool_table", e.target.value)}
+                        className="bg-slate-900 border-slate-700 text-white h-8 text-sm" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-600 mt-1">Piano/Hot Tub/Safe → enforces 3-mover min · Pool Table → 2-mover min</p>
+                </div>
+
+                {/* Weight Tiers */}
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 mb-2">Weight Tiers & Heavy Item Surcharge</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="text-[11px] text-slate-500 block mb-1">Light max (lbs)</label>
+                      <Input type="number" value={draft.weight_light_max}
+                        onChange={e => set("weight_light_max", e.target.value)}
+                        className="bg-slate-900 border-slate-700 text-white h-8 text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-slate-500 block mb-1">Heavy min (lbs)</label>
+                      <Input type="number" value={draft.weight_heavy_min}
+                        onChange={e => set("weight_heavy_min", e.target.value)}
+                        className="bg-slate-900 border-slate-700 text-white h-8 text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-slate-500 block mb-1">Heavy surcharge ($)</label>
+                      <Input type="number" value={draft.heavy_item_flat}
+                        onChange={e => set("heavy_item_flat", e.target.value)}
+                        className="bg-slate-900 border-slate-700 text-white h-8 text-sm" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-600 mt-1">Light {'<'} {draft.weight_light_max} lbs · Medium {draft.weight_light_max}–{draft.weight_heavy_min} lbs · Heavy ≥ {draft.weight_heavy_min} lbs (3-mover min + flat surcharge)</p>
+                </div>
+
+                {/* Access Add-On Rates */}
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 mb-2">Access / Difficulty Add-On Rates ($)</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[11px] text-slate-500 block mb-1">Stairs (per flight)</label>
+                      <Input type="number" value={draft.stairs_per_flight}
+                        onChange={e => set("stairs_per_flight", e.target.value)}
+                        className="bg-slate-900 border-slate-700 text-white h-8 text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-slate-500 block mb-1">Long Carry ({'>'}75 ft)</label>
+                      <Input type="number" value={draft.long_carry_flat}
+                        onChange={e => set("long_carry_flat", e.target.value)}
+                        className="bg-slate-900 border-slate-700 text-white h-8 text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-slate-500 block mb-1">Elevator</label>
+                      <Input type="number" value={draft.elevator_flat}
+                        onChange={e => set("elevator_flat", e.target.value)}
+                        className="bg-slate-900 border-slate-700 text-white h-8 text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-slate-500 block mb-1">Tight Access</label>
+                      <Input type="number" value={draft.tight_access_flat}
+                        onChange={e => set("tight_access_flat", e.target.value)}
+                        className="bg-slate-900 border-slate-700 text-white h-8 text-sm" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-600 mt-1">Stairs on a truck job bumps crew minimum +1 automatically</p>
+                </div>
+
+                {/* Distance Tiers */}
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 mb-2">Distance Tier Thresholds & Rates</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[11px] text-slate-500 block mb-1">Local max (mi)</label>
+                      <Input type="number" value={draft.local_miles_max}
+                        onChange={e => set("local_miles_max", e.target.value)}
+                        className="bg-slate-900 border-slate-700 text-white h-8 text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-slate-500 block mb-1">Regional max (mi)</label>
+                      <Input type="number" value={draft.regional_miles_max}
+                        onChange={e => set("regional_miles_max", e.target.value)}
+                        className="bg-slate-900 border-slate-700 text-white h-8 text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-slate-500 block mb-1">Regional surcharge ($/mi)</label>
+                      <Input type="number" value={draft.regional_surcharge_per_mile}
+                        onChange={e => set("regional_surcharge_per_mile", e.target.value)}
+                        className="bg-slate-900 border-slate-700 text-white h-8 text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-slate-500 block mb-1">Long distance rate ($/mi)</label>
+                      <Input type="number" value={draft.long_distance_rate_per_mile}
+                        onChange={e => set("long_distance_rate_per_mile", e.target.value)}
+                        className="bg-slate-900 border-slate-700 text-white h-8 text-sm" />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="text-[11px] text-slate-500 block mb-1">Long distance min miles (billed)</label>
+                      <Input type="number" value={draft.long_distance_min_miles}
+                        onChange={e => set("long_distance_min_miles", e.target.value)}
+                        className="bg-slate-900 border-slate-700 text-white h-8 text-sm" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-600 mt-1">
+                    Local ≤ {draft.local_miles_max} mi · Regional {draft.local_miles_max}–{draft.regional_miles_max} mi · Long Distance {'>'} {draft.regional_miles_max} mi
+                  </p>
+                </div>
+
+                {/* Fuel Surcharge */}
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 mb-2">Fuel Surcharge</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[11px] text-slate-500 block mb-1">Flat surcharge ($, 0=off)</label>
+                      <Input type="number" value={draft.fuel_surcharge_flat}
+                        onChange={e => set("fuel_surcharge_flat", e.target.value)}
+                        className="bg-slate-900 border-slate-700 text-white h-8 text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-slate-500 block mb-1">Trigger distance (mi)</label>
+                      <Input type="number" value={draft.fuel_surcharge_min_miles}
+                        onChange={e => set("fuel_surcharge_min_miles", e.target.value)}
+                        className="bg-slate-900 border-slate-700 text-white h-8 text-sm" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-600 mt-1">Added as a named line item when one-way distance ≥ trigger distance</p>
+                </div>
+
+              </div>
+            )}
           </div>
 
           {/* Actions */}
