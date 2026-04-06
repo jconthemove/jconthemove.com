@@ -4772,7 +4772,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Customer my-leads endpoint — returns leads for the authenticated customer, ordered by creation date descending
   app.get("/api/customer/my-leads", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = (req.session as any).userId;
+      const userId = req.user?.id || (req.session as any).userId;
       if (!userId) return res.status(401).json({ error: "User not authenticated" });
       const user = await storage.getUser(userId);
       if (!user || !user.email) return res.status(404).json({ error: "User not found" });
@@ -4782,7 +4782,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const customerLeads = await db
         .select()
         .from(leads)
-        .where(eq(leads.email, user.email))
+        .where(or(eq(leads.email, user.email), eq(leads.createdByUserId, userId)))
         .orderBy(desc(leads.createdAt));
       const transformedLeads = customerLeads.map(lead => ({
         id: lead.id,

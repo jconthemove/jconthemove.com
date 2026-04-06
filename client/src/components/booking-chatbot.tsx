@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { Send, CheckCircle2, ArrowRight, Sparkles, RotateCcw, ChevronRight } from "lucide-react";
 
 // ─────────────────────────────────────────────
@@ -364,6 +365,7 @@ function shortAnswer(stepId: string, val: string | string[]): string {
 export function BookingChatbot({ onClose, embedded = false, showCloseButton, className }: { onClose?: () => void; embedded?: boolean; showCloseButton?: boolean; className?: string }) {
   const showClose = showCloseButton ?? !embedded;
   const { toast } = useToast();
+  const { user } = useAuth();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const [answers, setAnswers] = useState<Answers>({});
@@ -377,9 +379,9 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
   const [stepIdx, setStepIdx] = useState(0);
   const [textInput, setTextInput] = useState("");
   const [multiSel, setMultiSel] = useState<string[]>([]);
-  const [contactName, setContactName] = useState("");
-  const [contactPhone, setContactPhone] = useState("");
-  const [contactEmail, setContactEmail] = useState("");
+  const [contactName, setContactName] = useState(() => user ? [user.firstName, user.lastName].filter(Boolean).join(" ") : "");
+  const [contactPhone, setContactPhone] = useState(() => user?.phoneNumber || "");
+  const [contactEmail, setContactEmail] = useState(() => user?.email || "");
   const [submitted, setSubmitted] = useState(false);
   const [quoteVisible, setQuoteVisible] = useState(false);
   const [pendingQuote, setPendingQuote] = useState<Quote | null>(null);
@@ -391,6 +393,15 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
   );
 
   const currentStep = visibleSteps[stepIdx];
+
+  // Pre-fill contact info when user data becomes available (async)
+  useEffect(() => {
+    if (user) {
+      setContactName(prev => prev || [user.firstName, user.lastName].filter(Boolean).join(" "));
+      setContactPhone(prev => prev || (user.phoneNumber || ""));
+      setContactEmail(prev => prev || (user.email || ""));
+    }
+  }, [user]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -522,9 +533,9 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
     setStepIdx(0);
     setTextInput("");
     setMultiSel([]);
-    setContactName("");
-    setContactPhone("");
-    setContactEmail("");
+    setContactName(user ? [user.firstName, user.lastName].filter(Boolean).join(" ") : "");
+    setContactPhone(user?.phoneNumber || "");
+    setContactEmail(user?.email || "");
     setSubmitted(false);
     setQuoteVisible(false);
     setPendingQuote(null);
