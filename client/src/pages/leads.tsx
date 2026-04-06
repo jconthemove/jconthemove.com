@@ -3,7 +3,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
-import { ArrowLeft, Home, Building, Trash2, Mail, Phone, MapPin, Calendar as CalendarIcon, ChevronRight, Coins, TrendingUp, CheckCheck } from "lucide-react";
+import { ArrowLeft, Home, Building, Trash2, Mail, Phone, MapPin, Calendar as CalendarIcon, ChevronRight, Coins, TrendingUp, CheckCheck, Search, X } from "lucide-react";
+import { formatOrderNumber } from "@shared/schema";
 import { getStatusColors } from "@/lib/job-status";
 import { JobCard } from "@/components/JobCard";
 import { calculateJCMovesReward, LOYALTY_TIERS, formatTokens, type LoyaltyTierKey } from "@/lib/loyalty";
@@ -38,7 +39,7 @@ export default function LeadsPage() {
   const { user: currentUser } = useAuth();
   const isStaff = ["admin", "business_owner", "employee"].includes(currentUser?.role || "");
   const [estimatedBudget, setEstimatedBudget] = useState("");
-  const [bookingConfirmed, setBookingConfirmed] = useState<{ tokens: number; tier: LoyaltyTierKey } | null>(null);
+  const [bookingConfirmed, setBookingConfirmed] = useState<{ tokens: number; tier: LoyaltyTierKey; orderNumber?: number | null } | null>(null);
 
   const userTier = ((currentUser as any)?.loyaltyTier || 'bronze') as LoyaltyTierKey;
   const estimatedTokens = useMemo(() => {
@@ -46,6 +47,7 @@ export default function LeadsPage() {
     if (!val || val <= 0) return 0;
     return calculateJCMovesReward(val, userTier);
   }, [estimatedBudget, userTier]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectedService, setSelectedService] = useState("");
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isQuickViewOpen, setIsQuickViewOpen] = useState(false);
@@ -93,12 +95,13 @@ export default function LeadsPage() {
   const submitLead = useMutation({
     mutationFn: async (data: InsertLead) => {
       const response = await apiRequest("POST", "/api/leads/employee", data);
-      return response.json();
+      return response.json() as Promise<{ id: string; orderNumber?: number | null; [key: string]: unknown }>;
     },
-    onSuccess: () => {
+    onSuccess: (createdLead) => {
       const tokens = estimatedTokens;
-      if (tokens > 0) {
-        setBookingConfirmed({ tokens, tier: userTier });
+      const orderNum = createdLead?.orderNumber ?? null;
+      if (tokens > 0 || orderNum != null) {
+        setBookingConfirmed({ tokens, tier: userTier, orderNumber: orderNum });
       }
       toast({
         title: isStaff ? "Job created!" : "Booking submitted!",
@@ -179,6 +182,23 @@ export default function LeadsPage() {
     saveQuote.mutate(data);
   };
 
+  const filteredLeads = useMemo(() => {
+    if (!searchQuery.trim()) return leads;
+    const q = searchQuery.trim().toLowerCase();
+    return leads.filter(l => {
+      const orderStr = l.orderNumber != null ? formatOrderNumber(l.orderNumber).toLowerCase() : "";
+      const fullName = `${l.firstName} ${l.lastName}`.toLowerCase();
+      const phone = (l.phone || "").toLowerCase().replace(/\D/g, "");
+      const searchPhone = q.replace(/\D/g, "");
+      return (
+        orderStr.includes(q) ||
+        fullName.includes(q) ||
+        (searchPhone.length >= 3 && phone.includes(searchPhone)) ||
+        (l.email || "").toLowerCase().includes(q)
+      );
+    });
+  }, [leads, searchQuery]);
+
   const handleViewLead = (lead: Lead) => {
     setSelectedLead(lead);
     setIsQuickViewOpen(true);
@@ -222,6 +242,25 @@ export default function LeadsPage() {
             <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block shadow shadow-green-500/60" /> Completed</span>
           </div>
 
+          {/* Search bar */}
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 pointer-events-none" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by order # (e.g. JC-1001), name, or phone…"
+              className="pl-9 pr-9 bg-slate-800/60 border-slate-700 text-white placeholder:text-slate-500 focus-visible:ring-blue-500/40"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
           <Tabs defaultValue="view" className="space-y-6">
             <TabsList className="bg-slate-800/80 border border-slate-700">
               <TabsTrigger value="view" data-testid="tab-view-leads">Active Leads</TabsTrigger>
@@ -239,23 +278,33 @@ export default function LeadsPage() {
                     <p className="mt-4 text-slate-400">Loading leads...</p>
                   </CardContent>
                 </Card>
-              ) : leads.filter(l => l.status !== 'completed').length === 0 ? (
+              ) : filteredLeads.filter(l => l.status !== 'completed').length === 0 ? (
                 <Card className="bg-slate-800/50 border-slate-700">
                   <CardContent className="py-12">
                     <div className="text-center">
-                      <p className="text-slate-400">No active leads at this time.</p>
+                      {searchQuery ? (
+                        <>
+                          <Search className="h-10 w-10 text-slate-600 mx-auto mb-3" />
+                          <p className="text-slate-400">No active leads match your search.</p>
+                          <button onClick={() => setSearchQuery("")} className="text-blue-400 text-sm mt-2 hover:underline">Clear search</button>
+                        </>
+                      ) : (
+                        <p className="text-slate-400">No active leads at this time.</p>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
               ) : (
                 <Card className="bg-slate-800/50 border-slate-700">
                   <CardHeader>
-                    <CardTitle className="text-2xl text-white">Active Leads ({leads.filter(l => l.status !== 'completed').length})</CardTitle>
+                    <CardTitle className="text-2xl text-white">
+                      Active Leads ({filteredLeads.filter(l => l.status !== 'completed').length}{searchQuery ? ` of ${leads.filter(l => l.status !== 'completed').length}` : ""})
+                    </CardTitle>
                     <CardDescription className="text-slate-400">Customer leads in progress</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      {[...leads]
+                      {[...filteredLeads]
                         .filter(l => !["completed", "cancelled", "paid"].includes(l.status))
                         .sort((a, b) => {
                           // Red → Yellow → Green sort order
@@ -283,12 +332,19 @@ export default function LeadsPage() {
                     <p className="mt-4 text-slate-400">Loading completed jobs...</p>
                   </CardContent>
                 </Card>
-              ) : leads.filter(l => l.status === 'completed').length === 0 ? (
+              ) : filteredLeads.filter(l => l.status === 'completed').length === 0 ? (
                 <Card className="bg-slate-800/50 border-slate-700">
                   <CardContent className="py-12">
                     <div className="text-center">
                       <CheckCheck className="h-12 w-12 text-slate-600 mx-auto mb-3" />
-                      <p className="text-slate-400">No completed jobs yet.</p>
+                      {searchQuery ? (
+                        <>
+                          <p className="text-slate-400">No completed jobs match your search.</p>
+                          <button onClick={() => setSearchQuery("")} className="text-blue-400 text-sm mt-2 hover:underline">Clear search</button>
+                        </>
+                      ) : (
+                        <p className="text-slate-400">No completed jobs yet.</p>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -297,13 +353,13 @@ export default function LeadsPage() {
                   <CardHeader>
                     <CardTitle className="text-2xl text-white flex items-center gap-2">
                       <CheckCheck className="h-6 w-6 text-emerald-500" />
-                      Completed Jobs ({leads.filter(l => l.status === 'completed').length})
+                      Completed Jobs ({filteredLeads.filter(l => l.status === 'completed').length}{searchQuery ? ` of ${leads.filter(l => l.status === 'completed').length}` : ""})
                     </CardTitle>
                     <CardDescription className="text-slate-400">Jobs that have been finished</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      {[...leads]
+                      {[...filteredLeads]
                         .filter(l => l.status === 'completed')
                         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
                         .map(lead => <JobCard key={lead.id} lead={lead} onDelete={setLeadToDelete} />)}
@@ -321,12 +377,21 @@ export default function LeadsPage() {
                     <Coins className="h-6 w-6 text-yellow-400 shrink-0 mt-0.5" />
                     <div>
                       <p className="font-semibold text-orange-400">Booking submitted — tokens on the way!</p>
-                      <p className="text-sm text-slate-300 mt-0.5">
-                        Once your job is confirmed and completed, you'll earn approximately{" "}
-                        <span className="font-bold text-yellow-400">{formatTokens(bookingConfirmed.tokens)} JCMOVES</span>{" "}
-                        <span className="text-slate-400">({LOYALTY_TIERS[bookingConfirmed.tier].emoji} {LOYALTY_TIERS[bookingConfirmed.tier].label} {Math.round(LOYALTY_TIERS[bookingConfirmed.tier].rate * 100)}% rate)</span>.
-                        Spend them on service credits, gift cards & local deals in the marketplace.
-                      </p>
+                      {bookingConfirmed.orderNumber != null && (
+                        <p className="text-sm text-slate-300 mt-1">
+                          Your order number is{" "}
+                          <span className="font-mono font-bold text-blue-400 text-base">{formatOrderNumber(bookingConfirmed.orderNumber)}</span>
+                          {" "}— use it to track or reference your job.
+                        </p>
+                      )}
+                      {bookingConfirmed.tokens > 0 && (
+                        <p className="text-sm text-slate-300 mt-0.5">
+                          Once your job is confirmed and completed, you'll earn approximately{" "}
+                          <span className="font-bold text-yellow-400">{formatTokens(bookingConfirmed.tokens)} JCMOVES</span>{" "}
+                          <span className="text-slate-400">({LOYALTY_TIERS[bookingConfirmed.tier].emoji} {LOYALTY_TIERS[bookingConfirmed.tier].label} {Math.round(LOYALTY_TIERS[bookingConfirmed.tier].rate * 100)}% rate)</span>.
+                          Spend them on service credits, gift cards & local deals in the marketplace.
+                        </p>
+                      )}
                       <Link href="/rewards" className="text-xs text-orange-400 hover:text-orange-300 mt-1 inline-block">
                         Browse the Rewards Marketplace →
                       </Link>

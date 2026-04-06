@@ -9,11 +9,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Mail, Phone, MapPin, Calendar, Users, DollarSign, Award, TrendingUp, CheckCircle, Clock, Star, ExternalLink, Sparkles, Send, FileText, Loader2, Bitcoin, Copy, Check, Zap, ShoppingBag, AlertTriangle, UserCheck, Camera, Image, ChevronRight, PlayCircle, ChevronDown, ChevronUp, MessageSquare, Minus, Plus, RefreshCw } from "lucide-react";
+import { ArrowLeft, Mail, Phone, MapPin, Calendar, Users, DollarSign, Award, TrendingUp, CheckCircle, Clock, Star, ExternalLink, Sparkles, Send, FileText, Loader2, Bitcoin, Copy, Check, Zap, ShoppingBag, AlertTriangle, UserCheck, Camera, Image, ChevronRight, PlayCircle, ChevronDown, ChevronUp, MessageSquare, Minus, Plus, RefreshCw, Hash } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { formatOrderNumber } from "@shared/schema";
 import { useAuth } from "@/hooks/useAuth";
 import { CrewSuggestionsDialog } from "@/components/crew-suggestions-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -57,6 +58,7 @@ interface OrderLineItem {
 
 interface Lead {
   id: string;
+  orderNumber?: number | null;
   firstName: string;
   lastName: string;
   email: string;
@@ -883,6 +885,17 @@ export default function LeadDetailPage() {
             <h1 className="text-2xl font-bold text-foreground">
               {lead.firstName} {lead.lastName}
             </h1>
+            {lead.orderNumber != null && (
+              <button
+                onClick={() => navigator.clipboard.writeText(formatOrderNumber(lead.orderNumber!))}
+                className="flex items-center gap-1.5 text-sm font-mono font-semibold text-blue-300 border border-blue-500/30 rounded-md px-2 py-1 hover:bg-blue-500/10 transition-colors"
+                title="Click to copy order number"
+              >
+                <Hash className="h-3.5 w-3.5" />
+                {formatOrderNumber(lead.orderNumber)}
+                <Copy className="h-3 w-3 opacity-60" />
+              </button>
+            )}
             <Badge className={serviceTypeBadge()}>
               {lead.serviceType === "residential" && "Residential"}
               {lead.serviceType === "commercial" && "Commercial"}

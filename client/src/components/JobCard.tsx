@@ -1,9 +1,10 @@
 import { useLocation } from "wouter";
-import { Phone, Mail, MapPin, Calendar, ChevronRight, Trash2, Users, DollarSign, Zap } from "lucide-react";
+import { Phone, Mail, MapPin, Calendar, ChevronRight, Trash2, Users, DollarSign, Zap, Copy, Hash } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getStatusColors } from "@/lib/job-status";
+import { formatOrderNumber } from "@shared/schema";
 
 export const SERVICE_LABELS: Record<string, string> = {
   residential: "Residential Move",
@@ -32,6 +33,7 @@ export function getServiceBadgeColor(serviceType: string): string {
 export interface JobCardProps {
   lead: {
     id: string | number;
+    orderNumber?: number | null;
     firstName?: string;
     lastName?: string;
     serviceType?: string;
@@ -85,6 +87,20 @@ export function JobCard({ lead, onDelete, showContact = true, showTokens = true,
             <h3 className={`font-bold ${compact ? "text-sm" : "text-base"} text-white group-hover:text-blue-300 transition-colors`}>
               {lead.firstName} {lead.lastName}
             </h3>
+            {lead.orderNumber != null && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigator.clipboard.writeText(formatOrderNumber(lead.orderNumber!));
+                }}
+                className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 border border-slate-600/50 rounded px-1.5 py-0.5 transition-colors"
+                title="Copy order number"
+              >
+                <Hash className="h-3 w-3" />
+                {formatOrderNumber(lead.orderNumber)}
+                <Copy className="h-2.5 w-2.5 opacity-60" />
+              </button>
+            )}
             <Badge className={badgeColor}>{serviceLabel}</Badge>
             <Badge className={sc.badgeBg}>{sc.label}</Badge>
             {lead.redemptionId && (

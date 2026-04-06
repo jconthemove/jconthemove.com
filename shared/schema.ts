@@ -20,6 +20,7 @@ export type JobPhoto = z.infer<typeof jobPhotoSchema>;
 
 export const leads = pgTable("leads", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderNumber: serial("order_number"),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
   email: text("email").notNull(),
@@ -604,10 +605,15 @@ export type JewelryItem = typeof jewelryItems.$inferSelect;
 
 export const insertLeadSchema = createInsertSchema(leads).omit({
   id: true,
+  orderNumber: true,
   status: true,
   assignedToUserId: true, // Assigned internally when employee accepts job
   createdAt: true,
 });
+
+export function formatOrderNumber(n: number): string {
+  return `JC-${n}`;
+}
 
 export const insertContactSchema = createInsertSchema(contacts).omit({
   id: true,

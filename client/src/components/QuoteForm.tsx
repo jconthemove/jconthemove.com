@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { insertLeadSchema, type InsertLead } from "@shared/schema";
+import { insertLeadSchema, type InsertLead, formatOrderNumber } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -150,14 +150,15 @@ export default function QuoteForm({
       }
       
       const response = await apiRequest("POST", apiEndpoint, payload);
-      return response.json();
+      return response.json() as Promise<{ success: boolean; leadId?: string; orderNumber?: number | null; message?: string }>;
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
+      const orderPart = result?.orderNumber != null ? ` Your order number is ${formatOrderNumber(result.orderNumber)}.` : "";
       toast({
         title: isEmployee ? "Job request submitted!" : "Quote request submitted!",
         description: isEmployee 
-          ? "The job has been added to the system. You'll earn rewards when it's confirmed and completed."
-          : "We will contact you within 24 hours with your quote.",
+          ? `The job has been added to the system.${orderPart} You'll earn rewards when it's confirmed and completed.`
+          : `We will contact you within 24 hours with your quote.${orderPart}`,
       });
       
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });

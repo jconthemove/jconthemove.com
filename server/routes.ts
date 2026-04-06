@@ -536,6 +536,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('⚠️ Leads square_payment_url migration error (non-fatal):', migErr);
   }
 
+  // Schema migration: order_number serial on leads (auto-increments for human-readable job IDs like JC-1042)
+  try {
+    await pool.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'leads' AND column_name = 'order_number'
+        ) THEN
+          CREATE SEQUENCE IF NOT EXISTS leads_order_number_seq START 1000;
+          ALTER TABLE leads ADD COLUMN order_number INTEGER NOT NULL DEFAULT nextval('leads_order_number_seq');
+          ALTER SEQUENCE leads_order_number_seq OWNED BY leads.order_number;
+        END IF;
+      END$$;
+    `);
+    console.log('✅ Leads order_number column ready');
+  } catch (migErr) {
+    console.error('⚠️ Leads order_number migration error (non-fatal):', migErr);
+  }
+
   // Schema migration: spin_results extended columns + jackpots + spin_config tables
   try {
     await pool.query(`
@@ -3283,7 +3303,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error('Booking request reward error:', rewardError);
       }
 
-      res.json({ success: true, leadId: lead.id, message: `Quote submitted!${rewardMessage}` });
+      res.json({ success: true, leadId: lead.id, orderNumber: lead.orderNumber ?? null, message: `Quote submitted!${rewardMessage}` });
     } catch (error) {
       console.error("Error creating lead:", error);
       res.status(400).json({ error: "Invalid lead data" });
@@ -4674,7 +4694,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error('Lead creation reward error:', rewardError);
       }
 
-      res.json({ success: true, leadId: lead.id, message: `Job created!${rewardMessage} You'll also earn a bonus when it's completed.` });
+      res.json({ success: true, leadId: lead.id, orderNumber: lead.orderNumber ?? null, message: `Job created!${rewardMessage} You'll also earn a bonus when it's completed.` });
     } catch (error: any) {
       console.error("❌ Error creating employee lead:", error);
       
@@ -4780,6 +4800,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Transform to match frontend CustomerJob interface
       const transformedLeads = customerLeads.map(lead => ({
         id: lead.id,
+        orderNumber: lead.orderNumber ?? null,
         fullName: `${lead.firstName} ${lead.lastName}`,
         email: lead.email,
         phone: lead.phone || '',
@@ -4818,6 +4839,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .orderBy(desc(leads.createdAt));
       const transformedLeads = customerLeads.map(lead => ({
         id: lead.id,
+        orderNumber: lead.orderNumber ?? null,
         fullName: `${lead.firstName} ${lead.lastName}`,
         email: lead.email,
         phone: lead.phone || '',
@@ -7388,6 +7410,7 @@ Thank you for your business!
       const crewLine = lead.crewSize ? `${lead.crewSize} mover${lead.crewSize !== 1 ? "s" : ""}` : null;
       const dateLine = lead.confirmedDate || lead.moveDate || null;
       const windowLine = lead.arrivalWindow || null;
+      const orderLabel = lead.orderNumber != null ? `JC-${lead.orderNumber}` : null;
 
       // ── Optional: create a Square invoice silently (no Square delivery email) ──
       const { squareInvoiceService } = await import('./services/square-invoice');
@@ -7417,6 +7440,7 @@ Thank you for your business!
 
       // Build email HTML
       const detailRows = [
+        orderLabel ? `<tr><td style="color:#888;padding:4px 0">Order #</td><td style="font-weight:700;padding:4px 8px;color:#3b82f6;font-family:monospace">${orderLabel}</td></tr>` : "",
         `<tr><td style="color:#888;padding:4px 0">Service</td><td style="font-weight:600;padding:4px 8px">${serviceLabel}</td></tr>`,
         crewLine ? `<tr><td style="color:#888;padding:4px 0">Crew</td><td style="font-weight:600;padding:4px 8px">${crewLine}</td></tr>` : "",
         dateLine ? `<tr><td style="color:#888;padding:4px 0">Estimated date</td><td style="font-weight:600;padding:4px 8px">${dateLine}</td></tr>` : "",
@@ -7464,9 +7488,9 @@ Thank you for your business!
         emailSent = await sendEmail({
           to: lead.email,
           from: "jconthemove@gmail.com",
-          subject: `Your JC on the Move Quote — ${serviceLabel}`,
+          subject: `Your JC on the Move Quote${orderLabel ? ` — Order ${orderLabel}` : ""} — ${serviceLabel}`,
           html: emailHtml,
-          text: `Hi ${lead.firstName}, your JC on the Move quote is ready: ${totalFormatted} total for ${serviceLabel}${crewLine ? `, ${crewLine}` : ""}${dateLine ? `, on ${dateLine}` : ""}${windowLine ? `, arriving ${windowLine}` : ""}.${squarePaymentUrl ? ` Pay online: ${squarePaymentUrl}` : ""} Or call / text (906) 285-9312 to confirm. — JC on the Move`,
+          text: `Hi ${lead.firstName}, your JC on the Move quote is ready${orderLabel ? ` (Order ${orderLabel})` : ""}: ${totalFormatted} total for ${serviceLabel}${crewLine ? `, ${crewLine}` : ""}${dateLine ? `, on ${dateLine}` : ""}${windowLine ? `, arriving ${windowLine}` : ""}.${squarePaymentUrl ? ` Pay online: ${squarePaymentUrl}` : ""} Or call / text (906) 285-9312 to confirm. — JC on the Move`,
         });
       } catch (err) {
         console.error("Quote email send error:", err);

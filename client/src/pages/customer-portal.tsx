@@ -17,6 +17,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, clearTokens, queryClient } from "@/lib/queryClient";
 import { LOYALTY_TIERS, getTierProgress, getNextTier } from "@/lib/loyalty";
+import { formatOrderNumber } from "@shared/schema";
 import QuoteForm from "@/components/QuoteForm";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { LotteryPanel } from "@/components/lottery-panel";
@@ -56,6 +57,7 @@ interface ReferralStats {
 
 interface CustomerJob {
   id: string;
+  orderNumber?: number | null;
   fullName: string;
   email: string;
   phone: string;
@@ -311,6 +313,11 @@ export default function CustomerPortal() {
                           <Badge variant="secondary" className="bg-slate-700/50 text-slate-300 text-xs">
                             {job.serviceType}
                           </Badge>
+                          {job.orderNumber != null && (
+                            <span className="text-xs font-mono text-blue-400 font-semibold">
+                              {formatOrderNumber(job.orderNumber)}
+                            </span>
+                          )}
                         </div>
                         <span className="text-xs text-slate-500">{new Date(job.createdAt).toLocaleDateString()}</span>
                       </div>
