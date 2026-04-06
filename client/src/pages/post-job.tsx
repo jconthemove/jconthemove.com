@@ -109,6 +109,8 @@ function BookingSuccessScreen({ selectedServiceLabel, pkgId, jewelryCouponCode }
 }) {
   const [, setLocation] = useLocation();
   const [copied, setCopied] = useState(false);
+  const { user } = useAuth();
+  const isCrewMember = user?.role === "employee" || user?.role === "business_owner";
 
   function copyCode() {
     if (!jewelryCouponCode) return;
@@ -238,10 +240,10 @@ function BookingSuccessScreen({ selectedServiceLabel, pkgId, jewelryCouponCode }
         )}
 
         <button
-          onClick={() => setLocation("/")}
+          onClick={() => setLocation(isCrewMember ? "/crew/jobs" : "/")}
           className="w-full h-14 rounded-2xl bg-jc-orange text-white font-bold text-lg shadow-lg shadow-jc-orange/30 hover:bg-jc-orange/90 active:scale-[0.98] transition-all"
         >
-          Back to Home
+          {isCrewMember ? "Back to Job Board" : "Back to Home"}
         </button>
       </div>
     </div>
@@ -548,6 +550,8 @@ export default function PostJobPage() {
     return 1;
   }
 
+  const isCrewRole = user?.role === "employee" || user?.role === "business_owner";
+
   function handleBack() {
     if (step === 3) { setStep(2); return; }
     if (step === 2 && !pkgStep) {
@@ -556,7 +560,7 @@ export default function PostJobPage() {
       setStep(1); return;
     }
     if (step === 2 && pkgStep) { setStep(1); setPkgStep(false); return; }
-    setLocation("/");
+    setLocation(isCrewRole ? "/crew/jobs" : "/");
   }
 
   if (step === 5) {
