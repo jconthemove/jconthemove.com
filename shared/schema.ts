@@ -99,6 +99,7 @@ export const leads = pgTable("leads", {
   quoteSentAt: timestamp("quote_sent_at"),
   quoteViewedAt: timestamp("quote_viewed_at"),
   arrivalWindow: text("arrival_window"), // e.g. "9:00 AM – 11:00 AM"
+  squarePaymentUrl: text("square_payment_url"), // hosted Square payment page URL embedded in quote email
 
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });

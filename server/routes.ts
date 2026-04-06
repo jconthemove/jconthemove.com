@@ -7387,20 +7387,21 @@ Thank you for your business!
       const totalFormatted = `$${price.toFixed(2)}`;
       const crewLine = lead.crewSize ? `${lead.crewSize} mover${lead.crewSize !== 1 ? "s" : ""}` : null;
       const dateLine = lead.confirmedDate || lead.moveDate || null;
-      const windowLine = (lead as any).arrivalWindow || null;
+      const windowLine = lead.arrivalWindow || null;
 
       // ── Optional: create a Square invoice silently (no Square delivery email) ──
       const { squareInvoiceService } = await import('./services/square-invoice');
       // Re-use existing payment URL if one was already created (avoids duplicate invoices on re-send)
-      const existingPaymentUrl = (lead as any).squarePaymentUrl as string | null | undefined;
-      let squarePaymentUrl: string | null = existingPaymentUrl || null;
+      const existingPaymentUrl = lead.squarePaymentUrl ?? null;
+      let squarePaymentUrl: string | null = existingPaymentUrl;
       let squareInvoiceCreated = false;
       if (!existingPaymentUrl && squareInvoiceService.isConfigured()) {
         try {
-          const invoiceResult = await squareInvoiceService.createInvoiceForLead(
-            lead as any,
-            price,
-            `${serviceLabel} — ${customerName}`,
+          // Build a single-line itemized invoice from the quote total
+          const lineItems = [{ name: `${serviceLabel} — ${customerName}`, qty: 1, unitPrice: price, total: price }];
+          const invoiceResult = await squareInvoiceService.createItemizedInvoiceForLead(
+            lead,
+            lineItems,
             undefined,
             "none"   // SHARE_MANUALLY: creates invoice but Square sends NO email/SMS
           );
@@ -7473,7 +7474,7 @@ Thank you for your business!
 
       if (lead.phone) {
         try {
-          const smsBody = `Hi ${lead.firstName}, your JC on the Move quote is ready: ${totalFormatted} total for ${serviceLabel}.${squarePaymentUrl ? ` Pay online: ${squarePaymentUrl}` : " Call or text (906) 285-9312 to confirm."} — JC on the Move`;
+          const smsBody = `Hi ${lead.firstName}, your JC on the Move quote is ready: ${totalFormatted} total for ${serviceLabel}. Call or text (906) 285-9312 to confirm. — JC on the Move`;
           const smsResult = await smsService.sendSMS(lead.phone, smsBody);
           smsSent = smsResult.success;
         } catch (err) {
