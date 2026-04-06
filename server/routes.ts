@@ -514,6 +514,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('⚠️ Leads selected_package_id migration error (non-fatal):', migErr);
   }
 
+  // Schema migration: add quote dispatch fields to leads
+  try {
+    await pool.query(`
+      ALTER TABLE leads ADD COLUMN IF NOT EXISTS quote_sent_at TIMESTAMP;
+      ALTER TABLE leads ADD COLUMN IF NOT EXISTS quote_viewed_at TIMESTAMP;
+      ALTER TABLE leads ADD COLUMN IF NOT EXISTS arrival_window TEXT;
+    `);
+    console.log('✅ Leads quote dispatch columns ready');
+  } catch (migErr) {
+    console.error('⚠️ Leads quote dispatch migration error (non-fatal):', migErr);
+  }
+
   // Schema migration: spin_results extended columns + jackpots + spin_config tables
   try {
     await pool.query(`
@@ -5745,7 +5757,10 @@ Thank you for your business!
       const pianoFee = quoteData.hasPiano ? calculateHeavyItemFee(quoteData.pianoWeight) : 0;
       
       const totalSpecialItemsFee = hotTubFee + heavySafeFee + poolTableFee + pianoFee;
-      const basePrice = parseFloat(quoteData.basePrice) || 0;
+      // When basePrice is not in the request body, preserve the existing lead's basePrice
+      const basePrice = "basePrice" in quoteData
+        ? parseFloat(quoteData.basePrice) || 0
+        : parseFloat(currentLead?.basePrice ?? "0") || 0;
       const totalPrice = basePrice + totalSpecialItemsFee;
       
       const updatedLead = await storage.updateLeadQuote(id, {
@@ -7325,6 +7340,107 @@ Thank you for your business!
     } catch (error) {
       console.error("Error completing job:", error);
       res.status(500).json({ error: "Failed to complete job" });
+    }
+  });
+
+  // Send quote to customer via email + SMS
+  app.post("/api/leads/:id/send-quote", isAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { message } = req.body as { message?: string };
+      const actorId = (req.session as any)?.userId ?? req.user?.id ?? null;
+
+      const lead = await storage.getLead(id);
+      if (!lead) return res.status(404).json({ error: "Lead not found" });
+
+      const price = parseFloat(String(lead.totalPrice || lead.basePrice || "0"));
+      if (!price || price <= 0) {
+        return res.status(400).json({ error: "A quote total must be set before sending. Please build the quote first." });
+      }
+
+      // Set quote_sent_at
+      const now = new Date();
+      await pool.query(`UPDATE leads SET quote_sent_at = $1 WHERE id = $2`, [now, id]);
+
+      // Advance status to "quoted" using canonical transition logic if applicable
+      const transitionableStatuses = ["new", "quote_requested", "chatbot_pending"];
+      if (transitionableStatuses.includes(lead.status)) {
+        // Use storage method + history log (mirrors the /status endpoint logic)
+        await storage.updateLeadStatus(id, "quoted");
+        await writeLeadHistory(id, lead.status, "quoted", actorId, "Quote sent to customer");
+      }
+
+      const customerName = `${lead.firstName} ${lead.lastName}`;
+      const serviceLabel = lead.serviceType
+        ? lead.serviceType.charAt(0).toUpperCase() + lead.serviceType.slice(1).replace(/_/g, " ")
+        : "Moving";
+      const totalFormatted = `$${price.toFixed(2)}`;
+      const crewLine = lead.crewSize ? `${lead.crewSize} mover${lead.crewSize !== 1 ? "s" : ""}` : null;
+      const dateLine = lead.confirmedDate || lead.moveDate || null;
+      const windowLine = lead.arrivalWindow || null;
+
+      // Build email HTML
+      const detailRows = [
+        `<tr><td style="color:#888;padding:4px 0">Service</td><td style="font-weight:600;padding:4px 8px">${serviceLabel}</td></tr>`,
+        crewLine ? `<tr><td style="color:#888;padding:4px 0">Crew</td><td style="font-weight:600;padding:4px 8px">${crewLine}</td></tr>` : "",
+        dateLine ? `<tr><td style="color:#888;padding:4px 0">Estimated date</td><td style="font-weight:600;padding:4px 8px">${dateLine}</td></tr>` : "",
+        windowLine ? `<tr><td style="color:#888;padding:4px 0">Arrival window</td><td style="font-weight:600;padding:4px 8px">${windowLine}</td></tr>` : "",
+        `<tr><td style="color:#888;padding:4px 0">Quote total</td><td style="font-weight:700;font-size:18px;color:#f97316;padding:4px 8px">${totalFormatted}</td></tr>`,
+      ].join("");
+
+      const noteSection = message ? `<p style="margin:16px 0;padding:12px;background:#f9f9f9;border-left:3px solid #f97316;border-radius:4px;color:#333">${message}</p>` : "";
+
+      const emailHtml = `
+        <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#222">
+          <div style="background:#f97316;padding:20px 24px;border-radius:8px 8px 0 0">
+            <h2 style="margin:0;color:#fff;font-size:22px">JC on the Move</h2>
+            <p style="margin:4px 0 0;color:#fff9;font-size:14px">Your Quote is Ready</p>
+          </div>
+          <div style="background:#fff;padding:24px;border:1px solid #eee;border-top:none;border-radius:0 0 8px 8px">
+            <p style="margin:0 0 16px">Hi <strong>${lead.firstName}</strong>,</p>
+            <p style="margin:0 0 16px">Thanks for reaching out! Here's your quote from JC on the Move:</p>
+            <table style="width:100%;border-collapse:collapse;margin-bottom:16px">${detailRows}</table>
+            ${noteSection}
+            <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:16px;text-align:center;margin-top:16px">
+              <p style="margin:0 0 8px;font-weight:600;color:#c2410c">To confirm your booking:</p>
+              <p style="margin:0;font-size:18px;font-weight:700;color:#f97316">Call or text (906) 285-9312</p>
+            </div>
+            <p style="margin-top:20px;font-size:12px;color:#999">JC on the Move · Serving the Upper Peninsula</p>
+          </div>
+        </div>
+      `;
+
+      let emailSent = false;
+      let smsSent = false;
+
+      try {
+        emailSent = await sendEmail({
+          to: lead.email,
+          from: "jconthemove@gmail.com",
+          subject: `Your JC on the Move Quote — ${serviceLabel}`,
+          html: emailHtml,
+          text: `Hi ${lead.firstName}, your JC on the Move quote is ready: ${totalFormatted} total for ${serviceLabel}${crewLine ? `, ${crewLine}` : ""}${dateLine ? `, on ${dateLine}` : ""}${windowLine ? `, arriving ${windowLine}` : ""}. Call or text (906) 285-9312 to confirm. — JC on the Move`,
+        });
+      } catch (err) {
+        console.error("Quote email send error:", err);
+      }
+
+      if (lead.phone) {
+        try {
+          const smsBody = `Hi ${lead.firstName}, your JC on the Move quote is ready: ${totalFormatted} total for ${serviceLabel}. Call or text (906) 285-9312 to confirm. — JC on the Move`;
+          const smsResult = await smsService.sendSMS(lead.phone, smsBody);
+          smsSent = smsResult.success;
+        } catch (err) {
+          console.error("Quote SMS send error:", err);
+        }
+      }
+
+      // Invalidate cache so frontend refreshes
+      const updatedLead = await storage.getLead(id);
+      res.json({ success: true, quoteSentAt: now.toISOString(), emailSent, smsSent, lead: updatedLead });
+    } catch (error) {
+      console.error("Error sending quote:", error);
+      res.status(500).json({ error: "Failed to send quote" });
     }
   });
 

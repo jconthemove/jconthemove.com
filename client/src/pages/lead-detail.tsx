@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Mail, Phone, MapPin, Calendar, Users, DollarSign, Award, TrendingUp, CheckCircle, Clock, Star, ExternalLink, Sparkles, Send, FileText, Loader2, Bitcoin, Copy, Check, Zap, ShoppingBag, AlertTriangle, UserCheck, Camera, Image, ChevronRight, PlayCircle } from "lucide-react";
+import { ArrowLeft, Mail, Phone, MapPin, Calendar, Users, DollarSign, Award, TrendingUp, CheckCircle, Clock, Star, ExternalLink, Sparkles, Send, FileText, Loader2, Bitcoin, Copy, Check, Zap, ShoppingBag, AlertTriangle, UserCheck, Camera, Image, ChevronRight, PlayCircle, ChevronDown, ChevronUp, MessageSquare, Minus, Plus, RefreshCw } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { CrewSuggestionsDialog } from "@/components/crew-suggestions-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { JobOrderBuilder } from "@/components/JobOrderBuilder";
 
@@ -89,6 +90,9 @@ interface Lead {
   redemptionId?: number;
   appliedCreditNote?: string;
   photos?: Array<{ url: string; mimeType: string; name: string }>;
+  quoteSentAt?: string;
+  quoteViewedAt?: string;
+  arrivalWindow?: string;
 }
 
 interface Reward {
@@ -226,6 +230,20 @@ export default function LeadDetailPage() {
   const photoInputRef = useRef<HTMLInputElement>(null);
   const { hasAdminAccess, isEmployee } = useAuth();
 
+  // Quote & Send tab state
+  const [activeTab, setActiveTab] = useState("details");
+  const [quoteNote, setQuoteNote] = useState("");
+  const [quoteSentAt, setQuoteSentAt] = useState<string | null>(null);
+  const [showJobOrderBuilderSheet, setShowJobOrderBuilderSheet] = useState(false);
+  // Crew & Service Plan inline state
+  const [planCrewSize, setPlanCrewSize] = useState(2);
+  const [planHours, setPlanHours] = useState(3);
+  const [planArrivalWindow, setPlanArrivalWindow] = useState("");
+  const [planConfirmedDate, setPlanConfirmedDate] = useState("");
+  const [planApplied, setPlanApplied] = useState(false);
+  const [planHasTruck, setPlanHasTruck] = useState(false);
+  const [planHasTrailer, setPlanHasTrailer] = useState(false);
+
   const { data: lead, isLoading, isError, error } = useQuery<Lead>({
     queryKey: ["/api/leads", params?.id],
     enabled: !!params?.id,
@@ -303,6 +321,17 @@ export default function LeadDetailPage() {
       setSelectedCrewMembers(members);
       const inferredBonus = members.length > 0 && (lead.crewSize ?? 0) > members.length;
       setBonusMover(inferredBonus);
+      // Sync plan state from lead
+      setPlanCrewSize(lead.crewSize || 2);
+      setPlanHours(lead.confirmedHours || 3);
+      setPlanArrivalWindow(lead.arrivalWindow || "");
+      setPlanConfirmedDate(lead.confirmedDate || lead.moveDate || "");
+      if (lead.quoteSentAt) setQuoteSentAt(lead.quoteSentAt);
+      // Truck/trailer from truckConfig
+      if (lead.truckConfig) {
+        setPlanHasTruck(lead.truckConfig === "company_truck" || lead.truckConfig === "customer_truck");
+        setPlanHasTrailer(false); // no direct field; default off on load
+      }
     }
   }, [lead, form]);
 
@@ -324,6 +353,64 @@ export default function LeadDetailPage() {
         description: "Failed to update lead",
         variant: "destructive",
       });
+    },
+  });
+
+  const applyPlanMutation = useMutation({
+    mutationFn: async () => {
+      // Derive truckConfig from toggles (trailer uses a trailer truck config)
+      const truckConfig = planHasTruck
+        ? "company_truck"
+        : planHasTrailer
+          ? "trailer_only"
+          : "no_truck";
+      return await apiRequest("PATCH", `/api/leads/${params?.id}/quote`, {
+        crewSize: planCrewSize,
+        confirmedHours: planHours,
+        ...(planConfirmedDate ? { confirmedDate: planConfirmedDate } : {}),
+        ...(planArrivalWindow ? { arrivalWindow: planArrivalWindow } : {}),
+        crewMembers: selectedCrewMembers,
+        truckConfig,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads", params?.id] });
+      setPlanApplied(true);
+      setTimeout(() => setPlanApplied(false), 3000);
+      toast({ title: "Plan saved!", description: "Crew & service plan updated." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to save plan.", variant: "destructive" });
+    },
+  });
+
+  const sendQuoteMutation = useMutation({
+    mutationFn: async (channel: "email" | "sms" | "both") => {
+      const res = await apiRequest("POST", `/api/leads/${params?.id}/send-quote`, { message: quoteNote || undefined });
+      return { res, channel };
+    },
+    onSuccess: async ({ res }) => {
+      const data = await res.json();
+      setQuoteSentAt(data.quoteSentAt);
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads", params?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads", params?.id, "history"] });
+      toast({
+        title: "Quote sent!",
+        description: `Email: ${data.emailSent ? "✓" : "✗"}  SMS: ${data.smsSent ? "✓" : "✗"}`,
+      });
+    },
+    onError: (error: Error) => {
+      let msg = error?.message || "Failed to send quote";
+      try {
+        const jsonStart = msg.indexOf("{");
+        if (jsonStart !== -1) {
+          const parsed = JSON.parse(msg.slice(jsonStart));
+          if (parsed?.error) msg = parsed.error;
+        }
+      } catch (_) {}
+      toast({ title: "Send failed", description: msg, variant: "destructive" });
     },
   });
 
@@ -438,7 +525,7 @@ export default function LeadDetailPage() {
       toast({ title: "Step completed", description: "Job workflow advanced successfully" });
       setIsCheckingIn(false);
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       let msg = error?.message || "Failed to advance step";
       try {
         const jsonStart = msg.indexOf("{");
@@ -446,7 +533,7 @@ export default function LeadDetailPage() {
           const parsed = JSON.parse(msg.slice(jsonStart));
           if (parsed?.error) msg = parsed.error;
         }
-      } catch {}
+      } catch (_) {}
       toast({ title: "Step blocked", description: msg, variant: "destructive" });
     },
   });
@@ -470,7 +557,7 @@ export default function LeadDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/leads", params?.id, "history"] });
       toast({ title: "Status updated", description: "Lead pipeline stage advanced." });
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       let msg = error?.message || "Failed to update status";
       try {
         const jsonStart = msg.indexOf("{");
@@ -478,7 +565,7 @@ export default function LeadDetailPage() {
           const parsed = JSON.parse(msg.slice(jsonStart));
           if (parsed?.error) msg = parsed.error;
         }
-      } catch {}
+      } catch (_) {}
       toast({ title: "Transition blocked", description: msg, variant: "destructive" });
     },
   });
@@ -778,17 +865,81 @@ export default function LeadDetailPage() {
           )}
         </div>
 
+        {/* === Sticky Customer Summary Bar === */}
+        {hasAdminAccess && (
+          <div className="sticky top-0 z-20 mb-4 p-3 rounded-xl border border-slate-700/50 bg-slate-900/95 backdrop-blur-sm flex flex-wrap items-center gap-3 text-sm shadow-md">
+            <div className="flex items-center gap-1.5 font-semibold text-foreground">
+              <Users className="h-4 w-4 text-slate-400" />
+              {lead.firstName} {lead.lastName}
+            </div>
+            {lead.phone && (
+              <a href={`tel:${lead.phone}`} className="flex items-center gap-1 text-blue-400 hover:underline">
+                <Phone className="h-3.5 w-3.5" /> {lead.phone}
+              </a>
+            )}
+            {lead.email && (
+              <a href={`mailto:${lead.email}`} className="flex items-center gap-1 text-slate-400 hover:text-slate-200 hover:underline truncate max-w-[180px]">
+                <Mail className="h-3.5 w-3.5 shrink-0" /> {lead.email}
+              </a>
+            )}
+            <div className="hidden sm:block w-px h-4 bg-slate-600" />
+            <span className="text-slate-400 capitalize">
+              {lead.serviceType?.replace(/_/g, " ")}
+              {(lead.totalPrice || lead.basePrice) && (
+                <span className="text-emerald-400 font-semibold ml-1">
+                  · ${parseFloat(lead.totalPrice || lead.basePrice || "0").toFixed(0)}
+                </span>
+              )}
+            </span>
+            <Badge
+              variant="secondary"
+              className={lead.status === "quoted" || lead.status === "completed" ? "bg-amber-600/20 text-amber-300 border-amber-500/30" : ""}
+            >
+              {lead.status.replace(/_/g, " ").charAt(0).toUpperCase() + lead.status.replace(/_/g, " ").slice(1)}
+            </Badge>
+            {(quoteSentAt || lead.quoteSentAt) && (
+              <Badge className="bg-green-600/20 text-green-300 border-green-500/30 text-[10px]">
+                <CheckCircle className="h-3 w-3 mr-1" /> Quote Sent
+              </Badge>
+            )}
+            <div className="ml-auto">
+              <Button
+                size="sm"
+                className="bg-orange-600 hover:bg-orange-700 text-white"
+                onClick={() => setActiveTab("quote")}
+              >
+                <Send className="h-3.5 w-3.5 mr-1.5" /> Send Quote
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* === 4-Tab Interface === */}
-        <Tabs defaultValue="details" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-4 mb-6">
-            <TabsTrigger value="details">Details</TabsTrigger>
-            <TabsTrigger value="quote">Quote</TabsTrigger>
-            <TabsTrigger value="notes">Notes/Photos</TabsTrigger>
-            <TabsTrigger value="history">History</TabsTrigger>
+            <TabsTrigger value="details">Job Request</TabsTrigger>
+            <TabsTrigger value="quote">Quote & Send</TabsTrigger>
+            <TabsTrigger value="notes">Notes & Media</TabsTrigger>
+            <TabsTrigger value="history">Timeline</TabsTrigger>
           </TabsList>
 
-          {/* ─────────── TAB: DETAILS ─────────── */}
+          {/* ─────────── TAB: DETAILS (Job Request) ─────────── */}
           <TabsContent value="details" className="space-y-4">
+            {/* Quick Contact pills */}
+            {hasAdminAccess && (
+              <div className="flex gap-2 flex-wrap">
+                <a href={`tel:${lead.phone}`} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-600/15 border border-blue-500/30 text-blue-400 text-sm font-medium hover:bg-blue-600/25 transition-colors">
+                  <Phone className="h-3.5 w-3.5" /> Call
+                </a>
+                <a href={`sms:${lead.phone}`} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-600/15 border border-green-500/30 text-green-400 text-sm font-medium hover:bg-green-600/25 transition-colors">
+                  <MessageSquare className="h-3.5 w-3.5" /> Text
+                </a>
+                <a href={`mailto:${lead.email}`} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-700/40 border border-slate-600/40 text-slate-300 text-sm font-medium hover:bg-slate-700/60 transition-colors">
+                  <Mail className="h-3.5 w-3.5" /> Email
+                </a>
+              </div>
+            )}
+
             {/* Pipeline Stepper — admins and employees only */}
             {(hasAdminAccess || isEmployee) && (() => {
               const PIPELINE_STAGES = [
@@ -831,6 +982,9 @@ export default function LeadDetailPage() {
                                 {isCurrent && <PlayCircle className="h-3 w-3 shrink-0" />}
                                 <span>{stage.label}</span>
                               </div>
+                              {stage.key === "quoted" && (quoteSentAt || lead.quoteSentAt) && (
+                                <span className="text-[9px] font-semibold text-green-400">Quote Sent ✓</span>
+                              )}
                               {isCompleted && reachedAt && (
                                 <span className="text-[9px] font-normal opacity-70">
                                   {new Date(reachedAt).toLocaleDateString()}
@@ -968,40 +1122,6 @@ export default function LeadDetailPage() {
               </CardContent>
             </Card>
 
-            {/* Schedule & Addresses */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  Schedule & Addresses
-                </CardTitle>
-                <CardDescription>Confirm the date, pickup, and delivery locations</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="confirmedDate">Confirmed Move Date</Label>
-                  <Input id="confirmedDate" type="date" disabled={!isEditing} {...form.register("confirmedDate")} data-testid="input-confirmed-date" />
-                </div>
-                <div>
-                  <Label htmlFor="confirmedFromAddress">Confirmed Pickup Address</Label>
-                  <Input id="confirmedFromAddress" disabled={!isEditing} {...form.register("confirmedFromAddress")} data-testid="input-confirmed-from" />
-                </div>
-                <div>
-                  <Label htmlFor="confirmedToAddress">Confirmed Delivery Address</Label>
-                  <Input id="confirmedToAddress" disabled={!isEditing} {...form.register("confirmedToAddress")} data-testid="input-confirmed-to" />
-                </div>
-                {!hasAdminAccess && (
-                  <div>
-                    <Label htmlFor="basePrice">Base Price</Label>
-                    <div className="relative">
-                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input id="basePrice" type="number" step="0.01" className="pl-9" disabled={!isEditing} {...form.register("basePrice")} data-testid="input-base-price" />
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
             {/* Crew Assignment */}
             {hasAdminAccess && (
               <Card>
@@ -1095,158 +1215,340 @@ export default function LeadDetailPage() {
             )}
           </TabsContent>
 
-          {/* ─────────── TAB: QUOTE ─────────── */}
+          {/* ─────────── TAB: QUOTE & SEND ─────────── */}
           <TabsContent value="quote" className="space-y-4">
-            {/* Workflow Step Actions */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Job Workflow</CardTitle>
-                <CardDescription>
-                  Step {currentStep} of {workflow.length}: {workflow.find(w => w.step === currentStep)?.name}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between mb-4">
-                  {workflow.map((step, idx) => (
-                    <div key={step.step} className="flex items-center flex-1">
-                      <div className="flex flex-col items-center flex-1">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 ${
-                          currentStep > step.step ? 'bg-green-600 border-green-600 text-white' :
-                          currentStep === step.step ? 'bg-primary border-primary text-white' :
-                          'bg-muted border-muted-foreground/30 text-muted-foreground'
-                        }`}>
-                          {currentStep > step.step ? <CheckCircle className="h-4 w-4" /> : <span className="text-xs font-bold">{step.step}</span>}
-                        </div>
-                        <p className="text-[10px] mt-1 text-center text-muted-foreground">{step.name}</p>
-                      </div>
-                      {idx < workflow.length - 1 && <div className={`h-0.5 flex-1 ${currentStep > step.step ? 'bg-green-600' : 'bg-muted'}`} />}
-                    </div>
-                  ))}
-                </div>
 
-                <div className="p-3 bg-muted/50 rounded-lg">
-                  {currentStep === 1 && (
-                    <div className="space-y-3">
-                      <p className="text-sm text-muted-foreground">Review details and set pricing, then make available.</p>
-                      <div className="flex gap-2 items-end">
-                        <div className="flex-1">
-                          <Label>JCMOVES Token Allocation</Label>
-                          <Input type="number" placeholder="e.g., 500" value={tokenAllocation} onChange={(e) => setTokenAllocation(e.target.value)} data-testid="input-token-allocation" />
-                        </div>
-                      </div>
-                      {hasAdminAccess && selectedCrewMembers.length === 0 && (
-                        <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-md px-3 py-2">
-                          <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-                          <span>No crew members assigned. Assign crew in the Details tab.</span>
-                        </div>
+            {/* Section A — Crew & Service Plan */}
+            {hasAdminAccess && (
+              <Card className="border-blue-500/20 bg-blue-950/10">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Users className="h-4 w-4 text-blue-400" />
+                    Crew & Service Plan
+                  </CardTitle>
+                  <CardDescription>Configure the crew and schedule for this job</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Crew Size stepper */}
+                  <div>
+                    <Label className="text-sm font-semibold mb-2 block">Crew Size</Label>
+                    <div className="flex items-center gap-3">
+                      {[1, 2, 3, 4].map((n) => (
+                        <button
+                          key={n}
+                          onClick={() => setPlanCrewSize(n)}
+                          className={`w-12 h-12 rounded-xl border-2 text-lg font-bold transition-colors ${
+                            planCrewSize === n
+                              ? "bg-blue-600 border-blue-500 text-white"
+                              : "bg-slate-800/60 border-slate-600/40 text-slate-400 hover:border-blue-500/50"
+                          }`}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                      <span className="text-sm text-slate-400 ml-1">mover{planCrewSize !== 1 ? "s" : ""}</span>
+                    </div>
+                  </div>
+
+                  {/* Named crew multi-select */}
+                  <div>
+                    <Label className="text-sm font-semibold mb-2 block">Named Crew</Label>
+                    <div className="max-h-36 overflow-y-auto space-y-1 border rounded-md p-2 bg-muted/20">
+                      {employees.filter(e => e.isApproved || e.status === "approved").length === 0 ? (
+                        <p className="text-xs text-muted-foreground text-center py-2">No approved employees found</p>
+                      ) : (
+                        employees.filter(emp => emp.isApproved || emp.status === "approved").map((emp) => {
+                          const isSel = selectedCrewMembers.includes(emp.id);
+                          const toggle = () => setSelectedCrewMembers(prev => isSel ? prev.filter(id => id !== emp.id) : [...prev, emp.id]);
+                          return (
+                            <div key={emp.id} onClick={toggle} className="flex items-center gap-2 p-1.5 rounded hover:bg-muted/50 cursor-pointer">
+                              <Checkbox checked={isSel} tabIndex={-1} className="h-4 w-4 pointer-events-none" />
+                              <span className={`text-sm ${isSel ? "text-primary font-medium" : ""}`}>{emp.firstName} {emp.lastName}</span>
+                            </div>
+                          );
+                        })
                       )}
-                      <Button onClick={() => advanceToStep.mutate(2)} disabled={!lead?.basePrice || advanceToStep.isPending} data-testid="button-make-available">
-                        {advanceToStep.isPending ? "Activating..." : "Make Job Available"}
+                    </div>
+                  </div>
+
+                  {/* Hours stepper (0.5 increments, 1–10) */}
+                  <div>
+                    <Label className="text-sm font-semibold mb-2 block">Hours Estimate</Label>
+                    <div className="flex items-center gap-3">
+                      <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => setPlanHours(h => Math.max(1, Math.round((h - 0.5) * 2) / 2))}>
+                        <Minus className="h-4 w-4" />
                       </Button>
-                    </div>
-                  )}
-                  {currentStep === 2 && (
-                    <div className="space-y-3">
-                      <p className="text-sm text-muted-foreground">Job is available. Mark as in progress once the crew has started.</p>
-                      <div className="p-3 bg-primary/10 rounded-lg">
-                        <p className="text-sm font-semibold text-primary">Token Reward: {lead?.tokenAllocation || 0} JCMOVES</p>
-                      </div>
-                      <Button onClick={() => advanceToStep.mutate(3)} disabled={advanceToStep.isPending} data-testid="button-mark-in-progress">
-                        {advanceToStep.isPending ? "Starting..." : "Mark as In Progress"}
+                      <span className="w-14 text-center font-bold text-lg">{planHours}</span>
+                      <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => setPlanHours(h => Math.min(10, Math.round((h + 0.5) * 2) / 2))}>
+                        <Plus className="h-4 w-4" />
                       </Button>
+                      <span className="text-sm text-slate-400">hr{planHours !== 1 ? "s" : ""}</span>
                     </div>
-                  )}
-                  {currentStep === 3 && (
-                    <div className="space-y-3">
-                      <p className="text-sm text-muted-foreground">Job is in progress. Mark complete when finished.</p>
-                      <div className="p-3 bg-primary/10 rounded-lg">
-                        <p className="text-sm font-semibold text-primary">Token Reward: {lead?.tokenAllocation || 0} JCMOVES</p>
+                  </div>
+
+                  {/* Truck / Trailer toggles */}
+                  <div className="flex gap-6">
+                    <div className="flex items-center gap-3">
+                      <Switch
+                        id="plan-truck"
+                        checked={planHasTruck}
+                        onCheckedChange={setPlanHasTruck}
+                      />
+                      <Label htmlFor="plan-truck" className="cursor-pointer text-sm">Truck</Label>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Switch
+                        id="plan-trailer"
+                        checked={planHasTrailer}
+                        onCheckedChange={setPlanHasTrailer}
+                      />
+                      <Label htmlFor="plan-trailer" className="cursor-pointer text-sm">Trailer</Label>
+                    </div>
+                  </div>
+
+                  {/* Arrival window */}
+                  <div>
+                    <Label htmlFor="arrivalWindow" className="text-sm font-semibold mb-1 block">Arrival Window</Label>
+                    <Input
+                      id="arrivalWindow"
+                      placeholder='e.g. "9:00 AM – 11:00 AM"'
+                      value={planArrivalWindow}
+                      onChange={(e) => setPlanArrivalWindow(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Confirmed date */}
+                  <div>
+                    <Label htmlFor="planConfirmedDate" className="text-sm font-semibold mb-1 block">Confirmed Date</Label>
+                    <Input
+                      id="planConfirmedDate"
+                      type="date"
+                      value={planConfirmedDate}
+                      onChange={(e) => setPlanConfirmedDate(e.target.value)}
+                    />
+                  </div>
+
+                  <Button
+                    onClick={() => applyPlanMutation.mutate()}
+                    disabled={applyPlanMutation.isPending}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    {applyPlanMutation.isPending ? (
+                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving…</>
+                    ) : planApplied ? (
+                      <><CheckCircle className="h-4 w-4 mr-2" /> Plan Saved!</>
+                    ) : (
+                      <><CheckCircle className="h-4 w-4 mr-2" /> Apply Plan</>
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Section B — Quote Summary */}
+            <Card className="border-emerald-500/30 bg-slate-900/60">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-base text-emerald-400">
+                  <ShoppingBag className="h-4 w-4" />
+                  Quote Summary
+                  {orderApplied && <Badge className="ml-1 bg-emerald-600/30 text-emerald-300 border-emerald-500/30 text-[10px]">Just updated</Badge>}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {(lead.totalPrice || lead.basePrice) ? (
+                  <>
+                    {lead.orderLineItems && lead.orderLineItems.length > 0 ? (
+                      <div className="space-y-1.5">
+                        {lead.orderLineItems.map((li: OrderLineItem, i: number) => (
+                          <div key={i} className="flex justify-between text-sm text-slate-300">
+                            <span>{li.name}{li.qty > 1 ? ` × ${li.qty}` : ""}</span>
+                            <span className="font-medium">${li.total?.toFixed(2) ?? "0.00"}</span>
+                          </div>
+                        ))}
+                        <div className="flex justify-between font-bold text-white pt-2 border-t border-slate-600/50">
+                          <span>Subtotal</span>
+                          <span>${parseFloat(lead.totalPrice || lead.basePrice || "0").toFixed(2)}</span>
+                        </div>
                       </div>
-                      <Button onClick={() => advanceToStep.mutate(4)} disabled={advanceToStep.isPending} data-testid="button-mark-complete">
-                        {advanceToStep.isPending ? "Completing..." : "Mark as Complete"}
-                      </Button>
-                    </div>
-                  )}
-                  {currentStep === 4 && (
-                    <div className="space-y-3">
-                      <p className="text-sm text-muted-foreground">Job complete! Request a review from the customer.</p>
-                      <div className="flex flex-wrap gap-2">
-                        <Button onClick={() => requestReview("google")} variant="outline" className="gap-2" data-testid="button-review-google">
-                          <ExternalLink className="h-4 w-4" /> Google Review
-                        </Button>
-                        <Button onClick={() => requestReview("facebook")} variant="outline" className="gap-2" data-testid="button-review-facebook">
-                          <ExternalLink className="h-4 w-4" /> Facebook Review
-                        </Button>
-                        <Button onClick={() => requestReview("inapp")} variant="outline" className="gap-2" data-testid="button-review-inapp">
-                          <Star className="h-4 w-4" /> In-App Review
-                        </Button>
+                    ) : (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-400">Base Quote</span>
+                        <span className="font-medium">${parseFloat(lead.basePrice || "0").toFixed(2)}</span>
                       </div>
+                    )}
+                    {/* Special item surcharges */}
+                    {parseFloat(String(lead.totalSpecialItemsFee || "0")) > 0 && (
+                      <div className="flex justify-between text-sm border-t border-slate-700/30 pt-1.5">
+                        <span className="text-slate-400">Special Items Surcharge</span>
+                        <span className="text-orange-400 font-medium">+${parseFloat(String(lead.totalSpecialItemsFee || "0")).toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-lg font-bold text-emerald-400 border-t border-slate-600/60 pt-2">
+                      <span>Total</span>
+                      <span>${parseFloat(lead.totalPrice || lead.basePrice || "0").toFixed(2)}</span>
                     </div>
-                  )}
-                </div>
+                    {/* Token preview */}
+                    {(() => {
+                      const price = parseFloat(lead.totalPrice || lead.basePrice || "0");
+                      const crewCount = lead.crewSize ? parseInt(String(lead.crewSize)) : 0;
+                      const jobTokens = Math.round(price * 15);
+                      const perWorker = crewCount > 0 ? Math.round(jobTokens / crewCount) : jobTokens;
+                      return (
+                        <div className="pt-1.5 border-t border-slate-700/50 space-y-1">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Token conversion · $1 = 15 JCMOVES</p>
+                          <div className="flex items-center gap-1.5 text-xs text-amber-400">
+                            <Zap className="h-3.5 w-3.5 shrink-0" />
+                            <span>Customer earns <strong>~{jobTokens.toLocaleString()}</strong> JCMOVES</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-xs text-orange-400">
+                            <Zap className="h-3.5 w-3.5 shrink-0" />
+                            <span>Crew earns <strong>~{jobTokens.toLocaleString()}</strong> JCMOVES{crewCount > 0 && <span className="text-orange-400/70"> (~{perWorker.toLocaleString()} each)</span>}</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </>
+                ) : (
+                  <p className="text-sm text-slate-500 italic text-center py-3">No quote set yet. Use "Adjust Quote" to build the quote.</p>
+                )}
+
+                {/* Adjust Quote button → opens JobOrderBuilder Sheet */}
+                {hasAdminAccess && (
+                  <div className="pt-1">
+                    <Button variant="outline" className="w-full" onClick={() => setShowJobOrderBuilderSheet(true)}>
+                      <DollarSign className="h-4 w-4 mr-2" /> Adjust Quote
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
-            {/* Order Builder (Admin only) */}
-            {hasAdminAccess && (
-              <JobOrderBuilder lead={lead} leadId={lead.id} disabled={updateLead.isPending} onApply={handleOrderApply} />
-            )}
+            {/* JobOrderBuilder Sheet */}
+            <Sheet open={showJobOrderBuilderSheet} onOpenChange={setShowJobOrderBuilderSheet}>
+              <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
+                <SheetHeader className="mb-4">
+                  <SheetTitle>Adjust Quote</SheetTitle>
+                  <SheetDescription>Build or update the itemized quote for this job.</SheetDescription>
+                </SheetHeader>
+                {hasAdminAccess && (
+                  <JobOrderBuilder
+                    lead={lead}
+                    leadId={lead.id}
+                    disabled={updateLead.isPending}
+                    onApply={(orderData) => {
+                      handleOrderApply(orderData);
+                      setShowJobOrderBuilderSheet(false);
+                    }}
+                  />
+                )}
+              </SheetContent>
+            </Sheet>
 
-            {/* Active Order Summary */}
-            {(lead.totalPrice || lead.basePrice) && (
-              <Card className="border-emerald-500/30 bg-slate-900/60">
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-2 text-base text-emerald-400">
-                    <ShoppingBag className="h-4 w-4" />
-                    Active Order
-                    {orderApplied && <Badge className="ml-1 bg-emerald-600/30 text-emerald-300 border-emerald-500/30 text-[10px]">Just applied</Badge>}
+            {/* Section C — Send to Customer */}
+            {hasAdminAccess && (
+              <Card className="border-orange-500/30 bg-orange-950/10">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Send className="h-4 w-4 text-orange-400" />
+                    Send to Customer
                   </CardTitle>
+                  <CardDescription>Preview and send the quote via email and SMS</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-2">
-                  {lead.orderLineItems && lead.orderLineItems.length > 0 ? (
-                    <div className="space-y-1">
-                      {lead.orderLineItems.map((li: OrderLineItem, i: number) => (
-                        <div key={i} className="flex justify-between text-sm text-slate-300">
-                          <span>{li.name}{li.qty > 1 ? ` × ${li.qty}` : ""}</span>
-                          <span className="font-medium">${li.total?.toFixed(2) ?? "0.00"}</span>
-                        </div>
-                      ))}
-                      <div className="flex justify-between font-bold text-white pt-2 border-t border-slate-600/50">
-                        <span>Total</span>
-                        <span className="text-emerald-400">${parseFloat(lead.totalPrice || lead.basePrice || "0").toFixed(2)}</span>
-                      </div>
+                <CardContent className="space-y-4">
+                  {/* Preview box */}
+                  <div className="p-3 rounded-lg bg-slate-800/60 border border-slate-700/50 text-sm space-y-1.5">
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-2">What the customer will see</p>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Service</span>
+                      <span className="font-medium capitalize">{lead.serviceType?.replace(/_/g, " ")}</span>
                     </div>
-                  ) : (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-slate-400">Quote Total</span>
-                      <span className="font-bold text-emerald-400">${parseFloat(lead.totalPrice || lead.basePrice || "0").toFixed(2)}</span>
+                    {(planCrewSize || lead.crewSize) && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Crew</span>
+                        <span className="font-medium">{planCrewSize || lead.crewSize} mover{(planCrewSize || lead.crewSize) !== 1 ? "s" : ""}</span>
+                      </div>
+                    )}
+                    {(planConfirmedDate || lead.confirmedDate) && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Estimated date</span>
+                        <span className="font-medium">{planConfirmedDate || lead.confirmedDate}</span>
+                      </div>
+                    )}
+                    {(planArrivalWindow || lead.arrivalWindow) && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Arrival window</span>
+                        <span className="font-medium">{planArrivalWindow || lead.arrivalWindow}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between border-t border-slate-700/50 pt-1.5 mt-1.5">
+                      <span className="text-slate-400">Quote total</span>
+                      <span className="font-bold text-emerald-400 text-base">
+                        {(lead.totalPrice || lead.basePrice) ? `$${parseFloat(lead.totalPrice || lead.basePrice || "0").toFixed(2)}` : "Not set"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">To confirm</span>
+                      <span className="text-orange-400 font-semibold">Call or text (906) 285-9312</span>
+                    </div>
+                  </div>
+
+                  {/* Note textarea */}
+                  <div>
+                    <Label className="text-sm font-medium mb-1 block">Add a personal note (optional)</Label>
+                    <Textarea
+                      placeholder="e.g. Thanks for reaching out! We're excited to help with your move."
+                      value={quoteNote}
+                      onChange={(e) => setQuoteNote(e.target.value)}
+                      rows={2}
+                      className="resize-none text-sm"
+                    />
+                  </div>
+
+                  {/* Already sent status */}
+                  {(quoteSentAt || lead.quoteSentAt) && (
+                    <div className="flex items-center gap-2 text-sm text-green-400 bg-green-600/10 border border-green-500/20 rounded-lg px-3 py-2">
+                      <CheckCircle className="h-4 w-4 shrink-0" />
+                      <span>
+                        Quote sent {new Date(quoteSentAt || lead.quoteSentAt!).toLocaleString()}
+                      </span>
                     </div>
                   )}
-                  {lead.crewSize && (
-                    <div className="flex items-center gap-2 text-xs text-slate-400 pt-1">
-                      <Users className="h-3.5 w-3.5" />{lead.crewSize} movers
-                      {lead.confirmedHours ? <><Clock className="h-3.5 w-3.5 ml-2" />{lead.confirmedHours} hrs</> : null}
-                    </div>
+
+                  {/* Send buttons */}
+                  <div className="flex gap-2">
+                    <Button
+                      className="flex-1 bg-orange-600 hover:bg-orange-700 text-white"
+                      onClick={() => sendQuoteMutation.mutate("email")}
+                      disabled={sendQuoteMutation.isPending || !(lead.totalPrice || lead.basePrice)}
+                    >
+                      {sendQuoteMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Mail className="h-4 w-4 mr-2" />
+                      )}
+                      {quoteSentAt || lead.quoteSentAt ? "Re-send Email" : "Send Email"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => sendQuoteMutation.mutate("sms")}
+                      disabled={sendQuoteMutation.isPending || !(lead.totalPrice || lead.basePrice) || !lead.phone}
+                    >
+                      {sendQuoteMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <MessageSquare className="h-4 w-4 mr-2" />
+                      )}
+                      {quoteSentAt || lead.quoteSentAt ? "Re-send SMS" : "Send SMS"}
+                    </Button>
+                  </div>
+
+                  {!(lead.totalPrice || lead.basePrice) && (
+                    <p className="text-xs text-amber-400 flex items-center gap-1.5">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                      Build a quote first before sending.
+                    </p>
                   )}
-                  {(lead.totalPrice || lead.basePrice) && (() => {
-                    const price = parseFloat(lead.totalPrice || lead.basePrice || "0");
-                    const crewCount = lead.crewSize ? parseInt(String(lead.crewSize)) : 0;
-                    const jobTokens = Math.round(price * 15);
-                    const perWorker = crewCount > 0 ? Math.round(jobTokens / crewCount) : jobTokens;
-                    return (
-                      <div className="pt-1.5 border-t border-slate-700/50 space-y-1">
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Token conversion · $1 = 15 JCMOVES</p>
-                        <div className="flex items-center gap-1.5 text-xs text-amber-400">
-                          <Zap className="h-3.5 w-3.5 shrink-0" />
-                          <span>Customer earns <strong>~{jobTokens.toLocaleString()}</strong> JCMOVES</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-xs text-orange-400">
-                          <Zap className="h-3.5 w-3.5 shrink-0" />
-                          <span>Crew earns <strong>~{jobTokens.toLocaleString()}</strong> JCMOVES{crewCount > 0 && <span className="text-orange-400/70"> (~{perWorker.toLocaleString()} each)</span>}</span>
-                        </div>
-                      </div>
-                    );
-                  })()}
                 </CardContent>
               </Card>
             )}

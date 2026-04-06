@@ -95,6 +95,11 @@ export const leads = pgTable("leads", {
   reviewToken: varchar("review_token").unique(),
   reviewRequestSentAt: timestamp("review_request_sent_at"),
 
+  // Quote dispatch fields
+  quoteSentAt: timestamp("quote_sent_at"),
+  quoteViewedAt: timestamp("quote_viewed_at"),
+  arrivalWindow: text("arrival_window"), // e.g. "9:00 AM – 11:00 AM"
+
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
 
