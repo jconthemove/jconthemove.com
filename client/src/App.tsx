@@ -136,6 +136,18 @@ function PublicHomePage() {
   );
 }
 
+// Detect stale deployment chunk errors — browser has old bundle, auto-reload fixes it
+function isChunkLoadError(error: any): boolean {
+  const msg = error?.message || String(error) || "";
+  return (
+    msg.includes("Failed to fetch dynamically imported module") ||
+    msg.includes("Loading chunk") ||
+    msg.includes("Loading CSS chunk") ||
+    msg.includes("Importing a module script failed") ||
+    msg.includes("error loading dynamically imported module")
+  );
+}
+
 // Root error boundary — catches ANY crash in the entire app tree
 class RootErrorBoundary extends ReactComponent<
   { children: ReactNode },
@@ -146,6 +158,11 @@ class RootErrorBoundary extends ReactComponent<
     this.state = { hasError: false, error: "", stack: "", componentStack: "" };
   }
   static getDerivedStateFromError(error: any) {
+    // Auto-reload on stale deployment chunk errors
+    if (isChunkLoadError(error)) {
+      window.location.reload();
+      return { hasError: false, error: "", stack: "", componentStack: "" };
+    }
     return {
       hasError: true,
       error: error?.message || String(error) || "Unknown error",
@@ -154,6 +171,7 @@ class RootErrorBoundary extends ReactComponent<
     };
   }
   componentDidCatch(error: any, info: any) {
+    if (isChunkLoadError(error)) return; // already reloading
     console.error("[RootErrorBoundary] Caught crash:", error, info);
     this.setState({ componentStack: info?.componentStack || "" });
     fetch("/api/client-error", {
@@ -207,11 +225,17 @@ class PageErrorBoundary extends ReactComponent<
     if (error?.message?.includes("suspended while responding to synchronous input")) {
       return { hasError: false, error: "", componentStack: "" };
     }
+    // Auto-reload on stale deployment chunk errors
+    if (isChunkLoadError(error)) {
+      window.location.reload();
+      return { hasError: false, error: "", componentStack: "" };
+    }
     return { hasError: true, error: error?.message || "Something went wrong", componentStack: "" };
   }
   componentDidCatch(error: any, info: any) {
     // Ignore React's synchronous suspension warning
     if (error?.message?.includes("suspended while responding to synchronous input")) return;
+    if (isChunkLoadError(error)) return; // already reloading
     console.error("[PageErrorBoundary] Caught crash:", error, info);
     this.setState({ componentStack: info?.componentStack || "" });
     fetch("/api/client-error", {
