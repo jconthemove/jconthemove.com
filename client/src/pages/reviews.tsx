@@ -135,6 +135,11 @@ export default function ReviewsPage() {
     queryKey: ["/api/testimonials/stats"],
   });
 
+  const { data: googleReviewData } = useQuery<{ url: string | null }>({
+    queryKey: ["/api/google-review-url"],
+  });
+  const googleReviewUrl = googleReviewData?.url || null;
+
   const submitReviewMutation = useMutation({
     mutationFn: async (data: ReviewFormValues) => {
       const response = await apiRequest("POST", "/api/testimonials", data);
@@ -217,7 +222,23 @@ export default function ReviewsPage() {
           </div>
         </div>
 
-        <div className="flex justify-center mb-8">
+        <div className="flex flex-col sm:flex-row justify-center items-center gap-3 mb-8">
+          <a
+            href={googleReviewUrl || undefined}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={!googleReviewUrl ? (e) => { e.preventDefault(); setIsReviewDialogOpen(true); } : undefined}
+          >
+            <Button
+              size="lg"
+              className="bg-white hover:bg-slate-100 text-slate-800 font-semibold shadow-lg border border-slate-200"
+              data-testid="button-google-review"
+            >
+              <SiGoogle className="h-5 w-5 mr-2 text-blue-500" />
+              Write a Google Review
+              <ExternalLink className="h-4 w-4 ml-2 text-slate-400" />
+            </Button>
+          </a>
           <Button 
             size="lg"
             onClick={() => setIsReviewDialogOpen(true)}
@@ -225,7 +246,7 @@ export default function ReviewsPage() {
             data-testid="button-leave-review"
           >
             <PenLine className="h-5 w-5 mr-2" />
-            Leave Us a Review
+            Leave a Review Here
           </Button>
         </div>
 

@@ -5775,6 +5775,163 @@ Thank you for your business!
     }
   });
 
+  // Sync Google Reviews (admin only) — fetches from Google Places API and upserts into testimonials
+  app.post("/api/admin/testimonials/sync-google", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+      if (!apiKey) {
+        return res.status(400).json({ error: "GOOGLE_MAPS_API_KEY is not configured" });
+      }
+
+      // Step 1: Get or discover the Place ID
+      let placeId: string | null = null;
+
+      // Check if we have a cached Place ID in spin_config
+      const cachedRow = await pool.query(
+        `SELECT setting_value FROM spin_config WHERE setting_key = 'google_place_id' LIMIT 1`
+      );
+      if (cachedRow.rows.length > 0 && cachedRow.rows[0].setting_value) {
+        placeId = cachedRow.rows[0].setting_value;
+      }
+
+      if (!placeId) {
+        // Discover via Places API text search
+        const searchRes = await fetch("https://places.googleapis.com/v1/places:searchText", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": apiKey,
+            "X-Goog-FieldMask": "places.id,places.displayName",
+          },
+          body: JSON.stringify({ textQuery: "Northwoods Moving with JC Ironwood MI" }),
+        });
+
+        if (!searchRes.ok) {
+          const errText = await searchRes.text();
+          console.error("Google Places text search failed:", errText);
+          return res.status(502).json({ error: "Failed to search Google Places: " + errText });
+        }
+
+        const searchData = await searchRes.json() as { places?: Array<{ id: string; displayName?: { text: string } }> };
+        if (!searchData.places || searchData.places.length === 0) {
+          return res.status(404).json({ error: "Business not found in Google Places. Try adjusting the business name." });
+        }
+
+        placeId = searchData.places[0].id;
+        console.log(`✅ Google Place ID discovered: ${placeId} (${searchData.places[0].displayName?.text})`);
+
+        // Cache the Place ID in spin_config
+        await pool.query(`
+          INSERT INTO spin_config (setting_key, setting_value, description)
+          VALUES ('google_place_id', $1, 'Google Places API Place ID for business reviews sync')
+          ON CONFLICT (setting_key) DO UPDATE SET setting_value = $1
+        `, [placeId]);
+      }
+
+      // Step 2: Fetch place details including reviews
+      const detailsRes = await fetch(`https://places.googleapis.com/v1/places/${placeId}`, {
+        method: "GET",
+        headers: {
+          "X-Goog-Api-Key": apiKey,
+          "X-Goog-FieldMask": "id,reviews",
+        },
+      });
+
+      if (!detailsRes.ok) {
+        const errText = await detailsRes.text();
+        console.error("Google Places details fetch failed:", errText);
+        return res.status(502).json({ error: "Failed to fetch place details: " + errText });
+      }
+
+      const detailsData = await detailsRes.json() as {
+        id: string;
+        reviews?: Array<{
+          rating: number;
+          text?: { text: string };
+          publishTime?: string;
+          authorAttribution?: {
+            displayName?: string;
+            uri?: string;
+          };
+        }>;
+      };
+
+      const googleReviews = detailsData.reviews || [];
+      if (googleReviews.length === 0) {
+        return res.json({ success: true, added: 0, message: "No reviews found on Google for this business." });
+      }
+
+      // Build Google Maps write-review URL and store it
+      const googleReviewUrl = `https://search.google.com/local/writereview?placeid=${placeId}`;
+      await pool.query(`
+        INSERT INTO spin_config (setting_key, setting_value, description)
+        VALUES ('google_review_url', $1, 'URL for customers to write a Google review')
+        ON CONFLICT (setting_key) DO UPDATE SET setting_value = $1
+      `, [googleReviewUrl]);
+
+      // Step 3: Fetch existing Google testimonials to deduplicate
+      const existingGoogle = await storage.getTestimonials({ sourcePlatform: "google" });
+      const existingKeys = new Set(existingGoogle.map(t => `${t.reviewerName}|${t.content?.slice(0, 50)}`));
+
+      let addedCount = 0;
+      for (const review of googleReviews) {
+        const reviewerName = review.authorAttribution?.displayName || "Google Customer";
+        const content = review.text?.text || "";
+        const rating = Math.min(5, Math.max(1, review.rating || 5));
+        const reviewDate = review.publishTime ? new Date(review.publishTime).toISOString().split("T")[0] : null;
+        const sourceUrl = review.authorAttribution?.uri || null;
+
+        const dedupeKey = `${reviewerName}|${content.slice(0, 50)}`;
+        if (existingKeys.has(dedupeKey)) {
+          continue; // skip duplicate
+        }
+
+        await storage.createTestimonial({
+          reviewerName,
+          rating,
+          content,
+          serviceType: null,
+          sourceType: "imported",
+          sourcePlatform: "google",
+          sourceUrl,
+          reviewDate,
+          status: "published",
+          featured: true,
+          verified: true,
+        });
+
+        existingKeys.add(dedupeKey);
+        addedCount++;
+      }
+
+      console.log(`✅ Google Reviews sync: ${addedCount} new reviews added (${googleReviews.length} fetched)`);
+      res.json({
+        success: true,
+        added: addedCount,
+        total: googleReviews.length,
+        message: addedCount > 0
+          ? `${addedCount} new Google review${addedCount > 1 ? "s" : ""} added!`
+          : "All Google reviews are already up to date.",
+      });
+    } catch (error) {
+      console.error("Error syncing Google reviews:", error);
+      res.status(500).json({ error: "Failed to sync Google reviews" });
+    }
+  });
+
+  // Get Google review URL (public — for "Write a Review" CTA)
+  app.get("/api/google-review-url", async (_req, res) => {
+    try {
+      const row = await pool.query(
+        `SELECT setting_value FROM spin_config WHERE setting_key = 'google_review_url' LIMIT 1`
+      );
+      const url = row.rows[0]?.setting_value || null;
+      res.json({ url });
+    } catch (error) {
+      res.json({ url: null });
+    }
+  });
+
   // General update lead endpoint (admin or employee)
   app.patch("/api/leads/:id", isAuthenticated, async (req: any, res) => {
     try {

@@ -231,6 +231,29 @@ export default function AdminTestimonialsPage() {
     },
   });
 
+  const syncGoogleMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/admin/testimonials/sync-google", {});
+      return response.json();
+    },
+    onSuccess: (data: { added: number; total: number; message: string }) => {
+      toast({
+        title: "Google Sync Complete",
+        description: data.message,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/testimonials"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/testimonials?status=published"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/testimonials/stats"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Sync Failed",
+        description: error.message || "Could not sync Google reviews. Check your API key.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleApprove = (id: string) => {
     updateMutation.mutate({ id, updates: { status: 'published' } });
   };
@@ -288,7 +311,7 @@ export default function AdminTestimonialsPage() {
             </Link>
           </div>
           
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div>
               <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
                 <MessageSquare className="h-8 w-8 text-primary" />
@@ -299,14 +322,30 @@ export default function AdminTestimonialsPage() {
               </p>
             </div>
             
-            <Button 
-              onClick={() => setIsImportDialogOpen(true)}
-              className="bg-primary hover:bg-primary/90"
-              data-testid="button-import-review"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Import Review
-            </Button>
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={() => syncGoogleMutation.mutate()}
+                disabled={syncGoogleMutation.isPending}
+                variant="outline"
+                className="border-blue-500/50 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 dark:text-blue-400"
+                data-testid="button-sync-google"
+              >
+                {syncGoogleMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <SiGoogle className="h-4 w-4 mr-2" />
+                )}
+                Sync Google Reviews
+              </Button>
+              <Button 
+                onClick={() => setIsImportDialogOpen(true)}
+                className="bg-primary hover:bg-primary/90"
+                data-testid="button-import-review"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Import Review
+              </Button>
+            </div>
           </div>
         </div>
 

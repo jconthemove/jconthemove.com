@@ -1,32 +1,28 @@
 import { useState, useEffect, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
   Truck, Trash2, Snowflake, Sparkles, Wrench, HardHat, Layers, PaintBucket,
   CheckCircle2, Star, Shield, Zap, MapPin, Phone, Gift,
   ArrowRight, CalendarCheck, MessageCircle
 } from "lucide-react";
+import { SiGoogle } from "react-icons/si";
 import { Link } from "wouter";
 
+interface Testimonial {
+  id: string;
+  reviewerName: string;
+  rating: number;
+  content: string;
+  serviceType: string | null;
+  sourcePlatform: string | null;
+  featured: boolean;
+}
 
-const testimonials = [
-  {
-    name: "Sarah M.",
-    service: "Moving",
-    quote: "Fast, careful, and professional. Highly recommend.",
-    rating: 5,
-  },
-  {
-    name: "James D.",
-    service: "Moving",
-    quote: "Best movers in the Northwoods. Showed up on time and got it done.",
-    rating: 5,
-  },
-  {
-    name: "Linda K.",
-    service: "Moving",
-    quote: "Easy booking, clear pricing, and a crew that works hard.",
-    rating: 5,
-  },
+const FALLBACK_TESTIMONIALS: Testimonial[] = [
+  { id: "f1", reviewerName: "Sarah M.", rating: 5, content: "Fast, careful, and professional. Highly recommend.", serviceType: "Moving", sourcePlatform: null, featured: true },
+  { id: "f2", reviewerName: "James D.", rating: 5, content: "Best movers in the Northwoods. Showed up on time and got it done.", serviceType: "Moving", sourcePlatform: null, featured: true },
+  { id: "f3", reviewerName: "Linda K.", rating: 5, content: "Easy booking, clear pricing, and a crew that works hard.", serviceType: "Moving", sourcePlatform: null, featured: true },
 ];
 
 const BANNER_MESSAGES = [
@@ -38,6 +34,14 @@ const BANNER_MESSAGES = [
 
 export default function HomePage() {
   const [bannerIdx, setBannerIdx] = useState(0);
+
+  const { data: liveTestimonials } = useQuery<Testimonial[]>({
+    queryKey: ["/api/testimonials?status=published&featured=true&limit=3"],
+    staleTime: 5 * 60 * 1000,
+  });
+  const displayTestimonials = (liveTestimonials && liveTestimonials.length > 0)
+    ? liveTestimonials.slice(0, 3)
+    : FALLBACK_TESTIMONIALS;
 
   // Hero ZIP ETA widget
   type HeroEtaData = { distanceMiles: number; estimatedMinutes: number; availabilityLabel: string; crewCount: number };
@@ -293,20 +297,32 @@ export default function HomePage() {
           <h2 className="text-2xl md:text-3xl font-bold text-white text-center mb-2">What Customers Say</h2>
           <p className="text-slate-400 text-sm text-center mb-8">Short, honest proof from recent customers.</p>
           <div className="grid md:grid-cols-3 gap-5">
-            {testimonials.map((t, i) => (
-              <div key={i} className="bg-slate-800/60 border border-slate-700/50 rounded-2xl p-5">
-                <div className="flex gap-0.5 mb-3">
-                  {Array.from({ length: t.rating }).map((_, j) => (
-                    <Star key={j} className="h-4 w-4 text-yellow-400 fill-yellow-400" />
-                  ))}
+            {displayTestimonials.map((t) => (
+              <div key={t.id} className="bg-slate-800/60 border border-slate-700/50 rounded-2xl p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex gap-0.5">
+                    {Array.from({ length: t.rating }).map((_, j) => (
+                      <Star key={j} className="h-4 w-4 text-yellow-400 fill-yellow-400" />
+                    ))}
+                  </div>
+                  {t.sourcePlatform === "google" && (
+                    <SiGoogle className="h-4 w-4 text-blue-400" title="Google Review" />
+                  )}
                 </div>
-                <p className="text-slate-200 text-sm italic mb-4">"{t.quote}"</p>
+                <p className="text-slate-200 text-sm italic mb-4">"{t.content}"</p>
                 <div>
-                  <p className="text-white font-semibold text-sm">{t.name}</p>
-                  <p className="text-slate-500 text-xs">{t.service}</p>
+                  <p className="text-white font-semibold text-sm">{t.reviewerName}</p>
+                  {t.serviceType && <p className="text-slate-500 text-xs">{t.serviceType}</p>}
                 </div>
               </div>
             ))}
+          </div>
+          <div className="text-center mt-6">
+            <Link href="/reviews">
+              <span className="text-slate-400 hover:text-white text-sm underline underline-offset-4 cursor-pointer transition-colors">
+                See all reviews →
+              </span>
+            </Link>
           </div>
         </div>
       </section>
