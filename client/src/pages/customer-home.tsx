@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
-import { Coins, Phone, MessageSquare, ChevronRight, Loader2, Search, Truck, Trash2, Wrench, Snowflake, X, PaintBucket, Layers, Leaf, Sparkles, MessageCircle } from "lucide-react";
+import { Coins, Phone, MessageSquare, ChevronRight, Loader2, Search, Truck, Trash2, Wrench, Snowflake, PaintBucket, Layers, Leaf, Sparkles, MessageCircle } from "lucide-react";
 import { JunkFlow, MovingFlow } from "@/components/ServiceSelector";
 import LiveCrewBeacon from "@/components/LiveCrewBeacon";
 import { BookingChatbot } from "@/components/booking-chatbot";
@@ -118,10 +118,6 @@ export default function CustomerHomePage() {
     setActiveBooking({ jobId: id, totalPrice: price });
   }
 
-  function toggleExpand(svc: ExpandedService) {
-    setExpanded(prev => prev === svc ? null : svc);
-  }
-
   return (
     <div className="min-h-screen bg-zinc-950 pb-28">
       <div className="max-w-[430px] mx-auto px-4 pt-4 space-y-4">
@@ -200,40 +196,30 @@ export default function CustomerHomePage() {
 
             {/* Moving */}
             <button
-              onClick={() => toggleExpand("moving")}
-              className={`relative flex flex-col items-start gap-1.5 p-3 rounded-2xl border transition-all active:scale-[0.97] text-left ${
-                expanded === "moving"
-                  ? "bg-blue-500/15 border-blue-500 ring-1 ring-blue-500"
-                  : "bg-zinc-900 border-zinc-800 hover:border-zinc-700"
-              }`}
+              onClick={() => setExpanded("moving")}
+              className="flex flex-col items-start gap-1.5 p-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
             >
-              <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${expanded === "moving" ? "bg-blue-500" : "bg-zinc-800"}`}>
-                <Truck className={`h-4 w-4 ${expanded === "moving" ? "text-white" : "text-zinc-400"}`} />
+              <div className="w-8 h-8 rounded-xl bg-zinc-800 flex items-center justify-center">
+                <Truck className="h-4 w-4 text-zinc-400" />
               </div>
               <div>
-                <p className={`font-bold text-sm ${expanded === "moving" ? "text-white" : "text-white"}`}>Moving</p>
+                <p className="font-bold text-sm text-white">Moving</p>
                 <p className="text-zinc-500 text-xs leading-snug">Full-service movers</p>
               </div>
-              {expanded === "moving" && <X className="absolute top-3 right-3 h-4 w-4 text-blue-400" />}
             </button>
 
             {/* Junk Removal */}
             <button
-              onClick={() => toggleExpand("junk")}
-              className={`relative flex flex-col items-start gap-1.5 p-3 rounded-2xl border transition-all active:scale-[0.97] text-left ${
-                expanded === "junk"
-                  ? "bg-orange-500/15 border-orange-500 ring-1 ring-orange-500"
-                  : "bg-zinc-900 border-zinc-800 hover:border-zinc-700"
-              }`}
+              onClick={() => setExpanded("junk")}
+              className="flex flex-col items-start gap-1.5 p-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
             >
-              <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${expanded === "junk" ? "bg-orange-500" : "bg-zinc-800"}`}>
-                <Trash2 className={`h-4 w-4 ${expanded === "junk" ? "text-white" : "text-zinc-400"}`} />
+              <div className="w-8 h-8 rounded-xl bg-zinc-800 flex items-center justify-center">
+                <Trash2 className="h-4 w-4 text-zinc-400" />
               </div>
               <div>
                 <p className="font-bold text-sm text-white">Junk Removal</p>
                 <p className="text-zinc-500 text-xs leading-snug">Pickup & haul away</p>
               </div>
-              {expanded === "junk" && <X className="absolute top-3 right-3 h-4 w-4 text-orange-400" />}
             </button>
 
             {/* Labor Only */}
@@ -252,7 +238,7 @@ export default function CustomerHomePage() {
 
             {/* Snow Removal */}
             <button
-              onClick={() => setLocation("/post-job")}
+              onClick={() => setLocation("/book?service=snow")}
               className="flex flex-col items-start gap-1.5 p-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
             >
               <div className="w-8 h-8 rounded-xl bg-zinc-800 flex items-center justify-center">
@@ -260,7 +246,7 @@ export default function CustomerHomePage() {
               </div>
               <div>
                 <p className="font-bold text-sm text-white">Snow Removal</p>
-                <p className="text-zinc-500 text-xs leading-snug">Post a job</p>
+                <p className="text-zinc-500 text-xs leading-snug">Request a quote</p>
               </div>
             </button>
 
@@ -342,7 +328,7 @@ export default function CustomerHomePage() {
 
             {/* Lawn Care — Coming Soon */}
             <button
-              onClick={() => setLocation("/quote?service=lawn")}
+              onClick={() => setLocation("/book?service=lawn-care")}
               className="relative flex flex-col items-start gap-1.5 p-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
             >
               <span className="absolute -top-2 left-3 text-[9px] font-bold bg-zinc-700 text-zinc-300 px-2 py-0.5 rounded-full whitespace-nowrap">
@@ -360,17 +346,6 @@ export default function CustomerHomePage() {
           </div>
         </div>
 
-        {/* Inline booking flows — expand below the grid */}
-        {expanded === "moving" && (
-          <div>
-            <MovingFlow user={user} onBooked={handleBooked} />
-          </div>
-        )}
-        {expanded === "junk" && (
-          <div>
-            <JunkFlow user={user} onBooked={handleBooked} onBack={() => setExpanded(null)} />
-          </div>
-        )}
         {/* Earn strip */}
         <button
           onClick={() => setLocation("/earn")}
@@ -389,6 +364,38 @@ export default function CustomerHomePage() {
         </button>
 
       </div>
+
+      {/* Moving Modal */}
+      <Sheet open={expanded === "moving"} onOpenChange={open => !open && setExpanded(null)}>
+        <SheetContent
+          side="bottom"
+          className="bg-zinc-950 border-zinc-800 rounded-t-3xl pb-10 h-[92vh] flex flex-col overflow-hidden"
+        >
+          <SheetHeader className="text-left mb-3 shrink-0">
+            <SheetTitle className="text-white font-black text-lg">Book a Move</SheetTitle>
+            <p className="text-zinc-400 text-xs">Full-service local & long-distance movers</p>
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto min-h-0">
+            <MovingFlow user={user} onBooked={handleBooked} />
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Junk Removal Modal */}
+      <Sheet open={expanded === "junk"} onOpenChange={open => !open && setExpanded(null)}>
+        <SheetContent
+          side="bottom"
+          className="bg-zinc-950 border-zinc-800 rounded-t-3xl pb-10 h-[92vh] flex flex-col overflow-hidden"
+        >
+          <SheetHeader className="text-left mb-3 shrink-0">
+            <SheetTitle className="text-white font-black text-lg">Junk Removal</SheetTitle>
+            <p className="text-zinc-400 text-xs">Pickup & haul away — quick & easy</p>
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto min-h-0">
+            <JunkFlow user={user} onBooked={handleBooked} onBack={() => setExpanded(null)} />
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Chatbot Sheet */}
       <Sheet open={showChatbot} onOpenChange={setShowChatbot}>

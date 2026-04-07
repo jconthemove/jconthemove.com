@@ -16,7 +16,7 @@ import { calculateTrashValetQuote } from "@shared/trashValetPricing";
 // Service categories
 // ─────────────────────────────────────────────
 const PRICEABLE_SERVICES = ["Moving", "Junk Removal", "Trash Valet", "Window Cleaning"];
-const QUOTE_ONLY_SERVICES = ["Painting", "Flooring", "Roofing", "Handyman", "Lawn Care"];
+const QUOTE_ONLY_SERVICES = ["Painting", "Flooring", "Roofing", "Handyman", "Lawn Care", "Snow Removal"];
 const IRONWOOD_ZIP = "49938";
 
 function isIronwoodZip(zip: string): boolean {
@@ -187,6 +187,7 @@ function getServiceLabel(rawType: string): string {
   if (rawType.includes("Roofing")) return "Roofing";
   if (rawType.includes("Handyman")) return "Handyman";
   if (rawType.includes("Lawn")) return "Lawn Care";
+  if (rawType.includes("Snow")) return "Snow Removal";
   return "Moving";
 }
 
@@ -236,6 +237,7 @@ const STEPS: Step[] = [
       "🪵 Flooring",
       "🏠 Roofing",
       "🔧 Handyman",
+      "❄️ Snow Removal",
       "🌿 Lawn Care",
     ],
   },
@@ -826,7 +828,22 @@ function shortAnswer(stepId: string, val: string | string[]): string {
 // ─────────────────────────────────────────────
 // Main Component
 // ─────────────────────────────────────────────
-export function BookingChatbot({ onClose, embedded = false, showCloseButton, className }: { onClose?: () => void; embedded?: boolean; showCloseButton?: boolean; className?: string }) {
+const SERVICE_SLUG_MAP: Record<string, string> = {
+  moving: "📦 Moving (local or long-distance)",
+  junk: "🗑️ Junk Removal",
+  trash_valet: "🗑️ Trash Valet (weekly curbside)",
+  window_cleaning: "🪟 Window Cleaning",
+  painting: "🎨 Painting",
+  flooring: "🪵 Flooring",
+  roofing: "🏠 Roofing",
+  handyman: "🔧 Handyman",
+  "lawn-care": "🌿 Lawn Care",
+  lawn: "🌿 Lawn Care",
+  snow: "❄️ Snow Removal",
+  snow_removal: "❄️ Snow Removal",
+};
+
+export function BookingChatbot({ onClose, embedded = false, showCloseButton, className, initialService }: { onClose?: () => void; embedded?: boolean; showCloseButton?: boolean; className?: string; initialService?: string }) {
   const showClose = showCloseButton ?? !embedded;
   const { toast } = useToast();
   const { user } = useAuth();
@@ -871,6 +888,22 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
   }, [user]);
 
   useEffect(() => {
+    if (!initialService) return;
+    const mapped = SERVICE_SLUG_MAP[initialService.toLowerCase()];
+    if (!mapped) return;
+    const newAnswers: Answers = { serviceType: mapped };
+    setAnswers(newAnswers);
+    const nextSteps = STEPS.filter(s => !s.show || s.show(newAnswers));
+    const nextStep = nextSteps[1];
+    setMessages(prev => [
+      ...prev,
+      { from: "bot", text: `You selected: ${mapped}`, ts: Date.now() },
+      ...(nextStep ? [{ from: "bot" as const, text: nextStep.question + (nextStep.subtext ? `\n\n_${nextStep.subtext}_` : ""), ts: Date.now() + 1 }] : []),
+    ]);
+    setStepIdx(1);
+  }, [initialService]);
+
+  useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, quoteVisible]);
@@ -886,12 +919,6 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
   }
 
   function advanceStep(stepId: string, value: string | string[]) {
-    // Redirect Lawn Care to dedicated booking page
-    if (stepId === "serviceType" && typeof value === "string" && value.includes("Lawn")) {
-      setLocation("/book/lawn-care");
-      return;
-    }
-
     const newAnswers = { ...answers };
 
     if (stepId === "contact") {

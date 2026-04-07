@@ -5,7 +5,7 @@ import {
   ArrowLeft, Truck, Trash2, Snowflake, Wrench, MapPin, Calendar, FileText,
   CheckCircle, Coins, Loader2, ChevronRight, Camera, X, Image, Video, Upload,
   Users, Clock, Package, CheckCircle2, Minus, Plus, HelpCircle, DollarSign,
-  Tag, AlertCircle, Gem
+  Tag, AlertCircle, Gem, Layers, PaintBucket, Leaf, Sparkles
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -14,11 +14,16 @@ import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 
 const SERVICES = [
-  { value: "residential", label: "Moving",         sub: "Local & long distance",              icon: Truck,       color: "bg-blue-50 dark:bg-blue-900/20 text-blue-600 border-blue-200 dark:border-blue-800"     },
-  { value: "junk",        label: "Junk Removal",   sub: "Haul away & disposal",               icon: Trash2,      color: "bg-orange-50 dark:bg-orange-900/20 text-orange-600 border-orange-200 dark:border-orange-800" },
-  { value: "snow",        label: "Snow Removal",   sub: "Plowing & shoveling",                icon: Snowflake,   color: "bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 border-cyan-200 dark:border-cyan-800"     },
-  { value: "handyman",    label: "Handyman",        sub: "General repairs & labor",            icon: Wrench,      color: "bg-amber-50 dark:bg-amber-900/20 text-amber-600 border-amber-200 dark:border-amber-800" },
-  { value: "custom",      label: "Something Else",  sub: "Describe what you need — we'll quote you", icon: HelpCircle, color: "bg-violet-50 dark:bg-violet-900/20 text-violet-600 border-violet-200 dark:border-violet-800" },
+  { value: "residential",     label: "Moving",           sub: "Local & long distance",              icon: Truck,       color: "bg-blue-50 dark:bg-blue-900/20 text-blue-600 border-blue-200 dark:border-blue-800"     },
+  { value: "junk",            label: "Junk Removal",     sub: "Haul away & disposal",               icon: Trash2,      color: "bg-orange-50 dark:bg-orange-900/20 text-orange-600 border-orange-200 dark:border-orange-800" },
+  { value: "snow",            label: "Snow Removal",     sub: "Plowing & shoveling",                icon: Snowflake,   color: "bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 border-cyan-200 dark:border-cyan-800"     },
+  { value: "handyman",        label: "Handyman",          sub: "General repairs & labor",            icon: Wrench,      color: "bg-amber-50 dark:bg-amber-900/20 text-amber-600 border-amber-200 dark:border-amber-800" },
+  { value: "flooring",        label: "Flooring",          sub: "Install & refinish",                 icon: Layers,      color: "bg-teal-50 dark:bg-teal-900/20 text-teal-600 border-teal-200 dark:border-teal-800"     },
+  { value: "painting",        label: "Painting",          sub: "Interior & exterior",                icon: PaintBucket, color: "bg-rose-50 dark:bg-rose-900/20 text-rose-600 border-rose-200 dark:border-rose-800"     },
+  { value: "lawn_care",       label: "Lawn Care",         sub: "Mowing & maintenance",               icon: Leaf,        color: "bg-green-50 dark:bg-green-900/20 text-green-600 border-green-200 dark:border-green-800" },
+  { value: "window_cleaning", label: "Window Cleaning",   sub: "Streak-free shine",                  icon: Sparkles,    color: "bg-sky-50 dark:bg-sky-900/20 text-sky-600 border-sky-200 dark:border-sky-800"         },
+  { value: "trash_valet",     label: "Trash Valet",       sub: "Curbside pull-out",                  icon: Package,     color: "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 border-emerald-200 dark:border-emerald-800" },
+  { value: "custom",          label: "Something Else",    sub: "Describe what you need — we'll quote you", icon: HelpCircle, color: "bg-violet-50 dark:bg-violet-900/20 text-violet-600 border-violet-200 dark:border-violet-800" },
 ];
 
 const EARN_RATE = 15;

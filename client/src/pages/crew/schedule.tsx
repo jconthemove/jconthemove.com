@@ -323,7 +323,9 @@ export default function CrewSchedulePage() {
   }
 
   function getEffectiveDate(j: CalendarJob): string | null {
-    return j.effectiveDate || j.confirmedDate || j.moveDate || null;
+    const raw = j.effectiveDate || j.confirmedDate || j.moveDate || null;
+    if (!raw) return null;
+    return raw.slice(0, 10);
   }
 
   function getJobsForDate(dateStr: string, forWeek = false) {
@@ -530,12 +532,19 @@ export default function CrewSchedulePage() {
               <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
             </div>
           ) : (
-            <div className="grid grid-cols-7 gap-1">
-              {calendarGrid.map((day, idx) => {
-                if (!day) return <div key={idx} />;
-                return <DayCell key={day} dateStr={getDayStr(day)} compact />;
-              })}
-            </div>
+            <>
+              <div className="grid grid-cols-7 gap-1">
+                {calendarGrid.map((day, idx) => {
+                  if (!day) return <div key={idx} />;
+                  return <DayCell key={day} dateStr={getDayStr(day)} compact />;
+                })}
+              </div>
+              {calendarData && calendarData.jobs.length === 0 && (
+                <div className="text-center py-4 text-slate-500 text-sm">
+                  No jobs scheduled this month — check back soon!
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -588,6 +597,13 @@ export default function CrewSchedulePage() {
               <div className="grid grid-cols-7 gap-1">
                 {weekDays.map(d => <DayCell key={dateToStr(d)} dateStr={dateToStr(d)} forWeek />)}
               </div>
+
+              {/* Empty state for week view */}
+              {!weekDays.some(d => getJobsForDate(dateToStr(d), true).length > 0) && (
+                <div className="text-center py-4 text-slate-500 text-sm">
+                  No jobs scheduled this week — check back soon!
+                </div>
+              )}
 
               {/* Job detail cards for the week */}
               {weekDays.some(d => getJobsForDate(dateToStr(d), true).length > 0) && (
