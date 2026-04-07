@@ -1214,8 +1214,8 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
             <div>
               <p className="text-xs font-semibold text-slate-300 mb-2 px-1">Select a package:</p>
               <div className="grid grid-cols-1 gap-2">
-                {packages.map((pkg) => {
-                  const isSelected = selectedPackage?.id === pkg.id;
+                {crewPackages.map((pkg) => {
+                  const isSelected = selectedPackageObj?.id === pkg.id;
                   const isCustom = pkg.price === 0;
                   return (
                     <button
@@ -1257,10 +1257,10 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
 
             <Button
               onClick={handlePackageContinue}
-              disabled={!selectedPackage}
+              disabled={!selectedPackageObj}
               className="w-full bg-gradient-to-r from-teal-600 to-blue-600 hover:from-teal-500 hover:to-blue-500 text-white font-bold py-3 rounded-xl text-sm"
             >
-              Continue with {selectedPackage ? `"${selectedPackage.label}"` : "Selected Package"} <ArrowRight className="h-4 w-4 ml-2" />
+              Continue with {selectedPackageObj ? `"${selectedPackageObj.label}"` : "Selected Package"} <ArrowRight className="h-4 w-4 ml-2" />
             </Button>
           </div>
         )}
@@ -1281,10 +1281,10 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
                   <p className="text-xs text-slate-500 mt-2">Applied toward your final invoice · Fully refundable if rescheduled 24 hrs in advance</p>
                 </div>
 
-                {selectedPackage && (
+                {selectedPackageObj && (
                   <div className="flex items-center justify-between bg-slate-800/60 rounded-xl px-3 py-2.5">
                     <span className="text-sm text-slate-300">Selected Package</span>
-                    <span className="text-sm font-semibold text-teal-300">{selectedPackage.label}</span>
+                    <span className="text-sm font-semibold text-teal-300">{selectedPackageObj.label}</span>
                   </div>
                 )}
 
