@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Truck, Trash2, Snowflake, Wrench, ArrowLeft, ArrowRight, CheckCircle, MapPin, Calendar, Plus, Minus, Loader2, Zap, Clock, Users, Home, Building2, ChevronRight, MessageSquare, ListOrdered, Sparkles, X, Phone, PaintBucket, Layers, Droplets, Recycle } from "lucide-react";
+import { Truck, Trash2, Snowflake, Wrench, ArrowLeft, ArrowRight, CheckCircle, MapPin, Calendar, Plus, Minus, Loader2, Zap, Clock, Users, Home, Building2, ChevronRight, MessageSquare, ListOrdered, Sparkles, X, Phone, PaintBucket, Layers, Droplets, Recycle, type LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +15,16 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 
-const SERVICES = [
+interface ServiceOption {
+  value: string;
+  label: string;
+  sub: string;
+  icon: LucideIcon;
+  color: string;
+  redirectTo?: string;
+}
+
+const SERVICES: ServiceOption[] = [
   { value: "residential", label: "Moving",           sub: "Local & long distance",       icon: Truck,        color: "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300" },
   { value: "junk",        label: "Junk Removal",     sub: "Haul away & disposal",        icon: Trash2,       color: "bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-700 text-orange-700 dark:text-orange-300" },
   { value: "snow",        label: "Snow Removal",     sub: "Plowing & shoveling",         icon: Snowflake,    color: "bg-cyan-50 dark:bg-cyan-900/20 border-cyan-200 dark:border-cyan-700 text-cyan-700 dark:text-cyan-300" },
@@ -508,17 +517,17 @@ export default function CustomerBookPage() {
               {SERVICES.map(svc => {
                 const Icon = svc.icon;
                 const isSelected = serviceType === svc.value;
-                const isRedirect = !!(svc as any).redirectTo;
+                const isRedirect = !!svc.redirectTo;
                 return (
                   <button
                     key={svc.value}
                     onClick={() => {
-                      if (isRedirect) { setLocation((svc as any).redirectTo); }
+                      if (svc.redirectTo) { setLocation(svc.redirectTo); }
                       else { setServiceType(svc.value); }
                     }}
                     className={cn("relative flex flex-col items-start gap-2 p-4 rounded-2xl border-2 text-left transition-all", isSelected ? "border-primary bg-primary/5 shadow-md" : "border-muted hover:border-primary/40", svc.color)}>
                     {isSelected && <CheckCircle className="absolute top-2 right-2 h-4 w-4 text-primary" />}
-                    {isRedirect && <ChevronRight className="absolute top-2 right-2 h-4 w-4 text-muted-foreground" />}
+                    {isRedirect && !isSelected && <ChevronRight className="absolute top-2 right-2 h-4 w-4 text-muted-foreground" />}
                     <div className={cn("p-2 rounded-xl", isSelected ? "bg-primary/10" : "bg-background/60")}>
                       <Icon className="h-5 w-5" />
                     </div>
