@@ -1092,6 +1092,8 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
   const svc = getServiceLabel(answers.serviceType || "");
   const isQuoteOnly = QUOTE_ONLY_SERVICES.includes(svc);
 
+  const phase = submitted ? "submitted" : (quoteVisible && pendingQuote ? "deposit" : null);
+
   return (
     <div className={`flex flex-col h-full min-h-[500px]${className ? " " + className : ""}`}>
       {/* Progress bar */}
