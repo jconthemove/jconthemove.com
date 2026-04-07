@@ -15,7 +15,7 @@ import { calculateTrashValetQuote } from "@shared/trashValetPricing";
 // Service categories
 // ─────────────────────────────────────────────
 const PRICEABLE_SERVICES = ["Moving", "Junk Removal", "Trash Valet", "Window Cleaning"];
-const QUOTE_ONLY_SERVICES = ["Painting", "Flooring", "Roofing", "Handyman"];
+const QUOTE_ONLY_SERVICES = ["Painting", "Flooring", "Roofing", "Handyman", "Lawn Care"];
 const IRONWOOD_ZIP = "49938";
 
 function isIronwoodZip(zip: string): boolean {
@@ -185,6 +185,7 @@ function getServiceLabel(rawType: string): string {
   if (rawType.includes("Flooring")) return "Flooring";
   if (rawType.includes("Roofing")) return "Roofing";
   if (rawType.includes("Handyman")) return "Handyman";
+  if (rawType.includes("Lawn")) return "Lawn Care";
   return "Moving";
 }
 
@@ -234,6 +235,7 @@ const STEPS: Step[] = [
       "🪵 Flooring",
       "🏠 Roofing",
       "🔧 Handyman",
+      "🌿 Lawn Care",
     ],
   },
 
@@ -657,10 +659,11 @@ function computeQuoteForAnswers(a: Answers): QuoteResult | null {
 
   if (QUOTE_ONLY_SERVICES.includes(svc)) {
     const ranges: Record<string, [number, number]> = {
-      "Painting":  [500, 5000],
-      "Flooring":  [800, 8000],
-      "Roofing":   [2000, 15000],
-      "Handyman":  [100, 1200],
+      "Painting":   [500, 5000],
+      "Flooring":   [800, 8000],
+      "Roofing":    [2000, 15000],
+      "Handyman":   [100, 1200],
+      "Lawn Care":  [50, 400],
     };
     const [min, max] = ranges[svc] || [500, 5000];
     return { type: "quote_only", service: svc, minPrice: min, maxPrice: max };

@@ -17663,11 +17663,12 @@ Thank you for your business!
       else if (svcRaw.toLowerCase().includes("roof")) serviceType = "roofing";
       else if (svcRaw.toLowerCase().includes("handyman")) serviceType = "handyman";
       else if (svcRaw.toLowerCase().includes("snow")) serviceType = "snow";
+      else if (svcRaw.toLowerCase().includes("lawn")) serviceType = "lawn";
 
       // Enforce deposit rules server-side — never trust client-provided values
       const IRONWOOD_ZIP = "49938";
       const isLocal = fromZip.trim() === IRONWOOD_ZIP;
-      const QUOTE_ONLY_SERVICES_SERVER = ["painting", "flooring", "roofing", "handyman"];
+      const QUOTE_ONLY_SERVICES_SERVER = ["painting", "flooring", "roofing", "handyman", "lawn"];
       const serverIsQuoteOnly = QUOTE_ONLY_SERVICES_SERVER.includes(serviceType);
       let serverDepositRequired = false;
       let serverDepositAmount = 0;
