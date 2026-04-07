@@ -35,6 +35,7 @@ import { jupiterSwapService, SUPPORTED_TOKENS } from "./services/jupiter-swap";
 import { smsService } from "./services/sms";
 import { ensureMomsAccount } from "./services/generosityFund";
 import { dispatchGenericJob } from "./services/dispatchGeneric";
+import lawnCareRouter from "./routes/lawnCare";
 
 async function ensureStakingTiersSeeded() {
   try {
@@ -498,6 +499,77 @@ async function awardTierPoints(userId: string, activity: TierPointActivity, mult
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Schema migration: create lawn_care_quotes and lawn_care_plans tables
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS lawn_care_quotes (
+        id SERIAL PRIMARY KEY,
+        customer_name TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        email TEXT,
+        address TEXT NOT NULL,
+        city TEXT,
+        state TEXT,
+        zip TEXT,
+        service_type TEXT NOT NULL DEFAULT 'lawn_care',
+        service_category TEXT NOT NULL,
+        service_frequency TEXT NOT NULL,
+        property_size TEXT NOT NULL,
+        square_footage INTEGER,
+        property_condition TEXT NOT NULL,
+        add_ons JSONB NOT NULL DEFAULT '[]',
+        notes TEXT,
+        photo_urls JSONB NOT NULL DEFAULT '[]',
+        has_fence BOOLEAN DEFAULT false,
+        has_pets BOOLEAN DEFAULT false,
+        has_steep_slope BOOLEAN DEFAULT false,
+        needs_haul_away BOOLEAN DEFAULT false,
+        recommended_crew_type TEXT,
+        recommended_crew_size INTEGER,
+        base_price DECIMAL(10,2) DEFAULT 0,
+        condition_multiplier DECIMAL(5,2) DEFAULT 1.00,
+        frequency_multiplier DECIMAL(5,2) DEFAULT 1.00,
+        add_on_total DECIMAL(10,2) DEFAULT 0,
+        travel_fee DECIMAL(10,2) DEFAULT 0,
+        total_quoted DECIMAL(10,2) DEFAULT 0,
+        is_custom_estimate BOOLEAN DEFAULT false,
+        requested_start_date TEXT,
+        requested_time_window TEXT,
+        status TEXT NOT NULL DEFAULT 'quote_requested',
+        created_at TIMESTAMP DEFAULT now(),
+        updated_at TIMESTAMP DEFAULT now()
+      );
+      CREATE TABLE IF NOT EXISTS lawn_care_plans (
+        id SERIAL PRIMARY KEY,
+        quote_id INTEGER NOT NULL,
+        customer_name TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        email TEXT,
+        address TEXT NOT NULL,
+        city TEXT,
+        state TEXT,
+        zip TEXT,
+        frequency TEXT NOT NULL,
+        start_date TEXT NOT NULL,
+        next_service_date TEXT,
+        is_active BOOLEAN DEFAULT true,
+        crew_type TEXT,
+        crew_size INTEGER,
+        service_category TEXT NOT NULL,
+        property_size TEXT NOT NULL,
+        property_condition TEXT NOT NULL,
+        add_ons JSONB NOT NULL DEFAULT '[]',
+        recurring_price DECIMAL(10,2) DEFAULT 0,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT now(),
+        updated_at TIMESTAMP DEFAULT now()
+      );
+    `);
+    console.log('✅ Lawn care tables ready');
+  } catch (migErr) {
+    console.error('⚠️ Lawn care tables migration error (non-fatal):', migErr);
+  }
+
   // Schema migration: add loyalty tier columns to users if not present
   try {
     await pool.query(`
@@ -18651,6 +18723,9 @@ Thank you for your business!
       res.status(500).json({ error: "Failed to fetch subscription" });
     }
   });
+
+  // ── Lawn Care Module ──────────────────────────────────────────────────────────
+  app.use("/api/lawn-care", lawnCareRouter);
 
   const httpServer = createServer(app);
   return httpServer;

@@ -280,7 +280,7 @@ export default function HomePage() {
               { icon: Layers,       label: "Flooring",        sub: "Install & removal",      href: "/book?service=flooring",     iconCls: "text-purple-400", borderCls: "hover:border-purple-500/50"  },
               { icon: PaintBucket,  label: "Painting",        sub: "Interior & exterior",    href: "/book?service=painting",     iconCls: "text-pink-400",   borderCls: "hover:border-pink-500/50"    },
               { icon: Home,         label: "Roofing",         sub: "Repair & replacement",   href: "/book?service=roofing",      iconCls: "text-amber-400",  borderCls: "hover:border-amber-500/50"   },
-              { icon: Leaf,         label: "Lawn Care",       sub: "Mowing, trimming & more",href: "/book?service=lawn",         iconCls: "text-lime-400",   borderCls: "hover:border-lime-500/50",   comingSoon: true },
+              { icon: Leaf,         label: "Lawn Care",       sub: "Mowing, trimming & more",href: "/book/lawn-care",            iconCls: "text-lime-400",   borderCls: "hover:border-lime-500/50"    },
             ] as { icon: LucideIcon; label: string; sub: string; href: string; iconCls: string; borderCls: string; comingSoon?: boolean }[]).map(({ icon: Icon, label, sub, href, iconCls, borderCls, comingSoon }) => (
               <Link key={label} href={comingSoon ? "#" : href} className="block" onClick={comingSoon ? (e) => e.preventDefault() : undefined}>
                 <div className={`relative bg-slate-800/60 border border-slate-700/50 ${comingSoon ? "opacity-75 cursor-default" : `${borderCls} cursor-pointer hover:bg-slate-700/60`} rounded-xl p-4 transition-all h-full`}>

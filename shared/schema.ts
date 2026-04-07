@@ -2132,3 +2132,102 @@ export const insertTrashJobSchema = createInsertSchema(trashJobs).omit({
 });
 export type TrashJob = typeof trashJobs.$inferSelect;
 export type InsertTrashJob = z.infer<typeof insertTrashJobSchema>;
+
+// ── Lawn Care Quotes ──────────────────────────────────────────────────────────
+export const lawnCareQuotes = pgTable("lawn_care_quotes", {
+  id: serial("id").primaryKey(),
+
+  customerName: text("customer_name").notNull(),
+  phone: text("phone").notNull(),
+  email: text("email"),
+  address: text("address").notNull(),
+  city: text("city"),
+  state: text("state"),
+  zip: text("zip"),
+
+  serviceType: text("service_type").notNull().default("lawn_care"),
+  serviceCategory: text("service_category").notNull(),
+  serviceFrequency: text("service_frequency").notNull(),
+  propertySize: text("property_size").notNull(),
+  squareFootage: integer("square_footage"),
+  propertyCondition: text("property_condition").notNull(),
+
+  addOns: jsonb("add_ons").notNull().default(sql`'[]'::jsonb`),
+  notes: text("notes"),
+  photoUrls: jsonb("photo_urls").notNull().default(sql`'[]'::jsonb`),
+
+  hasFence: boolean("has_fence").default(false),
+  hasPets: boolean("has_pets").default(false),
+  hasSteepSlope: boolean("has_steep_slope").default(false),
+  needsHaulAway: boolean("needs_haul_away").default(false),
+
+  recommendedCrewType: text("recommended_crew_type"),
+  recommendedCrewSize: integer("recommended_crew_size"),
+
+  basePrice: decimal("base_price", { precision: 10, scale: 2 }).default("0"),
+  conditionMultiplier: decimal("condition_multiplier", { precision: 5, scale: 2 }).default("1.00"),
+  frequencyMultiplier: decimal("frequency_multiplier", { precision: 5, scale: 2 }).default("1.00"),
+  addOnTotal: decimal("add_on_total", { precision: 10, scale: 2 }).default("0"),
+  travelFee: decimal("travel_fee", { precision: 10, scale: 2 }).default("0"),
+  totalQuoted: decimal("total_quoted", { precision: 10, scale: 2 }).default("0"),
+
+  isCustomEstimate: boolean("is_custom_estimate").default(false),
+
+  requestedStartDate: text("requested_start_date"),
+  requestedTimeWindow: text("requested_time_window"),
+
+  status: text("status").notNull().default("quote_requested"),
+
+  createdAt: timestamp("created_at").default(sql`now()`),
+  updatedAt: timestamp("updated_at").default(sql`now()`),
+});
+
+export const insertLawnCareQuoteSchema = createInsertSchema(lawnCareQuotes).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type LawnCareQuote = typeof lawnCareQuotes.$inferSelect;
+export type InsertLawnCareQuote = z.infer<typeof insertLawnCareQuoteSchema>;
+
+// ── Lawn Care Recurring Plans ─────────────────────────────────────────────────
+export const lawnCarePlans = pgTable("lawn_care_plans", {
+  id: serial("id").primaryKey(),
+
+  quoteId: integer("quote_id").notNull(),
+
+  customerName: text("customer_name").notNull(),
+  phone: text("phone").notNull(),
+  email: text("email"),
+  address: text("address").notNull(),
+  city: text("city"),
+  state: text("state"),
+  zip: text("zip"),
+
+  frequency: text("frequency").notNull(),
+  startDate: text("start_date").notNull(),
+  nextServiceDate: text("next_service_date"),
+  isActive: boolean("is_active").default(true),
+
+  crewType: text("crew_type"),
+  crewSize: integer("crew_size"),
+
+  serviceCategory: text("service_category").notNull(),
+  propertySize: text("property_size").notNull(),
+  propertyCondition: text("property_condition").notNull(),
+  addOns: jsonb("add_ons").notNull().default(sql`'[]'::jsonb`),
+
+  recurringPrice: decimal("recurring_price", { precision: 10, scale: 2 }).default("0"),
+  notes: text("notes"),
+
+  createdAt: timestamp("created_at").default(sql`now()`),
+  updatedAt: timestamp("updated_at").default(sql`now()`),
+});
+
+export const insertLawnCarePlanSchema = createInsertSchema(lawnCarePlans).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type LawnCarePlan = typeof lawnCarePlans.$inferSelect;
+export type InsertLawnCarePlan = z.infer<typeof insertLawnCarePlanSchema>;

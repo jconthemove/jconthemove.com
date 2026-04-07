@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -829,6 +830,7 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
   const showClose = showCloseButton ?? !embedded;
   const { toast } = useToast();
   const { user } = useAuth();
+  const [, setLocation] = useLocation();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const [answers, setAnswers] = useState<Answers>({});
@@ -884,6 +886,12 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
   }
 
   function advanceStep(stepId: string, value: string | string[]) {
+    // Redirect Lawn Care to dedicated booking page
+    if (stepId === "serviceType" && typeof value === "string" && value.includes("Lawn")) {
+      setLocation("/book/lawn-care");
+      return;
+    }
+
     const newAnswers = { ...answers };
 
     if (stepId === "contact") {

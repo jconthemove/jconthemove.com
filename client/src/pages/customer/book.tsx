@@ -18,6 +18,7 @@ export default function CustomerBookPage() {
     // Redirect services that have dedicated pages
     if (svc === "window_cleaning") { setLocation("/window-cleaning"); return; }
     if (svc === "trash_valet")     { setLocation("/trash-valet/book"); return; }
+    if (svc === "lawn")            { setLocation("/book/lawn-care"); return; }
     setInitialService(svc);
   }, []);
 

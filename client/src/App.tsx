@@ -108,6 +108,8 @@ const AdminFinancePage = lazy(() => import("@/pages/admin/finance"));
 const AdminMarketplacePage = lazy(() => import("@/pages/admin/marketplace"));
 const AdminSystemPage = lazy(() => import("@/pages/admin/system"));
 const AdminSponsorsPage = lazy(() => import("@/pages/admin/sponsors"));
+const BookLawnCarePage = lazy(() => import("@/pages/book-lawn-care"));
+const AdminLawnCarePage = lazy(() => import("@/pages/admin-lawn-care"));
 
 // Thin fallback shown while a lazy page chunk is downloading
 function PageLoader() {
@@ -604,6 +606,14 @@ function AuthenticatedApp() {
           <Route path="/trash-valet">
             <PageWrapper component={TrashValetPage} />
           </Route>
+          <Route path="/book/lawn-care">
+            <PageWrapper component={BookLawnCarePage} />
+          </Route>
+          <Route path="/admin/lawn-care">
+            <RouteGuard allowedRoles={['admin', 'business_owner']}>
+              <PageWrapper component={AdminLawnCarePage} />
+            </RouteGuard>
+          </Route>
           <Route path="/window-cleaning">
             <PageWrapper component={WindowCleaningPage} />
           </Route>
@@ -696,6 +706,9 @@ function Router() {
       {/* Trash Valet pages - accessible to all */}
       <Route path="/trash-valet/book" component={TrashValetBookPage} />
       <Route path="/trash-valet" component={TrashValetPage} />
+
+      {/* Lawn Care booking page - accessible to all */}
+      <Route path="/book/lawn-care" component={BookLawnCarePage} />
 
       {/* Window Cleaning booking page - accessible to all */}
       <Route path="/window-cleaning" component={WindowCleaningPage} />
