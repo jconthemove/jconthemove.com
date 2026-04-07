@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Send, CheckCircle2, ArrowRight, Sparkles, RotateCcw, ChevronRight, AlertCircle, Users, DollarSign } from "lucide-react";
 import { calculateWindowCleaningQuote } from "@shared/windowCleaningPricing";
 import { calculateTrashValetQuote } from "@shared/trashValetPricing";
+import { PlacesAutocomplete } from "@/components/places-autocomplete";
 
 // ─────────────────────────────────────────────
 // Service categories
@@ -20,7 +21,10 @@ const QUOTE_ONLY_SERVICES = ["Painting", "Flooring", "Roofing", "Handyman", "Law
 const IRONWOOD_ZIP = "49938";
 
 function isIronwoodZip(zip: string): boolean {
-  return zip.trim() === IRONWOOD_ZIP;
+  const clean = zip.trim();
+  if (clean === IRONWOOD_ZIP) return true;
+  const match = clean.match(/\b(\d{5})\b/);
+  return match ? match[1] === IRONWOOD_ZIP : false;
 }
 
 function getDepositInfo(service: string, zip: string): { required: boolean; amount: number; termsHtml: string } {
@@ -60,7 +64,7 @@ function getDepositInfo(service: string, zip: string): { required: boolean; amou
 // ─────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────
-type StepType = "choice" | "multiselect" | "text" | "contact" | "notes" | "deposit_ack" | "package_select";
+type StepType = "choice" | "multiselect" | "text" | "address" | "contact" | "notes" | "deposit_ack" | "package_select";
 
 interface Step {
   id: string;
@@ -245,18 +249,18 @@ const STEPS: Step[] = [
   // ── MOVING STEPS ──────────────────────────────────────────────────────────
   {
     id: "fromZip",
-    question: "What ZIP code are you moving FROM?",
-    subtext: "Enter the 5-digit ZIP of the pickup address.",
-    type: "text",
-    placeholder: "e.g. 48201",
+    question: "What's the pickup address?",
+    subtext: "Start typing — we'll suggest addresses as you go.",
+    type: "address",
+    placeholder: "123 Main St, Ironwood, MI",
     show: (a) => isMovingService(a),
   },
   {
     id: "toZip",
-    question: "What ZIP code are you moving TO?",
-    subtext: "Enter the 5-digit ZIP of the drop-off address.",
-    type: "text",
-    placeholder: "e.g. 48103",
+    question: "What's the delivery address?",
+    subtext: "Where are we dropping everything off?",
+    type: "address",
+    placeholder: "456 Oak Ave, Hurley, WI",
     show: (a) => isMovingService(a) && (a.serviceType || "").includes("Moving"),
   },
   {
@@ -435,10 +439,10 @@ const STEPS: Step[] = [
   },
   {
     id: "depositZip",
-    question: "What's the ZIP code for your service address?",
+    question: "What's your service address?",
     subtext: "We'll use this to confirm service availability.",
-    type: "text",
-    placeholder: "e.g. 49938",
+    type: "address",
+    placeholder: "123 Main St, Ironwood, MI",
     show: (a) => isTrashValetService(a),
   },
 
@@ -486,10 +490,10 @@ const STEPS: Step[] = [
   },
   {
     id: "jobLocation",
-    question: "What's the ZIP code for the job?",
-    subtext: "We use this to determine if a free local estimate or deposit applies.",
-    type: "text",
-    placeholder: "e.g. 49938",
+    question: "What's the job address?",
+    subtext: "We use this to determine if a free local estimate applies.",
+    type: "address",
+    placeholder: "123 Main St, Ironwood, MI",
     show: (a) => isQuoteOnlyService(a),
   },
   {
@@ -860,6 +864,7 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
   ]);
   const [stepIdx, setStepIdx] = useState(0);
   const [textInput, setTextInput] = useState("");
+  const [addressInput, setAddressInput] = useState("");
   const [multiSel, setMultiSel] = useState<string[]>([]);
   const [contactName, setContactName] = useState(() => user ? [user.firstName, user.lastName].filter(Boolean).join(" ") : "");
   const [contactPhone, setContactPhone] = useState(() => user?.phoneNumber || "");
@@ -967,6 +972,7 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
         }
         setStepIdx(nextIdx);
         setTextInput("");
+        setAddressInput("");
         setMultiSel([]);
       }, 500);
     } else {
@@ -1004,6 +1010,14 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
     const val = textInput.trim();
     if (!val && !currentStep.optional) return;
     advanceStep(currentStep.id, val || "(none)");
+  }
+
+  function handleAddressSubmit() {
+    if (!currentStep) return;
+    const val = addressInput.trim();
+    if (!val) return;
+    advanceStep(currentStep.id, val);
+    setAddressInput("");
   }
 
   function handleMultiSubmit() {
@@ -1100,6 +1114,7 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
     }]);
     setStepIdx(0);
     setTextInput("");
+    setAddressInput("");
     setMultiSel([]);
     setContactName(user ? [user.firstName, user.lastName].filter(Boolean).join(" ") : "");
     setContactPhone(user?.phoneNumber || "");
@@ -1473,7 +1488,32 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
             </div>
           )}
 
-          {/* TEXT */}
+          {/* ADDRESS autocomplete */}
+          {currentStep.type === "address" && (
+            <div className="flex gap-2 items-start">
+              <div className="flex-1">
+                <PlacesAutocomplete
+                  value={addressInput}
+                  onChange={setAddressInput}
+                  onPlaceSelect={(place) => {
+                    setAddressInput(place.fullAddress);
+                  }}
+                  placeholder={currentStep.placeholder || "Start typing an address…"}
+                  onKeyDown={(e) => e.key === "Enter" && handleAddressSubmit()}
+                  autoFocus
+                />
+              </div>
+              <Button
+                onClick={handleAddressSubmit}
+                size="icon"
+                disabled={!addressInput.trim()}
+                className="bg-teal-600 hover:bg-teal-500 shrink-0 disabled:opacity-40"
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+
           {currentStep.type === "text" && (
             <div className="flex gap-2">
               <Input

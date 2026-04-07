@@ -15,6 +15,7 @@ import {
   Leaf, Phone, ChevronRight, ChevronLeft, CheckCircle2, Loader2, Calendar, Home,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PlacesAutocomplete } from "@/components/places-autocomplete";
 
 const SERVICE_CATEGORIES = [
   { id: "mowing", label: "Mowing", icon: "🌿", desc: "Grass cutting & cleanup" },
@@ -362,7 +363,18 @@ export default function BookLawnCare() {
               </div>
               <div>
                 <label className="text-slate-400 text-sm mb-1 block">Service address *</label>
-                <Input {...form.register("address")} placeholder="123 Main St" className="bg-slate-800 border-slate-700 text-white" />
+                <PlacesAutocomplete
+                  value={form.watch("address")}
+                  onChange={(v) => form.setValue("address", v, { shouldValidate: true })}
+                  onPlaceSelect={(place) => {
+                    form.setValue("address", place.fullAddress, { shouldValidate: true });
+                    if (place.city) form.setValue("city", place.city);
+                    if (place.state) form.setValue("state", place.state);
+                    if (place.zip) form.setValue("zip", place.zip);
+                  }}
+                  placeholder="123 Main St, Ironwood, MI"
+                  inputClassName="w-full rounded-md border border-slate-700 bg-slate-800 text-white placeholder:text-slate-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500/60 transition-all"
+                />
                 {form.formState.errors.address && <p className="text-red-400 text-xs mt-1">{form.formState.errors.address.message}</p>}
               </div>
               <div className="grid grid-cols-3 gap-3">

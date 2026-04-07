@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
+import { PlacesAutocomplete } from "@/components/places-autocomplete";
 
 const SERVICES = [
   { value: "residential",     label: "Moving",           sub: "Local & long distance",              icon: Truck,       color: "bg-blue-50 dark:bg-blue-900/20 text-blue-600 border-blue-200 dark:border-blue-800"     },
@@ -877,12 +878,11 @@ export default function PostJobPage() {
                   <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
                     <MapPin className="h-4 w-4 inline mr-1" /> Job Location <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="text"
-                    placeholder="123 Main St, Ironwood, MI"
+                  <PlacesAutocomplete
                     value={form.fromAddress}
-                    onChange={e => set("fromAddress", e.target.value)}
-                    className="w-full h-12 px-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder:text-zinc-400 text-base focus:outline-none focus:ring-2 focus:ring-jc-orange/30 focus:border-jc-orange transition-all"
+                    onChange={(v) => set("fromAddress", v)}
+                    placeholder="123 Main St, Ironwood, MI"
+                    inputClassName="w-full h-12 px-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder:text-zinc-400 text-base focus:outline-none focus:ring-2 focus:ring-jc-orange/30 focus:border-jc-orange transition-all"
                   />
                 </div>
 
@@ -923,13 +923,11 @@ export default function PostJobPage() {
                   <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
                     <MapPin className="h-4 w-4 inline mr-1" /> Location / Address
                   </label>
-                  <input
-                    type="text"
-                    placeholder="123 Main St, Ironwood, MI"
-                    required
+                  <PlacesAutocomplete
                     value={form.fromAddress}
-                    onChange={e => set("fromAddress", e.target.value)}
-                    className="w-full h-13 px-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder:text-zinc-400 text-base focus:outline-none focus:ring-2 focus:ring-jc-orange/30 focus:border-jc-orange transition-all"
+                    onChange={(v) => set("fromAddress", v)}
+                    placeholder="123 Main St, Ironwood, MI"
+                    inputClassName="w-full h-12 px-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder:text-zinc-400 text-base focus:outline-none focus:ring-2 focus:ring-jc-orange/30 focus:border-jc-orange transition-all"
                   />
                 </div>
 
@@ -938,12 +936,11 @@ export default function PostJobPage() {
                     <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
                       Delivery Address
                     </label>
-                    <input
-                      type="text"
-                      placeholder="456 Oak Ave, Green Bay, WI"
+                    <PlacesAutocomplete
                       value={form.toAddress}
-                      onChange={e => set("toAddress", e.target.value)}
-                      className="w-full h-13 px-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder:text-zinc-400 text-base focus:outline-none focus:ring-2 focus:ring-jc-orange/30 focus:border-jc-orange transition-all"
+                      onChange={(v) => set("toAddress", v)}
+                      placeholder="456 Oak Ave, Green Bay, WI"
+                      inputClassName="w-full h-12 px-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder:text-zinc-400 text-base focus:outline-none focus:ring-2 focus:ring-jc-orange/30 focus:border-jc-orange transition-all"
                     />
                   </div>
                 )}
