@@ -16936,7 +16936,6 @@ Thank you for your business!
         // Weight tiers
         weightLightMax:  n('pricing_weight_light_max',  200),
         weightHeavyMin:  n('pricing_weight_heavy_min',  400),
-        heavyItemFlat:   n('pricing_heavy_item_flat',   100),
         // Access / difficulty add-on rates
         stairsPerFlight:   n('pricing_stairs_per_flight',    25),
         longCarryFlat:     n('pricing_long_carry_flat',      50),

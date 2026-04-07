@@ -47,6 +47,10 @@ interface Pricing {
   earnRatePerDollar?: number;
   bookingRequestBonus?: number;
   completionFlatBonus?: number;
+  snowRemovalHourlyRate?: number;
+  handymanHourlyRate?: number;
+  paintingHourlyRate?: number;
+  flooringPerSqFt?: number;
 }
 
 interface SizeTier {
@@ -59,19 +63,25 @@ interface SizeTier {
   isCustom?: boolean;
 }
 
-const SNOW_TIERS: SizeTier[] = [
-  { id: "snow_small",  label: "Small",  desc: "Single driveway",              low: 35,  high: 75,  tag: "Quick" },
-  { id: "snow_medium", label: "Medium", desc: "Residential / multi-car",      low: 75,  high: 150 },
-  { id: "snow_large",  label: "Large",  desc: "Estate or light commercial",   low: 150, high: 300, tag: "Popular" },
-  { id: "snow_custom", label: "Custom", desc: "We'll quote on-site",          low: 0,   high: 0,   isCustom: true },
-];
+function buildSnowTiers(ratePerHr: number): SizeTier[] {
+  const r = Math.max(ratePerHr, 30);
+  return [
+    { id: "snow_small",  label: "Small",  desc: "Single driveway",              low: Math.round(r * 0.5),  high: Math.round(r * 1),   tag: "Quick" },
+    { id: "snow_medium", label: "Medium", desc: "Residential / multi-car",      low: Math.round(r * 1),    high: Math.round(r * 2) },
+    { id: "snow_large",  label: "Large",  desc: "Estate or light commercial",   low: Math.round(r * 2),    high: Math.round(r * 4),   tag: "Popular" },
+    { id: "snow_custom", label: "Custom", desc: "We'll quote on-site",          low: 0,                    high: 0,                    isCustom: true },
+  ];
+}
 
-const HANDYMAN_TIERS: SizeTier[] = [
-  { id: "handyman_small",  label: "Small",  desc: "1–2 hour task",            low: 75,  high: 150, tag: "Quick" },
-  { id: "handyman_medium", label: "Medium", desc: "Half-day project",         low: 150, high: 350 },
-  { id: "handyman_large",  label: "Large",  desc: "Full-day or multi-day",    low: 350, high: 700, tag: "Popular" },
-  { id: "handyman_custom", label: "Custom", desc: "We'll quote on-site",      low: 0,   high: 0,   isCustom: true },
-];
+function buildHandymanTiers(ratePerHr: number): SizeTier[] {
+  const r = Math.max(ratePerHr, 30);
+  return [
+    { id: "handyman_small",  label: "Small",  desc: "1–2 hour task",           low: Math.round(r * 1), high: Math.round(r * 2), tag: "Quick" },
+    { id: "handyman_medium", label: "Medium", desc: "Half-day project",         low: Math.round(r * 2), high: Math.round(r * 4) },
+    { id: "handyman_large",  label: "Large",  desc: "Full-day or multi-day",   low: Math.round(r * 4), high: Math.round(r * 8), tag: "Popular" },
+    { id: "handyman_custom", label: "Custom", desc: "We'll quote on-site",     low: 0,                  high: 0,                  isCustom: true },
+  ];
+}
 
 const LABOR_TIERS: SizeTier[] = [
   { id: "labor_small",  label: "Small",  desc: "2 hrs · studio or small load",    low: 100, high: 175, tag: "Quick" },
@@ -80,20 +90,26 @@ const LABOR_TIERS: SizeTier[] = [
   { id: "labor_custom", label: "Custom", desc: "We'll quote on-site",             low: 0,   high: 0,   isCustom: true },
 ];
 
-const PAINTING_TIERS: SizeTier[] = [
-  { id: "painting_room",     label: "Single Room",   desc: "One bedroom or living area",      low: 200,  high: 400,  tag: "Quick" },
-  { id: "painting_multi",    label: "Multi-Room",    desc: "2–4 rooms",                       low: 400,  high: 800 },
-  { id: "painting_interior", label: "Full Interior", desc: "Whole home interior",             low: 800,  high: 1800, tag: "Popular" },
-  { id: "painting_exterior", label: "Exterior",      desc: "Outside walls of the home",       low: 1000, high: 2500 },
-  { id: "painting_custom",   label: "Custom",        desc: "We'll quote on-site",             low: 0,    high: 0,    isCustom: true },
-];
+function buildPaintingTiers(ratePerHr: number): SizeTier[] {
+  const r = Math.max(ratePerHr, 30);
+  return [
+    { id: "painting_room",     label: "Single Room",   desc: "One bedroom or living area",  low: Math.round(r * 3),  high: Math.round(r * 5),  tag: "Quick" },
+    { id: "painting_multi",    label: "Multi-Room",    desc: "2–4 rooms",                    low: Math.round(r * 6),  high: Math.round(r * 10) },
+    { id: "painting_interior", label: "Full Interior", desc: "Whole home interior",          low: Math.round(r * 12), high: Math.round(r * 22), tag: "Popular" },
+    { id: "painting_exterior", label: "Exterior",      desc: "Outside walls of the home",   low: Math.round(r * 14), high: Math.round(r * 30) },
+    { id: "painting_custom",   label: "Custom",        desc: "We'll quote on-site",          low: 0,                   high: 0,                   isCustom: true },
+  ];
+}
 
-const FLOORING_TIERS: SizeTier[] = [
-  { id: "flooring_room",   label: "Single Room",    desc: "One room up to 200 sq ft",         low: 200,  high: 500,  tag: "Quick" },
-  { id: "flooring_multi",  label: "Multiple Rooms", desc: "2–4 rooms",                        low: 500,  high: 1200 },
-  { id: "flooring_home",   label: "Whole Home",     desc: "Full home installation",           low: 1200, high: 3000, tag: "Popular" },
-  { id: "flooring_custom", label: "Custom",         desc: "We'll quote on-site",              low: 0,    high: 0,    isCustom: true },
-];
+function buildFlooringTiers(ratePerSqFt: number): SizeTier[] {
+  const r = Math.max(ratePerSqFt, 1);
+  return [
+    { id: "flooring_room",   label: "Single Room",    desc: "One room up to 200 sq ft",   low: Math.round(r * 150), high: Math.round(r * 250), tag: "Quick" },
+    { id: "flooring_multi",  label: "Multiple Rooms", desc: "2–4 rooms",                   low: Math.round(r * 400), high: Math.round(r * 800) },
+    { id: "flooring_home",   label: "Whole Home",     desc: "Full home installation",      low: Math.round(r * 1000), high: Math.round(r * 2000), tag: "Popular" },
+    { id: "flooring_custom", label: "Custom",         desc: "We'll quote on-site",          low: 0,                    high: 0,                     isCustom: true },
+  ];
+}
 
 // Hour-based discount tiers: book more hours, save more
 const HOUR_TIERS = [
@@ -303,11 +319,16 @@ export default function CustomerBookPage() {
     ? movingPackages.find(p => p.id === selectedPkgId)
     : junkPackages.find(p => p.id === selectedPkgId);
 
-  const activeSizeTiers = isSnow ? SNOW_TIERS
-    : isHandyman ? HANDYMAN_TIERS
-    : isLabor ? LABOR_TIERS
-    : isPainting ? PAINTING_TIERS
-    : FLOORING_TIERS;
+  const snowHourlyRate    = pricing?.snowRemovalHourlyRate ?? 85;
+  const handymanHourlyRate = pricing?.handymanHourlyRate    ?? 85;
+  const paintingHourlyRate = pricing?.paintingHourlyRate    ?? 85;
+  const flooringPerSqFt   = pricing?.flooringPerSqFt        ?? 3;
+
+  const activeSizeTiers = isSnow     ? buildSnowTiers(snowHourlyRate)
+    : isHandyman ? buildHandymanTiers(handymanHourlyRate)
+    : isLabor    ? LABOR_TIERS
+    : isPainting ? buildPaintingTiers(paintingHourlyRate)
+    : buildFlooringTiers(flooringPerSqFt);
 
   const selectedSizeTier = needsSizeTiers
     ? activeSizeTiers.find(t => t.id === sizeTierId)
@@ -327,21 +348,24 @@ export default function CustomerBookPage() {
   };
 
   const calcTotal = () => {
-    if (!selectedPkg) return 0;
-    if (isMoving) {
-      const pkg = selectedPkg as MovingPackage;
-      return calcMovingPrice(pkg) + calcAddonTotal();
+    if (isMoving && selectedPkg) {
+      return calcMovingPrice(selectedPkg as MovingPackage) + calcAddonTotal();
     }
-    if (isJunk) {
-      const pkg = selectedPkg as JunkPackage;
-      return pkg.high + calcAddonTotal();
+    if (isJunk && selectedPkg) {
+      return (selectedPkg as JunkPackage).high + calcAddonTotal();
+    }
+    if (needsSizeTiers && selectedSizeTier) {
+      if (!selectedSizeTier.isCustom && selectedSizeTier.high > 0) {
+        return Math.round((selectedSizeTier.low + selectedSizeTier.high) / 2);
+      }
+      if (selectedSizeTier.low > 0) return selectedSizeTier.low;
     }
     return 0;
   };
 
   const submitJob = useMutation({
     mutationFn: async () => {
-      const totalPrice = selectedPkg ? calcTotal() : undefined;
+      const totalPrice = (selectedPkg || selectedSizeTier) ? calcTotal() : undefined;
       const pkg = selectedPkg;
       const crewSize = isMoving && pkg ? (pkg as MovingPackage).movers : undefined;
       const confirmedHours = isMoving && pkg ? (pkg as MovingPackage).hours : undefined;
@@ -947,7 +971,7 @@ export default function CustomerBookPage() {
                 </div>
 
                 {/* Total */}
-                {selectedPkg && calcTotal() > 0 && (
+                {(selectedPkg || selectedSizeTier) && calcTotal() > 0 && (
                   <>
                     <hr className="border-muted" />
                     <div className="flex items-center justify-between">
