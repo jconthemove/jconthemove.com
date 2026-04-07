@@ -853,20 +853,26 @@ export function BookingChatbot({
     setPhase("deposit");
   }
 
+  const [depositInvoiceSent, setDepositInvoiceSent] = useState(false);
+  const [depositInvoiceUrl, setDepositInvoiceUrl] = useState<string | null>(null);
+
   // Submission
   const submitMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (withDeposit: boolean) => {
       if (!pendingQuote) throw new Error("No quote");
-      return apiRequest("POST", "/api/chatbot-quote", {
+      const result = await apiRequest("POST", "/api/chatbot-quote", {
         answers,
         quote: pendingQuote,
         selectedPackage,
-        depositPaid,
+        depositPaid: withDeposit,
       });
+      return result as { leadId: string; message: string; depositInvoiceSent?: boolean; depositInvoiceUrl?: string };
     },
-    onSuccess: async () => {
+    onSuccess: (data, withDeposit) => {
+      setDepositPaid(withDeposit);
+      setDepositInvoiceSent(data?.depositInvoiceSent ?? false);
+      setDepositInvoiceUrl(data?.depositInvoiceUrl ?? null);
       setPhase("submitted");
-      botSay("✅ You're confirmed! Darrell will review your request and send a finalized invoice to your email. We typically respond within 2–4 business hours.");
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : "Please try again.";
@@ -875,15 +881,12 @@ export function BookingChatbot({
   });
 
   function handleDepositPay() {
-    // Open Square payment link in new tab (placeholder — admin configures the URL)
-    window.open(`https://checkout.square.site/pay/jconthemove-deposit?amount=${DEPOSIT_AMOUNT}`, "_blank");
-    setDepositPaid(true);
-    setTimeout(() => submitMutation.mutate(), 800);
+    // Server will create the Square invoice and email it — no need to open a URL manually
+    submitMutation.mutate(true);
   }
 
   function handleSkipDeposit() {
-    setDepositPaid(false);
-    submitMutation.mutate();
+    submitMutation.mutate(false);
   }
 
   function resetChat() {
@@ -1100,19 +1103,22 @@ export function BookingChatbot({
                     disabled={submitMutation.isPending}
                     className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-400 hover:to-orange-500 text-white font-bold py-3 rounded-xl text-sm"
                   >
-                    {submitMutation.isPending && depositPaid ? (
-                      "Processing…"
+                    {submitMutation.isPending ? (
+                      "Sending invoice…"
                     ) : (
-                      <><CreditCard className="h-4 w-4 mr-2" />Pay ${DEPOSIT_AMOUNT} Deposit &amp; Submit</>
+                      <><CreditCard className="h-4 w-4 mr-2" />Send ${DEPOSIT_AMOUNT} Deposit Invoice &amp; Confirm</>
                     )}
                   </Button>
+                  <p className="text-[11px] text-slate-500 text-center px-2">
+                    Invoice emailed instantly · Applied toward final balance · Refundable with 24 hr notice
+                  </p>
                   <Button
                     variant="ghost"
                     onClick={handleSkipDeposit}
                     disabled={submitMutation.isPending}
                     className="w-full text-slate-400 hover:text-slate-200 text-xs py-2"
                   >
-                    {submitMutation.isPending && !depositPaid ? "Submitting…" : "Skip deposit — submit for review only"}
+                    {submitMutation.isPending ? "Submitting…" : "Skip deposit — submit for review only"}
                   </Button>
                 </div>
               </div>
@@ -1129,21 +1135,55 @@ export function BookingChatbot({
               </div>
               <div>
                 <p className="font-bold text-white text-base">
-                  {depositPaid ? "Appointment Confirmed!" : "Quote Submitted!"}
+                  {depositPaid ? "Deposit Invoice Sent!" : "Quote Submitted!"}
                 </p>
                 <p className="text-sm text-slate-400 mt-1">
-                  {depositPaid
-                    ? "Your deposit was received. Darrell will send your finalized invoice shortly."
+                  {depositPaid && depositInvoiceSent
+                    ? `A $${DEPOSIT_AMOUNT} deposit invoice was emailed to ${answers.contactEmail || "you"}. Paying it confirms your appointment.`
+                    : depositPaid && !depositInvoiceSent
+                    ? `Your quote is in — Darrell will send a $${DEPOSIT_AMOUNT} deposit invoice to your email shortly.`
                     : "Darrell will review and reach out with a finalized quote soon."}
                 </p>
               </div>
+
+              {depositInvoiceUrl && (
+                <a
+                  href={depositInvoiceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full"
+                >
+                  <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl px-4 py-3 flex items-center justify-between">
+                    <div className="text-left">
+                      <p className="text-sm font-semibold text-orange-300">Open Deposit Invoice</p>
+                      <p className="text-xs text-slate-400">Pay ${DEPOSIT_AMOUNT} to lock in your spot</p>
+                    </div>
+                    <CreditCard className="h-5 w-5 text-orange-400 shrink-0" />
+                  </div>
+                </a>
+              )}
+
               <div className="bg-slate-800/60 rounded-xl px-4 py-3 w-full">
-                <p className="text-xs text-slate-400">What happens next:</p>
-                <div className="mt-2 space-y-1 text-left">
-                  <p className="text-xs text-slate-300">1. Admin reviews your request (2–4 hrs)</p>
-                  <p className="text-xs text-slate-300">2. Finalized invoice sent to your email</p>
-                  <p className="text-xs text-slate-300">3. Payment confirms your scheduled date</p>
-                  <p className="text-xs text-slate-300">4. Crew dispatched on your chosen day</p>
+                <p className="text-xs text-slate-400 font-medium mb-2">What happens next:</p>
+                <div className="space-y-1.5 text-left">
+                  <div className="flex items-start gap-2">
+                    <span className="text-teal-400 text-xs shrink-0 mt-0.5">1.</span>
+                    <p className="text-xs text-slate-300">
+                      {depositPaid ? "Pay the deposit invoice (check your email)" : "Admin reviews your quote (2–4 hrs)"}
+                    </p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-teal-400 text-xs shrink-0 mt-0.5">2.</span>
+                    <p className="text-xs text-slate-300">Darrell confirms details &amp; sends finalized invoice</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-teal-400 text-xs shrink-0 mt-0.5">3.</span>
+                    <p className="text-xs text-slate-300">Full payment confirms your scheduled date</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-teal-400 text-xs shrink-0 mt-0.5">4.</span>
+                    <p className="text-xs text-slate-300">Crew is auto-dispatched on your chosen day ✅</p>
+                  </div>
                 </div>
               </div>
               {onClose && showClose && (

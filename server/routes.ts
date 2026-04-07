@@ -12792,6 +12792,23 @@ Thank you for your business!
               if (lead && lead.status !== "paid" && lead.status !== "completed") {
                 await storage.updateLeadStatus(localInvoice.leadId, "paid");
                 console.log(`[Square webhook] Lead ${localInvoice.leadId} status updated to paid`);
+
+                // Auto-dispatch crew after payment confirmed
+                try {
+                  const { dispatchGenericJob } = await import("./services/dispatchGeneric");
+                  const crewSize = lead.crewSize || 2;
+                  const kind = lead.serviceType === "junk" ? "labor" : "moving";
+                  const assignedCrew = await dispatchGenericJob({ leadId: lead.id, kind, crewSize });
+                  if (assignedCrew.length > 0) {
+                    console.log(`[Square webhook] Auto-dispatched ${assignedCrew.length} crew to lead ${lead.id} after payment`);
+                  } else {
+                    console.warn(`[Square webhook] No available crew found for auto-dispatch on lead ${lead.id}`);
+                  }
+                } catch (dispatchErr: unknown) {
+                  const msg = dispatchErr instanceof Error ? dispatchErr.message : String(dispatchErr);
+                  console.error(`[Square webhook] Auto-dispatch failed for lead ${localInvoice.leadId}:`, msg);
+                  // Non-fatal — payment is already recorded
+                }
               }
             }
           } else {
@@ -17609,9 +17626,40 @@ Thank you for your business!
         createdAt: new Date(),
       }).returning();
 
-      // Notify admin via email if possible
+      // Auto-create deposit invoice via Square (non-blocking — doesn't fail the request)
+      let depositInvoiceSent = false;
+      let depositInvoiceUrl: string | null = null;
+      const DEPOSIT_AMOUNT = 75;
+      if (depositPaid) {
+        try {
+          const { squareInvoiceService } = await import("./services/square-invoice");
+          if (squareInvoiceService.isConfigured()) {
+            const pkgLabel = selectedPackage ? selectedPackage.label : svcRaw;
+            const invoiceResult = await squareInvoiceService.createInvoiceForLead(
+              lead,
+              DEPOSIT_AMOUNT,
+              `Appointment Deposit — ${pkgLabel} (${svcRaw})`,
+              undefined, // default due date (48 hrs)
+              "email"
+            );
+            depositInvoiceSent = true;
+            depositInvoiceUrl = invoiceResult.invoiceUrl;
+            console.log(`[chatbot-quote] Deposit invoice sent to ${email} for lead ${lead.id}`);
+          } else {
+            console.warn("[chatbot-quote] Square not configured — skipping deposit invoice");
+          }
+        } catch (invErr: unknown) {
+          const msg = invErr instanceof Error ? invErr.message : String(invErr);
+          console.error("[chatbot-quote] Failed to create deposit invoice:", msg);
+          // Non-fatal — lead is already saved
+        }
+      }
+
+      // Notify admin via email
       const pkgLabel = selectedPackage ? selectedPackage.label : "No package selected yet";
-      const depositNote = depositPaid ? "✅ Deposit PAID ($75)" : "⏳ No deposit — review only";
+      const depositNote = depositPaid
+        ? (depositInvoiceSent ? `✅ Deposit invoice ($${DEPOSIT_AMOUNT}) sent to customer via Square` : `⏳ Deposit requested but Square not configured`)
+        : "⏳ No deposit — review only";
       try {
         await sendEmail({
           to: "upmichiganstatemovers@gmail.com",
@@ -17623,6 +17671,7 @@ Thank you for your business!
             <p><strong>Service:</strong> ${svcRaw}</p>
             <p><strong>Package Selected:</strong> ${pkgLabel}</p>
             <p><strong>Deposit:</strong> ${depositNote}</p>
+            ${depositInvoiceUrl ? `<p><strong>Invoice URL:</strong> <a href="${depositInvoiceUrl}">${depositInvoiceUrl}</a></p>` : ""}
             <p><strong>Home Size / Scope:</strong> ${a.homeSize || a.scopeSize || "N/A"}</p>
             <p><strong>From:</strong> ${fromAddress}${toAddress ? ` → ${toAddress}` : ""}</p>
             <p><strong>Date:</strong> ${moveDateStr}</p>
@@ -17632,7 +17681,7 @@ Thank you for your business!
         });
       } catch (_) {}
 
-      res.json({ leadId: lead.id, message: "Quote submitted for review" });
+      res.json({ leadId: lead.id, message: "Quote submitted for review", depositInvoiceSent, depositInvoiceUrl });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
