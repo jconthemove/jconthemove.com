@@ -33,13 +33,13 @@ import { eq, and } from "drizzle-orm";
 import { storage } from "../storage";
 import type { Lead } from "@shared/schema";
 
-const TOKEN_PRICE        = 0.00000508432;
-const HOURS_RATE         = 25;    // JCMOVES per confirmed hour per crew member
-const FALLBACK_FLAT      = 500;   // JCMOVES flat per worker if setting not found
-const FALLBACK_EARN      = 15;    // JCMOVES per $1 if setting not found
-const FALLBACK_COMPLETION = 1500; // JCMOVES flat bonus for customer on job completion
-const REFERRAL_BONUS     = 1000;  // JCMOVES awarded to referrer on first confirmed job
-const BONUS_MULTIPLIER   = 1.25;  // +25% for bonus-flagged movers
+const TOKEN_PRICE         = 0.00000508432;
+const HOURS_RATE          = 25;    // JCMOVES per confirmed hour per crew member
+const FALLBACK_FLAT       = 500;   // JCMOVES flat per worker if setting not found
+const FALLBACK_EARN       = 15;    // JCMOVES per $1 if setting not found
+const FALLBACK_COMPLETION = 1500;  // JCMOVES flat bonus for customer on job completion
+const FALLBACK_REFERRAL   = 1000;  // JCMOVES awarded to referrer on first confirmed job
+const BONUS_MULTIPLIER    = 1.25;  // +25% for bonus-flagged movers
 
 export type DisbursementSummary = {
   customerTokens: number;
@@ -158,6 +158,7 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
       ?? FALLBACK_FLAT;
     const earnRate          = (await getSetting("earn_rate_per_dollar")) ?? FALLBACK_EARN;
     const completionBonus   = (await getSetting("customer_quote_completed")) ?? FALLBACK_COMPLETION;
+    const referralBonus     = (await getSetting("referral_job_bonus"))    ?? FALLBACK_REFERRAL;
     const confirmedHrs = lead.confirmedHours ? Number(lead.confirmedHours) : 0;
     const baseHoursBonus = HOURS_RATE * confirmedHrs;
     const now = new Date();
@@ -334,14 +335,14 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
                 await db.insert(rewards).values({
                   userId: customer.referred_by_user_id,
                   rewardType: "referral_confirmed",
-                  tokenAmount: REFERRAL_BONUS.toFixed(8),
-                  cashValue: (REFERRAL_BONUS * TOKEN_PRICE).toFixed(6),
+                  tokenAmount: referralBonus.toFixed(8),
+                  cashValue: (referralBonus * TOKEN_PRICE).toFixed(6),
                   status: "confirmed",
                   referenceId: leadId,
                   metadata: { referredUserId: customer.id, jobId: leadId },
                 });
-                await storage.creditWalletTokens(customer.referred_by_user_id, REFERRAL_BONUS);
-                console.log(`🎉 Referral ${REFERRAL_BONUS} JCMOVES → ${customer.referred_by_user_id}`);
+                await storage.creditWalletTokens(customer.referred_by_user_id, referralBonus);
+                console.log(`🎉 Referral ${referralBonus} JCMOVES → ${customer.referred_by_user_id}`);
               }
             }
           }

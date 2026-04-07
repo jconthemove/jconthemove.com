@@ -40,7 +40,14 @@ interface MovingPackage { id: string; movers: number; hours: number; label: stri
 interface JunkPackage { id: string; label: string; desc: string; low: number; high: number; tag?: string; openPrice?: boolean; }
 interface Addon { id: string; name: string; description?: string; unitPrice: number; openPrice?: boolean; qtyOptions: number[]; }
 interface CatalogDefs { movingPackages: MovingPackage[]; junkPackages: JunkPackage[]; movingAddons: Addon[]; junkAddons: Addon[]; }
-interface Pricing { ratePerMoverHour: number; jc222Price: number; shortJobFull: number; }
+interface Pricing {
+  ratePerMoverHour: number;
+  jc222Price: number;
+  shortJobFull: number;
+  earnRatePerDollar?: number;
+  bookingRequestBonus?: number;
+  completionFlatBonus?: number;
+}
 
 interface SizeTier {
   id: string;
@@ -382,7 +389,7 @@ export default function CustomerBookPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
       queryClient.invalidateQueries({ queryKey: ["/api/customer/my-leads"] });
-      toast({ title: "Booking submitted!", description: "We'll confirm your details soon. You earned 50 JCMOVES!" });
+      toast({ title: "Booking submitted!", description: `We'll confirm your details soon. You earned ${(pricing?.bookingRequestBonus ?? 250).toLocaleString()} JCMOVES!` });
       if (!user) {
         setShowAccountCTA(true);
       } else {
@@ -544,8 +551,8 @@ export default function CustomerBookPage() {
             <div className="flex items-center gap-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl">
               <Zap className="h-5 w-5 text-amber-500 flex-shrink-0" />
               <div className="text-sm">
-                <span className="font-semibold text-amber-500">Earn 50 JCMOVES</span>
-                <span className="text-muted-foreground"> just for booking, plus 15 per dollar spent!</span>
+                <span className="font-semibold text-amber-500">Earn {(pricing?.bookingRequestBonus ?? 250).toLocaleString()} JCMOVES</span>
+                <span className="text-muted-foreground"> just for booking, plus {pricing?.earnRatePerDollar ?? 15} per dollar spent!</span>
               </div>
             </div>
 
@@ -957,7 +964,7 @@ export default function CustomerBookPage() {
               <div className="flex items-center gap-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl">
                 <Zap className="h-5 w-5 text-amber-500 flex-shrink-0" />
                 <div className="text-sm">
-                  <span className="font-semibold text-amber-500">Earn ~{(50 + 1500 + Math.round(calcTotal() * 15)).toLocaleString()} JCMOVES</span>
+                  <span className="font-semibold text-amber-500">Earn ~{((pricing?.bookingRequestBonus ?? 250) + (pricing?.completionFlatBonus ?? 1500) + Math.round(calcTotal() * (pricing?.earnRatePerDollar ?? 15))).toLocaleString()} JCMOVES</span>
                   <span className="text-muted-foreground"> on this booking!</span>
                 </div>
               </div>

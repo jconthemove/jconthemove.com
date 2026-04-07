@@ -160,6 +160,12 @@ async function ensureRewardSettingsSeeded() {
         await db.insert(rewardSettings).values({ settingKey: "redemption_auto_approve_threshold", label: "Redemption Auto-Approve Threshold", description: "Redemptions under this token amount are auto-approved. At or above this amount are held for manual admin review.", tokenAmount: "5000.00", isActive: true });
         console.log("✅ redemption_auto_approve_threshold setting inserted — 5000 JCMOVES");
       }
+      // Ensure referral_job_bonus exists (separate from referral_confirmed which is for signups)
+      const hasReferralJobBonus = existing.find(s => s.settingKey === 'referral_job_bonus');
+      if (!hasReferralJobBonus) {
+        await db.insert(rewardSettings).values({ settingKey: "referral_job_bonus", label: "Referral First-Job Bonus", description: "JCMOVES awarded to the referrer when their referred user completes their first job", tokenAmount: "1000.00", isActive: true });
+        console.log("✅ referral_job_bonus setting inserted — 1000 JCMOVES");
+      }
     }
   } catch (error) {
     console.error("Failed to seed reward settings:", error);
@@ -16945,6 +16951,35 @@ Thank you for your business!
         // Fuel surcharge
         fuelSurchargeFlat:     n('pricing_fuel_surcharge_flat',      0),
         fuelSurchargeMinMiles: n('pricing_fuel_surcharge_min_miles', 30),
+        // Truck flat rates (replaces hourly truck add-on for customer-facing pricing)
+        truckSmallFlat: n('pricing_truck_small_flat', 300),
+        truckLargeFlat: n('pricing_truck_large_flat', 600),
+        // Service rates
+        windowCleaningPerPane: n('pricing_window_cleaning_per_pane',   5),
+        trashValetBaseMonthly: n('pricing_trash_valet_base_monthly',  30),
+        paintingHourlyRate:    n('pricing_painting_hourly_rate',      85),
+        flooringPerSqFt:       n('pricing_flooring_per_sq_ft',         3),
+        snowRemovalHourlyRate: n('pricing_snow_removal_hourly_rate',  85),
+        handymanHourlyRate:    n('pricing_handyman_hourly_rate',      85),
+        lawnCareHourlyRate:    n('pricing_lawn_care_hourly_rate',     60),
+        // JCMOVES token economy (from reward_settings table)
+        ...await (async () => {
+          try {
+            const rsRows = await pool.query(
+              `SELECT setting_key, token_amount FROM reward_settings
+               WHERE setting_key IN ('earn_rate_per_dollar','customer_quote_accepted','customer_quote_completed','referral_job_bonus')
+               AND is_active = true`
+            );
+            const rs: Record<string, number> = {};
+            for (const r of rsRows.rows) rs[r.setting_key] = parseFloat(r.token_amount);
+            return {
+              earnRatePerDollar:   rs['earn_rate_per_dollar']    ?? 15,
+              bookingRequestBonus: rs['customer_quote_accepted']  ?? 250,
+              completionFlatBonus: rs['customer_quote_completed'] ?? 1500,
+              referralBonus:       rs['referral_job_bonus']       ?? 1000,
+            };
+          } catch { return { earnRatePerDollar: 15, bookingRequestBonus: 250, completionFlatBonus: 1500, referralBonus: 1000 }; }
+        })(),
       });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
