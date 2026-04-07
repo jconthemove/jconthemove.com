@@ -243,7 +243,9 @@ export default function AdminTestimonialsPage() {
       });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/testimonials"] });
       queryClient.invalidateQueries({ queryKey: ["/api/testimonials?status=published"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/testimonials?status=published&featured=true&limit=3"] });
       queryClient.invalidateQueries({ queryKey: ["/api/testimonials/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/google-review-url"] });
     },
     onError: (error: Error) => {
       toast({

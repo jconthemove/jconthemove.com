@@ -5871,7 +5871,10 @@ Thank you for your business!
 
       // Step 3: Fetch existing Google testimonials to deduplicate
       const existingGoogle = await storage.getTestimonials({ sourcePlatform: "google" });
-      const existingKeys = new Set(existingGoogle.map(t => `${t.reviewerName}|${t.content?.slice(0, 50)}`));
+      // Normalize: trim + lowercase the full content for exact match
+      const normalizeKey = (name: string, content: string) =>
+        `${name.trim().toLowerCase()}|${content.trim().toLowerCase()}`;
+      const existingKeys = new Set(existingGoogle.map(t => normalizeKey(t.reviewerName, t.content || "")));
 
       let addedCount = 0;
       for (const review of googleReviews) {
@@ -5881,7 +5884,7 @@ Thank you for your business!
         const reviewDate = review.publishTime ? new Date(review.publishTime).toISOString().split("T")[0] : null;
         const sourceUrl = review.authorAttribution?.uri || null;
 
-        const dedupeKey = `${reviewerName}|${content.slice(0, 50)}`;
+        const dedupeKey = normalizeKey(reviewerName, content);
         if (existingKeys.has(dedupeKey)) {
           continue; // skip duplicate
         }
@@ -5920,13 +5923,35 @@ Thank you for your business!
   });
 
   // Get Google review URL (public — for "Write a Review" CTA)
+  // Resolves in priority order: stored URL → compute from place ID → null
   app.get("/api/google-review-url", async (_req, res) => {
     try {
-      const row = await pool.query(
-        `SELECT setting_value FROM spin_config WHERE setting_key = 'google_review_url' LIMIT 1`
+      const rows = await pool.query(
+        `SELECT setting_key, setting_value FROM spin_config WHERE setting_key IN ('google_review_url', 'google_place_id')`
       );
-      const url = row.rows[0]?.setting_value || null;
-      res.json({ url });
+      const configMap: Record<string, string> = {};
+      for (const row of rows.rows) {
+        configMap[row.setting_key] = row.setting_value;
+      }
+
+      // If stored URL exists, return it
+      if (configMap['google_review_url']) {
+        return res.json({ url: configMap['google_review_url'] });
+      }
+
+      // If we have the Place ID, derive the URL and cache it
+      if (configMap['google_place_id']) {
+        const derivedUrl = `https://search.google.com/local/writereview?placeid=${configMap['google_place_id']}`;
+        await pool.query(`
+          INSERT INTO spin_config (setting_key, setting_value, description)
+          VALUES ('google_review_url', $1, 'URL for customers to write a Google review')
+          ON CONFLICT (setting_key) DO UPDATE SET setting_value = $1
+        `, [derivedUrl]);
+        return res.json({ url: derivedUrl });
+      }
+
+      // No Place ID yet — return null (button falls back gracefully)
+      res.json({ url: null });
     } catch (error) {
       res.json({ url: null });
     }
