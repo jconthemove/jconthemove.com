@@ -14,9 +14,11 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
 }
 
 function requireAdminRole(req: Request, res: Response, next: NextFunction) {
+  const userId = (req as any).user?.id || (req.session as any)?.userId;
+  if (!userId) return res.status(401).json({ error: "Authentication required" });
   const user = (req as any).user;
   const role = user?.role || user?.userType;
-  if (!user || !["admin", "business_owner"].includes(role)) {
+  if (!role || !["admin", "business_owner"].includes(role)) {
     return res.status(403).json({ error: "Admin access required" });
   }
   return next();
@@ -147,12 +149,18 @@ router.post("/mark-paid/:id", requireAuth, requireAdminRole, async (req: Request
   }
 });
 
-// POST /api/lawn-care/activate-plan/:id — admin only
+// POST /api/lawn-care/activate-plan/:id — admin only (idempotent)
 router.post("/activate-plan/:id", requireAuth, requireAdminRole, async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id);
     const [quote] = await db.select().from(lawnCareQuotes).where(eq(lawnCareQuotes.id, id));
     if (!quote) return res.status(404).json({ error: "Quote not found" });
+
+    // Idempotency: return existing plan if already activated
+    const existing = await db.select().from(lawnCarePlans).where(eq(lawnCarePlans.quoteId, id));
+    if (existing.length > 0) {
+      return res.json({ success: true, plan: existing[0], alreadyActive: true });
+    }
 
     await db.update(lawnCareQuotes)
       .set({ status: "plan_active" })
