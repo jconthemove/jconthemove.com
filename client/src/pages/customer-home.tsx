@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
-import { Coins, Phone, MessageSquare, ChevronRight, Loader2, Search, Truck, Trash2, Wrench, Snowflake, X } from "lucide-react";
+import { Coins, Phone, MessageSquare, ChevronRight, Loader2, Search, Truck, Trash2, Wrench, Snowflake, X, PaintBucket, Layers, Leaf } from "lucide-react";
 import { JunkFlow, MovingFlow } from "@/components/ServiceSelector";
 import LiveCrewBeacon from "@/components/LiveCrewBeacon";
 
@@ -287,6 +287,51 @@ export default function CustomerHomePage() {
                 ) : (
                   <p className="text-zinc-500 text-xs leading-snug">Curbside pull-out · from $30/mo</p>
                 )}
+              </div>
+            </button>
+
+            {/* Painting */}
+            <button
+              onClick={() => setLocation("/book?service=painting")}
+              className="flex flex-col items-start gap-1.5 p-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
+            >
+              <div className="w-8 h-8 rounded-xl bg-rose-500/15 flex items-center justify-center">
+                <PaintBucket className="h-4 w-4 text-rose-400" />
+              </div>
+              <div>
+                <p className="font-bold text-sm text-white">Painting</p>
+                <p className="text-zinc-500 text-xs leading-snug">Interior & exterior</p>
+              </div>
+            </button>
+
+            {/* Flooring */}
+            <button
+              onClick={() => setLocation("/book?service=flooring")}
+              className="flex flex-col items-start gap-1.5 p-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
+            >
+              <div className="w-8 h-8 rounded-xl bg-teal-500/15 flex items-center justify-center">
+                <Layers className="h-4 w-4 text-teal-400" />
+              </div>
+              <div>
+                <p className="font-bold text-sm text-white">Flooring</p>
+                <p className="text-zinc-500 text-xs leading-snug">Install & refinish</p>
+              </div>
+            </button>
+
+            {/* Lawn Care — Coming Soon */}
+            <button
+              onClick={() => setLocation("/quote?service=lawn")}
+              className="relative flex flex-col items-start gap-1.5 p-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
+            >
+              <span className="absolute -top-2 left-3 text-[9px] font-bold bg-zinc-700 text-zinc-300 px-2 py-0.5 rounded-full whitespace-nowrap">
+                Coming Soon
+              </span>
+              <div className="w-8 h-8 rounded-xl bg-green-500/15 flex items-center justify-center">
+                <Leaf className="h-4 w-4 text-green-400" />
+              </div>
+              <div>
+                <p className="font-bold text-sm text-white">Lawn Care</p>
+                <p className="text-zinc-500 text-xs leading-snug">Request a quote</p>
               </div>
             </button>
 

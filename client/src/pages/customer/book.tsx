@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Truck, Trash2, Snowflake, Wrench, ArrowLeft, ArrowRight, CheckCircle, MapPin, Calendar, Plus, Minus, Loader2, Zap, Clock, Users, Home, Building2, ChevronRight, MessageSquare, ListOrdered, Sparkles, X, Phone } from "lucide-react";
+import { Truck, Trash2, Snowflake, Wrench, ArrowLeft, ArrowRight, CheckCircle, MapPin, Calendar, Plus, Minus, Loader2, Zap, Clock, Users, Home, Building2, ChevronRight, MessageSquare, ListOrdered, Sparkles, X, Phone, PaintBucket, Layers, Droplets, Recycle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,11 +16,15 @@ import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 
 const SERVICES = [
-  { value: "residential", label: "Moving", sub: "Local & long distance", icon: Truck, color: "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300" },
-  { value: "junk", label: "Junk Removal", sub: "Haul away & disposal", icon: Trash2, color: "bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-700 text-orange-700 dark:text-orange-300" },
-  { value: "snow", label: "Snow Removal", sub: "Plowing & shoveling", icon: Snowflake, color: "bg-cyan-50 dark:bg-cyan-900/20 border-cyan-200 dark:border-cyan-700 text-cyan-700 dark:text-cyan-300" },
-  { value: "handyman", label: "Handyman", sub: "General repairs", icon: Wrench, color: "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700 text-amber-700 dark:text-amber-300" },
-  { value: "labor", label: "Labor Only", sub: "Loading · Unloading · Packing", icon: Users, color: "bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-700 text-purple-700 dark:text-purple-300" },
+  { value: "residential", label: "Moving",           sub: "Local & long distance",       icon: Truck,        color: "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300" },
+  { value: "junk",        label: "Junk Removal",     sub: "Haul away & disposal",        icon: Trash2,       color: "bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-700 text-orange-700 dark:text-orange-300" },
+  { value: "snow",        label: "Snow Removal",     sub: "Plowing & shoveling",         icon: Snowflake,    color: "bg-cyan-50 dark:bg-cyan-900/20 border-cyan-200 dark:border-cyan-700 text-cyan-700 dark:text-cyan-300" },
+  { value: "handyman",    label: "Handyman",          sub: "General repairs",             icon: Wrench,       color: "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700 text-amber-700 dark:text-amber-300" },
+  { value: "labor",       label: "Labor Only",       sub: "Loading · Unloading · Packing", icon: Users,      color: "bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-700 text-purple-700 dark:text-purple-300" },
+  { value: "painting",    label: "Painting",         sub: "Interior & exterior",         icon: PaintBucket,  color: "bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-700 text-rose-700 dark:text-rose-300" },
+  { value: "flooring",    label: "Flooring",         sub: "Install & refinish",          icon: Layers,       color: "bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-700 text-teal-700 dark:text-teal-300" },
+  { value: "window_cleaning", label: "Window Cleaning", sub: "$5/pane · streak-free",   icon: Droplets,     color: "bg-sky-50 dark:bg-sky-900/20 border-sky-200 dark:border-sky-700 text-sky-700 dark:text-sky-300",   redirectTo: "/window-cleaning" },
+  { value: "trash_valet", label: "Trash Valet",      sub: "Weekly curbside service",     icon: Recycle,      color: "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700 text-green-700 dark:text-green-300", redirectTo: "/trash-valet/book" },
 ];
 
 interface MovingPackage { id: string; movers: number; hours: number; label: string; tag?: string; }
@@ -58,6 +62,21 @@ const LABOR_TIERS: SizeTier[] = [
   { id: "labor_medium", label: "Medium", desc: "3–4 hrs · 2–3 bedroom load",      low: 175, high: 350 },
   { id: "labor_large",  label: "Large",  desc: "5–7 hrs · full home load",        low: 350, high: 600, tag: "Popular" },
   { id: "labor_custom", label: "Custom", desc: "We'll quote on-site",             low: 0,   high: 0,   isCustom: true },
+];
+
+const PAINTING_TIERS: SizeTier[] = [
+  { id: "painting_room",     label: "Single Room",   desc: "One bedroom or living area",      low: 200,  high: 400,  tag: "Quick" },
+  { id: "painting_multi",    label: "Multi-Room",    desc: "2–4 rooms",                       low: 400,  high: 800 },
+  { id: "painting_interior", label: "Full Interior", desc: "Whole home interior",             low: 800,  high: 1800, tag: "Popular" },
+  { id: "painting_exterior", label: "Exterior",      desc: "Outside walls of the home",       low: 1000, high: 2500 },
+  { id: "painting_custom",   label: "Custom",        desc: "We'll quote on-site",             low: 0,    high: 0,    isCustom: true },
+];
+
+const FLOORING_TIERS: SizeTier[] = [
+  { id: "flooring_room",   label: "Single Room",    desc: "One room up to 200 sq ft",         low: 200,  high: 500,  tag: "Quick" },
+  { id: "flooring_multi",  label: "Multiple Rooms", desc: "2–4 rooms",                        low: 500,  high: 1200 },
+  { id: "flooring_home",   label: "Whole Home",     desc: "Full home installation",           low: 1200, high: 3000, tag: "Popular" },
+  { id: "flooring_custom", label: "Custom",         desc: "We'll quote on-site",              low: 0,    high: 0,    isCustom: true },
 ];
 
 // Hour-based discount tiers: book more hours, save more
@@ -181,12 +200,26 @@ export default function CustomerBookPage() {
   const [step, setStep] = useState<BookStep>("service");
   const [serviceType, setServiceType] = useState("");
 
-  // Pre-select service + skip to estimate step when ?service= is in the URL
+  // Pre-select service + skip to estimate step when ?service= is in the URL.
+  // Redirect services navigate away immediately; form services pre-select and skip the picker.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const svc = params.get("service");
-    if (svc && ["moving", "junk"].includes(svc)) {
-      setServiceType(svc);
+    if (!svc) return;
+    if (svc === "window_cleaning") { setLocation("/window-cleaning"); return; }
+    if (svc === "trash_valet")     { setLocation("/trash-valet/book"); return; }
+    const serviceMap: Record<string, string> = {
+      moving: "residential", residential: "residential",
+      junk:   "junk",
+      snow:   "snow",
+      handyman: "handyman",
+      labor:    "labor",
+      painting: "painting",
+      flooring: "flooring",
+    };
+    const mapped = serviceMap[svc];
+    if (mapped) {
+      setServiceType(mapped);
       setBookingMode("form");
       setStep("estimate");
     }
@@ -245,15 +278,23 @@ export default function CustomerBookPage() {
   const isSnow = serviceType === "snow";
   const isHandyman = serviceType === "handyman";
   const isLabor = serviceType === "labor";
+  const isPainting = serviceType === "painting";
+  const isFlooring = serviceType === "flooring";
   const needsPackages = isMoving || isJunk;
-  const needsSizeTiers = isSnow || isHandyman || isLabor;
+  const needsSizeTiers = isSnow || isHandyman || isLabor || isPainting || isFlooring;
 
   const selectedPkg = isMoving
     ? movingPackages.find(p => p.id === selectedPkgId)
     : junkPackages.find(p => p.id === selectedPkgId);
 
+  const activeSizeTiers = isSnow ? SNOW_TIERS
+    : isHandyman ? HANDYMAN_TIERS
+    : isLabor ? LABOR_TIERS
+    : isPainting ? PAINTING_TIERS
+    : FLOORING_TIERS;
+
   const selectedSizeTier = needsSizeTiers
-    ? (isSnow ? SNOW_TIERS : isHandyman ? HANDYMAN_TIERS : LABOR_TIERS).find(t => t.id === sizeTierId)
+    ? activeSizeTiers.find(t => t.id === sizeTierId)
     : null;
 
   const calcMovingPrice = (pkg: MovingPackage): number => {
@@ -467,10 +508,17 @@ export default function CustomerBookPage() {
               {SERVICES.map(svc => {
                 const Icon = svc.icon;
                 const isSelected = serviceType === svc.value;
+                const isRedirect = !!(svc as any).redirectTo;
                 return (
-                  <button key={svc.value} onClick={() => setServiceType(svc.value)}
+                  <button
+                    key={svc.value}
+                    onClick={() => {
+                      if (isRedirect) { setLocation((svc as any).redirectTo); }
+                      else { setServiceType(svc.value); }
+                    }}
                     className={cn("relative flex flex-col items-start gap-2 p-4 rounded-2xl border-2 text-left transition-all", isSelected ? "border-primary bg-primary/5 shadow-md" : "border-muted hover:border-primary/40", svc.color)}>
                     {isSelected && <CheckCircle className="absolute top-2 right-2 h-4 w-4 text-primary" />}
+                    {isRedirect && <ChevronRight className="absolute top-2 right-2 h-4 w-4 text-muted-foreground" />}
                     <div className={cn("p-2 rounded-xl", isSelected ? "bg-primary/10" : "bg-background/60")}>
                       <Icon className="h-5 w-5" />
                     </div>
@@ -575,7 +623,7 @@ export default function CustomerBookPage() {
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">Select a size to get a rough price estimate.</p>
                 <SizeTierCards
-                  tiers={isSnow ? SNOW_TIERS : isHandyman ? HANDYMAN_TIERS : LABOR_TIERS}
+                  tiers={activeSizeTiers}
                   selectedId={sizeTierId}
                   onSelect={(id) => setSizeTierId(id)}
                 />
