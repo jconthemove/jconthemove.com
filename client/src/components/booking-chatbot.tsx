@@ -109,6 +109,8 @@ interface Answers {
   depositAcknowledged?: string;
   // Package selection
   selectedPackage?: string;
+  // Promo code
+  promoCode?: string;
   // Contact
   contactName?: string;
   contactPhone?: string;
@@ -125,6 +127,9 @@ interface MovingQuote {
   maxPrice: number;
   tokensEstimate: number;
   specialSurcharge: number;
+  promoApplied?: boolean;
+  promoCode?: string;
+  rawMinPrice?: number;
 }
 
 interface TrashValetQuoteResult {
@@ -509,6 +514,20 @@ const STEPS: Step[] = [
     },
   },
 
+  // ── PROMO CODE (moving & junk — before package select so quote uses it) ───
+  {
+    id: "promoCode",
+    question: "Got a promo code? Enter it here — or skip.",
+    subtext: "JC222 unlocks special pricing on small jobs. Leave blank to skip.",
+    type: "text",
+    placeholder: "e.g. JC222",
+    optional: true,
+    show: (a) => {
+      const svc = getServiceLabel(a.serviceType || "");
+      return svc === "Moving" || svc === "Junk Removal";
+    },
+  },
+
   // ── PACKAGE SELECTION (priceable services) ────────────────────────────────
   {
     id: "selectedPackage",
@@ -600,8 +619,18 @@ function computeMovingQuote(a: Answers): MovingQuote {
 
   const RATE = 75;
   const round25 = (n: number) => Math.ceil(n / 25) * 25;
-  const minPrice = round25(crew * minH * RATE) + specialSurcharge;
-  const maxPrice = round25(crew * maxH * RATE) + specialSurcharge;
+  const rawMin = round25(crew * minH * RATE) + specialSurcharge;
+  const rawMax = round25(crew * maxH * RATE) + specialSurcharge;
+
+  // $300 floor for small jobs — JC222 promo lowers it to $222
+  const SMALL_JOB_FLOOR = 300;
+  const promoCodeRaw = (a.promoCode || "").toUpperCase().trim();
+  const isJC222 = promoCodeRaw === "JC222";
+  const effectiveFloor = isJC222 ? 222 : SMALL_JOB_FLOOR;
+  const isSmallJob = rawMin < SMALL_JOB_FLOOR;
+
+  const minPrice = isSmallJob ? Math.max(rawMin, effectiveFloor) : rawMin;
+  const maxPrice = isSmallJob ? Math.max(rawMax, effectiveFloor) : rawMax;
   const midPrice = (minPrice + maxPrice) / 2;
   const tokensEstimate = Math.round(midPrice * 50);
 
@@ -614,6 +643,9 @@ function computeMovingQuote(a: Answers): MovingQuote {
     maxPrice,
     tokensEstimate,
     specialSurcharge,
+    promoApplied: isSmallJob && isJC222,
+    promoCode: isJC222 ? "JC222" : undefined,
+    rawMinPrice: isSmallJob ? rawMin : undefined,
   };
 }
 
@@ -780,6 +812,10 @@ function shortAnswer(stepId: string, val: string | string[]): string {
   }
   if (stepId === "depositAcknowledged") return "Deposit terms acknowledged ✓";
   if (stepId === "selectedPackage") return `Package selected: ${val}`;
+  if (stepId === "promoCode") {
+    const code = (val as string).toUpperCase().trim();
+    return code ? `Promo code: ${code}` : "No promo code";
+  }
   return val;
 }
 
@@ -1150,6 +1186,12 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
                   </p>
                   {pendingQuote.type === "moving" && (pendingQuote as MovingQuote).specialSurcharge > 0 && (
                     <p className="text-xs text-orange-400 mt-1">Includes ${(pendingQuote as MovingQuote).specialSurcharge} specialty item surcharge</p>
+                  )}
+                  {pendingQuote.type === "moving" && (pendingQuote as MovingQuote).promoApplied && (
+                    <div className="mt-2 inline-flex items-center gap-1 bg-green-900/50 border border-green-500/40 rounded-full px-3 py-1">
+                      <span className="text-[11px] font-bold text-green-400">🏷️ JC222 Applied</span>
+                      <span className="text-[10px] text-green-300/80">— $300 floor → $222</span>
+                    </div>
                   )}
                   <p className="text-[11px] text-slate-500 mt-1">Final price confirmed by Darrell after review</p>
                 </div>
