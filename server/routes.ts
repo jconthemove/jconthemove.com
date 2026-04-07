@@ -3305,17 +3305,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Always start as "new" so crew job board can see it immediately
       const lead = await storage.createLead({ ...leadData, status: "new" });
       
-      // Send email notification
+      // Send email notification (non-blocking — a failed email must never reject the booking)
       const emailContent = generateLeadNotificationEmail(lead);
       const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
-      
-      await sendEmail({
-        to: companyEmail,
-        from: companyEmail,
-        subject: `New ${lead.serviceType} Lead - ${lead.firstName} ${lead.lastName}`,
-        text: emailContent.text,
-        html: emailContent.html,
-      });
+      try {
+        await sendEmail({
+          to: companyEmail,
+          from: companyEmail,
+          subject: `New ${lead.serviceType} Lead - ${lead.firstName} ${lead.lastName}`,
+          text: emailContent.text,
+          html: emailContent.html,
+        });
+      } catch (emailError) {
+        console.error("Admin email notification failed (lead still saved):", emailError);
+      }
 
       // Send SMS notification for new quote to admin
       try {
@@ -3749,18 +3752,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.set("Cache-Control", "no-store, no-cache, must-revalidate");
     res.set("Pragma", "no-cache");
     try {
-      const userId = (req.session as any).userId;
-      console.log(`✅ Authentication successful - Fetching user data for userId: ${userId}`);
-      const user = await storage.getUser(userId);
-      console.log(`User data retrieved:`, user ? `found - ${user.email} with role ${user.role}` : 'not found');
-      
+      // req.user is already populated (and fresh from DB) by isAuthenticatedAllowPending middleware.
+      // Using it directly avoids a redundant DB round-trip and correctly supports both
+      // session-cookie auth (web) and JWT Bearer auth (mobile).
+      const user = req.user;
       if (!user) {
-        console.error(`❌ User not found in database for userId: ${userId}`);
+        console.error(`❌ User not found for authenticated request`);
         return res.status(404).json({ message: "User not found" });
       }
-      
-      console.log(`📤 Returning user data for ${user.email}`);
-      // Sanitize user object - remove sensitive fields
+      console.log(`📤 Returning user data for ${user.email} (role: ${user.role}, tosAccepted: ${user.tosAccepted})`);
       const { passwordHash, ...sanitizedUser } = user;
       res.json(sanitizedUser);
     } catch (error) {

@@ -232,7 +232,7 @@ export default function CustomerBookPage() {
   const { data: pricing } = useQuery<Pricing>({ queryKey: ["/api/pricing"], retry: 2 });
   const { data: catalog } = useQuery<CatalogDefs>({ queryKey: ["/api/pricing/catalog-definitions"], retry: 2 });
 
-  const ratePerMoverHour = pricing?.ratePerMoverHour ?? 60;
+  const ratePerMoverHour = pricing?.ratePerMoverHour ?? 85;
   const shortJobFull = pricing?.shortJobFull ?? 300;
 
   const movingPackages = catalog?.movingPackages?.length ? catalog.movingPackages : FALLBACK_MOVING;
@@ -900,7 +900,7 @@ export default function CustomerBookPage() {
               <div className="flex items-center gap-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl">
                 <Zap className="h-5 w-5 text-amber-500 flex-shrink-0" />
                 <div className="text-sm">
-                  <span className="font-semibold text-amber-500">Earn ~{50 + Math.round(calcTotal() * 15).toLocaleString()} JCMOVES</span>
+                  <span className="font-semibold text-amber-500">Earn ~{(50 + 1500 + Math.round(calcTotal() * 15)).toLocaleString()} JCMOVES</span>
                   <span className="text-muted-foreground"> on this booking!</span>
                 </div>
               </div>
