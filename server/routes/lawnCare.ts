@@ -1,11 +1,26 @@
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import { db } from "../db";
 import { lawnCareQuotes, lawnCarePlans } from "@shared/schema";
-import { calculateLawnCareQuote, shouldForceCustomEstimate } from "../lib/lawnCarePricing";
+import { calculateLawnCareQuote } from "../lib/lawnCarePricing";
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
 
 const router = Router();
+
+function requireAuth(req: Request, res: Response, next: NextFunction) {
+  const userId = (req as any).user?.id || (req.session as any)?.userId;
+  if (!userId) return res.status(401).json({ error: "Authentication required" });
+  return next();
+}
+
+function requireAdminRole(req: Request, res: Response, next: NextFunction) {
+  const user = (req as any).user;
+  const role = user?.role || user?.userType;
+  if (!user || !["admin", "business_owner"].includes(role)) {
+    return res.status(403).json({ error: "Admin access required" });
+  }
+  return next();
+}
 
 const quoteRequestSchema = z.object({
   customerName: z.string().min(1),
@@ -30,6 +45,7 @@ const quoteRequestSchema = z.object({
   notes: z.string().optional(),
 });
 
+// POST /api/lawn-care/quote — public (no auth required to submit a quote request)
 router.post("/quote", async (req: Request, res: Response) => {
   try {
     const data = quoteRequestSchema.parse(req.body);
@@ -90,7 +106,8 @@ router.post("/quote", async (req: Request, res: Response) => {
   }
 });
 
-router.get("/quotes", async (_req: Request, res: Response) => {
+// GET /api/lawn-care/quotes — admin only
+router.get("/quotes", requireAuth, requireAdminRole, async (_req: Request, res: Response) => {
   try {
     const quotes = await db.select().from(lawnCareQuotes).orderBy(desc(lawnCareQuotes.createdAt));
     return res.json(quotes);
@@ -100,7 +117,8 @@ router.get("/quotes", async (_req: Request, res: Response) => {
   }
 });
 
-router.post("/approve/:id", async (req: Request, res: Response) => {
+// POST /api/lawn-care/approve/:id — admin only
+router.post("/approve/:id", requireAuth, requireAdminRole, async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id);
     const [updated] = await db.update(lawnCareQuotes)
@@ -114,7 +132,8 @@ router.post("/approve/:id", async (req: Request, res: Response) => {
   }
 });
 
-router.post("/mark-paid/:id", async (req: Request, res: Response) => {
+// POST /api/lawn-care/mark-paid/:id — admin only
+router.post("/mark-paid/:id", requireAuth, requireAdminRole, async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id);
     const [updated] = await db.update(lawnCareQuotes)
@@ -128,7 +147,8 @@ router.post("/mark-paid/:id", async (req: Request, res: Response) => {
   }
 });
 
-router.post("/activate-plan/:id", async (req: Request, res: Response) => {
+// POST /api/lawn-care/activate-plan/:id — admin only
+router.post("/activate-plan/:id", requireAuth, requireAdminRole, async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id);
     const [quote] = await db.select().from(lawnCareQuotes).where(eq(lawnCareQuotes.id, id));
@@ -168,7 +188,8 @@ router.post("/activate-plan/:id", async (req: Request, res: Response) => {
   }
 });
 
-router.get("/plans", async (_req: Request, res: Response) => {
+// GET /api/lawn-care/plans — admin only
+router.get("/plans", requireAuth, requireAdminRole, async (_req: Request, res: Response) => {
   try {
     const plans = await db.select().from(lawnCarePlans).orderBy(desc(lawnCarePlans.createdAt));
     return res.json(plans);
