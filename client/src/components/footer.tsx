@@ -1,4 +1,4 @@
-import { Facebook, Instagram, Chrome } from "lucide-react";
+import { Facebook, Instagram, MapPin } from "lucide-react";
 
 export default function Footer() {
   return (
@@ -12,14 +12,14 @@ export default function Footer() {
               Licensed, insured, and committed to making your move stress-free.
             </p>
             <div className="flex space-x-4">
-              <a href="#" className="text-background/80 hover:text-background transition-colors" data-testid="link-facebook">
+              <a href="https://www.facebook.com/JCOnTheMove/" target="_blank" rel="noopener noreferrer" className="text-background/80 hover:text-background transition-colors" data-testid="link-facebook" aria-label="Facebook">
                 <Facebook className="h-5 w-5" />
               </a>
-              <a href="#" className="text-background/80 hover:text-background transition-colors" data-testid="link-instagram">
+              <a href="https://www.instagram.com/jconthemove/" target="_blank" rel="noopener noreferrer" className="text-background/80 hover:text-background transition-colors" data-testid="link-instagram" aria-label="Instagram">
                 <Instagram className="h-5 w-5" />
               </a>
-              <a href="#" className="text-background/80 hover:text-background transition-colors" data-testid="link-google">
-                <Chrome className="h-5 w-5" />
+              <a href="https://www.google.com/maps/place/JC+ON+THE+MOVE" target="_blank" rel="noopener noreferrer" className="text-background/80 hover:text-background transition-colors" data-testid="link-google" aria-label="Google Maps">
+                <MapPin className="h-5 w-5" />
               </a>
             </div>
           </div>
@@ -27,10 +27,10 @@ export default function Footer() {
           <div>
             <h4 className="text-lg font-semibold mb-4">Services</h4>
             <ul className="space-y-2 text-background/80">
-              <li><a href="#" className="hover:text-background transition-colors" data-testid="link-residential">Residential Moving</a></li>
-              <li><a href="#" className="hover:text-background transition-colors" data-testid="link-commercial">Commercial Moving</a></li>
-              <li><a href="#" className="hover:text-background transition-colors" data-testid="link-junk">Junk Removal</a></li>
-              <li><a href="#" className="hover:text-background transition-colors" data-testid="link-storage">Storage Solutions</a></li>
+              <li><a href="/services" className="hover:text-background transition-colors" data-testid="link-residential">Residential Moving</a></li>
+              <li><a href="/services" className="hover:text-background transition-colors" data-testid="link-commercial">Commercial Moving</a></li>
+              <li><a href="/services" className="hover:text-background transition-colors" data-testid="link-junk">Junk Removal</a></li>
+              <li><a href="/quote?service=storage" className="hover:text-background transition-colors" data-testid="link-storage">Storage Solutions</a></li>
             </ul>
           </div>
           

@@ -114,7 +114,7 @@ export default function QuotePage() {
 
         <div className="mt-8 text-center text-slate-300">
           <p className="mb-2">Need immediate help?</p>
-          <a href="tel:(906) 285-9312" className="text-xl font-bold text-primary hover:text-primary/80 transition-colors">
+          <a href="tel:+19062859312" className="text-xl font-bold text-primary hover:text-primary/80 transition-colors">
             Call (906) 285-9312
           </a>
         </div>

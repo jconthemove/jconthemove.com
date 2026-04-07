@@ -826,7 +826,7 @@ export default function ServicesPage() {
               </div>
             </div>
           </div>
-          <Link href="/promo-half-day">
+          <Link href="/promo/half-day">
             <Button className="w-full bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 font-black border-0 shadow-lg shadow-orange-500/20">
               View Package &amp; Book <ChevronRight className="h-4 w-4 ml-1" />
             </Button>
@@ -890,7 +890,7 @@ export default function ServicesPage() {
                 Book Now — Free Quote <ChevronRight className="ml-1 h-5 w-5" />
               </Button>
             </Link>
-            <a href="tel:(906) 285-9312">
+            <a href="tel:+19062859312">
               <Button size="lg" variant="outline" className="border-slate-600 text-white hover:bg-slate-800 font-bold">
                 <Phone className="h-4 w-4 mr-2" /> (906) 285-9312
               </Button>
