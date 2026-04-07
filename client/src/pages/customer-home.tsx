@@ -2,9 +2,11 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
-import { Coins, Phone, MessageSquare, ChevronRight, Loader2, Search, Truck, Trash2, Wrench, Snowflake, X, PaintBucket, Layers, Leaf } from "lucide-react";
+import { Coins, Phone, MessageSquare, ChevronRight, Loader2, Search, Truck, Trash2, Wrench, Snowflake, X, PaintBucket, Layers, Leaf, Sparkles, MessageCircle } from "lucide-react";
 import { JunkFlow, MovingFlow } from "@/components/ServiceSelector";
 import LiveCrewBeacon from "@/components/LiveCrewBeacon";
+import { BookingChatbot } from "@/components/booking-chatbot";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 // ── Job Status Card (post-booking polling) ────────────────────────────────────
 
@@ -96,6 +98,7 @@ export default function CustomerHomePage() {
   const { user } = useAuth();
   const [activeBooking, setActiveBooking] = useState<{ jobId: string; totalPrice: number } | null>(null);
   const [expanded, setExpanded] = useState<ExpandedService>(null);
+  const [showChatbot, setShowChatbot] = useState(false);
 
   const { data: wallet } = useQuery<{ tokenBalance: string }>({
     queryKey: ["/api/rewards/wallet"],
@@ -141,7 +144,26 @@ export default function CustomerHomePage() {
           </button>
         </div>
 
-        {/* Hero CTAs */}
+        {/* HERO CHATBOT CTA */}
+        <button
+          onClick={() => setShowChatbot(true)}
+          className="w-full relative overflow-hidden flex items-center gap-4 bg-gradient-to-br from-teal-900/60 to-blue-900/40 border border-teal-500/30 hover:border-teal-500/60 rounded-2xl px-5 py-4 active:scale-[0.98] transition-all text-left"
+        >
+          <div className="absolute inset-0 bg-gradient-to-br from-teal-500/5 to-transparent pointer-events-none" />
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-teal-500 to-blue-600 flex items-center justify-center shrink-0 shadow-lg shadow-teal-500/20">
+            <MessageCircle className="h-6 w-6 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-0.5">
+              <p className="font-black text-white text-base">Get a Quote</p>
+              <span className="text-[9px] font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30 px-1.5 py-0.5 rounded-full uppercase tracking-wide">Fast · Free</span>
+            </div>
+            <p className="text-zinc-400 text-xs">All 8 services · Takes 60 seconds · Reviewed by Darrell</p>
+          </div>
+          <Sparkles className="h-5 w-5 text-teal-400 shrink-0" />
+        </button>
+
+        {/* Contact CTAs */}
         <div className="flex items-center gap-2">
           <button
             onClick={() => window.open("tel:+19062226009", "_self")}
@@ -367,6 +389,27 @@ export default function CustomerHomePage() {
         </button>
 
       </div>
+
+      {/* Chatbot Sheet */}
+      <Sheet open={showChatbot} onOpenChange={setShowChatbot}>
+        <SheetContent
+          side="bottom"
+          className="bg-zinc-950 border-zinc-800 rounded-t-3xl pb-10 h-[90vh] flex flex-col overflow-hidden"
+        >
+          <SheetHeader className="text-left mb-3 shrink-0">
+            <SheetTitle className="text-white font-black text-lg">Get a Quote</SheetTitle>
+            <p className="text-zinc-400 text-xs">All 8 services · Real human review before anything is sent</p>
+          </SheetHeader>
+          <div className="flex-1 overflow-hidden min-h-0">
+            <BookingChatbot
+              onClose={() => setShowChatbot(false)}
+              embedded={true}
+              showCloseButton={false}
+              className="h-full"
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

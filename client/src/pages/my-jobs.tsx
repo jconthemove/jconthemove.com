@@ -5,7 +5,7 @@ import {
   MapPin, Calendar, Loader2, Truck, Trash2, Snowflake, Wrench,
   Plus, CheckCircle, Clock, AlertCircle, Users, DollarSign, X,
   Package, ChevronRight, RefreshCw, Coins, HelpCircle, Phone,
-  FileText, Star, ArrowRight, Info
+  FileText, Star, ArrowRight, Info, ExternalLink, Zap
 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { LucideIcon } from "lucide-react";
@@ -26,6 +26,61 @@ interface CustomerJob {
   details?: string;
   notes?: string;
   createdAt: string;
+  squarePaymentUrl?: string | null;
+  depositRequired?: boolean;
+  depositAmount?: number;
+  depositPaid?: boolean;
+}
+
+// ── Status Tracker ────────────────────────────────────────────────────────────
+const STATUS_STEPS = [
+  { key: "submitted", label: "Submitted", icon: FileText },
+  { key: "under_review", label: "Under Review", icon: Clock },
+  { key: "quote_sent", label: "Quote Sent", icon: DollarSign },
+  { key: "paid", label: "Paid", icon: CheckCircle },
+  { key: "dispatched", label: "Dispatched", icon: Zap },
+];
+
+function getStepIndex(status: string): number {
+  if (["chatbot_pending", "quote_requested", "new", "deposit_pending"].includes(status)) return 0;
+  if (["quoted", "under_review"].includes(status)) return 1;
+  if (["quote_sent", "invoice_sent"].includes(status)) return 2;
+  if (["paid", "completed"].includes(status)) return 3;
+  if (["dispatched", "available", "confirmed", "in_progress", "accepted"].includes(status)) return 4;
+  if (status === "cancelled") return -1;
+  return 0;
+}
+
+function StatusTracker({ status }: { status: string }) {
+  const stepIdx = getStepIndex(status);
+  if (status === "cancelled") return null;
+
+  return (
+    <div className="flex items-center gap-0 mb-3">
+      {STATUS_STEPS.map((step, i) => {
+        const Icon = step.icon;
+        const isComplete = i < stepIdx;
+        const isActive = i === stepIdx;
+        return (
+          <div key={step.key} className="flex items-center flex-1 min-w-0">
+            <div className="flex flex-col items-center flex-shrink-0">
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                isComplete ? "bg-teal-500" : isActive ? "bg-orange-500 ring-2 ring-orange-500/30" : "bg-zinc-800 border border-zinc-700"
+              }`}>
+                <Icon className={`h-3 w-3 ${isComplete || isActive ? "text-white" : "text-zinc-600"}`} />
+              </div>
+              <p className={`text-[9px] font-medium mt-0.5 text-center leading-tight ${
+                isComplete ? "text-teal-400" : isActive ? "text-orange-400" : "text-zinc-600"
+              }`}>{step.label}</p>
+            </div>
+            {i < STATUS_STEPS.length - 1 && (
+              <div className={`h-0.5 flex-1 mx-0.5 mb-3.5 ${i < stepIdx ? "bg-teal-500" : "bg-zinc-800"}`} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 // ── Service config — covers all serviceType values ────────────────────────────
@@ -62,7 +117,6 @@ type StatusInfo = {
 function getStatus(status: string): StatusInfo {
   switch (status) {
     case "completed":
-    case "paid":
       return {
         label: "Done",
         cls: "bg-green-500/15 text-green-400",
@@ -71,6 +125,17 @@ function getStatus(status: string): StatusInfo {
           bg: "bg-green-500/10", border: "border-green-500/20", iconColor: "text-green-400",
           headline: "Job Complete!",
           body: "Your job is finished. Tokens will be credited to your wallet shortly. Thank you for choosing JC on the Move!",
+        },
+      };
+    case "paid":
+      return {
+        label: "Paid",
+        cls: "bg-emerald-500/15 text-emerald-400",
+        icon: CheckCircle,
+        banner: {
+          bg: "bg-emerald-500/10", border: "border-emerald-500/20", iconColor: "text-emerald-400",
+          headline: "Payment confirmed!",
+          body: "Your payment has been received. Your crew will be dispatched shortly. Questions? Call (906) 222-6009.",
         },
       };
     case "in_progress":
@@ -106,6 +171,51 @@ function getStatus(status: string): StatusInfo {
           bg: "bg-emerald-500/10", border: "border-emerald-500/20", iconColor: "text-emerald-400",
           headline: "Your quote is ready!",
           body: "We've reviewed your request and put together a price. Call us to confirm and schedule your crew.",
+        },
+      };
+    case "quote_sent":
+    case "invoice_sent":
+      return {
+        label: "Quote Sent",
+        cls: "bg-emerald-500/15 text-emerald-400",
+        icon: DollarSign,
+        banner: {
+          bg: "bg-emerald-500/10", border: "border-emerald-500/20", iconColor: "text-emerald-400",
+          headline: "Your quote is ready — pay to lock it in!",
+          body: "Use the Pay Now button below to secure your booking. Questions? Call (906) 285-9312.",
+        },
+      };
+    case "dispatched":
+      return {
+        label: "Dispatched",
+        cls: "bg-teal-500/15 text-teal-400",
+        icon: Zap,
+        banner: {
+          bg: "bg-teal-500/10", border: "border-teal-500/20", iconColor: "text-teal-400",
+          headline: "Your crew is on the way!",
+          body: "Your crew has been dispatched and will contact you before arrival. Call (906) 285-9312 with any last-minute changes.",
+        },
+      };
+    case "under_review":
+      return {
+        label: "Under Review",
+        cls: "bg-orange-500/15 text-orange-400",
+        icon: Clock,
+        banner: {
+          bg: "bg-orange-500/10", border: "border-orange-500/20", iconColor: "text-orange-400",
+          headline: "Request under review",
+          body: "Our team is reviewing your request. We'll reach out within a few hours with your quote.",
+        },
+      };
+    case "deposit_pending":
+      return {
+        label: "Deposit Pending",
+        cls: "bg-orange-500/15 text-orange-400",
+        icon: DollarSign,
+        banner: {
+          bg: "bg-orange-500/10", border: "border-orange-500/20", iconColor: "text-orange-400",
+          headline: "Estimate deposit required",
+          body: "An estimate deposit is required before we can schedule your in-person visit. Contact us to pay: (906) 222-6009.",
         },
       };
     case "cancelled":
@@ -228,6 +338,24 @@ function JobSheet({ job, open, onClose, onNewJob }: {
 
         <div className="space-y-3">
 
+          {/* Visual Status Tracker */}
+          <StatusTracker status={job.status} />
+
+          {/* Deposit Pending badge */}
+          {job.depositRequired && !job.depositPaid && (
+            <div className="bg-orange-900/20 border border-orange-500/30 rounded-xl px-4 py-3">
+              <div className="flex items-center gap-2">
+                <DollarSign className="h-4 w-4 text-orange-400 shrink-0" />
+                <div>
+                  <p className="text-sm font-bold text-orange-300">Estimate Deposit Pending</p>
+                  <p className="text-xs text-orange-200/70">
+                    ${job.depositAmount} deposit required to schedule your estimate. Contact us to pay.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Status banner */}
           <div className={`rounded-2xl border p-4 ${st.banner.bg} ${st.banner.border}`}>
             <div className="flex items-start gap-3">
@@ -247,12 +375,28 @@ function JobSheet({ job, open, onClose, onNewJob }: {
             </div>
           </div>
 
-          {/* Quote price highlight — shown when quoted */}
-          {isQuoted && hasCost && (
+          {/* Pay Now button — shown when quote_sent with a payment URL */}
+          {(job.status === "quote_sent" || job.status === "invoice_sent") && job.squarePaymentUrl && (
+            <a
+              href={job.squarePaymentUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full flex items-center justify-center gap-2 h-12 rounded-2xl bg-emerald-500 hover:bg-emerald-400 active:scale-[0.98] transition-all text-white font-bold text-sm"
+            >
+              <DollarSign className="h-4 w-4" />
+              Pay Now
+              <ExternalLink className="h-3.5 w-3.5 ml-1 opacity-70" />
+            </a>
+          )}
+
+          {/* Quote price highlight — shown when quoted or quote_sent */}
+          {(isQuoted || job.status === "quote_sent" || job.status === "invoice_sent") && hasCost && (
             <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-4">
               <p className="text-xs text-zinc-400 mb-1 font-semibold uppercase tracking-widest">Your Quote</p>
               <p className="text-3xl font-black text-emerald-400">${price.toFixed(0)}</p>
-              <p className="text-xs text-zinc-500 mt-1">Call to confirm: <span className="text-white font-semibold">(906) 285-9312</span></p>
+              {!job.squarePaymentUrl && (
+                <p className="text-xs text-zinc-500 mt-1">Call to confirm: <span className="text-white font-semibold">(906) 285-9312</span></p>
+              )}
             </div>
           )}
 

@@ -102,6 +102,12 @@ export const leads = pgTable("leads", {
   arrivalWindow: text("arrival_window"), // e.g. "9:00 AM – 11:00 AM"
   squarePaymentUrl: text("square_payment_url"), // hosted Square payment page URL embedded in quote email
 
+  // Deposit gate for quote-only / out-of-area services
+  depositRequired: boolean("deposit_required").default(false),
+  depositAmount: decimal("deposit_amount_gate", { precision: 10, scale: 2 }),
+  depositPaid: boolean("deposit_paid").default(false),
+  isQuoteOnly: boolean("is_quote_only").default(false),
+
   // Human-readable order number (e.g. JC-000042)
   orderNumber: varchar("order_number").unique(),
 

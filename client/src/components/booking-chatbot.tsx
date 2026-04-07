@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -7,12 +7,59 @@ import { Badge } from "@/components/ui/badge";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { Send, CheckCircle2, ArrowRight, Sparkles, RotateCcw, ChevronRight, CreditCard, Clock, Users } from "lucide-react";
+import { Send, CheckCircle2, ArrowRight, Sparkles, RotateCcw, ChevronRight, AlertCircle, Users, DollarSign } from "lucide-react";
+import { calculateWindowCleaningQuote } from "@shared/windowCleaningPricing";
+import { calculateTrashValetQuote } from "@shared/trashValetPricing";
+
+// ─────────────────────────────────────────────
+// Service categories
+// ─────────────────────────────────────────────
+const PRICEABLE_SERVICES = ["Moving", "Junk Removal", "Trash Valet", "Window Cleaning"];
+const QUOTE_ONLY_SERVICES = ["Painting", "Flooring", "Roofing", "Handyman"];
+const IRONWOOD_ZIP = "49938";
+
+function isIronwoodZip(zip: string): boolean {
+  return zip.trim() === IRONWOOD_ZIP;
+}
+
+function getDepositInfo(service: string, zip: string): { required: boolean; amount: number; termsHtml: string } {
+  const isLocal = isIronwoodZip(zip);
+
+  if (service === "Handyman") {
+    if (isLocal) {
+      return {
+        required: true,
+        amount: 50,
+        termsHtml: "$50 non-refundable estimate deposit (credited toward your project upon booking).",
+      };
+    } else {
+      return {
+        required: true,
+        amount: 100,
+        termsHtml: "$100 non-refundable estimate deposit (credited toward your project upon booking).",
+      };
+    }
+  }
+
+  if (["Painting", "Flooring", "Roofing"].includes(service)) {
+    if (isLocal) {
+      return { required: false, amount: 0, termsHtml: "" };
+    } else {
+      return {
+        required: true,
+        amount: 100,
+        termsHtml: "$100 non-refundable estimate deposit (credited toward your project if you book within 6 months).",
+      };
+    }
+  }
+
+  return { required: false, amount: 0, termsHtml: "" };
+}
 
 // ─────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────
-type StepType = "choice" | "multiselect" | "text" | "contact" | "notes";
+type StepType = "choice" | "multiselect" | "text" | "contact" | "notes" | "deposit_ack" | "package_select";
 
 interface Step {
   id: string;
@@ -27,7 +74,8 @@ interface Step {
 
 interface Answers {
   serviceType?: string;
-  // Moving / Junk / Labor
+  serviceCategory?: "priceable" | "quote_only";
+  // Moving fields
   fromZip?: string;
   toZip?: string;
   moveDate?: string;
@@ -42,25 +90,34 @@ interface Answers {
   specialItems?: string[];
   packingHelp?: string;
   truckSituation?: string;
-  // Snow / Handyman / Painting / Flooring
-  propertyType?: string;
-  scopeSize?: string;
-  projectDate?: string;
-  serviceAddress?: string;
-  // Window Cleaning
-  windowCount?: string;
-  windowAddress?: string;
-  // Trash Valet
-  trashUnits?: string;
-  trashAddress?: string;
-  // Contact (all services)
+  // Trash Valet fields
+  trashCans?: string;
+  trashBags?: string;
+  recyclingEnabled?: string;
+  trashPlanType?: string;
+  // Window Cleaning fields
+  standardWindows?: string;
+  largeWindows?: string;
+  ladderWindows?: string;
+  windowInside?: string;
+  windowOutside?: string;
+  // Quote-only fields
+  jobScope?: string;
+  jobLocation?: string;
+  // Deposit
+  depositZip?: string;
+  depositAcknowledged?: string;
+  // Package selection
+  selectedPackage?: string;
+  // Contact
   contactName?: string;
   contactPhone?: string;
   contactEmail?: string;
   notes?: string;
 }
 
-interface Quote {
+interface MovingQuote {
+  type: "moving";
   crew: number;
   minHrs: number;
   maxHrs: number;
@@ -68,19 +125,40 @@ interface Quote {
   maxPrice: number;
   tokensEstimate: number;
   specialSurcharge: number;
-  isFlat?: boolean;       // flat-rate services (window, trash)
-  isTiered?: boolean;     // size-tier services (snow, handyman, painting, flooring)
-  serviceLabel?: string;
 }
 
-interface SelectedPackage {
+interface TrashValetQuoteResult {
+  type: "trash_valet";
+  finalMonthlyPrice: number;
+  minPrice: number;
+  maxPrice: number;
+}
+
+interface WindowQuoteResult {
+  type: "window_cleaning";
+  paneCount: number;
+  minPrice: number;
+  maxPrice: number;
+  total: number;
+}
+
+interface QuoteOnlyResult {
+  type: "quote_only";
+  service: string;
+  minPrice: number;
+  maxPrice: number;
+}
+
+type QuoteResult = MovingQuote | TrashValetQuoteResult | WindowQuoteResult | QuoteOnlyResult;
+
+interface CrewPackage {
   id: string;
   label: string;
-  price: number;        // for moving packages (exact)
-  minPrice?: number;    // for range packages
-  maxPrice?: number;
+  desc: string;
+  minPrice: number;
+  maxPrice: number;
   crew?: number;
-  hours?: number;
+  tag?: string;
 }
 
 interface Message {
@@ -89,75 +167,79 @@ interface Message {
   ts: number;
 }
 
-interface Pricing {
-  ratePerMoverHour: number;
-  earnRatePerDollar?: number;
-  bookingRequestBonus?: number;
-  completionFlatBonus?: number;
-  snowRemovalHourlyRate?: number;
-  handymanHourlyRate?: number;
-  paintingHourlyRate?: number;
-  flooringPerSqFt?: number;
-  windowCleaningPerPane?: number;
-  trashValetBaseMonthly?: number;
-}
-
-// ─────────────────────────────────────────────
-// Service group helpers
-// ─────────────────────────────────────────────
-const MOVING_SERVICES = [
-  "📦 Local Move (origin → destination)",
-  "💪 Loading Help Only (you drive)",
-  "🏠 Unloading Help Only (you arrive)",
-  "🗑️ Junk Removal",
-  "📫 Packing Only (no truck)",
-];
-const TIERED_SERVICES = [
-  "❄️ Snow Removal",
-  "🔧 Handyman",
-  "🎨 Painting",
-  "🪵 Flooring",
-];
-const FLAT_SERVICES = [
-  "🪟 Window Cleaning",
-  "🗑️ Trash Valet (weekly curbside)",
-];
-
-function isMovingSvc(s?: string) { return MOVING_SERVICES.includes(s || ""); }
-function isJunkSvc(s?: string) { return s === "🗑️ Junk Removal"; }
-function isTieredSvc(s?: string) { return TIERED_SERVICES.includes(s || ""); }
-function isWindowSvc(s?: string) { return s === "🪟 Window Cleaning"; }
-function isTrashSvc(s?: string) { return s === "🗑️ Trash Valet (weekly curbside)"; }
-function isSnowSvc(s?: string) { return s === "❄️ Snow Removal"; }
-function isHandymanSvc(s?: string) { return s === "🔧 Handyman"; }
-function isPaintingSvc(s?: string) { return s === "🎨 Painting"; }
-function isFlooringSvc(s?: string) { return s === "🪵 Flooring"; }
-
 // ─────────────────────────────────────────────
 // Step Definitions
 // ─────────────────────────────────────────────
+
+function getServiceLabel(rawType: string): string {
+  if (rawType.includes("Moving") || rawType.includes("Local Move") || rawType.includes("Loading") || rawType.includes("Unloading") || rawType.includes("Packing Only")) return "Moving";
+  if (rawType.includes("Junk")) return "Junk Removal";
+  if (rawType.includes("Trash Valet")) return "Trash Valet";
+  if (rawType.includes("Window")) return "Window Cleaning";
+  if (rawType.includes("Painting")) return "Painting";
+  if (rawType.includes("Flooring")) return "Flooring";
+  if (rawType.includes("Roofing")) return "Roofing";
+  if (rawType.includes("Handyman")) return "Handyman";
+  return "Moving";
+}
+
+function isMovingService(a: Answers) {
+  const s = a.serviceType || "";
+  return s.includes("Move") || s.includes("Loading") || s.includes("Unloading") || s.includes("Packing Only");
+}
+
+function isJunkService(a: Answers) {
+  return (a.serviceType || "").includes("Junk");
+}
+
+function isTrashValetService(a: Answers) {
+  return (a.serviceType || "").includes("Trash Valet");
+}
+
+function isWindowCleaningService(a: Answers) {
+  return (a.serviceType || "").includes("Window");
+}
+
+function isPriceableService(a: Answers) {
+  const svc = getServiceLabel(a.serviceType || "");
+  return PRICEABLE_SERVICES.includes(svc);
+}
+
+function isQuoteOnlyService(a: Answers) {
+  const svc = getServiceLabel(a.serviceType || "");
+  return QUOTE_ONLY_SERVICES.includes(svc);
+}
+
+function needsDepositCheck(a: Answers) {
+  return isQuoteOnlyService(a);
+}
+
 const STEPS: Step[] = [
-  // ── 1. Service type ──────────────────────────
   {
     id: "serviceType",
     question: "What service do you need?",
     subtext: "Pick the one that best describes your situation.",
     type: "choice",
     options: [
-      ...MOVING_SERVICES,
-      ...TIERED_SERVICES,
-      ...FLAT_SERVICES,
+      "📦 Moving (local or long-distance)",
+      "🗑️ Junk Removal",
+      "🗑️ Trash Valet (weekly curbside)",
+      "🪟 Window Cleaning",
+      "🎨 Painting",
+      "🪵 Flooring",
+      "🏠 Roofing",
+      "🔧 Handyman",
     ],
   },
 
-  // ── Moving / Junk / Labor ────────────────────
+  // ── MOVING STEPS ──────────────────────────────────────────────────────────
   {
     id: "fromZip",
     question: "What ZIP code are you moving FROM?",
     subtext: "Enter the 5-digit ZIP of the pickup address.",
     type: "text",
     placeholder: "e.g. 48201",
-    show: (a) => isMovingSvc(a.serviceType),
+    show: (a) => isMovingService(a),
   },
   {
     id: "toZip",
@@ -165,7 +247,7 @@ const STEPS: Step[] = [
     subtext: "Enter the 5-digit ZIP of the drop-off address.",
     type: "text",
     placeholder: "e.g. 48103",
-    show: (a) => a.serviceType === "📦 Local Move (origin → destination)",
+    show: (a) => isMovingService(a) && (a.serviceType || "").includes("Moving"),
   },
   {
     id: "moveDate",
@@ -179,11 +261,11 @@ const STEPS: Step[] = [
       "⏳ 2+ months out",
       "🌀 Flexible / Not sure",
     ],
-    show: (a) => isMovingSvc(a.serviceType),
+    show: (a) => isMovingService(a) || isJunkService(a),
   },
   {
     id: "homeSize",
-    question: "What's the size of the space being moved?",
+    question: "What's the size of the space?",
     subtext: "Pick the closest match.",
     type: "choice",
     options: [
@@ -197,14 +279,14 @@ const STEPS: Step[] = [
       "4+ Bedroom House",
       "Commercial / Office",
     ],
-    show: (a) => isMovingSvc(a.serviceType),
+    show: (a) => isMovingService(a) || isJunkService(a),
   },
   {
     id: "originFloor",
     question: "Which floor are you on at the PICKUP location?",
     type: "choice",
     options: ["Ground Floor / 1st", "2nd Floor", "3rd Floor", "4th Floor or Higher"],
-    show: (a) => isMovingSvc(a.serviceType) && !isJunkSvc(a.serviceType),
+    show: (a) => isMovingService(a),
   },
   {
     id: "originElevator",
@@ -212,8 +294,7 @@ const STEPS: Step[] = [
     type: "choice",
     options: ["✅ Yes, there's an elevator", "🪜 No elevator — stairs only"],
     show: (a) =>
-      isMovingSvc(a.serviceType) &&
-      !isJunkSvc(a.serviceType) &&
+      isMovingService(a) &&
       !["Ground Floor / 1st"].includes(a.originFloor || ""),
   },
   {
@@ -221,7 +302,7 @@ const STEPS: Step[] = [
     question: "Which floor at the DROP-OFF location?",
     type: "choice",
     options: ["Ground Floor / 1st", "2nd Floor", "3rd Floor", "4th Floor or Higher"],
-    show: (a) => a.serviceType === "📦 Local Move (origin → destination)",
+    show: (a) => isMovingService(a) && (a.serviceType || "").includes("Moving"),
   },
   {
     id: "destElevator",
@@ -229,7 +310,8 @@ const STEPS: Step[] = [
     type: "choice",
     options: ["✅ Yes, there's an elevator", "🪜 No elevator — stairs only"],
     show: (a) =>
-      a.serviceType === "📦 Local Move (origin → destination)" &&
+      isMovingService(a) &&
+      (a.serviceType || "").includes("Moving") &&
       !["Ground Floor / 1st"].includes(a.destFloor || ""),
   },
   {
@@ -242,10 +324,7 @@ const STEPS: Step[] = [
       "🚶 Short walk (30–100 ft)",
       "🏃 Long carry (100 ft+)",
     ],
-    show: (a) =>
-      isMovingSvc(a.serviceType) &&
-      !isJunkSvc(a.serviceType) &&
-      a.serviceType !== "📫 Packing Only (no truck)",
+    show: (a) => isMovingService(a),
   },
   {
     id: "furniture",
@@ -262,7 +341,7 @@ const STEPS: Step[] = [
       "Refrigerator", "Washer / Dryer",
       "Stove / Range", "None of the above",
     ],
-    show: (a) => isMovingSvc(a.serviceType) && !isJunkSvc(a.serviceType),
+    show: (a) => isMovingService(a),
   },
   {
     id: "boxCount",
@@ -273,7 +352,7 @@ const STEPS: Step[] = [
       "Under 10 boxes", "10–25 boxes", "25–50 boxes",
       "50–75 boxes", "75–100 boxes", "100+ boxes",
     ],
-    show: (a) => isMovingSvc(a.serviceType) && !isJunkSvc(a.serviceType),
+    show: (a) => isMovingService(a),
   },
   {
     id: "specialItems",
@@ -288,7 +367,7 @@ const STEPS: Step[] = [
       "🔒 Heavy Safe (300 lbs+)",
       "None of these",
     ],
-    show: (a) => isMovingSvc(a.serviceType),
+    show: (a) => isMovingService(a) || isJunkService(a),
   },
   {
     id: "packingHelp",
@@ -300,7 +379,7 @@ const STEPS: Step[] = [
       "📦 Pack a few fragile items",
       "🏠 Full packing service (whole home)",
     ],
-    show: (a) => isMovingSvc(a.serviceType) && !isJunkSvc(a.serviceType),
+    show: (a) => isMovingService(a),
   },
   {
     id: "truckSituation",
@@ -311,196 +390,164 @@ const STEPS: Step[] = [
       "🚗 I have my own truck / rental",
       "📋 Not sure yet",
     ],
-    show: (a) => ["📦 Local Move (origin → destination)", "💪 Loading Help Only (you drive)"].includes(a.serviceType || ""),
+    show: (a) => isMovingService(a) && (a.serviceType || "").includes("Moving"),
   },
 
-  // ── Snow / Handyman / Painting / Flooring ────
+  // ── TRASH VALET STEPS ──────────────────────────────────────────────────────
   {
-    id: "propertyType",
-    question: "What type of property?",
+    id: "trashCans",
+    question: "How many trash cans do you have?",
+    subtext: "This is for weekly trash pickup.",
     type: "choice",
-    options: [
-      "🏠 Single-Family Home",
-      "🏢 Condo / Apartment",
-      "🏗️ Commercial / Business",
-      "🏡 Multi-Unit Building",
-    ],
-    show: (a) => isTieredSvc(a.serviceType),
+    options: ["1 can", "2 cans", "3 cans", "4+ cans"],
+    show: (a) => isTrashValetService(a),
   },
   {
-    id: "scopeSize",
-    question: "How would you describe the scope of work?",
+    id: "trashBags",
+    question: "Any extra bags beyond your cans?",
     type: "choice",
-    options: [
-      "Small — quick task or single area",
-      "Medium — half-day project",
-      "Large — full day or multiple areas",
-      "XL — multi-day or whole home",
-      "Not sure — I need a quote on-site",
-    ],
-    show: (a) => isTieredSvc(a.serviceType),
+    options: ["No extra bags", "1–4 extra bags", "5–9 extra bags", "10+ extra bags"],
+    show: (a) => isTrashValetService(a),
   },
   {
-    id: "projectDate",
-    question: "When are you looking to get this done?",
+    id: "recyclingEnabled",
+    question: "Do you want bi-weekly recycling pickup?",
+    type: "choice",
+    options: ["✅ Yes, add recycling", "❌ No, trash only"],
+    show: (a) => isTrashValetService(a),
+  },
+  {
+    id: "trashPlanType",
+    question: "What plan type works best for you?",
+    type: "choice",
+    options: ["📅 Monthly (pay each month)", "📆 Yearly (save 1 month — 11 months charged)"],
+    show: (a) => isTrashValetService(a),
+  },
+  {
+    id: "depositZip",
+    question: "What's the ZIP code for your service address?",
+    subtext: "We'll use this to confirm service availability.",
+    type: "text",
+    placeholder: "e.g. 49938",
+    show: (a) => isTrashValetService(a),
+  },
+
+  // ── WINDOW CLEANING STEPS ─────────────────────────────────────────────────
+  {
+    id: "standardWindows",
+    question: "How many standard-size windows do you have?",
+    subtext: "Standard = typical residential window.",
+    type: "text",
+    placeholder: "e.g. 10",
+    show: (a) => isWindowCleaningService(a),
+  },
+  {
+    id: "largeWindows",
+    question: "How many large / picture windows?",
+    subtext: "Large = floor-to-ceiling or oversized pane (counts as 2 panes).",
+    type: "text",
+    placeholder: "e.g. 3",
+    show: (a) => isWindowCleaningService(a),
+  },
+  {
+    id: "ladderWindows",
+    question: "How many windows require a ladder?",
+    subtext: "2nd floor or higher. These are $10/pane.",
+    type: "text",
+    placeholder: "e.g. 0",
+    show: (a) => isWindowCleaningService(a),
+  },
+  {
+    id: "windowInside",
+    question: "Do you want inside cleaning too?",
+    type: "choice",
+    options: ["✅ Yes — inside + outside", "❌ Outside only"],
+    show: (a) => isWindowCleaningService(a),
+  },
+
+  // ── QUOTE-ONLY SERVICE STEPS ──────────────────────────────────────────────
+  {
+    id: "jobScope",
+    question: "Describe the scope of work:",
+    subtext: "Rough size, number of rooms, square footage, or area — whatever you know.",
+    type: "text",
+    placeholder: "e.g. 2 bedrooms, approx 800 sq ft of hardwood",
+    show: (a) => isQuoteOnlyService(a),
+  },
+  {
+    id: "jobLocation",
+    question: "What's the ZIP code for the job?",
+    subtext: "We use this to determine if a free local estimate or deposit applies.",
+    type: "text",
+    placeholder: "e.g. 49938",
+    show: (a) => isQuoteOnlyService(a),
+  },
+  {
+    id: "moveDate",
+    question: "When are you looking to get started?",
     type: "choice",
     options: [
       "🔥 ASAP / This week",
       "📅 Next week",
       "🗓️ 2–3 weeks out",
       "📆 Next month",
-      "🌀 Flexible",
+      "⏳ 2+ months out",
+      "🌀 Flexible / Not sure",
     ],
-    show: (a) => isTieredSvc(a.serviceType),
+    show: (a) => isQuoteOnlyService(a),
   },
   {
-    id: "serviceAddress",
-    question: "What's the service address or ZIP code?",
-    type: "text",
-    placeholder: "e.g. 123 Main St or ZIP 48201",
-    show: (a) => isTieredSvc(a.serviceType),
+    id: "depositAcknowledged",
+    question: "Estimate deposit acknowledgment",
+    type: "deposit_ack",
+    show: (a) => {
+      if (!isQuoteOnlyService(a)) return false;
+      const zip = a.jobLocation || "";
+      const svc = getServiceLabel(a.serviceType || "");
+      const dep = getDepositInfo(svc, zip);
+      return dep.required;
+    },
   },
 
-  // ── Window Cleaning ──────────────────────────
+  // ── PACKAGE SELECTION (priceable services) ────────────────────────────────
   {
-    id: "windowCount",
-    question: "Roughly how many windows (panes) need cleaning?",
-    type: "choice",
-    options: [
-      "1–5 panes",
-      "6–10 panes",
-      "11–20 panes",
-      "21–30 panes",
-      "30+ panes",
-    ],
-    show: (a) => isWindowSvc(a.serviceType),
-  },
-  {
-    id: "windowAddress",
-    question: "What's the service address or ZIP?",
-    type: "text",
-    placeholder: "e.g. 123 Main St or ZIP 48201",
-    show: (a) => isWindowSvc(a.serviceType),
+    id: "selectedPackage",
+    question: "Choose your crew package:",
+    type: "package_select",
+    show: (a) => isPriceableService(a) && !isQuoteOnlyService(a),
   },
 
-  // ── Trash Valet ──────────────────────────────
-  {
-    id: "trashUnits",
-    question: "How many units need weekly trash valet service?",
-    type: "choice",
-    options: [
-      "1 unit",
-      "2–5 units",
-      "6–15 units",
-      "16–30 units",
-      "31+ units",
-    ],
-    show: (a) => isTrashSvc(a.serviceType),
-  },
-  {
-    id: "trashAddress",
-    question: "What's the property address or ZIP code?",
-    type: "text",
-    placeholder: "e.g. 123 Main St or ZIP 48201",
-    show: (a) => isTrashSvc(a.serviceType),
-  },
-
-  // ── Contact (all) ────────────────────────────
+  // ── CONTACT + NOTES (all services) ───────────────────────────────────────
   {
     id: "contact",
     question: "Almost done! What's the best way to reach you?",
-    subtext: "Your quote will be reviewed by Darrell personally before anything is finalized.",
+    subtext: "Your quote will be reviewed by Darrell personally before anything is sent.",
     type: "contact",
   },
   {
     id: "notes",
     question: "Anything else we should know?",
-    subtext: "Special access, tight deadlines, etc. Type 'skip' or leave blank if none.",
+    subtext: "Narrow hallways, parking restrictions, tight deadlines, etc. Leave blank to skip.",
     type: "notes",
     optional: true,
-    placeholder: "e.g. 'Gate code 1234, narrow driveway, moving out-of-state in 10 days'",
+    placeholder: "e.g. 'Moving out-of-state in 10 days, tight hallways, big sectional needs to be disassembled'",
   },
 ];
 
 // ─────────────────────────────────────────────
-// Quote Engine
+// Moving Quote Engine
 // ─────────────────────────────────────────────
-function computeQuote(a: Answers, pricing: Pricing | undefined): Quote {
-  const rate = pricing?.ratePerMoverHour ?? 85;
-
-  // ── Window Cleaning ──────────────────
-  if (isWindowSvc(a.serviceType)) {
-    const paneRate = pricing?.windowCleaningPerPane ?? 5;
-    const paneMap: Record<string, number> = {
-      "1–5 panes": 3, "6–10 panes": 8, "11–20 panes": 15,
-      "21–30 panes": 25, "30+ panes": 35,
-    };
-    const midPanes = paneMap[a.windowCount || "6–10 panes"] ?? 8;
-    const minPrice = Math.max(50, Math.round(midPanes * paneRate * 0.8 / 5) * 5);
-    const maxPrice = Math.round(midPanes * paneRate * 1.2 / 5) * 5;
-    return { crew: 1, minHrs: 1, maxHrs: 3, minPrice, maxPrice, tokensEstimate: Math.round((minPrice + maxPrice) / 2 * 50), specialSurcharge: 0, isFlat: true, serviceLabel: "Window Cleaning" };
-  }
-
-  // ── Trash Valet ──────────────────────
-  if (isTrashSvc(a.serviceType)) {
-    const baseRate = pricing?.trashValetBaseMonthly ?? 35;
-    const unitMap: Record<string, number> = {
-      "1 unit": 1, "2–5 units": 3, "6–15 units": 10,
-      "16–30 units": 20, "31+ units": 35,
-    };
-    const units = unitMap[a.trashUnits || "1 unit"] ?? 1;
-    const minPrice = Math.round(units * baseRate * 0.9);
-    const maxPrice = Math.round(units * baseRate * 1.1);
-    return { crew: 1, minHrs: 0, maxHrs: 0, minPrice, maxPrice, tokensEstimate: Math.round((minPrice + maxPrice) / 2 * 50), specialSurcharge: 0, isFlat: true, serviceLabel: "Trash Valet (monthly)" };
-  }
-
-  // ── Snow / Handyman / Painting / Flooring ────
-  if (isTieredSvc(a.serviceType)) {
-    const scopeMap: Record<string, [number, number]> = {
-      "Small — quick task or single area": [0.5, 2],
-      "Medium — half-day project": [2, 4],
-      "Large — full day or multiple areas": [4, 8],
-      "XL — multi-day or whole home": [8, 16],
-      "Not sure — I need a quote on-site": [2, 8],
-    };
-    const [minH, maxH] = scopeMap[a.scopeSize || "Medium — half-day project"] ?? [2, 4];
-
-    let hrRate = rate;
-    let label = "Service";
-    if (isSnowSvc(a.serviceType))     { hrRate = pricing?.snowRemovalHourlyRate ?? 85;  label = "Snow Removal"; }
-    if (isHandymanSvc(a.serviceType)) { hrRate = pricing?.handymanHourlyRate    ?? 85;  label = "Handyman"; }
-    if (isPaintingSvc(a.serviceType)) { hrRate = pricing?.paintingHourlyRate    ?? 85;  label = "Painting"; }
-    if (isFlooringSvc(a.serviceType)) {
-      const sqftRate = pricing?.flooringPerSqFt ?? 3;
-      const sqftMap: Record<string, [number, number]> = {
-        "Small — quick task or single area": [100, 200],
-        "Medium — half-day project": [300, 600],
-        "Large — full day or multiple areas": [600, 1200],
-        "XL — multi-day or whole home": [1200, 2500],
-        "Not sure — I need a quote on-site": [300, 1200],
-      };
-      const [minSq, maxSq] = sqftMap[a.scopeSize || "Medium — half-day project"] ?? [300, 600];
-      const minPrice = Math.round(minSq * sqftRate / 25) * 25;
-      const maxPrice = Math.round(maxSq * sqftRate / 25) * 25;
-      return { crew: 2, minHrs: minH, maxHrs: maxH, minPrice, maxPrice, tokensEstimate: Math.round((minPrice + maxPrice) / 2 * 50), specialSurcharge: 0, isTiered: true, serviceLabel: "Flooring" };
-    }
-
-    const minPrice = Math.round(minH * hrRate / 25) * 25;
-    const maxPrice = Math.round(maxH * hrRate / 25) * 25;
-    return { crew: 1, minHrs: minH, maxHrs: maxH, minPrice, maxPrice, tokensEstimate: Math.round((minPrice + maxPrice) / 2 * 50), specialSurcharge: 0, isTiered: true, serviceLabel: label };
-  }
-
-  // ── Moving / Junk / Labor ────────────────────
+function computeMovingQuote(a: Answers): MovingQuote {
   const sizeMap: Record<string, { crew: number; minH: number; maxH: number }> = {
-    "Studio / Single Room":   { crew: 2, minH: 1.5, maxH: 2.5 },
-    "1 Bedroom Apartment":    { crew: 2, minH: 2,   maxH: 3   },
-    "2 Bedroom Apartment":    { crew: 2, minH: 3,   maxH: 4.5 },
-    "3 Bedroom Apartment":    { crew: 3, minH: 4,   maxH: 6   },
-    "4+ Bedroom Apartment":   { crew: 3, minH: 5,   maxH: 7   },
-    "1–2 Bedroom House":      { crew: 2, minH: 3,   maxH: 5   },
-    "3 Bedroom House":        { crew: 3, minH: 5,   maxH: 7   },
-    "4+ Bedroom House":       { crew: 4, minH: 6,   maxH: 9   },
-    "Commercial / Office":    { crew: 3, minH: 5,   maxH: 8   },
+    "Studio / Single Room":        { crew: 2, minH: 1.5, maxH: 2.5 },
+    "1 Bedroom Apartment":         { crew: 2, minH: 2,   maxH: 3   },
+    "2 Bedroom Apartment":         { crew: 2, minH: 3,   maxH: 4.5 },
+    "3 Bedroom Apartment":         { crew: 3, minH: 4,   maxH: 6   },
+    "4+ Bedroom Apartment":        { crew: 3, minH: 5,   maxH: 7   },
+    "1–2 Bedroom House":           { crew: 2, minH: 3,   maxH: 5   },
+    "3 Bedroom House":             { crew: 3, minH: 5,   maxH: 7   },
+    "4+ Bedroom House":            { crew: 4, minH: 6,   maxH: 9   },
+    "Commercial / Office":         { crew: 3, minH: 5,   maxH: 8   },
   };
 
   const cfg = sizeMap[a.homeSize || ""] || { crew: 2, minH: 2, maxH: 4 };
@@ -509,10 +556,16 @@ function computeQuote(a: Answers, pricing: Pricing | undefined): Quote {
   let maxH = cfg.maxH;
 
   const oFloor = { "Ground Floor / 1st": 1, "2nd Floor": 2, "3rd Floor": 3, "4th Floor or Higher": 4 }[a.originFloor || ""] || 1;
-  if (oFloor >= 2 && a.originElevator === "🪜 No elevator — stairs only") { minH += (oFloor - 1) * 0.4; maxH += (oFloor - 1) * 0.6; }
+  if (oFloor >= 2 && a.originElevator === "🪜 No elevator — stairs only") {
+    minH += (oFloor - 1) * 0.4;
+    maxH += (oFloor - 1) * 0.6;
+  }
 
   const dFloor = { "Ground Floor / 1st": 1, "2nd Floor": 2, "3rd Floor": 3, "4th Floor or Higher": 4 }[a.destFloor || ""] || 1;
-  if (dFloor >= 2 && a.destElevator === "🪜 No elevator — stairs only") { minH += (dFloor - 1) * 0.4; maxH += (dFloor - 1) * 0.6; }
+  if (dFloor >= 2 && a.destElevator === "🪜 No elevator — stairs only") {
+    minH += (dFloor - 1) * 0.4;
+    maxH += (dFloor - 1) * 0.6;
+  }
 
   if (a.parkingDistance === "🚶 Short walk (30–100 ft)") { minH += 0.25; maxH += 0.5; }
   if (a.parkingDistance === "🏃 Long carry (100 ft+)") { minH += 0.5; maxH += 1; }
@@ -530,32 +583,30 @@ function computeQuote(a: Answers, pricing: Pricing | undefined): Quote {
 
   let specialSurcharge = 0;
   const specials = (a.specialItems || []).filter(s => s !== "None of these");
-  if (specials.includes("🎹 Grand Piano"))   { crew = Math.max(crew, 4); minH += 2; maxH += 3; specialSurcharge += 250; }
-  if (specials.includes("🎹 Upright Piano")) { crew = Math.max(crew, 3); minH += 1; maxH += 2; specialSurcharge += 150; }
-  if (specials.includes("🎱 Pool Table"))    { crew = Math.max(crew, 3); minH += 1; maxH += 2; specialSurcharge += 150; }
-  if (specials.includes("♨️ Hot Tub"))       { crew = Math.max(crew, 3); minH += 1; maxH += 2; specialSurcharge += 200; }
+  if (specials.includes("🎹 Grand Piano"))   { crew = Math.max(crew, 4); minH += 2; maxH += 3;   specialSurcharge += 250; }
+  if (specials.includes("🎹 Upright Piano")) { crew = Math.max(crew, 3); minH += 1; maxH += 2;   specialSurcharge += 150; }
+  if (specials.includes("🎱 Pool Table"))    { crew = Math.max(crew, 3); minH += 1; maxH += 2;   specialSurcharge += 150; }
+  if (specials.includes("♨️ Hot Tub"))       { crew = Math.max(crew, 3); minH += 1; maxH += 2;   specialSurcharge += 200; }
   if (specials.includes("🔒 Heavy Safe (300 lbs+)")) { minH += 0.5; maxH += 1; specialSurcharge += 75; }
 
   if (a.packingHelp === "📦 Pack a few fragile items") { minH += 0.5; maxH += 1; }
   if (a.packingHelp === "🏠 Full packing service (whole home)") { minH += 2; maxH += 4; crew = Math.max(crew, 3); }
 
-  if (["💪 Loading Help Only (you drive)", "🏠 Unloading Help Only (you arrive)"].includes(a.serviceType || "")) {
-    minH *= 0.55; maxH *= 0.55;
-  }
-
-  if (isJunkSvc(a.serviceType)) {
+  if (a.serviceType?.includes("Junk")) {
     crew = Math.min(crew, 2);
     minH = Math.max(1, minH * 0.45);
     maxH = Math.max(2, maxH * 0.55);
   }
 
+  const RATE = 75;
   const round25 = (n: number) => Math.ceil(n / 25) * 25;
-  const minPrice = round25(crew * minH * rate) + specialSurcharge;
-  const maxPrice = round25(crew * maxH * rate) + specialSurcharge;
+  const minPrice = round25(crew * minH * RATE) + specialSurcharge;
+  const maxPrice = round25(crew * maxH * RATE) + specialSurcharge;
   const midPrice = (minPrice + maxPrice) / 2;
   const tokensEstimate = Math.round(midPrice * 50);
 
   return {
+    type: "moving",
     crew,
     minHrs: Math.round(minH * 2) / 2,
     maxHrs: Math.round(maxH * 2) / 2,
@@ -563,91 +614,157 @@ function computeQuote(a: Answers, pricing: Pricing | undefined): Quote {
     maxPrice,
     tokensEstimate,
     specialSurcharge,
-    serviceLabel: isJunkSvc(a.serviceType) ? "Junk Removal" : "Moving",
   };
 }
 
 // ─────────────────────────────────────────────
-// Package builders (for package selection step)
+// Compute Quote for Any Service
 // ─────────────────────────────────────────────
-function buildMovingPackages(quote: Quote, rate: number): SelectedPackage[] {
-  const round = (n: number) => Math.round(n / 10) * 10;
-  const pkgs: SelectedPackage[] = [];
-  const { crew, minHrs, maxHrs } = quote;
-  const minCrew = Math.max(2, crew - 1);
-  const maxCrew = crew + 1;
-  for (let c = minCrew; c <= maxCrew; c++) {
-    const hoursToTry = Array.from(new Set([Math.floor(minHrs), Math.ceil((minHrs + maxHrs) / 2), Math.ceil(maxHrs)]));
-    for (const h of hoursToTry) {
-      if (h < 1 || h > 12) continue;
-      const price = round(c * h * rate);
-      const disc = h >= 7 ? 0.20 : h >= 5 ? 0.15 : h >= 3 ? 0.10 : 0;
-      const finalPrice = disc ? Math.round(price * (1 - disc) / 10) * 10 : price;
-      const tag = disc ? `${(disc * 100).toFixed(0)}% Off` : (c === crew && h === Math.ceil((minHrs + maxHrs) / 2) ? "Recommended" : undefined);
-      pkgs.push({ id: `mv_${c}m_${h}h`, label: `${c} Movers × ${h} hrs`, price: finalPrice, crew: c, hours: h, ...(tag ? {} : {}), minPrice: finalPrice, maxPrice: finalPrice });
-      if (tag) pkgs[pkgs.length - 1] = { ...pkgs[pkgs.length - 1] };
-    }
+function computeQuoteForAnswers(a: Answers): QuoteResult | null {
+  const svc = getServiceLabel(a.serviceType || "");
+
+  if (QUOTE_ONLY_SERVICES.includes(svc)) {
+    const ranges: Record<string, [number, number]> = {
+      "Painting":  [500, 5000],
+      "Flooring":  [800, 8000],
+      "Roofing":   [2000, 15000],
+      "Handyman":  [100, 1200],
+    };
+    const [min, max] = ranges[svc] || [500, 5000];
+    return { type: "quote_only", service: svc, minPrice: min, maxPrice: max };
   }
-  // deduplicate by id and limit to 6
-  const seen = new Set<string>();
-  return pkgs.filter(p => { if (seen.has(p.id)) return false; seen.add(p.id); return true; }).slice(0, 6);
+
+  if (svc === "Trash Valet") {
+    const canMap: Record<string, number> = { "1 can": 1, "2 cans": 2, "3 cans": 3, "4+ cans": 4 };
+    const bagMap: Record<string, number> = { "No extra bags": 0, "1–4 extra bags": 2, "5–9 extra bags": 7, "10+ extra bags": 12 };
+    const cans = canMap[a.trashCans || "1 can"] || 1;
+    const bags = bagMap[a.trashBags || "No extra bags"] || 0;
+    const recycling = (a.recyclingEnabled || "").includes("Yes");
+    const planType = (a.trashPlanType || "").includes("Yearly") ? "yearly" : "monthly";
+
+    const quote = calculateTrashValetQuote({ cans, bagCount: bags, recyclingEnabled: recycling, planType });
+    return {
+      type: "trash_valet",
+      finalMonthlyPrice: quote.finalMonthlyPrice,
+      minPrice: quote.finalMonthlyPrice,
+      maxPrice: quote.finalMonthlyPrice + 10,
+    };
+  }
+
+  if (svc === "Window Cleaning") {
+    const std = parseInt(a.standardWindows || "0") || 0;
+    const lg = parseInt(a.largeWindows || "0") || 0;
+    const lad = parseInt(a.ladderWindows || "0") || 0;
+    const inside = (a.windowInside || "").includes("inside + outside");
+    const quote = calculateWindowCleaningQuote({
+      standardWindows: std,
+      largeWindows: lg,
+      ladderWindows: lad,
+      includeInside: inside,
+      includeOutside: true,
+      seasonMode: "normal",
+    });
+    return {
+      type: "window_cleaning",
+      paneCount: quote.paneCount,
+      minPrice: quote.total,
+      maxPrice: quote.total,
+      total: quote.total,
+    };
+  }
+
+  // Moving or Junk
+  return computeMovingQuote(a);
 }
 
-function buildJunkPackages(): SelectedPackage[] {
-  return [
-    { id: "junk_single", label: "Single Item", minPrice: 100, maxPrice: 200, price: 150 },
-    { id: "junk_quarter", label: "¼ Truck Load", minPrice: 300, maxPrice: 500, price: 400 },
-    { id: "junk_half", label: "½ Truck Load", minPrice: 500, maxPrice: 800, price: 650 },
-    { id: "junk_full", label: "Full Truck Load", minPrice: 1000, maxPrice: 1400, price: 1200 },
-  ];
-}
+// ─────────────────────────────────────────────
+// Build Crew Packages for priceable services
+// ─────────────────────────────────────────────
+function buildCrewPackages(a: Answers, q: QuoteResult | null): CrewPackage[] {
+  if (!q) return [];
 
-function buildTieredPackages(quote: Quote, answers: Answers, pricing: Pricing | undefined): SelectedPackage[] {
-  const { minPrice, maxPrice } = quote;
-  const mid = Math.round((minPrice + maxPrice) / 2);
-  const svc = answers.serviceType || "";
+  if (q.type === "moving") {
+    const mq = q as MovingQuote;
+    const crew = mq.crew;
+    const packages: CrewPackage[] = [];
 
-  if (isFlooringSvc(svc)) {
+    if (crew >= 3) {
+      packages.push({
+        id: "pkg_lean",
+        label: `${crew - 1} Movers`,
+        desc: `Smaller crew · Budget-friendly · ${mq.minHrs + 1}–${mq.maxHrs + 2} hrs est.`,
+        minPrice: Math.round(mq.minPrice * 0.75),
+        maxPrice: Math.round(mq.maxPrice * 0.85),
+        crew: crew - 1,
+      });
+    }
+    packages.push({
+      id: "pkg_recommended",
+      label: `${crew} Movers (Recommended)`,
+      desc: `Optimal crew for your move · ${mq.minHrs}–${mq.maxHrs} hrs est.`,
+      minPrice: mq.minPrice,
+      maxPrice: mq.maxPrice,
+      crew,
+      tag: "Best Match",
+    });
+    packages.push({
+      id: "pkg_heavy",
+      label: `${crew + 1} Movers (Power Crew)`,
+      desc: `Extra mover for speed · ${Math.max(1, mq.minHrs - 0.5)}–${Math.max(2, mq.maxHrs - 1)} hrs est.`,
+      minPrice: Math.round(mq.minPrice * 1.2),
+      maxPrice: Math.round(mq.maxPrice * 1.3),
+      crew: crew + 1,
+    });
+
+    return packages;
+  }
+
+  if (q.type === "trash_valet") {
+    const tq = q as TrashValetQuoteResult;
     return [
-      { id: "floor_room", label: "Single Room (~150 sq ft)", minPrice: Math.round(minPrice * 0.3), maxPrice: Math.round(maxPrice * 0.3), price: Math.round(mid * 0.3) },
-      { id: "floor_multi", label: "Multi-Room (2–4 rooms)", minPrice: Math.round(minPrice * 0.6), maxPrice: Math.round(maxPrice * 0.6), price: Math.round(mid * 0.6) },
-      { id: "floor_home", label: "Whole Home", minPrice, maxPrice, price: mid },
-      { id: "floor_custom", label: "Custom — Quote on Site", minPrice: 0, maxPrice: 0, price: 0 },
+      {
+        id: "pkg_tv_monthly",
+        label: "Monthly Plan",
+        desc: "Pay month-to-month — cancel anytime.",
+        minPrice: tq.finalMonthlyPrice,
+        maxPrice: tq.finalMonthlyPrice,
+        tag: "Flexible",
+      },
+      {
+        id: "pkg_tv_yearly",
+        label: "Yearly Plan",
+        desc: "11 months charged, 12 months of service.",
+        minPrice: Math.round(tq.finalMonthlyPrice * 11 / 12),
+        maxPrice: Math.round(tq.finalMonthlyPrice * 11 / 12),
+        tag: "Best Value",
+      },
     ];
   }
 
-  return [
-    { id: "tier_small", label: "Small", minPrice: Math.round(minPrice * 0.4), maxPrice: Math.round(maxPrice * 0.4), price: Math.round(mid * 0.4) },
-    { id: "tier_medium", label: "Medium", minPrice: Math.round(minPrice * 0.6), maxPrice: Math.round(maxPrice * 0.7), price: Math.round(mid * 0.65) },
-    { id: "tier_large", label: "Large", minPrice, maxPrice, price: mid },
-    { id: "tier_custom", label: "Custom — Quote on Site", minPrice: 0, maxPrice: 0, price: 0 },
-  ];
-}
+  if (q.type === "window_cleaning") {
+    const wq = q as WindowQuoteResult;
+    const insideExtra = Math.round(wq.total * 0.4);
+    return [
+      {
+        id: "pkg_wc_outside",
+        label: "Outside Only",
+        desc: "Streak-free exterior cleaning · $5/pane",
+        minPrice: Math.round(wq.total * 0.6),
+        maxPrice: Math.round(wq.total * 0.65),
+        tag: "Popular",
+      },
+      {
+        id: "pkg_wc_both",
+        label: "Inside + Outside",
+        desc: "Full deep clean both sides · $5/pane/side",
+        minPrice: wq.total,
+        maxPrice: wq.total + insideExtra,
+        tag: "Best Value",
+      },
+    ];
+  }
 
-function buildWindowPackages(quote: Quote, answers: Answers, pricing: Pricing | undefined): SelectedPackage[] {
-  const paneRate = pricing?.windowCleaningPerPane ?? 5;
-  const paneMap: Record<string, number[]> = {
-    "1–5 panes": [1, 5], "6–10 panes": [6, 10], "11–20 panes": [11, 20],
-    "21–30 panes": [21, 30], "30+ panes": [30, 40],
-  };
-  const [minP, maxP] = paneMap[answers.windowCount || "6–10 panes"] ?? [6, 10];
-  return [
-    { id: "win_interior", label: "Interior Windows Only", minPrice: Math.round(minP * paneRate * 0.6), maxPrice: Math.round(maxP * paneRate * 0.6), price: Math.round((minP + maxP) / 2 * paneRate * 0.6) },
-    { id: "win_exterior", label: "Exterior Windows Only", minPrice: Math.round(minP * paneRate * 0.7), maxPrice: Math.round(maxP * paneRate * 0.7), price: Math.round((minP + maxP) / 2 * paneRate * 0.7) },
-    { id: "win_both", label: "Interior + Exterior (Both Sides)", minPrice: Math.round(minP * paneRate), maxPrice: Math.round(maxP * paneRate), price: Math.round((minP + maxP) / 2 * paneRate) },
-  ];
-}
-
-function buildTrashPackages(answers: Answers, pricing: Pricing | undefined): SelectedPackage[] {
-  const baseRate = pricing?.trashValetBaseMonthly ?? 35;
-  const unitMap: Record<string, number> = {
-    "1 unit": 1, "2–5 units": 3, "6–15 units": 10, "16–30 units": 20, "31+ units": 35,
-  };
-  const units = unitMap[answers.trashUnits || "1 unit"] ?? 1;
-  return [
-    { id: "trash_monthly", label: `Monthly (${units} unit${units > 1 ? "s" : ""})`, minPrice: Math.round(units * baseRate * 0.9), maxPrice: Math.round(units * baseRate * 1.1), price: Math.round(units * baseRate) },
-    { id: "trash_quarterly", label: `Quarterly (3 months · save 5%)`, minPrice: Math.round(units * baseRate * 2.85), maxPrice: Math.round(units * baseRate * 3.15), price: Math.round(units * baseRate * 3 * 0.95) },
-  ];
+  return [];
 }
 
 // ─────────────────────────────────────────────
@@ -661,76 +778,42 @@ function shortAnswer(stepId: string, val: string | string[]): string {
     }
     return val.length <= 3 ? val.join(", ") : `${val.slice(0, 2).join(", ")} +${val.length - 2} more`;
   }
+  if (stepId === "depositAcknowledged") return "Deposit terms acknowledged ✓";
+  if (stepId === "selectedPackage") return `Package selected: ${val}`;
   return val;
 }
 
 // ─────────────────────────────────────────────
-// Deposit amount (configurable later)
-// ─────────────────────────────────────────────
-const DEPOSIT_AMOUNT = 75;
-
-// ─────────────────────────────────────────────
 // Main Component
 // ─────────────────────────────────────────────
-export function BookingChatbot({
-  onClose,
-  embedded = false,
-  showCloseButton,
-  className,
-  initialService,
-}: {
-  onClose?: () => void;
-  embedded?: boolean;
-  showCloseButton?: boolean;
-  className?: string;
-  initialService?: string;
-}) {
+export function BookingChatbot({ onClose, embedded = false, showCloseButton, className }: { onClose?: () => void; embedded?: boolean; showCloseButton?: boolean; className?: string }) {
   const showClose = showCloseButton ?? !embedded;
   const { toast } = useToast();
   const { user } = useAuth();
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const { data: pricing } = useQuery<Pricing>({ queryKey: ["/api/pricing"] });
-
-  // Derive initial answers from initialService prop
-  const initialAnswers = useMemo<Answers>(() => {
-    if (!initialService) return {};
-    const svcMap: Record<string, string> = {
-      residential: "📦 Local Move (origin → destination)",
-      junk: "🗑️ Junk Removal",
-      snow: "❄️ Snow Removal",
-      handyman: "🔧 Handyman",
-      labor: "💪 Loading Help Only (you drive)",
-      painting: "🎨 Painting",
-      flooring: "🪵 Flooring",
-      window_cleaning: "🪟 Window Cleaning",
-      trash_valet: "🗑️ Trash Valet (weekly curbside)",
-    };
-    const mapped = svcMap[initialService];
-    return mapped ? { serviceType: mapped } : {};
-  }, [initialService]);
-
-  const [answers, setAnswers] = useState<Answers>(initialAnswers);
-  const [messages, setMessages] = useState<Message[]>(() => {
-    const greeting = "👋 Hi — I'm JC from Northwoods Moving. I'll help you get an instant estimate and lock in your appointment. No pressure, no spam — real human review before anything is finalized.";
-    return [{ from: "bot", text: greeting, ts: Date.now() }];
-  });
-
-  // If initialService is set, skip the first step (serviceType)
-  const [stepIdx, setStepIdx] = useState(() => initialService ? 1 : 0);
+  const [answers, setAnswers] = useState<Answers>({});
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      from: "bot",
+      text: "👋 Hi — I'm JC! I'll help you get a quote for any of our services in about 60 seconds. No pressure, no spam — real human review before anything is sent.",
+      ts: Date.now(),
+    },
+  ]);
+  const [stepIdx, setStepIdx] = useState(0);
   const [textInput, setTextInput] = useState("");
   const [multiSel, setMultiSel] = useState<string[]>([]);
   const [contactName, setContactName] = useState(() => user ? [user.firstName, user.lastName].filter(Boolean).join(" ") : "");
   const [contactPhone, setContactPhone] = useState(() => user?.phoneNumber || "");
   const [contactEmail, setContactEmail] = useState(() => user?.email || "");
+  const [submitted, setSubmitted] = useState(false);
+  const [quoteVisible, setQuoteVisible] = useState(false);
+  const [pendingQuote, setPendingQuote] = useState<QuoteResult | null>(null);
+  const [crewPackages, setCrewPackages] = useState<CrewPackage[]>([]);
+  const [selectedPackageObj, setSelectedPackageObj] = useState<CrewPackage | null>(null);
+  const [depositInfo, setDepositInfo] = useState<{ required: boolean; amount: number; termsHtml: string } | null>(null);
+  const [depositChecked, setDepositChecked] = useState(false);
 
-  // Phases: "chat" | "packages" | "deposit" | "submitted"
-  const [phase, setPhase] = useState<"chat" | "packages" | "deposit" | "submitted">("chat");
-  const [pendingQuote, setPendingQuote] = useState<Quote | null>(null);
-  const [selectedPackage, setSelectedPackage] = useState<SelectedPackage | null>(null);
-  const [depositPaid, setDepositPaid] = useState(false);
-
-  // Visible steps filtered by show()
   const visibleSteps = useMemo(
     () => STEPS.filter(s => !s.show || s.show(answers)),
     [answers]
@@ -738,7 +821,6 @@ export function BookingChatbot({
 
   const currentStep = visibleSteps[stepIdx];
 
-  // Pre-fill contact info when user data becomes available
   useEffect(() => {
     if (user) {
       setContactName(prev => prev || [user.firstName, user.lastName].filter(Boolean).join(" "));
@@ -747,11 +829,10 @@ export function BookingChatbot({
     }
   }, [user]);
 
-  // Auto-scroll to bottom
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, phase, selectedPackage]);
+  }, [messages, quoteVisible]);
 
   function botSay(text: string, delay = 0) {
     setTimeout(() => {
@@ -771,9 +852,9 @@ export function BookingChatbot({
       newAnswers.contactPhone = contactPhone.trim();
       newAnswers.contactEmail = contactEmail.trim();
     } else if (Array.isArray(value)) {
-      (newAnswers as Record<string, unknown>)[stepId] = value;
+      (newAnswers as any)[stepId] = value;
     } else {
-      (newAnswers as Record<string, unknown>)[stepId] = value;
+      (newAnswers as any)[stepId] = value;
     }
     setAnswers(newAnswers);
 
@@ -788,21 +869,52 @@ export function BookingChatbot({
 
     if (nextIdx < nextVisibleSteps.length) {
       const nextStep = nextVisibleSteps[nextIdx];
+
+      // When we reach the deposit step, compute deposit info
+      if (nextStep.id === "depositAcknowledged") {
+        const svc = getServiceLabel(newAnswers.serviceType || "");
+        const zip = newAnswers.jobLocation || newAnswers.depositZip || "";
+        const dep = getDepositInfo(svc, zip);
+        setDepositInfo(dep);
+        setDepositChecked(false);
+      }
+
+      // When we reach the package select step, compute packages
+      if (nextStep.id === "selectedPackage") {
+        const q = computeQuoteForAnswers(newAnswers);
+        setPendingQuote(q);
+        const pkgs = buildCrewPackages(newAnswers, q);
+        setCrewPackages(pkgs);
+      }
+
       setTimeout(() => {
-        botSay(nextStep.question + (nextStep.subtext ? `\n\n_${nextStep.subtext}_` : ""));
+        if (nextStep.id !== "depositAcknowledged" && nextStep.id !== "selectedPackage") {
+          botSay(nextStep.question + (nextStep.subtext ? `\n\n_${nextStep.subtext}_` : ""));
+        }
         setStepIdx(nextIdx);
         setTextInput("");
         setMultiSel([]);
       }, 500);
     } else {
-      // All questions answered — compute quote and enter package selection phase
+      // All done — compute final quote & show
       setTimeout(() => {
-        const q = computeQuote(newAnswers, pricing);
+        const q = computeQuoteForAnswers(newAnswers);
         setPendingQuote(q);
-        botSay(
-          `Perfect! Based on your answers, I've put together a quote estimate. Review it below and **select a package** that fits your needs — then we'll confirm your appointment with a small deposit. 👇`
-        );
-        setTimeout(() => setPhase("packages"), 600);
+
+        const svc = getServiceLabel(newAnswers.serviceType || "");
+        const isQuoteOnly = QUOTE_ONLY_SERVICES.includes(svc);
+
+        if (isQuoteOnly) {
+          botSay(
+            `Got it! I've put together a placeholder estimate range for your ${svc} job. This is a starting point — Darrell will reach out to schedule a free on-site estimate (or a virtual one) to give you an exact number. Tap **Request My Quote** below to submit. 👇`
+          );
+        } else {
+          botSay(
+            `Perfect! Based on everything you've told me, here's your estimated quote. Hit **Submit for Review** and Darrell will finalize it personally. 👇`
+          );
+        }
+
+        setTimeout(() => setQuoteVisible(true), 600);
         setStepIdx(nextVisibleSteps.length);
       }, 500);
     }
@@ -843,27 +955,37 @@ export function BookingChatbot({
     advanceStep("contact", "");
   }
 
-  function handlePackageSelect(pkg: SelectedPackage) {
-    setSelectedPackage(pkg);
+  function handleDepositAck() {
+    if (!depositChecked) return;
+    advanceStep("depositAcknowledged", "acknowledged");
   }
 
-  function handlePackageContinue() {
-    if (!selectedPackage) return;
-    botSay(`Great choice — **${selectedPackage.label}**! Now let's confirm your appointment with a $${DEPOSIT_AMOUNT} deposit. This holds your spot on the schedule.`);
-    setPhase("deposit");
+  function handlePackageSelect(pkg: CrewPackage) {
+    setSelectedPackageObj(pkg);
+    advanceStep("selectedPackage", pkg.id);
   }
 
   const [depositInvoiceSent, setDepositInvoiceSent] = useState(false);
   const [depositInvoiceUrl, setDepositInvoiceUrl] = useState<string | null>(null);
 
-  // Submission
+  // Build the submit payload
   const submitMutation = useMutation({
     mutationFn: async (withDeposit: boolean) => {
       if (!pendingQuote) throw new Error("No quote");
+      const svc = getServiceLabel(answers.serviceType || "");
+      const isQuoteOnly = QUOTE_ONLY_SERVICES.includes(svc);
+      const dep = depositInfo;
+      const zip = answers.jobLocation || answers.depositZip || answers.fromZip || "";
+
       const result = await apiRequest("POST", "/api/chatbot-quote", {
         answers,
         quote: pendingQuote,
-        selectedPackage,
+        selectedPackage: selectedPackageObj || null,
+        depositRequired: dep?.required || false,
+        depositAmount: dep?.amount || 0,
+        serviceLabel: svc,
+        isQuoteOnly,
+        customerZip: zip,
         depositPaid: withDeposit,
       });
       return result as { leadId: string; message: string; depositInvoiceSent?: boolean; depositInvoiceUrl?: string };
@@ -872,11 +994,17 @@ export function BookingChatbot({
       setDepositPaid(withDeposit);
       setDepositInvoiceSent(data?.depositInvoiceSent ?? false);
       setDepositInvoiceUrl(data?.depositInvoiceUrl ?? null);
-      setPhase("submitted");
+      setSubmitted(true);
+      const svc = getServiceLabel(answers.serviceType || "");
+      const isQuoteOnly = QUOTE_ONLY_SERVICES.includes(svc);
+      if (isQuoteOnly) {
+        botSay("✅ Your quote request has been submitted! Darrell will reach out to schedule your estimate. Typically within 2–4 hours during business hours.");
+      } else {
+        botSay("✅ Your quote request has been submitted! Darrell will review it and send you a finalized quote. Typically within 2–4 hours during business hours.");
+      }
     },
-    onError: (err: unknown) => {
-      const msg = err instanceof Error ? err.message : "Please try again.";
-      toast({ title: "Submission failed", description: msg, variant: "destructive" });
+    onError: (err: any) => {
+      toast({ title: "Submission failed", description: err.message || "Please try again.", variant: "destructive" });
     },
   });
 
@@ -893,7 +1021,7 @@ export function BookingChatbot({
     setAnswers({});
     setMessages([{
       from: "bot",
-      text: "👋 Hi — I'm JC from Northwoods Moving. I'll help you get an instant estimate and lock in your appointment. No pressure, no spam — real human review before anything is finalized.",
+      text: "👋 Hi — I'm JC! I'll help you get a quote for any of our services in about 60 seconds. No pressure, no spam — real human review before anything is sent.",
       ts: Date.now(),
     }]);
     setStepIdx(0);
@@ -902,40 +1030,27 @@ export function BookingChatbot({
     setContactName(user ? [user.firstName, user.lastName].filter(Boolean).join(" ") : "");
     setContactPhone(user?.phoneNumber || "");
     setContactEmail(user?.email || "");
-    setPhase("chat");
+    setSubmitted(false);
+    setQuoteVisible(false);
     setPendingQuote(null);
-    setSelectedPackage(null);
-    setDepositPaid(false);
+    setCrewPackages([]);
+    setSelectedPackageObj(null);
+    setDepositInfo(null);
+    setDepositChecked(false);
   }
 
   const isDone = stepIdx >= visibleSteps.length;
-  const progress = isDone || phase !== "chat" ? 100 : Math.round((stepIdx / visibleSteps.length) * 100);
+  const progress = isDone ? 100 : Math.round((stepIdx / visibleSteps.length) * 100);
 
-  // Build packages for the package selection phase
-  const rate = pricing?.ratePerMoverHour ?? 85;
-  const packages: SelectedPackage[] = useMemo(() => {
-    if (!pendingQuote) return [];
-    const svc = answers.serviceType || "";
-    if (isMovingSvc(svc) && !isJunkSvc(svc)) return buildMovingPackages(pendingQuote, rate);
-    if (isJunkSvc(svc)) return buildJunkPackages();
-    if (isTieredSvc(svc)) return buildTieredPackages(pendingQuote, answers, pricing);
-    if (isWindowSvc(svc)) return buildWindowPackages(pendingQuote, answers, pricing);
-    if (isTrashSvc(svc)) return buildTrashPackages(answers, pricing);
-    return [];
-  }, [pendingQuote, answers, pricing, rate]);
+  const svc = getServiceLabel(answers.serviceType || "");
+  const isQuoteOnly = QUOTE_ONLY_SERVICES.includes(svc);
 
   return (
     <div className={`flex flex-col h-full min-h-[500px]${className ? " " + className : ""}`}>
       {/* Progress bar */}
       <div className="px-1 pb-2 shrink-0">
         <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-          <span>
-            {phase === "submitted" ? "✅ Appointment confirmed!" :
-             phase === "deposit"   ? "Step 3 of 3 — Deposit" :
-             phase === "packages"  ? "Step 2 of 3 — Select Package" :
-             isDone                ? "Step 1 of 3 — Quote ready!" :
-             "Step 1 of 3 — Your quote (~60 sec)"}
-          </span>
+          <span>{isDone ? "✅ All done!" : "Takes about 60 seconds"}</span>
           <span>{progress}%</span>
         </div>
         <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
@@ -968,44 +1083,55 @@ export function BookingChatbot({
           </div>
         ))}
 
-        {/* ── PHASE: Package Selection ── */}
-        {phase === "packages" && pendingQuote && (
-          <div className="mx-1 mt-2 space-y-3">
-            {/* Quote summary */}
-            <div className="rounded-2xl border border-teal-500/30 bg-gradient-to-br from-teal-900/30 to-slate-900/60 overflow-hidden">
-              <div className="px-4 pt-4 pb-3">
-                <div className="flex items-center gap-2 mb-3">
-                  <Sparkles className="h-4 w-4 text-teal-400" />
-                  <span className="text-sm font-bold text-teal-300 uppercase tracking-wide">Your Estimated Quote</span>
+        {/* Quote Card */}
+        {quoteVisible && pendingQuote && (
+          <div className="mx-1 mt-2 rounded-2xl border border-teal-500/30 bg-gradient-to-br from-teal-900/30 to-slate-900/60 overflow-hidden">
+            <div className="px-4 pt-4 pb-3">
+              <div className="flex items-center gap-2 mb-3">
+                <Sparkles className="h-4 w-4 text-teal-400" />
+                <span className="text-sm font-bold text-teal-300 uppercase tracking-wide">
+                  {isQuoteOnly ? "Placeholder Estimate" : "Your Estimated Quote"}
+                </span>
+              </div>
+
+              {isQuoteOnly && (
+                <div className="flex items-start gap-2 bg-amber-900/20 border border-amber-500/30 rounded-xl px-3 py-2 mb-3">
+                  <AlertCircle className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
+                  <p className="text-xs text-amber-200/90">
+                    This is a <strong>placeholder range</strong> — a formal quote requires an in-person estimate. Darrell will contact you to schedule it.
+                  </p>
                 </div>
+              )}
+
+              {pendingQuote.type === "moving" && (
                 <div className="grid grid-cols-3 gap-2 mb-3">
-                  {!pendingQuote.isFlat && (
-                    <div className="bg-slate-800/60 rounded-xl p-3 text-center">
-                      <p className="text-[10px] text-slate-400 mb-1">Crew Size</p>
-                      <p className="text-xl font-bold text-white">{pendingQuote.crew}</p>
-                      <p className="text-[10px] text-slate-400">movers</p>
-                    </div>
-                  )}
-                  {!pendingQuote.isFlat && (
-                    <div className="bg-slate-800/60 rounded-xl p-3 text-center">
-                      <p className="text-[10px] text-slate-400 mb-1">Est. Hours</p>
-                      <p className="text-xl font-bold text-white">{pendingQuote.minHrs}–{pendingQuote.maxHrs}</p>
-                      <p className="text-[10px] text-slate-400">hours</p>
-                    </div>
-                  )}
-                  <div className={`bg-slate-800/60 rounded-xl p-3 text-center ${pendingQuote.isFlat ? "col-span-2" : ""}`}>
+                  <div className="bg-slate-800/60 rounded-xl p-3 text-center">
+                    <p className="text-[10px] text-slate-400 mb-1">Crew Size</p>
+                    <p className="text-xl font-bold text-white">{(pendingQuote as MovingQuote).crew}</p>
+                    <p className="text-[10px] text-slate-400">movers</p>
+                  </div>
+                  <div className="bg-slate-800/60 rounded-xl p-3 text-center">
+                    <p className="text-[10px] text-slate-400 mb-1">Est. Hours</p>
+                    <p className="text-xl font-bold text-white">{(pendingQuote as MovingQuote).minHrs}–{(pendingQuote as MovingQuote).maxHrs}</p>
+                    <p className="text-[10px] text-slate-400">hours</p>
+                  </div>
+                  <div className="bg-slate-800/60 rounded-xl p-3 text-center">
                     <p className="text-[10px] text-slate-400 mb-1">JCMOVES Earned</p>
-                    <p className="text-lg font-bold text-yellow-400">{(pendingQuote.tokensEstimate / 1000).toFixed(0)}K+</p>
+                    <p className="text-lg font-bold text-yellow-400">{((pendingQuote as MovingQuote).tokensEstimate / 1000).toFixed(0)}K</p>
                     <p className="text-[10px] text-slate-400">tokens</p>
                   </div>
                 </div>
-                <div className="bg-slate-900/60 rounded-xl p-3 text-center">
-                  <p className="text-xs text-slate-400 mb-1">Estimated Price Range</p>
-                  <p className="text-2xl font-bold text-white">
-                    ${pendingQuote.minPrice.toLocaleString()} – ${pendingQuote.maxPrice.toLocaleString()}
+                <div className="bg-slate-900/60 rounded-xl p-3 text-center mb-3">
+                  <p className="text-xs text-slate-400 mb-1">
+                    {pendingQuote.type === "trash_valet" ? "Price Range" : "Estimated Price Range"}
                   </p>
-                  {pendingQuote.specialSurcharge > 0 && (
-                    <p className="text-xs text-orange-400 mt-1">Includes ${pendingQuote.specialSurcharge} specialty item surcharge</p>
+                  <p className="text-2xl font-bold text-white">
+                    {pendingQuote.minPrice === pendingQuote.maxPrice
+                      ? `$${pendingQuote.minPrice.toLocaleString()}`
+                      : `$${pendingQuote.minPrice.toLocaleString()} – $${pendingQuote.maxPrice.toLocaleString()}`}
+                  </p>
+                  {pendingQuote.type === "moving" && (pendingQuote as MovingQuote).specialSurcharge > 0 && (
+                    <p className="text-xs text-orange-400 mt-1">Includes ${(pendingQuote as MovingQuote).specialSurcharge} specialty item surcharge</p>
                   )}
                   <p className="text-[11px] text-slate-500 mt-1">Final price confirmed by Darrell after review</p>
                 </div>
@@ -1191,16 +1317,134 @@ export function BookingChatbot({
                   Close <ArrowRight className="h-3 w-3 ml-1" />
                 </Button>
               )}
-              <button onClick={resetChat} className="text-xs text-slate-500 hover:text-slate-400 flex items-center gap-1">
-                <RotateCcw className="h-3 w-3" /> Start a new quote
-              </button>
             </div>
+          </div>
+        )}
+
+              {pendingQuote.type === "trash_valet" && (
+                <div className="bg-slate-800/60 rounded-xl p-3 text-center mb-3">
+                  <p className="text-xs text-slate-400 mb-1">Monthly Rate</p>
+                  <p className="text-2xl font-bold text-teal-300">${(pendingQuote as TrashValetQuoteResult).finalMonthlyPrice}/mo</p>
+                  <p className="text-[11px] text-slate-500 mt-1">Based on your can & bag count</p>
+                </div>
+              )}
+
+              {pendingQuote.type === "window_cleaning" && (
+                <div className="bg-slate-800/60 rounded-xl p-3 text-center mb-3">
+                  <p className="text-xs text-slate-400 mb-1">{(pendingQuote as WindowQuoteResult).paneCount} panes · $5/pane</p>
+                  <p className="text-2xl font-bold text-teal-300">${(pendingQuote as WindowQuoteResult).total}</p>
+                  <p className="text-[11px] text-slate-500 mt-1">Streak-free guarantee</p>
+                </div>
+              )}
+
+              <div className="bg-slate-900/60 rounded-xl p-3 text-center mb-3">
+                <p className="text-xs text-slate-400 mb-1">
+                  {pendingQuote.type === "trash_valet" ? "Price Range" : "Estimated Price Range"}
+                </p>
+                <p className="text-2xl font-bold text-white">
+                  {pendingQuote.minPrice === pendingQuote.maxPrice
+                    ? `$${pendingQuote.minPrice.toLocaleString()}`
+                    : `$${pendingQuote.minPrice.toLocaleString()} – $${pendingQuote.maxPrice.toLocaleString()}`}
+                </p>
+                {pendingQuote.type === "moving" && (pendingQuote as MovingQuote).specialSurcharge > 0 && (
+                  <p className="text-xs text-orange-400 mt-1">Includes ${(pendingQuote as MovingQuote).specialSurcharge} specialty item surcharge</p>
+                )}
+                <p className="text-[11px] text-slate-500 mt-1">Final price confirmed by Darrell after review</p>
+              </div>
+
+              {/* Selected package display */}
+              {answers.selectedPackage && crewPackages.length > 0 && (
+                <div className="bg-teal-900/30 border border-teal-500/30 rounded-xl p-3 mb-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Users className="h-3.5 w-3.5 text-teal-400" />
+                    <p className="text-xs font-bold text-teal-300 uppercase tracking-wide">Selected Package</p>
+                  </div>
+                  {(() => {
+                    const pkg = crewPackages.find(p => p.id === answers.selectedPackage);
+                    return pkg ? (
+                      <div>
+                        <p className="text-sm text-white font-semibold">{pkg.label}</p>
+                        <p className="text-xs text-slate-400">{pkg.desc}</p>
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
+              )}
+
+              {/* Deposit info */}
+              {depositInfo?.required && (
+                <div className="bg-orange-900/20 border border-orange-500/30 rounded-xl px-3 py-2 mb-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <DollarSign className="h-3.5 w-3.5 text-orange-400" />
+                    <p className="text-xs font-bold text-orange-300 uppercase tracking-wide">Estimate Deposit Required</p>
+                  </div>
+                  <p className="text-xs text-orange-200/80">${depositInfo.amount} — {depositInfo.termsHtml}</p>
+                </div>
+              )}
+
+              <div className="flex items-start gap-2 bg-blue-900/20 border border-blue-500/20 rounded-lg px-3 py-2">
+                <span className="text-base shrink-0">🔍</span>
+                <p className="text-xs text-slate-300">
+                  {isQuoteOnly
+                    ? "These ranges are for budgeting only. A formal quote requires an in-person estimate. No commitment needed to schedule one."
+                    : "This is an estimate only. Darrell personally reviews every submission before sending your official quote."}
+                </p>
+              </div>
+            </div>
+
+            {!submitted ? (
+              <div className="px-4 pb-4">
+                <Button
+                  onClick={() => submitMutation.mutate()}
+                  disabled={submitMutation.isPending}
+                  className={`w-full font-bold py-3 rounded-xl text-sm ${
+                    isQuoteOnly
+                      ? "bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500"
+                      : "bg-gradient-to-r from-teal-600 to-blue-600 hover:from-teal-500 hover:to-blue-500"
+                  } text-white`}
+                >
+                  {submitMutation.isPending ? (
+                    "Submitting…"
+                  ) : isQuoteOnly ? (
+                    <>
+                      <Send className="h-4 w-4 mr-2" />
+                      Request My Quote
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4 mr-2" />
+                      Submit for Review
+                    </>
+                  )}
+                </Button>
+              </div>
+            ) : (
+              <div className="px-4 pb-4 flex flex-col items-center gap-3 text-center">
+                <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center">
+                  <CheckCircle2 className="h-6 w-6 text-green-400" />
+                </div>
+                <div>
+                  <p className="font-bold text-white text-sm">
+                    {isQuoteOnly ? "Quote Request Submitted!" : "Quote Submitted!"}
+                  </p>
+                  <p className="text-xs text-slate-400">Darrell will review and reach out soon.</p>
+                </div>
+                {onClose && showClose && (
+                  <Button variant="outline" size="sm" onClick={onClose} className="border-slate-600 text-slate-300 hover:bg-slate-800">
+                    Close <ArrowRight className="h-3 w-3 ml-1" />
+                  </Button>
+                )}
+                <button onClick={resetChat} className="text-xs text-slate-500 hover:text-slate-400 flex items-center gap-1">
+                  <RotateCcw className="h-3 w-3" /> Start a new quote
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* Input area — only show during chat phase and not done */}
-      {phase === "chat" && !isDone && currentStep && (
+      {/* Input area */}
+      {!isDone && currentStep && (
         <div className="shrink-0 pt-2 border-t border-slate-800/60">
           {/* CHOICE */}
           {currentStep.type === "choice" && (
@@ -1260,6 +1504,8 @@ export function BookingChatbot({
                 placeholder={currentStep.placeholder || "Type your answer…"}
                 className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 text-sm"
                 autoFocus
+                type={currentStep.id.includes("windows") || currentStep.id === "trashCans" ? "number" : "text"}
+                min="0"
               />
               <Button onClick={handleTextSubmit} size="icon" className="bg-teal-600 hover:bg-teal-500 shrink-0">
                 <Send className="h-4 w-4" />
@@ -1321,6 +1567,68 @@ export function BookingChatbot({
               >
                 Continue <ChevronRight className="h-3.5 w-3.5 ml-1" />
               </Button>
+            </div>
+          )}
+
+          {/* DEPOSIT ACKNOWLEDGMENT */}
+          {currentStep.type === "deposit_ack" && depositInfo && (
+            <div className="space-y-3">
+              <div className="bg-orange-900/20 border border-orange-500/30 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <DollarSign className="h-4 w-4 text-orange-400" />
+                  <p className="text-sm font-bold text-orange-300">Estimate Deposit Required</p>
+                </div>
+                <p className="text-sm text-orange-100/80 mb-3">
+                  A <strong className="text-white">${depositInfo.amount} non-refundable deposit</strong> is required to schedule your in-person estimate.
+                </p>
+                <p className="text-xs text-orange-300/70 mb-3">{depositInfo.termsHtml}</p>
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={depositChecked}
+                    onChange={(e) => setDepositChecked(e.target.checked)}
+                    className="mt-0.5 shrink-0 accent-orange-500"
+                  />
+                  <span className="text-xs text-slate-300">
+                    I understand and agree to the ${depositInfo.amount} non-refundable estimate deposit. This amount will be credited toward my project upon booking.
+                  </span>
+                </label>
+              </div>
+              <Button
+                onClick={handleDepositAck}
+                disabled={!depositChecked}
+                className="w-full bg-orange-600 hover:bg-orange-500 text-white"
+                size="sm"
+              >
+                Acknowledge & Continue <ChevronRight className="h-3.5 w-3.5 ml-1" />
+              </Button>
+            </div>
+          )}
+
+          {/* PACKAGE SELECT */}
+          {currentStep.type === "package_select" && crewPackages.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-slate-200 mb-1">Choose your crew package:</p>
+              {crewPackages.map((pkg) => (
+                <button
+                  key={pkg.id}
+                  onClick={() => handlePackageSelect(pkg)}
+                  className="w-full text-left p-3 rounded-xl border border-slate-700/60 bg-slate-800/60 hover:border-teal-500/60 hover:bg-teal-900/20 transition-all"
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-semibold text-white">{pkg.label}</span>
+                    <div className="flex items-center gap-2">
+                      {pkg.tag && <Badge className="text-[10px] bg-teal-700/60 text-teal-200 border-0">{pkg.tag}</Badge>}
+                      <span className="text-sm font-bold text-teal-300">
+                        {pkg.minPrice === pkg.maxPrice
+                          ? `$${pkg.minPrice}`
+                          : `$${pkg.minPrice}–$${pkg.maxPrice}`}
+                      </span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-400">{pkg.desc}</p>
+                </button>
+              ))}
             </div>
           )}
         </div>

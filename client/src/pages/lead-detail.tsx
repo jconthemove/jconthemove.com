@@ -111,6 +111,11 @@ interface Lead {
   quoteViewedAt?: string;
   arrivalWindow?: string;
   squarePaymentUrl?: string;
+  depositRequired?: boolean;
+  depositAmount?: string | number | null;
+  depositPaid?: boolean;
+  isQuoteOnly?: boolean;
+  selectedPackageId?: string;
 }
 
 interface Reward {
@@ -614,6 +619,36 @@ export default function LeadDetailPage() {
     },
   });
 
+  const markAsPaidMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("POST", `/api/leads/${params?.id}/mark-paid`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads", params?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads", params?.id, "history"] });
+      toast({ title: "Dispatched!", description: "Job marked as paid and crew SMS sent." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message || "Failed to dispatch", variant: "destructive" });
+    },
+  });
+
+  const markDepositReceivedMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("POST", `/api/leads/${params?.id}/mark-deposit-received`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads", params?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads", params?.id, "history"] });
+      toast({ title: "Deposit confirmed!", description: "Customer notified via SMS." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message || "Failed to confirm deposit", variant: "destructive" });
+    },
+  });
+
   const computeEffectiveCrewSize = () => selectedCrewMembers.length + (bonusMover ? 1 : 0);
 
   const handleSave = () => {
@@ -1087,6 +1122,104 @@ export default function LeadDetailPage() {
                 </Card>
               );
             })()}
+
+            {/* Selected Package card — admin only, shown for chatbot leads */}
+            {hasAdminAccess && lead.details && (() => {
+              try {
+                const parsed = JSON.parse(lead.details);
+                if (parsed._source === "chatbot" && parsed.selectedPackage) {
+                  const pkg = parsed.selectedPackage;
+                  return (
+                    <Card className="border-blue-500/20 bg-blue-950/10">
+                      <CardContent className="pt-4 pb-4">
+                        <div className="flex items-start gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-blue-600/20 flex items-center justify-center shrink-0">
+                            <ShoppingBag className="h-4 w-4 text-blue-400" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-blue-300 uppercase tracking-wider mb-1">Customer-Selected Package</p>
+                            <p className="text-sm font-bold text-white">{pkg.label || pkg.id}</p>
+                            {pkg.desc && <p className="text-xs text-slate-400 mt-0.5">{pkg.desc}</p>}
+                            <div className="flex items-center gap-3 mt-2 text-xs text-slate-300">
+                              {(pkg.minPrice || pkg.maxPrice) && (
+                                <span className="font-semibold text-emerald-400">
+                                  ${pkg.minPrice}–${pkg.maxPrice}
+                                </span>
+                              )}
+                              {pkg.crew && <span>{pkg.crew} movers</span>}
+                              {parsed.isQuoteOnly && (
+                                <Badge className="bg-amber-600/20 text-amber-300 border-amber-500/30 text-[10px]">In-Person Estimate</Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                }
+              } catch (_) {}
+              return null;
+            })()}
+
+            {/* Deposit gate card — admin only */}
+            {hasAdminAccess && lead.depositRequired && (
+              <Card className="border-orange-500/30 bg-orange-950/10">
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="h-4 w-4 text-orange-400" />
+                      <p className="text-sm font-semibold text-orange-300">Deposit Required</p>
+                      <Badge className={lead.depositPaid ? "bg-green-600/20 text-green-300 border-green-500/30" : "bg-orange-600/20 text-orange-300 border-orange-500/30"}>
+                        {lead.depositPaid ? "Paid" : `$${lead.depositAmount || "?"} Pending`}
+                      </Badge>
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-400 mb-3">
+                    {lead.isQuoteOnly
+                      ? "Customer needs to pay this deposit before an in-person estimate can be scheduled."
+                      : "Customer needs to pay this deposit to secure their booking."}
+                  </p>
+                  {!lead.depositPaid && (
+                    <Button
+                      size="sm"
+                      onClick={() => markDepositReceivedMutation.mutate()}
+                      disabled={markDepositReceivedMutation.isPending}
+                      className="bg-orange-600 hover:bg-orange-700 text-white"
+                    >
+                      {markDepositReceivedMutation.isPending
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                        : <CheckCircle className="h-3.5 w-3.5 mr-1.5" />}
+                      Mark Deposit Received
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Mark as Paid + Dispatch button — admin only */}
+            {hasAdminAccess && !["dispatched", "completed", "cancelled"].includes(lead.status) && (
+              <Card className="border-teal-500/20 bg-teal-950/10">
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-teal-300 mb-0.5">Mark as Paid & Dispatch</p>
+                      <p className="text-xs text-slate-400">Transitions to "Dispatched" and sends SMS to assigned crew members.</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => markAsPaidMutation.mutate()}
+                      disabled={markAsPaidMutation.isPending}
+                      className="bg-teal-600 hover:bg-teal-700 text-white ml-4 shrink-0"
+                    >
+                      {markAsPaidMutation.isPending
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                        : <Zap className="h-3.5 w-3.5 mr-1.5" />}
+                      Dispatch
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Customer Information */}
             <Card>

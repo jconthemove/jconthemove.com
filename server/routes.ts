@@ -4969,7 +4969,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         crewSize: lead.crewSize || null,
         details: lead.details || '',
         notes: lead.quoteNotes || '',
-        createdAt: lead.createdAt?.toISOString() || ''
+        createdAt: lead.createdAt?.toISOString() || '',
+        squarePaymentUrl: lead.squarePaymentUrl || null,
+        depositRequired: lead.depositRequired || false,
+        depositAmount: lead.depositAmount ? parseFloat(lead.depositAmount) : null,
+        depositPaid: lead.depositPaid || false,
+        isQuoteOnly: lead.isQuoteOnly || false,
       }));
       res.json(transformedLeads);
     } catch (error) {
@@ -17546,7 +17551,7 @@ Thank you for your business!
   // ── Chatbot Quote Submission ──────────────────────────────────────────────
   app.post("/api/chatbot-quote", async (req: any, res) => {
     try {
-      const { answers, quote, selectedPackage, depositPaid } = req.body;
+      const { answers, quote, selectedPackage, depositRequired, depositAmount, serviceLabel, isQuoteOnly, customerZip, depositPaid } = req.body;
       if (!answers || !quote) return res.status(400).json({ error: "Missing answers or quote" });
 
       const a = answers as Record<string, any>;
@@ -17559,29 +17564,50 @@ Thank you for your business!
       const last = rest.join(" ") || "";
 
       // Build from/to address strings (ZIPs for moving, addresses for other services)
-      const fromAddress = a.fromZip ? `ZIP: ${a.fromZip}` :
+      const fromZip = a.fromZip || customerZip || "";
+      const fromAddress = fromZip ? `ZIP: ${fromZip}` :
         (a.serviceAddress || a.windowAddress || a.trashAddress || "Not provided");
       const toAddress = a.toZip ? `ZIP: ${a.toZip}` : undefined;
 
-      // Determine service type for DB
-      const svcRaw: string = a.serviceType || "Local Move";
-      const serviceType =
-        svcRaw.includes("Junk") ? "junk" :
-        svcRaw.includes("Snow") ? "snow" :
-        svcRaw.includes("Handyman") ? "handyman" :
-        svcRaw.includes("Painting") ? "painting" :
-        svcRaw.includes("Flooring") ? "flooring" :
-        svcRaw.includes("Window") ? "window_cleaning" :
-        svcRaw.includes("Trash Valet") ? "trash_valet" :
-        "residential";
+      // Determine service type label from new 8-service payload
+      const svcRaw: string = serviceLabel || a.serviceType || "Local Move";
+      let serviceType = "residential";
+      if (svcRaw.toLowerCase().includes("junk")) serviceType = "junk";
+      else if (svcRaw.toLowerCase().includes("trash valet")) serviceType = "trash_valet";
+      else if (svcRaw.toLowerCase().includes("window")) serviceType = "window_cleaning";
+      else if (svcRaw.toLowerCase().includes("paint")) serviceType = "painting";
+      else if (svcRaw.toLowerCase().includes("floor")) serviceType = "flooring";
+      else if (svcRaw.toLowerCase().includes("roof")) serviceType = "roofing";
+      else if (svcRaw.toLowerCase().includes("handyman")) serviceType = "handyman";
+      else if (svcRaw.toLowerCase().includes("snow")) serviceType = "snow";
 
-      // Store all chatbot Q&A in details as JSON
+      // Enforce deposit rules server-side — never trust client-provided values
+      const IRONWOOD_ZIP = "49938";
+      const isLocal = fromZip.trim() === IRONWOOD_ZIP;
+      const QUOTE_ONLY_SERVICES_SERVER = ["painting", "flooring", "roofing", "handyman"];
+      const serverIsQuoteOnly = QUOTE_ONLY_SERVICES_SERVER.includes(serviceType);
+      let serverDepositRequired = false;
+      let serverDepositAmount = 0;
+      if (serviceType === "handyman") {
+        serverDepositRequired = true;
+        serverDepositAmount = isLocal ? 50 : 100;
+      } else if (["painting", "flooring", "roofing"].includes(serviceType)) {
+        if (!isLocal) {
+          serverDepositRequired = true;
+          serverDepositAmount = 100;
+        }
+      }
+
+      // Store all chatbot Q&A in details as JSON (uses server-computed deposit values)
       const detailsJson = JSON.stringify({
         _source: "chatbot",
         answers,
         estimatedQuote: quote,
-        selectedPackage: selectedPackage || null,
-        depositPaid: depositPaid || false,
+        selectedPackage: (selectedPackage && typeof selectedPackage === "object") ? selectedPackage : null,
+        depositRequired: serverDepositRequired,
+        depositAmount: serverDepositAmount,
+        isQuoteOnly: serverIsQuoteOnly,
+        customerZip: fromZip,
       }, null, 2);
 
       // Determine move date hint
@@ -17617,28 +17643,33 @@ Thank you for your business!
         propertySize: a.homeSize || a.scopeSize || null,
         details: detailsJson,
         moveDate: moveDate || null,
-        status: "chatbot_pending" as any,
-        crewSize: quote.crew || 2,
-        basePrice,
-        totalPrice,
+        status: (serverDepositRequired ? "deposit_pending" : "chatbot_pending") as any,
+        crewSize: (selectedPackage && typeof selectedPackage === "object" ? selectedPackage.crew : null) ?? quote.crew ?? 2,
+        basePrice: String((selectedPackage && typeof selectedPackage === "object" ? selectedPackage.minPrice : null) ?? quote.minPrice ?? 0),
+        totalPrice: String((selectedPackage && typeof selectedPackage === "object" ? selectedPackage.maxPrice : null) ?? quote.maxPrice ?? 0),
         smsConsent: false,
         createdByUserId: userId,
+        selectedPackageId: (selectedPackage && typeof selectedPackage === "object" ? selectedPackage.id : selectedPackage) || null,
+        depositRequired: serverDepositRequired,
+        depositAmount: serverDepositAmount > 0 ? String(serverDepositAmount) : null,
+        depositPaid: false,
+        isQuoteOnly: serverIsQuoteOnly,
         createdAt: new Date(),
       }).returning();
 
       // Auto-create deposit invoice via Square (non-blocking — doesn't fail the request)
       let depositInvoiceSent = false;
       let depositInvoiceUrl: string | null = null;
-      const DEPOSIT_AMOUNT = 75;
-      if (depositPaid) {
+      const DEPOSIT_AMOUNT = serverDepositAmount || 75;
+      if (serverDepositRequired) {
         try {
           const { squareInvoiceService } = await import("./services/square-invoice");
           if (squareInvoiceService.isConfigured()) {
-            const pkgLabel = selectedPackage ? selectedPackage.label : svcRaw;
+            const pkgLabelForInvoice = (selectedPackage && typeof selectedPackage === "object") ? (selectedPackage.label || selectedPackage.id) : svcRaw;
             const invoiceResult = await squareInvoiceService.createInvoiceForLead(
               lead,
               DEPOSIT_AMOUNT,
-              `Appointment Deposit — ${pkgLabel} (${svcRaw})`,
+              `Appointment Deposit — ${pkgLabelForInvoice} (${svcRaw})`,
               undefined, // default due date (48 hrs)
               "email"
             );
@@ -17656,14 +17687,20 @@ Thank you for your business!
       }
 
       // Notify admin via email
-      const pkgLabel = selectedPackage ? selectedPackage.label : "No package selected yet";
-      const depositNote = depositPaid
-        ? (depositInvoiceSent ? `✅ Deposit invoice ($${DEPOSIT_AMOUNT}) sent to customer via Square` : `⏳ Deposit requested but Square not configured`)
-        : "⏳ No deposit — review only";
       try {
+        const pkgLabel = selectedPackage ? (selectedPackage.label || selectedPackage.id) : "No package selected yet";
+        const depositNote = depositPaid ? `✅ Deposit PAID ($${serverDepositAmount})` : (serverDepositRequired ? `⏳ Deposit REQUIRED ($${serverDepositAmount})` : "⏳ No deposit — review only");
+        
+        const pkgLine = selectedPackage
+          ? `<p><strong>Package:</strong> ${pkgLabel}</p>`
+          : "";
+        const depositLine = serverDepositRequired
+          ? `<p><strong>⚠️ Deposit Required:</strong> $${serverDepositAmount} (${serverIsQuoteOnly ? "in-person estimate" : "booking"})</p>`
+          : "";
+
         await sendEmail({
           to: "upmichiganstatemovers@gmail.com",
-          subject: `🤖 New Chatbot Quote: ${name} — ${a.homeSize || a.scopeSize || svcRaw}`,
+          subject: `🤖 New Chatbot Quote: ${name} — ${svcRaw}`,
           html: `<h2>New chatbot quote submitted</h2>
             <p><strong>Name:</strong> ${name}</p>
             <p><strong>Phone:</strong> ${phone}</p>
@@ -17675,8 +17712,10 @@ Thank you for your business!
             <p><strong>Home Size / Scope:</strong> ${a.homeSize || a.scopeSize || "N/A"}</p>
             <p><strong>From:</strong> ${fromAddress}${toAddress ? ` → ${toAddress}` : ""}</p>
             <p><strong>Date:</strong> ${moveDateStr}</p>
+            ${pkgLine}
+            ${depositLine}
             <p><strong>Estimated Range:</strong> $${quote.minPrice}–$${quote.maxPrice}</p>
-            ${!quote.isFlat ? `<p><strong>Crew:</strong> ${quote.crew} movers, ${quote.minHrs}–${quote.maxHrs} hrs</p>` : ""}
+            ${(quote.crew || selectedPackage?.crew) ? `<p><strong>Crew:</strong> ${quote.crew || selectedPackage.crew} movers, ${quote.minHrs || ""}–${quote.maxHrs || ""} hrs</p>` : ""}
             <p><a href="https://jconthemove.replit.app/admin/quote-review">Review at Admin Dashboard →</a></p>`,
         });
       } catch (_) {}
@@ -17740,6 +17779,92 @@ Thank you for your business!
         console.error('[lead_history] Chatbot dismiss history failed:', histErr);
       }
       res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Admin: Mark Lead as Paid + Dispatch Crew SMS ─────────────────────────────
+  app.post("/api/leads/:id/mark-paid", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser((req.session as any).userId);
+      if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
+
+      const [lead] = await db.select().from(leads).where(eq(leads.id, req.params.id));
+      if (!lead) return res.status(404).json({ error: "Lead not found" });
+
+      // Record 'paid' transition first, then 'dispatched'
+      await db.update(leads)
+        .set({ status: "paid" as any, lastQuoteUpdatedAt: new Date() })
+        .where(eq(leads.id, req.params.id));
+      try {
+        await writeLeadHistory(req.params.id, lead.status, "paid", user.id, "Payment confirmed by admin");
+      } catch (_) {}
+
+      await db.update(leads)
+        .set({ status: "dispatched" as any, lastQuoteUpdatedAt: new Date() })
+        .where(eq(leads.id, req.params.id));
+      try {
+        await writeLeadHistory(req.params.id, "paid", "dispatched", user.id, "Crew dispatched by admin");
+      } catch (_) {}
+
+      // SMS to assigned crew members if any
+      const crewIds: string[] = (lead.crewMembers as string[] | null) || [];
+      const smsResults: any[] = [];
+      if (crewIds.length > 0) {
+        for (const crewId of crewIds) {
+          try {
+            const crewMember = await storage.getUser(crewId);
+            if (crewMember?.phoneNumber) {
+              const customerName = `${lead.firstName || ""} ${lead.lastName || ""}`.trim();
+              const msg = `🚚 JC ON THE MOVE — DISPATCH ALERT\n\nYou've been assigned a job!\n\nCustomer: ${customerName}\nService: ${lead.serviceType || "Move"}\nDate: ${lead.confirmedDate || lead.moveDate || "TBD"}\nPickup: ${lead.confirmedFromAddress || lead.fromAddress || "TBD"}\n\nOpen the app for full details. Questions? Call Darrell.`;
+              const result = await smsService.sendSMS(crewMember.phoneNumber, msg);
+              smsResults.push({ crewId, ...result });
+            }
+          } catch (_) {}
+        }
+      }
+
+      // Also SMS customer if phone available
+      if (lead.phone) {
+        try {
+          const msg = `Hi ${lead.firstName || "there"}, your JC on the Move crew has been dispatched! They'll reach out before arrival. Questions? Call (906) 222-6009.`;
+          await smsService.sendSMS(lead.phone, msg);
+        } catch (_) {}
+      }
+
+      res.json({ success: true, status: "dispatched", smsResults });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Admin: Mark Deposit Received ──────────────────────────────────────────
+  app.post("/api/leads/:id/mark-deposit-received", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser((req.session as any).userId);
+      if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
+
+      const [lead] = await db.select().from(leads).where(eq(leads.id, req.params.id));
+      if (!lead) return res.status(404).json({ error: "Lead not found" });
+
+      await db.update(leads)
+        .set({ depositPaid: true, status: "under_review" as any, lastQuoteUpdatedAt: new Date() })
+        .where(eq(leads.id, req.params.id));
+
+      try {
+        await writeLeadHistory(req.params.id, lead.status, "under_review", user.id, "Deposit received — estimate scheduling unlocked");
+      } catch (_) {}
+
+      // Notify customer
+      if (lead.phone) {
+        try {
+          const msg = `Hi ${lead.firstName || "there"}! We've received your deposit for your ${lead.serviceType || "service"} estimate. Darrell will be in touch shortly to schedule your in-person visit. Call (906) 222-6009 with questions.`;
+          await smsService.sendSMS(lead.phone, msg);
+        } catch (_) {}
+      }
+
+      res.json({ success: true, status: "under_review" });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
