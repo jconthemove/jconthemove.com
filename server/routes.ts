@@ -17529,7 +17529,7 @@ Thank you for your business!
   // ── Chatbot Quote Submission ──────────────────────────────────────────────
   app.post("/api/chatbot-quote", async (req: any, res) => {
     try {
-      const { answers, quote } = req.body;
+      const { answers, quote, selectedPackage, depositPaid } = req.body;
       if (!answers || !quote) return res.status(400).json({ error: "Missing answers or quote" });
 
       const a = answers as Record<string, any>;
@@ -17541,19 +17541,34 @@ Thank you for your business!
       const [first, ...rest] = name.split(" ");
       const last = rest.join(" ") || "";
 
-      // Build from/to address strings from zips
-      const fromAddress = a.fromZip ? `ZIP: ${a.fromZip}` : "Not provided";
+      // Build from/to address strings (ZIPs for moving, addresses for other services)
+      const fromAddress = a.fromZip ? `ZIP: ${a.fromZip}` :
+        (a.serviceAddress || a.windowAddress || a.trashAddress || "Not provided");
       const toAddress = a.toZip ? `ZIP: ${a.toZip}` : undefined;
 
-      // Determine service type label
+      // Determine service type for DB
       const svcRaw: string = a.serviceType || "Local Move";
-      const serviceType = svcRaw.includes("Junk") ? "junk" : "residential";
+      const serviceType =
+        svcRaw.includes("Junk") ? "junk" :
+        svcRaw.includes("Snow") ? "snow" :
+        svcRaw.includes("Handyman") ? "handyman" :
+        svcRaw.includes("Painting") ? "painting" :
+        svcRaw.includes("Flooring") ? "flooring" :
+        svcRaw.includes("Window") ? "window_cleaning" :
+        svcRaw.includes("Trash Valet") ? "trash_valet" :
+        "residential";
 
       // Store all chatbot Q&A in details as JSON
-      const detailsJson = JSON.stringify({ _source: "chatbot", answers, estimatedQuote: quote }, null, 2);
+      const detailsJson = JSON.stringify({
+        _source: "chatbot",
+        answers,
+        estimatedQuote: quote,
+        selectedPackage: selectedPackage || null,
+        depositPaid: depositPaid || false,
+      }, null, 2);
 
       // Determine move date hint
-      const moveDateStr = a.moveDate || "";
+      const moveDateStr = a.moveDate || a.projectDate || "";
       let moveDate: string | null = null;
       if (moveDateStr.includes("This week")) {
         const d = new Date(); d.setDate(d.getDate() + 3);
@@ -17562,6 +17577,14 @@ Thank you for your business!
         const d = new Date(); d.setDate(d.getDate() + 10);
         moveDate = d.toISOString().split("T")[0];
       }
+
+      // Use selected package price if available, otherwise fall back to quote range
+      const basePrice = selectedPackage?.price
+        ? String(selectedPackage.price)
+        : String(quote.minPrice || 0);
+      const totalPrice = selectedPackage?.maxPrice
+        ? String(selectedPackage.maxPrice)
+        : String(quote.maxPrice || 0);
 
       const userId = (req.session as any)?.userId || null;
 
@@ -17574,33 +17597,37 @@ Thank you for your business!
         serviceType,
         fromAddress,
         toAddress: toAddress || null,
-        propertySize: a.homeSize || null,
+        propertySize: a.homeSize || a.scopeSize || null,
         details: detailsJson,
         moveDate: moveDate || null,
         status: "chatbot_pending" as any,
         crewSize: quote.crew || 2,
-        basePrice: String(quote.minPrice || 0),
-        totalPrice: String(quote.maxPrice || 0),
+        basePrice,
+        totalPrice,
         smsConsent: false,
         createdByUserId: userId,
         createdAt: new Date(),
       }).returning();
 
       // Notify admin via email if possible
+      const pkgLabel = selectedPackage ? selectedPackage.label : "No package selected yet";
+      const depositNote = depositPaid ? "✅ Deposit PAID ($75)" : "⏳ No deposit — review only";
       try {
         await sendEmail({
           to: "upmichiganstatemovers@gmail.com",
-          subject: `🤖 New Chatbot Quote: ${name} — ${a.homeSize || svcRaw}`,
+          subject: `🤖 New Chatbot Quote: ${name} — ${a.homeSize || a.scopeSize || svcRaw}`,
           html: `<h2>New chatbot quote submitted</h2>
             <p><strong>Name:</strong> ${name}</p>
             <p><strong>Phone:</strong> ${phone}</p>
             <p><strong>Email:</strong> ${email}</p>
             <p><strong>Service:</strong> ${svcRaw}</p>
-            <p><strong>Home Size:</strong> ${a.homeSize || "N/A"}</p>
-            <p><strong>From ZIP:</strong> ${a.fromZip || "N/A"} → <strong>To ZIP:</strong> ${a.toZip || "N/A"}</p>
-            <p><strong>Move Date:</strong> ${moveDateStr}</p>
+            <p><strong>Package Selected:</strong> ${pkgLabel}</p>
+            <p><strong>Deposit:</strong> ${depositNote}</p>
+            <p><strong>Home Size / Scope:</strong> ${a.homeSize || a.scopeSize || "N/A"}</p>
+            <p><strong>From:</strong> ${fromAddress}${toAddress ? ` → ${toAddress}` : ""}</p>
+            <p><strong>Date:</strong> ${moveDateStr}</p>
             <p><strong>Estimated Range:</strong> $${quote.minPrice}–$${quote.maxPrice}</p>
-            <p><strong>Crew:</strong> ${quote.crew} movers, ${quote.minHrs}–${quote.maxHrs} hrs</p>
+            ${!quote.isFlat ? `<p><strong>Crew:</strong> ${quote.crew} movers, ${quote.minHrs}–${quote.maxHrs} hrs</p>` : ""}
             <p><a href="https://jconthemove.replit.app/admin/quote-review">Review at Admin Dashboard →</a></p>`,
         });
       } catch (_) {}
