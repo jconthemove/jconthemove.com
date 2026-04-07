@@ -613,6 +613,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('⚠️ square_invoices.square_invoice_number migration error (non-fatal):', migErr);
   }
 
+  // Schema migration: deposit gate + quote-only columns on leads
+  try {
+    await pool.query(`
+      ALTER TABLE leads ADD COLUMN IF NOT EXISTS deposit_required BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE leads ADD COLUMN IF NOT EXISTS deposit_amount_gate NUMERIC(10,2);
+      ALTER TABLE leads ADD COLUMN IF NOT EXISTS deposit_paid BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE leads ADD COLUMN IF NOT EXISTS is_quote_only BOOLEAN NOT NULL DEFAULT false;
+    `);
+    console.log('✅ Leads deposit_required/deposit_paid/is_quote_only columns ready');
+  } catch (migErr) {
+    console.error('⚠️ Leads deposit columns migration error (non-fatal):', migErr);
+  }
+
   // Schema migration: spin_results extended columns + jackpots + spin_config tables
   try {
     await pool.query(`
@@ -12731,6 +12744,76 @@ Thank you for your business!
     } catch (error) {
       console.error("Error checking Square config:", error);
       res.status(500).json({ error: "Failed to check configuration" });
+    }
+  });
+
+  // ── Dev-only: simulate invoice paid for a given lead ────────────────────
+  // POST /api/dev/simulate-invoice-paid/:leadId
+  // Non-production only. Skips Square HMAC. Runs the same paid→dispatch
+  // logic as the real Square webhook so devs can test end-to-end without
+  // a live Square account.
+  app.post("/api/dev/simulate-invoice-paid/:leadId", isAuthenticated, async (req: any, res) => {
+    if (process.env.NODE_ENV === "production") {
+      return res.status(404).json({ error: "Not found" });
+    }
+    const user = await storage.getUser(req.user?.id || (req.session as any).userId);
+    if (!user || !["admin", "business_owner"].includes(user.role || "")) {
+      return res.status(403).json({ error: "Unauthorized" });
+    }
+    const { leadId } = req.params;
+    const log: string[] = [];
+    try {
+      const lead = await storage.getLead(leadId);
+      if (!lead) return res.status(404).json({ error: "Lead not found", leadId });
+
+      log.push(`[sim] Lead found: ${lead.firstName} ${lead.lastName} — status: ${lead.status}`);
+
+      // Mark deposit paid on the lead
+      await db.update(leads)
+        .set({ depositPaid: true as any, status: "paid" as any, lastQuoteUpdatedAt: new Date() })
+        .where(eq(leads.id, leadId));
+      log.push("[sim] Lead status → paid, depositPaid = true");
+
+      try {
+        await writeLeadHistory(leadId, lead.status, "paid", user.id, "DEV: Simulated invoice payment");
+        log.push("[sim] Lead history written");
+      } catch (_) { log.push("[sim] Lead history write skipped"); }
+
+      // Auto-dispatch crew
+      let assignedCrew: string[] = [];
+      try {
+        const { dispatchGenericJob } = await import("./services/dispatchGeneric");
+        const crewSize = lead.crewSize || 2;
+        const kind = lead.serviceType === "junk" ? "labor" : "moving";
+        assignedCrew = await dispatchGenericJob({ leadId, kind, crewSize });
+        if (assignedCrew.length > 0) {
+          log.push(`[sim] Auto-dispatched ${assignedCrew.length} crew member(s)`);
+          await db.update(leads)
+            .set({ status: "dispatched" as any })
+            .where(eq(leads.id, leadId));
+          await writeLeadHistory(leadId, "paid", "dispatched", user.id, "DEV: Crew auto-dispatched");
+          log.push("[sim] Lead status → dispatched");
+        } else {
+          log.push("[sim] No available crew for auto-dispatch — status stays paid");
+        }
+      } catch (dispErr: any) {
+        log.push(`[sim] Dispatch error (non-fatal): ${dispErr.message}`);
+      }
+
+      // Notify customer via SMS
+      if (lead.phone) {
+        try {
+          await smsService.sendSMS(
+            lead.phone,
+            `Hi ${lead.firstName || "there"}, your JC on the Move payment has been confirmed! Your crew has been dispatched. Questions? Call (906) 222-6009.`
+          );
+          log.push("[sim] Customer SMS sent");
+        } catch (_) { log.push("[sim] Customer SMS skipped (not configured)"); }
+      }
+
+      return res.json({ success: true, leadId, finalStatus: assignedCrew.length > 0 ? "dispatched" : "paid", crewAssigned: assignedCrew.length, log });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message, log });
     }
   });
 
