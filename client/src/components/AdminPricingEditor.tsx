@@ -59,12 +59,6 @@ interface Pricing {
   fuelSurchargeMinMiles: number;
 }
 
-interface RewardSetting {
-  settingKey: string;
-  tokenAmount: string;
-  isActive: boolean;
-}
-
 const DEFAULTS = {
   rate_per_mover_hour: "85",
   drive_rate: "40",
@@ -169,9 +163,6 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
   const [resetting, setResetting] = useState(false);
 
   const { data: pricing } = useQuery<Pricing>({ queryKey: ["/api/pricing"] });
-  const { data: rewardSettingsList } = useQuery<RewardSetting[]>({
-    queryKey: ["/api/admin/reward-settings"],
-  });
 
   const [draft, setDraft] = useState<typeof DEFAULTS>(DEFAULTS);
   const [rewardDraft, setRewardDraft] = useState<typeof REWARD_DEFAULTS>(REWARD_DEFAULTS);
@@ -626,7 +617,7 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
               onClick={handleReset}
               disabled={saveMutation.isPending || resetting}
               className="text-slate-400 border-slate-700 hover:text-red-400 hover:border-red-500/50 px-3"
-              title="Reset all pricing to defaults"
+              title="Reset pricing config to defaults (does not reset token economy)"
             >
               <RotateCcw className="h-3.5 w-3.5" />
             </Button>
