@@ -110,6 +110,7 @@ const AdminSystemPage = lazy(() => import("@/pages/admin/system"));
 const AdminSponsorsPage = lazy(() => import("@/pages/admin/sponsors"));
 const BookLawnCarePage = lazy(() => import("@/pages/book-lawn-care"));
 const AdminLawnCarePage = lazy(() => import("@/pages/admin-lawn-care"));
+const PricingPage = lazy(() => import("@/pages/pricing"));
 
 // Thin fallback shown while a lazy page chunk is downloading
 function PageLoader() {
@@ -718,6 +719,7 @@ function Router() {
       
       {/* Services page - accessible to all */}
       <Route path="/services" component={ServicesPage} />
+      <Route path="/pricing" component={PricingPage} />
       
       {/* Gallery page - accessible to all */}
       <Route path="/gallery" component={GalleryPage} />

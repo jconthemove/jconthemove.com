@@ -266,7 +266,14 @@ export default function HomePage() {
         <div className="max-w-5xl mx-auto">
           <p className="text-blue-400 text-xs font-semibold uppercase tracking-widest text-center mb-2">What We Do</p>
           <h2 className="text-2xl md:text-3xl font-bold text-white text-center mb-2">All Services</h2>
-          <p className="text-slate-400 text-sm text-center mb-8">Tap any service to start booking or get a quote.</p>
+          <p className="text-slate-400 text-sm text-center mb-4">Tap any service to start booking or get a quote.</p>
+          <div className="flex justify-center mb-6">
+            <Link href="/pricing">
+              <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-orange-400 border border-orange-500/30 bg-orange-500/10 hover:bg-orange-500/20 rounded-full px-4 py-1.5 transition-colors cursor-pointer">
+                <ArrowRight className="h-3.5 w-3.5" /> View Full Pricing &amp; Rates
+              </span>
+            </Link>
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             {([
               { icon: Truck,        label: "Moving",         sub: "Local & long distance",  href: "/book?service=moving",       iconCls: "text-blue-400",   borderCls: "hover:border-blue-500/50"    },

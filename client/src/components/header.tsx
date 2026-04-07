@@ -191,6 +191,14 @@ export default function Header() {
                     Gallery
                   </Link>
                   <Link
+                    href="/pricing"
+                    className="text-white hover:opacity-90 px-5 py-2 rounded-full text-sm font-medium transition-all"
+                    style={{ backgroundColor: '#800000' }}
+                    data-testid="button-pricing"
+                  >
+                    Pricing
+                  </Link>
+                  <Link
                     href="/services"
                     className="text-white hover:opacity-90 px-5 py-2 rounded-full text-sm font-medium transition-all"
                     style={{ backgroundColor: '#800000' }}
@@ -406,6 +414,15 @@ export default function Header() {
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     Gallery
+                  </Link>
+                  <Link
+                    href="/pricing"
+                    className="text-white hover:opacity-90 px-6 py-2.5 rounded-full text-sm font-medium transition-all text-center"
+                    style={{ backgroundColor: '#800000' }}
+                    data-testid="button-mobile-pricing"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    Pricing
                   </Link>
                   <Link
                     href="/services"
