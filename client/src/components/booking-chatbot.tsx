@@ -1121,7 +1121,25 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
                     <p className="text-[10px] text-slate-400">tokens</p>
                   </div>
                 </div>
-                <div className="bg-slate-900/60 rounded-xl p-3 text-center mb-3">
+              )}
+
+              {pendingQuote.type === "trash_valet" && (
+                <div className="bg-slate-800/60 rounded-xl p-3 text-center mb-3">
+                  <p className="text-xs text-slate-400 mb-1">Monthly Rate</p>
+                  <p className="text-2xl font-bold text-teal-300">${(pendingQuote as TrashValetQuoteResult).finalMonthlyPrice}/mo</p>
+                  <p className="text-[11px] text-slate-500 mt-1">Based on your can &amp; bag count</p>
+                </div>
+              )}
+
+              {pendingQuote.type === "window_cleaning" && (
+                <div className="bg-slate-800/60 rounded-xl p-3 text-center mb-3">
+                  <p className="text-xs text-slate-400 mb-1">{(pendingQuote as WindowQuoteResult).paneCount} panes · $5/pane</p>
+                  <p className="text-2xl font-bold text-teal-300">${(pendingQuote as WindowQuoteResult).total}</p>
+                  <p className="text-[11px] text-slate-500 mt-1">Streak-free guarantee</p>
+                </div>
+              )}
+
+              <div className="bg-slate-900/60 rounded-xl p-3 text-center mb-3">
                   <p className="text-xs text-slate-400 mb-1">
                     {pendingQuote.type === "trash_valet" ? "Price Range" : "Estimated Price Range"}
                   </p>
@@ -1136,7 +1154,6 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
                   <p className="text-[11px] text-slate-500 mt-1">Final price confirmed by Darrell after review</p>
                 </div>
               </div>
-            </div>
 
             {/* Package cards */}
             <div>
@@ -1321,126 +1338,6 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
           </div>
         )}
 
-              {pendingQuote.type === "trash_valet" && (
-                <div className="bg-slate-800/60 rounded-xl p-3 text-center mb-3">
-                  <p className="text-xs text-slate-400 mb-1">Monthly Rate</p>
-                  <p className="text-2xl font-bold text-teal-300">${(pendingQuote as TrashValetQuoteResult).finalMonthlyPrice}/mo</p>
-                  <p className="text-[11px] text-slate-500 mt-1">Based on your can & bag count</p>
-                </div>
-              )}
-
-              {pendingQuote.type === "window_cleaning" && (
-                <div className="bg-slate-800/60 rounded-xl p-3 text-center mb-3">
-                  <p className="text-xs text-slate-400 mb-1">{(pendingQuote as WindowQuoteResult).paneCount} panes · $5/pane</p>
-                  <p className="text-2xl font-bold text-teal-300">${(pendingQuote as WindowQuoteResult).total}</p>
-                  <p className="text-[11px] text-slate-500 mt-1">Streak-free guarantee</p>
-                </div>
-              )}
-
-              <div className="bg-slate-900/60 rounded-xl p-3 text-center mb-3">
-                <p className="text-xs text-slate-400 mb-1">
-                  {pendingQuote.type === "trash_valet" ? "Price Range" : "Estimated Price Range"}
-                </p>
-                <p className="text-2xl font-bold text-white">
-                  {pendingQuote.minPrice === pendingQuote.maxPrice
-                    ? `$${pendingQuote.minPrice.toLocaleString()}`
-                    : `$${pendingQuote.minPrice.toLocaleString()} – $${pendingQuote.maxPrice.toLocaleString()}`}
-                </p>
-                {pendingQuote.type === "moving" && (pendingQuote as MovingQuote).specialSurcharge > 0 && (
-                  <p className="text-xs text-orange-400 mt-1">Includes ${(pendingQuote as MovingQuote).specialSurcharge} specialty item surcharge</p>
-                )}
-                <p className="text-[11px] text-slate-500 mt-1">Final price confirmed by Darrell after review</p>
-              </div>
-
-              {/* Selected package display */}
-              {answers.selectedPackage && crewPackages.length > 0 && (
-                <div className="bg-teal-900/30 border border-teal-500/30 rounded-xl p-3 mb-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Users className="h-3.5 w-3.5 text-teal-400" />
-                    <p className="text-xs font-bold text-teal-300 uppercase tracking-wide">Selected Package</p>
-                  </div>
-                  {(() => {
-                    const pkg = crewPackages.find(p => p.id === answers.selectedPackage);
-                    return pkg ? (
-                      <div>
-                        <p className="text-sm text-white font-semibold">{pkg.label}</p>
-                        <p className="text-xs text-slate-400">{pkg.desc}</p>
-                      </div>
-                    ) : null;
-                  })()}
-                </div>
-              )}
-
-              {/* Deposit info */}
-              {depositInfo?.required && (
-                <div className="bg-orange-900/20 border border-orange-500/30 rounded-xl px-3 py-2 mb-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <DollarSign className="h-3.5 w-3.5 text-orange-400" />
-                    <p className="text-xs font-bold text-orange-300 uppercase tracking-wide">Estimate Deposit Required</p>
-                  </div>
-                  <p className="text-xs text-orange-200/80">${depositInfo.amount} — {depositInfo.termsHtml}</p>
-                </div>
-              )}
-
-              <div className="flex items-start gap-2 bg-blue-900/20 border border-blue-500/20 rounded-lg px-3 py-2">
-                <span className="text-base shrink-0">🔍</span>
-                <p className="text-xs text-slate-300">
-                  {isQuoteOnly
-                    ? "These ranges are for budgeting only. A formal quote requires an in-person estimate. No commitment needed to schedule one."
-                    : "This is an estimate only. Darrell personally reviews every submission before sending your official quote."}
-                </p>
-              </div>
-            </div>
-
-            {!submitted ? (
-              <div className="px-4 pb-4">
-                <Button
-                  onClick={() => submitMutation.mutate()}
-                  disabled={submitMutation.isPending}
-                  className={`w-full font-bold py-3 rounded-xl text-sm ${
-                    isQuoteOnly
-                      ? "bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500"
-                      : "bg-gradient-to-r from-teal-600 to-blue-600 hover:from-teal-500 hover:to-blue-500"
-                  } text-white`}
-                >
-                  {submitMutation.isPending ? (
-                    "Submitting…"
-                  ) : isQuoteOnly ? (
-                    <>
-                      <Send className="h-4 w-4 mr-2" />
-                      Request My Quote
-                    </>
-                  ) : (
-                    <>
-                      <Send className="h-4 w-4 mr-2" />
-                      Submit for Review
-                    </>
-                  )}
-                </Button>
-              </div>
-            ) : (
-              <div className="px-4 pb-4 flex flex-col items-center gap-3 text-center">
-                <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center">
-                  <CheckCircle2 className="h-6 w-6 text-green-400" />
-                </div>
-                <div>
-                  <p className="font-bold text-white text-sm">
-                    {isQuoteOnly ? "Quote Request Submitted!" : "Quote Submitted!"}
-                  </p>
-                  <p className="text-xs text-slate-400">Darrell will review and reach out soon.</p>
-                </div>
-                {onClose && showClose && (
-                  <Button variant="outline" size="sm" onClick={onClose} className="border-slate-600 text-slate-300 hover:bg-slate-800">
-                    Close <ArrowRight className="h-3 w-3 ml-1" />
-                  </Button>
-                )}
-                <button onClick={resetChat} className="text-xs text-slate-500 hover:text-slate-400 flex items-center gap-1">
-                  <RotateCcw className="h-3 w-3" /> Start a new quote
-                </button>
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Input area */}
