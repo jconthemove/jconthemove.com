@@ -23,7 +23,7 @@ export default function CustomerBookPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
       {/* Header */}
       <div className="px-4 pt-5 pb-3 border-b border-border flex-shrink-0">
         <div className="max-w-2xl mx-auto flex items-start justify-between">
@@ -43,24 +43,24 @@ export default function CustomerBookPage() {
         </div>
       </div>
 
-      {/* Chatbot — full remaining height */}
-      <div className="flex-1 overflow-hidden max-w-2xl mx-auto w-full px-4 py-4 flex flex-col" style={{ minHeight: 0 }}>
+      {/* Chatbot — fills remaining height above bottom nav (h-16 = 64px) */}
+      <div
+        className="flex-1 overflow-hidden max-w-2xl mx-auto w-full px-4 pt-4 pb-2 flex flex-col"
+        style={{ minHeight: 0, paddingBottom: "calc(64px + 0.5rem)" }}
+      >
         <BookingChatbot
           embedded
           initialService={initialService}
           className="flex-1"
         />
-      </div>
-
-      {/* Bottom sign-in nudge for guests */}
-      {!user && (
-        <div className="px-4 pb-safe pb-4 flex-shrink-0 max-w-2xl mx-auto w-full">
-          <p className="text-xs text-center text-muted-foreground">
+        {/* Sign-in nudge for guests */}
+        {!user && (
+          <p className="text-xs text-center text-muted-foreground pt-1 flex-shrink-0">
             <Link href="/login" className="text-primary hover:underline font-medium">Sign in</Link>
             {" "}to track your bookings and earn JCMOVES rewards automatically.
           </p>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
