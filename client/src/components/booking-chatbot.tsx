@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react";
+import BookingConfirmedTiles from "@/components/BookingConfirmedTiles";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -2673,6 +2674,8 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
                     Done <ArrowRight className="h-3 w-3 ml-1" />
                   </Button>
                 )}
+
+                <BookingConfirmedTiles />
               </div>
             </div>
           </div>

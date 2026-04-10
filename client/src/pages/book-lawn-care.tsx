@@ -14,6 +14,7 @@ import { Link } from "wouter";
 import {
   Leaf, Phone, ChevronRight, ChevronLeft, CheckCircle2, Loader2, Calendar, Home,
 } from "lucide-react";
+import BookingConfirmedTiles from "@/components/BookingConfirmedTiles";
 import { cn } from "@/lib/utils";
 import { DatePicker } from "@/components/ui/date-picker";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
@@ -391,73 +392,84 @@ export default function BookLawnCare() {
 
         {/* Step 7 — Quote Result */}
         {step === 7 && quoteResult && (
-          <div className="text-center py-6">
-            <div className="flex justify-center mb-4">
-              <div className="bg-lime-500/10 border border-lime-500/30 rounded-full p-4">
-                {quoteResult.pricing.isCustomEstimate
-                  ? <Home className="h-8 w-8 text-lime-400" />
-                  : <CheckCircle2 className="h-8 w-8 text-lime-400" />
-                }
+          <div className="rounded-2xl border border-green-500/30 bg-gradient-to-br from-green-900/20 via-slate-900/80 to-slate-900 overflow-hidden">
+
+            {/* Hero bar */}
+            <div className="bg-green-500/10 border-b border-green-500/20 px-4 py-4 flex items-center gap-3">
+              <div className="w-11 h-11 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="h-6 w-6 text-green-400" />
+              </div>
+              <div>
+                <p className="font-extrabold text-white text-base leading-tight">Request Confirmed!</p>
+                <p className="text-xs text-green-300 mt-0.5">
+                  {quoteResult.pricing.isCustomEstimate
+                    ? "We'll reach out shortly to discuss your custom estimate."
+                    : "Darrell will confirm your appointment shortly."}
+                </p>
               </div>
             </div>
 
-            {quoteResult.pricing.isCustomEstimate ? (
-              <>
-                <h2 className="text-xl font-bold mb-2">Custom Estimate Requested</h2>
-                <p className="text-slate-400 text-sm mb-6">
-                  Your property is a bit unique — Darrell will reach out shortly to discuss pricing and schedule a walkthrough.
+            <div className="px-4 py-4 space-y-3">
+
+              {/* Price block */}
+              <div className="rounded-xl bg-slate-800/60 border border-slate-700/50 px-4 py-3 text-center">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">
+                  {quoteResult.pricing.isCustomEstimate ? "Custom Estimate" : "Your Quote"}
                 </p>
-              </>
-            ) : (
-              <>
-                <h2 className="text-xl font-bold mb-1">Your Instant Quote</h2>
-                <div className="my-4">
-                  <span className="text-4xl font-black text-lime-400">${quoteResult.pricing.totalQuoted}</span>
-                  {quoteResult.quote.serviceFrequency !== "one_time" && (
-                    <span className="text-slate-400 text-sm"> / visit</span>
-                  )}
-                </div>
-                <div className="bg-slate-800 rounded-xl p-4 mb-6 text-left">
-                  <p className="text-slate-400 text-xs mb-2 uppercase tracking-wider">Quote breakdown</p>
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-slate-300">Base price</span>
-                      <span className="text-white">${quoteResult.pricing.basePrice}</span>
-                    </div>
-                    {quoteResult.pricing.addOnTotal > 0 && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-300">Add-ons</span>
-                        <span className="text-white">+${quoteResult.pricing.addOnTotal}</span>
+                {quoteResult.pricing.isCustomEstimate ? (
+                  <p className="text-sm text-slate-300">Darrell will review your property and provide a personalized price.</p>
+                ) : (
+                  <>
+                    <p className="text-2xl font-extrabold text-lime-400">
+                      ${quoteResult.pricing.totalQuoted}
+                      {quoteResult.quote.serviceFrequency !== "one_time" && <span className="text-base font-normal text-slate-400"> / visit</span>}
+                    </p>
+                    <div className="mt-2 space-y-1 text-left">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-400">Base price</span>
+                        <span className="text-white">${quoteResult.pricing.basePrice}</span>
                       </div>
-                    )}
-                    <div className="flex justify-between text-sm border-t border-slate-700 pt-1 mt-1">
-                      <span className="text-white font-semibold">Total</span>
-                      <span className="text-lime-400 font-bold">${quoteResult.pricing.totalQuoted}</span>
+                      {quoteResult.pricing.addOnTotal > 0 && (
+                        <div className="flex justify-between text-xs">
+                          <span className="text-slate-400">Add-ons</span>
+                          <span className="text-white">+${quoteResult.pricing.addOnTotal}</span>
+                        </div>
+                      )}
                     </div>
-                  </div>
+                  </>
+                )}
+              </div>
+
+              {/* What happens next */}
+              <div className="rounded-xl bg-slate-800/40 border border-slate-700/40 px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2.5">What Happens Next</p>
+                <div className="space-y-2">
+                  {[
+                    quoteResult.pricing.isCustomEstimate
+                      ? "Darrell visits or calls to assess your property and confirm pricing"
+                      : "Darrell confirms your first service date",
+                    "You receive a Square invoice — pay to lock in your schedule",
+                    "We arrive on your service day and keep your lawn looking great ✅",
+                  ].map((step, i) => (
+                    <div key={i} className="flex items-start gap-2.5">
+                      <span className="w-5 h-5 rounded-full bg-teal-500/20 text-teal-400 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+                      <p className="text-xs text-slate-300 leading-snug">{step}</p>
+                    </div>
+                  ))}
                 </div>
-              </>
-            )}
+              </div>
 
-            <Badge className="bg-lime-500/20 text-lime-400 border border-lime-500/30 mb-6">
-              Quote #{quoteResult.quote.id} — {quoteResult.quote.customerName}
-            </Badge>
+              <p className="text-[11px] text-slate-500 text-center">
+                Questions? Call <a href="tel:+19062859312" className="text-slate-300 underline">(906) 285-9312</a>
+              </p>
 
-            <p className="text-slate-400 text-sm mb-6">
-              We'll confirm your appointment and send a reminder before service day.
-            </p>
-
-            <div className="space-y-3">
-              <a href="tel:+12312341234">
-                <Button variant="outline" className="w-full border-slate-700 text-white hover:bg-slate-800">
-                  <Phone className="h-4 w-4 mr-2" /> Call us to confirm
-                </Button>
-              </a>
               <Link href="/">
-                <Button variant="ghost" className="w-full text-slate-400 hover:text-white">
-                  Back to home
+                <Button variant="outline" className="w-full border-slate-700 text-white hover:bg-slate-800">
+                  Back to Home
                 </Button>
               </Link>
+
+              <BookingConfirmedTiles />
             </div>
           </div>
         )}

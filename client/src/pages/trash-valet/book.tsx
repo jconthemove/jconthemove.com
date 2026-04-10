@@ -10,7 +10,8 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, CheckCircle, Recycle, DollarSign, Trash2 } from "lucide-react";
+import { ArrowLeft, CheckCircle, CheckCircle2, Recycle, DollarSign, Trash2 } from "lucide-react";
+import BookingConfirmedTiles from "@/components/BookingConfirmedTiles";
 import { DatePicker } from "@/components/ui/date-picker";
 import { calculateTrashValetQuote, type TrashValetQuote } from "@shared/trashValetPricing";
 
@@ -103,45 +104,76 @@ export default function TrashValetBookPage() {
   if (submitted) {
     const trashDay = DAY_OPTIONS.find(d => d.value === form.serviceDayOfWeek)?.label ?? form.serviceDayOfWeek;
     const recyclingDay = DAY_OPTIONS.find(d => d.value === form.recyclingDayOfWeek)?.label ?? form.recyclingDayOfWeek;
+    const monthlyPrice = (serverMonthlyPrice ?? quote.finalMonthlyPrice).toFixed(2);
     return (
-      <div className="min-h-screen bg-zinc-950 text-white flex flex-col items-center justify-center px-4">
-        <div className="max-w-sm w-full text-center space-y-5">
-          <div className="w-20 h-20 rounded-full bg-emerald-500/15 flex items-center justify-center mx-auto">
-            <CheckCircle className="h-10 w-10 text-emerald-400" />
+      <div className="min-h-screen bg-zinc-950 text-white flex flex-col items-center justify-start px-4 pt-12 pb-16">
+        <div className="max-w-sm w-full space-y-0 rounded-2xl border border-green-500/30 bg-gradient-to-br from-green-900/20 via-zinc-900/80 to-zinc-950 overflow-hidden">
+
+          {/* Hero bar */}
+          <div className="bg-green-500/10 border-b border-green-500/20 px-4 py-4 flex items-center gap-3">
+            <div className="w-11 h-11 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="h-6 w-6 text-green-400" />
+            </div>
+            <div>
+              <p className="font-extrabold text-white text-base leading-tight">Subscription Confirmed!</p>
+              <p className="text-xs text-green-300 mt-0.5">We'll reach out to finalize your first pickup date.</p>
+            </div>
           </div>
-          <h1 className="text-2xl font-black">You're all set!</h1>
-          <p className="text-zinc-400 text-sm leading-relaxed">
-            Your Trash Valet subscription is active. We'll handle your cans every week — 
-            you'll receive a confirmation shortly. Questions? Call us at (906) 285-9312.
-          </p>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 text-left space-y-1.5 text-sm">
-            <div className="flex justify-between">
-              <span className="text-zinc-400">Monthly price</span>
-              <span className="font-bold text-orange-400">
-                ${(serverMonthlyPrice ?? quote.finalMonthlyPrice).toFixed(2)}/mo
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-zinc-400">Trash day</span>
-              <span>{trashDay}s</span>
-            </div>
-            {form.recyclingEnabled && (
-              <div className="flex justify-between text-green-400">
-                <span>Recycling day</span>
-                <span>{recyclingDay}s (bi-weekly)</span>
+
+          <div className="px-4 py-4 space-y-3">
+
+            {/* Plan summary */}
+            <div className="rounded-xl bg-zinc-800/60 border border-zinc-700/50 px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">Your Plan</p>
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-sm">
+                  <span className="text-zinc-400">Monthly rate</span>
+                  <span className="font-bold text-orange-400">${monthlyPrice}/mo</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-zinc-400">Trash day</span>
+                  <span className="text-white">{trashDay}s</span>
+                </div>
+                {form.recyclingEnabled && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-zinc-400">Recycling day</span>
+                    <span className="text-green-400">{recyclingDay}s (bi-weekly)</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm">
+                  <span className="text-zinc-400">Plan type</span>
+                  <span className="text-white capitalize">{form.planType}</span>
+                </div>
               </div>
-            )}
-            <div className="flex justify-between">
-              <span className="text-zinc-400">Plan</span>
-              <span className="capitalize">{form.planType}</span>
             </div>
+
+            {/* What happens next */}
+            <div className="rounded-xl bg-zinc-800/40 border border-zinc-700/40 px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2.5">What Happens Next</p>
+              <div className="space-y-2">
+                {[
+                  "We contact you to confirm your first pickup and set up billing",
+                  "Cans go out the night before your service day — we bring them back after",
+                  "You'll receive a Square invoice monthly — pay to keep service active ✅",
+                ].map((step, i) => (
+                  <div key={i} className="flex items-start gap-2.5">
+                    <span className="w-5 h-5 rounded-full bg-teal-500/20 text-teal-400 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+                    <p className="text-xs text-zinc-300 leading-snug">{step}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <p className="text-[11px] text-zinc-500 text-center">
+              Questions? Call <a href="tel:+19062859312" className="text-zinc-300 underline">(906) 285-9312</a>
+            </p>
+
+            <Button onClick={() => setLocation("/")} className="w-full bg-orange-500 hover:bg-orange-400 text-white font-bold">
+              Back to Home
+            </Button>
+
+            <BookingConfirmedTiles />
           </div>
-          <Button
-            onClick={() => setLocation("/")}
-            className="w-full bg-orange-500 hover:bg-orange-400 text-white font-bold"
-          >
-            Back to Home
-          </Button>
         </div>
       </div>
     );

@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import WindowCleaningBooking from "@/components/WindowCleaningBooking";
+import BookingConfirmedTiles from "@/components/BookingConfirmedTiles";
 
 export default function WindowCleaningPage() {
   const [, setLocation] = useLocation();
@@ -52,22 +53,48 @@ export default function WindowCleaningPage() {
         </div>
 
         {booked ? (
-          <div className="bg-zinc-900 border border-green-500/30 rounded-2xl p-5 text-center space-y-3">
-            <div className="text-4xl">🪟</div>
-            <h2 className="text-white font-black text-lg">Booking Received!</h2>
-            <p className="text-zinc-400 text-sm">
-              Total: <span className="text-white font-bold">${booked.total.toFixed(2)}</span>
-            </p>
-            <p className="text-zinc-500 text-xs">
-              Our team will reach out to confirm — watch for a call from{" "}
-              <a href="tel:+19062859312" className="text-orange-400 font-semibold">(906) 285-9312</a>
-            </p>
-            <button
-              onClick={() => setBooked(null)}
-              className="mt-2 px-4 py-2 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-300 text-sm font-semibold hover:bg-zinc-700 transition-all"
-            >
-              Book Another
-            </button>
+          <div className="rounded-2xl border border-green-500/30 bg-gradient-to-br from-green-900/20 via-zinc-900/80 to-zinc-900 overflow-hidden">
+            <div className="bg-green-500/10 border-b border-green-500/20 px-4 py-4 flex items-center gap-3">
+              <div className="w-11 h-11 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="h-6 w-6 text-green-400" />
+              </div>
+              <div>
+                <p className="font-extrabold text-white text-base leading-tight">Booking Confirmed!</p>
+                <p className="text-xs text-green-300 mt-0.5">We'll reach out shortly to finalize your appointment.</p>
+              </div>
+            </div>
+            <div className="px-4 py-4 space-y-3">
+              <div className="rounded-xl bg-zinc-800/60 border border-zinc-700/50 px-4 py-3 text-center">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-1">Your Estimate</p>
+                <p className="text-2xl font-extrabold text-white">${booked.total.toFixed(2)}</p>
+                <p className="text-xs text-zinc-400 mt-1">Final invoice sent after we confirm your appointment.</p>
+              </div>
+              <div className="rounded-xl bg-zinc-800/40 border border-zinc-700/40 px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2.5">What Happens Next</p>
+                <div className="space-y-2">
+                  {[
+                    "Darrell reviews your booking and confirms the time",
+                    "You receive a Square invoice — pay to lock in your date",
+                    "Our crew arrives on your scheduled day — streak-free guaranteed ✅",
+                  ].map((step, i) => (
+                    <div key={i} className="flex items-start gap-2.5">
+                      <span className="w-5 h-5 rounded-full bg-teal-500/20 text-teal-400 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+                      <p className="text-xs text-zinc-300 leading-snug">{step}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <p className="text-[11px] text-zinc-500 text-center">
+                Questions? Call <a href="tel:+19062859312" className="text-zinc-300 underline">(906) 285-9312</a>
+              </p>
+              <button
+                onClick={() => setBooked(null)}
+                className="w-full px-4 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-300 text-sm font-semibold hover:bg-zinc-700 transition-all"
+              >
+                Book Another
+              </button>
+              <BookingConfirmedTiles />
+            </div>
           </div>
         ) : (
           <WindowCleaningBooking
