@@ -17083,6 +17083,121 @@ Thank you for your business!
     }
   });
 
+  // ── Live Crew Status (customer-facing, no auth required) ───────────────────
+  // Returns a readiness badge driven by real crew availability + today's job load.
+  // Status keys: ready | limited | high_demand | scheduling_ahead
+  app.get("/api/crew-status", async (_req, res) => {
+    try {
+      // All approved employees/admins
+      const allCrew = await db.select({
+        id: users.id,
+        isAvailable: users.isAvailable,
+        lastActive: users.lastActive,
+      }).from(users).where(
+        and(
+          eq(users.status, "approved"),
+          or(eq(users.role, "employee"), eq(users.role, "admin"))
+        )
+      );
+
+      // "Online" = lastActive heartbeat within the last 3 minutes
+      const onlineThreshold = new Date(Date.now() - 3 * 60 * 1000);
+      const onlineCrew    = allCrew.filter(c => c.lastActive && new Date(c.lastActive) >= onlineThreshold);
+      const availableCrew = allCrew.filter(c => c.isAvailable); // isAvailable = on duty now
+
+      // Today's date in Central Time (Ironwood, MI) — YYYY-MM-DD
+      const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+      const ctHour = parseInt(
+        new Date().toLocaleTimeString("en-US", { timeZone: "America/Chicago", hour: "numeric", hour12: false }),
+        10
+      );
+
+      // Active leads (non-completed) — fetch and filter in JS to avoid text date format issues
+      const activeLeads = await db.select({
+        status:   leads.status,
+        moveDate: leads.moveDate,
+        confirmedDate: leads.confirmedDate,
+        crewSize: leads.crewSize,
+      }).from(leads).where(
+        or(eq(leads.status, "available"), eq(leads.status, "quote_requested"))
+      );
+
+      const todayLeads  = activeLeads.filter(l => l.moveDate === today || l.confirmedDate === today);
+      const liveJobs    = todayLeads.filter(l => l.status === "available");
+      const quotedJobs  = todayLeads.filter(l => l.status === "quote_requested");
+
+      const crewCapacity      = availableCrew.length;
+      const activeLoad        = liveJobs.reduce((s, j) => s + (j.crewSize || 2), 0);
+      const pendingPressure   = quotedJobs.length;
+      const remainingCapacity = Math.max(crewCapacity - activeLoad, 0);
+
+      type StatusKey = "ready" | "limited" | "high_demand" | "scheduling_ahead";
+      let status: StatusKey = "scheduling_ahead";
+
+      if (ctHour >= 18) {
+        // After 6 PM CT → schedule ahead only
+        status = "scheduling_ahead";
+      } else if (crewCapacity >= 3 && remainingCapacity >= 2 && pendingPressure <= 1 && ctHour < 16) {
+        // Before 4 PM with plenty of open capacity
+        status = "ready";
+      } else if (crewCapacity >= 2 && remainingCapacity >= 1) {
+        status = "limited";
+      } else if (crewCapacity >= 1 || onlineCrew.length >= 1) {
+        status = "high_demand";
+      } else {
+        status = "scheduling_ahead";
+      }
+
+      const PAYLOADS: Record<StatusKey, object> = {
+        ready: {
+          status: "ready",
+          title: "Crew Ready Now",
+          subtitle: "Same-day bookings are available",
+          badge: "Ready to Book",
+          tone: "green",
+          ctaHint: "Takes 60 seconds · Fast response",
+        },
+        limited: {
+          status: "limited",
+          title: "Limited Availability Today",
+          subtitle: "Same-day spots are filling fast",
+          badge: "Limited",
+          tone: "orange",
+          ctaHint: "Book now to lock in your spot",
+        },
+        high_demand: {
+          status: "high_demand",
+          title: "High Demand",
+          subtitle: "Openings are limited and booking quickly",
+          badge: "Busy",
+          tone: "red",
+          ctaHint: "Request your quote now",
+        },
+        scheduling_ahead: {
+          status: "scheduling_ahead",
+          title: "Scheduling Ahead",
+          subtitle: "Request your preferred time — we follow up fast",
+          badge: "Scheduling",
+          tone: "gray",
+          ctaHint: "Quotes are still open",
+        },
+      };
+
+      return res.json({ ...PAYLOADS[status], refreshedAt: new Date().toISOString() });
+    } catch (err) {
+      console.error("[crew-status] error:", err);
+      return res.json({
+        status: "limited",
+        title: "Limited Availability Today",
+        subtitle: "Quotes are still open",
+        badge: "Limited",
+        tone: "orange",
+        ctaHint: "Book now to lock in your spot",
+        refreshedAt: new Date().toISOString(),
+      });
+    }
+  });
+
   app.get("/api/maps-config", (_req, res) => {
     const key = process.env.GOOGLE_MAPS_API_KEY || "";
     res.json({ key });

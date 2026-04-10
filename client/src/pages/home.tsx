@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { SiGoogle } from "react-icons/si";
 import { Link } from "wouter";
+import CrewStatusCard from "@/components/CrewStatusCard";
 
 interface Testimonial {
   id: string;
@@ -237,25 +238,9 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Right: CTA card */}
-            <div className="flex flex-col gap-4">
-              <Link href="/quote" className="block">
-                <div className="group bg-slate-800/80 hover:bg-slate-700/80 border border-slate-600/60 hover:border-slate-500 rounded-2xl p-6 shadow-xl cursor-pointer transition-all duration-200">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="w-10 h-10 rounded-xl bg-slate-700 flex items-center justify-center">
-                      <MessageCircle className="h-5 w-5 text-blue-400" />
-                    </div>
-                    <ArrowRight className="h-5 w-5 text-slate-500 group-hover:text-white group-hover:translate-x-1 transition-all" />
-                  </div>
-                  <p className="text-white font-extrabold text-xl mb-1">Get a Quote</p>
-                  <p className="text-slate-400 text-sm">Not sure what you need? Describe your job and we'll get back to you with a custom quote within 24 hours.</p>
-                </div>
-              </Link>
-
-              <a href="tel:+19062859312" className="flex items-center justify-center gap-2 rounded-xl border border-slate-700/60 hover:border-slate-500 bg-slate-900/60 hover:bg-slate-800/60 px-4 py-3 text-slate-300 hover:text-white transition-all text-sm font-medium">
-                <Phone className="h-4 w-4 text-blue-400" />
-                Prefer to call? (906) 285-9312
-              </a>
+            {/* Right: Live Crew Status Card */}
+            <div>
+              <CrewStatusCard />
             </div>
           </div>
         </div>
