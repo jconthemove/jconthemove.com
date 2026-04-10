@@ -17088,11 +17088,11 @@ Thank you for your business!
   // Status keys: ready | limited | high_demand | scheduling_ahead
   app.get("/api/crew-status", async (_req, res) => {
     try {
-      // All approved employees/admins
+      // All approved employees/admins with their duty-window fields
       const allCrew = await db.select({
-        id: users.id,
-        isAvailable: users.isAvailable,
-        lastActive: users.lastActive,
+        id:             users.id,
+        isAvailable:    users.isAvailable,
+        availableUntil: users.availableUntil,
       }).from(users).where(
         and(
           eq(users.status, "approved"),
@@ -17100,10 +17100,13 @@ Thank you for your business!
         )
       );
 
-      // "Online" = lastActive heartbeat within the last 3 minutes
-      const onlineThreshold = new Date(Date.now() - 3 * 60 * 1000);
-      const onlineCrew    = allCrew.filter(c => c.lastActive && new Date(c.lastActive) >= onlineThreshold);
-      const availableCrew = allCrew.filter(c => c.isAvailable); // isAvailable = on duty now
+      // "On duty" = isAvailable=true AND availableUntil is either unset or still in the future.
+      // The background interval auto-clears expired windows, but we double-check here in case
+      // the interval hasn't fired yet — avoids counting workers whose shift just ended.
+      const now = new Date();
+      const availableCrew = allCrew.filter(c =>
+        c.isAvailable && (!c.availableUntil || new Date(c.availableUntil) > now)
+      );
 
       // Today's date in Central Time (Ironwood, MI) — YYYY-MM-DD
       const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
@@ -17142,7 +17145,7 @@ Thank you for your business!
         status = "ready";
       } else if (crewCapacity >= 2 && remainingCapacity >= 1) {
         status = "limited";
-      } else if (crewCapacity >= 1 || onlineCrew.length >= 1) {
+      } else if (crewCapacity >= 1) {
         status = "high_demand";
       } else {
         status = "scheduling_ahead";
