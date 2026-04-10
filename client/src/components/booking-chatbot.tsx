@@ -19,6 +19,7 @@ import { PlacesAutocomplete } from "@/components/places-autocomplete";
 const PRICEABLE_SERVICES = ["Moving", "Junk Removal", "Trash Valet", "Window Cleaning"];
 const QUOTE_ONLY_SERVICES = ["Painting", "Flooring", "Roofing", "Handyman", "Lawn Care", "Snow Removal", "Move-In/Out Cleaning", "Light Demolition"];
 const IRONWOOD_ZIP = "49938";
+const TRAVEL_CHARGE = 50; // added to tiny/small jobs outside Ironwood
 
 function isIronwoodZip(zip: string): boolean {
   const clean = zip.trim();
@@ -140,6 +141,9 @@ export interface MovingQuote {
   promoApplied?: boolean;
   promoCode?: string;
   rawMinPrice?: number;
+  travelCharge?: number;
+  jcmovesApplied?: boolean;
+  jcmovesDiscount?: number;
 }
 
 interface TrashValetQuoteResult {
@@ -167,6 +171,9 @@ interface JunkQuote {
   maxPrice: number;
   tokensEstimate: number;
   specialSurcharge: number;
+  travelCharge?: number;
+  jcmovesApplied?: boolean;
+  jcmovesDiscount?: number;
 }
 
 interface QuoteOnlyResult {
@@ -707,8 +714,8 @@ export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatP
 
   if (tier === "tiny") {
     crew   = 1;
-    minHrs = 0.5;
-    maxHrs = 1;
+    minHrs = 2;   // minimum is 2 mover-hours ($170) — same whether 1×2hrs or 2×1hr
+    maxHrs = 2;
   } else if (tier === "small") {
     crew   = (hasHeavySafe || hasMajorSpecial) && hasAnyStairs ? 3 : 2;
     minHrs = 2;
@@ -760,14 +767,29 @@ export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatP
   const rawMin = round5(crew * minHrs * RATE) + specialSurcharge;
   const rawMax = round5(crew * maxHrs * RATE) + specialSurcharge;
 
-  // JC222 promo: applies to Small-tier 2-crew jobs → $340 becomes $222 flat
+  // ── Travel charge: tiny/small jobs outside Ironwood add a flat travel fee ──
+  const pickupAddr = a.fromZip || "";
+  const isLocal = !pickupAddr || isIronwoodZip(pickupAddr);
+  const travelCharge = (tier === "tiny" || tier === "small") && !isLocal ? TRAVEL_CHARGE : 0;
+
+  // ── JC222 promo: Small-tier 2-crew → $340 becomes $222 flat ───────────────
   const promoCodeRaw = (a.promoCode || "").toUpperCase().trim();
   const isJC222      = promoCodeRaw === "JC222";
-  // Small tier with standard 2-crew qualifies for JC222 (2×2hrs = $340 → $222)
   const promoApplied = isJC222 && tier === "small" && crew === 2;
 
-  const minPrice = promoApplied ? jc222FlatPrice : rawMin;
-  const maxPrice = promoApplied ? jc222FlatPrice : rawMax;
+  // ── JCMOVES promo: 10% off or $20 off, whichever is greater ───────────────
+  // Applies to tiny and small tiers when JC222 isn't already active
+  const isJCMOVES      = promoCodeRaw === "JCMOVES";
+  const jcmovesBase    = promoApplied ? jc222FlatPrice : rawMin;
+  const jcmovesDiscount = isJCMOVES && !promoApplied
+    ? Math.max(Math.round(jcmovesBase * 0.10), 20)
+    : 0;
+  const jcmovesApplied = jcmovesDiscount > 0;
+
+  const baseMin = promoApplied ? jc222FlatPrice : rawMin - jcmovesDiscount;
+  const baseMax = promoApplied ? jc222FlatPrice : rawMax - jcmovesDiscount;
+  const minPrice = baseMin + travelCharge;
+  const maxPrice = baseMax + travelCharge;
   const midPrice = (minPrice + maxPrice) / 2;
   const tokensEstimate = Math.round(midPrice * 50);
 
@@ -782,8 +804,11 @@ export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatP
     tokensEstimate,
     specialSurcharge,
     promoApplied,
-    promoCode:    isJC222 ? "JC222" : undefined,
-    rawMinPrice:  promoApplied ? rawMin : undefined,
+    promoCode:      isJC222 ? "JC222" : isJCMOVES ? "JCMOVES" : undefined,
+    rawMinPrice:    promoApplied ? rawMin : undefined,
+    travelCharge:   travelCharge || undefined,
+    jcmovesApplied: jcmovesApplied || undefined,
+    jcmovesDiscount: jcmovesDiscount || undefined,
   };
 }
 
@@ -819,8 +844,9 @@ function computeJunkQuote(a: Answers, ratePerMoverHour = 85): JunkQuote {
   if (specials.includes("🔒 Heavy Safe (300 lbs+)")) specialSurcharge += 75;
 
   // Crew and hour ranges by tier
+  // Minimum is 2 mover-hours ($170) — same whether 1 mover × 2 hrs or 2 movers × 1 hr
   let crew: number, minHrs: number, maxHrs: number;
-  if (tier === "tiny")   { crew = 1; minHrs = 1;   maxHrs = 1;   }
+  if (tier === "tiny")        { crew = 1; minHrs = 2;   maxHrs = 2;   }
   else if (tier === "small")  { crew = 2; minHrs = 1.5; maxHrs = 2;   }
   else if (tier === "medium") { crew = 2; minHrs = 2.5; maxHrs = 3.5; }
   else                        { crew = 3; minHrs = 3;   maxHrs = 5;   }
@@ -831,11 +857,32 @@ function computeJunkQuote(a: Answers, ratePerMoverHour = 85): JunkQuote {
     if (tier === "tiny") { crew = 2; minHrs = 1.5; maxHrs = 2; }
   }
 
-  const minPrice = r5(crew * minHrs * RATE) + specialSurcharge;
-  const maxPrice = r5(crew * maxHrs * RATE) + specialSurcharge;
+  const rawMin = r5(crew * minHrs * RATE) + specialSurcharge;
+  const rawMax = r5(crew * maxHrs * RATE) + specialSurcharge;
+
+  // ── Travel charge: tiny/small jobs outside Ironwood ───────────────────────
+  const pickupAddr = a.junkLocation || "";
+  const isLocal = !pickupAddr || isIronwoodZip(pickupAddr);
+  const travelCharge = (tier === "tiny" || tier === "small") && !isLocal ? TRAVEL_CHARGE : 0;
+
+  // ── JCMOVES promo: 10% off or $20 off, whichever is greater ───────────────
+  const promoCodeRaw = (a.promoCode || "").toUpperCase().trim();
+  const isJCMOVES = promoCodeRaw === "JCMOVES";
+  const jcmovesDiscount = isJCMOVES
+    ? Math.max(Math.round(rawMin * 0.10), 20)
+    : 0;
+  const jcmovesApplied = jcmovesDiscount > 0;
+
+  const minPrice = rawMin - jcmovesDiscount + travelCharge;
+  const maxPrice = rawMax - jcmovesDiscount + travelCharge;
   const tokensEstimate = Math.round(((minPrice + maxPrice) / 2) * 50);
 
-  return { type: "junk", tier, crew, minHrs, maxHrs, minPrice, maxPrice, tokensEstimate, specialSurcharge };
+  return {
+    type: "junk", tier, crew, minHrs, maxHrs, minPrice, maxPrice, tokensEstimate, specialSurcharge,
+    travelCharge:    travelCharge    || undefined,
+    jcmovesApplied:  jcmovesApplied  || undefined,
+    jcmovesDiscount: jcmovesDiscount || undefined,
+  };
 }
 
 // ─────────────────────────────────────────────
@@ -915,30 +962,46 @@ export function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMove
   if (q.type === "junk") {
     const jq = q as JunkQuote;
     const RATE = ratePerMoverHour;
-    const sur  = jq.specialSurcharge;
+    const sur    = jq.specialSurcharge;
+    const travel = jq.travelCharge || 0;
     const r5   = (n: number) => Math.ceil(n / 5) * 5;
     const price = (crew: number, hrs: number) => r5(crew * hrs * RATE) + sur;
+    const travelNote = travel > 0 ? ` · +$${travel} travel fee` : "";
 
     if (jq.tier === "tiny") {
-      return [{
-        id: "pkg_junk_tiny",
-        label: "Quick Haul · 1 Mover · ~1 hr",
-        desc: "1–2 items (couch, appliance, mattress, etc.) · includes curbside pickup",
-        minPrice: price(1, 1),
-        maxPrice: price(1, 1),
-        crew: 1,
-        hours: 1,
-        tag: "Minimum Job",
-      }];
+      // $170 minimum = 2 mover-hours. Same price either way.
+      const base = price(1, 2) + travel;
+      return [
+        {
+          id: "pkg_junk_tiny_solo",
+          label: "1 Mover × 2 hrs",
+          desc: `Solo mover · 2-hr minimum · couch, appliance, mattress, or 1–2 items${travelNote}`,
+          minPrice: base,
+          maxPrice: base,
+          crew: 1,
+          hours: 2,
+          tag: "Standard",
+        },
+        {
+          id: "pkg_junk_tiny_duo",
+          label: "2 Movers × 1 hr",
+          desc: `Two-person crew · faster in-and-out · same total cost${travelNote}`,
+          minPrice: base,
+          maxPrice: base,
+          crew: 2,
+          hours: 1,
+          tag: "Quick",
+        },
+      ];
     }
 
     if (jq.tier === "small") {
       return [{
         id: "pkg_junk_small",
         label: "Small Load · 2 Movers · ~1.5–2 hrs",
-        desc: "Studio or 1BR worth of junk · roughly ¼ truck load · efficient crew",
-        minPrice: price(2, 1.5),
-        maxPrice: price(2, 2),
+        desc: `Studio or 1BR worth of junk · roughly ¼ truck load · efficient crew${travelNote}`,
+        minPrice: price(2, 1.5) + travel,
+        maxPrice: price(2, 2) + travel,
         crew: 2,
         hours: 2,
         tag: "Standard",
@@ -996,21 +1059,35 @@ export function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMove
   if (q.type === "moving") {
     const mq = q as MovingQuote;
     const RATE = ratePerMoverHour;
-    const sur  = mq.specialSurcharge;
+    const sur    = mq.specialSurcharge;
+    const travel = mq.travelCharge || 0;
     const r5   = (n: number) => Math.ceil(n / 5) * 5;
     const price = (crew: number, hrs: number) => r5(crew * hrs * RATE) + sur;
+    const travelNote = travel > 0 ? ` · +$${travel} travel fee` : "";
 
     if (mq.tier === "tiny") {
+      // $170 minimum = 2 mover-hours. Offer two configurations at the same price.
+      const base = price(1, 2) + travel; // 1×2×$85 = $170, plus travel if outside Ironwood
       return [
         {
-          id: "pkg_tiny",
-          label: "Tiny Move · 1 Mover · Up to 60 min",
-          desc: "1–2 light items (≤200 lbs) · single task · perfect for a couch, dresser, or single appliance",
-          minPrice: RATE,
-          maxPrice: RATE,
+          id: "pkg_tiny_solo",
+          label: "1 Mover × 2 hrs",
+          desc: `Solo mover · 2-hr minimum · great for a couch, dresser, or 1–2 items${travelNote}`,
+          minPrice: base,
+          maxPrice: base,
           crew: 1,
+          hours: 2,
+          tag: "Standard",
+        },
+        {
+          id: "pkg_tiny_duo",
+          label: "2 Movers × 1 hr",
+          desc: `Two-person team · same total cost, faster clock · in and out in ~1 hr${travelNote}`,
+          minPrice: base,
+          maxPrice: base,
+          crew: 2,
           hours: 1,
-          tag: "Quick Job",
+          tag: "Quick",
         },
       ];
     }
@@ -1022,9 +1099,9 @@ export function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMove
           {
             id: "pkg_small_3crew",
             label: "3 Movers × 2 hrs (Heavy + Stairs)",
-            desc: "Required for heavy items on stairs — 3 movers minimum for safe handling",
-            minPrice: price(3, 2),
-            maxPrice: price(3, 2),
+            desc: `Required for heavy items on stairs — 3 movers minimum for safe handling${travelNote}`,
+            minPrice: price(3, 2) + travel,
+            maxPrice: price(3, 2) + travel,
             crew: 3,
             hours: 2,
             tag: "Safety Required",
@@ -1032,13 +1109,14 @@ export function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMove
         ];
       }
       // Standard 2-crew small: show base rate + JC222 promo variant side-by-side
+      const jc222Total = jc222FlatPrice + travel;
       return [
         {
           id: "pkg_small",
           label: "2 Movers × 2 hrs",
-          desc: "Studio / single room · load only or unload only · 2-hr minimum",
-          minPrice: price(2, 2),
-          maxPrice: price(2, 2),
+          desc: `Studio / single room · load only or unload only · 2-hr minimum${travelNote}`,
+          minPrice: price(2, 2) + travel,
+          maxPrice: price(2, 2) + travel,
           crew: 2,
           hours: 2,
           tag: "Standard",
@@ -1046,12 +1124,12 @@ export function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMove
         {
           id: "pkg_small_jc222",
           label: "2 Movers × 2 hrs — JC222 Promo",
-          desc: `Same crew & time at the JC222 promo rate · $${jc222FlatPrice} flat · limited availability`,
-          minPrice: jc222FlatPrice,
-          maxPrice: jc222FlatPrice,
+          desc: `Same crew & time at the JC222 promo rate${travel ? ` · $${jc222FlatPrice} + $${travel} travel` : ` · $${jc222FlatPrice} flat`} · limited availability`,
+          minPrice: jc222Total,
+          maxPrice: jc222Total,
           crew: 2,
           hours: 2,
-          tag: `JC222 — $${jc222FlatPrice}`,
+          tag: `JC222 — $${jc222Total}`,
         },
       ];
     }
@@ -1389,6 +1467,21 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
       userSay(`${contactName} · ${contactPhone} · ${contactEmail}`);
     } else {
       userSay(shortAnswer(stepId, value));
+    }
+
+    // Special promo code responses
+    if (stepId === "promoCode") {
+      const code = ((Array.isArray(value) ? value[0] : value) as string || "").toUpperCase().trim();
+      if (code === "JCMOVES") {
+        const q = computeQuoteForAnswers(newAnswers, liveRate, liveJc222);
+        const disc = (q as any)?.jcmovesDiscount;
+        setTimeout(() => botSay(disc
+          ? `✅ JCMOVES code applied! You're saving $${disc} — we appreciate your support.`
+          : `✅ JCMOVES perk noted! Discount will be reflected on your final invoice.`
+        ), 200);
+      } else if (code && code !== "JC222" && code !== "(NONE)" && code !== "(none)") {
+        setTimeout(() => botSay("⚠️ That code didn't match any active promos — no worries, we'll proceed at the standard rate."), 200);
+      }
     }
 
     const nextVisibleSteps = STEPS.filter(s => !s.show || s.show(newAnswers));
