@@ -1428,14 +1428,14 @@ function computeQuoteForAnswers(a: Answers, ratePerMoverHour = 85, jc222FlatPric
 
   if (QUOTE_ONLY_SERVICES.includes(svc)) {
     const ranges: Record<string, [number, number]> = {
-      "Painting":              [500,  5000],
-      "Flooring":              [800,  8000],
-      "Roofing":               [2000, 15000],
-      "Handyman":              [75,   900],
-      "Lawn Care":             [50,   400],
-      "Snow Removal":          [75,   350],
-      "Move-In/Out Cleaning":  [150,  600],
-      "Light Demolition":      [300,  2000],
+      "Painting":              [500,   5000],
+      "Flooring":              [800,   8000],
+      "Roofing":               [5000,  50000],
+      "Handyman":              [75,    900],
+      "Lawn Care":             [50,    400],
+      "Snow Removal":          [75,    350],
+      "Move-In/Out Cleaning":  [150,   600],
+      "Light Demolition":      [300,   2000],
     };
     const [min, max] = ranges[svc] || [300, 3000];
     return { type: "quote_only", service: svc, minPrice: min, maxPrice: max };
@@ -2208,6 +2208,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
     advanceStep("employeePhotos", summary);
   }
 
+  const [depositPaid, setDepositPaid]             = useState(false);
   const [depositInvoiceSent, setDepositInvoiceSent] = useState(false);
   const [depositInvoiceUrl, setDepositInvoiceUrl] = useState<string | null>(null);
 
@@ -2594,68 +2595,85 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
         {/* ── PHASE: Submitted ── */}
         {phase === "submitted" && (
           <div className="mx-1 mt-2">
-            <div className="rounded-2xl border border-green-500/30 bg-gradient-to-br from-green-900/20 to-slate-900/60 px-4 py-6 flex flex-col items-center gap-4 text-center">
-              <div className="w-14 h-14 rounded-full bg-green-500/20 flex items-center justify-center">
-                <CheckCircle2 className="h-7 w-7 text-green-400" />
-              </div>
-              <div>
-                <p className="font-bold text-white text-base">
-                  {depositPaid ? "Deposit Invoice Sent!" : "Quote Submitted!"}
-                </p>
-                <p className="text-sm text-slate-400 mt-1">
-                  {depositPaid && depositInvoiceSent
-                    ? `A $${DEPOSIT_AMOUNT} deposit invoice was emailed to ${answers.contactEmail || "you"}. Paying it confirms your appointment.`
-                    : depositPaid && !depositInvoiceSent
-                    ? `Your quote is in — Darrell will send a $${DEPOSIT_AMOUNT} deposit invoice to your email shortly.`
-                    : "Darrell will review and reach out with a finalized quote soon."}
-                </p>
-              </div>
+            <div className="rounded-2xl border border-green-500/30 bg-gradient-to-br from-green-900/20 via-slate-900/80 to-slate-900 overflow-hidden">
 
-              {depositInvoiceUrl && (
-                <a
-                  href={depositInvoiceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full"
-                >
-                  <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl px-4 py-3 flex items-center justify-between">
-                    <div className="text-left">
-                      <p className="text-sm font-semibold text-orange-300">Open Deposit Invoice</p>
-                      <p className="text-xs text-slate-400">Pay ${DEPOSIT_AMOUNT} to lock in your spot</p>
-                    </div>
-                    <CreditCard className="h-5 w-5 text-orange-400 shrink-0" />
-                  </div>
-                </a>
-              )}
-
-              <div className="bg-slate-800/60 rounded-xl px-4 py-3 w-full">
-                <p className="text-xs text-slate-400 font-medium mb-2">What happens next:</p>
-                <div className="space-y-1.5 text-left">
-                  <div className="flex items-start gap-2">
-                    <span className="text-teal-400 text-xs shrink-0 mt-0.5">1.</span>
-                    <p className="text-xs text-slate-300">
-                      {depositPaid ? "Pay the deposit invoice (check your email)" : "Admin reviews your quote (2–4 hrs)"}
-                    </p>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <span className="text-teal-400 text-xs shrink-0 mt-0.5">2.</span>
-                    <p className="text-xs text-slate-300">Darrell confirms details &amp; sends finalized invoice</p>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <span className="text-teal-400 text-xs shrink-0 mt-0.5">3.</span>
-                    <p className="text-xs text-slate-300">Full payment confirms your scheduled date</p>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <span className="text-teal-400 text-xs shrink-0 mt-0.5">4.</span>
-                    <p className="text-xs text-slate-300">Crew is auto-dispatched on your chosen day ✅</p>
-                  </div>
+              {/* Hero confirmation bar */}
+              <div className="bg-green-500/10 border-b border-green-500/20 px-4 py-4 flex items-center gap-3">
+                <div className="w-11 h-11 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="h-6 w-6 text-green-400" />
+                </div>
+                <div>
+                  <p className="font-extrabold text-white text-base leading-tight">
+                    Request Confirmed!
+                  </p>
+                  <p className="text-xs text-green-300 mt-0.5">
+                    {depositPaid ? "Deposit invoice is on its way to your email." : "We received your request — Darrell will be in touch soon."}
+                  </p>
                 </div>
               </div>
-              {onClose && showClose && (
-                <Button variant="outline" size="sm" onClick={onClose} className="border-slate-600 text-slate-300 hover:bg-slate-800">
-                  Close <ArrowRight className="h-3 w-3 ml-1" />
-                </Button>
-              )}
+
+              <div className="px-4 py-4 space-y-3">
+
+                {/* Placeholder estimate range */}
+                {pendingQuote && (
+                  <div className="rounded-xl bg-slate-800/60 border border-slate-700/50 px-4 py-3 text-center">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Placeholder Estimate Range</p>
+                    <p className="text-2xl font-extrabold text-white">
+                      ${pendingQuote.minPrice.toLocaleString()} – ${pendingQuote.maxPrice.toLocaleString()}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      This is a starting range only — we will contact you to schedule a free on-site or virtual estimate and confirm your personalized quote.
+                    </p>
+                  </div>
+                )}
+
+                {/* Deposit invoice link */}
+                {depositInvoiceUrl && (
+                  <a href={depositInvoiceUrl} target="_blank" rel="noopener noreferrer" className="block">
+                    <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl px-4 py-3 flex items-center justify-between">
+                      <div className="text-left">
+                        <p className="text-sm font-semibold text-orange-300">Open Deposit Invoice</p>
+                        <p className="text-xs text-slate-400">Pay ${DEPOSIT_AMOUNT} to lock in your spot</p>
+                      </div>
+                      <CreditCard className="h-5 w-5 text-orange-400 shrink-0" />
+                    </div>
+                  </a>
+                )}
+
+                {/* What happens next */}
+                <div className="rounded-xl bg-slate-800/40 border border-slate-700/40 px-4 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2.5">What Happens Next</p>
+                  <div className="space-y-2">
+                    {[
+                      depositPaid
+                        ? "Pay the deposit invoice sent to your email — this locks in your spot"
+                        : "Darrell reviews your request (typically within 2–4 hours)",
+                      "We contact you to schedule a free on-site or virtual estimate",
+                      "You receive a personalized quote with your confirmed price",
+                      "Pay the invoice to lock in your date — crew is dispatched automatically ✅",
+                    ].map((step, i) => (
+                      <div key={i} className="flex items-start gap-2.5">
+                        <span className="w-5 h-5 rounded-full bg-teal-500/20 text-teal-400 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                          {i + 1}
+                        </span>
+                        <p className="text-xs text-slate-300 leading-snug">{step}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Contact reminder */}
+                <p className="text-[11px] text-slate-500 text-center px-2">
+                  Questions? Call or text us at{" "}
+                  <a href="tel:+19062859312" className="text-slate-300 underline">(906) 285-9312</a>
+                </p>
+
+                {onClose && showClose && (
+                  <Button variant="outline" size="sm" onClick={onClose} className="w-full border-slate-600 text-slate-300 hover:bg-slate-800">
+                    Done <ArrowRight className="h-3 w-3 ml-1" />
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         )}
