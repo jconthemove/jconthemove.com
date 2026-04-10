@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -108,11 +108,26 @@ export default function BookLawnCare() {
   const [hasSteepSlope, setHasSteepSlope] = useState(false);
   const [needsHaulAway, setNeedsHaulAway] = useState(false);
   const [quoteResult, setQuoteResult] = useState<QuoteResult | null>(null);
+  const [distanceMiles, setDistanceMiles] = useState(0);
 
   const form = useForm<ContactForm>({
     resolver: zodResolver(contactSchema),
     defaultValues: { customerName: "", phone: "", email: "", address: "", city: "", state: "", zip: "", requestedStartDate: "", notes: "" },
   });
+
+  // Fetch drive distance when service address changes
+  useEffect(() => {
+    const addr = (form.watch("address") || "").trim();
+    if (addr.length >= 8) {
+      fetch(`/api/utility/estimate-drive-miles?address=${encodeURIComponent(addr)}`)
+        .then(r => r.json())
+        .then((d: any) => setDistanceMiles(typeof d.miles === "number" ? d.miles : 0))
+        .catch(() => setDistanceMiles(0));
+    } else {
+      setDistanceMiles(0);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.watch("address")]);
 
   const quoteMutation = useMutation({
     mutationFn: (data: object) => apiRequest("POST", "/api/lawn-care/quote", data),
@@ -141,6 +156,7 @@ export default function BookLawnCare() {
       propertySize,
       propertyCondition,
       addOns: selectedAddOns,
+      distanceMiles,
       hasFence,
       hasPets,
       hasSteepSlope,

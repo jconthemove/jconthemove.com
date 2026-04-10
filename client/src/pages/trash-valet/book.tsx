@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -42,6 +42,10 @@ export default function TrashValetBookPage() {
   const [submitted, setSubmitted] = useState(false);
   const [subId, setSubId] = useState("");
   const [serverMonthlyPrice, setServerMonthlyPrice] = useState<number | null>(null);
+  const [distanceMiles, setDistanceMiles] = useState(0);
+
+  const TRAVEL_FEE_MONTHLY = 50;
+  const TRAVEL_THRESHOLD = 2.5;
 
   const [form, setForm] = useState({
     customerName: "",
@@ -65,6 +69,19 @@ export default function TrashValetBookPage() {
   const setField = (key: string, value: string | number | boolean) =>
     setForm((f) => ({ ...f, [key]: value }));
 
+  // Fetch drive distance whenever address changes to apply travel fee
+  useEffect(() => {
+    const addr = form.address.trim();
+    if (addr.length >= 8) {
+      fetch(`/api/utility/estimate-drive-miles?address=${encodeURIComponent(addr)}`)
+        .then(r => r.json())
+        .then((d: any) => setDistanceMiles(typeof d.miles === "number" ? d.miles : 0))
+        .catch(() => setDistanceMiles(0));
+    } else {
+      setDistanceMiles(0);
+    }
+  }, [form.address]);
+
   const quote = calculateTrashValetQuote({
     cans: Number(form.cans) || 0,
     bagCount: Number(form.bagCount) || 0,
@@ -72,6 +89,11 @@ export default function TrashValetBookPage() {
     recyclingAnchorDate: form.recyclingAnchorDate || null,
     planType: form.planType as "monthly" | "yearly",
   });
+
+  const travelFeeApplied = distanceMiles > TRAVEL_THRESHOLD;
+  const adjustedMonthly = quote.finalMonthlyPrice + (travelFeeApplied ? TRAVEL_FEE_MONTHLY : 0);
+  const yearlyEffectiveMonthly = Math.round(adjustedMonthly * 11 / 12);
+  const displayMonthly = form.planType === "yearly" ? yearlyEffectiveMonthly : adjustedMonthly;
 
   const bookMutation = useMutation<BookingResult, Error, object>({
     mutationFn: (data) =>
@@ -439,18 +461,23 @@ export default function TrashValetBookPage() {
                   <span>$30.00</span>
                 </div>
               )}
-              {quote.travelSurchargeMonthly > 0 && (
-                <div className="flex justify-between text-zinc-400">
-                  <span>Travel surcharge</span>
-                  <span className="text-white">+${quote.travelSurchargeMonthly.toFixed(2)}/mo</span>
+              {(quote.travelSurchargeMonthly > 0 || travelFeeApplied) && (
+                <div className="flex justify-between text-amber-400 text-xs">
+                  <span>Travel fee (out of area)</span>
+                  <span>+${Math.max(quote.travelSurchargeMonthly, travelFeeApplied ? TRAVEL_FEE_MONTHLY : 0).toFixed(2)}/mo</span>
                 </div>
               )}
-              <div className="border-t border-zinc-800 pt-2 flex justify-between font-bold">
+              <div className="border-t border-zinc-800 pt-2 flex justify-between font-bold items-center">
                 <span className="text-white">Monthly total</span>
-                <span className="text-orange-400 text-base">${quote.finalMonthlyPrice.toFixed(2)}/mo</span>
+                <div className="flex items-center gap-2">
+                  {form.planType === "yearly" && (
+                    <span className="text-xs text-zinc-500 line-through">${adjustedMonthly.toFixed(2)}</span>
+                  )}
+                  <span className="text-orange-400 text-base">${displayMonthly.toFixed(2)}/mo</span>
+                </div>
               </div>
               {form.planType === "yearly" && (
-                <p className="text-xs text-zinc-500">Yearly plan: 11 months billed, 12 months of service</p>
+                <p className="text-xs text-zinc-400">Yearly plan: 11 months billed, 12 months of service — save 1 month free</p>
               )}
             </CardContent>
           </Card>
@@ -474,7 +501,7 @@ export default function TrashValetBookPage() {
             disabled={bookMutation.isPending}
             className="w-full bg-orange-500 hover:bg-orange-400 text-white font-black text-base py-6"
           >
-            {bookMutation.isPending ? "Booking…" : `Start Service — $${quote.finalMonthlyPrice.toFixed(2)}/mo`}
+            {bookMutation.isPending ? "Booking…" : `Start Service — $${displayMonthly.toFixed(2)}/mo`}
           </Button>
 
           <p className="text-center text-zinc-600 text-xs">

@@ -42,6 +42,7 @@ const quoteRequestSchema = z.object({
   hasPets: z.boolean().optional(),
   hasSteepSlope: z.boolean().optional(),
   needsHaulAway: z.boolean().optional(),
+  distanceMiles: z.number().optional(),
   requestedStartDate: z.string().optional(),
   requestedTimeWindow: z.string().optional(),
   notes: z.string().optional(),
@@ -64,6 +65,7 @@ router.post("/quote", async (req: Request, res: Response) => {
       hasSteepSlope: data.hasSteepSlope,
       needsHaulAway: data.needsHaulAway,
       zip: data.zip,
+      distanceMiles: data.distanceMiles,
     });
 
     const [quote] = await db.insert(lawnCareQuotes).values({

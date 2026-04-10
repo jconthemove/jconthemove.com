@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { Send, CheckCircle2, ArrowRight, Sparkles, RotateCcw, ChevronRight, AlertCircle, Users, DollarSign, Camera, X, CreditCard, Clock } from "lucide-react";
 import { calculateWindowCleaningQuote } from "@shared/windowCleaningPricing";
-import { calculateTrashValetQuote } from "@shared/trashValetPricing";
+import { calculateTrashValetQuote, TRASH_VALET_TRAVEL_THRESHOLD_MILES } from "@shared/trashValetPricing";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
 
 // ─────────────────────────────────────────────
@@ -242,6 +242,7 @@ export interface CrewPackage {
   crew?: number;
   hours?: number;
   tag?: string;
+  originalPrice?: number;
 }
 
 interface Message {
@@ -1453,13 +1454,14 @@ function computeQuoteForAnswers(a: Answers, ratePerMoverHour = 85, jc222FlatPric
     const bags = bagMap[a.trashBags || "No extra bags"] || 0;
     const recycling = (a.recyclingEnabled || "").includes("Yes");
     const planType = (a.trashPlanType || "").includes("Yearly") ? "yearly" : "monthly";
-
+    const travelFeeMonthly = distanceMiles > TRASH_VALET_TRAVEL_THRESHOLD_MILES ? 50 : 0;
     const quote = calculateTrashValetQuote({ cans, bagCount: bags, recyclingEnabled: recycling, planType });
+    const finalPrice = quote.finalMonthlyPrice + travelFeeMonthly;
     return {
       type: "trash_valet",
-      finalMonthlyPrice: quote.finalMonthlyPrice,
-      minPrice: quote.finalMonthlyPrice,
-      maxPrice: quote.finalMonthlyPrice + 10,
+      finalMonthlyPrice: finalPrice,
+      minPrice: finalPrice,
+      maxPrice: finalPrice + 10,
     };
   }
 
@@ -1476,12 +1478,13 @@ function computeQuoteForAnswers(a: Answers, ratePerMoverHour = 85, jc222FlatPric
       includeOutside: true,
       seasonMode: "normal",
     });
+    const travelFee = distanceMiles > 5 ? 50 : 0;
     return {
       type: "window_cleaning",
       paneCount: quote.paneCount,
-      minPrice: quote.total,
-      maxPrice: quote.total,
-      total: quote.total,
+      minPrice: quote.total + travelFee,
+      maxPrice: quote.total + travelFee,
+      total: quote.total + travelFee,
     };
   }
 
@@ -1749,6 +1752,7 @@ export function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMove
         minPrice: Math.round(tq.finalMonthlyPrice * 11 / 12),
         maxPrice: Math.round(tq.finalMonthlyPrice * 11 / 12),
         tag: "Best Value",
+        originalPrice: tq.finalMonthlyPrice,
       },
     ];
   }
@@ -2944,8 +2948,11 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
                           : <div className="h-4 w-4 rounded-full border-2 border-slate-600 shrink-0" />}
                         <span className="text-sm font-semibold text-white">{pkg.label}</span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap justify-end">
                         {pkg.tag && <Badge className="text-[10px] bg-teal-700/60 text-teal-200 border-0">{pkg.tag}</Badge>}
+                        {pkg.originalPrice !== undefined && (
+                          <span className="text-xs text-slate-500 line-through">${pkg.originalPrice}</span>
+                        )}
                         <span className="text-sm font-bold text-teal-300">
                           {pkg.minPrice === pkg.maxPrice
                             ? `$${pkg.minPrice}`

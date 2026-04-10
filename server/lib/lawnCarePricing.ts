@@ -73,7 +73,11 @@ export interface LawnCareQuoteInput {
   hasSteepSlope?: boolean;
   needsHaulAway?: boolean;
   zip?: string;
+  distanceMiles?: number;
 }
+
+export const LAWN_CARE_TRAVEL_THRESHOLD_MILES = 5;
+export const LAWN_CARE_TRAVEL_FEE = 50;
 
 export interface LawnCarePriceBreakdown {
   basePrice: number;
@@ -140,7 +144,7 @@ export function calculateLawnCareQuote(input: LawnCareQuoteInput): LawnCarePrice
   if (input.hasFence) adjustedBase += 10;
 
   const haulAway = input.needsHaulAway ? 45 : 0;
-  const travelFee = 0;
+  const travelFee = (input.distanceMiles ?? 0) > LAWN_CARE_TRAVEL_THRESHOLD_MILES ? LAWN_CARE_TRAVEL_FEE : 0;
   const totalQuoted = Math.max(
     Math.round(adjustedBase + addOnTotal + haulAway + travelFee),
     CUSTOM_ESTIMATE_THRESHOLDS.minPrice

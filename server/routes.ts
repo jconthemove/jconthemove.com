@@ -3283,6 +3283,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     includeOutside:  z.boolean().default(true),
     seasonMode:      z.enum(["normal", "winter_inside_only"]).default("normal"),
     promoCode:       z.string().trim().default(""),
+    travelFee:       z.coerce.number().min(0).default(0),
+    distanceMiles:   z.coerce.number().min(0).default(0),
   });
 
   app.post("/api/window-cleaning/quote", async (req: any, res) => {
@@ -3297,6 +3299,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         firstName, lastName, email, phone, address,
         standardWindows, largeWindows, ladderWindows,
         includeInside, includeOutside, seasonMode, promoCode,
+        travelFee, distanceMiles,
       } = parseResult.data;
 
       const { calculateWindowCleaningQuote } = await import("@shared/windowCleaningPricing");
@@ -3328,6 +3331,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         promoCode: validatedPromoCode,
       }, isApril);
 
+      const serverTravelFee = distanceMiles > 5 ? 50 : travelFee;
+      const adjustedTotal = quote.total + serverTravelFee;
+
       const details = JSON.stringify({
         standardWindows, largeWindows, ladderWindows,
         includeInside, includeOutside, seasonMode,
@@ -3337,6 +3343,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         discountPercent: quote.discountPercent,
         promoApplied: quote.promoApplied,
         promoCode: promoCode || null,
+        travelFee: serverTravelFee,
+        distanceMiles,
       });
 
       const customerEmail = email.length > 0 ? email : "noreply@jconthemove.com";
@@ -3351,7 +3359,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fromAddress: address,
         status: "quote_requested",
         basePrice: String(quote.total),
-        totalPrice: String(quote.total),
+        totalPrice: String(adjustedTotal),
         details,
         promoCode: promoCode.toUpperCase() || null,
         createdByUserId: (req.session as any)?.userId || req.user?.id || null,
@@ -3359,13 +3367,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
       const customerName = `${firstName} ${lastName}`.trim();
+      const travelNote = serverTravelFee > 0 ? ` + $${serverTravelFee} travel fee (${distanceMiles.toFixed(1)} mi)` : "";
       try {
         await sendEmail({
           to: companyEmail,
           from: companyEmail,
           subject: `New Window Cleaning Booking — ${customerName}`,
-          text: `New window cleaning job submitted.\n\nCustomer: ${customerName}\nPhone: ${customerPhone}\nEmail: ${customerEmail}\nAddress: ${address}\nWindows: ${standardWindows} standard, ${largeWindows} large, ${ladderWindows} ladder\nInside: ${includeInside}, Outside: ${includeOutside}, Season: ${seasonMode}\nPanes: ${quote.paneCount}\nTotal: $${quote.total}${quote.promoApplied ? ` (${quote.discountPercent}% promo applied)` : ""}\n\nView job in admin panel.`,
-          html: `<h2>New Window Cleaning Booking</h2><p><b>Customer:</b> ${customerName}<br><b>Phone:</b> ${customerPhone}<br><b>Email:</b> ${customerEmail}<br><b>Address:</b> ${address}<br><b>Windows:</b> ${standardWindows} standard, ${largeWindows} large, ${ladderWindows} ladder<br><b>Inside:</b> ${includeInside}, <b>Outside:</b> ${includeOutside}<br><b>Season:</b> ${seasonMode}<br><b>Total:</b> $${quote.total}${quote.promoApplied ? ` <em>(${quote.discountPercent}% promo applied)</em>` : ""}</p>`,
+          text: `New window cleaning job submitted.\n\nCustomer: ${customerName}\nPhone: ${customerPhone}\nEmail: ${customerEmail}\nAddress: ${address}\nWindows: ${standardWindows} standard, ${largeWindows} large, ${ladderWindows} ladder\nInside: ${includeInside}, Outside: ${includeOutside}, Season: ${seasonMode}\nPanes: ${quote.paneCount}\nTotal: $${adjustedTotal}${quote.promoApplied ? ` (${quote.discountPercent}% promo applied)` : ""}${travelNote}\n\nView job in admin panel.`,
+          html: `<h2>New Window Cleaning Booking</h2><p><b>Customer:</b> ${customerName}<br><b>Phone:</b> ${customerPhone}<br><b>Email:</b> ${customerEmail}<br><b>Address:</b> ${address}<br><b>Windows:</b> ${standardWindows} standard, ${largeWindows} large, ${ladderWindows} ladder<br><b>Inside:</b> ${includeInside}, <b>Outside:</b> ${includeOutside}<br><b>Season:</b> ${seasonMode}<br><b>Total:</b> $${adjustedTotal}${quote.promoApplied ? ` <em>(${quote.discountPercent}% promo applied)</em>` : ""}${travelNote ? `<br><b>Travel:</b> ${travelNote}` : ""}</p>`,
         });
       } catch (emailErr) { console.error("Admin email failed:", emailErr); }
 
@@ -3379,7 +3388,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         subtotal: quote.subtotal,
         discountAmount: quote.discountAmount,
         discountPercent: quote.discountPercent,
-        total: quote.total,
+        travelFee: serverTravelFee,
+        total: adjustedTotal,
         promoApplied: quote.promoApplied,
         message: "Booking received! Our team will reach out to confirm.",
       });

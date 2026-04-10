@@ -11,7 +11,7 @@ export const TRASH_VALET_ADDITIONAL_CAN_RATE = 3;
 // Recycling is a separate service day (bi-weekly), same per-can rates
 // $30/month minimum
 export const TRASH_VALET_MONTHLY_MINIMUM = 30;
-export const TRASH_VALET_TRAVEL_SURCHARGE_MONTHLY = 5;
+export const TRASH_VALET_TRAVEL_SURCHARGE_MONTHLY = 50;
 
 export interface TrashValetInput {
   cans: number;        // trash cans (weekly)

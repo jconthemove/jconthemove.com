@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Loader2, Tag, ChevronDown, ChevronUp, AlertCircle, CheckCircle2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
@@ -38,6 +38,20 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
   const [phone, setPhone] = useState(user?.phoneNumber || "");
   const [address, setAddress] = useState("");
   const [addressTouched, setAddressTouched] = useState(false);
+  const [distanceMiles, setDistanceMiles] = useState(0);
+
+  // Fetch drive distance when address changes
+  useEffect(() => {
+    const addr = address.trim();
+    if (addr.length >= 8) {
+      fetch(`/api/utility/estimate-drive-miles?address=${encodeURIComponent(addr)}`)
+        .then(r => r.json())
+        .then((d: any) => setDistanceMiles(typeof d.miles === "number" ? d.miles : 0))
+        .catch(() => setDistanceMiles(0));
+    } else {
+      setDistanceMiles(0);
+    }
+  }, [address]);
 
   const [standardWindows, setStandardWindows] = useState(5);
   const [largeWindows, setLargeWindows] = useState(0);
@@ -56,6 +70,9 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
     { standardWindows, largeWindows, ladderWindows, includeInside, includeOutside, seasonMode, promoCode: promoSubmitted },
     isApril,
   );
+
+  const travelFee = distanceMiles > 5 ? 50 : 0;
+  const adjustedTotal = quote.total + travelFee;
 
   const addressError = addressTouched && address.trim().length < 8;
 
@@ -80,6 +97,8 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
         includeOutside,
         seasonMode,
         promoCode: promoSubmitted.trim(),
+        travelFee,
+        distanceMiles,
       });
       if (!res.ok) {
         const errBody = await res.json() as { error?: string };
@@ -251,9 +270,15 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
           </div>
         )}
 
+        {travelFee > 0 && (
+          <div className="flex items-center justify-between">
+            <span className="text-amber-400 text-xs">Travel fee (out of area)</span>
+            <span className="text-amber-400 text-xs font-semibold">+${travelFee.toFixed(2)}</span>
+          </div>
+        )}
         <div className="flex items-center justify-between border-t border-zinc-800 pt-3">
           <span className="text-zinc-300 font-semibold text-sm">Total</span>
-          <span className="text-white font-black text-2xl">${quote.total.toFixed(2)}</span>
+          <span className="text-white font-black text-2xl">${adjustedTotal.toFixed(2)}</span>
         </div>
 
         <p className="text-zinc-600 text-[10px]">$5/pane · 4-window minimum · Ladder access billed at 2× rate</p>
@@ -364,7 +389,7 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
         {book.isPending ? (
           <Loader2 className="h-5 w-5 animate-spin" />
         ) : (
-          <>🪟 Book Now · ${quote.total.toFixed(2)}</>
+          <>🪟 Book Now · ${adjustedTotal.toFixed(2)}</>
         )}
       </button>
       <p className="text-center text-xs text-zinc-600">⚡ Most jobs booked in under 30 seconds</p>
