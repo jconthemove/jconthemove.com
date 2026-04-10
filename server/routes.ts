@@ -19,7 +19,7 @@ import { faucetService } from "./services/faucet";
 import { insertFundingDepositSchema, insertFaucetConfigSchema, insertFaucetWalletSchema } from "@shared/schema";
 import { z } from "zod";
 import { EncryptionService } from "./services/encryption";
-import { eq, desc, sql, and, gte, lte, or, ilike, inArray } from 'drizzle-orm';
+import { eq, desc, sql, and, gte, lte, or, ilike, inArray, isNull } from 'drizzle-orm';
 import { db, pool } from './db';
 import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, giftCards, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens, promoCodes, reviews, rewardCategories, rewardItems, rewardRedemptions, buybackFund, laborQuotes } from '@shared/schema';
 import { getFaucetPayService } from "./services/faucetpay";
@@ -5120,7 +5120,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const assignedLeads = await storage.getAssignedLeads(employeeId);
       const assignedIds = new Set(assignedLeads.map((l: any) => l.id));
       const openLeads = await db.select().from(leads)
-        .where(inArray(leads.status, ["new", "quote_requested", "available", "quoted", "open", "assigned"]))
+        .where(and(inArray(leads.status, ["new", "quote_requested", "available", "quoted", "open", "assigned"]), isNull(leads.archivedAt)))
         .orderBy(desc(leads.createdAt));
       const merged = [
         ...assignedLeads,
@@ -5154,6 +5154,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(
           and(
             inArray(leads.status, ["new", "quote_requested", "quoted", "available", "open", "assigned", "in_progress"]),
+            isNull(leads.archivedAt),
           )
         )
         .orderBy(desc(leads.createdAt));
