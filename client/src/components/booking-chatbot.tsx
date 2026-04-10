@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { Send, CheckCircle2, ArrowRight, Sparkles, RotateCcw, ChevronRight, AlertCircle, Users, DollarSign, Camera, X, CreditCard, Clock } from "lucide-react";
 import { calculateWindowCleaningQuote } from "@shared/windowCleaningPricing";
-import { calculateTrashValetQuote, TRASH_VALET_TRAVEL_THRESHOLD_MILES } from "@shared/trashValetPricing";
+import { calculateTrashValetQuote, TRASH_VALET_TRAVEL_THRESHOLD_MILES, TRASH_VALET_OUT_OF_AREA_MINIMUM } from "@shared/trashValetPricing";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
 
 // ─────────────────────────────────────────────
@@ -1454,9 +1454,11 @@ function computeQuoteForAnswers(a: Answers, ratePerMoverHour = 85, jc222FlatPric
     const bags = bagMap[a.trashBags || "No extra bags"] || 0;
     const recycling = (a.recyclingEnabled || "").includes("Yes");
     const planType = (a.trashPlanType || "").includes("Yearly") ? "yearly" : "monthly";
-    const travelFeeMonthly = distanceMiles > TRASH_VALET_TRAVEL_THRESHOLD_MILES ? 50 : 0;
+    const isOutOfArea = distanceMiles > TRASH_VALET_TRAVEL_THRESHOLD_MILES;
+    const travelFeeMonthly = isOutOfArea ? 50 : 0;
     const quote = calculateTrashValetQuote({ cans, bagCount: bags, recyclingEnabled: recycling, planType });
-    const finalPrice = quote.finalMonthlyPrice + travelFeeMonthly;
+    const rawFinal = quote.finalMonthlyPrice + travelFeeMonthly;
+    const finalPrice = isOutOfArea ? Math.max(TRASH_VALET_OUT_OF_AREA_MINIMUM, rawFinal) : rawFinal;
     return {
       type: "trash_valet",
       finalMonthlyPrice: finalPrice,
@@ -2293,12 +2295,15 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
         return { leadId: "", message: "Lead submitted", depositInvoiceSent: false, depositInvoiceUrl: null };
       }
 
+      const isTV = isTrashValetService(answers);
+      const tvMonthly = selectedPackageObj?.minPrice ?? (pendingQuote as any)?.finalMonthlyPrice ?? 0;
       const result = await apiRequest("POST", "/api/chatbot-quote", {
         answers,
         quote: pendingQuote,
         selectedPackage: selectedPackageObj || null,
-        depositRequired: dep?.required || false,
-        depositAmount: dep?.amount || 0,
+        depositRequired: isTV ? withDeposit : (dep?.required || false),
+        depositAmount: isTV ? tvMonthly : (dep?.amount || 0),
+        isFirstMonthPayment: isTV && withDeposit,
         serviceLabel: svc,
         isQuoteOnly,
         customerZip: zip,
@@ -2370,6 +2375,9 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
   const svc = getServiceLabel(answers.serviceType || "");
   const isQuoteOnly = QUOTE_ONLY_SERVICES.includes(svc);
   const DEPOSIT_AMOUNT = depositInfo?.amount ?? 100;
+  const isTrashValet = isTrashValetService(answers);
+  // For trash valet the "deposit" is actually the first month's subscription cost
+  const firstMonthCost = selectedPackageObj?.minPrice ?? (pendingQuote as any)?.finalMonthlyPrice ?? 0;
 
   const phase = submitted ? "submitted" : (quoteVisible && pendingQuote ? (isEmployee ? "employee_submit" : "deposit") : null);
 
@@ -2524,15 +2532,23 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
                   <span className="text-sm font-bold text-orange-300 uppercase tracking-wide">Confirm Your Appointment</span>
                 </div>
 
-                <div className="bg-slate-900/60 rounded-xl p-4 text-center">
-                  <p className="text-3xl font-bold text-white">${DEPOSIT_AMOUNT}</p>
-                  <p className="text-sm text-slate-400 mt-1">Appointment Deposit</p>
-                  <p className="text-xs text-slate-500 mt-2">Applied toward your final invoice · Fully refundable if rescheduled 24 hrs in advance</p>
-                </div>
+                {isTrashValet ? (
+                  <div className="bg-slate-900/60 rounded-xl p-4 text-center">
+                    <p className="text-3xl font-bold text-white">${firstMonthCost}/mo</p>
+                    <p className="text-sm text-slate-400 mt-1">First Month's Service</p>
+                    <p className="text-xs text-slate-500 mt-2">Pay now to lock in your spot · No contract · Cancel anytime</p>
+                  </div>
+                ) : (
+                  <div className="bg-slate-900/60 rounded-xl p-4 text-center">
+                    <p className="text-3xl font-bold text-white">${DEPOSIT_AMOUNT}</p>
+                    <p className="text-sm text-slate-400 mt-1">Appointment Deposit</p>
+                    <p className="text-xs text-slate-500 mt-2">Applied toward your final invoice · Fully refundable if rescheduled 24 hrs in advance</p>
+                  </div>
+                )}
 
                 {selectedPackageObj && (
                   <div className="flex items-center justify-between bg-slate-800/60 rounded-xl px-3 py-2.5">
-                    <span className="text-sm text-slate-300">Selected Package</span>
+                    <span className="text-sm text-slate-300">{isTrashValet ? "Selected Plan" : "Selected Package"}</span>
                     <span className="text-sm font-semibold text-teal-300">{selectedPackageObj.label}</span>
                   </div>
                 )}
@@ -2540,7 +2556,10 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
                 <div className="flex items-start gap-2 bg-blue-900/20 border border-blue-500/20 rounded-lg px-3 py-2">
                   <span className="text-base shrink-0">🔍</span>
                   <p className="text-xs text-slate-300">
-                    After submitting, Darrell reviews your request and sends a <strong className="text-white">finalized invoice to your email</strong>. Payment locks in your spot on the schedule.
+                    {isTrashValet
+                      ? <>After submitting, Darrell confirms your first pickup date. <strong className="text-white">An invoice for your first month is emailed instantly.</strong> Service begins once payment clears.</>
+                      : <>After submitting, Darrell reviews your request and sends a <strong className="text-white">finalized invoice to your email</strong>. Payment locks in your spot on the schedule.</>
+                    }
                   </p>
                 </div>
 
@@ -2552,12 +2571,17 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
                   >
                     {submitMutation.isPending ? (
                       "Sending invoice…"
+                    ) : isTrashValet ? (
+                      <><CreditCard className="h-4 w-4 mr-2" />Pay First Month — ${firstMonthCost}</>
                     ) : (
                       <><CreditCard className="h-4 w-4 mr-2" />Send ${DEPOSIT_AMOUNT} Deposit Invoice &amp; Confirm</>
                     )}
                   </Button>
                   <p className="text-[11px] text-slate-500 text-center px-2">
-                    Invoice emailed instantly · Applied toward final balance · Refundable with 24 hr notice
+                    {isTrashValet
+                      ? "Invoice emailed instantly · No contract · Cancel anytime"
+                      : "Invoice emailed instantly · Applied toward final balance · Refundable with 24 hr notice"
+                    }
                   </p>
                   <Button
                     variant="ghost"
@@ -2565,7 +2589,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
                     disabled={submitMutation.isPending}
                     className="w-full text-slate-400 hover:text-slate-200 text-xs py-2"
                   >
-                    {submitMutation.isPending ? "Submitting…" : "Skip deposit — submit for review only"}
+                    {submitMutation.isPending ? "Submitting…" : isTrashValet ? "Submit without paying — we'll invoice you" : "Skip deposit — submit for review only"}
                   </Button>
                 </div>
               </div>

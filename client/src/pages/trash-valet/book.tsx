@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, CheckCircle, CheckCircle2, Recycle, DollarSign, Trash2 } from "lucide-react";
 import BookingConfirmedTiles from "@/components/BookingConfirmedTiles";
 import { DatePicker } from "@/components/ui/date-picker";
-import { calculateTrashValetQuote, type TrashValetQuote } from "@shared/trashValetPricing";
+import { calculateTrashValetQuote, TRASH_VALET_OUT_OF_AREA_MINIMUM, type TrashValetQuote } from "@shared/trashValetPricing";
 
 const DAY_OPTIONS = [
   { value: "1", label: "Monday" },
@@ -91,7 +91,8 @@ export default function TrashValetBookPage() {
   });
 
   const travelFeeApplied = distanceMiles > TRAVEL_THRESHOLD;
-  const adjustedMonthly = quote.finalMonthlyPrice + (travelFeeApplied ? TRAVEL_FEE_MONTHLY : 0);
+  const rawAdjusted = quote.finalMonthlyPrice + (travelFeeApplied ? TRAVEL_FEE_MONTHLY : 0);
+  const adjustedMonthly = travelFeeApplied ? Math.max(TRASH_VALET_OUT_OF_AREA_MINIMUM, rawAdjusted) : rawAdjusted;
   const yearlyEffectiveMonthly = Math.round(adjustedMonthly * 11 / 12);
   const displayMonthly = form.planType === "yearly" ? yearlyEffectiveMonthly : adjustedMonthly;
 

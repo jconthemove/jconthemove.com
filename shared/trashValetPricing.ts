@@ -9,9 +9,10 @@ export const TRASH_VALET_FIRST_CAN_RATE = 6;
 export const TRASH_VALET_ADDITIONAL_CAN_RATE = 3;
 
 // Recycling is a separate service day (bi-weekly), same per-can rates
-// $30/month minimum
+// $30/month minimum (local); $129/month minimum for out-of-area
 export const TRASH_VALET_MONTHLY_MINIMUM = 30;
 export const TRASH_VALET_TRAVEL_SURCHARGE_MONTHLY = 50;
+export const TRASH_VALET_OUT_OF_AREA_MINIMUM = 129;
 
 export interface TrashValetInput {
   cans: number;        // trash cans (weekly)
@@ -99,7 +100,10 @@ export function calculateTrashValetQuote(input: TrashValetInput): TrashValetQuot
     }
   }
 
-  const finalMonthlyPrice = parseFloat((baseMonthly + travelSurchargeMonthly).toFixed(2));
+  const rawMonthly = baseMonthly + travelSurchargeMonthly;
+  const finalMonthlyPrice = parseFloat(
+    (travelSurchargeMonthly > 0 ? Math.max(TRASH_VALET_OUT_OF_AREA_MINIMUM, rawMonthly) : rawMonthly).toFixed(2)
+  );
 
   // Per-week recycling charge (for individual job costing)
   const targetDate = input.targetWeekOf ? new Date(input.targetWeekOf + "T00:00:00Z") : new Date();
