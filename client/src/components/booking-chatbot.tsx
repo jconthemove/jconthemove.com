@@ -101,7 +101,10 @@ interface Answers {
   trashBags?: string;
   recyclingEnabled?: string;
   trashPlanType?: string;
+  // Junk Removal fields
+  junkLocation?: string;
   // Window Cleaning fields
+  windowLocation?: string;
   standardWindows?: string;
   largeWindows?: string;
   ladderWindows?: string;
@@ -400,6 +403,14 @@ const STEPS: Step[] = [
     show: (a) => isMovingService(a) || isJunkService(a),
   },
   {
+    id: "junkLocation",
+    question: "Where's the junk located?",
+    subtext: "We need your address to schedule pickup.",
+    type: "address",
+    placeholder: "123 Main St, Ironwood, MI",
+    show: (a) => isJunkService(a),
+  },
+  {
     id: "packingHelp",
     question: "Do you need packing help?",
     subtext: "We bring all supplies.",
@@ -463,6 +474,14 @@ const STEPS: Step[] = [
   },
 
   // ── WINDOW CLEANING STEPS ─────────────────────────────────────────────────
+  {
+    id: "windowLocation",
+    question: "What's the address for the window cleaning?",
+    subtext: "We'll confirm local availability and scheduling.",
+    type: "address",
+    placeholder: "123 Main St, Ironwood, MI",
+    show: (a) => isWindowCleaningService(a),
+  },
   {
     id: "standardWindows",
     question: "How many standard-size windows do you have?",
@@ -770,13 +789,14 @@ function computeQuoteForAnswers(a: Answers): QuoteResult | null {
 
   if (QUOTE_ONLY_SERVICES.includes(svc)) {
     const ranges: Record<string, [number, number]> = {
-      "Painting":   [500, 5000],
-      "Flooring":   [800, 8000],
-      "Roofing":    [2000, 15000],
-      "Handyman":   [100, 1200],
-      "Lawn Care":  [50, 400],
+      "Painting":       [500,  5000],
+      "Flooring":       [800,  8000],
+      "Roofing":        [2000, 15000],
+      "Handyman":       [75,   900],
+      "Lawn Care":      [50,   400],
+      "Snow Removal":   [75,   350],
     };
-    const [min, max] = ranges[svc] || [500, 5000];
+    const [min, max] = ranges[svc] || [300, 3000];
     return { type: "quote_only", service: svc, minPrice: min, maxPrice: max };
   }
 
@@ -1078,6 +1098,54 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
   const [depositInfo, setDepositInfo] = useState<{ required: boolean; amount: number; termsHtml: string } | null>(null);
   const [depositChecked, setDepositChecked] = useState(false);
 
+  // ── localStorage session persistence ──────────────────────────────────────
+  const STORAGE_KEY = `jc_chatbot_session_${initialService || "default"}`;
+
+  useEffect(() => {
+    if (initialService) return; // Don't restore if a service was pre-selected (fresh entry)
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (!saved) return;
+      const d = JSON.parse(saved);
+      if (!d.answers || d.stepIdx == null) return;
+      setAnswers(d.answers);
+      if (Array.isArray(d.messages) && d.messages.length > 0) setMessages(d.messages);
+      setStepIdx(d.stepIdx);
+      if (!user) {
+        if (d.contactName)  setContactName(d.contactName);
+        if (d.contactPhone) setContactPhone(d.contactPhone);
+        if (d.contactEmail) setContactEmail(d.contactEmail);
+      }
+      if (d.pendingQuote) {
+        setPendingQuote(d.pendingQuote);
+        setQuoteVisible(d.quoteVisible || false);
+      }
+      if (Array.isArray(d.crewPackages) && d.crewPackages.length > 0) setCrewPackages(d.crewPackages);
+      if (d.selectedPackageObj) setSelectedPackageObj(d.selectedPackageObj);
+    } catch { /* ignore */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (submitted) { localStorage.removeItem(STORAGE_KEY); return; }
+    if (stepIdx === 0 && Object.keys(answers).length === 0) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        answers,
+        messages,
+        stepIdx,
+        contactName,
+        contactPhone,
+        contactEmail,
+        pendingQuote,
+        quoteVisible,
+        crewPackages,
+        selectedPackageObj,
+      }));
+    } catch { /* quota exceeded — ignore */ }
+  }, [answers, messages, stepIdx, contactName, contactPhone, contactEmail,
+      pendingQuote, quoteVisible, crewPackages, selectedPackageObj, submitted]);
+
   const visibleSteps = useMemo(
     () => STEPS.filter(s => !s.show || s.show(answers)),
     [answers]
@@ -1268,7 +1336,7 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
       const svc = getServiceLabel(answers.serviceType || "");
       const isQuoteOnly = QUOTE_ONLY_SERVICES.includes(svc);
       const dep = depositInfo;
-      const zip = answers.jobLocation || answers.depositZip || answers.fromZip || "";
+      const zip = answers.jobLocation || answers.depositZip || answers.junkLocation || answers.windowLocation || answers.fromZip || "";
 
       const result = await apiRequest("POST", "/api/chatbot-quote", {
         answers,
@@ -1311,6 +1379,7 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
   }
 
   function resetChat() {
+    try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
     setAnswers({});
     setMessages([{
       from: "bot",
