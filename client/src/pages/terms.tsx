@@ -159,6 +159,81 @@ export default function TermsOfService() {
             </p>
           </section>
 
+          {/* Trash Valet Subscription Terms */}
+          <section className="mb-10 p-6 bg-orange-900/20 border border-orange-500/30 rounded-lg">
+            <h2 className="text-2xl font-semibold mb-2 text-orange-300">🗑️ Trash Valet Subscription Terms</h2>
+            <p className="text-slate-400 text-sm mb-5">Applies to all Trash Valet monthly and yearly recurring subscriptions, including Gift a Plan subscriptions.</p>
+
+            <div className="space-y-4 mb-6">
+
+              <div className="bg-blue-900/20 border border-blue-500/20 rounded-lg p-4">
+                <p className="font-semibold text-blue-300 mb-2">📅 Yearly Plan — 1 Month Free</p>
+                <p className="text-slate-300 text-sm">
+                  Customers who subscribe on a <strong className="text-white">yearly plan</strong> are billed for 
+                  <strong className="text-white"> 11 months</strong> and receive <strong className="text-white">12 months of service</strong> — 
+                  one month free. The effective monthly rate is calculated as <em>(monthly rate × 11 ÷ 12)</em>. 
+                  Yearly billing is collected in monthly installments at the reduced rate for the 11-month billing period.
+                </p>
+              </div>
+
+              <div className="bg-yellow-900/20 border border-yellow-500/20 rounded-lg p-4">
+                <p className="font-semibold text-yellow-300 mb-2">🎁 Gift a Plan — 10% Off Both</p>
+                <p className="text-slate-300 text-sm">
+                  When a customer purchases a <strong className="text-white">Gift a Plan</strong> subscription covering two addresses, 
+                  both subscriptions receive a <strong className="text-white">10% discount</strong> applied to the effective monthly rate. 
+                  If combined with a yearly plan, the 10% gift discount is applied on top of the yearly rate — 
+                  resulting in the best available pricing. Both addresses are billed separately via Square invoice.
+                </p>
+              </div>
+
+              <div className="bg-slate-800/60 border border-slate-600/40 rounded-lg p-4">
+                <p className="font-semibold text-slate-200 mb-2">📋 Billing & Service Terms</p>
+                <ul className="text-slate-300 text-sm space-y-1.5 list-disc pl-4">
+                  <li>Monthly invoices are sent via Square. Failure to pay within 30 days may result in service suspension.</li>
+                  <li>Service may be paused (up to 4 weeks/year) by contacting JC ON THE MOVE at least 5 days before the next service day.</li>
+                  <li>A $30/month minimum applies to all local subscriptions; out-of-area addresses (more than 2.5 miles from base) are subject to a travel surcharge and a $129/month minimum.</li>
+                  <li>Prices are subject to change with 30 days written notice.</li>
+                </ul>
+              </div>
+
+              <div className="bg-red-900/20 border border-red-500/25 rounded-lg p-4">
+                <p className="font-semibold text-red-300 mb-2">❌ Cancellation & 70% Prorate Credit</p>
+                <p className="text-slate-300 text-sm mb-3">
+                  Either party may cancel a Trash Valet subscription at any time by providing at least 
+                  <strong className="text-white"> 5 calendar days' notice</strong> before the next billing date.
+                </p>
+                <div className="bg-orange-900/30 border border-orange-500/20 rounded-lg p-3 mb-3">
+                  <p className="text-orange-300 font-semibold text-sm mb-1">70% Prorate Credit Policy</p>
+                  <p className="text-slate-300 text-sm">
+                    If a customer cancels a <strong className="text-white">monthly</strong> or <strong className="text-white">yearly</strong> subscription 
+                    mid-billing-cycle (after payment has been collected for that month), JC ON THE MOVE will issue a 
+                    <strong className="text-white"> 70% prorate credit</strong> for the unused portion of the billing period. 
+                    This credit is applied toward any future JC ON THE MOVE service — it is <em>not</em> issued as a cash refund.
+                  </p>
+                </div>
+                <p className="text-slate-400 text-xs font-medium mb-1">How the prorate is calculated:</p>
+                <ul className="text-slate-400 text-xs space-y-1 list-disc pl-4">
+                  <li><strong className="text-slate-300">Days remaining</strong> = (billing period end) − (last service day)</li>
+                  <li><strong className="text-slate-300">Daily rate</strong> = monthly rate ÷ days in billing month</li>
+                  <li><strong className="text-slate-300">Credit</strong> = daily rate × days remaining × 70%</li>
+                  <li>Example: $30/mo plan, 10 days unused → daily rate ≈ $1.00 → credit = $1.00 × 10 × 70% = <strong className="text-slate-200">$7.00 credit</strong></li>
+                </ul>
+                <p className="text-slate-500 text-xs mt-3">
+                  Prorate credits expire 12 months from the date of issuance and are non-transferable. 
+                  Cancellations with less than 5 days' notice may be processed in the following billing cycle.
+                </p>
+              </div>
+
+            </div>
+
+            <p className="text-sm text-slate-400">
+              By subscribing to Trash Valet service, you acknowledge and agree to these subscription, billing, and cancellation terms. 
+              For questions, contact us at{" "}
+              <a href="tel:+19062859312" className="text-orange-400 hover:underline">(906) 285-9312</a> or{" "}
+              <a href="mailto:upmichiganstatemovers@gmail.com" className="text-orange-400 hover:underline">upmichiganstatemovers@gmail.com</a>.
+            </p>
+          </section>
+
           <section className="mb-8">
             <h2 className="text-2xl font-semibold mb-4" data-testid="text-section-changes">Changes to Terms</h2>
             <p className="mb-4">
@@ -182,7 +257,7 @@ export default function TermsOfService() {
           </section>
 
           <p className="text-sm text-muted-foreground mt-8">
-            Last updated: January 2026
+            Last updated: April 2026
           </p>
         </div>
       </div>
