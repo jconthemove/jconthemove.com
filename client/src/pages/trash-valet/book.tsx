@@ -14,6 +14,7 @@ import { ArrowLeft, CheckCircle, CheckCircle2, Recycle, DollarSign, Trash2 } fro
 import BookingConfirmedTiles from "@/components/BookingConfirmedTiles";
 import { DatePicker } from "@/components/ui/date-picker";
 import { calculateTrashValetQuote, TRASH_VALET_OUT_OF_AREA_MINIMUM, type TrashValetQuote } from "@shared/trashValetPricing";
+import ServiceBundleAddon from "@/components/ServiceBundleAddon";
 
 const DAY_OPTIONS = [
   { value: "1", label: "Monday" },
@@ -43,6 +44,7 @@ export default function TrashValetBookPage() {
   const [subId, setSubId] = useState("");
   const [serverMonthlyPrice, setServerMonthlyPrice] = useState<number | null>(null);
   const [distanceMiles, setDistanceMiles] = useState(0);
+  const [bundleAddons, setBundleAddons] = useState<string[]>([]);
 
   const TRAVEL_FEE_MONTHLY = 50;
   const TRAVEL_THRESHOLD = 2.5;
@@ -121,6 +123,7 @@ export default function TrashValetBookPage() {
       bagCount: Number(form.bagCount),
       serviceDayOfWeek: Number(form.serviceDayOfWeek),
       recyclingDayOfWeek: form.recyclingEnabled ? Number(form.recyclingDayOfWeek) : null,
+      bundleAddons: bundleAddons.length > 0 ? bundleAddons : undefined,
     });
   };
 
@@ -496,6 +499,13 @@ export default function TrashValetBookPage() {
               />
             </CardContent>
           </Card>
+
+          {/* Cross-sell other services */}
+          <ServiceBundleAddon
+            currentService="trash_valet"
+            selected={bundleAddons}
+            onChange={setBundleAddons}
+          />
 
           <Button
             type="submit"

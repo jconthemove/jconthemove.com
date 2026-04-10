@@ -18,6 +18,7 @@ import BookingConfirmedTiles from "@/components/BookingConfirmedTiles";
 import { cn } from "@/lib/utils";
 import { DatePicker } from "@/components/ui/date-picker";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
+import ServiceBundleAddon from "@/components/ServiceBundleAddon";
 
 const SERVICE_CATEGORIES = [
   { id: "mowing", label: "Mowing", icon: "🌿", desc: "Grass cutting & cleanup" },
@@ -103,6 +104,7 @@ export default function BookLawnCare() {
   const [propertySize, setPropertySize] = useState("");
   const [propertyCondition, setPropertyCondition] = useState("");
   const [selectedAddOns, setSelectedAddOns] = useState<string[]>([]);
+  const [bundleAddons, setBundleAddons] = useState<string[]>([]);
   const [hasFence, setHasFence] = useState(false);
   const [hasPets, setHasPets] = useState(false);
   const [hasSteepSlope, setHasSteepSlope] = useState(false);
@@ -156,6 +158,7 @@ export default function BookLawnCare() {
       propertySize,
       propertyCondition,
       addOns: selectedAddOns,
+      bundleAddons,
       distanceMiles,
       hasFence,
       hasPets,
@@ -307,7 +310,7 @@ export default function BookLawnCare() {
               ))}
             </div>
             <p className="text-slate-400 text-sm mb-3">Property details</p>
-            <div className="space-y-3">
+            <div className="space-y-3 mb-5">
               {[
                 { state: hasFence, set: setHasFence, label: "Fenced yard", desc: "Gate access needed" },
                 { state: hasPets, set: setHasPets, label: "Pets on property", desc: "We'll take extra care" },
@@ -323,6 +326,12 @@ export default function BookLawnCare() {
                 </label>
               ))}
             </div>
+            <ServiceBundleAddon
+              currentService="lawn_care"
+              selected={bundleAddons}
+              onChange={setBundleAddons}
+              theme="slate"
+            />
           </StepWrap>
         )}
 

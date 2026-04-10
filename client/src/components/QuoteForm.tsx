@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Truck, Trash2, Snowflake, Sparkles, Send, Camera, X, ImagePlus, Wrench, HardHat, Layers, PaintBucket } from "lucide-react";
 import { DatePicker } from "@/components/ui/date-picker";
+import ServiceBundleAddon from "@/components/ServiceBundleAddon";
 
 interface QuotePhoto {
   id: string;
@@ -52,6 +53,7 @@ export default function QuoteForm({
   const queryClient = useQueryClient();
   const [selectedService, setSelectedService] = useState<string>(prefilledService);
   const [photos, setPhotos] = useState<QuotePhoto[]>([]);
+  const [bundleAddons, setBundleAddons] = useState<string[]>([]);
 
   const isEmployee = variant === "employee";
   const apiEndpoint = isEmployee ? "/api/leads/employee" : "/api/leads";
@@ -149,6 +151,10 @@ export default function QuoteForm({
           timestamp: new Date().toISOString(),
         }));
       }
+
+      if (bundleAddons.length > 0) {
+        payload.bundleAddons = bundleAddons;
+      }
       
       const response = await apiRequest("POST", apiEndpoint, payload);
       return response.json() as Promise<{ success: boolean; leadId?: string; orderNumber?: number | null; message?: string }>;
@@ -171,6 +177,7 @@ export default function QuoteForm({
       form.reset();
       setSelectedService("");
       setPhotos([]);
+      setBundleAddons([]);
       
       onSuccess?.();
     },
@@ -413,6 +420,14 @@ export default function QuoteForm({
               data-testid="input-promo-code"
             />
           </div>
+
+          {/* Cross-sell: other services customer might want */}
+          <ServiceBundleAddon
+            currentService={selectedService === "residential" ? "moving" : selectedService === "junk" ? "junk_removal" : selectedService === "snow" ? "snow_removal" : selectedService === "cleaning" ? "cleaning" : undefined}
+            selected={bundleAddons}
+            onChange={setBundleAddons}
+            theme="slate"
+          />
 
           <div>
             <Label className={`${labelClasses} mb-3 block`}>

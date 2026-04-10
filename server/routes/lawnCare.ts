@@ -4,6 +4,7 @@ import { lawnCareQuotes, lawnCarePlans } from "@shared/schema";
 import { calculateLawnCareQuote } from "../lib/lawnCarePricing";
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
+import { sendEmail } from "../services/email";
 
 const router = Router();
 
@@ -51,6 +52,7 @@ const quoteRequestSchema = z.object({
 // POST /api/lawn-care/quote — public (no auth required to submit a quote request)
 router.post("/quote", async (req: Request, res: Response) => {
   try {
+    const bundleAddons: string[] = Array.isArray((req.body as any).bundleAddons) ? (req.body as any).bundleAddons : [];
     const data = quoteRequestSchema.parse(req.body);
 
     const pricing = calculateLawnCareQuote({
@@ -101,6 +103,26 @@ router.post("/quote", async (req: Request, res: Response) => {
       requestedTimeWindow: data.requestedTimeWindow,
       status: "quote_requested",
     }).returning();
+
+    // Notify admin (non-blocking)
+    const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
+    const bundleNote = bundleAddons.length > 0
+      ? `\n\n⚡ ALSO INTERESTED IN: ${bundleAddons.join(", ")} — follow up for bundle quote.`
+      : "";
+    const bundleHtml = bundleAddons.length > 0
+      ? `<br><br><b style="color:orange">⚡ Also Interested In:</b> ${bundleAddons.join(", ")} — follow up for bundle quote.`
+      : "";
+    try {
+      await sendEmail({
+        to: companyEmail,
+        from: companyEmail,
+        subject: `New Lawn Care Quote — ${data.customerName}${bundleAddons.length > 0 ? " [+ Bundle Interest]" : ""}`,
+        text: `New lawn care quote request.\n\nCustomer: ${data.customerName}\nPhone: ${data.phone}\nEmail: ${data.email || "N/A"}\nAddress: ${data.address}\nService: ${data.serviceCategory} — ${data.serviceFrequency}\nProperty size: ${data.propertySize}\nCondition: ${data.propertyCondition}\nTotal: $${pricing.totalQuoted}${pricing.isCustomEstimate ? " (custom estimate)" : ""}\nAdd-ons: ${(data.addOns || []).join(", ") || "none"}\nNotes: ${data.notes || "—"}${bundleNote}`,
+        html: `<h2>New Lawn Care Quote</h2><p><b>Customer:</b> ${data.customerName}<br><b>Phone:</b> ${data.phone}<br><b>Email:</b> ${data.email || "N/A"}<br><b>Address:</b> ${data.address}<br><b>Service:</b> ${data.serviceCategory} — ${data.serviceFrequency}<br><b>Property:</b> ${data.propertySize} / ${data.propertyCondition}<br><b>Total:</b> $${pricing.totalQuoted}${pricing.isCustomEstimate ? " <em>(custom estimate)</em>" : ""}<br><b>Add-ons:</b> ${(data.addOns || []).join(", ") || "none"}</p>${bundleHtml}`,
+      });
+    } catch (emailErr) {
+      console.error("Lawn care admin email failed:", emailErr);
+    }
 
     return res.json({ success: true, quote, pricing });
   } catch (err: any) {

@@ -3437,19 +3437,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/leads", async (req, res) => {
     try {
       const leadData = insertLeadSchema.parse(req.body);
+      const bundleAddons: string[] = Array.isArray(req.body.bundleAddons) ? req.body.bundleAddons : [];
       // Always start as "new" so crew job board can see it immediately
       const lead = await storage.createLead({ ...leadData, status: "new" });
       
       // Send email notification (non-blocking — a failed email must never reject the booking)
       const emailContent = generateLeadNotificationEmail(lead);
       const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
+      const bundleNote = bundleAddons.length > 0
+        ? `\n\n⚡ ALSO INTERESTED IN: ${bundleAddons.join(", ")} — follow up for a bundle quote.`
+        : "";
+      const bundleHtml = bundleAddons.length > 0
+        ? `<br><br><b style="color:orange">⚡ Also Interested In:</b> ${bundleAddons.join(", ")} — follow up for bundle quote.`
+        : "";
       try {
         await sendEmail({
           to: companyEmail,
           from: companyEmail,
-          subject: `New ${lead.serviceType} Lead - ${lead.firstName} ${lead.lastName}`,
-          text: emailContent.text,
-          html: emailContent.html,
+          subject: `New ${lead.serviceType} Lead - ${lead.firstName} ${lead.lastName}${bundleAddons.length > 0 ? " [+ Bundle Interest]" : ""}`,
+          text: emailContent.text + bundleNote,
+          html: emailContent.html + bundleHtml,
         });
       } catch (emailError) {
         console.error("Admin email notification failed (lead still saved):", emailError);
@@ -18555,7 +18562,9 @@ Thank you for your business!
         customerName, phone, email, address, city, state, zip,
         cans, bagCount, recyclingEnabled, recyclingAnchorDate,
         serviceDayOfWeek, recyclingDayOfWeek, serviceNotes, planType, promoCode,
+        bundleAddons: rawBundleAddons,
       } = req.body;
+      const bundleAddons: string[] = Array.isArray(rawBundleAddons) ? rawBundleAddons : [];
 
       if (!customerName || !phone || !address) {
         return res.status(400).json({ error: "Name, phone, and address are required" });
@@ -18693,9 +18702,9 @@ Thank you for your business!
       try {
         await sendEmail({
           to: companyEmail, from: companyEmail,
-          subject: `New Trash Valet Subscription — ${customerName}`,
-          text: `New trash valet subscription.\n\nCustomer: ${customerName}\nPhone: ${phone}\nEmail: ${email}\nAddress: ${address}, ${city}, ${state} ${zip}\nCans: ${cans}, Bags: ${bagCount}\nRecycling: ${recyclingEnabled ? "Yes" : "No"}\nService Day: ${dayNames[Number(serviceDayOfWeek)] || serviceDayOfWeek}\nMonthly Price: $${effectiveMonthlyPrice}${promoCodeUsed ? ` (promo: ${promoCodeUsed})` : ""}\nPlan: ${planType}\n\nView in admin panel at /admin-trash-valet`,
-          html: `<h2>New Trash Valet Subscription</h2><p><b>Customer:</b> ${customerName}<br><b>Phone:</b> ${phone}<br><b>Email:</b> ${email}<br><b>Address:</b> ${address}, ${city}, ${state} ${zip}<br><b>Cans:</b> ${cans} | <b>Bags:</b> ${bagCount}<br><b>Recycling:</b> ${recyclingEnabled ? "Yes" : "No"}<br><b>Service Day:</b> ${dayNames[Number(serviceDayOfWeek)] || serviceDayOfWeek}<br><b>Monthly Price:</b> $${effectiveMonthlyPrice}${promoCodeUsed ? ` (promo: ${promoCodeUsed})` : ""}<br><b>Plan:</b> ${planType}</p>`,
+          subject: `New Trash Valet Subscription — ${customerName}${bundleAddons.length > 0 ? " [+ Bundle Interest]" : ""}`,
+          text: `New trash valet subscription.\n\nCustomer: ${customerName}\nPhone: ${phone}\nEmail: ${email}\nAddress: ${address}, ${city}, ${state} ${zip}\nCans: ${cans}, Bags: ${bagCount}\nRecycling: ${recyclingEnabled ? "Yes" : "No"}\nService Day: ${dayNames[Number(serviceDayOfWeek)] || serviceDayOfWeek}\nMonthly Price: $${effectiveMonthlyPrice}${promoCodeUsed ? ` (promo: ${promoCodeUsed})` : ""}\nPlan: ${planType}${bundleAddons.length > 0 ? `\n\n⚡ ALSO INTERESTED IN: ${bundleAddons.join(", ")} — follow up for bundle quote.` : ""}\n\nView in admin panel at /admin-trash-valet`,
+          html: `<h2>New Trash Valet Subscription</h2><p><b>Customer:</b> ${customerName}<br><b>Phone:</b> ${phone}<br><b>Email:</b> ${email}<br><b>Address:</b> ${address}, ${city}, ${state} ${zip}<br><b>Cans:</b> ${cans} | <b>Bags:</b> ${bagCount}<br><b>Recycling:</b> ${recyclingEnabled ? "Yes" : "No"}<br><b>Service Day:</b> ${dayNames[Number(serviceDayOfWeek)] || serviceDayOfWeek}<br><b>Monthly Price:</b> $${effectiveMonthlyPrice}${promoCodeUsed ? ` (promo: ${promoCodeUsed})` : ""}<br><b>Plan:</b> ${planType}${bundleAddons.length > 0 ? `<br><br><b style="color:orange">⚡ Also Interested In:</b> ${bundleAddons.join(", ")} — follow up for bundle quote.` : ""}</p>`,
         });
       } catch (emailErr) { console.error("Admin email failed:", emailErr); }
       try {
