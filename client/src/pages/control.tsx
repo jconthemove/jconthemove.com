@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Users, Briefcase, Wallet, Tag, Gift, Star, Activity,
   Coins, ChevronRight, Shield, Bitcoin, MessageSquare,
-  TrendingUp, Settings, BarChart3, FileText, Snowflake
+  TrendingUp, Settings, BarChart3, FileText, Snowflake, FlaskConical
 } from "lucide-react";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
@@ -176,6 +176,13 @@ const SECTIONS = [
   {
     title: "System",
     items: [
+      {
+        href: "/admin/calibrate",
+        icon: FlaskConical,
+        label: "Pricing Calibration",
+        description: "Tune the booking chatbot pricing engine — set rates, JC222 promo, and save to database",
+        color: "from-teal-600 to-emerald-700",
+      },
       {
         href: "/admin/square-catalog",
         icon: Settings,

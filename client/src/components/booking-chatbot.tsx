@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -600,8 +600,8 @@ const STEPS: Step[] = [
 // ─────────────────────────────────────────────
 // Moving Quote Engine
 // ─────────────────────────────────────────────
-function computeMovingQuote(a: Answers): MovingQuote {
-  const RATE = 85;
+function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatPrice = 222): MovingQuote {
+  const RATE = ratePerMoverHour;
   const round5 = (n: number) => Math.ceil(n / 5) * 5;
 
   // ── Load type ──────────────────────────────────────────────────────────────
@@ -759,8 +759,8 @@ function computeMovingQuote(a: Answers): MovingQuote {
   // Small tier with standard 2-crew qualifies for JC222 (2×2hrs = $340 → $222)
   const promoApplied = isJC222 && tier === "small" && crew === 2;
 
-  const minPrice = promoApplied ? 222 : rawMin;
-  const maxPrice = promoApplied ? 222 : rawMax;
+  const minPrice = promoApplied ? jc222FlatPrice : rawMin;
+  const maxPrice = promoApplied ? jc222FlatPrice : rawMax;
   const midPrice = (minPrice + maxPrice) / 2;
   const tokensEstimate = Math.round(midPrice * 50);
 
@@ -783,7 +783,7 @@ function computeMovingQuote(a: Answers): MovingQuote {
 // ─────────────────────────────────────────────
 // Compute Quote for Any Service
 // ─────────────────────────────────────────────
-function computeQuoteForAnswers(a: Answers): QuoteResult | null {
+function computeQuoteForAnswers(a: Answers, ratePerMoverHour = 85, jc222FlatPrice = 222): QuoteResult | null {
   const svc = getServiceLabel(a.serviceType || "");
 
   if (QUOTE_ONLY_SERVICES.includes(svc)) {
@@ -839,18 +839,18 @@ function computeQuoteForAnswers(a: Answers): QuoteResult | null {
   }
 
   // Moving or Junk
-  return computeMovingQuote(a);
+  return computeMovingQuote(a, ratePerMoverHour, jc222FlatPrice);
 }
 
 // ─────────────────────────────────────────────
 // Build Crew Packages for priceable services
 // ─────────────────────────────────────────────
-function buildCrewPackages(a: Answers, q: QuoteResult | null): CrewPackage[] {
+function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMoverHour = 85, jc222FlatPrice = 222): CrewPackage[] {
   if (!q) return [];
 
   if (q.type === "moving") {
     const mq = q as MovingQuote;
-    const RATE = 85;
+    const RATE = ratePerMoverHour;
     const sur  = mq.specialSurcharge;
     const r5   = (n: number) => Math.ceil(n / 5) * 5;
     const price = (crew: number, hrs: number) => r5(crew * hrs * RATE) + sur;
@@ -861,8 +861,8 @@ function buildCrewPackages(a: Answers, q: QuoteResult | null): CrewPackage[] {
           id: "pkg_tiny",
           label: "Tiny Move · 1 Mover · Up to 60 min",
           desc: "1–2 light items (≤200 lbs) · single task · perfect for a couch, dresser, or single appliance",
-          minPrice: 85,
-          maxPrice: 85,
+          minPrice: RATE,
+          maxPrice: RATE,
           crew: 1,
           hours: 1,
           tag: "Quick Job",
@@ -901,12 +901,12 @@ function buildCrewPackages(a: Answers, q: QuoteResult | null): CrewPackage[] {
         {
           id: "pkg_small_jc222",
           label: "2 Movers × 2 hrs — JC222 Promo",
-          desc: "Same crew & time at the JC222 promo rate · $222 flat · limited availability",
-          minPrice: 222,
-          maxPrice: 222,
+          desc: `Same crew & time at the JC222 promo rate · $${jc222FlatPrice} flat · limited availability`,
+          minPrice: jc222FlatPrice,
+          maxPrice: jc222FlatPrice,
           crew: 2,
           hours: 2,
-          tag: "JC222 — $222",
+          tag: `JC222 — $${jc222FlatPrice}`,
         },
       ];
     }
@@ -1064,6 +1064,14 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Fetch live pricing from DB so the chatbot reflects admin calibration changes in real time
+  const { data: pricingConfig } = useQuery<{ ratePerMoverHour: number; jc222Price: number }>({
+    queryKey: ["/api/pricing"],
+    staleTime: 5 * 60 * 1000,
+  });
+  const liveRate      = pricingConfig?.ratePerMoverHour ?? 85;
+  const liveJc222     = pricingConfig?.jc222Price       ?? 222;
 
   const [answers, setAnswers] = useState<Answers>({});
   const [messages, setMessages] = useState<Message[]>([
@@ -1232,9 +1240,9 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
 
       // When we reach the package select step, compute packages
       if (nextStep.id === "selectedPackage") {
-        const q = computeQuoteForAnswers(newAnswers);
+        const q = computeQuoteForAnswers(newAnswers, liveRate, liveJc222);
         setPendingQuote(q);
-        const pkgs = buildCrewPackages(newAnswers, q);
+        const pkgs = buildCrewPackages(newAnswers, q, liveRate, liveJc222);
         setCrewPackages(pkgs);
       }
 
@@ -1251,7 +1259,7 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
     } else {
       // All done — compute final quote & show
       setTimeout(() => {
-        const q = computeQuoteForAnswers(newAnswers);
+        const q = computeQuoteForAnswers(newAnswers, liveRate, liveJc222);
         setPendingQuote(q);
 
         const svc = getServiceLabel(newAnswers.serviceType || "");

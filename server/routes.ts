@@ -971,6 +971,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('⚠️ trash_jobs migration error (non-fatal):', tjErr);
   }
 
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS calibration_sessions (
+        id SERIAL PRIMARY KEY,
+        applied_at TIMESTAMP DEFAULT NOW(),
+        applied_by_user_id VARCHAR(255),
+        applied_by_name TEXT,
+        values JSONB NOT NULL,
+        notes TEXT
+      );
+    `);
+    console.log('📐 calibration_sessions table ready');
+  } catch (csErr) {
+    console.error('⚠️ calibration_sessions migration error (non-fatal):', csErr);
+  }
+
   // Seed staking tiers and treasury user on startup (ensures production has them)
   await ensureStakingTiersSeeded();
   await ensureStakingTreasuryUser();
@@ -17333,6 +17349,88 @@ Thank you for your business!
         ['pricing_junk_addons', JSON.stringify(items), 'Junk removal heavy item surcharges JSON array']
       );
       res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Pricing Calibration ──────────────────────────────────────────────────────
+  // POST /api/admin/calibration/apply
+  // Applies a full set of pricing values in one transaction and logs the session.
+  app.post("/api/admin/calibration/apply", isAuthenticated, async (req: any, res) => {
+    try {
+      const role = req.user?.role || req.user?.userType || (req.session as any)?.userRole;
+      if (!['admin', 'business_owner'].includes(role)) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      const { values, notes } = req.body as {
+        values: Record<string, number>;
+        notes?: string;
+      };
+      if (!values || typeof values !== "object") {
+        return res.status(400).json({ error: "values object required" });
+      }
+
+      const userId = req.user?.id || (req.session as any)?.userId || null;
+      const userName = req.user ? `${req.user.firstName || ""} ${req.user.lastName || ""}`.trim() : null;
+
+      // Apply each pricing key to spin_config atomically
+      const pricingKeys: Record<string, string> = {
+        rate_per_mover_hour:        "pricing_rate_per_mover_hour",
+        jc222_price:                "pricing_jc222_price",
+        short_job_full:             "pricing_short_job_full",
+        truck_small_flat:           "pricing_truck_small_flat",
+        truck_large_flat:           "pricing_truck_large_flat",
+        drive_rate:                 "pricing_drive_rate",
+        heavy_item_flat:            "pricing_heavy_item_flat",
+        min_hours_1:                "pricing_min_hours_1",
+        min_hours_2:                "pricing_min_hours_2",
+        min_hours_3:                "pricing_min_hours_3",
+        min_hours_4:                "pricing_min_hours_4",
+      };
+
+      const updates: Array<Promise<any>> = [];
+      for (const [shortKey, configKey] of Object.entries(pricingKeys)) {
+        if (values[shortKey] !== undefined && !isNaN(values[shortKey])) {
+          updates.push(
+            pool.query(
+              `INSERT INTO spin_config (setting_key, setting_value, description)
+               VALUES ($1, $2, $3)
+               ON CONFLICT (setting_key) DO UPDATE SET setting_value=$2, updated_at=NOW()`,
+              [configKey, String(values[shortKey]), `Pricing calibration — ${shortKey}`]
+            )
+          );
+        }
+      }
+      await Promise.all(updates);
+
+      // Log calibration session
+      await pool.query(
+        `INSERT INTO calibration_sessions (applied_by_user_id, applied_by_name, values, notes)
+         VALUES ($1, $2, $3, $4)`,
+        [userId ? String(userId) : null, userName, JSON.stringify(values), notes || null]
+      );
+
+      res.json({ ok: true, applied: Object.keys(values).length });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // GET /api/admin/calibration/history — last 20 calibration sessions
+  app.get("/api/admin/calibration/history", isAuthenticated, async (req: any, res) => {
+    try {
+      const role = req.user?.role || req.user?.userType || (req.session as any)?.userRole;
+      if (!['admin', 'business_owner'].includes(role)) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      const { rows } = await pool.query(
+        `SELECT id, applied_at, applied_by_name, values, notes
+         FROM calibration_sessions
+         ORDER BY applied_at DESC
+         LIMIT 20`
+      );
+      res.json(rows);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }

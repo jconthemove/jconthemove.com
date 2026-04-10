@@ -2231,3 +2231,20 @@ export const insertLawnCarePlanSchema = createInsertSchema(lawnCarePlans).omit({
 });
 export type LawnCarePlan = typeof lawnCarePlans.$inferSelect;
 export type InsertLawnCarePlan = z.infer<typeof insertLawnCarePlanSchema>;
+
+// ── Pricing Calibration Sessions ─────────────────────────────────────────────
+// Logs every time an admin runs the calibration questionnaire and applies results.
+export const calibrationSessions = pgTable("calibration_sessions", {
+  id: serial("id").primaryKey(),
+  appliedAt: timestamp("applied_at").defaultNow(),
+  appliedByUserId: varchar("applied_by_user_id"),
+  appliedByName: text("applied_by_name"),
+  values: jsonb("values").$type<Record<string, number>>().notNull(),
+  notes: text("notes"),
+});
+export type CalibrationSession = typeof calibrationSessions.$inferSelect;
+export const insertCalibrationSessionSchema = createInsertSchema(calibrationSessions).omit({
+  id: true,
+  appliedAt: true,
+});
+export type InsertCalibrationSession = z.infer<typeof insertCalibrationSessionSchema>;
