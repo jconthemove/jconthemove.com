@@ -912,7 +912,7 @@ function buildCrewPackages(a: Answers, q: QuoteResult | null): CrewPackage[] {
     }
 
     if (mq.tier === "medium") {
-      return [
+      const medPkgs: CrewPackage[] = [
         {
           id: "pkg_med_a",
           label: "2 Movers × 4 hrs",
@@ -933,14 +933,16 @@ function buildCrewPackages(a: Answers, q: QuoteResult | null): CrewPackage[] {
           tag: "Recommended",
         },
       ];
+      // Enforce minimum crew from quote engine (e.g. heavy item + stairs requires 3-mover min)
+      return medPkgs.filter(p => !p.crew || p.crew >= mq.crew);
     }
 
-    // large
-    return [
+    // large — filter enforced below
+    const largePkgs: CrewPackage[] = [
       {
         id: "pkg_lg_c",
         label: "2 Movers × 7 hrs",
-        desc: "Budget option · plenty of time · best without stairs",
+        desc: "Budget option · plenty of time · best without stairs or heavy items",
         minPrice: price(2, 7),
         maxPrice: price(2, 7),
         crew: 2,
@@ -966,6 +968,8 @@ function buildCrewPackages(a: Answers, q: QuoteResult | null): CrewPackage[] {
         hours: 4,
       },
     ];
+    // Enforce minimum crew: never offer a package with fewer movers than computed minimum
+    return largePkgs.filter(p => !p.crew || p.crew >= mq.crew);
   }
 
   if (q.type === "trash_valet") {
@@ -1197,6 +1201,12 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
       newAnswers.promoCode = "JC222";
     }
 
+    // Protect auto-injected JC222: if the user skips/clears the promo code step
+    // but JC222 was already set by package selection, keep it intact.
+    if (stepId === "promoCode" && (!value || value === "(none)") && answers.promoCode === "JC222") {
+      newAnswers.promoCode = "JC222";
+    }
+
     setAnswers(newAnswers);
 
     if (stepId === "contact") {
@@ -1233,7 +1243,8 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
           botSay(nextStep.question + (nextStep.subtext ? `\n\n_${nextStep.subtext}_` : ""));
         }
         setStepIdx(nextIdx);
-        setTextInput("");
+        // Pre-fill promoCode input when JC222 was auto-injected via package selection
+        setTextInput(nextStep.id === "promoCode" && newAnswers.promoCode === "JC222" ? "JC222" : "");
         setAddressInput("");
         setMultiSel([]);
       }, 500);
