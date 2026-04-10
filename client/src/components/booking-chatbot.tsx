@@ -753,15 +753,14 @@ function computeMovingQuote(a: Answers): MovingQuote {
   const rawMin = round5(crew * minHrs * RATE) + specialSurcharge;
   const rawMax = round5(crew * maxHrs * RATE) + specialSurcharge;
 
-  // JC222 promo: lowers $300 Small job floor to $222
-  const SMALL_JOB_FLOOR = 300;
-  const promoCodeRaw   = (a.promoCode || "").toUpperCase().trim();
-  const isJC222        = promoCodeRaw === "JC222";
-  const effectiveFloor = isJC222 ? 222 : SMALL_JOB_FLOOR;
-  const isSmallJob     = rawMax <= SMALL_JOB_FLOOR;
+  // JC222 promo: applies to Small-tier 2-crew jobs → $340 becomes $222 flat
+  const promoCodeRaw = (a.promoCode || "").toUpperCase().trim();
+  const isJC222      = promoCodeRaw === "JC222";
+  // Small tier with standard 2-crew qualifies for JC222 (2×2hrs = $340 → $222)
+  const promoApplied = isJC222 && tier === "small" && crew === 2;
 
-  const minPrice = isSmallJob ? Math.max(rawMin, effectiveFloor) : rawMin;
-  const maxPrice = isSmallJob ? Math.max(rawMax, effectiveFloor) : rawMax;
+  const minPrice = promoApplied ? 222 : rawMin;
+  const maxPrice = promoApplied ? 222 : rawMax;
   const midPrice = (minPrice + maxPrice) / 2;
   const tokensEstimate = Math.round(midPrice * 50);
 
@@ -775,9 +774,9 @@ function computeMovingQuote(a: Answers): MovingQuote {
     maxPrice,
     tokensEstimate,
     specialSurcharge,
-    promoApplied: isSmallJob && isJC222,
+    promoApplied,
     promoCode:    isJC222 ? "JC222" : undefined,
-    rawMinPrice:  isSmallJob ? rawMin : undefined,
+    rawMinPrice:  promoApplied ? rawMin : undefined,
   };
 }
 
@@ -860,10 +859,10 @@ function buildCrewPackages(a: Answers, q: QuoteResult | null): CrewPackage[] {
       return [
         {
           id: "pkg_tiny",
-          label: "Tiny Move · 1 Mover · Up to 90 min",
-          desc: "1–2 light items (≤200 lbs) · single task · perfect for a single appliance, couch, or dresser",
+          label: "Tiny Move · 1 Mover · Up to 60 min",
+          desc: "1–2 light items (≤200 lbs) · single task · perfect for a couch, dresser, or single appliance",
           minPrice: 85,
-          maxPrice: 130,
+          maxPrice: 85,
           crew: 1,
           hours: 1,
           tag: "Quick Job",
@@ -887,17 +886,27 @@ function buildCrewPackages(a: Answers, q: QuoteResult | null): CrewPackage[] {
           },
         ];
       }
-      // Standard small — 2 movers. JC222 discount is applied via promo code step (not a separate package).
+      // Standard 2-crew small: show base rate + JC222 promo variant side-by-side
       return [
         {
           id: "pkg_small",
           label: "2 Movers × 2 hrs",
-          desc: "Studio / single room · load only or unload only · 2-hr minimum · JC222 promo eligible",
+          desc: "Studio / single room · load only or unload only · 2-hr minimum",
           minPrice: price(2, 2),
           maxPrice: price(2, 2),
           crew: 2,
           hours: 2,
-          tag: "Recommended",
+          tag: "Standard",
+        },
+        {
+          id: "pkg_small_jc222",
+          label: "2 Movers × 2 hrs — JC222 Promo",
+          desc: "Same crew & time at the JC222 promo rate · $222 flat · limited availability",
+          minPrice: 222,
+          maxPrice: 222,
+          crew: 2,
+          hours: 2,
+          tag: "JC222 — $222",
         },
       ];
     }
@@ -1181,6 +1190,13 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
     } else {
       (newAnswers as any)[stepId] = value;
     }
+
+    // When user selects the JC222 promo package, auto-inject promoCode so the
+    // quote engine sees it when computing the final quote after all steps.
+    if (stepId === "selectedPackage" && value === "pkg_small_jc222") {
+      newAnswers.promoCode = "JC222";
+    }
+
     setAnswers(newAnswers);
 
     if (stepId === "contact") {
