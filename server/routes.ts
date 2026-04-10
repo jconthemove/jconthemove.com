@@ -18700,6 +18700,165 @@ Thank you for your business!
     }
   });
 
+  // ── Gift Subscribe — creates two subscriptions both with 10% off ────────────
+  app.post("/api/trash/gift-subscribe", async (req, res) => {
+    try {
+      const { calculateTrashValetQuote } = await import("../shared/trashValetPricing");
+      const { trashSubscriptions, trashJobs } = await import("@shared/schema");
+
+      const { contact, giftRecipientName, yourService, giftService } = req.body;
+      if (!contact?.name || !contact?.phone) return res.status(400).json({ error: "Contact name and phone are required" });
+      if (!yourService?.address) return res.status(400).json({ error: "Your service address is required" });
+      if (!giftService?.address) return res.status(400).json({ error: "Gift service address is required" });
+
+      const GIFT_DISCOUNT = 0.10;
+      const dayNames = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+      async function buildAndInsert(svcData: any, ownerName: string, isGift: boolean) {
+        const { address, city, state, zip, cans, bagCount, recyclingEnabled, recyclingAnchorDate,
+          serviceDayOfWeek, recyclingDayOfWeek, serviceNotes, planType } = svcData;
+
+        // Geocode for travel surcharge
+        let lat: number | null = null;
+        let lng: number | null = null;
+        try {
+          const fullAddr = [address, city, state || "MI", zip].filter(Boolean).join(" ");
+          const geoResp = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(fullAddr)}&format=json&limit=1&countrycodes=us`, {
+            headers: { "User-Agent": "JCOnTheMove/1.0 contact@jcontmove.com" },
+          });
+          if (geoResp.ok) {
+            const geoData = await geoResp.json() as Array<{ lat: string; lon: string }>;
+            if (geoData.length > 0) { lat = parseFloat(geoData[0].lat); lng = parseFloat(geoData[0].lon); }
+          }
+        } catch { /* non-fatal */ }
+
+        const quote = calculateTrashValetQuote({
+          cans: Number(cans) || 1,
+          bagCount: Number(bagCount) || 0,
+          recyclingEnabled: !!recyclingEnabled,
+          recyclingAnchorDate: recyclingAnchorDate || null,
+          lat, lng,
+          planType: planType === "yearly" ? "yearly" : "monthly",
+        });
+
+        const fullMonthly = quote.finalMonthlyPrice;
+        const discountedMonthly = parseFloat((fullMonthly * (1 - GIFT_DISCOUNT)).toFixed(2));
+        const today = new Date().toISOString().split("T")[0];
+        const giftNote = isGift
+          ? `[GIFT PLAN — 10% off] Gift from: ${contact.name}. ${serviceNotes || ""}`.trim()
+          : `[GIFT PLAN — 10% off] Your plan. ${serviceNotes || ""}`.trim();
+
+        const [sub] = await db.insert(trashSubscriptions).values({
+          customerName: ownerName.trim(),
+          phone: contact.phone.trim(),
+          email: (contact.email || "").trim(),
+          address: address.trim(),
+          city: (city || "").trim(),
+          state: (state || "MI").trim(),
+          zip: (zip || "").trim(),
+          lat: lat != null ? String(lat) : null,
+          lng: lng != null ? String(lng) : null,
+          distanceMiles: quote.distanceMiles != null ? String(quote.distanceMiles) : null,
+          travelSurchargeMonthly: String(quote.travelSurchargeMonthly),
+          cans: Number(cans) || 1,
+          bagCount: Number(bagCount) || 0,
+          recyclingEnabled: !!recyclingEnabled,
+          recyclingAnchorDate: recyclingAnchorDate || null,
+          serviceDayOfWeek: Number(serviceDayOfWeek) || 1,
+          recyclingDayOfWeek: recyclingDayOfWeek != null ? Number(recyclingDayOfWeek) : null,
+          serviceNotes: giftNote,
+          planType: planType === "yearly" ? "yearly" : "monthly",
+          weeklyBasePrice: String(quote.weeklyBasePrice),
+          projectedMonthlyPrice: String(quote.projectedMonthlyPrice),
+          monthlyMinimumApplied: quote.monthlyMinimumApplied,
+          finalMonthlyPrice: String(discountedMonthly),
+          billingStatus: "active",
+          status: "active",
+          nextBillingDate: today,
+        }).returning();
+
+        // Schedule first job
+        const serviceDate = new Date();
+        const targetDay = Number(serviceDayOfWeek) || 1;
+        let dayDiff = targetDay - serviceDate.getDay();
+        if (dayDiff <= 0) dayDiff += 7;
+        serviceDate.setDate(serviceDate.getDate() + dayDiff);
+        const weekSunday = new Date(serviceDate);
+        weekSunday.setDate(serviceDate.getDate() - serviceDate.getDay());
+        const weekOfStr = weekSunday.toISOString().split("T")[0];
+
+        const weekQuote = calculateTrashValetQuote({
+          cans: Number(cans) || 1,
+          bagCount: Number(bagCount) || 0,
+          recyclingEnabled: !!recyclingEnabled,
+          recyclingAnchorDate: recyclingAnchorDate || null,
+          lat, lng,
+          planType: planType === "yearly" ? "yearly" : "monthly",
+          targetWeekOf: weekOfStr,
+        });
+
+        const [job] = await db.insert(trashJobs).values({
+          subscriptionId: sub.id,
+          serviceWeekOf: weekOfStr,
+          serviceType: "trash_valet",
+          cans: Number(cans) || 1,
+          bagCount: Number(bagCount) || 0,
+          isRecyclingWeek: weekQuote.isRecyclingWeek,
+          weeklyBasePrice: String(weekQuote.weeklyBasePrice),
+          recyclingCharge: String(weekQuote.recyclingCharge),
+          travelChargePortion: String(weekQuote.travelChargePortion),
+          jobValue: String(weekQuote.jobValue),
+          status: "scheduled",
+        }).returning();
+
+        return { sub, job, discountedMonthly };
+      }
+
+      const yourName = contact.name;
+      const recipientName = giftRecipientName || "Gift Recipient";
+
+      const [yourResult, giftResult] = await Promise.all([
+        buildAndInsert(yourService, yourName, false),
+        buildAndInsert(giftService, recipientName, true),
+      ]);
+
+      // Email admin about both
+      const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
+      try {
+        await sendEmail({
+          to: companyEmail, from: companyEmail,
+          subject: `🎁 Gift Plan — ${contact.name} signed up two addresses (10% off both)`,
+          html: `<h2>🎁 Gift Trash Valet Plan</h2>
+<p><b>Purchaser:</b> ${contact.name} | ${contact.phone} | ${contact.email || "no email"}</p>
+<hr>
+<h3>Their Plan</h3>
+<p><b>Address:</b> ${yourService.address}, ${yourService.city || ""} ${yourService.zip || ""}<br>
+<b>Cans:</b> ${yourService.cans} | <b>Service Day:</b> ${dayNames[Number(yourService.serviceDayOfWeek)] || yourService.serviceDayOfWeek}<br>
+<b>Monthly (10% off):</b> $${yourResult.discountedMonthly}</p>
+<hr>
+<h3>Gift Plan — ${recipientName}</h3>
+<p><b>Address:</b> ${giftService.address}, ${giftService.city || ""} ${giftService.zip || ""}<br>
+<b>Cans:</b> ${giftService.cans} | <b>Service Day:</b> ${dayNames[Number(giftService.serviceDayOfWeek)] || giftService.serviceDayOfWeek}<br>
+<b>Monthly (10% off):</b> $${giftResult.discountedMonthly}</p>`,
+        });
+      } catch (emailErr) { console.error("Gift plan email failed:", emailErr); }
+
+      try {
+        await smsService.notifyNewQuote({ customerName: `${contact.name} (GIFT PLAN x2)`, serviceType: "trash valet gift", phone: contact.phone });
+      } catch (smsErr) { console.error("Gift plan SMS failed:", smsErr); }
+
+      res.json({
+        yourSubscriptionId: yourResult.sub.id,
+        giftSubscriptionId: giftResult.sub.id,
+        yourMonthlyPrice: yourResult.discountedMonthly,
+        giftMonthlyPrice: giftResult.discountedMonthly,
+      });
+    } catch (err) {
+      console.error("Gift subscribe error:", err);
+      res.status(500).json({ error: "Failed to create gift subscriptions" });
+    }
+  });
+
   // GET /api/trash/subscriptions — admin only, filterable by status
   app.get("/api/trash/subscriptions", isAuthenticated, async (req, res) => {
     if (!await requireAdminRole(req, res)) return;

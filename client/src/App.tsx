@@ -83,6 +83,7 @@ const SnowRemovalPage = lazy(() => import("@/pages/snow-removal"));
 const WindowCleaningPage = lazy(() => import("@/pages/window-cleaning"));
 const TrashValetPage = lazy(() => import("@/pages/trash-valet"));
 const TrashValetBookPage = lazy(() => import("@/pages/trash-valet/book"));
+const TrashValetGiftPage = lazy(() => import("@/pages/trash-valet/gift"));
 const AdminTrashValetPage = lazy(() => import("@/pages/admin-trash-valet"));
 const MobilePreviewPage = lazy(() => import("@/pages/mobile-preview"));
 const PiJackpotPage = lazy(() => import("@/pages/pi-jackpot"));
@@ -608,6 +609,9 @@ function AuthenticatedApp() {
           <Route path="/trash-valet/book">
             <PageWrapper component={TrashValetBookPage} />
           </Route>
+          <Route path="/trash-valet/gift">
+            <PageWrapper component={TrashValetGiftPage} />
+          </Route>
           <Route path="/trash-valet">
             <PageWrapper component={TrashValetPage} />
           </Route>
@@ -710,6 +714,7 @@ function Router() {
 
       {/* Trash Valet pages - accessible to all */}
       <Route path="/trash-valet/book" component={TrashValetBookPage} />
+      <Route path="/trash-valet/gift" component={TrashValetGiftPage} />
       <Route path="/trash-valet" component={TrashValetPage} />
 
       {/* Lawn Care booking page - accessible to all */}

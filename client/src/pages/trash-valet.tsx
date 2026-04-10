@@ -4,13 +4,12 @@ import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import {
   Trash2, CheckCircle, Calendar, DollarSign, ArrowRight,
-  Recycle, ShieldCheck, Clock, ChevronRight
+  Recycle, ShieldCheck, Clock, Gift, Phone, Globe
 } from "lucide-react";
 
 interface QuoteResult {
@@ -27,8 +26,6 @@ interface QuoteResult {
   finalMonthlyPrice: number;
   planLabel: string;
 }
-
-const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export default function TrashValetPage() {
   const [, setLocation] = useLocation();
@@ -48,22 +45,125 @@ export default function TrashValetPage() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white pb-24">
-      <div className="max-w-[480px] mx-auto px-4 pt-8 space-y-6">
+      <div className="max-w-[480px] mx-auto px-4 pt-6 space-y-6">
 
-        {/* Hero */}
-        <div className="text-center space-y-3">
-          <div className="w-16 h-16 rounded-2xl bg-orange-500/15 flex items-center justify-center mx-auto text-4xl">
-            🗑️
-          </div>
-          <h1 className="text-3xl font-black">Trash Valet</h1>
-          <p className="text-zinc-400 text-sm leading-relaxed">
-            Weekly curbside trash pull-out and return. Sign up once — we handle it every week.
-          </p>
-          <div className="inline-flex items-center gap-2 bg-orange-500/10 border border-orange-500/30 rounded-full px-4 py-1.5">
-            <DollarSign className="h-4 w-4 text-orange-400" />
-            <span className="text-orange-300 font-bold text-sm">Starting at $30/month</span>
+        {/* ── PLACARD ────────────────────────────────────────────────── */}
+        <div
+          className="relative rounded-3xl overflow-hidden"
+          style={{
+            background: "linear-gradient(160deg, #1c1005 0%, #2e1a06 35%, #1a0e03 65%, #0d0703 100%)",
+            boxShadow: "0 0 0 1.5px rgba(255,180,0,0.18), 0 8px 40px rgba(0,0,0,0.7)",
+          }}
+        >
+          {/* Texture overlay */}
+          <div
+            className="absolute inset-0 opacity-[0.06]"
+            style={{
+              backgroundImage: `repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255,255,255,0.05) 3px, rgba(255,255,255,0.05) 4px)`,
+            }}
+          />
+
+          <div className="relative z-10 px-5 pt-6 pb-5 space-y-4">
+
+            {/* Headline */}
+            <div className="text-center space-y-1">
+              <p className="text-orange-400 text-xs font-bold uppercase tracking-[0.25em]">🔥 No More</p>
+              <h1
+                className="text-4xl font-black leading-none tracking-tight text-white"
+                style={{ textShadow: "0 2px 12px rgba(0,0,0,0.8)" }}
+              >
+                TRASH DAY
+              </h1>
+              <h1
+                className="text-4xl font-black leading-none tracking-tight"
+                style={{
+                  color: "#f5a623",
+                  textShadow: "0 2px 16px rgba(245,166,35,0.4)",
+                }}
+              >
+                STRESS ✅
+              </h1>
+              <p className="text-zinc-300 text-sm font-medium mt-2">
+                We take it out. We bring it back.
+              </p>
+            </div>
+
+            {/* Pricing box */}
+            <div
+              className="rounded-2xl px-4 py-3 space-y-1"
+              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,180,0,0.2)" }}
+            >
+              <p className="text-yellow-400 text-[10px] font-black uppercase tracking-widest">Weekly Service</p>
+              <div className="flex items-baseline gap-1">
+                <span className="text-5xl font-black text-white leading-none">$6</span>
+                <span className="text-zinc-300 text-sm font-bold">/can</span>
+              </div>
+              <p className="text-green-400 text-sm font-semibold">
+                +$4 <span className="text-zinc-400 font-normal">recycling</span>
+                <span className="text-zinc-500 text-xs ml-1">(where applicable)</span>
+              </p>
+              <p className="text-zinc-300 text-sm">Starting at <span className="text-white font-bold">$25/month</span></p>
+            </div>
+
+            {/* Gift a Plan */}
+            <button
+              onClick={() => setLocation("/trash-valet/gift")}
+              className="w-full rounded-2xl px-4 py-3 text-left transition-all active:scale-[0.98]"
+              style={{
+                background: "linear-gradient(135deg, rgba(255,180,0,0.18) 0%, rgba(255,100,0,0.12) 100%)",
+                border: "1.5px solid rgba(255,180,0,0.35)",
+              }}
+            >
+              <div className="flex items-center gap-3">
+                <div className="text-3xl">🎁</div>
+                <div>
+                  <p className="font-black text-yellow-300 text-base leading-tight">GIFT A PLAN — SAVE 10% BOTH</p>
+                  <div className="mt-1 space-y-0.5">
+                    <p className="text-green-400 text-xs flex items-center gap-1.5">
+                      <CheckCircle className="h-3 w-3" /> Keep one for yourself
+                    </p>
+                    <p className="text-green-400 text-xs flex items-center gap-1.5">
+                      <CheckCircle className="h-3 w-3" /> Gift one to a neighbor!
+                    </p>
+                  </div>
+                </div>
+                <ArrowRight className="h-5 w-5 text-yellow-400 ml-auto flex-shrink-0" />
+              </div>
+            </button>
+
+            {/* Location footer */}
+            <div
+              className="rounded-xl px-4 py-3 space-y-1 text-center"
+              style={{ background: "rgba(0,0,0,0.4)", border: "1px solid rgba(255,180,0,0.15)" }}
+            >
+              <p className="text-yellow-400 font-black text-xs uppercase tracking-widest">Ironwood &amp; Surrounding Areas</p>
+              <p className="text-zinc-400 text-[10px] uppercase tracking-wider">— Local Help You Can Count On —</p>
+              <p className="text-zinc-400 text-[10px] uppercase tracking-wider">Custom Quotes Available</p>
+              <div className="flex items-center justify-center gap-4 mt-2">
+                <a href="tel:+19062859312" className="flex items-center gap-1.5 text-white text-xs font-semibold">
+                  <Phone className="h-3 w-3 text-orange-400" /> (906) 285-9312
+                </a>
+                <a href="https://www.jconthemove.com" target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-zinc-300 text-xs">
+                  <Globe className="h-3 w-3 text-orange-400" /> JCOnTheMove.com
+                </a>
+              </div>
+            </div>
+
+            {/* Start CTA */}
+            <button
+              onClick={() => setLocation("/trash-valet/book")}
+              className="w-full flex items-center justify-between rounded-xl px-5 py-3.5 font-black text-black active:scale-[0.98] transition-all"
+              style={{
+                background: "linear-gradient(90deg, #f5a623 0%, #f97316 100%)",
+                boxShadow: "0 4px 20px rgba(249,115,22,0.4)",
+              }}
+            >
+              <span className="text-base">▶ START SERVICE THIS WEEK ▶</span>
+            </button>
+
           </div>
         </div>
+        {/* ── END PLACARD ────────────────────────────────────────────── */}
 
         {/* How it works */}
         <div className="space-y-2">
@@ -93,31 +193,19 @@ export default function TrashValetPage() {
                 <Label className="text-xs text-zinc-500 mb-2 block">
                   Number of cans: <span className="text-white font-bold">{cans}</span>
                 </Label>
-                <Slider
-                  min={1} max={10} step={1} value={[cans]}
-                  onValueChange={([v]) => setCans(v)}
-                  className="w-full"
-                />
+                <Slider min={1} max={10} step={1} value={[cans]} onValueChange={([v]) => setCans(v)} className="w-full" />
               </div>
 
               <div>
                 <Label className="text-xs text-zinc-500 mb-2 block">
-                  Extra bags (bags): <span className="text-white font-bold">{bagCount}</span>
+                  Extra bags: <span className="text-white font-bold">{bagCount}</span>
                   <span className="text-zinc-600 ml-1 text-[10px]">(5 bags = 1 billable can)</span>
                 </Label>
-                <Slider
-                  min={0} max={20} step={1} value={[bagCount]}
-                  onValueChange={([v]) => setBagCount(v)}
-                  className="w-full"
-                />
+                <Slider min={0} max={20} step={1} value={[bagCount]} onValueChange={([v]) => setBagCount(v)} className="w-full" />
               </div>
 
               <div className="flex items-center gap-3">
-                <Switch
-                  id="recycling-toggle"
-                  checked={recycling}
-                  onCheckedChange={setRecycling}
-                />
+                <Switch id="recycling-toggle" checked={recycling} onCheckedChange={setRecycling} />
                 <Label htmlFor="recycling-toggle" className="text-sm text-zinc-300 cursor-pointer flex items-center gap-1.5">
                   <Recycle className="h-4 w-4 text-green-400" />
                   Include recycling (bi-weekly · same per-can rate)
@@ -170,6 +258,26 @@ export default function TrashValetPage() {
           </CardContent>
         </Card>
 
+        {/* Gift a Plan card */}
+        <button
+          onClick={() => setLocation("/trash-valet/gift")}
+          className="w-full rounded-2xl overflow-hidden border border-yellow-500/25 active:scale-[0.98] transition-all"
+          style={{ background: "linear-gradient(135deg, #1f1500 0%, #2a1c00 100%)" }}
+        >
+          <div className="px-5 py-4 flex items-center gap-4">
+            <div className="text-4xl">🎁</div>
+            <div className="text-left flex-1">
+              <p className="font-black text-yellow-300 text-base">Gift a Plan</p>
+              <p className="text-zinc-400 text-xs mt-0.5">Sign up two addresses at once — both save 10% every month</p>
+              <div className="mt-2 flex gap-2">
+                <span className="bg-yellow-500/20 text-yellow-300 text-[10px] font-bold px-2 py-0.5 rounded-full">10% OFF BOTH</span>
+                <span className="bg-zinc-700 text-zinc-300 text-[10px] px-2 py-0.5 rounded-full">2 addresses</span>
+              </div>
+            </div>
+            <ArrowRight className="h-5 w-5 text-yellow-400 flex-shrink-0" />
+          </div>
+        </button>
+
         {/* Features */}
         <div className="space-y-2">
           <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-widest">What's included</h2>
@@ -179,6 +287,7 @@ export default function TrashValetPage() {
             { icon: <Recycle className="h-4 w-4 text-green-400" />, text: "Optional bi-weekly recycling service" },
             { icon: <ShieldCheck className="h-4 w-4 text-orange-400" />, text: "One-time sign-up, weekly service" },
             { icon: <Clock className="h-4 w-4 text-purple-400" />, text: "Pause or cancel anytime" },
+            { icon: <Gift className="h-4 w-4 text-yellow-400" />, text: "Gift a plan — both addresses save 10%" },
           ].map((f, i) => (
             <div key={i} className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3">
               {f.icon}
