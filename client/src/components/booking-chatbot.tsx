@@ -83,6 +83,7 @@ interface Answers {
   // Moving fields
   fromZip?: string;
   toZip?: string;
+  loadType?: string;
   moveDate?: string;
   homeSize?: string;
   originFloor?: string;
@@ -125,6 +126,7 @@ interface Answers {
 
 interface MovingQuote {
   type: "moving";
+  tier: "tiny" | "small" | "medium" | "large";
   crew: number;
   minHrs: number;
   maxHrs: number;
@@ -168,6 +170,7 @@ interface CrewPackage {
   minPrice: number;
   maxPrice: number;
   crew?: number;
+  hours?: number;
   tag?: string;
 }
 
@@ -264,6 +267,18 @@ const STEPS: Step[] = [
     show: (a) => isMovingService(a) && (a.serviceType || "").includes("Moving"),
   },
   {
+    id: "loadType",
+    question: "What are we doing?",
+    subtext: "Load only = we load the truck at the pickup. Unload only = we unload at the destination. Both = full move.",
+    type: "choice",
+    options: [
+      "🔼 Load only (we load the truck)",
+      "🔽 Unload only (we unload at destination)",
+      "🔄 Both — load AND unload",
+    ],
+    show: (a) => isMovingService(a),
+  },
+  {
     id: "moveDate",
     question: "When do you need this done?",
     type: "choice",
@@ -279,10 +294,11 @@ const STEPS: Step[] = [
   },
   {
     id: "homeSize",
-    question: "What's the size of the space?",
+    question: "What's the size of the space or job?",
     subtext: "Pick the closest match.",
     type: "choice",
     options: [
+      "1–2 Items (Tiny Job)",
       "Studio / Single Room",
       "1 Bedroom Apartment",
       "2 Bedroom Apartment",
@@ -523,11 +539,19 @@ const STEPS: Step[] = [
     },
   },
 
-  // ── PROMO CODE (moving & junk — before package select so quote uses it) ───
+  // ── PACKAGE SELECTION (priceable services) ────────────────────────────────
+  {
+    id: "selectedPackage",
+    question: "Choose your crew package:",
+    type: "package_select",
+    show: (a) => isPriceableService(a) && !isQuoteOnlyService(a),
+  },
+
+  // ── PROMO CODE (moving & junk — after package select, near the end) ───────
   {
     id: "promoCode",
     question: "Got a promo code? Enter it here — or skip.",
-    subtext: "JC222 unlocks special pricing on small jobs. Leave blank to skip.",
+    subtext: "JC222 unlocks special pricing on qualifying small jobs. Leave blank to skip.",
     type: "text",
     placeholder: "e.g. JC222",
     optional: true,
@@ -535,14 +559,6 @@ const STEPS: Step[] = [
       const svc = getServiceLabel(a.serviceType || "");
       return svc === "Moving" || svc === "Junk Removal";
     },
-  },
-
-  // ── PACKAGE SELECTION (priceable services) ────────────────────────────────
-  {
-    id: "selectedPackage",
-    question: "Choose your crew package:",
-    type: "package_select",
-    show: (a) => isPriceableService(a) && !isQuoteOnlyService(a),
   },
 
   // ── CONTACT + NOTES (all services) ───────────────────────────────────────
@@ -566,77 +582,164 @@ const STEPS: Step[] = [
 // Moving Quote Engine
 // ─────────────────────────────────────────────
 function computeMovingQuote(a: Answers): MovingQuote {
-  const sizeMap: Record<string, { crew: number; minH: number; maxH: number }> = {
-    "Studio / Single Room":        { crew: 2, minH: 1.5, maxH: 2.5 },
-    "1 Bedroom Apartment":         { crew: 2, minH: 2,   maxH: 3   },
-    "2 Bedroom Apartment":         { crew: 2, minH: 3,   maxH: 4.5 },
-    "3 Bedroom Apartment":         { crew: 3, minH: 4,   maxH: 6   },
-    "4+ Bedroom Apartment":        { crew: 3, minH: 5,   maxH: 7   },
-    "1–2 Bedroom House":           { crew: 2, minH: 3,   maxH: 5   },
-    "3 Bedroom House":             { crew: 3, minH: 5,   maxH: 7   },
-    "4+ Bedroom House":            { crew: 4, minH: 6,   maxH: 9   },
-    "Commercial / Office":         { crew: 3, minH: 5,   maxH: 8   },
-  };
+  const RATE = 85;
+  const round5 = (n: number) => Math.ceil(n / 5) * 5;
 
-  const cfg = sizeMap[a.homeSize || ""] || { crew: 2, minH: 2, maxH: 4 };
-  let { crew } = cfg;
-  let minH = cfg.minH;
-  let maxH = cfg.maxH;
+  // ── Load type ──────────────────────────────────────────────────────────────
+  const loadTypeRaw = a.loadType || "";
+  const isBoth = loadTypeRaw.includes("Both");
 
-  const oFloor = { "Ground Floor / 1st": 1, "2nd Floor": 2, "3rd Floor": 3, "4th Floor or Higher": 4 }[a.originFloor || ""] || 1;
-  if (oFloor >= 2 && a.originElevator === "🪜 No elevator — stairs only") {
-    minH += (oFloor - 1) * 0.4;
-    maxH += (oFloor - 1) * 0.6;
-  }
+  // ── Stairs ─────────────────────────────────────────────────────────────────
+  const floorNum = (f: string | undefined) =>
+    ({ "Ground Floor / 1st": 1, "2nd Floor": 2, "3rd Floor": 3, "4th Floor or Higher": 4 }[f || ""] || 1);
+  const oFloor = floorNum(a.originFloor);
+  const dFloor = floorNum(a.destFloor);
+  const hasOriginStairs = oFloor >= 2 && a.originElevator === "🪜 No elevator — stairs only";
+  const hasDestStairs   = dFloor >= 2 && a.destElevator   === "🪜 No elevator — stairs only";
+  const hasAnyStairs    = hasOriginStairs || hasDestStairs;
+  const highStairFloors = (hasOriginStairs ? oFloor - 1 : 0) + (hasDestStairs ? dFloor - 1 : 0);
 
-  const dFloor = { "Ground Floor / 1st": 1, "2nd Floor": 2, "3rd Floor": 3, "4th Floor or Higher": 4 }[a.destFloor || ""] || 1;
-  if (dFloor >= 2 && a.destElevator === "🪜 No elevator — stairs only") {
-    minH += (dFloor - 1) * 0.4;
-    maxH += (dFloor - 1) * 0.6;
-  }
-
-  if (a.parkingDistance === "🚶 Short walk (30–100 ft)") { minH += 0.25; maxH += 0.5; }
-  if (a.parkingDistance === "🏃 Long carry (100 ft+)") { minH += 0.5; maxH += 1; }
-
-  const furn = (a.furniture || []).filter(f => f !== "None of the above").length;
-  minH += Math.floor(furn / 5) * 0.25;
-  maxH += Math.floor(furn / 3) * 0.5;
-
-  const boxAdj: Record<string, [number, number]> = {
-    "Under 10 boxes": [0, 0], "10–25 boxes": [0.25, 0.5], "25–50 boxes": [0.5, 1],
-    "50–75 boxes": [1, 1.5], "75–100 boxes": [1.5, 2], "100+ boxes": [2.5, 3.5],
-  };
-  const [bMin, bMax] = boxAdj[a.boxCount || ""] || [0, 0];
-  minH += bMin; maxH += bMax;
+  // ── Special items ──────────────────────────────────────────────────────────
+  const specials = (a.specialItems || []).filter(s => s !== "None of these");
+  const hasGrandPiano   = specials.includes("🎹 Grand Piano");
+  const hasUprightPiano = specials.includes("🎹 Upright Piano");
+  const hasPoolTable    = specials.includes("🎱 Pool Table");
+  const hasHotTub       = specials.includes("♨️ Hot Tub");
+  const hasHeavySafe    = specials.includes("🔒 Heavy Safe (300 lbs+)");
+  const hasMajorSpecial = hasGrandPiano || hasUprightPiano || hasPoolTable || hasHotTub;
 
   let specialSurcharge = 0;
-  const specials = (a.specialItems || []).filter(s => s !== "None of these");
-  if (specials.includes("🎹 Grand Piano"))   { crew = Math.max(crew, 4); minH += 2; maxH += 3;   specialSurcharge += 250; }
-  if (specials.includes("🎹 Upright Piano")) { crew = Math.max(crew, 3); minH += 1; maxH += 2;   specialSurcharge += 150; }
-  if (specials.includes("🎱 Pool Table"))    { crew = Math.max(crew, 3); minH += 1; maxH += 2;   specialSurcharge += 150; }
-  if (specials.includes("♨️ Hot Tub"))       { crew = Math.max(crew, 3); minH += 1; maxH += 2;   specialSurcharge += 200; }
-  if (specials.includes("🔒 Heavy Safe (300 lbs+)")) { minH += 0.5; maxH += 1; specialSurcharge += 75; }
+  if (hasGrandPiano)   specialSurcharge += 250;
+  if (hasUprightPiano) specialSurcharge += 150;
+  if (hasPoolTable)    specialSurcharge += 150;
+  if (hasHotTub)       specialSurcharge += 200;
+  if (hasHeavySafe)    specialSurcharge += 75;
 
-  if (a.packingHelp === "📦 Pack a few fragile items") { minH += 0.5; maxH += 1; }
-  if (a.packingHelp === "🏠 Full packing service (whole home)") { minH += 2; maxH += 4; crew = Math.max(crew, 3); }
+  // ── Furniture & box counts ─────────────────────────────────────────────────
+  const furnCount = (a.furniture || []).filter(f => f !== "None of the above").length;
+  const boxIdx = ["Under 10 boxes", "10–25 boxes", "25–50 boxes", "50–75 boxes", "75–100 boxes", "100+ boxes"]
+    .indexOf(a.boxCount || "Under 10 boxes");
 
-  if (a.serviceType?.includes("Junk")) {
-    crew = Math.min(crew, 2);
-    minH = Math.max(1, minH * 0.45);
-    maxH = Math.max(2, maxH * 0.55);
+  // ── Size score → base tier ─────────────────────────────────────────────────
+  // score: -1 = force tiny, 0-2 = small, 3-5 = medium, 6+ = large
+  const sizeScore: Record<string, number> = {
+    "1–2 Items (Tiny Job)": -1,
+    "Studio / Single Room": 0,
+    "1 Bedroom Apartment":  1,
+    "2 Bedroom Apartment":  3,
+    "3 Bedroom Apartment":  5,
+    "4+ Bedroom Apartment": 6,
+    "1–2 Bedroom House":    4,
+    "3 Bedroom House":      7,
+    "4+ Bedroom House":     9,
+    "Commercial / Office":  8,
+  };
+  let score = sizeScore[a.homeSize || ""] ?? 2;
+
+  // Adjust score for complexity
+  if (isBoth)             score += 2;   // Load + Unload = more work
+  if (hasAnyStairs)       score += 1;
+  if (highStairFloors >= 2) score += 1; // 3rd floor or higher, or stairs at both ends
+  if (furnCount >= 6)     score += 1;
+  if (furnCount >= 12)    score += 1;
+  if (boxIdx >= 3)        score += 1;   // 50–75 boxes
+  if (boxIdx >= 5)        score += 1;   // 100+ boxes
+  if (hasMajorSpecial)    score = Math.max(score, 4); // at least Medium
+  if (hasGrandPiano)      score = Math.max(score, 7); // Large
+  if (a.packingHelp === "🏠 Full packing service (whole home)") score += 2;
+  if (a.parkingDistance === "🏃 Long carry (100 ft+)") score += 1;
+
+  // ── Determine tier ─────────────────────────────────────────────────────────
+  let tier: "tiny" | "small" | "medium" | "large";
+  if (score === -1 && !isBoth && !hasMajorSpecial && !hasHeavySafe) {
+    tier = "tiny";
+  } else if (score <= 2) {
+    tier = "small";
+  } else if (score <= 5) {
+    tier = "medium";
+  } else {
+    tier = "large";
   }
 
-  const RATE = 75;
-  const round25 = (n: number) => Math.ceil(n / 25) * 25;
-  const rawMin = round25(crew * minH * RATE) + specialSurcharge;
-  const rawMax = round25(crew * maxH * RATE) + specialSurcharge;
+  // Special upgrade rules
+  // Heavy safe + stairs → minimum Small with 3 movers
+  if (tier === "tiny" && hasHeavySafe && hasAnyStairs) tier = "small";
+  // Load+Unload always minimum Medium
+  if (isBoth && tier === "small") tier = "medium";
 
-  // $300 floor for small jobs — JC222 promo lowers it to $222
+  // ── Crew & hours from tier ─────────────────────────────────────────────────
+  let crew: number;
+  let minHrs: number;
+  let maxHrs: number;
+
+  if (tier === "tiny") {
+    crew   = 1;
+    minHrs = 0.5;
+    maxHrs = 1;
+  } else if (tier === "small") {
+    crew   = (hasHeavySafe || hasMajorSpecial) && hasAnyStairs ? 3 : 2;
+    minHrs = 2;
+    maxHrs = isBoth ? 3 : 2;
+  } else if (tier === "medium") {
+    // Default 2×4; with stairs or heavy items 3×2.5
+    if (hasAnyStairs || hasMajorSpecial || hasHeavySafe || highStairFloors >= 2) {
+      crew   = 3;
+      minHrs = 2.5;
+      maxHrs = 3.5;
+    } else {
+      crew   = 2;
+      minHrs = 4;
+      maxHrs = 4;
+    }
+  } else { // large
+    if (hasGrandPiano || score >= 9) {
+      crew   = 4;
+      minHrs = 4;
+      maxHrs = 5;
+    } else {
+      crew   = 3;
+      minHrs = 5;
+      maxHrs = 7;
+    }
+  }
+
+  // ── Fine-tune hours from context ───────────────────────────────────────────
+  if (hasOriginStairs && tier !== "tiny") maxHrs += (oFloor - 1) * 0.3;
+  if (hasDestStairs   && tier !== "tiny") maxHrs += (dFloor - 1) * 0.3;
+  if (a.parkingDistance === "🚶 Short walk (30–100 ft)") maxHrs += 0.25;
+  if (a.parkingDistance === "🏃 Long carry (100 ft+)")   maxHrs += 0.75;
+  if (a.packingHelp === "📦 Pack a few fragile items")       maxHrs += 0.5;
+  if (a.packingHelp === "🏠 Full packing service (whole home)") { maxHrs += 2; crew = Math.max(crew, 3); }
+  if (furnCount >= 8)  maxHrs += 0.5;
+  if (boxIdx >= 4)     maxHrs += 0.5;
+
+  // ── Junk Removal adjustments ──────────────────────────────────────────────
+  if (a.serviceType?.includes("Junk")) {
+    crew   = Math.min(crew, 2);
+    minHrs = Math.max(1, minHrs * 0.5);
+    maxHrs = Math.max(2, maxHrs * 0.6);
+  }
+
+  // ── Enforce load+unload minimum 3 hrs ─────────────────────────────────────
+  if (isBoth && !a.serviceType?.includes("Junk")) {
+    minHrs = Math.max(minHrs, 3);
+    maxHrs = Math.max(maxHrs, 3);
+  }
+
+  // Round to nearest 0.5
+  minHrs = Math.round(minHrs * 2) / 2;
+  maxHrs = Math.max(minHrs, Math.round(maxHrs * 2) / 2);
+
+  // ── Pricing ───────────────────────────────────────────────────────────────
+  const rawMin = round5(crew * minHrs * RATE) + specialSurcharge;
+  const rawMax = round5(crew * maxHrs * RATE) + specialSurcharge;
+
+  // JC222 promo: lowers $300 Small job floor to $222
   const SMALL_JOB_FLOOR = 300;
-  const promoCodeRaw = (a.promoCode || "").toUpperCase().trim();
-  const isJC222 = promoCodeRaw === "JC222";
+  const promoCodeRaw   = (a.promoCode || "").toUpperCase().trim();
+  const isJC222        = promoCodeRaw === "JC222";
   const effectiveFloor = isJC222 ? 222 : SMALL_JOB_FLOOR;
-  const isSmallJob = rawMin < SMALL_JOB_FLOOR;
+  const isSmallJob     = rawMax <= SMALL_JOB_FLOOR;
 
   const minPrice = isSmallJob ? Math.max(rawMin, effectiveFloor) : rawMin;
   const maxPrice = isSmallJob ? Math.max(rawMax, effectiveFloor) : rawMax;
@@ -645,16 +748,17 @@ function computeMovingQuote(a: Answers): MovingQuote {
 
   return {
     type: "moving",
+    tier,
     crew,
-    minHrs: Math.round(minH * 2) / 2,
-    maxHrs: Math.round(maxH * 2) / 2,
+    minHrs,
+    maxHrs,
     minPrice,
     maxPrice,
     tokensEstimate,
     specialSurcharge,
     promoApplied: isSmallJob && isJC222,
-    promoCode: isJC222 ? "JC222" : undefined,
-    rawMinPrice: isSmallJob ? rawMin : undefined,
+    promoCode:    isJC222 ? "JC222" : undefined,
+    rawMinPrice:  isSmallJob ? rawMin : undefined,
   };
 }
 
@@ -727,38 +831,135 @@ function buildCrewPackages(a: Answers, q: QuoteResult | null): CrewPackage[] {
 
   if (q.type === "moving") {
     const mq = q as MovingQuote;
-    const crew = mq.crew;
-    const packages: CrewPackage[] = [];
+    const RATE = 85;
+    const sur  = mq.specialSurcharge;
+    const r5   = (n: number) => Math.ceil(n / 5) * 5;
+    const price = (crew: number, hrs: number) => r5(crew * hrs * RATE) + sur;
 
-    if (crew >= 3) {
-      packages.push({
-        id: "pkg_lean",
-        label: `${crew - 1} Movers`,
-        desc: `Smaller crew · Budget-friendly · ${mq.minHrs + 1}–${mq.maxHrs + 2} hrs est.`,
-        minPrice: Math.round(mq.minPrice * 0.75),
-        maxPrice: Math.round(mq.maxPrice * 0.85),
-        crew: crew - 1,
-      });
+    if (mq.tier === "tiny") {
+      return [
+        {
+          id: "pkg_tiny",
+          label: "Tiny Move · 1 Mover",
+          desc: "1–2 light items (≤200 lbs) · 30–60 min · single task",
+          minPrice: price(1, 0.5),
+          maxPrice: price(1, 1),
+          crew: 1,
+          hours: 1,
+          tag: "Quick Job",
+        },
+        {
+          id: "pkg_small_upgrade",
+          label: "Small Move · 2 Movers × 2 hrs",
+          desc: "More flexibility — ideal if your needs grow day-of",
+          minPrice: price(2, 2),
+          maxPrice: price(2, 2),
+          crew: 2,
+          hours: 2,
+        },
+      ];
     }
-    packages.push({
-      id: "pkg_recommended",
-      label: `${crew} Movers (Recommended)`,
-      desc: `Optimal crew for your move · ${mq.minHrs}–${mq.maxHrs} hrs est.`,
-      minPrice: mq.minPrice,
-      maxPrice: mq.maxPrice,
-      crew,
-      tag: "Best Match",
-    });
-    packages.push({
-      id: "pkg_heavy",
-      label: `${crew + 1} Movers (Power Crew)`,
-      desc: `Extra mover for speed · ${Math.max(1, mq.minHrs - 0.5)}–${Math.max(2, mq.maxHrs - 1)} hrs est.`,
-      minPrice: Math.round(mq.minPrice * 1.2),
-      maxPrice: Math.round(mq.maxPrice * 1.3),
-      crew: crew + 1,
-    });
 
-    return packages;
+    if (mq.tier === "small") {
+      const pkgs: CrewPackage[] = [
+        {
+          id: "pkg_small",
+          label: "2 Movers × 2 hrs",
+          desc: "Studio / single room · load only or unload only · 2-hr minimum",
+          minPrice: price(2, 2),
+          maxPrice: price(2, 2),
+          crew: 2,
+          hours: 2,
+          tag: "Recommended",
+        },
+        {
+          id: "pkg_small_3hr",
+          label: "2 Movers × 3 hrs",
+          desc: "Extra time buffer — best if you have stairs or more items",
+          minPrice: price(2, 3),
+          maxPrice: price(2, 3),
+          crew: 2,
+          hours: 3,
+        },
+      ];
+      // If heavy item + stairs, lead with 3-mover option
+      const specials = (a.specialItems || []).filter(s => s !== "None of these");
+      const hasHeavy = specials.includes("🔒 Heavy Safe (300 lbs+)") ||
+                       specials.includes("🎹 Upright Piano") ||
+                       specials.includes("🎱 Pool Table") ||
+                       specials.includes("♨️ Hot Tub");
+      const hasStairs = (a.originFloor !== "Ground Floor / 1st" && a.originElevator === "🪜 No elevator — stairs only") ||
+                        (a.destFloor   !== "Ground Floor / 1st" && a.destElevator   === "🪜 No elevator — stairs only");
+      if (hasHeavy && hasStairs) {
+        pkgs.unshift({
+          id: "pkg_small_3crew",
+          label: "3 Movers × 2 hrs (Heavy + Stairs)",
+          desc: "Required for heavy items on stairs — safest option",
+          minPrice: price(3, 2),
+          maxPrice: price(3, 2),
+          crew: 3,
+          hours: 2,
+          tag: "Safety Pick",
+        });
+      }
+      return pkgs;
+    }
+
+    if (mq.tier === "medium") {
+      return [
+        {
+          id: "pkg_med_a",
+          label: "2 Movers × 4 hrs",
+          desc: "Steady pace · best for ground-floor or elevator access",
+          minPrice: price(2, 4),
+          maxPrice: price(2, 4),
+          crew: 2,
+          hours: 4,
+        },
+        {
+          id: "pkg_med_b",
+          label: "3 Movers × 2.5 hrs",
+          desc: "Faster crew · recommended with stairs or tight schedule",
+          minPrice: price(3, 2.5),
+          maxPrice: price(3, 3),
+          crew: 3,
+          hours: 2.5,
+          tag: "Recommended",
+        },
+      ];
+    }
+
+    // large
+    return [
+      {
+        id: "pkg_lg_c",
+        label: "2 Movers × 7 hrs",
+        desc: "Budget option · plenty of time · best without stairs",
+        minPrice: price(2, 7),
+        maxPrice: price(2, 7),
+        crew: 2,
+        hours: 7,
+      },
+      {
+        id: "pkg_lg_b",
+        label: "3 Movers × 5 hrs",
+        desc: "Balanced crew · great for 3BR house or 2+ flights of stairs",
+        minPrice: price(3, 5),
+        maxPrice: price(3, 5),
+        crew: 3,
+        hours: 5,
+        tag: "Recommended",
+      },
+      {
+        id: "pkg_lg_a",
+        label: "4 Movers × 4 hrs",
+        desc: "Power crew · fastest option · best for 4BR+ or pianos",
+        minPrice: price(4, 4),
+        maxPrice: price(4, 4),
+        crew: 4,
+        hours: 4,
+      },
+    ];
   }
 
   if (q.type === "trash_valet") {
@@ -1050,7 +1251,11 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
 
   function handlePackageSelect(pkg: CrewPackage) {
     setSelectedPackageObj(pkg);
-    advanceStep("selectedPackage", pkg.id);
+  }
+
+  function handlePackageContinue() {
+    if (!selectedPackageObj) return;
+    advanceStep("selectedPackage", selectedPackageObj.id);
   }
 
   const [depositInvoiceSent, setDepositInvoiceSent] = useState(false);
@@ -1258,7 +1463,6 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
               <div className="grid grid-cols-1 gap-2">
                 {crewPackages.map((pkg) => {
                   const isSelected = selectedPackageObj?.id === pkg.id;
-                  const isCustom = pkg.price === 0;
                   return (
                     <button
                       key={pkg.id}
@@ -1283,12 +1487,10 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
                         </div>
                       </div>
                       <div className="text-right shrink-0 ml-2">
-                        {isCustom ? (
-                          <p className="text-sm font-bold text-slate-400">Custom Quote</p>
-                        ) : pkg.minPrice !== pkg.maxPrice ? (
+                        {pkg.minPrice !== pkg.maxPrice ? (
                           <p className="text-sm font-bold text-teal-300">${pkg.minPrice}–${pkg.maxPrice}</p>
                         ) : (
-                          <p className="text-sm font-bold text-teal-300">${pkg.price.toLocaleString()}</p>
+                          <p className="text-sm font-bold text-teal-300">${pkg.minPrice.toLocaleString()}</p>
                         )}
                       </div>
                     </button>
