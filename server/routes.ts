@@ -3445,10 +3445,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const emailContent = generateLeadNotificationEmail(lead);
       const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
       const bundleNote = bundleAddons.length > 0
-        ? `\n\n⚡ ALSO INTERESTED IN: ${bundleAddons.join(", ")} — follow up for a bundle quote.`
+        ? `\n\n⚡ BUNDLE DISCOUNT: ${bundleAddons.join(", ")} — apply 10% off + up to $50 off on the add-on(s) when invoicing.`
         : "";
       const bundleHtml = bundleAddons.length > 0
-        ? `<br><br><b style="color:orange">⚡ Also Interested In:</b> ${bundleAddons.join(", ")} — follow up for bundle quote.`
+        ? `<br><br><b style="color:green">⚡ Bundle Add-On (10% off + up to $50 off):</b> ${bundleAddons.join(", ")} — apply discount when invoicing.`
         : "";
       try {
         await sendEmail({
@@ -18703,8 +18703,8 @@ Thank you for your business!
         await sendEmail({
           to: companyEmail, from: companyEmail,
           subject: `New Trash Valet Subscription — ${customerName}${bundleAddons.length > 0 ? " [+ Bundle Interest]" : ""}`,
-          text: `New trash valet subscription.\n\nCustomer: ${customerName}\nPhone: ${phone}\nEmail: ${email}\nAddress: ${address}, ${city}, ${state} ${zip}\nCans: ${cans}, Bags: ${bagCount}\nRecycling: ${recyclingEnabled ? "Yes" : "No"}\nService Day: ${dayNames[Number(serviceDayOfWeek)] || serviceDayOfWeek}\nMonthly Price: $${effectiveMonthlyPrice}${promoCodeUsed ? ` (promo: ${promoCodeUsed})` : ""}\nPlan: ${planType}${bundleAddons.length > 0 ? `\n\n⚡ ALSO INTERESTED IN: ${bundleAddons.join(", ")} — follow up for bundle quote.` : ""}\n\nView in admin panel at /admin-trash-valet`,
-          html: `<h2>New Trash Valet Subscription</h2><p><b>Customer:</b> ${customerName}<br><b>Phone:</b> ${phone}<br><b>Email:</b> ${email}<br><b>Address:</b> ${address}, ${city}, ${state} ${zip}<br><b>Cans:</b> ${cans} | <b>Bags:</b> ${bagCount}<br><b>Recycling:</b> ${recyclingEnabled ? "Yes" : "No"}<br><b>Service Day:</b> ${dayNames[Number(serviceDayOfWeek)] || serviceDayOfWeek}<br><b>Monthly Price:</b> $${effectiveMonthlyPrice}${promoCodeUsed ? ` (promo: ${promoCodeUsed})` : ""}<br><b>Plan:</b> ${planType}${bundleAddons.length > 0 ? `<br><br><b style="color:orange">⚡ Also Interested In:</b> ${bundleAddons.join(", ")} — follow up for bundle quote.` : ""}</p>`,
+          text: `New trash valet subscription.\n\nCustomer: ${customerName}\nPhone: ${phone}\nEmail: ${email}\nAddress: ${address}, ${city}, ${state} ${zip}\nCans: ${cans}, Bags: ${bagCount}\nRecycling: ${recyclingEnabled ? "Yes" : "No"}\nService Day: ${dayNames[Number(serviceDayOfWeek)] || serviceDayOfWeek}\nMonthly Price: $${effectiveMonthlyPrice}${promoCodeUsed ? ` (promo: ${promoCodeUsed})` : ""}\nPlan: ${planType}${bundleAddons.length > 0 ? `\n\n⚡ BUNDLE DISCOUNT: ${bundleAddons.join(", ")} — apply 10% off + up to $50 off on the add-on(s) when invoicing.` : ""}\n\nView in admin panel at /admin-trash-valet`,
+          html: `<h2>New Trash Valet Subscription</h2><p><b>Customer:</b> ${customerName}<br><b>Phone:</b> ${phone}<br><b>Email:</b> ${email}<br><b>Address:</b> ${address}, ${city}, ${state} ${zip}<br><b>Cans:</b> ${cans} | <b>Bags:</b> ${bagCount}<br><b>Recycling:</b> ${recyclingEnabled ? "Yes" : "No"}<br><b>Service Day:</b> ${dayNames[Number(serviceDayOfWeek)] || serviceDayOfWeek}<br><b>Monthly Price:</b> $${effectiveMonthlyPrice}${promoCodeUsed ? ` (promo: ${promoCodeUsed})` : ""}<br><b>Plan:</b> ${planType}${bundleAddons.length > 0 ? `<br><br><b style="color:green">⚡ Bundle Add-On (10% off + up to $50 off):</b> ${bundleAddons.join(", ")} — apply discount when invoicing.` : ""}</p>`,
         });
       } catch (emailErr) { console.error("Admin email failed:", emailErr); }
       try {

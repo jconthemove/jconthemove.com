@@ -107,10 +107,10 @@ router.post("/quote", async (req: Request, res: Response) => {
     // Notify admin (non-blocking)
     const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
     const bundleNote = bundleAddons.length > 0
-      ? `\n\n⚡ ALSO INTERESTED IN: ${bundleAddons.join(", ")} — follow up for bundle quote.`
+      ? `\n\n⚡ BUNDLE DISCOUNT: ${bundleAddons.join(", ")} — apply 10% off + up to $50 off on the add-on(s) when invoicing.`
       : "";
     const bundleHtml = bundleAddons.length > 0
-      ? `<br><br><b style="color:orange">⚡ Also Interested In:</b> ${bundleAddons.join(", ")} — follow up for bundle quote.`
+      ? `<br><br><b style="color:green">⚡ Bundle Add-On (10% off + up to $50 off):</b> ${bundleAddons.join(", ")} — apply discount when invoicing.`
       : "";
     try {
       await sendEmail({

@@ -236,7 +236,7 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
         </div>
       </div>
 
-      {/* Add-On Services — 10% bundle discount */}
+      {/* Add-On Services — 10% off + up to $50 off bundle discount */}
       <div className={`rounded-2xl p-4 space-y-3 border transition-all ${
         addonSelected
           ? "bg-green-900/20 border-green-500/40"
@@ -247,11 +247,11 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
             <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
               <Plus className="h-3 w-3" /> Add a Service
             </p>
-            <p className="text-[11px] text-zinc-500 mt-0.5">Save an extra 10% on windows when you add another service</p>
+            <p className="text-[11px] text-zinc-500 mt-0.5">Add another service — save 10% + up to $50 off on windows</p>
           </div>
           {addonSelected && (
             <span className="bg-green-500/20 text-green-300 text-[10px] font-bold px-2 py-1 rounded-full border border-green-500/30">
-              −10% applied
+              10% off · up to $50 off
             </span>
           )}
         </div>
@@ -280,7 +280,7 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
 
         {addonSelected && (
           <p className="text-[11px] text-green-400 text-center">
-            🎉 Bundle discount active — 10% off windows! We'll quote your {selectedAddons.length > 1 ? "add-ons" : "add-on"} separately.
+            🎉 10% off + up to $50 off windows applied! We'll quote your {selectedAddons.length > 1 ? "add-ons" : "add-on"} separately.
           </p>
         )}
       </div>

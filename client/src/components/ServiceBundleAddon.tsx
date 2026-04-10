@@ -1,4 +1,4 @@
-import { CheckCircle2, Plus } from "lucide-react";
+import { CheckCircle2, Plus, Tag } from "lucide-react";
 
 export interface BundleService {
   id: string;
@@ -22,8 +22,6 @@ interface ServiceBundleAddonProps {
   currentService?: string;
   selected: string[];
   onChange: (ids: string[]) => void;
-  showDiscount?: boolean;
-  discountNote?: string;
   theme?: "dark" | "slate";
 }
 
@@ -31,8 +29,6 @@ export default function ServiceBundleAddon({
   currentService,
   selected,
   onChange,
-  showDiscount = false,
-  discountNote,
   theme = "dark",
 }: ServiceBundleAddonProps) {
   const services = ALL_BUNDLE_SERVICES.filter(s => s.id !== currentService);
@@ -42,40 +38,46 @@ export default function ServiceBundleAddon({
     onChange(selected.includes(id) ? selected.filter(a => a !== id) : [...selected, id]);
   };
 
-  const bg = theme === "slate" ? "bg-slate-900 border-slate-700" : "bg-zinc-900 border-zinc-800";
-  const activeBg = hasSelected && showDiscount ? "bg-green-900/20 border-green-500/40" : bg;
+  const cardBg = hasSelected
+    ? "bg-green-900/20 border-green-500/40"
+    : theme === "slate"
+      ? "bg-slate-900 border-slate-700"
+      : "bg-zinc-900 border-zinc-800";
+
   const chipBase = theme === "slate"
     ? "border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-500 hover:text-slate-300"
     : "border-zinc-700 bg-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300";
-  const chipActive = showDiscount
-    ? "border-green-500/50 bg-green-500/15 text-green-300"
-    : "border-orange-500/50 bg-orange-500/15 text-orange-300";
+
+  const selectedNames = selected
+    .map(id => ALL_BUNDLE_SERVICES.find(s => s.id === id)?.label)
+    .filter(Boolean)
+    .join(", ");
 
   return (
-    <div className={`rounded-2xl p-4 space-y-3 border transition-all ${activeBg}`}>
-      <div className="flex items-center justify-between flex-wrap gap-2">
+    <div className={`rounded-2xl p-4 space-y-3 border transition-all ${cardBg}`}>
+
+      {/* Header */}
+      <div className="flex items-start justify-between gap-2">
         <div>
           <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
-            <Plus className="h-3 w-3" /> Also Interested In?
+            <Plus className="h-3 w-3" /> Bundle & Save
           </p>
-          <p className="text-[11px] text-zinc-500 mt-0.5">
-            {showDiscount
-              ? "Add another service — save extra on this booking"
-              : "Let us know and we'll quote everything together"}
+          <p className="text-[11px] text-zinc-400 mt-0.5">
+            Add any service — get <span className="text-green-400 font-bold">10% off + up to $50 off</span> your bundled add-on.
           </p>
         </div>
-        {hasSelected && showDiscount && (
-          <span className="bg-green-500/20 text-green-300 text-[10px] font-bold px-2 py-1 rounded-full border border-green-500/30 whitespace-nowrap">
-            {discountNote || "Bundle discount active"}
+        {hasSelected ? (
+          <span className="shrink-0 bg-green-500/20 text-green-300 text-[10px] font-bold px-2 py-1 rounded-full border border-green-500/30 whitespace-nowrap flex items-center gap-1">
+            <Tag className="h-2.5 w-2.5" /> Up to $50 off
           </span>
-        )}
-        {hasSelected && !showDiscount && (
-          <span className="bg-orange-500/20 text-orange-300 text-[10px] font-bold px-2 py-1 rounded-full border border-orange-500/30 whitespace-nowrap">
-            ✓ {selected.length} added
+        ) : (
+          <span className="shrink-0 bg-orange-500/10 text-orange-400 text-[10px] font-bold px-2 py-1 rounded-full border border-orange-500/20 whitespace-nowrap">
+            Save up to $50
           </span>
         )}
       </div>
 
+      {/* Service grid */}
       <div className="grid grid-cols-4 gap-2">
         {services.map(svc => {
           const active = selected.includes(svc.id);
@@ -85,23 +87,33 @@ export default function ServiceBundleAddon({
               type="button"
               onClick={() => toggle(svc.id)}
               className={`flex flex-col items-center gap-0.5 py-2.5 px-1 rounded-xl border text-center transition-all active:scale-95 ${
-                active ? chipActive : chipBase
+                active
+                  ? "border-green-500/50 bg-green-500/15 text-green-300"
+                  : chipBase
               }`}
             >
               <span className="text-lg leading-none">{svc.emoji}</span>
               <span className="text-[9px] font-semibold leading-tight mt-0.5">{svc.label}</span>
               <span className="text-[8px] text-zinc-500 leading-tight">{svc.hint}</span>
-              {active && <CheckCircle2 className="h-3 w-3 text-inherit opacity-80 mt-0.5" />}
+              {active && <CheckCircle2 className="h-3 w-3 text-green-400 mt-0.5" />}
             </button>
           );
         })}
       </div>
 
-      {hasSelected && (
-        <p className="text-[11px] text-zinc-400 text-center border-t border-zinc-800/60 pt-2">
-          {showDiscount
-            ? `🎉 Bundle discount applied — your add-on${selected.length > 1 ? "s" : ""} will be quoted separately.`
-            : `We'll include quotes for ${selected.map(id => ALL_BUNDLE_SERVICES.find(s => s.id === id)?.label).filter(Boolean).join(", ")} in your follow-up.`}
+      {/* Confirmation note */}
+      {hasSelected ? (
+        <div className="rounded-xl bg-green-900/30 border border-green-500/20 px-3 py-2 space-y-1">
+          <p className="text-[11px] text-green-300 font-semibold">
+            🎉 10% off + up to $50 off {selectedNames} — applied when we send your invoice.
+          </p>
+          <p className="text-[10px] text-zinc-500">
+            No action needed. We'll apply the bundle discount automatically when quoting your add-on{selected.length > 1 ? "s" : ""}.
+          </p>
+        </div>
+      ) : (
+        <p className="text-[10px] text-zinc-600 text-center">
+          Tap any service above — bundle & save 10% + up to $50 off.
         </p>
       )}
     </div>
