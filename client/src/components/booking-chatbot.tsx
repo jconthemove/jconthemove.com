@@ -1127,14 +1127,13 @@ const STEPS: Step[] = [
     },
   },
 
-  // ── PHOTO UPLOAD (employee mode only) ────────────────────────────────────
+  // ── PHOTO UPLOAD (all users) ──────────────────────────────────────────────
   {
     id: "employeePhotos",
-    question: "Add site photos (optional)",
-    subtext: "Upload before/during photos so Darrell can review the job scope. Tap to skip if not needed.",
+    question: "Add photos (optional)",
+    subtext: "Upload photos of items, space, or anything that helps us understand the job scope. Tap to skip.",
     type: "photo_upload",
     optional: true,
-    employeeOnly: true,
   },
 
   // ── CONTACT + NOTES (all services) ───────────────────────────────────────
@@ -2297,6 +2296,12 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
 
       const isTV = isTrashValetService(answers);
       const tvMonthly = selectedPackageObj?.minPrice ?? (pendingQuote as any)?.finalMonthlyPrice ?? 0;
+      const customerPhotos = photos.length > 0 ? photos.map(p => ({
+        id: p.id,
+        url: p.dataUrl,
+        type: "before" as const,
+        timestamp: new Date().toISOString(),
+      })) : undefined;
       const result = await apiRequest("POST", "/api/chatbot-quote", {
         answers,
         quote: pendingQuote,
@@ -2308,6 +2313,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
         isQuoteOnly,
         customerZip: zip,
         depositPaid: withDeposit,
+        ...(customerPhotos ? { photos: customerPhotos } : {}),
       });
       return result as { leadId: string; message: string; depositInvoiceSent?: boolean; depositInvoiceUrl?: string };
     },
@@ -2646,13 +2652,20 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
                 {/* Placeholder estimate range */}
                 {pendingQuote && (
                   <div className="rounded-xl bg-slate-800/60 border border-slate-700/50 px-4 py-3 text-center">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Placeholder Estimate Range</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Starting Estimate</p>
                     <p className="text-2xl font-extrabold text-white">
-                      ${pendingQuote.minPrice.toLocaleString()} – ${pendingQuote.maxPrice.toLocaleString()}
+                      {pendingQuote.minPrice === pendingQuote.maxPrice
+                        ? <>~${pendingQuote.minPrice.toLocaleString()}</>
+                        : <>${pendingQuote.minPrice.toLocaleString()} – ${pendingQuote.maxPrice.toLocaleString()}</>
+                      }
                     </p>
                     <p className="text-xs text-slate-400 mt-1">
-                      This is a starting range only — we will contact you to schedule a free on-site or virtual estimate and confirm your personalized quote.
+                      Starting estimate — Darrell will confirm the final price after reviewing your request.
                     </p>
+                    <div className="mt-2 bg-amber-900/20 border border-amber-500/20 rounded-lg px-3 py-2 text-left">
+                      <p className="text-[10px] text-amber-400 font-semibold mb-0.5">⚠️ Items that may add to the final cost:</p>
+                      <p className="text-[10px] text-slate-400">Tires · Mattresses · TVs · Hazardous materials — final cost determined on-site</p>
+                    </div>
                   </div>
                 )}
 

@@ -17948,7 +17948,7 @@ Thank you for your business!
   // ── Chatbot Quote Submission ──────────────────────────────────────────────
   app.post("/api/chatbot-quote", async (req: any, res) => {
     try {
-      const { answers, quote, selectedPackage, depositRequired, depositAmount, serviceLabel, isQuoteOnly, customerZip, depositPaid } = req.body;
+      const { answers, quote, selectedPackage, depositRequired, depositAmount, serviceLabel, isQuoteOnly, customerZip, depositPaid, photos: submittedPhotos } = req.body;
       if (!answers || !quote) return res.status(400).json({ error: "Missing answers or quote" });
 
       const a = answers as Record<string, any>;
@@ -17997,6 +17997,7 @@ Thank you for your business!
       }
 
       // Store all chatbot Q&A in details as JSON (uses server-computed deposit values)
+      const photoList = Array.isArray(submittedPhotos) ? submittedPhotos : [];
       const detailsJson = JSON.stringify({
         _source: "chatbot",
         answers,
@@ -18006,6 +18007,7 @@ Thank you for your business!
         depositAmount: serverDepositAmount,
         isQuoteOnly: serverIsQuoteOnly,
         customerZip: fromZip,
+        ...(photoList.length > 0 ? { photos: photoList } : {}),
       }, null, 2);
 
       // Determine move date hint
