@@ -16,6 +16,7 @@ Preferred communication style: Simple, everyday language.
 - **State Management**: TanStack Query for server state.
 - **Forms**: React Hook Form with Zod validation.
 - **UI/UX Decisions**: Mobile-first design with orange (#E86329) + cream (#F5F0EB) color palette. Customer experience features a bottom tab bar (Home, Jobs, Post, Rewards, Profile), splash screen, clean onboarding flow, and card-based job feed. Admin/employee views retain the existing TeamHub/Dashboard interface with header navigation. Dark mode toggle supported throughout.
+- **Unified Add-Lead System**: `BookingChatbot` with `variant="employee"` powers all service intake — online booking, customer home, hub "Add Lead" tab, and `employee-add-job` page all use the same 12-service tile grid with service-specific structured questionnaires. Employee variant includes photo upload step and posts to `/api/leads/employee`.
 - **Mobile-First Customer Flow**: Splash page → Onboarding (name, email, phone) → Home feed with job cards → Post a Job (multi-step) → Rewards tab → Profile tab. Bottom tab bar replaces header for customer role.
 - **Role-Based Routing**: Customers get the new mobile-first experience (`CustomerApp` with `BottomTabBar`). Employees/admins land on existing TeamHub/Dashboard with `Header` navigation.
 

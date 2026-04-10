@@ -343,6 +343,62 @@ export default function CustomerHomePage() {
               </div>
             </button>
 
+            {/* Handyman */}
+            <button
+              onClick={() => setLocation("/book?service=handyman")}
+              className="flex flex-col items-start gap-1.5 p-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
+            >
+              <div className="w-8 h-8 rounded-xl bg-amber-500/15 flex items-center justify-center">
+                <Wrench className="h-4 w-4 text-amber-400" />
+              </div>
+              <div>
+                <p className="font-bold text-sm text-white">Handyman</p>
+                <p className="text-zinc-500 text-xs leading-snug">Repairs & projects</p>
+              </div>
+            </button>
+
+            {/* Light Demolition */}
+            <button
+              onClick={() => setLocation("/book?service=demolition")}
+              className="flex flex-col items-start gap-1.5 p-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
+            >
+              <div className="w-8 h-8 rounded-xl bg-red-500/15 flex items-center justify-center text-base">
+                ⚒️
+              </div>
+              <div>
+                <p className="font-bold text-sm text-white">Light Demo</p>
+                <p className="text-zinc-500 text-xs leading-snug">Tearout & removal</p>
+              </div>
+            </button>
+
+            {/* Roofing */}
+            <button
+              onClick={() => setLocation("/book?service=roofing")}
+              className="flex flex-col items-start gap-1.5 p-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
+            >
+              <div className="w-8 h-8 rounded-xl bg-slate-500/15 flex items-center justify-center text-base">
+                🏠
+              </div>
+              <div>
+                <p className="font-bold text-sm text-white">Roofing</p>
+                <p className="text-zinc-500 text-xs leading-snug">Repair & replacement</p>
+              </div>
+            </button>
+
+            {/* Move-In/Out Cleaning */}
+            <button
+              onClick={() => setLocation("/book?service=cleaning")}
+              className="flex flex-col items-start gap-1.5 p-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
+            >
+              <div className="w-8 h-8 rounded-xl bg-violet-500/15 flex items-center justify-center">
+                <Sparkles className="h-4 w-4 text-violet-400" />
+              </div>
+              <div>
+                <p className="font-bold text-sm text-white">Move Cleaning</p>
+                <p className="text-zinc-500 text-xs leading-snug">Move-in/out clean</p>
+              </div>
+            </button>
+
           </div>
         </div>
 
@@ -405,7 +461,7 @@ export default function CustomerHomePage() {
         >
           <SheetHeader className="text-left mb-3 shrink-0">
             <SheetTitle className="text-white font-black text-lg">Get a Quote</SheetTitle>
-            <p className="text-zinc-400 text-xs">All 8 services · Real human review before anything is sent</p>
+            <p className="text-zinc-400 text-xs">All 12 services · Real human review before anything is sent</p>
           </SheetHeader>
           <div className="flex-1 overflow-hidden min-h-0">
             <BookingChatbot

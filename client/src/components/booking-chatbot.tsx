@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { Send, CheckCircle2, ArrowRight, Sparkles, RotateCcw, ChevronRight, AlertCircle, Users, DollarSign } from "lucide-react";
+import { Send, CheckCircle2, ArrowRight, Sparkles, RotateCcw, ChevronRight, AlertCircle, Users, DollarSign, Camera, X, CreditCard, Clock } from "lucide-react";
 import { calculateWindowCleaningQuote } from "@shared/windowCleaningPricing";
 import { calculateTrashValetQuote } from "@shared/trashValetPricing";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
@@ -66,7 +66,7 @@ function getDepositInfo(service: string, zip: string): { required: boolean; amou
 // ─────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────
-type StepType = "choice" | "multiselect" | "text" | "address" | "contact" | "notes" | "deposit_ack" | "package_select";
+type StepType = "choice" | "multiselect" | "text" | "address" | "contact" | "notes" | "deposit_ack" | "package_select" | "photo_upload";
 
 interface Step {
   id: string;
@@ -77,6 +77,7 @@ interface Step {
   show?: (a: Answers) => boolean;
   placeholder?: string;
   optional?: boolean;
+  employeeOnly?: boolean;
 }
 
 export interface Answers {
@@ -127,6 +128,51 @@ export interface Answers {
   contactPhone?: string;
   contactEmail?: string;
   notes?: string;
+  // Snow Removal fields
+  snowDrivewayType?: string;
+  snowAddons?: string[];
+  // Move-In/Out Cleaning fields
+  cleanHomeSize?: string;
+  cleanType?: string;
+  cleanAddons?: string[];
+  // Light Demolition fields
+  demoCrewSize?: string;
+  demoDuration?: string;
+  demoHazards?: string[];
+  demoWasteRemoval?: string;
+  demoScope?: string[];
+  // Handyman fields
+  handymanScale?: string;
+  handymanCategory?: string;
+  // Flooring fields
+  flooringOldRemoval?: string;
+  flooringCurrentType?: string;
+  flooringNewProduct?: string;
+  flooringMaterials?: string;
+  flooringRoomsSqft?: string;
+  flooringHaulAway?: string;
+  flooringTrim?: string;
+  // Painting fields
+  paintingIntExt?: string;
+  paintingType?: string;
+  paintingRoomCount?: string;
+  paintingRoomSize?: string;
+  paintingCeilings?: string;
+  paintingAddons?: string[];
+  paintingPrep?: string;
+  paintingMaterials?: string;
+  paintingPrimer?: string;
+  paintingSurfaceCondition?: string;
+  paintingSpecialtyAreas?: string;
+  // Roofing fields
+  roofingCurrentType?: string;
+  roofingStories?: string;
+  roofingPitch?: string;
+  roofingTearOff?: string;
+  roofingWasteRemoval?: string;
+  roofingMaterials?: string;
+  // Employee photo upload
+  employeePhotos?: string;
 }
 
 export interface MovingQuote {
@@ -250,6 +296,43 @@ function isQuoteOnlyService(a: Answers) {
   return QUOTE_ONLY_SERVICES.includes(svc);
 }
 
+function isSnowService(a: Answers) {
+  return getServiceLabel(a.serviceType || "") === "Snow Removal";
+}
+
+function isCleaningService(a: Answers) {
+  return getServiceLabel(a.serviceType || "") === "Move-In/Out Cleaning";
+}
+
+function isDemoService(a: Answers) {
+  return getServiceLabel(a.serviceType || "") === "Light Demolition";
+}
+
+function isHandymanService(a: Answers) {
+  return getServiceLabel(a.serviceType || "") === "Handyman";
+}
+
+function isFlooringService(a: Answers) {
+  return getServiceLabel(a.serviceType || "") === "Flooring";
+}
+
+function isPaintingService(a: Answers) {
+  return getServiceLabel(a.serviceType || "") === "Painting";
+}
+
+function isRoofingService(a: Answers) {
+  return getServiceLabel(a.serviceType || "") === "Roofing";
+}
+
+function isLawnService(a: Answers) {
+  return getServiceLabel(a.serviceType || "") === "Lawn Care";
+}
+
+function hasStructuredSteps(a: Answers) {
+  return isSnowService(a) || isCleaningService(a) || isDemoService(a) ||
+    isHandymanService(a) || isFlooringService(a) || isPaintingService(a) || isRoofingService(a);
+}
+
 function needsDepositCheck(a: Answers) {
   return isQuoteOnlyService(a);
 }
@@ -271,6 +354,8 @@ const STEPS: Step[] = [
       "🔧 Handyman",
       "❄️ Snow Removal",
       "🌿 Lawn Care",
+      "✨ Move-In/Out Cleaning",
+      "⚒️ Light Demolition",
     ],
   },
 
@@ -537,14 +622,452 @@ const STEPS: Step[] = [
   },
 
   // ── QUOTE-ONLY SERVICE STEPS ──────────────────────────────────────────────
+
+  // Generic scope — only for Lawn Care (all other quote-only services have structured steps)
   {
     id: "jobScope",
     question: "Describe the scope of work:",
     subtext: "Rough size, number of rooms, square footage, or area — whatever you know.",
     type: "text",
-    placeholder: "e.g. 2 bedrooms, approx 800 sq ft of hardwood",
-    show: (a) => isQuoteOnlyService(a),
+    placeholder: "e.g. front and back yard, approx 1/4 acre",
+    show: (a) => isQuoteOnlyService(a) && isLawnService(a),
   },
+
+  // ── SNOW REMOVAL ─────────────────────────────────────────────────────────
+  {
+    id: "snowDrivewayType",
+    question: "What's your driveway situation?",
+    subtext: "Tap the option that best describes it.",
+    type: "choice",
+    options: [
+      "🚗 Single car — short (1 car wide, under 40 ft)",
+      "🚗 Single car — long (1 car wide, 40 ft+)",
+      "🚙 Double car — short (2 cars wide, under 40 ft)",
+      "🚙 Double car — long (2 cars wide, 40 ft+)",
+      "📋 Custom / Commercial — need a quote",
+    ],
+    show: (a) => isSnowService(a),
+  },
+  {
+    id: "snowAddons",
+    question: "Any add-ons?",
+    subtext: "Select all that apply.",
+    type: "multiselect",
+    options: [
+      "🚶 Walkway + front steps",
+      "🚪 Back or side door path",
+      "None — driveway only",
+    ],
+    show: (a) => isSnowService(a) && !(a.snowDrivewayType || "").includes("Custom"),
+  },
+
+  // ── MOVE-IN/OUT CLEANING ──────────────────────────────────────────────────
+  {
+    id: "cleanHomeSize",
+    question: "What's the size of the home?",
+    type: "choice",
+    options: [
+      "🏠 Studio",
+      "🏠 1 Bedroom",
+      "🏠 2 Bedrooms",
+      "🏠 3 Bedrooms",
+      "🏠 4 Bedrooms+",
+    ],
+    show: (a) => isCleaningService(a),
+  },
+  {
+    id: "cleanType",
+    question: "What type of clean do you need?",
+    subtext: "Deep clean includes inside appliances, baseboards, and detailed scrubbing.",
+    type: "choice",
+    options: [
+      "✨ Light Clean — surface-level refresh",
+      "🧹 Deep Clean — thorough top-to-bottom",
+    ],
+    show: (a) => isCleaningService(a),
+  },
+  {
+    id: "cleanAddons",
+    question: "Any add-ons?",
+    subtext: "Select all that apply.",
+    type: "multiselect",
+    options: [
+      "🛋️ Carpet cleaning",
+      "🪟 Extra window cleaning",
+      "🍳 Appliance cleaning (inside oven, fridge, etc.)",
+      "None",
+    ],
+    show: (a) => isCleaningService(a),
+  },
+
+  // ── LIGHT DEMOLITION ──────────────────────────────────────────────────────
+  {
+    id: "demoCrewSize",
+    question: "How big of a crew do you estimate needing?",
+    type: "choice",
+    options: [
+      "👤 1 person",
+      "👥 2 people",
+      "👥👥 3+ people",
+      "❓ Not sure — need advice",
+    ],
+    show: (a) => isDemoService(a),
+  },
+  {
+    id: "demoDuration",
+    question: "How long do you think the job will take?",
+    type: "choice",
+    options: [
+      "⏱️ 2–4 hours",
+      "🕐 Half day (~4–6 hrs)",
+      "📅 Full day (6–8 hrs)",
+      "📆 Multi-day project",
+    ],
+    show: (a) => isDemoService(a),
+  },
+  {
+    id: "demoHazards",
+    question: "Any hazardous conditions we should know about?",
+    subtext: "Hazardous materials affect crew requirements. Select all that apply.",
+    type: "multiselect",
+    options: [
+      "🦠 Mold present",
+      "🐛 Bed bugs",
+      "☢️ Asbestos suspected",
+      "✅ None / Other",
+    ],
+    show: (a) => isDemoService(a),
+  },
+  {
+    id: "demoWasteRemoval",
+    question: "How will demo waste be handled?",
+    type: "choice",
+    options: [
+      "🗑️ Dumpster already on site",
+      "🚛 JC hauls everything away",
+      "❓ Unsure — need guidance",
+    ],
+    show: (a) => isDemoService(a),
+  },
+  {
+    id: "demoScope",
+    question: "What's being demolished?",
+    subtext: "Select all that apply.",
+    type: "multiselect",
+    options: [
+      "🪵 Flooring",
+      "🧱 Walls / Sheetrock",
+      "🏠 Insulation",
+      "🔲 Ceilings",
+      "🏚️ Full room tearout",
+      "Other",
+    ],
+    show: (a) => isDemoService(a),
+  },
+
+  // ── HANDYMAN ──────────────────────────────────────────────────────────────
+  {
+    id: "handymanScale",
+    question: "How big is the project?",
+    subtext: "Pick the closest match.",
+    type: "choice",
+    options: [
+      "🔩 Tiny — about 1 hour",
+      "🔧 Small — half day",
+      "🛠️ Medium — 2–4 hours",
+      "⚙️ Large — half day or more",
+    ],
+    show: (a) => isHandymanService(a),
+  },
+  {
+    id: "handymanCategory",
+    question: "What category best fits the work?",
+    type: "choice",
+    options: [
+      "🚿 Bathroom",
+      "🍳 Kitchen",
+      "🏠 Exterior",
+      "🛋️ Interior (general)",
+      "📋 Custom / Mixed",
+    ],
+    show: (a) => isHandymanService(a),
+  },
+
+  // ── FLOORING ──────────────────────────────────────────────────────────────
+  {
+    id: "flooringOldRemoval",
+    question: "Does the old flooring need to be removed first?",
+    type: "choice",
+    options: [
+      "✅ Yes — remove existing floor",
+      "❌ No — installing over subfloor",
+      "❓ Not sure",
+    ],
+    show: (a) => isFlooringService(a),
+  },
+  {
+    id: "flooringCurrentType",
+    question: "What's the current floor type?",
+    type: "choice",
+    options: [
+      "🪵 Hardwood",
+      "🔲 Laminate / Vinyl",
+      "⬛ Tile / Stone",
+      "🟫 Carpet",
+      "Subfloor / Bare",
+      "Other",
+    ],
+    show: (a) => isFlooringService(a),
+  },
+  {
+    id: "flooringNewProduct",
+    question: "What type of new flooring are you installing?",
+    type: "choice",
+    options: [
+      "🪵 Hardwood (solid or engineered)",
+      "🔲 Luxury vinyl plank (LVP)",
+      "⬛ Tile / Stone",
+      "🟫 Carpet",
+      "Other / Undecided",
+    ],
+    show: (a) => isFlooringService(a),
+  },
+  {
+    id: "flooringMaterials",
+    question: "Who's supplying the materials?",
+    type: "choice",
+    options: [
+      "📦 I'm supplying the materials",
+      "🏪 JC provides materials",
+      "💬 Need advice on materials",
+    ],
+    show: (a) => isFlooringService(a),
+  },
+  {
+    id: "flooringRoomsSqft",
+    question: "How many rooms and what's the approximate square footage?",
+    subtext: "Give us your best estimate — exact measurements aren't required yet.",
+    type: "text",
+    placeholder: "e.g. 2 rooms, ~400 sq ft",
+    show: (a) => isFlooringService(a),
+  },
+  {
+    id: "flooringHaulAway",
+    question: "Should we haul away the old flooring material?",
+    type: "choice",
+    options: [
+      "✅ Yes — haul away old material",
+      "❌ No — I'll dispose of it",
+    ],
+    show: (a) => isFlooringService(a) && a.flooringOldRemoval === "✅ Yes — remove existing floor",
+  },
+  {
+    id: "flooringTrim",
+    question: "What about trim and baseboards?",
+    type: "choice",
+    options: [
+      "✅ Install new trim / baseboards",
+      "🔄 Reinstall existing trim",
+      "❌ No trim work needed",
+    ],
+    show: (a) => isFlooringService(a),
+  },
+
+  // ── PAINTING ──────────────────────────────────────────────────────────────
+  {
+    id: "paintingIntExt",
+    question: "Interior or exterior painting?",
+    type: "choice",
+    options: [
+      "🏠 Interior",
+      "🏡 Exterior",
+      "🏘️ Both interior & exterior",
+    ],
+    show: (a) => isPaintingService(a),
+  },
+  {
+    id: "paintingType",
+    question: "Painting or staining?",
+    type: "choice",
+    options: [
+      "🎨 Painting",
+      "🪵 Staining",
+      "Both",
+    ],
+    show: (a) => isPaintingService(a),
+  },
+  {
+    id: "paintingRoomCount",
+    question: "How many rooms or areas need painting?",
+    type: "choice",
+    options: [
+      "1 room / area",
+      "2–3 rooms",
+      "4–5 rooms",
+      "6+ rooms / whole house",
+    ],
+    show: (a) => isPaintingService(a) && a.paintingIntExt !== "🏡 Exterior",
+  },
+  {
+    id: "paintingRoomSize",
+    question: "What's the typical room size?",
+    type: "choice",
+    options: [
+      "🔹 Small (under 150 sq ft)",
+      "🔷 Medium (150–300 sq ft)",
+      "🔶 Large (300–500 sq ft)",
+      "🟠 Extra large / open concept (500+ sq ft)",
+    ],
+    show: (a) => isPaintingService(a) && a.paintingIntExt !== "🏡 Exterior",
+  },
+  {
+    id: "paintingCeilings",
+    question: "Are ceilings included?",
+    type: "choice",
+    options: [
+      "✅ Yes — paint the ceilings too",
+      "❌ No — walls only",
+    ],
+    show: (a) => isPaintingService(a) && a.paintingIntExt !== "🏡 Exterior",
+  },
+  {
+    id: "paintingAddons",
+    question: "Any add-ons?",
+    subtext: "Select all that apply.",
+    type: "multiselect",
+    options: [
+      "🚪 Doors & trim",
+      "🪟 Window frames",
+      "None",
+    ],
+    show: (a) => isPaintingService(a),
+  },
+  {
+    id: "paintingPrep",
+    question: "How much prep work is needed?",
+    type: "choice",
+    options: [
+      "✅ Minimal — walls are in great shape",
+      "🔧 Some — minor patching / sanding needed",
+      "⚒️ Heavy — significant repairs or stripping",
+    ],
+    show: (a) => isPaintingService(a),
+  },
+  {
+    id: "paintingMaterials",
+    question: "Who's supplying the paint?",
+    type: "choice",
+    options: [
+      "🪣 I'm providing the paint",
+      "🏪 JC provides paint",
+      "💬 Need help choosing",
+    ],
+    show: (a) => isPaintingService(a),
+  },
+  {
+    id: "paintingPrimer",
+    question: "Will a primer coat be needed?",
+    type: "choice",
+    options: [
+      "✅ Yes — prime before painting",
+      "❌ No primer needed",
+      "❓ Not sure",
+    ],
+    show: (a) => isPaintingService(a),
+  },
+  {
+    id: "paintingSurfaceCondition",
+    question: "What's the surface condition?",
+    type: "choice",
+    options: [
+      "✅ Good — minimal imperfections",
+      "⚠️ Fair — some cracks or peeling",
+      "🔴 Poor — significant damage or old paint",
+    ],
+    show: (a) => isPaintingService(a),
+  },
+  {
+    id: "paintingSpecialtyAreas",
+    question: "Any high or vaulted ceilings?",
+    type: "choice",
+    options: [
+      "✅ Yes — high or vaulted ceilings",
+      "❌ No — standard ceiling height",
+    ],
+    show: (a) => isPaintingService(a),
+  },
+
+  // ── ROOFING ───────────────────────────────────────────────────────────────
+  {
+    id: "roofingCurrentType",
+    question: "What's the current roof type?",
+    type: "choice",
+    options: [
+      "🔩 Metal roof",
+      "🏠 Asphalt shingles",
+      "🏚️ Other / Unknown",
+    ],
+    show: (a) => isRoofingService(a),
+  },
+  {
+    id: "roofingStories",
+    question: "How many stories is the building?",
+    type: "choice",
+    options: [
+      "🏠 1 story",
+      "🏘️ 2 stories",
+      "🏗️ 2+ stories",
+    ],
+    show: (a) => isRoofingService(a),
+  },
+  {
+    id: "roofingPitch",
+    question: "What's the roof pitch (steepness)?",
+    subtext: "If unsure, describe what you see.",
+    type: "choice",
+    options: [
+      "🔲 Low / flat pitch",
+      "📐 Medium pitch (standard residential)",
+      "📐📐 Steep pitch",
+      "❓ Not sure",
+    ],
+    show: (a) => isRoofingService(a),
+  },
+  {
+    id: "roofingTearOff",
+    question: "Is this a full replacement or repair?",
+    type: "choice",
+    options: [
+      "🔄 Full tear-off & replacement",
+      "🔧 Repair / partial replacement",
+      "❓ Not sure — need an assessment",
+    ],
+    show: (a) => isRoofingService(a),
+  },
+  {
+    id: "roofingWasteRemoval",
+    question: "How should old roofing materials be handled?",
+    type: "choice",
+    options: [
+      "🚛 JC hauls everything away",
+      "🗑️ Dumpster already on site",
+      "❓ Unsure",
+    ],
+    show: (a) => isRoofingService(a) && a.roofingTearOff === "🔄 Full tear-off & replacement",
+  },
+  {
+    id: "roofingMaterials",
+    question: "Who's supplying roofing materials?",
+    type: "choice",
+    options: [
+      "📦 I'm supplying materials",
+      "🏪 JC provides materials",
+      "💬 Need advice on materials",
+    ],
+    show: (a) => isRoofingService(a),
+  },
+
+  // ── SHARED QUOTE-ONLY STEPS ───────────────────────────────────────────────
   {
     id: "jobLocation",
     question: "What's the job address?",
@@ -600,6 +1123,16 @@ const STEPS: Step[] = [
       const svc = getServiceLabel(a.serviceType || "");
       return svc === "Moving" || svc === "Junk Removal";
     },
+  },
+
+  // ── PHOTO UPLOAD (employee mode only) ────────────────────────────────────
+  {
+    id: "employeePhotos",
+    question: "Add site photos (optional)",
+    subtext: "Upload before/during photos so Darrell can review the job scope. Tap to skip if not needed.",
+    type: "photo_upload",
+    optional: true,
+    employeeOnly: true,
   },
 
   // ── CONTACT + NOTES (all services) ───────────────────────────────────────
@@ -1288,12 +1821,21 @@ const SERVICE_SLUG_MAP: Record<string, string> = {
   residential: "📦 Moving (local or long-distance)",
 };
 
-export function BookingChatbot({ onClose, embedded = false, showCloseButton, className, initialService }: { onClose?: () => void; embedded?: boolean; showCloseButton?: boolean; className?: string; initialService?: string }) {
+interface ChatPhoto {
+  id: string;
+  dataUrl: string;
+  name: string;
+}
+
+export function BookingChatbot({ onClose, onSuccess, embedded = false, showCloseButton, className, initialService, variant = "customer" }: { onClose?: () => void; onSuccess?: () => void; embedded?: boolean; showCloseButton?: boolean; className?: string; initialService?: string; variant?: "customer" | "employee" }) {
+  const isEmployee = variant === "employee";
   const showClose = showCloseButton ?? !embedded;
   const { toast } = useToast();
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
 
   // Fetch live pricing from DB so the chatbot reflects admin calibration changes in real time
   const { data: pricingConfig } = useQuery<{ ratePerMoverHour: number; jc222Price: number }>({
@@ -1303,6 +1845,7 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
   const liveRate      = pricingConfig?.ratePerMoverHour ?? 85;
   const liveJc222     = pricingConfig?.jc222Price       ?? 222;
 
+  const [photos, setPhotos] = useState<ChatPhoto[]>([]);
   const [answers, setAnswers] = useState<Answers>({});
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -1376,8 +1919,11 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
       pendingQuote, quoteVisible, crewPackages, selectedPackageObj, submitted]);
 
   const visibleSteps = useMemo(
-    () => STEPS.filter(s => !s.show || s.show(answers)),
-    [answers]
+    () => STEPS.filter(s => {
+      if (s.employeeOnly && !isEmployee) return false;
+      return !s.show || s.show(answers);
+    }),
+    [answers, isEmployee]
   );
 
   const currentStep = visibleSteps[stepIdx];
@@ -1503,7 +2049,10 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
       }
     }
 
-    const nextVisibleSteps = STEPS.filter(s => !s.show || s.show(newAnswers));
+    const nextVisibleSteps = STEPS.filter(s => {
+      if (s.employeeOnly && !isEmployee) return false;
+      return !s.show || s.show(newAnswers);
+    });
     const nextIdx = stepIdx + 1;
 
     if (nextIdx < nextVisibleSteps.length) {
@@ -1618,6 +2167,47 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
     advanceStep("selectedPackage", selectedPackageObj.id);
   }
 
+  function handlePhotoUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = event.target.files;
+    if (!files) return;
+
+    if (photos.length + files.length > 5) {
+      toast({
+        title: "Too many photos",
+        description: "You can upload up to 5 photos.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    Array.from(files).forEach((file) => {
+      if (file.size > 10 * 1024 * 1024) {
+        toast({
+          title: "File too large",
+          description: `${file.name} is larger than 10MB.`,
+          variant: "destructive",
+        });
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target?.result as string;
+        setPhotos(prev => [...prev, { id: crypto.randomUUID(), dataUrl, name: file.name }]);
+      };
+      reader.readAsDataURL(file);
+    });
+    event.target.value = "";
+  }
+
+  function removePhoto(id: string) {
+    setPhotos(prev => prev.filter(p => p.id !== id));
+  }
+
+  function handlePhotoStepContinue() {
+    const summary = photos.length > 0 ? `${photos.length} photo${photos.length > 1 ? "s" : ""} added` : "(no photos)";
+    advanceStep("employeePhotos", summary);
+  }
+
   const [depositInvoiceSent, setDepositInvoiceSent] = useState(false);
   const [depositInvoiceUrl, setDepositInvoiceUrl] = useState<string | null>(null);
 
@@ -1629,6 +2219,73 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
       const isQuoteOnly = QUOTE_ONLY_SERVICES.includes(svc);
       const dep = depositInfo;
       const zip = answers.jobLocation || answers.depositZip || answers.junkLocation || answers.windowLocation || answers.fromZip || "";
+
+      if (isEmployee) {
+        const nameParts = (answers.contactName || "").trim().split(/\s+/);
+        const firstName = nameParts[0] || "";
+        const lastName = nameParts.slice(1).join(" ") || "";
+        const photoPayload = photos.length > 0 ? photos.map(p => ({
+          id: p.id,
+          url: p.dataUrl,
+          type: "before" as const,
+          timestamp: new Date().toISOString(),
+        })) : undefined;
+
+        const scopeParts: string[] = [];
+        if (answers.snowDrivewayType) scopeParts.push(`Driveway: ${answers.snowDrivewayType}`);
+        if (answers.snowAddons?.length) scopeParts.push(`Add-ons: ${answers.snowAddons.join(", ")}`);
+        if (answers.cleanHomeSize) scopeParts.push(`Home size: ${answers.cleanHomeSize}`);
+        if (answers.cleanType) scopeParts.push(`Clean type: ${answers.cleanType}`);
+        if (answers.cleanAddons?.length) scopeParts.push(`Add-ons: ${answers.cleanAddons.join(", ")}`);
+        if (answers.demoCrewSize) scopeParts.push(`Crew: ${answers.demoCrewSize}`);
+        if (answers.demoDuration) scopeParts.push(`Duration: ${answers.demoDuration}`);
+        if (answers.demoHazards?.length) scopeParts.push(`Hazards: ${answers.demoHazards.join(", ")}`);
+        if (answers.demoWasteRemoval) scopeParts.push(`Waste: ${answers.demoWasteRemoval}`);
+        if (answers.demoScope?.length) scopeParts.push(`Scope: ${answers.demoScope.join(", ")}`);
+        if (answers.handymanScale) scopeParts.push(`Scale: ${answers.handymanScale}`);
+        if (answers.handymanCategory) scopeParts.push(`Category: ${answers.handymanCategory}`);
+        if (answers.flooringOldRemoval) scopeParts.push(`Old floor removal: ${answers.flooringOldRemoval}`);
+        if (answers.flooringHaulAway) scopeParts.push(`Haul away: ${answers.flooringHaulAway}`);
+        if (answers.flooringCurrentType) scopeParts.push(`Current floor: ${answers.flooringCurrentType}`);
+        if (answers.flooringNewProduct) scopeParts.push(`New floor: ${answers.flooringNewProduct}`);
+        if (answers.flooringMaterials) scopeParts.push(`Materials: ${answers.flooringMaterials}`);
+        if (answers.flooringRoomsSqft) scopeParts.push(`Rooms/sqft: ${answers.flooringRoomsSqft}`);
+        if (answers.flooringTrim) scopeParts.push(`Trim: ${answers.flooringTrim}`);
+        if (answers.paintingIntExt) scopeParts.push(`Painting area: ${answers.paintingIntExt}`);
+        if (answers.paintingType) scopeParts.push(`Painting type: ${answers.paintingType}`);
+        if (answers.paintingRoomCount) scopeParts.push(`Room count: ${answers.paintingRoomCount}`);
+        if (answers.paintingRoomSize) scopeParts.push(`Room size: ${answers.paintingRoomSize}`);
+        if (answers.paintingCeilings) scopeParts.push(`Ceilings: ${answers.paintingCeilings}`);
+        if (answers.paintingAddons?.length) scopeParts.push(`Painting add-ons: ${answers.paintingAddons.join(", ")}`);
+        if (answers.paintingSurfaceCondition) scopeParts.push(`Surface condition: ${answers.paintingSurfaceCondition}`);
+        if (answers.paintingPrep) scopeParts.push(`Prep work: ${answers.paintingPrep}`);
+        if (answers.paintingMaterials) scopeParts.push(`Paint materials: ${answers.paintingMaterials}`);
+        if (answers.paintingPrimer) scopeParts.push(`Primer: ${answers.paintingPrimer}`);
+        if (answers.paintingSpecialtyAreas) scopeParts.push(`Specialty areas: ${answers.paintingSpecialtyAreas}`);
+        if (answers.roofingCurrentType) scopeParts.push(`Roof type: ${answers.roofingCurrentType}`);
+        if (answers.roofingStories) scopeParts.push(`Stories: ${answers.roofingStories}`);
+        if (answers.roofingPitch) scopeParts.push(`Pitch: ${answers.roofingPitch}`);
+        if (answers.roofingTearOff) scopeParts.push(`Roof work: ${answers.roofingTearOff}`);
+        if (answers.roofingWasteRemoval) scopeParts.push(`Waste removal: ${answers.roofingWasteRemoval}`);
+        if (answers.roofingMaterials) scopeParts.push(`Roofing materials: ${answers.roofingMaterials}`);
+        if (answers.jobScope) scopeParts.push(answers.jobScope);
+
+        const payload = {
+          firstName,
+          lastName,
+          email: answers.contactEmail || "",
+          phone: answers.contactPhone || "",
+          serviceType: svc,
+          fromAddress: answers.jobLocation || answers.fromZip || answers.junkLocation || "",
+          toAddress: answers.toZip || "",
+          moveDate: answers.moveDate || "",
+          details: [...scopeParts, answers.notes || ""].filter(Boolean).join(" | "),
+          ...(photoPayload ? { photos: photoPayload } : {}),
+        };
+
+        const result = await apiRequest("POST", "/api/leads/employee", payload);
+        return { leadId: "", message: "Lead submitted", depositInvoiceSent: false, depositInvoiceUrl: null };
+      }
 
       const result = await apiRequest("POST", "/api/chatbot-quote", {
         answers,
@@ -1650,7 +2307,13 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
       setSubmitted(true);
       const svc = getServiceLabel(answers.serviceType || "");
       const isQuoteOnly = QUOTE_ONLY_SERVICES.includes(svc);
-      if (isQuoteOnly) {
+      if (isEmployee) {
+        queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/leads/my-jobs"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/leads/available"] });
+        botSay("✅ Lead added! The job has been saved to the system. You'll earn rewards when it's confirmed and completed.");
+        onSuccess?.();
+      } else if (isQuoteOnly) {
         botSay("✅ Your quote request has been submitted! Darrell will reach out to schedule your estimate. Typically within 2–4 hours during business hours.");
       } else {
         botSay("✅ Your quote request has been submitted! Darrell will review it and send you a finalized quote. Typically within 2–4 hours during business hours.");
@@ -1692,6 +2355,7 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
     setSelectedPackageObj(null);
     setDepositInfo(null);
     setDepositChecked(false);
+    setPhotos([]);
   }
 
   const isDone = stepIdx >= visibleSteps.length;
@@ -1699,8 +2363,9 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
 
   const svc = getServiceLabel(answers.serviceType || "");
   const isQuoteOnly = QUOTE_ONLY_SERVICES.includes(svc);
+  const DEPOSIT_AMOUNT = depositInfo?.amount ?? 100;
 
-  const phase = submitted ? "submitted" : (quoteVisible && pendingQuote ? "deposit" : null);
+  const phase = submitted ? "submitted" : (quoteVisible && pendingQuote ? (isEmployee ? "employee_submit" : "deposit") : null);
 
   return (
     <div className={`flex flex-col h-full min-h-[500px]${className ? " " + className : ""}`}>
@@ -1897,6 +2562,30 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
                     {submitMutation.isPending ? "Submitting…" : "Skip deposit — submit for review only"}
                   </Button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── PHASE: Employee Submit ── */}
+        {phase === "employee_submit" && pendingQuote && (
+          <div className="mx-1 mt-2">
+            <div className="rounded-2xl border border-orange-500/30 bg-gradient-to-br from-orange-900/20 to-slate-900/60 overflow-hidden">
+              <div className="px-4 pt-4 pb-4 space-y-4">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-orange-400" />
+                  <span className="text-sm font-bold text-orange-300 uppercase tracking-wide">Ready to Submit Lead</span>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Review the details above and tap below to add this lead to the system. You'll earn rewards when the job is confirmed and completed.
+                </p>
+                <Button
+                  onClick={() => submitMutation.mutate(false)}
+                  disabled={submitMutation.isPending}
+                  className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-400 hover:to-orange-500 text-white font-bold py-3 rounded-xl text-sm"
+                >
+                  {submitMutation.isPending ? "Submitting…" : "Submit Job Request"}
+                </Button>
               </div>
             </div>
           </div>
@@ -2157,6 +2846,57 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
               >
                 Acknowledge & Continue <ChevronRight className="h-3.5 w-3.5 ml-1" />
               </Button>
+            </div>
+          )}
+
+          {/* PHOTO UPLOAD (employee only) */}
+          {currentStep.type === "photo_upload" && (
+            <div className="space-y-3">
+              {photos.length > 0 && (
+                <div className="grid grid-cols-3 gap-2">
+                  {photos.map(photo => (
+                    <div key={photo.id} className="relative aspect-square rounded-xl overflow-hidden bg-slate-800 ring-2 ring-slate-700">
+                      <img src={photo.dataUrl} alt={photo.name} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => removePhoto(photo.id)}
+                        className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full p-0.5 shadow-lg"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {photos.length < 5 && (
+                <label className="cursor-pointer block">
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handlePhotoUpload}
+                    className="hidden"
+                  />
+                  <div className="flex items-center justify-center gap-2 p-3 border-2 border-dashed border-slate-600 hover:border-teal-500/50 rounded-xl transition-colors">
+                    <Camera className="h-5 w-5 text-slate-400" />
+                    <span className="text-sm text-slate-400">
+                      {photos.length === 0 ? "Tap to add photos" : `Add more (${5 - photos.length} remaining)`}
+                    </span>
+                  </div>
+                </label>
+              )}
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePhotoStepContinue}
+                  className="border-slate-600 text-slate-400 hover:bg-slate-800 flex-1"
+                >
+                  {photos.length === 0 ? "Skip — no photos" : "Continue"}
+                  <ChevronRight className="h-3.5 w-3.5 ml-1" />
+                </Button>
+              </div>
             </div>
           )}
 

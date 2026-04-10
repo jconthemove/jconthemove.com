@@ -29,7 +29,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { getStatusColors } from "@/lib/job-status";
-import QuoteForm from "@/components/QuoteForm";
+import { BookingChatbot } from "@/components/booking-chatbot";
 import type { Lead, User } from "@shared/schema";
 
 // ─────────────────────────────────────────────────
@@ -1109,14 +1109,17 @@ export default function TeamHub() {
 
             {/* ── ADD LEAD TAB ── */}
             <TabsContent value="add">
-              <QuoteForm
-                variant="employee"
-                onSuccess={() => {
-                  invalidateLeads();
-                  setActiveTab("leads");
-                  toast({ title: "✅ Lead added!", description: "Lead has been saved." });
-                }}
-              />
+              <div className="h-[600px]">
+                <BookingChatbot
+                  variant="employee"
+                  embedded={true}
+                  onSuccess={() => {
+                    invalidateLeads();
+                    setActiveTab("leads");
+                    toast({ title: "✅ Lead added!", description: "Lead has been saved." });
+                  }}
+                />
+              </div>
             </TabsContent>
 
             {/* ── SCHEDULE TAB ── */}
