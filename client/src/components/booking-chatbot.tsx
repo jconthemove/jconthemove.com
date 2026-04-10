@@ -77,7 +77,7 @@ interface Step {
   optional?: boolean;
 }
 
-interface Answers {
+export interface Answers {
   serviceType?: string;
   serviceCategory?: "priceable" | "quote_only";
   // Moving fields
@@ -127,7 +127,7 @@ interface Answers {
   notes?: string;
 }
 
-interface MovingQuote {
+export interface MovingQuote {
   type: "moving";
   tier: "tiny" | "small" | "medium" | "large";
   crew: number;
@@ -600,7 +600,7 @@ const STEPS: Step[] = [
 // ─────────────────────────────────────────────
 // Moving Quote Engine
 // ─────────────────────────────────────────────
-function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatPrice = 222): MovingQuote {
+export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatPrice = 222): MovingQuote {
   const RATE = ratePerMoverHour;
   const round5 = (n: number) => Math.ceil(n / 5) * 5;
 

@@ -23,7 +23,8 @@ import {
   ChevronRight,
   Home,
   Tag,
-  CheckCheck
+  CheckCheck,
+  SlidersHorizontal
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "wouter";
@@ -458,6 +459,19 @@ export default function AdminDashboardFull() {
                 <div>
                   <p className="font-medium">System Health Checklist</p>
                   <p className="text-sm text-muted-foreground">Verify emails, rewards, spins & more</p>
+                </div>
+              </div>
+              <ChevronRight className="h-5 w-5 text-muted-foreground" />
+            </div>
+          </Link>
+
+          <Link href="/admin/pricing-calibration">
+            <div className="flex items-center justify-between p-4 hover:bg-muted/50 transition-colors cursor-pointer border-b last:border-0">
+              <div className="flex items-center gap-3">
+                <SlidersHorizontal className="h-5 w-5 text-orange-500" />
+                <div>
+                  <p className="font-medium">Pricing Calibration</p>
+                  <p className="text-sm text-muted-foreground">Test engine against 10 real-world scenarios</p>
                 </div>
               </div>
               <ChevronRight className="h-5 w-5 text-muted-foreground" />
