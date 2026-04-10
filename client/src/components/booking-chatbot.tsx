@@ -166,7 +166,7 @@ interface QuoteOnlyResult {
 
 type QuoteResult = MovingQuote | TrashValetQuoteResult | WindowQuoteResult | QuoteOnlyResult;
 
-interface CrewPackage {
+export interface CrewPackage {
   id: string;
   label: string;
   desc: string;
@@ -845,7 +845,7 @@ function computeQuoteForAnswers(a: Answers, ratePerMoverHour = 85, jc222FlatPric
 // ─────────────────────────────────────────────
 // Build Crew Packages for priceable services
 // ─────────────────────────────────────────────
-function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMoverHour = 85, jc222FlatPrice = 222): CrewPackage[] {
+export function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMoverHour = 85, jc222FlatPrice = 222): CrewPackage[] {
   if (!q) return [];
 
   if (q.type === "moving") {

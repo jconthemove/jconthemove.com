@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ThumbsUp, ThumbsDown, ChevronRight, ChevronLeft, BarChart3, CheckCircle2, AlertTriangle } from "lucide-react";
-import { computeMovingQuote, type Answers, type MovingQuote } from "@/components/booking-chatbot";
+import { computeMovingQuote, buildCrewPackages, type Answers, type MovingQuote, type CrewPackage } from "@/components/booking-chatbot";
 
 // ─────────────────────────────────────────────
 // Scenario definitions
@@ -542,6 +542,41 @@ export default function PricingCalibrationPage() {
               </div>
             </div>
           </div>
+
+          {/* Crew Package Options */}
+          {(() => {
+            const pkgs: CrewPackage[] = buildCrewPackages(current.answers, engineOutput, liveRate, liveJc222);
+            if (pkgs.length === 0) return null;
+            return (
+              <div className="space-y-1.5">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Package Options Engine Would Offer
+                </p>
+                <div className="space-y-1.5">
+                  {pkgs.map((pkg) => (
+                    <div key={pkg.id} className="flex items-center justify-between rounded-lg border bg-muted/20 px-3 py-2 gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium truncate">{pkg.label}</p>
+                        <p className="text-xs text-muted-foreground truncate">{pkg.desc}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {pkg.tag && (
+                          <Badge variant="secondary" className="text-xs py-0 h-4">
+                            {pkg.tag}
+                          </Badge>
+                        )}
+                        <span className="text-xs font-semibold text-foreground">
+                          {pkg.minPrice === pkg.maxPrice
+                            ? fmtPrice(pkg.minPrice)
+                            : `${fmtPrice(pkg.minPrice)}–${fmtPrice(pkg.maxPrice)}`}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Notes */}
           <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground leading-relaxed">
