@@ -19,7 +19,8 @@ import { PlacesAutocomplete } from "@/components/places-autocomplete";
 const PRICEABLE_SERVICES = ["Moving", "Junk Removal", "Trash Valet", "Window Cleaning"];
 const QUOTE_ONLY_SERVICES = ["Painting", "Flooring", "Roofing", "Handyman", "Lawn Care", "Snow Removal", "Move-In/Out Cleaning", "Light Demolition"];
 const IRONWOOD_ZIP = "49938";
-const TRAVEL_CHARGE = 50; // added to tiny/small jobs outside Ironwood
+const TRAVEL_CHARGE_PER_TIER = 50;  // $50 per 25-mile band from Ironwood
+const TRAVEL_TIER_MILES      = 25;  // miles per tier
 
 function isIronwoodZip(zip: string): boolean {
   const clean = zip.trim();
@@ -621,7 +622,7 @@ const STEPS: Step[] = [
 // ─────────────────────────────────────────────
 // Moving Quote Engine
 // ─────────────────────────────────────────────
-export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatPrice = 222): MovingQuote {
+export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatPrice = 222, distanceMiles = 0): MovingQuote {
   const RATE = ratePerMoverHour;
   const round5 = (n: number) => Math.ceil(n / 5) * 5;
 
@@ -767,10 +768,10 @@ export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatP
   const rawMin = round5(crew * minHrs * RATE) + specialSurcharge;
   const rawMax = round5(crew * maxHrs * RATE) + specialSurcharge;
 
-  // ── Travel charge: tiny/small jobs outside Ironwood add a flat travel fee ──
-  const pickupAddr = a.fromZip || "";
-  const isLocal = !pickupAddr || isIronwoodZip(pickupAddr);
-  const travelCharge = (tier === "tiny" || tier === "small") && !isLocal ? TRAVEL_CHARGE : 0;
+  // ── Travel charge: $50 per 25-mile band from Ironwood (tiny/small only) ───
+  // distanceMiles=0 means unknown/local → no charge applied
+  const travelTiers = distanceMiles > 0 ? Math.floor(distanceMiles / TRAVEL_TIER_MILES) : 0;
+  const travelCharge = (tier === "tiny" || tier === "small") ? travelTiers * TRAVEL_CHARGE_PER_TIER : 0;
 
   // ── JC222 promo: Small-tier 2-crew → $340 becomes $222 flat ───────────────
   const promoCodeRaw = (a.promoCode || "").toUpperCase().trim();
@@ -815,7 +816,7 @@ export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatP
 // ─────────────────────────────────────────────
 // Junk Removal Quote Engine
 // ─────────────────────────────────────────────
-function computeJunkQuote(a: Answers, ratePerMoverHour = 85): JunkQuote {
+function computeJunkQuote(a: Answers, ratePerMoverHour = 85, distanceMiles = 0): JunkQuote {
   const RATE = ratePerMoverHour;
   const r5 = (n: number) => Math.ceil(n / 5) * 5;
 
@@ -860,10 +861,9 @@ function computeJunkQuote(a: Answers, ratePerMoverHour = 85): JunkQuote {
   const rawMin = r5(crew * minHrs * RATE) + specialSurcharge;
   const rawMax = r5(crew * maxHrs * RATE) + specialSurcharge;
 
-  // ── Travel charge: tiny/small jobs outside Ironwood ───────────────────────
-  const pickupAddr = a.junkLocation || "";
-  const isLocal = !pickupAddr || isIronwoodZip(pickupAddr);
-  const travelCharge = (tier === "tiny" || tier === "small") && !isLocal ? TRAVEL_CHARGE : 0;
+  // ── Travel charge: $50 per 25-mile band from Ironwood (tiny/small only) ───
+  const travelTiers = distanceMiles > 0 ? Math.floor(distanceMiles / TRAVEL_TIER_MILES) : 0;
+  const travelCharge = (tier === "tiny" || tier === "small") ? travelTiers * TRAVEL_CHARGE_PER_TIER : 0;
 
   // ── JCMOVES promo: 10% off or $20 off, whichever is greater ───────────────
   const promoCodeRaw = (a.promoCode || "").toUpperCase().trim();
@@ -888,7 +888,7 @@ function computeJunkQuote(a: Answers, ratePerMoverHour = 85): JunkQuote {
 // ─────────────────────────────────────────────
 // Compute Quote for Any Service
 // ─────────────────────────────────────────────
-function computeQuoteForAnswers(a: Answers, ratePerMoverHour = 85, jc222FlatPrice = 222): QuoteResult | null {
+function computeQuoteForAnswers(a: Answers, ratePerMoverHour = 85, jc222FlatPrice = 222, distanceMiles = 0): QuoteResult | null {
   const svc = getServiceLabel(a.serviceType || "");
 
   if (QUOTE_ONLY_SERVICES.includes(svc)) {
@@ -907,7 +907,7 @@ function computeQuoteForAnswers(a: Answers, ratePerMoverHour = 85, jc222FlatPric
   }
 
   if (svc === "Junk Removal") {
-    return computeJunkQuote(a, ratePerMoverHour);
+    return computeJunkQuote(a, ratePerMoverHour, distanceMiles);
   }
 
   if (svc === "Trash Valet") {
@@ -950,7 +950,7 @@ function computeQuoteForAnswers(a: Answers, ratePerMoverHour = 85, jc222FlatPric
   }
 
   // Moving or Junk
-  return computeMovingQuote(a, ratePerMoverHour, jc222FlatPrice);
+  return computeMovingQuote(a, ratePerMoverHour, jc222FlatPrice, distanceMiles);
 }
 
 // ─────────────────────────────────────────────
@@ -1320,6 +1320,7 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
   const [quoteVisible, setQuoteVisible] = useState(false);
   const [pendingQuote, setPendingQuote] = useState<QuoteResult | null>(null);
   const [crewPackages, setCrewPackages] = useState<CrewPackage[]>([]);
+  const [distanceMiles, setDistanceMiles] = useState(0); // fetched async when address is entered
   const [selectedPackageObj, setSelectedPackageObj] = useState<CrewPackage | null>(null);
   const [depositInfo, setDepositInfo] = useState<{ required: boolean; amount: number; termsHtml: string } | null>(null);
   const [depositChecked, setDepositChecked] = useState(false);
@@ -1419,7 +1420,7 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
     if (!currentStep) return;
     if (currentStep.type !== "package_select") return;
     if (crewPackages.length > 0) return;
-    const q = computeQuoteForAnswers(answers, liveRate, liveJc222);
+    const q = computeQuoteForAnswers(answers, liveRate, liveJc222, distanceMiles);
     if (!q) return;
     setPendingQuote(q);
     const pkgs = buildCrewPackages(answers, q, liveRate, liveJc222);
@@ -1469,11 +1470,27 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
       userSay(shortAnswer(stepId, value));
     }
 
+    // Async distance fetch: fires when address is captured, resolves before package step
+    if (stepId === "fromZip" || stepId === "junkLocation") {
+      const addr = (value as string || "").trim();
+      if (addr.length >= 5) {
+        fetch(`/api/utility/estimate-drive-miles?address=${encodeURIComponent(addr)}`)
+          .then(r => r.json())
+          .then((data: any) => {
+            const miles = typeof data.miles === "number" ? data.miles : 0;
+            setDistanceMiles(miles);
+          })
+          .catch(() => setDistanceMiles(0));
+      } else {
+        setDistanceMiles(0);
+      }
+    }
+
     // Special promo code responses
     if (stepId === "promoCode") {
       const code = ((Array.isArray(value) ? value[0] : value) as string || "").toUpperCase().trim();
       if (code === "JCMOVES") {
-        const q = computeQuoteForAnswers(newAnswers, liveRate, liveJc222);
+        const q = computeQuoteForAnswers(newAnswers, liveRate, liveJc222, distanceMiles);
         const disc = (q as any)?.jcmovesDiscount;
         setTimeout(() => botSay(disc
           ? `✅ JCMOVES code applied! You're saving $${disc} — we appreciate your support.`
@@ -1501,7 +1518,7 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
 
       // When we reach the package select step, compute packages
       if (nextStep.id === "selectedPackage") {
-        const q = computeQuoteForAnswers(newAnswers, liveRate, liveJc222);
+        const q = computeQuoteForAnswers(newAnswers, liveRate, liveJc222, distanceMiles);
         setPendingQuote(q);
         const pkgs = buildCrewPackages(newAnswers, q, liveRate, liveJc222);
         setCrewPackages(pkgs);
@@ -1520,7 +1537,7 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
     } else {
       // All done — compute final quote & show
       setTimeout(() => {
-        const q = computeQuoteForAnswers(newAnswers, liveRate, liveJc222);
+        const q = computeQuoteForAnswers(newAnswers, liveRate, liveJc222, distanceMiles);
         setPendingQuote(q);
 
         const svc = getServiceLabel(newAnswers.serviceType || "");
