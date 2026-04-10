@@ -203,7 +203,7 @@ function getServiceLabel(rawType: string): string {
 
 function isMovingService(a: Answers) {
   const s = a.serviceType || "";
-  return s.includes("Move") || s.includes("Loading") || s.includes("Unloading") || s.includes("Packing Only");
+  return s.includes("Moving") || s.includes("Move") || s.includes("Loading") || s.includes("Unloading") || s.includes("Packing Only");
 }
 
 function isJunkService(a: Answers) {
@@ -1165,10 +1165,15 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
     if (!mapped) return;
     const newAnswers: Answers = { serviceType: mapped };
     setAnswers(newAnswers);
+    // Reset any stale state from previous sessions
+    setCrewPackages([]);
+    setSelectedPackageObj(null);
+    setPendingQuote(null);
+    setQuoteVisible(false);
     const nextSteps = STEPS.filter(s => !s.show || s.show(newAnswers));
     const nextStep = nextSteps[1];
-    setMessages(prev => [
-      ...prev,
+    setMessages([
+      { from: "bot", text: "👋 Hi — I'm JC! I'll help you get a quote for any of our services in about 60 seconds. No pressure, no spam — real human review before anything is sent.", ts: Date.now() - 1 },
       { from: "bot", text: `You selected: ${mapped}`, ts: Date.now() },
       ...(nextStep ? [{ from: "bot" as const, text: nextStep.question + (nextStep.subtext ? `\n\n_${nextStep.subtext}_` : ""), ts: Date.now() + 1 }] : []),
     ]);
@@ -1179,6 +1184,19 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, quoteVisible]);
+
+  // Defensive: if we're on the package_select step but crewPackages is empty
+  // (can happen on session restore from localStorage), recompute them now.
+  useEffect(() => {
+    if (!currentStep) return;
+    if (currentStep.type !== "package_select") return;
+    if (crewPackages.length > 0) return;
+    const q = computeQuoteForAnswers(answers, liveRate, liveJc222);
+    if (!q) return;
+    setPendingQuote(q);
+    const pkgs = buildCrewPackages(answers, q, liveRate, liveJc222);
+    if (pkgs.length > 0) setCrewPackages(pkgs);
+  }, [currentStep?.id, crewPackages.length]);
 
   function botSay(text: string, delay = 0) {
     setTimeout(() => {
