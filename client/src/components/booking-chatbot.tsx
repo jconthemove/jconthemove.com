@@ -768,10 +768,11 @@ export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatP
   const rawMin = round5(crew * minHrs * RATE) + specialSurcharge;
   const rawMax = round5(crew * maxHrs * RATE) + specialSurcharge;
 
-  // ── Travel charge: $50 per 25-mile band from Ironwood (tiny/small only) ───
+  // ── Travel charge: $50 per 25-mile band from Ironwood — all job sizes ──────
+  // This is a fuel/drive surcharge billed in addition to on-site labor + drive time.
   // distanceMiles=0 means unknown/local → no charge applied
   const travelTiers = distanceMiles > 0 ? Math.floor(distanceMiles / TRAVEL_TIER_MILES) : 0;
-  const travelCharge = (tier === "tiny" || tier === "small") ? travelTiers * TRAVEL_CHARGE_PER_TIER : 0;
+  const travelCharge = travelTiers * TRAVEL_CHARGE_PER_TIER;
 
   // ── JC222 promo: Small-tier 2-crew → $340 becomes $222 flat ───────────────
   const promoCodeRaw = (a.promoCode || "").toUpperCase().trim();
@@ -861,9 +862,9 @@ function computeJunkQuote(a: Answers, ratePerMoverHour = 85, distanceMiles = 0):
   const rawMin = r5(crew * minHrs * RATE) + specialSurcharge;
   const rawMax = r5(crew * maxHrs * RATE) + specialSurcharge;
 
-  // ── Travel charge: $50 per 25-mile band from Ironwood (tiny/small only) ───
+  // ── Travel charge: $50 per 25-mile band from Ironwood — all job sizes ──────
   const travelTiers = distanceMiles > 0 ? Math.floor(distanceMiles / TRAVEL_TIER_MILES) : 0;
-  const travelCharge = (tier === "tiny" || tier === "small") ? travelTiers * TRAVEL_CHARGE_PER_TIER : 0;
+  const travelCharge = travelTiers * TRAVEL_CHARGE_PER_TIER;
 
   // ── JCMOVES promo: 10% off or $20 off, whichever is greater ───────────────
   const promoCodeRaw = (a.promoCode || "").toUpperCase().trim();
@@ -1013,18 +1014,18 @@ export function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMove
         {
           id: "pkg_junk_med_a",
           label: "2 Movers · ~3 hrs",
-          desc: "Steady pace — great for a 2–3BR worth of junk or a garage cleanout",
-          minPrice: price(2, 2.5),
-          maxPrice: price(2, 3.5),
+          desc: `Steady pace — great for a 2–3BR worth of junk or a garage cleanout${travelNote}`,
+          minPrice: price(2, 2.5) + travel,
+          maxPrice: price(2, 3.5) + travel,
           crew: 2,
           hours: 3,
         },
         {
           id: "pkg_junk_med_b",
           label: "3 Movers · ~2 hrs",
-          desc: "Faster crew — best if you have heavy items or a tight time window",
-          minPrice: price(3, 2),
-          maxPrice: price(3, 2),
+          desc: `Faster crew — best if you have heavy items or a tight time window${travelNote}`,
+          minPrice: price(3, 2) + travel,
+          maxPrice: price(3, 2) + travel,
           crew: 3,
           hours: 2,
           tag: "Recommended",
@@ -1037,18 +1038,18 @@ export function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMove
       {
         id: "pkg_junk_lg_a",
         label: "2 Movers · ~5 hrs",
-        desc: "Budget option — plenty of time for a full house cleanout",
-        minPrice: price(2, 4),
-        maxPrice: price(2, 5),
+        desc: `Budget option — plenty of time for a full house cleanout${travelNote}`,
+        minPrice: price(2, 4) + travel,
+        maxPrice: price(2, 5) + travel,
         crew: 2,
         hours: 5,
       },
       {
         id: "pkg_junk_lg_b",
         label: "3 Movers · ~3.5 hrs",
-        desc: "Balanced crew — ideal for 4BR+ or commercial cleanouts",
-        minPrice: price(3, 3),
-        maxPrice: price(3, 3.5),
+        desc: `Balanced crew — ideal for 4BR+ or commercial cleanouts${travelNote}`,
+        minPrice: price(3, 3) + travel,
+        maxPrice: price(3, 3.5) + travel,
         crew: 3,
         hours: 3.5,
         tag: "Recommended",
@@ -1139,18 +1140,18 @@ export function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMove
         {
           id: "pkg_med_a",
           label: "2 Movers × 4 hrs",
-          desc: "Steady pace · $85/mover/hr · best for ground-floor or elevator access",
-          minPrice: price(2, 4),
-          maxPrice: price(2, 4),
+          desc: `Steady pace · $85/mover/hr · best for ground-floor or elevator access${travelNote}`,
+          minPrice: price(2, 4) + travel,
+          maxPrice: price(2, 4) + travel,
           crew: 2,
           hours: 4,
         },
         {
           id: "pkg_med_b",
           label: "3 Movers × 2.5 hrs",
-          desc: "Faster crew · same total effort · recommended with stairs or tight schedule",
-          minPrice: price(3, 2.5),
-          maxPrice: price(3, 2.5),
+          desc: `Faster crew · same total effort · recommended with stairs or tight schedule${travelNote}`,
+          minPrice: price(3, 2.5) + travel,
+          maxPrice: price(3, 2.5) + travel,
           crew: 3,
           hours: 2.5,
           tag: "Recommended",
@@ -1165,18 +1166,18 @@ export function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMove
       {
         id: "pkg_lg_c",
         label: "2 Movers × 7 hrs",
-        desc: "Budget option · plenty of time · best without stairs or heavy items",
-        minPrice: price(2, 7),
-        maxPrice: price(2, 7),
+        desc: `Budget option · plenty of time · best without stairs or heavy items${travelNote}`,
+        minPrice: price(2, 7) + travel,
+        maxPrice: price(2, 7) + travel,
         crew: 2,
         hours: 7,
       },
       {
         id: "pkg_lg_b",
         label: "3 Movers × 5 hrs",
-        desc: "Balanced crew · great for 3BR house or 2+ flights of stairs",
-        minPrice: price(3, 5),
-        maxPrice: price(3, 5),
+        desc: `Balanced crew · great for 3BR house or 2+ flights of stairs${travelNote}`,
+        minPrice: price(3, 5) + travel,
+        maxPrice: price(3, 5) + travel,
         crew: 3,
         hours: 5,
         tag: "Recommended",
@@ -1184,9 +1185,9 @@ export function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMove
       {
         id: "pkg_lg_a",
         label: "4 Movers × 4 hrs",
-        desc: "Power crew · fastest option · best for 4BR+ or pianos",
-        minPrice: price(4, 4),
-        maxPrice: price(4, 4),
+        desc: `Power crew · fastest option · best for 4BR+ or pianos${travelNote}`,
+        minPrice: price(4, 4) + travel,
+        maxPrice: price(4, 4) + travel,
         crew: 4,
         hours: 4,
       },
