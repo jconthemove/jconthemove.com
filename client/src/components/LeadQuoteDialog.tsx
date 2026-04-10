@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { X, Users, Award, Pencil, Check, Zap } from "lucide-react";
+import { DatePicker } from "@/components/ui/date-picker";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -429,14 +430,14 @@ export function LeadQuoteDialog({ open, onOpenChange, lead, employees, onSave }:
                 )}
 
                 <div>
-                  <Label htmlFor="confirmedDate" className="text-sm text-muted-foreground">Confirmed Move Date</Label>
-                  <Input
-                    id="confirmedDate"
-                    type="date"
-                    {...quoteForm.register("confirmedDate")}
-                    data-testid="input-confirmed-date"
-                    className="mt-1"
-                  />
+                  <Label className="text-sm text-muted-foreground">Confirmed Move Date</Label>
+                  <div className="mt-1">
+                    <DatePicker
+                      value={quoteForm.watch("confirmedDate") || undefined}
+                      onChange={(v) => quoteForm.setValue("confirmedDate", v)}
+                      placeholder="Pick a confirmed date"
+                    />
+                  </div>
                   {quoteForm.formState.errors.confirmedDate && (
                     <p className="text-destructive text-sm mt-1" data-testid="error-confirmed-date">
                       {quoteForm.formState.errors.confirmedDate.message}

@@ -322,10 +322,10 @@ async function ensureJackpotsSeeded() {
         ('pricing_jc222_weight_limit',   '200', 'Light-item weight limit in lbs for JC promo qualification'),
         ('pricing_heavy_item_flat',      '100', 'Flat surcharge added for heavy items (400+ lbs) ($)'),
         -- Specialty item flat fees (canonical source)
-        ('pricing_specialty_piano',      '200', 'Piano move flat surcharge ($)'),
-        ('pricing_specialty_hot_tub',    '250', 'Hot tub move flat surcharge ($)'),
-        ('pricing_specialty_safe',       '175', 'Heavy safe (300+ lbs) flat surcharge ($)'),
-        ('pricing_specialty_pool_table', '200', 'Pool table move flat surcharge ($)'),
+        ('pricing_specialty_piano',      '400', 'Upright piano move flat surcharge — ≤500 lbs tier ($)'),
+        ('pricing_specialty_hot_tub',    '600', 'Hot tub move flat surcharge — 500+ lbs tier ($)'),
+        ('pricing_specialty_safe',       '400', 'Heavy safe (≤500 lbs) flat surcharge ($)'),
+        ('pricing_specialty_pool_table', '400', 'Pool table move flat surcharge — ≤500 lbs tier ($)'),
         -- Weight tier thresholds
         ('pricing_weight_light_max',     '200', 'Max weight (lbs) for Light tier (below = light, qualifies for JC222 promo)'),
         ('pricing_weight_heavy_min',     '400', 'Min weight (lbs) for Heavy tier (at or above = heavy, 3-mover minimum)'),
@@ -362,6 +362,15 @@ async function ensureJackpotsSeeded() {
       INSERT INTO spin_config (setting_key, setting_value, description)
       VALUES ('pricing_drive_rate', '40', 'Drive time rate per mover per hour ($)')
       ON CONFLICT (setting_key) DO NOTHING;
+      -- Update specialty pricing to new tier defaults ($400 for ≤500 lbs, $600 for 500+ lbs)
+      UPDATE spin_config SET setting_value = '400', description = 'Upright piano move flat surcharge — ≤500 lbs tier ($)'
+      WHERE setting_key = 'pricing_specialty_piano' AND setting_value::numeric < 400;
+      UPDATE spin_config SET setting_value = '600', description = 'Hot tub move flat surcharge — 500+ lbs tier ($)'
+      WHERE setting_key = 'pricing_specialty_hot_tub' AND setting_value::numeric < 600;
+      UPDATE spin_config SET setting_value = '400', description = 'Heavy safe (≤500 lbs) flat surcharge ($)'
+      WHERE setting_key = 'pricing_specialty_safe' AND setting_value::numeric < 400;
+      UPDATE spin_config SET setting_value = '400', description = 'Pool table move flat surcharge — ≤500 lbs tier ($)'
+      WHERE setting_key = 'pricing_specialty_pool_table' AND setting_value::numeric < 400;
     `);
     console.log('✅ Pricing values corrected to production-ready defaults');
   } catch (err) {
@@ -17245,10 +17254,10 @@ Thank you for your business!
         customItems,
         junkAddons,
         // Specialty item canonical rates
-        specialtyPiano:     n('pricing_specialty_piano',      200),
-        specialtyHotTub:    n('pricing_specialty_hot_tub',    250),
-        specialtySafe:      n('pricing_specialty_safe',       175),
-        specialtyPoolTable: n('pricing_specialty_pool_table', 200),
+        specialtyPiano:     n('pricing_specialty_piano',      400),
+        specialtyHotTub:    n('pricing_specialty_hot_tub',    600),
+        specialtySafe:      n('pricing_specialty_safe',       400),
+        specialtyPoolTable: n('pricing_specialty_pool_table', 400),
         // Weight tiers
         weightLightMax:  n('pricing_weight_light_max',  200),
         weightHeavyMin:  n('pricing_weight_heavy_min',  400),
@@ -17355,7 +17364,8 @@ Thank you for your business!
     movingPackages: [
       { id: "moving_jc222", movers: 2, hours: 2, label: "JC222 — Local (≤10 mi)", tag: "Promo", isPromo: true, promoKey: "jc222", durationMinutes: 82 },
       { id: "moving_jc272", movers: 2, hours: 2, label: "JC272 — Outside 10 mi",  tag: "Promo", isPromo: true, promoKey: "jc272", durationMinutes: 82 },
-      { id: "moving_heavy", movers: 3, hours: 2, label: "Heavy Item (Safe/Piano/Hot Tub)", tag: "Specialty", isHeavyItem: true },
+      { id: "moving_heavy_light", movers: 3, hours: 2, label: "Heavy Item (≤500 lbs)", tag: "Specialty", isHeavyItem: true, heavyTier: "light" },
+      { id: "moving_heavy_oversized", movers: 3, hours: 2, label: "Oversized Item (500+ lbs)", tag: "Specialty", isHeavyItem: true, heavyTier: "heavy" },
       { id: "moving_2m_2h", movers: 2, hours: 2, label: "2 Movers × 2 hrs", tag: "Quick Job" },
       { id: "moving_2m_3h", movers: 2, hours: 3, label: "2 Movers × 3 hrs", tag: "Short Move" },
       { id: "moving_2m_4h", movers: 2, hours: 4, label: "2 Movers × 4 hrs" },
@@ -17391,10 +17401,10 @@ Thank you for your business!
       { id: "teardown",          name: "Light Demolition / Teardown", unitPrice: 500, openPrice: true,  qtyOptions: [1] },
     ],
     specialItems: [
-      { id: "hot_tub",    name: "Hot Tub",            baseFee: 250, key: "hasHotTub",    feeKey: "hotTubFee" },
-      { id: "piano",      name: "Piano",               baseFee: 200, key: "hasPiano",     feeKey: "pianoFee" },
-      { id: "heavy_safe", name: "Heavy Safe (300+ lbs)", baseFee: 175, key: "hasHeavySafe", feeKey: "heavySafeFee" },
-      { id: "pool_table", name: "Pool Table",          baseFee: 200, key: "hasPoolTable", feeKey: "poolTableFee" },
+      { id: "hot_tub",    name: "Hot Tub (500+ lbs)",               baseFee: 600, key: "hasHotTub",    feeKey: "hotTubFee",    crewMin: 3 },
+      { id: "piano",      name: "Piano / Upright (≤500 lbs)",        baseFee: 400, key: "hasPiano",     feeKey: "pianoFee",     crewMin: 3 },
+      { id: "heavy_safe", name: "Heavy Safe (≤500 lbs)",             baseFee: 400, key: "hasHeavySafe", feeKey: "heavySafeFee", crewMin: 3 },
+      { id: "pool_table", name: "Pool Table (≤500 lbs)",             baseFee: 400, key: "hasPoolTable", feeKey: "poolTableFee", crewMin: 2 },
     ],
   };
 

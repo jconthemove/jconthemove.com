@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, CheckCircle, Recycle, DollarSign, Trash2 } from "lucide-react";
+import { DatePicker } from "@/components/ui/date-picker";
 import { calculateTrashValetQuote, type TrashValetQuote } from "@shared/trashValetPricing";
 
 const DAY_OPTIONS = [
@@ -343,11 +344,10 @@ export default function TrashValetBookPage() {
                     </div>
                     <div>
                       <Label className="text-xs text-zinc-500">First recycling week starts on (anchor date)</Label>
-                      <Input
-                        value={form.recyclingAnchorDate}
-                        onChange={(e) => setField("recyclingAnchorDate", e.target.value)}
-                        type="date"
-                        className="bg-zinc-800 border-zinc-700 text-white mt-1"
+                      <DatePicker
+                        value={form.recyclingAnchorDate ?? undefined}
+                        onChange={(v) => setField("recyclingAnchorDate", v || "")}
+                        placeholder="Pick anchor date"
                       />
                       <p className="text-[10px] text-zinc-500 mt-0.5">Sets which weeks are recycling weeks (every other week from this date)</p>
                     </div>

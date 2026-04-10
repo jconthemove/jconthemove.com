@@ -84,10 +84,10 @@ const DEFAULTS = {
   snow_removal_hourly_rate: "85",
   handyman_hourly_rate: "85",
   lawn_care_hourly_rate: "60",
-  specialty_piano: "200",
-  specialty_hot_tub: "250",
-  specialty_safe: "175",
-  specialty_pool_table: "200",
+  specialty_piano: "400",
+  specialty_hot_tub: "600",
+  specialty_safe: "400",
+  specialty_pool_table: "400",
   weight_light_max: "200",
   weight_heavy_min: "400",
   stairs_per_flight: "25",
@@ -500,24 +500,24 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
             <div>
               <p className="text-[11px] text-slate-400 mb-1.5 font-semibold">Specialty Item Flat Surcharges ($)</p>
               <div className="grid grid-cols-2 gap-2">
-                <Field label="Piano">
+                <Field label="Piano / Upright (≤500 lbs)" hint="Default $400">
                   <Input type="number" value={draft.specialty_piano}
                     onChange={e => set("specialty_piano", e.target.value)} className={inp} />
                 </Field>
-                <Field label="Hot Tub">
+                <Field label="Hot Tub (500+ lbs)" hint="Default $600">
                   <Input type="number" value={draft.specialty_hot_tub}
                     onChange={e => set("specialty_hot_tub", e.target.value)} className={inp} />
                 </Field>
-                <Field label="Heavy Safe (300+ lbs)">
+                <Field label="Heavy Safe (≤500 lbs)" hint="Default $400">
                   <Input type="number" value={draft.specialty_safe}
                     onChange={e => set("specialty_safe", e.target.value)} className={inp} />
                 </Field>
-                <Field label="Pool Table">
+                <Field label="Pool Table (≤500 lbs)" hint="Default $400">
                   <Input type="number" value={draft.specialty_pool_table}
                     onChange={e => set("specialty_pool_table", e.target.value)} className={inp} />
                 </Field>
               </div>
-              <p className="text-[10px] text-slate-600 mt-1">Piano/Hot Tub/Safe → 3-mover min · Pool Table → 2-mover min</p>
+              <p className="text-[10px] text-slate-500 mt-1">≤500 lbs = $400 standard · 500+ lbs (Grand Piano/Hot Tub) = $600 oversized · 40% crew discount applies when added to a crew order</p>
             </div>
 
             <div>

@@ -143,7 +143,8 @@ interface JobOrderBuilderProps {
 const MOVING_PACKAGES: { id: string; movers: number; hours: number; label: string; tag?: string; isPromo?: boolean; promoKey?: string; durationMinutes?: number; isHeavyItem?: boolean }[] = [
   { id: "moving_jc222", movers: 2, hours: 2, label: "JC222 — Local (≤10 mi)", tag: "Promo", isPromo: true, promoKey: "jc222", durationMinutes: 82 },
   { id: "moving_jc272", movers: 2, hours: 2, label: "JC272 — Outside 10 mi",  tag: "Promo", isPromo: true, promoKey: "jc272", durationMinutes: 82 },
-  { id: "moving_heavy", movers: 3, hours: 2, label: "Heavy Item (Safe/Piano/Hot Tub)", tag: "Specialty", isHeavyItem: true },
+  { id: "moving_heavy_light", movers: 3, hours: 2, label: "Heavy Item (≤500 lbs)", tag: "Specialty", isHeavyItem: true, heavyTier: "light" as const },
+  { id: "moving_heavy_oversized", movers: 3, hours: 2, label: "Oversized Item (500+ lbs)", tag: "Specialty", isHeavyItem: true, heavyTier: "heavy" as const },
   { id: "moving_2m_2h", movers: 2, hours: 2, label: "2 Movers × 2 hrs",  tag: "Quick Job"      },
   { id: "moving_2m_3h", movers: 2, hours: 3, label: "2 Movers × 3 hrs",  tag: "10% Off"        },
   { id: "moving_3m_3h", movers: 3, hours: 3, label: "3 Movers × 3 hrs",  tag: "Most Popular"   },
@@ -170,10 +171,10 @@ const MOVING_ADDONS = [
 ];
 
 const MOVING_SPECIAL_ITEMS = [
-  { id: "hot_tub",    name: "Hot Tub",              description: "Specialty rigging required",         baseFee: 250, key: "hasHotTub"    as const, feeKey: "hotTubFee"    as const, pricingKey: "specialtyHotTub"    as const, crewMin: 3 },
-  { id: "piano",      name: "Piano",                description: "Upright or grand piano move",        baseFee: 200, key: "hasPiano"     as const, feeKey: "pianoFee"     as const, pricingKey: "specialtyPiano"     as const, crewMin: 3 },
-  { id: "heavy_safe", name: "Heavy Safe (300+ lbs)",description: "Gun safe or floor safe",             baseFee: 175, key: "hasHeavySafe" as const, feeKey: "heavySafeFee" as const, pricingKey: "specialtySafe"      as const, crewMin: 3 },
-  { id: "pool_table", name: "Pool Table",           description: "Disassemble, move, and reassemble",  baseFee: 200, key: "hasPoolTable" as const, feeKey: "poolTableFee" as const, pricingKey: "specialtyPoolTable" as const, crewMin: 2 },
+  { id: "hot_tub",    name: "Hot Tub (500+ lbs)",              description: "Specialty rigging required — oversized surcharge",          baseFee: 600, key: "hasHotTub"    as const, feeKey: "hotTubFee"    as const, pricingKey: "specialtyHotTub"    as const, crewMin: 3 },
+  { id: "piano",      name: "Piano (≤500 lbs)",                description: "Upright piano move — standard heavy item surcharge",        baseFee: 400, key: "hasPiano"     as const, feeKey: "pianoFee"     as const, pricingKey: "specialtyPiano"     as const, crewMin: 3 },
+  { id: "heavy_safe", name: "Heavy Safe (300+ lbs, ≤500 lbs)",description: "Gun safe or floor safe — standard heavy item surcharge",     baseFee: 400, key: "hasHeavySafe" as const, feeKey: "heavySafeFee" as const, pricingKey: "specialtySafe"      as const, crewMin: 3 },
+  { id: "pool_table", name: "Pool Table (≤500 lbs)",           description: "Disassemble, move, and reassemble — standard surcharge",     baseFee: 400, key: "hasPoolTable" as const, feeKey: "poolTableFee" as const, pricingKey: "specialtyPoolTable" as const, crewMin: 2 },
 ];
 
 const JUNK_PACKAGES = [
@@ -201,6 +202,7 @@ function PackageCard({ pkg, selected, pricing, onSelect }: {
 }) {
   const isPromo = (pkg as any).isPromo === true;
   const isHeavyItem = (pkg as any).isHeavyItem === true;
+  const heavyTier = (pkg as any).heavyTier as "light" | "heavy" | undefined;
 
   let displayPrice: number;
   let savings = 0;
@@ -209,7 +211,7 @@ function PackageCard({ pkg, selected, pricing, onSelect }: {
   if (isPromo) {
     displayPrice = (pkg as any).promoKey === "jc272" ? pricing.jc272Price : pricing.jc222Price;
   } else if (isHeavyItem) {
-    displayPrice = pricing.heavyItemFlat;
+    displayPrice = heavyTier === "heavy" ? 600 : 400;
   } else {
     const base = pkg.movers * pkg.hours * pricing.ratePerMoverHour;
     floored = base < pricing.shortJobFull ? pricing.shortJobFull : base;
@@ -596,8 +598,10 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
         laborTotal = promoPrice;
         laborLabel = `${pkg.label} — Flat Rate Promo`;
       } else if ((pkg as any).isHeavyItem) {
-        laborTotal = pricing.heavyItemFlat;
-        laborLabel = `Heavy Item — 3 Movers × 2 hrs minimum (flat floor $${pricing.heavyItemFlat})`;
+        const heavyTierLabel = (pkg as any).heavyTier === "heavy" ? "Oversized (500+ lbs)" : "Heavy (≤500 lbs)";
+        const baseHeavyPrice = (pkg as any).heavyTier === "heavy" ? 600 : 400;
+        laborTotal = baseHeavyPrice;
+        laborLabel = `Specialty Item — ${heavyTierLabel} · 3 Movers × 2 hrs minimum`;
       } else {
         const base = effectiveMovers * pkg.hours * pricing.ratePerMoverHour;
         const floored = base < pricing.shortJobFull ? pricing.shortJobFull : base;
@@ -622,13 +626,22 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
 
       addonLineItems.forEach(li => lineItems.push(li));
 
+      // Apply 40% crew-on-site discount when specialty items are added to an already-booked/active crew job.
+      // Crew discount only applies when the lead is already confirmed (booked/available/in_progress)
+      // AND the selected package is a regular crew package (not standalone heavy item).
+      const CREW_ACTIVE_STATUSES = ["booked", "available", "in_progress"];
+      const leadIsAlreadyBooked = CREW_ACTIVE_STATUSES.includes(lead?.status ?? "");
+      const isRegularCrewPkg = !((pkg as any).isHeavyItem);
+      const applyCrewDiscount = leadIsAlreadyBooked && isRegularCrewPkg;
       specialItemsDefs.forEach(item => {
         if (specialItems[item.key]) {
-          const fee = specialFees[item.feeKey] ?? (pricing[(item as any).pricingKey] ?? item.baseFee);
+          const baseFee = specialFees[item.feeKey] ?? (pricing[(item as any).pricingKey] ?? item.baseFee);
+          const fee = applyCrewDiscount ? Math.round(baseFee * 0.6) : baseFee;
           const crewNote = item.crewMin >= 3 ? " · 3-mover min" : item.crewMin === 2 ? " · 2-mover min" : "";
+          const discountNote = applyCrewDiscount ? " (40% crew discount)" : "";
           lineItems.push({
             id: item.id,
-            name: `${item.name} surcharge${crewNote}`,
+            name: `${item.name} surcharge${crewNote}${discountNote}`,
             qty: 1,
             unitPrice: fee,
             total: fee,
@@ -709,9 +722,27 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
   const handleApply = async () => {
     if (!summary) return;
 
+    // Compute specialty item fees with the same 40% crew discount logic used in summary line items.
+    // Discount only applies for already-booked/active leads with a regular crew package.
+    const activePkg = selectedPkg !== null ? movingPackages[selectedPkg] : null;
+    const CREW_ACTIVE_STATUSES_APPLY = ["booked", "available", "in_progress"];
+    const leadIsAlreadyBookedApply = CREW_ACTIVE_STATUSES_APPLY.includes(lead?.status ?? "");
+    const applyCrewDiscountApply = leadIsAlreadyBookedApply && !((activePkg as any)?.isHeavyItem);
+
     const specialItemsFee = specialItemsDefs.reduce((acc, item) => {
-      return acc + (specialItems[item.key] ? (specialFees[item.feeKey] ?? item.baseFee) : 0);
+      if (!specialItems[item.key]) return acc;
+      const baseFee = specialFees[item.feeKey] ?? item.baseFee;
+      const discountedFee = applyCrewDiscountApply ? Math.round(baseFee * 0.6) : baseFee;
+      return acc + discountedFee;
     }, 0);
+
+    // Per-item fees with discount applied for storage
+    const hotTubBaseApply = specialFees.hotTubFee ?? MOVING_SPECIAL_ITEMS.find(i => i.id === "hot_tub")!.baseFee;
+    const pianoBaseApply = specialFees.pianoFee ?? MOVING_SPECIAL_ITEMS.find(i => i.id === "piano")!.baseFee;
+    const heavySafeBaseApply = specialFees.heavySafeFee ?? MOVING_SPECIAL_ITEMS.find(i => i.id === "heavy_safe")!.baseFee;
+    const poolTableBaseApply = specialFees.poolTableFee ?? MOVING_SPECIAL_ITEMS.find(i => i.id === "pool_table")!.baseFee;
+
+    const applyDiscount = (fee: number) => applyCrewDiscountApply ? Math.round(fee * 0.6) : fee;
 
     const orderNotes = [
       quoteNotes,
@@ -729,13 +760,13 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
       confirmedHours: summary.confirmedHours,
       quoteNotes: orderNotes,
       hasHotTub: specialItems.hasHotTub ?? false,
-      hotTubFee: (specialFees.hotTubFee ?? 250).toFixed(2),
+      hotTubFee: applyDiscount(hotTubBaseApply).toFixed(2),
       hasHeavySafe: specialItems.hasHeavySafe ?? false,
-      heavySafeFee: (specialFees.heavySafeFee ?? 175).toFixed(2),
+      heavySafeFee: applyDiscount(heavySafeBaseApply).toFixed(2),
       hasPoolTable: specialItems.hasPoolTable ?? false,
-      poolTableFee: (specialFees.poolTableFee ?? 200).toFixed(2),
+      poolTableFee: applyDiscount(poolTableBaseApply).toFixed(2),
       hasPiano: specialItems.hasPiano ?? false,
-      pianoFee: (specialFees.pianoFee ?? 200).toFixed(2),
+      pianoFee: applyDiscount(pianoBaseApply).toFixed(2),
       totalSpecialItemsFee: specialItemsFee.toFixed(2),
       lineItems: summary.lineItems,
     });

@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Trash2, Recycle, Calendar, DollarSign, Play, Pause, XCircle, RefreshCw } from "lucide-react";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Link } from "wouter";
 
 interface TrashSub {
@@ -298,11 +299,11 @@ export default function AdminTrashValetPage() {
             <div className="flex flex-wrap items-center gap-3 mb-4">
               <div>
                 <Label className="text-xs text-zinc-500 mb-1 block">Week of</Label>
-                <Input
-                  type="date"
-                  value={jobWeekFilter}
-                  onChange={(e) => setJobWeekFilter(e.target.value)}
-                  className="bg-zinc-900 border-zinc-700 text-white text-sm w-40"
+                <DatePicker
+                  value={jobWeekFilter ?? undefined}
+                  onChange={(v) => setJobWeekFilter(v || "")}
+                  placeholder="Pick a week"
+                  disablePast={false}
                 />
               </div>
               <div>

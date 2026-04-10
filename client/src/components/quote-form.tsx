@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Home, Building, Trash2, Send, Snowflake, Sparkles, Wrench, HardHat, Layers, PaintBucket } from "lucide-react";
+import { DatePicker } from "@/components/ui/date-picker";
 
 export default function QuoteForm() {
   const { toast } = useToast();
@@ -202,12 +203,11 @@ export default function QuoteForm() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <Label htmlFor="moveDate">Preferred Move Date</Label>
-                  <Input
-                    id="moveDate"
-                    type="date"
-                    {...form.register("moveDate")}
-                    data-testid="input-move-date"
+                  <Label>Preferred Move Date</Label>
+                  <DatePicker
+                    value={form.watch("moveDate") ?? undefined}
+                    onChange={(v) => form.setValue("moveDate", v || null)}
+                    placeholder="Pick a move date"
                   />
                 </div>
                 <div>

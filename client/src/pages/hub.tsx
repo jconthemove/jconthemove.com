@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -1210,12 +1211,10 @@ export default function TeamHub() {
               <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl p-4 space-y-3">
                 <p className="text-sm font-semibold text-white flex items-center gap-2"><CalendarDays className="h-4 w-4 text-red-400" /> Block a Day Off</p>
                 <div className="flex gap-2">
-                  <Input
-                    type="date"
-                    value={blockDate}
-                    onChange={e => setBlockDate(e.target.value)}
-                    min={new Date().toISOString().split("T")[0]}
-                    className="h-8 text-sm bg-slate-700/50 border-slate-600 text-white flex-1"
+                  <DatePicker
+                    value={blockDate || undefined}
+                    onChange={(v) => setBlockDate(v || "")}
+                    placeholder="Pick a date"
                   />
                   <Input
                     value={blockReason}

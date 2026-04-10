@@ -17,6 +17,10 @@ interface MovingPackage {
   label: string;
   tag?: string;
   isJc222?: boolean;
+  isPromo?: boolean;
+  promoKey?: string;
+  isHeavyItem?: boolean;
+  heavyTier?: "light" | "heavy";
 }
 
 interface JunkPackage {
@@ -48,6 +52,7 @@ interface JunkAddon {
 interface Pricing {
   ratePerMoverHour: number;
   jc222Price: number;
+  jc272Price: number;
   shortJobFull: number;
 }
 
@@ -72,6 +77,7 @@ export default function ServicePackagesPage() {
 
   const ratePerMoverHour = pricing?.ratePerMoverHour ?? 60;
   const jc222Price = pricing?.jc222Price ?? 222;
+  const jc272Price = pricing?.jc272Price ?? 272;
   const shortJobFull = pricing?.shortJobFull ?? 300;
 
   const movingPackages = catalog?.movingPackages ?? [];
@@ -83,7 +89,11 @@ export default function ServicePackagesPage() {
   const setSelectedPkg = tab === "moving" ? setSelectedMovingPkg : setSelectedJunkPkg;
 
   function getMovingPrice(pkg: MovingPackage): number {
-    return pkg.isJc222 ? jc222Price : pkg.movers * pkg.hours * ratePerMoverHour;
+    if (pkg.isJc222) return jc222Price;
+    if (pkg.isPromo) return pkg.promoKey === "jc272" ? jc272Price : jc222Price;
+    if (pkg.isHeavyItem) return pkg.heavyTier === "heavy" ? 600 : 400;
+    const base = pkg.movers * pkg.hours * ratePerMoverHour;
+    return base < shortJobFull ? shortJobFull : base;
   }
 
   function calcAddonTotal(): number {

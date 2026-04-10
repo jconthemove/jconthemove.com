@@ -12,6 +12,7 @@ import {
   Users, Clock, Coins, DollarSign, Calculator, CheckCircle2,
   CalendarDays, ArrowRight, ChevronDown, ChevronUp, Info, Zap
 } from "lucide-react";
+import { DatePicker } from "@/components/ui/date-picker";
 
 const TOKENS_PER_MOVER_MINUTE = 500;
 const CASH_PER_MOVER_HOUR = 62.5;
@@ -407,12 +408,10 @@ export function LaborCalculatorDialog({ open, onClose, walletBalance }: Props) {
                 <CalendarDays className="h-4 w-4 text-orange-400" />
                 <span className="text-sm font-semibold">Preferred Date <span className="text-muted-foreground font-normal">(optional)</span></span>
               </div>
-              <Input
-                type="date"
+              <DatePicker
                 value={scheduledDate}
-                onChange={(e) => setScheduledDate(e.target.value)}
-                min={new Date().toISOString().split("T")[0]}
-                className="h-9 text-sm"
+                onChange={setScheduledDate}
+                placeholder="Pick a date"
               />
             </div>
 
@@ -664,8 +663,11 @@ export function LaborCalculatorEmbedded() {
       <div className="grid grid-cols-2 gap-3">
         <div>
           <p className="text-xs font-semibold mb-1.5 flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5 text-orange-400" /> Preferred Date</p>
-          <input type="date" value={scheduledDate} onChange={(e) => setScheduledDate(e.target.value)} min={new Date().toISOString().split("T")[0]}
-            className="h-9 text-sm w-full rounded-md border border-border bg-background px-3" />
+          <DatePicker
+            value={scheduledDate}
+            onChange={setScheduledDate}
+            placeholder="Pick a date"
+          />
         </div>
         <div className="flex items-end text-xs text-muted-foreground bg-background/50 rounded-lg px-3 py-2 border border-border self-end">
           <span className="flex items-center gap-1 w-full justify-between">

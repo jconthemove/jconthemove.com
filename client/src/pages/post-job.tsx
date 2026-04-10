@@ -8,6 +8,7 @@ import {
   Tag, AlertCircle, Gem, Layers, PaintBucket, Leaf, Sparkles
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { DatePicker } from "@/components/ui/date-picker";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -892,11 +893,10 @@ export default function PostJobPage() {
                     <Calendar className="h-4 w-4 inline mr-1" /> Preferred Date
                     <span className="text-zinc-400 font-normal ml-1">(optional)</span>
                   </label>
-                  <input
-                    type="date"
-                    value={form.moveDate}
-                    onChange={e => set("moveDate", e.target.value)}
-                    className="w-full h-12 px-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white text-base focus:outline-none focus:ring-2 focus:ring-jc-orange/30 focus:border-jc-orange transition-all"
+                  <DatePicker
+                    value={form.moveDate || undefined}
+                    onChange={(v) => set("moveDate", v || "")}
+                    placeholder="Pick a preferred date"
                   />
                 </div>
 
@@ -949,11 +949,10 @@ export default function PostJobPage() {
                   <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
                     <Calendar className="h-4 w-4 inline mr-1" /> Preferred Date
                   </label>
-                  <input
-                    type="date"
-                    value={form.moveDate}
-                    onChange={e => set("moveDate", e.target.value)}
-                    className="w-full h-13 px-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white text-base focus:outline-none focus:ring-2 focus:ring-jc-orange/30 focus:border-jc-orange transition-all"
+                  <DatePicker
+                    value={form.moveDate || undefined}
+                    onChange={(v) => set("moveDate", v || "")}
+                    placeholder="Pick a preferred date"
                   />
                 </div>
 

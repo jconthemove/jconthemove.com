@@ -13,6 +13,7 @@ type DatePickerProps = {
   className?: string;
   buttonClassName?: string;
   disabled?: boolean;
+  disablePast?: boolean;
   testId?: string;
 };
 
@@ -29,6 +30,7 @@ export function DatePicker({
   className,
   buttonClassName,
   disabled = false,
+  disablePast = true,
   testId,
 }: DatePickerProps) {
   const selectedDate = parseDateValue(value);
@@ -56,7 +58,7 @@ export function DatePicker({
           mode="single"
           selected={selectedDate}
           onSelect={(date) => onChange(date ? format(date, "yyyy-MM-dd") : "")}
-          disabled={{ before: startOfToday() }}
+          disabled={disablePast ? { before: startOfToday() } : undefined}
           initialFocus
           className="text-white"
           classNames={{

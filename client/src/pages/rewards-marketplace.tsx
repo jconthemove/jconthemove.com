@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -1286,7 +1287,11 @@ export default function RewardsMarketplacePage() {
               {(redeemItem.requiresSchedule || redeemItem.scheduleRequired || redeemItem.createsServiceCredit) ? (
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Preferred service date (optional)</label>
-                  <Input type="date" value={scheduledDate} onChange={e => setScheduledDate(e.target.value)} className="h-9" />
+                  <DatePicker
+                    value={scheduledDate || undefined}
+                    onChange={(v) => setScheduledDate(v || "")}
+                    placeholder="Pick a service date"
+                  />
                 </div>
               ) : null}
 

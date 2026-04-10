@@ -649,12 +649,13 @@ export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatP
   const hasHeavySafe    = specials.includes("🔒 Heavy Safe (300 lbs+)");
   const hasMajorSpecial = hasGrandPiano || hasUprightPiano || hasPoolTable || hasHotTub;
 
+  // Specialty item surcharges — $400 for ≤500 lbs items, $600 for 500+ lbs items (standalone)
   let specialSurcharge = 0;
-  if (hasGrandPiano)   specialSurcharge += 250;
-  if (hasUprightPiano) specialSurcharge += 150;
-  if (hasPoolTable)    specialSurcharge += 150;
-  if (hasHotTub)       specialSurcharge += 200;
-  if (hasHeavySafe)    specialSurcharge += 75;
+  if (hasGrandPiano)   specialSurcharge += 600; // 500+ lbs
+  if (hasUprightPiano) specialSurcharge += 400; // ≤500 lbs
+  if (hasPoolTable)    specialSurcharge += 400; // ≤500 lbs
+  if (hasHotTub)       specialSurcharge += 600; // 500+ lbs
+  if (hasHeavySafe)    specialSurcharge += 400; // ≤500 lbs (300+ lbs safes)
 
   // ── Furniture & box counts ─────────────────────────────────────────────────
   const furnCount = (a.furniture || []).filter(f => f !== "None of the above").length;
@@ -836,14 +837,14 @@ function computeJunkQuote(a: Answers, ratePerMoverHour = 85, distanceMiles = 0):
   };
   const tier: "tiny" | "small" | "medium" | "large" = sizeTierMap[a.homeSize || ""] ?? "small";
 
-  // Special items surcharge
+  // Special items surcharge — $400 for ≤500 lbs items, $600 for 500+ lbs items (standalone)
   const specials = (a.specialItems || []).filter(s => s !== "None of these");
   let specialSurcharge = 0;
-  if (specials.includes("🎹 Grand Piano"))       specialSurcharge += 250;
-  if (specials.includes("🎹 Upright Piano"))     specialSurcharge += 150;
-  if (specials.includes("🎱 Pool Table"))        specialSurcharge += 150;
-  if (specials.includes("♨️ Hot Tub"))           specialSurcharge += 200;
-  if (specials.includes("🔒 Heavy Safe (300 lbs+)")) specialSurcharge += 75;
+  if (specials.includes("🎹 Grand Piano"))       specialSurcharge += 600; // 500+ lbs
+  if (specials.includes("🎹 Upright Piano"))     specialSurcharge += 400; // ≤500 lbs
+  if (specials.includes("🎱 Pool Table"))        specialSurcharge += 400; // ≤500 lbs
+  if (specials.includes("♨️ Hot Tub"))           specialSurcharge += 600; // 500+ lbs
+  if (specials.includes("🔒 Heavy Safe (300 lbs+)")) specialSurcharge += 400; // ≤500 lbs
 
   // Crew and hour ranges by tier
   // Minimum is 2 mover-hours ($170) — same whether 1 mover × 2 hrs or 2 movers × 1 hr

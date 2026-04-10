@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { ArrowLeft, Home, Building, Trash2, Mail, Phone, MapPin, Calendar as CalendarIcon, ChevronRight, Coins, TrendingUp, CheckCheck, Search, X, Square, CheckSquare, Settings, Archive, ArchiveRestore } from "lucide-react";
+import { DatePicker } from "@/components/ui/date-picker";
 import { formatOrderNumber } from "@shared/schema";
 import { getStatusColors } from "@/lib/job-status";
 import { JobCard } from "@/components/JobCard";
@@ -769,13 +770,11 @@ export default function LeadsPage() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
-                        <Label htmlFor="moveDate" className="text-slate-300">Preferred Move Date</Label>
-                        <Input
-                          id="moveDate"
-                          type="date"
-                          className="bg-slate-700/50 border-slate-600 text-white"
-                          {...form.register("moveDate")}
-                          data-testid="input-move-date"
+                        <Label className="text-slate-300">Preferred Move Date</Label>
+                        <DatePicker
+                          value={form.watch("moveDate") ?? undefined}
+                          onChange={(v) => form.setValue("moveDate", v || null)}
+                          placeholder="Pick a move date"
                         />
                       </div>
                       <div>

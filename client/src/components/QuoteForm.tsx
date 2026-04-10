@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Truck, Trash2, Snowflake, Sparkles, Send, Camera, X, ImagePlus, Wrench, HardHat, Layers, PaintBucket } from "lucide-react";
+import { DatePicker } from "@/components/ui/date-picker";
 
 interface QuotePhoto {
   id: string;
@@ -364,13 +365,11 @@ export default function QuoteForm({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="moveDate" className={labelClasses}>Preferred Date</Label>
-              <Input
-                id="moveDate"
-                type="date"
-                className={inputClasses}
-                {...form.register("moveDate")}
-                data-testid="input-move-date"
+              <Label className={labelClasses}>Preferred Date</Label>
+              <DatePicker
+                value={form.watch("moveDate") ?? undefined}
+                onChange={(v) => form.setValue("moveDate", v || null)}
+                placeholder="Pick a move date"
               />
             </div>
             <div>

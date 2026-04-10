@@ -22,6 +22,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Switch } from "@/components/ui/switch";
 import { JobOrderBuilder } from "@/components/JobOrderBuilder";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DatePicker } from "@/components/ui/date-picker";
 
 interface SquareInvoice {
   id: string;
@@ -1259,7 +1260,11 @@ export default function LeadDetailPage() {
                     </div>
                     <div>
                       <Label>Requested Move Date</Label>
-                      <Input type="date" {...form.register("moveDate")} data-testid="input-move-date" />
+                      <DatePicker
+                        value={form.watch("moveDate") ?? undefined}
+                        onChange={(v) => form.setValue("moveDate", v || null)}
+                        placeholder="Pick a move date"
+                      />
                     </div>
                     <div>
                       <Label>Additional Details / Notes</Label>
@@ -1508,25 +1513,35 @@ export default function LeadDetailPage() {
                     </div>
                   </div>
 
-                  {/* Arrival window */}
+                  {/* Arrival window — time dropdown */}
                   <div>
-                    <Label htmlFor="arrivalWindow" className="text-sm font-semibold mb-1 block">Arrival Window</Label>
-                    <Input
-                      id="arrivalWindow"
-                      placeholder='e.g. "9:00 AM – 11:00 AM"'
-                      value={planArrivalWindow}
-                      onChange={(e) => setPlanArrivalWindow(e.target.value)}
-                    />
+                    <Label className="text-sm font-semibold mb-1 block">Arrival Window</Label>
+                    <Select value={planArrivalWindow} onValueChange={setPlanArrivalWindow}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select arrival window" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="7:00 AM – 9:00 AM">7:00 AM – 9:00 AM</SelectItem>
+                        <SelectItem value="8:00 AM – 10:00 AM">8:00 AM – 10:00 AM</SelectItem>
+                        <SelectItem value="9:00 AM – 11:00 AM">9:00 AM – 11:00 AM</SelectItem>
+                        <SelectItem value="10:00 AM – 12:00 PM">10:00 AM – 12:00 PM</SelectItem>
+                        <SelectItem value="11:00 AM – 1:00 PM">11:00 AM – 1:00 PM</SelectItem>
+                        <SelectItem value="12:00 PM – 2:00 PM">12:00 PM – 2:00 PM</SelectItem>
+                        <SelectItem value="1:00 PM – 3:00 PM">1:00 PM – 3:00 PM</SelectItem>
+                        <SelectItem value="2:00 PM – 4:00 PM">2:00 PM – 4:00 PM</SelectItem>
+                        <SelectItem value="3:00 PM – 5:00 PM">3:00 PM – 5:00 PM</SelectItem>
+                        <SelectItem value="Flexible">Flexible / TBD</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
-                  {/* Confirmed date */}
+                  {/* Confirmed date — date picker */}
                   <div>
-                    <Label htmlFor="planConfirmedDate" className="text-sm font-semibold mb-1 block">Confirmed Date</Label>
-                    <Input
-                      id="planConfirmedDate"
-                      type="date"
+                    <Label className="text-sm font-semibold mb-1 block">Confirmed Date</Label>
+                    <DatePicker
                       value={planConfirmedDate}
-                      onChange={(e) => setPlanConfirmedDate(e.target.value)}
+                      onChange={setPlanConfirmedDate}
+                      placeholder="Pick a date"
                     />
                   </div>
 
@@ -1646,20 +1661,28 @@ export default function LeadDetailPage() {
               </SheetContent>
             </Sheet>
 
-            {/* Section C — Send to Customer */}
+            {/* Section C — Unified Send: Quote Email + Square Invoice */}
             {hasAdminAccess && (
               <Card className="border-orange-500/30 bg-orange-950/10">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
                     <Send className="h-4 w-4 text-orange-400" />
-                    Send to Customer
+                    Send Quote &amp; Invoice
                   </CardTitle>
-                  <CardDescription>Preview and send the quote via email and SMS</CardDescription>
+                  <CardDescription>Send the quote email and Square invoice together in one click</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {/* Preview box */}
                   <div className="p-3 rounded-lg bg-slate-800/60 border border-slate-700/50 text-sm space-y-1.5">
-                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-2">What the customer will see</p>
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-2">What the customer will receive</p>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Customer</span>
+                      <span className="font-medium">{lead.firstName} {lead.lastName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Email</span>
+                      <span className="font-medium">{lead.email}</span>
+                    </div>
                     <div className="flex justify-between">
                       <span className="text-slate-400">Service</span>
                       <span className="font-medium capitalize">{lead.serviceType?.replace(/_/g, " ")}</span>
@@ -1672,7 +1695,7 @@ export default function LeadDetailPage() {
                     )}
                     {(planConfirmedDate || lead.confirmedDate) && (
                       <div className="flex justify-between">
-                        <span className="text-slate-400">Estimated date</span>
+                        <span className="text-slate-400">Date</span>
                         <span className="font-medium">{planConfirmedDate || lead.confirmedDate}</span>
                       </div>
                     )}
@@ -1687,10 +1710,6 @@ export default function LeadDetailPage() {
                       <span className="font-bold text-emerald-400 text-base">
                         {(lead.totalPrice || lead.basePrice) ? `$${parseFloat(lead.totalPrice || lead.basePrice || "0").toFixed(2)}` : "Not set"}
                       </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">To confirm</span>
-                      <span className="text-orange-400 font-semibold">Call or text (906) 285-9312</span>
                     </div>
                   </div>
 
@@ -1743,69 +1762,10 @@ export default function LeadDetailPage() {
                     </div>
                   )}
 
-                  {/* Send buttons */}
-                  <div className="flex gap-2">
-                    <Button
-                      className="flex-1 bg-orange-600 hover:bg-orange-700 text-white"
-                      onClick={() => sendQuoteMutation.mutate("email")}
-                      disabled={sendQuoteMutation.isPending || !(lead.totalPrice || lead.basePrice)}
-                    >
-                      {sendQuoteMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <Mail className="h-4 w-4 mr-2" />
-                      )}
-                      {(quoteSentAt || lead.quoteSentAt) ? "Re-send Quote" : "Send Quote"}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="flex-1"
-                      onClick={() => sendQuoteMutation.mutate("sms")}
-                      disabled={sendQuoteMutation.isPending || !(lead.totalPrice || lead.basePrice) || !lead.phone}
-                    >
-                      {sendQuoteMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <MessageSquare className="h-4 w-4 mr-2" />
-                      )}
-                      {(quoteSentAt || lead.quoteSentAt) ? "Re-send SMS" : "Send SMS"}
-                    </Button>
-                  </div>
-
-                  {!(lead.totalPrice || lead.basePrice) && (
-                    <p className="text-xs text-amber-400 flex items-center gap-1.5">
-                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                      Build a quote first before sending.
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Invoice (Admin Only) — hidden when payment URL already embedded in quote email */}
-            {hasAdminAccess && !(squarePaymentUrl || lead.squarePaymentUrl) && (
-              <Card className="border-emerald-500/30">
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <FileText className="h-4 w-4 text-emerald-500" /> Square Invoice
-                  </CardTitle>
-                  <CardDescription>Send a Square invoice directly to the customer</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="p-3 bg-muted/50 rounded-lg space-y-1 text-sm">
-                    <div className="flex justify-between"><span className="text-muted-foreground">Customer</span><span className="font-medium">{lead.firstName} {lead.lastName}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Email</span><span className="font-medium">{lead.email}</span></div>
-                    {lead.phone && (
-                      <div className="flex justify-between"><span className="text-muted-foreground">Phone</span><span className="font-medium">{lead.phone}</span></div>
-                    )}
-                    {(lead.totalPrice || lead.basePrice) && (
-                      <div className="flex justify-between"><span className="text-muted-foreground">Amount</span><span className="font-bold text-emerald-600 dark:text-emerald-400">${parseFloat(lead.totalPrice || lead.basePrice || "0").toFixed(2)}</span></div>
-                    )}
-                  </div>
-
+                  {/* Existing invoices */}
                   {leadInvoices.length > 0 && (
                     <div className="space-y-2">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sent Invoices</p>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Square Invoices</p>
                       {leadInvoices.map((inv) => {
                         const statusColors: Record<string, string> = {
                           draft: "bg-slate-600/20 text-slate-300 border-slate-500/30",
@@ -1838,9 +1798,27 @@ export default function LeadDetailPage() {
                     </div>
                   )}
 
-                  <Button onClick={() => { const price = lead.totalPrice || lead.basePrice || ""; setInvoiceAmount(price ? parseFloat(price).toString() : ""); setInvoiceDescription(`${lead.serviceType} - ${lead.firstName} ${lead.lastName}`); setInvoiceDeliveryMethod("email"); setShowInvoiceDialog(true); }} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white">
-                    <Send className="h-4 w-4 mr-2" /> Send Invoice via Square
+                  {/* Primary action: Send Quote Email + Square Invoice + SMS together */}
+                  <Button
+                    className="w-full bg-orange-600 hover:bg-orange-700 text-white font-semibold"
+                    onClick={() => sendQuoteMutation.mutate("email")}
+                    disabled={sendQuoteMutation.isPending || !(lead.totalPrice || lead.basePrice)}
+                  >
+                    {sendQuoteMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Send className="h-4 w-4 mr-2" />
+                    )}
+                    {(quoteSentAt || lead.quoteSentAt) ? "Re-send Quote & Invoice" : "Send Quote & Invoice"}
                   </Button>
+                  <p className="text-[10px] text-slate-500 text-center">Sends email + SMS (if phone on file) + Square invoice in one action</p>
+
+                  {!(lead.totalPrice || lead.basePrice) && (
+                    <p className="text-xs text-amber-400 flex items-center gap-1.5">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                      Build a quote first before sending.
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             )}

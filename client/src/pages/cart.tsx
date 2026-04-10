@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useCart } from "@/hooks/useCart";
 import { Link, useLocation } from "wouter";
 import { ArrowLeft, Trash2, ShoppingCart, Percent, Shield, Loader2, CreditCard, Gem, Truck, Plus, MapPin, CalendarDays, Heart, Building2, Trophy, Check, Bitcoin, Tag, X, CheckCircle2, Package, Home, DollarSign, Zap, Sparkles } from "lucide-react";
+import { DatePicker } from "@/components/ui/date-picker";
 
 interface PromoResult {
   valid: boolean;
@@ -703,7 +704,11 @@ export default function CartPage() {
                       <CalendarDays className="h-4 w-4 text-yellow-400" />
                       Preferred Date *
                     </Label>
-                    <Input type="date" value={form.moveDate} onChange={(e) => updateField("moveDate", e.target.value)} className="bg-slate-700 border-slate-600 text-white" min={new Date().toISOString().split("T")[0]} required />
+                    <DatePicker
+                      value={form.moveDate}
+                      onChange={(v) => updateField("moveDate", v)}
+                      placeholder="Pick a move date"
+                    />
                   </div>
                 </>
               )}

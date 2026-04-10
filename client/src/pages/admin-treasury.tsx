@@ -4,6 +4,7 @@ import { Link } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -2696,7 +2697,12 @@ export default function AdminTreasuryPage() {
                     </div>
                     <div>
                       <Label className="text-slate-300 text-xs">Expiry Date (blank = never)</Label>
-                      <Input type="date" value={promoForm.expiresAt} onChange={e => setPromoForm(f => ({...f, expiresAt: e.target.value}))} className="bg-slate-800 border-slate-600 text-white mt-1" />
+                      <DatePicker
+                        value={promoForm.expiresAt || undefined}
+                        onChange={(v) => setPromoForm(f => ({...f, expiresAt: v || ""}))}
+                        placeholder="Pick expiry date"
+                        disablePast={false}
+                      />
                     </div>
                   </div>
                   <div className="flex items-center gap-3">

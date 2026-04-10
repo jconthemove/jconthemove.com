@@ -705,8 +705,8 @@ function Router() {
       {/* Quote page - accessible to all */}
       <Route path="/quote" component={QuotePage} />
       
-      {/* Book page - accessible to all (shows account CTA for unauthenticated users after booking) */}
-      {!isAuthenticated && <Route path="/book" component={CustomerBookPage} />}
+      {/* Book page - accessible to all users, authenticated or not */}
+      <Route path="/book" component={CustomerBookPage} />
 
       {/* Trash Valet pages - accessible to all */}
       <Route path="/trash-valet/book" component={TrashValetBookPage} />

@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import { ArrowLeft, Truck, Clock, Users, MapPin, CalendarDays, Shield, Loader2, Plus, X, Percent, Gem, ShoppingCart, Check, UserPlus, Timer, Bitcoin } from "lucide-react";
+import { DatePicker } from "@/components/ui/date-picker";
 import promoImage from "@assets/file_00000000839871fd8e13378301744f2e_(1)_1771260918919.png";
 import truckImage from "@assets/file_00000000219471fdb0d2dab84a32d060_1771261914341.png";
 import { useCart } from "@/hooks/useCart";
@@ -479,13 +480,10 @@ export default function PromoHalfDayPage() {
                   <CalendarDays className="h-4 w-4 text-yellow-400" />
                   Preferred Move Date *
                 </Label>
-                <Input
-                  type="date"
-                  value={form.moveDate}
-                  onChange={(e) => updateField("moveDate", e.target.value)}
-                  className="bg-slate-700 border-slate-600 text-white"
-                  min={new Date().toISOString().split("T")[0]}
-                  required
+                <DatePicker
+                  value={form.moveDate ?? undefined}
+                  onChange={(v) => updateField("moveDate", v || "")}
+                  placeholder="Pick a move date"
                 />
               </div>
 

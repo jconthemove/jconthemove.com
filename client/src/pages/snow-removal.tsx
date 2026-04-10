@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -857,10 +858,11 @@ export default function SnowRemovalPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Date *</Label>
-                  <Input
-                    type="date"
-                    value={logForm.serviceDate}
-                    onChange={(e) => setLogForm({ ...logForm, serviceDate: e.target.value })}
+                  <DatePicker
+                    value={logForm.serviceDate || undefined}
+                    onChange={(v) => setLogForm({ ...logForm, serviceDate: v || "" })}
+                    placeholder="Pick service date"
+                    disablePast={false}
                   />
                 </div>
                 <div>

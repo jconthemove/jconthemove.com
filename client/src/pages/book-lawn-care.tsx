@@ -15,6 +15,7 @@ import {
   Leaf, Phone, ChevronRight, ChevronLeft, CheckCircle2, Loader2, Calendar, Home,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DatePicker } from "@/components/ui/date-picker";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
 
 const SERVICE_CATEGORIES = [
@@ -314,14 +315,11 @@ export default function BookLawnCare() {
             <div className="space-y-4">
               <div>
                 <label className="text-slate-400 text-sm mb-2 block">Preferred start date (optional)</label>
-                <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input
-                    type="date"
-                    {...form.register("requestedStartDate")}
-                    className="bg-slate-800 border-slate-700 text-white pl-10"
-                  />
-                </div>
+                <DatePicker
+                  value={form.watch("requestedStartDate") ?? undefined}
+                  onChange={(v) => form.setValue("requestedStartDate", v || undefined)}
+                  placeholder="Pick a start date"
+                />
               </div>
               <div>
                 <label className="text-slate-400 text-sm mb-2 block">Additional notes (optional)</label>
