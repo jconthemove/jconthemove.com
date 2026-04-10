@@ -872,29 +872,34 @@ function buildCrewPackages(a: Answers, q: QuoteResult | null): CrewPackage[] {
     }
 
     if (mq.tier === "small") {
-      const pkgs: CrewPackage[] = [
+      // If heavy item (300 lbs+) + stairs: crew bumped to 3 — only show 3-mover option
+      if (mq.crew >= 3) {
+        return [
+          {
+            id: "pkg_small_3crew",
+            label: "3 Movers × 2 hrs (Heavy + Stairs)",
+            desc: "Required for heavy items on stairs — 3 movers minimum for safe handling",
+            minPrice: price(3, 2),
+            maxPrice: price(3, 2),
+            crew: 3,
+            hours: 2,
+            tag: "Safety Required",
+          },
+        ];
+      }
+      // Standard small — 2 movers. JC222 discount is applied via promo code step (not a separate package).
+      return [
         {
           id: "pkg_small",
           label: "2 Movers × 2 hrs",
-          desc: "Studio / single room · load only or unload only · 2-hr minimum",
+          desc: "Studio / single room · load only or unload only · 2-hr minimum · JC222 promo eligible",
           minPrice: price(2, 2),
           maxPrice: price(2, 2),
           crew: 2,
           hours: 2,
           tag: "Recommended",
         },
-        {
-          id: "pkg_small_jc222",
-          label: "2 Movers × 2 hrs — JC222 Special",
-          desc: "Same crew, same time · use code JC222 at checkout for $222 flat · limited availability",
-          minPrice: 222,
-          maxPrice: 222,
-          crew: 2,
-          hours: 2,
-          tag: "JC222 Promo",
-        },
       ];
-      return pkgs;
     }
 
     if (mq.tier === "medium") {
