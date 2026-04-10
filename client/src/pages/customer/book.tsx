@@ -16,9 +16,9 @@ export default function CustomerBookPage() {
     const svc = params.get("service");
     if (!svc) return;
     // Redirect services that have dedicated pages
-    if (svc === "window_cleaning") { setLocation("/window-cleaning"); return; }
-    if (svc === "trash_valet")     { setLocation("/trash-valet/book"); return; }
-    if (svc === "lawn")            { setLocation("/book/lawn-care"); return; }
+    if (svc === "window_cleaning" || svc === "window") { setLocation("/window-cleaning"); return; }
+    if (svc === "trash_valet" || svc === "trash-valet") { setLocation("/trash-valet/book"); return; }
+    if (svc === "lawn")                                { setLocation("/book/lawn-care"); return; }
     setInitialService(svc);
   }, []);
 

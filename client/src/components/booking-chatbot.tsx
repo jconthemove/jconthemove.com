@@ -17,7 +17,7 @@ import { PlacesAutocomplete } from "@/components/places-autocomplete";
 // Service categories
 // ─────────────────────────────────────────────
 const PRICEABLE_SERVICES = ["Moving", "Junk Removal", "Trash Valet", "Window Cleaning"];
-const QUOTE_ONLY_SERVICES = ["Painting", "Flooring", "Roofing", "Handyman", "Lawn Care", "Snow Removal"];
+const QUOTE_ONLY_SERVICES = ["Painting", "Flooring", "Roofing", "Handyman", "Lawn Care", "Snow Removal", "Move-In/Out Cleaning", "Light Demolition"];
 const IRONWOOD_ZIP = "49938";
 
 function isIronwoodZip(zip: string): boolean {
@@ -157,6 +157,18 @@ interface WindowQuoteResult {
   total: number;
 }
 
+interface JunkQuote {
+  type: "junk";
+  tier: "tiny" | "small" | "medium" | "large";
+  crew: number;
+  minHrs: number;
+  maxHrs: number;
+  minPrice: number;
+  maxPrice: number;
+  tokensEstimate: number;
+  specialSurcharge: number;
+}
+
 interface QuoteOnlyResult {
   type: "quote_only";
   service: string;
@@ -164,7 +176,7 @@ interface QuoteOnlyResult {
   maxPrice: number;
 }
 
-type QuoteResult = MovingQuote | TrashValetQuoteResult | WindowQuoteResult | QuoteOnlyResult;
+type QuoteResult = MovingQuote | JunkQuote | TrashValetQuoteResult | WindowQuoteResult | QuoteOnlyResult;
 
 export interface CrewPackage {
   id: string;
@@ -198,6 +210,8 @@ function getServiceLabel(rawType: string): string {
   if (rawType.includes("Handyman")) return "Handyman";
   if (rawType.includes("Lawn")) return "Lawn Care";
   if (rawType.includes("Snow")) return "Snow Removal";
+  if (rawType.includes("Cleaning") || rawType.includes("Move-In")) return "Move-In/Out Cleaning";
+  if (rawType.includes("Demo") || rawType.includes("Demolition")) return "Light Demolition";
   return "Moving";
 }
 
@@ -732,15 +746,8 @@ export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatP
   if (furnCount >= 8)  maxHrs += 0.5;
   if (boxIdx >= 4)     maxHrs += 0.5;
 
-  // ── Junk Removal adjustments ──────────────────────────────────────────────
-  if (a.serviceType?.includes("Junk")) {
-    crew   = Math.min(crew, 2);
-    minHrs = Math.max(1, minHrs * 0.5);
-    maxHrs = Math.max(2, maxHrs * 0.6);
-  }
-
   // ── Enforce load+unload minimum 3 hrs ─────────────────────────────────────
-  if (isBoth && !a.serviceType?.includes("Junk")) {
+  if (isBoth) {
     minHrs = Math.max(minHrs, 3);
     maxHrs = Math.max(maxHrs, 3);
   }
@@ -781,6 +788,57 @@ export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatP
 }
 
 // ─────────────────────────────────────────────
+// Junk Removal Quote Engine
+// ─────────────────────────────────────────────
+function computeJunkQuote(a: Answers, ratePerMoverHour = 85): JunkQuote {
+  const RATE = ratePerMoverHour;
+  const r5 = (n: number) => Math.ceil(n / 5) * 5;
+
+  // Volume tier from home size
+  const sizeTierMap: Record<string, "tiny" | "small" | "medium" | "large"> = {
+    "1–2 Items (Tiny Job)":    "tiny",
+    "Studio / Single Room":    "small",
+    "1 Bedroom Apartment":     "small",
+    "2 Bedroom Apartment":     "medium",
+    "3 Bedroom Apartment":     "medium",
+    "4+ Bedroom Apartment":    "large",
+    "1–2 Bedroom House":       "medium",
+    "3 Bedroom House":         "large",
+    "4+ Bedroom House":        "large",
+    "Commercial / Office":     "large",
+  };
+  const tier: "tiny" | "small" | "medium" | "large" = sizeTierMap[a.homeSize || ""] ?? "small";
+
+  // Special items surcharge
+  const specials = (a.specialItems || []).filter(s => s !== "None of these");
+  let specialSurcharge = 0;
+  if (specials.includes("🎹 Grand Piano"))       specialSurcharge += 250;
+  if (specials.includes("🎹 Upright Piano"))     specialSurcharge += 150;
+  if (specials.includes("🎱 Pool Table"))        specialSurcharge += 150;
+  if (specials.includes("♨️ Hot Tub"))           specialSurcharge += 200;
+  if (specials.includes("🔒 Heavy Safe (300 lbs+)")) specialSurcharge += 75;
+
+  // Crew and hour ranges by tier
+  let crew: number, minHrs: number, maxHrs: number;
+  if (tier === "tiny")   { crew = 1; minHrs = 1;   maxHrs = 1;   }
+  else if (tier === "small")  { crew = 2; minHrs = 1.5; maxHrs = 2;   }
+  else if (tier === "medium") { crew = 2; minHrs = 2.5; maxHrs = 3.5; }
+  else                        { crew = 3; minHrs = 3;   maxHrs = 5;   }
+
+  // Heavy items force a larger crew minimum
+  if (specials.some(s => ["🎹 Grand Piano", "🎹 Upright Piano", "🎱 Pool Table", "♨️ Hot Tub"].includes(s))) {
+    crew = Math.max(crew, 2);
+    if (tier === "tiny") { crew = 2; minHrs = 1.5; maxHrs = 2; }
+  }
+
+  const minPrice = r5(crew * minHrs * RATE) + specialSurcharge;
+  const maxPrice = r5(crew * maxHrs * RATE) + specialSurcharge;
+  const tokensEstimate = Math.round(((minPrice + maxPrice) / 2) * 50);
+
+  return { type: "junk", tier, crew, minHrs, maxHrs, minPrice, maxPrice, tokensEstimate, specialSurcharge };
+}
+
+// ─────────────────────────────────────────────
 // Compute Quote for Any Service
 // ─────────────────────────────────────────────
 function computeQuoteForAnswers(a: Answers, ratePerMoverHour = 85, jc222FlatPrice = 222): QuoteResult | null {
@@ -788,15 +846,21 @@ function computeQuoteForAnswers(a: Answers, ratePerMoverHour = 85, jc222FlatPric
 
   if (QUOTE_ONLY_SERVICES.includes(svc)) {
     const ranges: Record<string, [number, number]> = {
-      "Painting":       [500,  5000],
-      "Flooring":       [800,  8000],
-      "Roofing":        [2000, 15000],
-      "Handyman":       [75,   900],
-      "Lawn Care":      [50,   400],
-      "Snow Removal":   [75,   350],
+      "Painting":              [500,  5000],
+      "Flooring":              [800,  8000],
+      "Roofing":               [2000, 15000],
+      "Handyman":              [75,   900],
+      "Lawn Care":             [50,   400],
+      "Snow Removal":          [75,   350],
+      "Move-In/Out Cleaning":  [150,  600],
+      "Light Demolition":      [300,  2000],
     };
     const [min, max] = ranges[svc] || [300, 3000];
     return { type: "quote_only", service: svc, minPrice: min, maxPrice: max };
+  }
+
+  if (svc === "Junk Removal") {
+    return computeJunkQuote(a, ratePerMoverHour);
   }
 
   if (svc === "Trash Valet") {
@@ -847,6 +911,87 @@ function computeQuoteForAnswers(a: Answers, ratePerMoverHour = 85, jc222FlatPric
 // ─────────────────────────────────────────────
 export function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMoverHour = 85, jc222FlatPrice = 222): CrewPackage[] {
   if (!q) return [];
+
+  if (q.type === "junk") {
+    const jq = q as JunkQuote;
+    const RATE = ratePerMoverHour;
+    const sur  = jq.specialSurcharge;
+    const r5   = (n: number) => Math.ceil(n / 5) * 5;
+    const price = (crew: number, hrs: number) => r5(crew * hrs * RATE) + sur;
+
+    if (jq.tier === "tiny") {
+      return [{
+        id: "pkg_junk_tiny",
+        label: "Quick Haul · 1 Mover · ~1 hr",
+        desc: "1–2 items (couch, appliance, mattress, etc.) · includes curbside pickup",
+        minPrice: price(1, 1),
+        maxPrice: price(1, 1),
+        crew: 1,
+        hours: 1,
+        tag: "Minimum Job",
+      }];
+    }
+
+    if (jq.tier === "small") {
+      return [{
+        id: "pkg_junk_small",
+        label: "Small Load · 2 Movers · ~1.5–2 hrs",
+        desc: "Studio or 1BR worth of junk · roughly ¼ truck load · efficient crew",
+        minPrice: price(2, 1.5),
+        maxPrice: price(2, 2),
+        crew: 2,
+        hours: 2,
+        tag: "Standard",
+      }];
+    }
+
+    if (jq.tier === "medium") {
+      return [
+        {
+          id: "pkg_junk_med_a",
+          label: "2 Movers · ~3 hrs",
+          desc: "Steady pace — great for a 2–3BR worth of junk or a garage cleanout",
+          minPrice: price(2, 2.5),
+          maxPrice: price(2, 3.5),
+          crew: 2,
+          hours: 3,
+        },
+        {
+          id: "pkg_junk_med_b",
+          label: "3 Movers · ~2 hrs",
+          desc: "Faster crew — best if you have heavy items or a tight time window",
+          minPrice: price(3, 2),
+          maxPrice: price(3, 2),
+          crew: 3,
+          hours: 2,
+          tag: "Recommended",
+        },
+      ];
+    }
+
+    // large
+    return [
+      {
+        id: "pkg_junk_lg_a",
+        label: "2 Movers · ~5 hrs",
+        desc: "Budget option — plenty of time for a full house cleanout",
+        minPrice: price(2, 4),
+        maxPrice: price(2, 5),
+        crew: 2,
+        hours: 5,
+      },
+      {
+        id: "pkg_junk_lg_b",
+        label: "3 Movers · ~3.5 hrs",
+        desc: "Balanced crew — ideal for 4BR+ or commercial cleanouts",
+        minPrice: price(3, 3),
+        maxPrice: price(3, 3.5),
+        crew: 3,
+        hours: 3.5,
+        tag: "Recommended",
+      },
+    ];
+  }
 
   if (q.type === "moving") {
     const mq = q as MovingQuote;
@@ -1047,7 +1192,9 @@ const SERVICE_SLUG_MAP: Record<string, string> = {
   moving: "📦 Moving (local or long-distance)",
   junk: "🗑️ Junk Removal",
   trash_valet: "🗑️ Trash Valet (weekly curbside)",
+  "trash-valet": "🗑️ Trash Valet (weekly curbside)",
   window_cleaning: "🪟 Window Cleaning",
+  window: "🪟 Window Cleaning",
   painting: "🎨 Painting",
   flooring: "🪵 Flooring",
   roofing: "🏠 Roofing",
@@ -1056,6 +1203,9 @@ const SERVICE_SLUG_MAP: Record<string, string> = {
   lawn: "🌿 Lawn Care",
   snow: "❄️ Snow Removal",
   snow_removal: "❄️ Snow Removal",
+  cleaning: "✨ Move-In/Out Cleaning",
+  demolition: "⚒️ Light Demolition",
+  residential: "📦 Moving (local or long-distance)",
 };
 
 export function BookingChatbot({ onClose, embedded = false, showCloseButton, className, initialService }: { onClose?: () => void; embedded?: boolean; showCloseButton?: boolean; className?: string; initialService?: string }) {
