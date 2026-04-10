@@ -233,8 +233,8 @@ async function seedDefaultPromoCodes() {
       },
       {
         code: 'CLEANWINDOWS',
-        description: 'April window cleaning promo — 20% off window cleaning service',
-        discountPercent: '20.00',
+        description: 'April window cleaning promo — 10% off window cleaning service',
+        discountPercent: '10.00',
         discountPercentJewelry: '0.00',
         rewardTokens: '0.00',
         referralRewardTokens: '0.00',
@@ -3283,6 +3283,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     includeOutside:  z.boolean().default(true),
     seasonMode:      z.enum(["normal", "winter_inside_only"]).default("normal"),
     promoCode:       z.string().trim().default(""),
+    addonSelected:   z.boolean().default(false),
+    addons:          z.array(z.string()).default([]),
     travelFee:       z.coerce.number().min(0).default(0),
     distanceMiles:   z.coerce.number().min(0).default(0),
   });
@@ -3299,6 +3301,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         firstName, lastName, email, phone, address,
         standardWindows, largeWindows, ladderWindows,
         includeInside, includeOutside, seasonMode, promoCode,
+        addonSelected, addons,
         travelFee, distanceMiles,
       } = parseResult.data;
 
@@ -3329,6 +3332,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         includeOutside,
         seasonMode,
         promoCode: validatedPromoCode,
+        addonSelected,
       }, isApril);
 
       const serverTravelFee = distanceMiles > 5 ? 50 : travelFee;
@@ -3341,8 +3345,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         subtotal: quote.subtotal,
         discountAmount: quote.discountAmount,
         discountPercent: quote.discountPercent,
+        promoDiscountAmount: quote.promoDiscountAmount,
+        addonDiscountAmount: quote.addonDiscountAmount,
+        addonDiscountApplied: quote.addonDiscountApplied,
         promoApplied: quote.promoApplied,
         promoCode: promoCode || null,
+        addonSelected,
+        addons,
         travelFee: serverTravelFee,
         distanceMiles,
       });
@@ -3373,8 +3382,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           to: companyEmail,
           from: companyEmail,
           subject: `New Window Cleaning Booking — ${customerName}`,
-          text: `New window cleaning job submitted.\n\nCustomer: ${customerName}\nPhone: ${customerPhone}\nEmail: ${customerEmail}\nAddress: ${address}\nWindows: ${standardWindows} standard, ${largeWindows} large, ${ladderWindows} ladder\nInside: ${includeInside}, Outside: ${includeOutside}, Season: ${seasonMode}\nPanes: ${quote.paneCount}\nTotal: $${adjustedTotal}${quote.promoApplied ? ` (${quote.discountPercent}% promo applied)` : ""}${travelNote}\n\nView job in admin panel.`,
-          html: `<h2>New Window Cleaning Booking</h2><p><b>Customer:</b> ${customerName}<br><b>Phone:</b> ${customerPhone}<br><b>Email:</b> ${customerEmail}<br><b>Address:</b> ${address}<br><b>Windows:</b> ${standardWindows} standard, ${largeWindows} large, ${ladderWindows} ladder<br><b>Inside:</b> ${includeInside}, <b>Outside:</b> ${includeOutside}<br><b>Season:</b> ${seasonMode}<br><b>Total:</b> $${adjustedTotal}${quote.promoApplied ? ` <em>(${quote.discountPercent}% promo applied)</em>` : ""}${travelNote ? `<br><b>Travel:</b> ${travelNote}` : ""}</p>`,
+          text: `New window cleaning job submitted.\n\nCustomer: ${customerName}\nPhone: ${customerPhone}\nEmail: ${customerEmail}\nAddress: ${address}\nWindows: ${standardWindows} standard, ${largeWindows} large, ${ladderWindows} ladder\nInside: ${includeInside}, Outside: ${includeOutside}, Season: ${seasonMode}\nPanes: ${quote.paneCount}\nTotal: $${adjustedTotal}${quote.promoApplied ? ` (${quote.promoDiscountPercent}% promo applied)` : ""}${quote.addonDiscountApplied ? ` + 10% bundle discount` : ""}${travelNote}${addons.length > 0 ? `\nRequested Add-Ons: ${addons.join(", ")} — please follow up for separate quotes` : ""}\n\nView job in admin panel.`,
+          html: `<h2>New Window Cleaning Booking</h2><p><b>Customer:</b> ${customerName}<br><b>Phone:</b> ${customerPhone}<br><b>Email:</b> ${customerEmail}<br><b>Address:</b> ${address}<br><b>Windows:</b> ${standardWindows} standard, ${largeWindows} large, ${ladderWindows} ladder<br><b>Inside:</b> ${includeInside}, <b>Outside:</b> ${includeOutside}<br><b>Season:</b> ${seasonMode}<br><b>Total:</b> $${adjustedTotal}${quote.promoApplied ? ` <em>(${quote.promoDiscountPercent}% promo applied)</em>` : ""}${quote.addonDiscountApplied ? ` <em>+ 10% bundle discount</em>` : ""}${travelNote ? `<br><b>Travel:</b> ${travelNote}` : ""}${addons.length > 0 ? `<br><b style="color:orange">Add-On Requests:</b> ${addons.join(", ")} — follow up for separate quotes` : ""}</p>`,
         });
       } catch (emailErr) { console.error("Admin email failed:", emailErr); }
 

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Loader2, Tag, ChevronDown, ChevronUp, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Loader2, Tag, ChevronDown, ChevronUp, AlertCircle, CheckCircle2, Plus } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import AddressAutocomplete from "@/components/AddressAutocomplete";
@@ -28,6 +28,15 @@ interface WindowCleaningBookingProps {
   user?: AuthUser;
   onBooked?: (jobId: string, total: number) => void;
 }
+
+const ADDON_SERVICES = [
+  { id: "junk_removal",  label: "Junk Removal",   emoji: "🗑️" },
+  { id: "trash_valet",   label: "Trash Valet",     emoji: "♻️" },
+  { id: "lawn_care",     label: "Lawn Care",        emoji: "🌿" },
+  { id: "moving",        label: "Moving Help",      emoji: "📦" },
+  { id: "snow_removal",  label: "Snow Removal",     emoji: "❄️" },
+  { id: "handyman",      label: "Handyman",         emoji: "🔧" },
+] as const;
 
 export default function WindowCleaningBooking({ user, onBooked }: WindowCleaningBookingProps) {
   const { toast } = useToast();
@@ -61,13 +70,15 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
   const [seasonMode, setSeasonMode] = useState<"normal" | "winter_inside_only">("normal");
   const [promoCode, setPromoCode] = useState("");
   const [promoSubmitted, setPromoSubmitted] = useState("");
+  const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
 
   const [showDetails, setShowDetails] = useState(false);
 
   const isApril = new Date().getMonth() === 3;
+  const addonSelected = selectedAddons.length > 0;
 
   const quote = calculateWindowCleaningQuote(
-    { standardWindows, largeWindows, ladderWindows, includeInside, includeOutside, seasonMode, promoCode: promoSubmitted },
+    { standardWindows, largeWindows, ladderWindows, includeInside, includeOutside, seasonMode, promoCode: promoSubmitted, addonSelected },
     isApril,
   );
 
@@ -81,6 +92,12 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
     phone.trim().length >= 7 &&
     address.trim().length >= 8 &&
     (standardWindows + largeWindows + ladderWindows) > 0;
+
+  const toggleAddon = (id: string) => {
+    setSelectedAddons(prev =>
+      prev.includes(id) ? prev.filter(a => a !== id) : [...prev, id]
+    );
+  };
 
   const book = useMutation({
     mutationFn: async () => {
@@ -97,6 +114,8 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
         includeOutside,
         seasonMode,
         promoCode: promoSubmitted.trim(),
+        addonSelected,
+        addons: selectedAddons,
         travelFee,
         distanceMiles,
       });
@@ -217,6 +236,55 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
         </div>
       </div>
 
+      {/* Add-On Services — 10% bundle discount */}
+      <div className={`rounded-2xl p-4 space-y-3 border transition-all ${
+        addonSelected
+          ? "bg-green-900/20 border-green-500/40"
+          : "bg-zinc-900 border-zinc-800"
+      }`}>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
+              <Plus className="h-3 w-3" /> Add a Service
+            </p>
+            <p className="text-[11px] text-zinc-500 mt-0.5">Save an extra 10% on windows when you add another service</p>
+          </div>
+          {addonSelected && (
+            <span className="bg-green-500/20 text-green-300 text-[10px] font-bold px-2 py-1 rounded-full border border-green-500/30">
+              −10% applied
+            </span>
+          )}
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          {ADDON_SERVICES.map(svc => {
+            const active = selectedAddons.includes(svc.id);
+            return (
+              <button
+                key={svc.id}
+                type="button"
+                onClick={() => toggleAddon(svc.id)}
+                className={`flex flex-col items-center gap-1 py-2.5 px-1 rounded-xl border text-center transition-all active:scale-95 ${
+                  active
+                    ? "bg-green-500/15 border-green-500/50 text-green-300"
+                    : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300"
+                }`}
+              >
+                <span className="text-lg leading-none">{svc.emoji}</span>
+                <span className="text-[10px] font-semibold leading-tight">{svc.label}</span>
+                {active && <span className="text-[9px] text-green-400 font-bold">✓ Added</span>}
+              </button>
+            );
+          })}
+        </div>
+
+        {addonSelected && (
+          <p className="text-[11px] text-green-400 text-center">
+            🎉 Bundle discount active — 10% off windows! We'll quote your {selectedAddons.length > 1 ? "add-ons" : "add-on"} separately.
+          </p>
+        )}
+      </div>
+
       {/* Live Quote Panel */}
       <div className="bg-zinc-900 border border-orange-500/30 rounded-2xl p-4 space-y-3">
         <div className="flex items-center justify-between">
@@ -264,9 +332,19 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
           <div className="flex items-center justify-between text-green-400">
             <span className="text-sm flex items-center gap-1">
               <CheckCircle2 className="h-3.5 w-3.5" />
-              CLEANWINDOWS (−{quote.discountPercent}%)
+              CLEANWINDOWS (−{quote.promoDiscountPercent}%)
             </span>
-            <span className="font-bold">−${quote.discountAmount.toFixed(2)}</span>
+            <span className="font-bold">−${quote.promoDiscountAmount.toFixed(2)}</span>
+          </div>
+        )}
+
+        {quote.addonDiscountApplied && (
+          <div className="flex items-center justify-between text-green-400">
+            <span className="text-sm flex items-center gap-1">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Bundle add-on discount (−10%)
+            </span>
+            <span className="font-bold">−${quote.addonDiscountAmount.toFixed(2)}</span>
           </div>
         )}
 
@@ -276,6 +354,7 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
             <span className="text-amber-400 text-xs font-semibold">+${travelFee.toFixed(2)}</span>
           </div>
         )}
+
         <div className="flex items-center justify-between border-t border-zinc-800 pt-3">
           <span className="text-zinc-300 font-semibold text-sm">Total</span>
           <span className="text-white font-black text-2xl">${adjustedTotal.toFixed(2)}</span>
@@ -315,11 +394,11 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
         {quote.promoApplied && (
           <p className="flex items-center gap-1 text-green-400 text-xs">
             <CheckCircle2 className="h-3 w-3" />
-            20% April discount applied!
+            10% April discount applied!
           </p>
         )}
         {isApril && !quote.promoApplied && (
-          <p className="text-orange-400 text-xs font-medium">🎉 Enter CLEANWINDOWS for 20% off — April special!</p>
+          <p className="text-orange-400 text-xs font-medium">🎉 Enter CLEANWINDOWS for 10% off — April special!</p>
         )}
       </div>
 
@@ -389,9 +468,14 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
         {book.isPending ? (
           <Loader2 className="h-5 w-5 animate-spin" />
         ) : (
-          <>🪟 Book Now · ${adjustedTotal.toFixed(2)}</>
+          <>🪟 Book Now · ${adjustedTotal.toFixed(2)}{addonSelected ? " + add-ons" : ""}</>
         )}
       </button>
+      {addonSelected && (
+        <p className="text-center text-xs text-green-500">
+          Your selected add-on{selectedAddons.length > 1 ? "s" : ""} ({selectedAddons.map(id => ADDON_SERVICES.find(s => s.id === id)?.label).join(", ")}) will be quoted separately.
+        </p>
+      )}
       <p className="text-center text-xs text-zinc-600">⚡ Most jobs booked in under 30 seconds</p>
     </div>
   );

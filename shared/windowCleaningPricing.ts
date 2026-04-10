@@ -6,6 +6,7 @@ export interface WindowCleaningInput {
   includeOutside: boolean;
   seasonMode: "normal" | "winter_inside_only";
   promoCode?: string;
+  addonSelected?: boolean;
 }
 
 export interface WindowCleaningQuote {
@@ -14,6 +15,10 @@ export interface WindowCleaningQuote {
   subtotal: number;
   discountAmount: number;
   discountPercent: number;
+  promoDiscountAmount: number;
+  promoDiscountPercent: number;
+  addonDiscountAmount: number;
+  addonDiscountApplied: boolean;
   total: number;
   breakdown: {
     standardPanes: number;
@@ -31,11 +36,14 @@ const MINIMUM_WINDOWS = 4;
 const LARGE_WINDOW_PANE_MULTIPLIER = 2;
 const LADDER_WINDOW_RATE_MULTIPLIER = 2;
 
+export const PROMO_DISCOUNT_PERCENT = 10;
+export const ADDON_DISCOUNT_PERCENT = 10;
+
 export function calculateWindowCleaningQuote(
   input: WindowCleaningInput,
   isApril: boolean = new Date().getMonth() === 3,
 ): WindowCleaningQuote {
-  const { standardWindows, largeWindows, ladderWindows, includeInside, includeOutside, seasonMode, promoCode } = input;
+  const { standardWindows, largeWindows, ladderWindows, includeInside, includeOutside, seasonMode, promoCode, addonSelected } = input;
 
   const effectiveIncludeOutside = seasonMode === "winter_inside_only" ? false : includeOutside;
   const sidesPerWindow = (effectiveIncludeOutside ? 1 : 0) + (includeInside ? 1 : 0);
@@ -54,15 +62,15 @@ export function calculateWindowCleaningQuote(
   const minimumSubtotal = MINIMUM_WINDOWS * sidesPerWindow * PRICE_PER_PANE;
   const subtotal = Math.max(computedSubtotal, minimumSubtotal, MINIMUM_WINDOWS * PRICE_PER_PANE);
 
-  let discountAmount = 0;
-  let discountPercent = 0;
+  let promoDiscountAmount = 0;
+  let promoDiscountPercent = 0;
   let promoApplied = false;
   let promoError: string | undefined;
 
   if (promoCode && promoCode.toUpperCase() === "CLEANWINDOWS") {
     if (isApril) {
-      discountPercent = 20;
-      discountAmount = Math.round(subtotal * 0.2 * 100) / 100;
+      promoDiscountPercent = PROMO_DISCOUNT_PERCENT;
+      promoDiscountAmount = Math.round(subtotal * (PROMO_DISCOUNT_PERCENT / 100) * 100) / 100;
       promoApplied = true;
     } else {
       promoError = "CLEANWINDOWS is only valid in April";
@@ -70,6 +78,15 @@ export function calculateWindowCleaningQuote(
   } else if (promoCode && promoCode.trim().length > 0) {
     promoError = "Invalid promo code";
   }
+
+  // Add-on bundle discount: 10% off when customer books an additional service
+  const addonDiscountApplied = !!addonSelected;
+  const addonDiscountAmount = addonDiscountApplied
+    ? Math.round(subtotal * (ADDON_DISCOUNT_PERCENT / 100) * 100) / 100
+    : 0;
+
+  const discountAmount = promoDiscountAmount + addonDiscountAmount;
+  const discountPercent = promoDiscountPercent + (addonDiscountApplied ? ADDON_DISCOUNT_PERCENT : 0);
 
   const total = Math.max(0, subtotal - discountAmount);
 
@@ -79,6 +96,10 @@ export function calculateWindowCleaningQuote(
     subtotal,
     discountAmount,
     discountPercent,
+    promoDiscountAmount,
+    promoDiscountPercent,
+    addonDiscountAmount,
+    addonDiscountApplied,
     total,
     breakdown: {
       standardPanes,
