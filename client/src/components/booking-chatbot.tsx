@@ -860,22 +860,13 @@ function buildCrewPackages(a: Answers, q: QuoteResult | null): CrewPackage[] {
       return [
         {
           id: "pkg_tiny",
-          label: "Tiny Move · 1 Mover",
-          desc: "1–2 light items (≤200 lbs) · 30–60 min · single task",
-          minPrice: price(1, 0.5),
-          maxPrice: price(1, 1),
+          label: "Tiny Move · 1 Mover · Up to 90 min",
+          desc: "1–2 light items (≤200 lbs) · single task · perfect for a single appliance, couch, or dresser",
+          minPrice: 85,
+          maxPrice: 130,
           crew: 1,
           hours: 1,
           tag: "Quick Job",
-        },
-        {
-          id: "pkg_small_upgrade",
-          label: "Small Move · 2 Movers × 2 hrs",
-          desc: "More flexibility — ideal if your needs grow day-of",
-          minPrice: price(2, 2),
-          maxPrice: price(2, 2),
-          crew: 2,
-          hours: 2,
         },
       ];
     }
@@ -893,35 +884,16 @@ function buildCrewPackages(a: Answers, q: QuoteResult | null): CrewPackage[] {
           tag: "Recommended",
         },
         {
-          id: "pkg_small_3hr",
-          label: "2 Movers × 3 hrs",
-          desc: "Extra time buffer — best if you have stairs or more items",
-          minPrice: price(2, 3),
-          maxPrice: price(2, 3),
+          id: "pkg_small_jc222",
+          label: "2 Movers × 2 hrs — JC222 Special",
+          desc: "Same crew, same time · use code JC222 at checkout for $222 flat · limited availability",
+          minPrice: 222,
+          maxPrice: 222,
           crew: 2,
-          hours: 3,
+          hours: 2,
+          tag: "JC222 Promo",
         },
       ];
-      // If heavy item + stairs, lead with 3-mover option
-      const specials = (a.specialItems || []).filter(s => s !== "None of these");
-      const hasHeavy = specials.includes("🔒 Heavy Safe (300 lbs+)") ||
-                       specials.includes("🎹 Upright Piano") ||
-                       specials.includes("🎱 Pool Table") ||
-                       specials.includes("♨️ Hot Tub");
-      const hasStairs = (a.originFloor !== "Ground Floor / 1st" && a.originElevator === "🪜 No elevator — stairs only") ||
-                        (a.destFloor   !== "Ground Floor / 1st" && a.destElevator   === "🪜 No elevator — stairs only");
-      if (hasHeavy && hasStairs) {
-        pkgs.unshift({
-          id: "pkg_small_3crew",
-          label: "3 Movers × 2 hrs (Heavy + Stairs)",
-          desc: "Required for heavy items on stairs — safest option",
-          minPrice: price(3, 2),
-          maxPrice: price(3, 2),
-          crew: 3,
-          hours: 2,
-          tag: "Safety Pick",
-        });
-      }
       return pkgs;
     }
 
@@ -930,7 +902,7 @@ function buildCrewPackages(a: Answers, q: QuoteResult | null): CrewPackage[] {
         {
           id: "pkg_med_a",
           label: "2 Movers × 4 hrs",
-          desc: "Steady pace · best for ground-floor or elevator access",
+          desc: "Steady pace · $85/mover/hr · best for ground-floor or elevator access",
           minPrice: price(2, 4),
           maxPrice: price(2, 4),
           crew: 2,
@@ -939,9 +911,9 @@ function buildCrewPackages(a: Answers, q: QuoteResult | null): CrewPackage[] {
         {
           id: "pkg_med_b",
           label: "3 Movers × 2.5 hrs",
-          desc: "Faster crew · recommended with stairs or tight schedule",
+          desc: "Faster crew · same total effort · recommended with stairs or tight schedule",
           minPrice: price(3, 2.5),
-          maxPrice: price(3, 3),
+          maxPrice: price(3, 2.5),
           crew: 3,
           hours: 2.5,
           tag: "Recommended",
@@ -1526,55 +1498,28 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
                 </div>
               </div>
 
-            {/* Package cards */}
-            <div>
-              <p className="text-xs font-semibold text-slate-300 mb-2 px-1">Select a package:</p>
-              <div className="grid grid-cols-1 gap-2">
-                {crewPackages.map((pkg) => {
-                  const isSelected = selectedPackageObj?.id === pkg.id;
-                  return (
-                    <button
-                      key={pkg.id}
-                      onClick={() => handlePackageSelect(pkg)}
-                      className={`flex items-center justify-between p-3.5 rounded-xl border-2 text-left transition-all ${
-                        isSelected
-                          ? "border-teal-500 bg-teal-900/30"
-                          : "border-slate-700/60 bg-slate-800/40 hover:border-teal-500/40"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        {isSelected && <CheckCircle2 className="h-4 w-4 text-teal-400 shrink-0" />}
-                        {!isSelected && <div className="h-4 w-4 rounded-full border-2 border-slate-600 shrink-0" />}
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-slate-100 truncate">{pkg.label}</p>
-                          {pkg.crew && pkg.hours && (
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <span className="flex items-center gap-1 text-[11px] text-slate-400"><Users className="h-2.5 w-2.5" />{pkg.crew} movers</span>
-                              <span className="flex items-center gap-1 text-[11px] text-slate-400"><Clock className="h-2.5 w-2.5" />{pkg.hours} hrs</span>
-                            </div>
-                          )}
-                        </div>
+            {/* Selected package summary — shown after package step is done */}
+            {selectedPackageObj && (
+              <div className="bg-teal-900/30 border border-teal-500/40 rounded-xl p-3 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <CheckCircle2 className="h-4 w-4 text-teal-400 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-slate-100 truncate">{selectedPackageObj.label}</p>
+                    {selectedPackageObj.crew && selectedPackageObj.hours && (
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="flex items-center gap-1 text-[11px] text-slate-400"><Users className="h-2.5 w-2.5" />{selectedPackageObj.crew} movers</span>
+                        <span className="flex items-center gap-1 text-[11px] text-slate-400"><Clock className="h-2.5 w-2.5" />{selectedPackageObj.hours} hrs</span>
                       </div>
-                      <div className="text-right shrink-0 ml-2">
-                        {pkg.minPrice !== pkg.maxPrice ? (
-                          <p className="text-sm font-bold text-teal-300">${pkg.minPrice}–${pkg.maxPrice}</p>
-                        ) : (
-                          <p className="text-sm font-bold text-teal-300">${pkg.minPrice.toLocaleString()}</p>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
+                    )}
+                  </div>
+                </div>
+                <p className="text-sm font-bold text-teal-300 shrink-0">
+                  {selectedPackageObj.minPrice !== selectedPackageObj.maxPrice
+                    ? `$${selectedPackageObj.minPrice}–$${selectedPackageObj.maxPrice}`
+                    : `$${selectedPackageObj.minPrice.toLocaleString()}`}
+                </p>
               </div>
-            </div>
-
-            <Button
-              onClick={handlePackageContinue}
-              disabled={!selectedPackageObj}
-              className="w-full bg-gradient-to-r from-teal-600 to-blue-600 hover:from-teal-500 hover:to-blue-500 text-white font-bold py-3 rounded-xl text-sm"
-            >
-              Continue with {selectedPackageObj ? `"${selectedPackageObj.label}"` : "Selected Package"} <ArrowRight className="h-4 w-4 ml-2" />
-            </Button>
+            )}
           </div>
         )}
 
@@ -1899,26 +1844,46 @@ export function BookingChatbot({ onClose, embedded = false, showCloseButton, cla
           {currentStep.type === "package_select" && crewPackages.length > 0 && (
             <div className="space-y-2">
               <p className="text-sm font-semibold text-slate-200 mb-1">Choose your crew package:</p>
-              {crewPackages.map((pkg) => (
-                <button
-                  key={pkg.id}
-                  onClick={() => handlePackageSelect(pkg)}
-                  className="w-full text-left p-3 rounded-xl border border-slate-700/60 bg-slate-800/60 hover:border-teal-500/60 hover:bg-teal-900/20 transition-all"
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-semibold text-white">{pkg.label}</span>
-                    <div className="flex items-center gap-2">
-                      {pkg.tag && <Badge className="text-[10px] bg-teal-700/60 text-teal-200 border-0">{pkg.tag}</Badge>}
-                      <span className="text-sm font-bold text-teal-300">
-                        {pkg.minPrice === pkg.maxPrice
-                          ? `$${pkg.minPrice}`
-                          : `$${pkg.minPrice}–$${pkg.maxPrice}`}
-                      </span>
+              {crewPackages.map((pkg) => {
+                const isSel = selectedPackageObj?.id === pkg.id;
+                return (
+                  <button
+                    key={pkg.id}
+                    onClick={() => handlePackageSelect(pkg)}
+                    className={`w-full text-left p-3 rounded-xl border-2 transition-all ${
+                      isSel
+                        ? "border-teal-500 bg-teal-900/30"
+                        : "border-slate-700/60 bg-slate-800/60 hover:border-teal-500/40"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        {isSel
+                          ? <CheckCircle2 className="h-4 w-4 text-teal-400 shrink-0" />
+                          : <div className="h-4 w-4 rounded-full border-2 border-slate-600 shrink-0" />}
+                        <span className="text-sm font-semibold text-white">{pkg.label}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {pkg.tag && <Badge className="text-[10px] bg-teal-700/60 text-teal-200 border-0">{pkg.tag}</Badge>}
+                        <span className="text-sm font-bold text-teal-300">
+                          {pkg.minPrice === pkg.maxPrice
+                            ? `$${pkg.minPrice}`
+                            : `$${pkg.minPrice}–$${pkg.maxPrice}`}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                  <p className="text-xs text-slate-400">{pkg.desc}</p>
-                </button>
-              ))}
+                    <p className="text-xs text-slate-400 pl-6">{pkg.desc}</p>
+                  </button>
+                );
+              })}
+              <Button
+                onClick={handlePackageContinue}
+                disabled={!selectedPackageObj}
+                className="w-full bg-gradient-to-r from-teal-600 to-blue-600 hover:from-teal-500 hover:to-blue-500 text-white font-semibold py-2.5 rounded-xl text-sm mt-1"
+                size="sm"
+              >
+                Continue with {selectedPackageObj ? `"${selectedPackageObj.label}"` : "a package"} <ChevronRight className="h-3.5 w-3.5 ml-1" />
+              </Button>
             </div>
           )}
         </div>
