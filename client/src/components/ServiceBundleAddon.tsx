@@ -16,6 +16,7 @@ export const ALL_BUNDLE_SERVICES: BundleService[] = [
   { id: "trash_valet",     label: "Trash Valet",     emoji: "♻️", hint: "from $25/mo" },
   { id: "snow_removal",    label: "Snow Removal",    emoji: "❄️", hint: "from $40/visit" },
   { id: "assembly",        label: "Assembly",        emoji: "🔧", hint: "$35/item" },
+  { id: "ashley_shop",     label: "Ashley's Shop",   emoji: "🛍️", hint: "earn JCMOVES" },
 ];
 
 interface ServiceBundleAddonProps {

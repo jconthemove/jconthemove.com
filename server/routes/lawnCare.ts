@@ -5,6 +5,7 @@ import { calculateLawnCareQuote } from "../lib/lawnCarePricing";
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
 import { sendEmail } from "../services/email";
+import { disburseServiceTokens } from "../services/disburse-service-tokens";
 
 const router = Router();
 
@@ -103,6 +104,16 @@ router.post("/quote", async (req: Request, res: Response) => {
       requestedTimeWindow: data.requestedTimeWindow,
       status: "quote_requested",
     }).returning();
+
+    // Award JCMOVES tokens (non-blocking, idempotent)
+    if (data.email) {
+      disburseServiceTokens({
+        serviceType: "lawn_care",
+        referenceId: quote.id,
+        customerEmail: data.email,
+        totalPrice: pricing.totalQuoted,
+      }).catch(err => console.error("Lawn care token disburse error:", err));
+    }
 
     // Notify admin (non-blocking)
     const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";

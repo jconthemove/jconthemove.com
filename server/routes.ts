@@ -18711,6 +18711,17 @@ Thank you for your business!
         await smsService.notifyNewQuote({ customerName, serviceType: "trash valet", phone: phone || undefined });
       } catch (smsErr) { console.error("Admin SMS failed:", smsErr); }
 
+      // Award JCMOVES tokens for trash valet subscription (non-blocking, idempotent)
+      if (email) {
+        const { disburseServiceTokens } = await import("./services/disburse-service-tokens");
+        disburseServiceTokens({
+          serviceType: "trash_valet",
+          referenceId: sub.id,
+          customerEmail: email,
+          totalPrice: effectiveMonthlyPrice,
+        }).catch(err => console.error("Trash valet token disburse error:", err));
+      }
+
       res.json({ subscriptionId: sub.id, jobId: job.id, quote: { ...quote, finalMonthlyPrice: effectiveMonthlyPrice }, promoApplied: promoCodeUsed });
     } catch (err) {
       console.error("Error creating trash valet subscription:", err);
