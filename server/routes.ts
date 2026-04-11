@@ -9933,6 +9933,96 @@ Thank you for your business!
     }
   });
 
+  // GET /api/admin/analytics/shop — Ashley's Shop specific traffic breakdown
+  app.get("/api/admin/analytics/shop", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      // Total shop views (all time + this month)
+      const { rows: shopTotals } = await pool.query(`
+        SELECT
+          COUNT(*) AS all_time_views,
+          COUNT(DISTINCT visitor_id) AS all_time_unique,
+          COUNT(*) FILTER (WHERE visited_at >= DATE_TRUNC('month', NOW())) AS this_month_views,
+          COUNT(DISTINCT visitor_id) FILTER (WHERE visited_at >= DATE_TRUNC('month', NOW())) AS this_month_unique
+        FROM page_views
+        WHERE page LIKE '/nature-made-jewls%'
+      `);
+
+      // Top referrer domains for shop traffic
+      const { rows: referrers } = await pool.query(`
+        SELECT
+          CASE
+            WHEN referrer IS NULL OR referrer = '' THEN 'Direct / Unknown'
+            WHEN referrer LIKE '%instagram%' THEN 'Instagram'
+            WHEN referrer LIKE '%facebook%' OR referrer LIKE '%fb.com%' THEN 'Facebook'
+            WHEN referrer LIKE '%google%' THEN 'Google'
+            WHEN referrer LIKE '%tiktok%' THEN 'TikTok'
+            WHEN referrer LIKE '%twitter%' OR referrer LIKE '%t.co%' OR referrer LIKE '%x.com%' THEN 'Twitter / X'
+            WHEN referrer LIKE '%pinterest%' THEN 'Pinterest'
+            WHEN referrer LIKE '%snapchat%' THEN 'Snapchat'
+            WHEN referrer LIKE '%youtube%' THEN 'YouTube'
+            WHEN referrer LIKE '%bing%' THEN 'Bing'
+            ELSE REGEXP_REPLACE(REGEXP_REPLACE(referrer, '^https?://(www\.)?', ''), '/.*$', '')
+          END AS source,
+          COUNT(*) AS visits,
+          COUNT(DISTINCT visitor_id) AS unique_visitors
+        FROM page_views
+        WHERE page LIKE '/nature-made-jewls%'
+          AND visited_at >= NOW() - INTERVAL '3 months'
+        GROUP BY source
+        ORDER BY visits DESC
+        LIMIT 12
+      `);
+
+      // Top product pages joined with jewelry_items for names
+      const { rows: topProducts } = await pool.query(`
+        SELECT
+          pv.page,
+          COUNT(*) AS views,
+          COUNT(DISTINCT pv.visitor_id) AS unique_visitors,
+          ji.title AS product_name
+        FROM page_views pv
+        LEFT JOIN jewelry_items ji ON ji.id = SUBSTRING(pv.page FROM '/nature-made-jewls/(.+)$')
+        WHERE pv.page LIKE '/nature-made-jewls/%'
+          AND visited_at >= DATE_TRUNC('month', NOW())
+        GROUP BY pv.page, ji.title
+        ORDER BY views DESC
+        LIMIT 10
+      `);
+
+      // Daily trend for shop pages this month
+      const { rows: daily } = await pool.query(`
+        SELECT
+          TO_CHAR(visited_at, 'YYYY-MM-DD') AS day,
+          COUNT(*) AS views,
+          COUNT(DISTINCT visitor_id) AS unique_visitors
+        FROM page_views
+        WHERE page LIKE '/nature-made-jewls%'
+          AND visited_at >= DATE_TRUNC('month', NOW())
+        GROUP BY TO_CHAR(visited_at, 'YYYY-MM-DD')
+        ORDER BY day ASC
+      `);
+
+      // Monthly history for shop
+      const { rows: monthly } = await pool.query(`
+        SELECT
+          TO_CHAR(visited_at, 'YYYY-MM') AS month,
+          COUNT(*) AS total_views,
+          COUNT(DISTINCT visitor_id) AS unique_visitors
+        FROM page_views
+        WHERE page LIKE '/nature-made-jewls%'
+          AND visited_at >= NOW() - INTERVAL '12 months'
+        GROUP BY TO_CHAR(visited_at, 'YYYY-MM')
+        ORDER BY month DESC
+        LIMIT 12
+      `);
+
+      res.json({ totals: shopTotals[0] || {}, referrers, topProducts, daily, monthly });
+    } catch (err) {
+      console.error("Shop analytics error:", err);
+      res.status(500).json({ error: "Failed to load shop analytics" });
+    }
+  });
+
   // ── Unified dashboard endpoint ──────────────────────────────────────────────
   // Returns jobs summary, token totals, and liability metrics in one call
   app.get("/api/dashboard", isAuthenticated, requireBusinessOwner, async (req, res) => {
