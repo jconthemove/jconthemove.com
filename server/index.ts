@@ -5,6 +5,21 @@ import cors from "cors";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
+// ── Crash guard — log clearly before exiting so the auto-restart wrapper picks it up ──
+process.on("uncaughtException", (err) => {
+  console.error(`\n[CRASH] Uncaught exception at ${new Date().toISOString()}:`);
+  console.error(err?.stack || err);
+  console.error("[CRASH] Auto-restart wrapper will bring the server back up in a moment...\n");
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error(`\n[CRASH] Unhandled promise rejection at ${new Date().toISOString()}:`);
+  console.error(reason);
+  console.error("[CRASH] Auto-restart wrapper will bring the server back up in a moment...\n");
+  process.exit(1);
+});
+
 const app = express();
 
 app.set("trust proxy", 1);

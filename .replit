@@ -39,8 +39,11 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "npm run dev"
+args = "bash start.sh"
 waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
 
 [objectStorage]
 defaultBucketID = "replit-objstore-a9baa404-581c-4bac-9fcf-ce0cab96dc69"
