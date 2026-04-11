@@ -486,6 +486,15 @@ export default function TrashValetBookPage() {
             </CardContent>
           </Card>
 
+          {/* Senior discount banner */}
+          <div className="rounded-xl bg-blue-950/60 border border-blue-500/30 px-4 py-3 flex items-center gap-3">
+            <span className="text-xl shrink-0">🏅</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-blue-300">Senior Discount — $5/month off</p>
+              <p className="text-xs text-zinc-400">Age 65+? Mention it when Darrell contacts you and we'll bring your rate down to <span className="text-blue-300 font-semibold">$25/mo</span>.</p>
+            </div>
+          </div>
+
           {/* Promo code */}
           <Card className="bg-zinc-900 border-zinc-800">
             <CardContent className="pt-4 pb-4">

@@ -2664,8 +2664,16 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
                       Starting estimate — Darrell will confirm the final price after reviewing your request.
                     </p>
                     <div className="mt-2 bg-amber-900/20 border border-amber-500/20 rounded-lg px-3 py-2 text-left">
-                      <p className="text-[10px] text-amber-400 font-semibold mb-0.5">⚠️ Items that may add to the final cost:</p>
-                      <p className="text-[10px] text-slate-400">Tires · Mattresses · TVs · Hazardous materials — final cost determined on-site</p>
+                      <p className="text-[10px] text-amber-400 font-semibold mb-0.5">⚠️ Things that can influence the final price:</p>
+                      <p className="text-[10px] text-slate-400">
+                        {isHandymanService(answers)
+                          ? "Deeper projects · Larger repairs · Specialty or hard-to-find materials — all can affect the final price"
+                          : isJunkService(answers)
+                            ? "Tires · Mattresses · TVs · Hazardous materials — final cost determined on-site"
+                            : isMovingService(answers)
+                              ? "Long distances · Extra stops · Heavy specialty items · Stairs or no elevator — all can affect the final price"
+                              : "Scope of work · Special materials · Site conditions — final price confirmed by Darrell"}
+                      </p>
                     </div>
                   </div>
                 )}
