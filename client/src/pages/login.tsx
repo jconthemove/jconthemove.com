@@ -14,7 +14,7 @@ import { Loader2, LogIn, Lock, Mail, User, UserPlus, Phone, Coins, Truck } from 
 function roleDestination(role: string, status: string): string {
   if (status === "pending") return "/pending-approval";
   if (role === "admin" || role === "business_owner") return "/control";
-  if (role === "employee") return "/hub";
+  if (role === "employee") return "/crew";
   return "/";
 }
 

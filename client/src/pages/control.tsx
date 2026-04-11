@@ -32,10 +32,10 @@ const SECTIONS = [
     title: "Operations",
     items: [
       {
-        href: "/hub",
+        href: "/crew",
         icon: Briefcase,
-        label: "Team Hub",
-        description: "Leads, jobs, team management, and quotes",
+        label: "Crew Dashboard",
+        description: "Today's jobs, schedule, and earnings",
         color: "from-blue-600 to-blue-700",
         statsKey: "activeJobs" as const,
         statsSuffix: "active jobs",

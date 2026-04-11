@@ -39,7 +39,6 @@ const Dashboard = lazy(() => import("@/pages/dashboard"));
 const RewardsPage = lazy(() => import("@/pages/rewards"));
 const ProfilePage = lazy(() => import("@/pages/profile"));
 const EmployeeHomePage = lazy(() => import("@/pages/employee-home"));
-const TeamHub = lazy(() => import("@/pages/hub"));
 const AdminControlPage = lazy(() => import("@/pages/control"));
 const EmployeeDashboard = lazy(() => import("@/pages/employee-dashboard"));
 const EmployeeAddJob = lazy(() => import("@/pages/employee-add-job"));
@@ -538,9 +537,7 @@ function AuthenticatedApp() {
             <PendingApprovalPage />
           </Route>
           <Route path="/hub">
-            <RouteGuard allowedRoles={['admin', 'employee', 'business_owner']}>
-              <PageWrapper component={TeamHub} />
-            </RouteGuard>
+            <Redirect to="/crew" />
           </Route>
           <Route path="/control">
             <RouteGuard allowedRoles={['admin', 'business_owner']}>
