@@ -9839,20 +9839,42 @@ Thank you for your business!
 
   app.get("/api/admin/stats", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
-      const users = await storage.getAllUsers();
-      const leads = await storage.getLeads();
-      
-      const activeLeadsCount = leads.filter((lead: any) => lead.status === 'new' || lead.status === 'available').length;
+      // Use direct SQL counts for accuracy — avoids ORM layer mismatches
+      const { rows: leadCounts } = await pool.query(`
+        SELECT
+          COUNT(*) FILTER (WHERE archived_at IS NULL) AS total_leads,
+          COUNT(*) FILTER (WHERE archived_at IS NULL AND status IN ('new', 'available', 'pending', 'in_progress', 'quote_requested')) AS active_leads,
+          COUNT(*) FILTER (WHERE archived_at IS NULL AND status = 'new') AS pending_leads,
+          COUNT(*) FILTER (WHERE archived_at IS NULL AND status = 'completed') AS completed_jobs
+        FROM leads
+      `);
+      const { rows: userCounts } = await pool.query(`SELECT COUNT(*) AS total_users FROM users`);
+
+      // JCMOVES burned/collected from the database (reliable, no blockchain dependency)
+      const { rows: burnRows } = await pool.query(`
+        SELECT
+          COALESCE(SUM(CAST(total_tokens_collected AS DECIMAL)), 0) AS total_burned,
+          COALESCE(SUM(CAST(token_balance AS DECIMAL)), 0) AS fund_balance
+        FROM buyback_fund
+      `);
+
+      // Reward redemptions = tokens spent by customers (another form of "burn")
+      const { rows: redemptionRows } = await pool.query(`
+        SELECT COALESCE(SUM(token_cost), 0) AS tokens_redeemed FROM reward_redemptions WHERE status != 'cancelled'
+      `);
+
+      const lc = leadCounts[0] || {};
       const stats = {
-        totalUsers: users.length,
-        totalLeads: leads.length,
-        activeLeads: activeLeadsCount,
-        activeJobs: activeLeadsCount, // backward-compat alias
-        monthlyRevenue: 45000, // This would come from actual financial data
-        completedJobs: leads.filter((lead: any) => lead.status === 'completed').length,
-        pendingLeads: leads.filter((lead: any) => lead.status === 'new').length,
+        totalUsers: parseInt(userCounts[0]?.total_users || '0'),
+        totalLeads: parseInt(lc.total_leads || '0'),
+        activeLeads: parseInt(lc.active_leads || '0'),
+        activeJobs: parseInt(lc.active_leads || '0'),
+        completedJobs: parseInt(lc.completed_jobs || '0'),
+        pendingLeads: parseInt(lc.pending_leads || '0'),
+        jcmovesBurned: parseFloat(burnRows[0]?.total_burned || '0') + parseFloat(redemptionRows[0]?.tokens_redeemed || '0'),
+        jcmovesFundBalance: parseFloat(burnRows[0]?.fund_balance || '0'),
       };
-      
+
       res.json(stats);
     } catch (error) {
       console.error("Error getting admin stats:", error);

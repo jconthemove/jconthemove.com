@@ -11,6 +11,10 @@ interface AdminStats {
   totalLeads: number;
   activeLeads: number;
   totalUsers: number;
+  jcmovesBurned: number;
+  jcmovesFundBalance: number;
+  completedJobs: number;
+  pendingLeads: number;
 }
 
 interface TrafficTotals {
@@ -36,7 +40,6 @@ export default function AdminOverviewPage() {
   const { data: adminStats } = useQuery<AdminStats>({ queryKey: ["/api/admin/stats"] });
   const { data: trafficData } = useQuery<{ totals: TrafficTotals }>({ queryKey: ["/api/admin/analytics/traffic"], refetchInterval: 60000 });
   const { data: liveBalance } = useQuery<{ balance: number }>({ queryKey: ["/api/solana/balance"], refetchInterval: 30000 });
-  const { data: buybackFund } = useQuery<{ burnWallet: { tokenBalance: number } }>({ queryKey: ["/api/treasury/buyback-fund"], refetchInterval: 30000 });
   const { data: pendingPayouts } = useQuery<{ payouts: Payout[] }>({ queryKey: ["/api/admin/payouts/pending"] });
   const { data: btcPayments } = useQuery<BtcPayment[]>({ queryKey: ["/api/admin/btc-payments"] });
 
@@ -59,7 +62,7 @@ export default function AdminOverviewPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
         {[
           { icon: Coins, label: "JCMOVES Balance", value: (liveBalance?.balance || 0).toLocaleString(undefined, { maximumFractionDigits: 0 }), color: "text-purple-400" },
-          { icon: TrendingUp, label: "JCMOVES Burned", value: (buybackFund?.burnWallet?.tokenBalance || 0).toLocaleString(undefined, { maximumFractionDigits: 0 }), color: "text-green-400" },
+          { icon: TrendingUp, label: "JCMOVES Burned", value: (adminStats?.jcmovesBurned || 0).toLocaleString(undefined, { maximumFractionDigits: 0 }), color: "text-green-400" },
           { icon: Activity, label: "Active Leads", value: String(adminStats?.activeLeads ?? "—"), color: "text-blue-400" },
           { icon: Users, label: "Total Users", value: String(adminStats?.totalUsers ?? "—"), color: "text-orange-400" },
           { icon: BarChart2, label: "Views This Month", value: Number(trafficData?.totals?.this_month_views || 0).toLocaleString(), color: "text-cyan-400" },
