@@ -363,22 +363,6 @@ const STEPS: Step[] = [
 
   // ── MOVING STEPS ──────────────────────────────────────────────────────────
   {
-    id: "fromZip",
-    question: "What's the pickup address?",
-    subtext: "Start typing — we'll suggest addresses as you go.",
-    type: "address",
-    placeholder: "123 Main St, Ironwood, MI",
-    show: (a) => isMovingService(a),
-  },
-  {
-    id: "toZip",
-    question: "What's the delivery address?",
-    subtext: "Where are we dropping everything off?",
-    type: "address",
-    placeholder: "456 Oak Ave, Hurley, WI",
-    show: (a) => isMovingService(a) && (a.serviceType || "").includes("Moving"),
-  },
-  {
     id: "loadType",
     question: "What are we doing?",
     subtext: "Load only = we load the truck at the pickup. Unload only = we unload at the destination. Both = full move.",
@@ -389,6 +373,22 @@ const STEPS: Step[] = [
       "🔄 Both — load AND unload",
     ],
     show: (a) => isMovingService(a),
+  },
+  {
+    id: "fromZip",
+    question: "What's the pickup address?",
+    subtext: "Start typing — we'll suggest addresses as you go.",
+    type: "address",
+    placeholder: "123 Main St, Ironwood, MI",
+    show: (a) => isMovingService(a) && !(a.loadType || "").includes("Unload only"),
+  },
+  {
+    id: "toZip",
+    question: "What's the delivery address?",
+    subtext: "Where are we dropping everything off?",
+    type: "address",
+    placeholder: "456 Oak Ave, Hurley, WI",
+    show: (a) => isMovingService(a) && !(a.loadType || "").includes("Load only"),
   },
   {
     id: "moveDate",
@@ -428,7 +428,7 @@ const STEPS: Step[] = [
     question: "Which floor are you on at the PICKUP location?",
     type: "choice",
     options: ["Ground Floor / 1st", "2nd Floor", "3rd Floor", "4th Floor or Higher"],
-    show: (a) => isMovingService(a),
+    show: (a) => isMovingService(a) && !(a.loadType || "").includes("Unload only"),
   },
   {
     id: "originElevator",
@@ -437,6 +437,7 @@ const STEPS: Step[] = [
     options: ["✅ Yes, there's an elevator", "🪜 No elevator — stairs only"],
     show: (a) =>
       isMovingService(a) &&
+      !(a.loadType || "").includes("Unload only") &&
       !["Ground Floor / 1st"].includes(a.originFloor || ""),
   },
   {
@@ -444,7 +445,7 @@ const STEPS: Step[] = [
     question: "Which floor at the DROP-OFF location?",
     type: "choice",
     options: ["Ground Floor / 1st", "2nd Floor", "3rd Floor", "4th Floor or Higher"],
-    show: (a) => isMovingService(a) && (a.serviceType || "").includes("Moving"),
+    show: (a) => isMovingService(a) && !(a.loadType || "").includes("Load only"),
   },
   {
     id: "destElevator",
@@ -453,7 +454,7 @@ const STEPS: Step[] = [
     options: ["✅ Yes, there's an elevator", "🪜 No elevator — stairs only"],
     show: (a) =>
       isMovingService(a) &&
-      (a.serviceType || "").includes("Moving") &&
+      !(a.loadType || "").includes("Load only") &&
       !["Ground Floor / 1st"].includes(a.destFloor || ""),
   },
   {

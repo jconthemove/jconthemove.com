@@ -753,11 +753,11 @@ export default function CartPage() {
                         <span className="text-sm font-bold text-emerald-300">Join JCMOVES Rewards — free</span>
                         <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full px-2 py-0.5 font-bold uppercase tracking-wider">Earn on every order</span>
                       </div>
-                      <p className="text-xs text-slate-400 mt-0.5">50 JCMOVES per $1 spent · redeem for discounts, prizes &amp; lottery tickets</p>
+                      <p className="text-xs text-slate-400 mt-0.5">15 JCMOVES per $1 spent · redeem for discounts, prizes &amp; lottery tickets</p>
                       {finalTotal > 0 && (
                         <div className="mt-2 flex items-center gap-1.5">
                           <Zap className="h-3.5 w-3.5 text-yellow-400 shrink-0" />
-                          <span className="text-sm font-black text-yellow-400">{Math.round(finalTotal * 50).toLocaleString()} JCMOVES</span>
+                          <span className="text-sm font-black text-yellow-400">{Math.round(finalTotal * 15).toLocaleString()} JCMOVES</span>
                           <span className="text-xs text-slate-400">earned on this order</span>
                         </div>
                       )}

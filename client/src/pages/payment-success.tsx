@@ -152,7 +152,7 @@ export default function PaymentSuccessPage() {
                 <p className="text-sm font-bold text-amber-800">Earn JCMOVES Rewards!</p>
               </div>
               <p className="text-xs text-amber-700 mb-3">
-                Create a free account to earn {50} JCMOVES per $1 spent on all future jewelry and moving purchases.
+                Create a free account to earn {15} JCMOVES per $1 spent on all future jewelry and moving purchases.
               </p>
               <Link href="/register">
                 <Button size="sm" className="w-full bg-amber-500 hover:bg-amber-400 text-white font-bold">

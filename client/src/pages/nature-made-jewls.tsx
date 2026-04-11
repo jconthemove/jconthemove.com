@@ -942,7 +942,7 @@ export default function AshleyShop() {
             <span className="text-xl">🪙</span>
             <div className="flex-1">
               <p className="text-sm font-bold text-amber-800">Earn JCMOVES Rewards on Every Purchase!</p>
-              <p className="text-xs text-amber-700">Get 50 JCMOVES per $1 spent — usable on jewelry, moving, and more. <Link href="/register" className="underline font-semibold">Sign up free &rarr;</Link></p>
+              <p className="text-xs text-amber-700">Get 15 JCMOVES per $1 spent — usable on jewelry, moving, and more. <Link href="/register" className="underline font-semibold">Sign up free &rarr;</Link></p>
             </div>
           </div>
         ) : (

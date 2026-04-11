@@ -17,7 +17,7 @@ import { ArrowLeft, Gem, ChevronLeft, ChevronRight, Pencil, Trash2, Video, Loade
 import { useCart } from "@/hooks/useCart";
 import { FloatingCartButton } from "@/components/cart-button";
 
-const EARN_RATE = 50; // JCMOVES per $1 spent
+const EARN_RATE = 15; // JCMOVES per $1 spent
 const TOKEN_PRICE_USD = 0.000005034116; // Fallback token price
 
 const isVideoUrl = (url: string) => /\.(mp4|webm|ogg|mov)$/i.test(url);
