@@ -247,8 +247,8 @@ export default function AshleyShop() {
     for (const file of Array.from(files)) {
       try {
         const fd = new FormData();
-        fd.append('photo', file);
-        const res = await fetch('/api/jewelry/upload-photo', { method: 'POST', body: fd, credentials: 'include' });
+        fd.append('file', file);
+        const res = await fetch('/api/jewelry/upload', { method: 'POST', body: fd, credentials: 'include' });
         const data = await res.json();
         if (data.url) uploaded.push(data.url);
       } catch { /* skip */ }
