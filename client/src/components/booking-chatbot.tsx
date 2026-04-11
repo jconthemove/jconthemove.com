@@ -2666,13 +2666,31 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
                     <div className="mt-2 bg-amber-900/20 border border-amber-500/20 rounded-lg px-3 py-2 text-left">
                       <p className="text-[10px] text-amber-400 font-semibold mb-0.5">⚠️ Things that can influence the final price:</p>
                       <p className="text-[10px] text-slate-400">
-                        {isHandymanService(answers)
-                          ? "Deeper projects · Larger repairs · Specialty or hard-to-find materials — all can affect the final price"
-                          : isJunkService(answers)
-                            ? "Tires · Mattresses · TVs · Hazardous materials — final cost determined on-site"
-                            : isMovingService(answers)
-                              ? "Long distances · Extra stops · Heavy specialty items · Stairs or no elevator — all can affect the final price"
-                              : "Scope of work · Special materials · Site conditions — final price confirmed by Darrell"}
+                        {isJunkService(answers)
+                          ? "Tires · Mattresses · TVs · Appliances · Hazardous materials — final cost determined on-site"
+                          : isMovingService(answers)
+                            ? "Long distances · Extra stops · Heavy specialty items · Stairs or no elevator — all can affect the final price"
+                            : isWindowCleaningService(answers)
+                              ? "Second-story or hard-to-reach windows · Skylights · Heavy mineral buildup or construction residue — all can affect the final price"
+                              : isHandymanService(answers)
+                                ? "Deeper projects · Larger repairs · Specialty or hard-to-find materials — all can affect the final price"
+                                : isPaintingService(answers)
+                                  ? "Wall repairs or patching needed · High ceilings · Number of coats required · Premium paint selection — all affect the final price"
+                                  : isFlooringService(answers)
+                                    ? "Subfloor repairs needed · Complex patterns or layouts · Stairs or transitions · Material selection — all can affect the final price"
+                                    : isRoofingService(answers)
+                                      ? "Roof pitch and access · Hidden damage under existing shingles · Material type selected — final cost confirmed after inspection"
+                                      : isSnowService(answers)
+                                        ? "Heavy accumulation or ice buildup · Long driveways or large lots · Tight access points — all affect time and cost"
+                                        : isLawnService(answers)
+                                          ? "Overgrowth or neglected areas · Steep slopes · Haul-away needs · Total property size — all affect the final price"
+                                          : isCleaningService(answers)
+                                            ? "Current condition of the space · Number of rooms and floors · Deep-clean requirements — all affect the final price"
+                                            : isDemoService(answers)
+                                              ? "Structure type and materials · Debris volume · Hazardous materials · Haul-away requirements — all affect the final cost"
+                                              : isTrashValetService(answers)
+                                                ? "Distance from curb · Extra-heavy or oversized items · Access restrictions — can affect the monthly rate"
+                                                : "Scope of work · Special materials · Site conditions — final price confirmed by Darrell"}
                       </p>
                     </div>
                   </div>

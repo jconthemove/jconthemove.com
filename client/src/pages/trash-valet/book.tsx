@@ -66,6 +66,7 @@ export default function TrashValetBookPage() {
     serviceNotes: "",
     planType: "monthly",
     promoCode: "",
+    seniorDiscount: false,
   });
 
   const setField = (key: string, value: string | number | boolean) =>
@@ -94,7 +95,9 @@ export default function TrashValetBookPage() {
 
   const travelFeeApplied = distanceMiles > TRAVEL_THRESHOLD;
   const rawAdjusted = quote.finalMonthlyPrice + (travelFeeApplied ? TRAVEL_FEE_MONTHLY : 0);
-  const adjustedMonthly = travelFeeApplied ? Math.max(TRASH_VALET_OUT_OF_AREA_MINIMUM, rawAdjusted) : rawAdjusted;
+  const baseMonthly = travelFeeApplied ? Math.max(TRASH_VALET_OUT_OF_AREA_MINIMUM, rawAdjusted) : rawAdjusted;
+  const seniorDisc = form.seniorDiscount ? 5 : 0;
+  const adjustedMonthly = Math.max(0, baseMonthly - seniorDisc);
   const yearlyEffectiveMonthly = Math.round(adjustedMonthly * 11 / 12);
   const displayMonthly = form.planType === "yearly" ? yearlyEffectiveMonthly : adjustedMonthly;
 
@@ -471,6 +474,12 @@ export default function TrashValetBookPage() {
                   <span>+${Math.max(quote.travelSurchargeMonthly, travelFeeApplied ? TRAVEL_FEE_MONTHLY : 0).toFixed(2)}/mo</span>
                 </div>
               )}
+              {form.seniorDiscount && (
+                <div className="flex justify-between text-blue-400 text-xs">
+                  <span>🏅 Senior discount</span>
+                  <span>−$5.00/mo</span>
+                </div>
+              )}
               <div className="border-t border-zinc-800 pt-2 flex justify-between font-bold items-center">
                 <span className="text-white">Monthly total</span>
                 <div className="flex items-center gap-2">
@@ -487,11 +496,23 @@ export default function TrashValetBookPage() {
           </Card>
 
           {/* Senior discount banner */}
-          <div className="rounded-xl bg-blue-950/60 border border-blue-500/30 px-4 py-3 flex items-center gap-3">
-            <span className="text-xl shrink-0">🏅</span>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-blue-300">Senior Discount — $5/month off</p>
-              <p className="text-xs text-zinc-400">Age 65+? Mention it when Darrell contacts you and we'll bring your rate down to <span className="text-blue-300 font-semibold">$25/mo</span>.</p>
+          <div className="rounded-xl bg-blue-950/60 border border-blue-500/30 px-4 py-3">
+            <div className="flex items-center gap-3 mb-2">
+              <span className="text-xl shrink-0">🏅</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-blue-300">Senior Discount — $5/month off</p>
+                <p className="text-xs text-zinc-400">Age 65+? Toggle below and your discount will be automatically applied.</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 bg-blue-900/30 rounded-lg px-3 py-2">
+              <Switch
+                id="seniorDiscount"
+                checked={form.seniorDiscount}
+                onCheckedChange={(v) => setField("seniorDiscount", v)}
+              />
+              <Label htmlFor="seniorDiscount" className="text-sm text-zinc-300 cursor-pointer">
+                I qualify for the senior discount (age 65+){form.seniorDiscount && <span className="ml-2 text-blue-300 font-semibold">— $5/mo off applied ✓</span>}
+              </Label>
             </div>
           </div>
 
