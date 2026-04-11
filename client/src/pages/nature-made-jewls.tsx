@@ -236,7 +236,7 @@ export default function AshleyShop() {
     if (chatOpen && chatMessages.length === 0) {
       setChatStep('photos');
       setChatData({ photos: [], title: '', category: '', price: '', materials: '', shortDesc: '', description: '' });
-      botSay("Hey! I'm your Ashley Shop listing assistant 🌸\n\nLet's get a new piece added to the shop. Start by uploading a photo — tap the camera button below!");
+      botSay("Hey! I'm your Ashley Shop listing assistant 🌸\n\nLet's get a new piece added to the shop. Start by uploading photos or videos — tap the button below!");
     }
   }, [chatOpen]);
 
@@ -244,8 +244,10 @@ export default function AshleyShop() {
     if (!files || files.length === 0) return;
     setChatUploading(true);
     const uploaded: string[] = [];
+    let videoCount = 0;
     for (const file of Array.from(files)) {
       try {
+        if (file.type.startsWith('video/')) videoCount++;
         const fd = new FormData();
         fd.append('file', file);
         const res = await fetch('/api/jewelry/upload', { method: 'POST', body: fd, credentials: 'include' });
@@ -256,9 +258,15 @@ export default function AshleyShop() {
     setChatUploading(false);
     if (uploaded.length === 0) { botSay("Hmm, that upload failed. Please try again."); return; }
     setChatData(prev => ({ ...prev, photos: [...prev.photos, ...uploaded] }));
-    userSay(`📸 Uploaded ${uploaded.length} photo${uploaded.length > 1 ? 's' : ''}`);
+    const photoCount = uploaded.length - videoCount;
+    const label = videoCount > 0 && photoCount > 0
+      ? `${photoCount} photo${photoCount > 1 ? 's' : ''} & ${videoCount} video${videoCount > 1 ? 's' : ''}`
+      : videoCount > 0
+        ? `${videoCount} video${videoCount > 1 ? 's' : ''}`
+        : `${uploaded.length} photo${uploaded.length > 1 ? 's' : ''}`;
+    userSay(`📸 Uploaded ${label}`);
     setTimeout(() => {
-      botSay(`Got it! ${uploaded.length > 1 ? 'Beautiful shots.' : 'Nice photo.'} You can upload more or move on.\n\nWhat's the name of this piece?`);
+      botSay(`Got it! ${uploaded.length > 1 ? 'Looking great — beautiful media.' : 'Looks great!'} You can upload more or move on.\n\nWhat's the name of this piece?`);
       setChatStep('title');
     }, 400);
   }
@@ -302,7 +310,7 @@ export default function AshleyShop() {
       const desc = text.toLowerCase() === 'skip' ? '' : text;
       const updated = { ...chatData, description: desc };
       setChatData(updated);
-      const summary = `Here's your listing preview:\n\n📸 ${updated.photos.length} photo(s)\n✏️ Name: ${updated.title}\n🏷 Category: ${updated.category}\n💲 Price: $${updated.price}\n🔮 Materials: ${updated.materials}\n📝 Tagline: ${updated.shortDesc}${updated.description ? '\n📖 Description: ' + updated.description.slice(0, 80) + (updated.description.length > 80 ? '…' : '') : ''}\n\nReady to publish? Reply "yes" to list it or "no" to cancel.`;
+      const summary = `Here's your listing preview:\n\n📸 ${updated.photos.length} media file${updated.photos.length > 1 ? 's' : ''}\n✏️ Name: ${updated.title}\n🏷 Category: ${updated.category}\n💲 Price: $${updated.price}\n🔮 Materials: ${updated.materials}\n📝 Tagline: ${updated.shortDesc}${updated.description ? '\n📖 Description: ' + updated.description.slice(0, 80) + (updated.description.length > 80 ? '…' : '') : ''}\n\nReady to publish? Reply "yes" to list it or "no" to cancel.`;
       setTimeout(() => { botSay(summary); setChatStep('confirm'); }, 400);
     } else if (chatStep === 'confirm') {
       if (text.toLowerCase().startsWith('y')) {
@@ -1392,16 +1400,18 @@ export default function AshleyShop() {
 
             <div className="border-t border-rose-100 p-3 flex gap-2">
               {chatStep === 'photos' && (
-                <label className={`flex items-center justify-center w-10 h-10 rounded-full bg-rose-100 text-rose-500 cursor-pointer hover:bg-rose-200 transition-colors flex-shrink-0 ${chatUploading ? 'opacity-50 pointer-events-none' : ''}`}>
-                  <input type="file" ref={chatFileRef} onChange={(e) => handleChatUpload(e.target.files)} accept="image/*" multiple className="sr-only" />
-                  {chatUploading ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <ImagePlus className="h-5 w-5" />}
+                <label className={`flex items-center justify-center gap-1 px-3 h-10 rounded-full bg-rose-100 text-rose-500 cursor-pointer hover:bg-rose-200 transition-colors flex-shrink-0 ${chatUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                  <input type="file" ref={chatFileRef} onChange={(e) => handleChatUpload(e.target.files)} accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime" multiple className="sr-only" />
+                  {chatUploading
+                    ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    : (<><ImagePlus className="h-4 w-4" /><Video className="h-4 w-4" /></>)}
                 </label>
               )}
               <Input
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleChatSend(); } }}
-                placeholder={chatStep === 'photos' ? "Upload a photo to start..." : "Type your reply..."}
+                placeholder={chatStep === 'photos' ? "Upload a photo or video to start..." : "Type your reply..."}
                 className="flex-1 rounded-full border-rose-200"
                 disabled={chatStep === 'photos' || chatStep === 'category'}
               />
