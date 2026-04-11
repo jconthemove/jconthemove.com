@@ -15,6 +15,8 @@ import PwaInstallPrompt from "@/components/pwa-install-prompt";
 import { CartProvider } from "@/hooks/useCart";
 import { NotificationPrompt } from "@/components/notification-prompt";
 import { useMiningNotifications } from "@/hooks/useMiningNotifications";
+import { usePageView } from "@/hooks/usePageView";
+import CookieBanner from "@/components/CookieBanner";
 
 // Layouts (kept eager — they render the shell before page content)
 import CrewLayout from "@/layouts/CrewLayout";
@@ -110,6 +112,7 @@ const AdminSystemPage = lazy(() => import("@/pages/admin/system"));
 const AdminCalibratePage = lazy(() => import("@/pages/admin/calibrate"));
 const AdminPricingCalibrationPage = lazy(() => import("@/pages/admin/pricing-calibration"));
 const AdminSponsorsPage = lazy(() => import("@/pages/admin/sponsors"));
+const AdminAnalyticsPage = lazy(() => import("@/pages/admin/analytics"));
 const BookLawnCarePage = lazy(() => import("@/pages/book-lawn-care"));
 const AdminLawnCarePage = lazy(() => import("@/pages/admin-lawn-care"));
 const PricingPage = lazy(() => import("@/pages/pricing"));
@@ -457,6 +460,7 @@ function AuthenticatedApp() {
               <Route path="/admin/calibrate"><AdminCalibratePage /></Route>
               <Route path="/admin/pricing-calibration"><AdminPricingCalibrationPage /></Route>
               <Route path="/admin/sponsors"><AdminSponsorsPage /></Route>
+              <Route path="/admin/analytics"><AdminAnalyticsPage /></Route>
               {/* Legacy admin URL redirects */}
               <Route path="/admin/treasury"><Redirect to="/admin/finance" /></Route>
               <Route path="/admin/users"><Redirect to="/admin/people" /></Route>
@@ -665,6 +669,11 @@ function AuthenticatedApp() {
   );
 }
 
+function PageViewTracker() {
+  usePageView();
+  return null;
+}
+
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
 
@@ -763,6 +772,15 @@ function Router() {
   );
 }
 
+function AppWithTracking() {
+  return (
+    <>
+      <PageViewTracker />
+      <Router />
+    </>
+  );
+}
+
 function App() {
   return (
     <RootErrorBoundary>
@@ -773,10 +791,11 @@ function App() {
               <TooltipProvider>
                 <PageErrorBoundary>
                   <Suspense fallback={<PageLoader />}>
-                    <Router />
+                    <AppWithTracking />
                   </Suspense>
                 </PageErrorBoundary>
                 <Toaster />
+                <CookieBanner />
                 <SilentErrorBoundary label="PwaInstallPrompt">
                   <PwaInstallPrompt />
                 </SilentErrorBoundary>

@@ -980,6 +980,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('⚠️ trash_jobs migration error (non-fatal):', tjErr);
   }
 
+  // ── Page view analytics table ──────────────────────────────────────────────
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS page_views (
+        id SERIAL PRIMARY KEY,
+        page TEXT NOT NULL,
+        visited_at TIMESTAMP DEFAULT NOW() NOT NULL,
+        visitor_id TEXT,
+        user_id VARCHAR(255),
+        referrer TEXT,
+        user_agent TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_page_views_visited_at ON page_views(visited_at);
+      CREATE INDEX IF NOT EXISTS idx_page_views_page ON page_views(page);
+      CREATE INDEX IF NOT EXISTS idx_page_views_visitor ON page_views(visitor_id);
+    `);
+    console.log('📊 page_views analytics table ready');
+  } catch (pvErr) {
+    console.error('⚠️ page_views table migration error (non-fatal):', pvErr);
+  }
+
   try {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS calibration_sessions (
@@ -9836,6 +9857,79 @@ Thank you for your business!
     } catch (error) {
       console.error("Error getting admin stats:", error);
       res.status(500).json({ error: "Failed to get admin stats" });
+    }
+  });
+
+  // ── Site Analytics ─────────────────────────────────────────────────────────
+  // POST /api/analytics/pageview — public, fire-and-forget page view tracker
+  app.post("/api/analytics/pageview", async (req, res) => {
+    try {
+      const { page, visitorId, referrer, userAgent } = req.body || {};
+      if (!page || typeof page !== "string") return res.json({ ok: false });
+      const userId = (req as any).user?.id || ((req as any).session as any)?.userId || null;
+      const safePage = page.slice(0, 500);
+      const safeVisitor = visitorId ? String(visitorId).slice(0, 100) : null;
+      const safeReferrer = referrer ? String(referrer).slice(0, 500) : null;
+      const safeUA = userAgent ? String(userAgent).slice(0, 500) : null;
+      await pool.query(
+        `INSERT INTO page_views (page, visitor_id, user_id, referrer, user_agent) VALUES ($1, $2, $3, $4, $5)`,
+        [safePage, safeVisitor, userId, safeReferrer, safeUA]
+      );
+      res.json({ ok: true });
+    } catch { res.json({ ok: false }); }
+  });
+
+  // GET /api/admin/analytics/traffic — admin only, returns monthly traffic breakdown
+  app.get("/api/admin/analytics/traffic", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const { rows: monthly } = await pool.query(`
+        SELECT
+          TO_CHAR(visited_at, 'YYYY-MM') AS month,
+          COUNT(*) AS total_views,
+          COUNT(DISTINCT visitor_id) AS unique_visitors
+        FROM page_views
+        WHERE visited_at >= NOW() - INTERVAL '12 months'
+        GROUP BY TO_CHAR(visited_at, 'YYYY-MM')
+        ORDER BY month DESC
+        LIMIT 12
+      `);
+
+      const { rows: topPages } = await pool.query(`
+        SELECT
+          page,
+          COUNT(*) AS views,
+          COUNT(DISTINCT visitor_id) AS unique_visitors
+        FROM page_views
+        WHERE visited_at >= DATE_TRUNC('month', NOW())
+        GROUP BY page
+        ORDER BY views DESC
+        LIMIT 10
+      `);
+
+      const { rows: daily } = await pool.query(`
+        SELECT
+          TO_CHAR(visited_at, 'YYYY-MM-DD') AS day,
+          COUNT(*) AS views,
+          COUNT(DISTINCT visitor_id) AS unique_visitors
+        FROM page_views
+        WHERE visited_at >= DATE_TRUNC('month', NOW())
+        GROUP BY TO_CHAR(visited_at, 'YYYY-MM-DD')
+        ORDER BY day ASC
+      `);
+
+      const { rows: totals } = await pool.query(`
+        SELECT
+          COUNT(*) AS all_time_views,
+          COUNT(DISTINCT visitor_id) AS all_time_unique,
+          COUNT(*) FILTER (WHERE visited_at >= DATE_TRUNC('month', NOW())) AS this_month_views,
+          COUNT(DISTINCT visitor_id) FILTER (WHERE visited_at >= DATE_TRUNC('month', NOW())) AS this_month_unique
+        FROM page_views
+      `);
+
+      res.json({ monthly, topPages, daily, totals: totals[0] || {} });
+    } catch (err) {
+      console.error("Analytics traffic error:", err);
+      res.status(500).json({ error: "Failed to load traffic data" });
     }
   });
 

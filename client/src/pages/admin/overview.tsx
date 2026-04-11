@@ -4,13 +4,18 @@ import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import {
-  Users, Activity, Coins, TrendingUp, Wallet, Bitcoin, ChevronRight, Handshake
+  Users, Activity, Coins, TrendingUp, Wallet, Bitcoin, ChevronRight, Handshake, BarChart2
 } from "lucide-react";
 
 interface AdminStats {
   totalLeads: number;
   activeLeads: number;
   totalUsers: number;
+}
+
+interface TrafficTotals {
+  this_month_views: string;
+  this_month_unique: string;
 }
 
 interface Payout {
@@ -29,6 +34,7 @@ export default function AdminOverviewPage() {
   const { user } = useAuth();
 
   const { data: adminStats } = useQuery<AdminStats>({ queryKey: ["/api/admin/stats"] });
+  const { data: trafficData } = useQuery<{ totals: TrafficTotals }>({ queryKey: ["/api/admin/analytics/traffic"], refetchInterval: 60000 });
   const { data: liveBalance } = useQuery<{ balance: number }>({ queryKey: ["/api/solana/balance"], refetchInterval: 30000 });
   const { data: buybackFund } = useQuery<{ burnWallet: { tokenBalance: number } }>({ queryKey: ["/api/treasury/buyback-fund"], refetchInterval: 30000 });
   const { data: pendingPayouts } = useQuery<{ payouts: Payout[] }>({ queryKey: ["/api/admin/payouts/pending"] });
@@ -56,6 +62,8 @@ export default function AdminOverviewPage() {
           { icon: TrendingUp, label: "JCMOVES Burned", value: (buybackFund?.burnWallet?.tokenBalance || 0).toLocaleString(undefined, { maximumFractionDigits: 0 }), color: "text-green-400" },
           { icon: Activity, label: "Active Leads", value: String(adminStats?.activeLeads ?? "—"), color: "text-blue-400" },
           { icon: Users, label: "Total Users", value: String(adminStats?.totalUsers ?? "—"), color: "text-orange-400" },
+          { icon: BarChart2, label: "Views This Month", value: Number(trafficData?.totals?.this_month_views || 0).toLocaleString(), color: "text-cyan-400" },
+          { icon: Users, label: "Visitors This Month", value: Number(trafficData?.totals?.this_month_unique || 0).toLocaleString(), color: "text-teal-400" },
         ].map(s => (
           <Card key={s.label} className="border-white/5 bg-white/[0.03]">
             <CardContent className="p-4 text-center">
@@ -100,6 +108,7 @@ export default function AdminOverviewPage() {
           { href: "/admin/marketplace", label: "Marketplace", desc: "Rewards, lottery, promo codes", color: "from-purple-600 to-purple-700", icon: Activity },
           { href: "/admin/sponsors", label: "Sponsors", desc: "Manage sponsor sign-ups & tiers", color: "from-yellow-600 to-amber-700", icon: Handshake },
           { href: "/admin/system", label: "System", desc: "System check, Square, config", color: "from-slate-500 to-slate-700", icon: Activity },
+          { href: "/admin/analytics", label: "Analytics", desc: "Traffic, page views & visitor stats", color: "from-cyan-600 to-teal-700", icon: BarChart2 },
           { href: "/crew", label: "Team Hub", desc: "Today's jobs, crew status, inspiration", color: "from-blue-600 to-blue-700", icon: Activity },
         ].map(item => (
           <Link key={item.href} href={item.href}>
