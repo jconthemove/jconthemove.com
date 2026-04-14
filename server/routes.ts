@@ -9919,6 +9919,152 @@ Thank you for your business!
     }
   });
 
+  // POST /api/admin/leads/:id/dispatch — send scheduled-job emails to each assigned crew member
+  app.post("/api/admin/leads/:id/dispatch", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const leadId = parseInt(req.params.id);
+      if (isNaN(leadId)) return res.status(400).json({ error: "Invalid lead ID" });
+
+      // Load lead
+      const { rows: leadRows } = await pool.query(
+        `SELECT * FROM leads WHERE id = $1 LIMIT 1`,
+        [leadId]
+      );
+      if (!leadRows.length) return res.status(404).json({ error: "Lead not found" });
+      const lead = leadRows[0];
+
+      // Apply any extra dispatch notes from request body
+      const { dispatchNotes } = req.body || {};
+      if (dispatchNotes !== undefined) {
+        await pool.query(`UPDATE leads SET dispatch_notes = $1 WHERE id = $2`, [dispatchNotes || null, leadId]);
+        lead.dispatch_notes = dispatchNotes;
+      }
+      // Normalise ORM-style field names for the email generator
+      const leadForEmail = {
+        ...lead,
+        confirmedFromAddress: lead.confirmed_from_address,
+        confirmedToAddress:   lead.confirmed_to_address,
+        confirmedDate:        lead.confirmed_date,
+        confirmedHours:       lead.confirmed_hours,
+        arrivalWindow:        lead.arrival_window,
+        serviceType:          lead.service_type,
+        firstName:            lead.first_name,
+        quoteNotes:           lead.quote_notes,
+        dispatchNotes:        lead.dispatch_notes,
+      };
+
+      const crewIds: string[] = Array.isArray(lead.crew_members) ? lead.crew_members : [];
+      if (!crewIds.length) {
+        return res.status(400).json({ error: "No crew members assigned to this job. Assign crew first." });
+      }
+
+      // Look up email addresses for each crew member
+      const { generateWorkerDispatchEmail } = await import('./services/email');
+      const { sendEmail } = await import('./services/email');
+
+      const results: { id: string; name: string; email: string | null; sent: boolean; error?: string }[] = [];
+      const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
+
+      for (const crewId of crewIds) {
+        const { rows: workerRows } = await pool.query(
+          `SELECT id, email, first_name, last_name, username FROM users WHERE id = $1 LIMIT 1`,
+          [crewId]
+        );
+        const worker = workerRows[0];
+        if (!worker) { results.push({ id: crewId, name: "Unknown", email: null, sent: false, error: "User not found" }); continue; }
+        if (!worker.email) { results.push({ id: crewId, name: worker.first_name || worker.username, email: null, sent: false, error: "No email on file" }); continue; }
+
+        try {
+          const { html, text } = generateWorkerDispatchEmail(leadForEmail, {
+            firstName: worker.first_name,
+            username: worker.username,
+          });
+          const jobDate = leadForEmail.confirmedDate || leadForEmail.move_date || "your upcoming job";
+          const sent = await sendEmail({
+            to: worker.email,
+            from: companyEmail,
+            subject: `JC ON THE MOVE — You're Scheduled: ${jobDate}`,
+            html,
+            text,
+          });
+          results.push({ id: crewId, name: worker.first_name || worker.username, email: worker.email, sent });
+        } catch (err: any) {
+          results.push({ id: crewId, name: worker.first_name || worker.username, email: worker.email, sent: false, error: err.message });
+        }
+      }
+
+      // Mark dispatch timestamp on lead
+      await pool.query(`UPDATE leads SET dispatch_sent_at = NOW() WHERE id = $1`, [leadId]);
+
+      const sentCount = results.filter(r => r.sent).length;
+      const failedCount = results.length - sentCount;
+      console.log(`[dispatch] Lead ${leadId}: ${sentCount} emails sent, ${failedCount} failed — crew: ${crewIds.join(', ')}`);
+      res.json({ success: true, sentCount, failedCount, results });
+    } catch (error: any) {
+      console.error("Error dispatching crew emails:", error);
+      res.status(500).json({ error: "Failed to dispatch crew emails" });
+    }
+  });
+
+  // GET /api/admin/schedule — jobs with confirmed dates for the schedule view
+  app.get("/api/admin/schedule", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const { start, end } = req.query;
+      const startDate = start ? String(start) : new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+      const endDate   = end   ? String(end)   : new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10);
+
+      const { rows } = await pool.query(`
+        SELECT
+          l.id, l.first_name, l.last_name, l.service_type,
+          l.confirmed_date, l.move_date, l.arrival_window,
+          l.confirmed_from_address, l.from_address,
+          l.confirmed_hours, l.status, l.crew_members,
+          l.crew_size, l.dispatch_sent_at, l.dispatch_notes,
+          l.order_number, l.quote_notes
+        FROM leads l
+        WHERE l.archived_at IS NULL
+          AND (l.confirmed_date IS NOT NULL OR l.move_date IS NOT NULL)
+        ORDER BY COALESCE(l.confirmed_date, l.move_date) ASC, l.arrival_window ASC
+        LIMIT 200
+      `);
+
+      // Collect all unique crew IDs across all leads and batch-load their names
+      const allCrewIds = [...new Set(rows.flatMap(r => Array.isArray(r.crew_members) ? r.crew_members : []))];
+      let crewMap: Record<string, string> = {};
+      if (allCrewIds.length) {
+        const placeholders = allCrewIds.map((_, i) => `$${i + 1}`).join(',');
+        const { rows: crewRows } = await pool.query(
+          `SELECT id, first_name, last_name, username FROM users WHERE id IN (${placeholders})`,
+          allCrewIds
+        );
+        crewMap = Object.fromEntries(crewRows.map(u => [u.id, u.first_name || u.username || "Crew"]));
+      }
+
+      const jobs = rows.map(r => ({
+        id: r.id,
+        orderNumber: r.order_number,
+        customerName: r.first_name || "Customer",
+        serviceType: r.service_type,
+        date: r.confirmed_date || r.move_date,
+        arrivalWindow: r.arrival_window,
+        location: r.confirmed_from_address || r.from_address,
+        confirmedHours: r.confirmed_hours,
+        status: r.status,
+        crewIds: Array.isArray(r.crew_members) ? r.crew_members : [],
+        crewNames: (Array.isArray(r.crew_members) ? r.crew_members : []).map((id: string) => crewMap[id] || id),
+        crewSize: r.crew_size || 2,
+        dispatchSentAt: r.dispatch_sent_at,
+        dispatchNotes: r.dispatch_notes,
+        quoteNotes: r.quote_notes,
+      }));
+
+      res.json(jobs);
+    } catch (error) {
+      console.error("Error getting schedule:", error);
+      res.status(500).json({ error: "Failed to get schedule" });
+    }
+  });
+
   app.get("/api/admin/stats", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
       // Use direct SQL counts for accuracy — avoids ORM layer mismatches

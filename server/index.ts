@@ -128,6 +128,19 @@ app.use((req, res, next) => {
       } catch (e) { console.error('idempotency_keys table init error:', e); }
     })();
 
+    // Crew dispatch columns on leads
+    (async () => {
+      try {
+        const { pool: dbPool } = await import('./db');
+        await dbPool.query(`
+          ALTER TABLE leads
+            ADD COLUMN IF NOT EXISTS dispatch_sent_at TIMESTAMPTZ,
+            ADD COLUMN IF NOT EXISTS dispatch_notes   TEXT
+        `);
+        console.log('✅ Crew dispatch columns ready');
+      } catch (e) { console.error('dispatch columns init error:', e); }
+    })();
+
     // Seed the rewards marketplace catalog (idempotent)
     const { seedRewardShop } = await import('./seed-reward-shop');
     seedRewardShop().catch(e => console.error("Reward shop seed error:", e));

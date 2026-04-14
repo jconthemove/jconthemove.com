@@ -111,6 +111,10 @@ export const leads = pgTable("leads", {
   // Human-readable order number (e.g. JC-000042)
   orderNumber: varchar("order_number").unique(),
 
+  // Crew dispatch tracking
+  dispatchSentAt: timestamp("dispatch_sent_at"),
+  dispatchNotes: text("dispatch_notes"),
+
   // Soft-delete: set when admin archives a job instead of permanently deleting
   archivedAt: timestamp("archived_at"),
 

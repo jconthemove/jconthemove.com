@@ -113,6 +113,7 @@ const AdminCalibratePage = lazy(() => import("@/pages/admin/calibrate"));
 const AdminPricingCalibrationPage = lazy(() => import("@/pages/admin/pricing-calibration"));
 const AdminSponsorsPage = lazy(() => import("@/pages/admin/sponsors"));
 const AdminAnalyticsPage = lazy(() => import("@/pages/admin/analytics"));
+const AdminSchedulePage = lazy(() => import("@/pages/admin/schedule"));
 const BookLawnCarePage = lazy(() => import("@/pages/book-lawn-care"));
 const AdminLawnCarePage = lazy(() => import("@/pages/admin-lawn-care"));
 const PricingPage = lazy(() => import("@/pages/pricing"));
@@ -461,6 +462,7 @@ function AuthenticatedApp() {
               <Route path="/admin/pricing-calibration"><AdminPricingCalibrationPage /></Route>
               <Route path="/admin/sponsors"><AdminSponsorsPage /></Route>
               <Route path="/admin/analytics"><AdminAnalyticsPage /></Route>
+              <Route path="/admin/schedule"><AdminSchedulePage /></Route>
               {/* Legacy admin URL redirects */}
               <Route path="/admin/treasury"><Redirect to="/admin/finance" /></Route>
               <Route path="/admin/users"><Redirect to="/admin/people" /></Route>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { X, Users, Award, Pencil, Check, Zap } from "lucide-react";
+import { X, Users, Award, Pencil, Check, Zap, Mail, CheckCircle2, AlertCircle } from "lucide-react";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -55,6 +55,8 @@ export function LeadQuoteDialog({ open, onOpenChange, lead, employees, onSave }:
   const [editFirstName, setEditFirstName] = useState("");
   const [editLastName, setEditLastName] = useState("");
   const [editPhone, setEditPhone] = useState("");
+  const [dispatchNotesDraft, setDispatchNotesDraft] = useState("");
+  const [dispatchResult, setDispatchResult] = useState<{ sentCount: number; failedCount: number; results: any[] } | null>(null);
 
   const saveFieldMutation = useMutation({
     mutationFn: async (updates: Record<string, string>) => {
@@ -69,6 +71,33 @@ export function LeadQuoteDialog({ open, onOpenChange, lead, employees, onSave }:
     },
     onError: (err: Error) => {
       toast({ title: "Update failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const dispatchMutation = useMutation({
+    mutationFn: async () => {
+      if (!lead) throw new Error("No lead selected");
+      const res = await apiRequest("POST", `/api/admin/leads/${lead.id}/dispatch`, {
+        dispatchNotes: dispatchNotesDraft,
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Dispatch failed");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setDispatchResult(data);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/schedule"] });
+      if (data.sentCount > 0) {
+        toast({ title: `✅ Emails sent to ${data.sentCount} crew member${data.sentCount !== 1 ? "s" : ""}` });
+      } else {
+        toast({ title: "No emails sent", description: "Check that crew members have emails on file.", variant: "destructive" });
+      }
+    },
+    onError: (err: Error) => {
+      toast({ title: "Dispatch failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -139,6 +168,8 @@ export function LeadQuoteDialog({ open, onOpenChange, lead, employees, onSave }:
       });
       setSelectedCrewMembers(lead.crewMembers || []);
       setSelectedStatus(lead.status || "");
+      setDispatchNotesDraft((lead as any).dispatchNotes || "");
+      setDispatchResult(null);
     }
   }, [lead, open, quoteForm]);
 
@@ -695,6 +726,64 @@ export function LeadQuoteDialog({ open, onOpenChange, lead, employees, onSave }:
                   data-testid="textarea-quote-notes"
                   className="mt-1"
                 />
+              </div>
+
+              {/* Crew Dispatch Section */}
+              <div className="border border-blue-200 dark:border-blue-800 rounded-lg p-4 bg-blue-50 dark:bg-blue-950/30 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Mail className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <span className="font-semibold text-sm text-blue-900 dark:text-blue-100">Dispatch Crew Emails</span>
+                  {(lead as any)?.dispatchSentAt && !dispatchResult && (
+                    <span className="ml-auto text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Last sent {new Date((lead as any).dispatchSentAt).toLocaleDateString()}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-blue-700 dark:text-blue-300">
+                  Sends each assigned crew member an email with the job date, city/state, customer first name, service type, estimated hours, and pay — no full address or last name shared.
+                </p>
+                <div>
+                  <Label className="text-xs font-medium text-blue-800 dark:text-blue-200">Notes for workers (optional)</Label>
+                  <Textarea
+                    placeholder="e.g. Park in the back, bring extra dollies, customer has fragile antiques..."
+                    rows={2}
+                    value={dispatchNotesDraft}
+                    onChange={e => setDispatchNotesDraft(e.target.value)}
+                    className="mt-1 text-sm"
+                  />
+                </div>
+                {dispatchResult && (
+                  <div className="space-y-1">
+                    {dispatchResult.results.map((r, i) => (
+                      <div key={i} className="flex items-center gap-2 text-xs">
+                        {r.sent
+                          ? <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
+                          : <AlertCircle className="h-3 w-3 text-red-400 shrink-0" />}
+                        <span className="font-medium">{r.name}</span>
+                        {r.email && <span className="text-muted-foreground">{r.email}</span>}
+                        {!r.sent && r.error && <span className="text-red-500">{r.error}</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <Button
+                  type="button"
+                  variant="default"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                  disabled={dispatchMutation.isPending || !selectedCrewMembers.length}
+                  onClick={() => dispatchMutation.mutate()}
+                  data-testid="button-dispatch-crew"
+                >
+                  <Mail className="h-4 w-4 mr-2" />
+                  {dispatchMutation.isPending
+                    ? "Sending..."
+                    : dispatchResult
+                    ? `Resend to ${selectedCrewMembers.length} Crew Member${selectedCrewMembers.length !== 1 ? "s" : ""}`
+                    : selectedCrewMembers.length === 0
+                    ? "Assign Crew First"
+                    : `Send Job Details to ${selectedCrewMembers.length} Crew Member${selectedCrewMembers.length !== 1 ? "s" : ""}`}
+                </Button>
               </div>
 
               <div className="flex gap-4 justify-end">

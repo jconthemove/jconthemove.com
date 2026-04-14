@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import {
-  Users, Activity, Coins, TrendingUp, Wallet, Bitcoin, ChevronRight, Handshake, BarChart2
+  Users, Activity, Coins, TrendingUp, Wallet, Bitcoin, ChevronRight, Handshake, BarChart2, CalendarDays
 } from "lucide-react";
 
 interface AdminStats {
@@ -106,6 +106,7 @@ export default function AdminOverviewPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {[
           { href: "/admin/jobs", label: "Jobs", desc: "All leads, pipeline & job management", color: "from-amber-600 to-orange-600", icon: Activity },
+          { href: "/admin/schedule", label: "Schedule", desc: "Weekly calendar — dispatch crew emails", color: "from-blue-600 to-indigo-700", icon: CalendarDays },
           { href: "/admin/people", label: "People", desc: "Users, roles, employees", color: "from-orange-600 to-orange-700", icon: Users },
           { href: "/admin/finance", label: "Finance", desc: "Treasury, transfers, payouts", color: "from-emerald-600 to-green-700", icon: Activity },
           { href: "/admin/marketplace", label: "Marketplace", desc: "Rewards, lottery, promo codes", color: "from-purple-600 to-purple-700", icon: Activity },
