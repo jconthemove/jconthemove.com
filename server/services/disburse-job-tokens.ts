@@ -32,11 +32,12 @@ import { rewards, rewardSettings, users } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { storage } from "../storage";
 import type { Lead } from "@shared/schema";
+import { EARN_RATE_PER_DOLLAR } from "../../shared/rewards";
 
 const TOKEN_PRICE            = 0.00000508432;
 const HOURS_RATE             = 25;    // JCMOVES per confirmed hour per crew member
 const FALLBACK_FLAT          = 500;   // JCMOVES flat per worker if setting not found
-const FALLBACK_EARN          = 15;    // JCMOVES per $1 if setting not found
+const FALLBACK_EARN          = EARN_RATE_PER_DOLLAR; // JCMOVES per $1 — from shared config; DB overrides at runtime
 const FALLBACK_COMPLETION    = 1500;  // JCMOVES flat bonus for customer on job completion
 const FALLBACK_REFERRAL      = 1000;  // JCMOVES awarded to referrer on first confirmed job
 const BONUS_MULTIPLIER       = 1.25;  // +25% for bonus-flagged movers

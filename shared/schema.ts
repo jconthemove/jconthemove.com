@@ -2232,6 +2232,17 @@ export const insertLawnCarePlanSchema = createInsertSchema(lawnCarePlans).omit({
 export type LawnCarePlan = typeof lawnCarePlans.$inferSelect;
 export type InsertLawnCarePlan = z.infer<typeof insertLawnCarePlanSchema>;
 
+// ── Idempotency Keys ─────────────────────────────────────────────────────────
+export const idempotencyKeys = pgTable("idempotency_keys", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  scope: text("scope").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type IdempotencyKey = typeof idempotencyKeys.$inferSelect;
+export const insertIdempotencyKeySchema = createInsertSchema(idempotencyKeys).omit({ id: true, createdAt: true });
+export type InsertIdempotencyKey = z.infer<typeof insertIdempotencyKeySchema>;
+
 // ── Site Traffic Analytics ───────────────────────────────────────────────────
 export const pageViews = pgTable("page_views", {
   id: serial("id").primaryKey(),

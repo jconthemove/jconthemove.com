@@ -7,6 +7,8 @@ import {
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import WalletNotice from "@/components/rewards/WalletNotice";
+import { EARN_RATE_PER_DOLLAR } from "@shared/rewards";
 
 interface WalletAccount {
   tokenBalance: string;
@@ -207,7 +209,8 @@ export default function CustomerRewardsPage() {
     <div className="min-h-screen bg-jc-cream dark:bg-zinc-950 pb-24">
       <div className="max-w-[430px] mx-auto px-4 pt-6">
         <h1 className="text-2xl font-black text-zinc-900 dark:text-white mb-1">Rewards</h1>
-        <p className="text-zinc-500 dark:text-zinc-400 text-sm mb-5">Your JCMOVES token earnings</p>
+        <p className="text-zinc-500 dark:text-zinc-400 text-sm mb-1">Your JCMOVES token earnings</p>
+        <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mb-5">Earn <span className="font-semibold text-jc-orange">{EARN_RATE_PER_DOLLAR} JCMOVES</span> per $1 spent on qualifying services</p>
 
         {isLoading ? (
           <div className="flex justify-center py-16">
@@ -285,6 +288,9 @@ export default function CustomerRewardsPage() {
                 </div>
               );
             })()}
+
+            {/* ── Wallet / custody notice ── */}
+            <WalletNotice />
 
             {/* ── Rewards Shop ── */}
             <div className="mb-5">
@@ -404,6 +410,11 @@ export default function CustomerRewardsPage() {
             )}
           </>
         )}
+
+        {/* ── Legal compliance notice ── */}
+        <p className="text-[10px] text-zinc-400 dark:text-zinc-600 text-center leading-relaxed mt-4 px-2">
+          JCMOVES tokens are not an investment, do not represent equity in JC ON THE MOVE LLC, and are not guaranteed to have monetary value. Earned for platform activity only.
+        </p>
       </div>
 
       {/* ── Pre-redeem confirmation sheet ── */}

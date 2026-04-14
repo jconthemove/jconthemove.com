@@ -112,6 +112,22 @@ app.use((req, res, next) => {
     server = await registerRoutes(app);
     console.log('Application routes registered successfully');
 
+    // Ensure idempotency_keys table exists (extra durability layer for reward ops)
+    (async () => {
+      try {
+        const { pool: dbPool } = await import('./db');
+        await dbPool.query(`
+          CREATE TABLE IF NOT EXISTS idempotency_keys (
+            id         SERIAL PRIMARY KEY,
+            key        TEXT NOT NULL UNIQUE,
+            scope      TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )
+        `);
+        console.log('✅ idempotency_keys table ready');
+      } catch (e) { console.error('idempotency_keys table init error:', e); }
+    })();
+
     // Seed the rewards marketplace catalog (idempotent)
     const { seedRewardShop } = await import('./seed-reward-shop');
     seedRewardShop().catch(e => console.error("Reward shop seed error:", e));

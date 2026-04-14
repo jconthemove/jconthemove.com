@@ -15,9 +15,10 @@
 import { db, pool } from "../db";
 import { rewards, rewardSettings } from "@shared/schema";
 import { storage } from "../storage";
+import { EARN_RATE_PER_DOLLAR } from "../../shared/rewards";
 
 const TOKEN_PRICE        = 0.00000508432;
-const FALLBACK_EARN      = 15;   // JCMOVES per $1
+const FALLBACK_EARN      = EARN_RATE_PER_DOLLAR; // JCMOVES per $1 — from shared config; DB overrides at runtime
 const FALLBACK_FLAT      = 500;  // flat booking bonus
 
 async function getSetting(key: string): Promise<number | null> {

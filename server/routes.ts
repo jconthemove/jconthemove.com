@@ -7861,24 +7861,31 @@ Thank you for your business!
       // Award JCMOVES tokens for accepting a job
       let acceptRewardAmount = 0;
       try {
-        const settings = await db.select().from(rewardSettings).where(eq(rewardSettings.settingKey, 'employee_job_accepted'));
-        const bonusTokens = settings.length > 0 && settings[0].isActive
-          ? parseFloat(settings[0].tokenAmount)
-          : 100;
+        const { ensureIdempotent } = await import('./lib/idempotency');
+        const idemKey = `job-accept-reward-${id}-${employeeId}`;
+        const isNew = await ensureIdempotent(idemKey, 'job_accepted');
+        if (!isNew) {
+          console.log(`[idempotency] job_accepted reward already credited for job ${id} employee ${employeeId} — skipping`);
+        } else {
+          const settings = await db.select().from(rewardSettings).where(eq(rewardSettings.settingKey, 'employee_job_accepted'));
+          const bonusTokens = settings.length > 0 && settings[0].isActive
+            ? parseFloat(settings[0].tokenAmount)
+            : 100;
 
-        await storage.creditWalletTokens(employeeId, bonusTokens);
-        await db.insert(rewards).values({
-          userId: employeeId,
-          rewardType: 'job_accepted',
-          tokenAmount: bonusTokens.toFixed(8),
-          cashValue: (bonusTokens * 0.01).toFixed(2),
-          status: 'confirmed',
-          earnedDate: new Date(),
-          referenceId: id,
-          metadata: { leadId: id, source: 'crew_acceptance' }
-        });
-        acceptRewardAmount = bonusTokens;
-        console.log(`🎁 Awarded ${bonusTokens} JCMOVES to employee ${employeeId} for accepting job ${id}`);
+          await storage.creditWalletTokens(employeeId, bonusTokens);
+          await db.insert(rewards).values({
+            userId: employeeId,
+            rewardType: 'job_accepted',
+            tokenAmount: bonusTokens.toFixed(8),
+            cashValue: (bonusTokens * 0.01).toFixed(2),
+            status: 'confirmed',
+            earnedDate: new Date(),
+            referenceId: id,
+            metadata: { leadId: id, source: 'crew_acceptance' }
+          });
+          acceptRewardAmount = bonusTokens;
+          console.log(`🎁 Awarded ${bonusTokens} JCMOVES to employee ${employeeId} for accepting job ${id}`);
+        }
       } catch (rewardErr) {
         console.error("Job acceptance reward error:", rewardErr);
       }
@@ -7924,8 +7931,15 @@ Thank you for your business!
 
       // Single unified reward disbursement — crew tokens, customer earn, referral bonus
       try {
-        const { disburseJobTokens } = await import('./services/disburse-job-tokens');
-        await disburseJobTokens(id);
+        const { ensureIdempotent } = await import('./lib/idempotency');
+        const idemKey = `job-reward-${id}-completion`;
+        const isNew = await ensureIdempotent(idemKey, 'job_completion');
+        if (!isNew) {
+          console.log(`[idempotency] job completion tokens already disbursed for job ${id} — skipping disburseJobTokens`);
+        } else {
+          const { disburseJobTokens } = await import('./services/disburse-job-tokens');
+          await disburseJobTokens(id);
+        }
       } catch (disbursementError) {
         console.error("Error disbursing job tokens:", disbursementError);
         // Job is still completed even if token distribution fails — admin can retry
@@ -19066,13 +19080,24 @@ Thank you for your business!
 
       // Award JCMOVES tokens for trash valet subscription (non-blocking, idempotent)
       if (email) {
-        const { disburseServiceTokens } = await import("./services/disburse-service-tokens");
-        disburseServiceTokens({
-          serviceType: "trash_valet",
-          referenceId: sub.id,
-          customerEmail: email,
-          totalPrice: effectiveMonthlyPrice,
-        }).catch(err => console.error("Trash valet token disburse error:", err));
+        (async () => {
+          try {
+            const { ensureIdempotent } = await import("./lib/idempotency");
+            const idemKey = `trash-valet-reward-${sub.id}`;
+            const isNew = await ensureIdempotent(idemKey, "trash_valet");
+            if (!isNew) {
+              console.log(`[idempotency] trash valet reward already credited for subscription ${sub.id} — skipping`);
+              return;
+            }
+            const { disburseServiceTokens } = await import("./services/disburse-service-tokens");
+            await disburseServiceTokens({
+              serviceType: "trash_valet",
+              referenceId: sub.id,
+              customerEmail: email,
+              totalPrice: effectiveMonthlyPrice,
+            });
+          } catch (err) { console.error("Trash valet token disburse error:", err); }
+        })();
       }
 
       res.json({ subscriptionId: sub.id, jobId: job.id, quote: { ...quote, finalMonthlyPrice: effectiveMonthlyPrice }, promoApplied: promoCodeUsed });
