@@ -1435,7 +1435,7 @@ function computeQuoteForAnswers(a: Answers, ratePerMoverHour = 85, jc222FlatPric
       "Roofing":               [5000,  50000],
       "Handyman":              [75,    900],
       "Lawn Care":             [50,    400],
-      "Snow Removal":          [75,    350],
+      "Snow Removal":          [40,    150],
       "Move-In/Out Cleaning":  [150,   600],
       "Light Demolition":      [300,   2000],
     };
@@ -2545,11 +2545,16 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
                     <p className="text-sm text-slate-400 mt-1">First Month's Service</p>
                     <p className="text-xs text-slate-500 mt-2">Pay now to lock in your spot · No contract · Cancel anytime</p>
                   </div>
-                ) : (
+                ) : depositInfo?.required ? (
                   <div className="bg-slate-900/60 rounded-xl p-4 text-center">
                     <p className="text-3xl font-bold text-white">${DEPOSIT_AMOUNT}</p>
                     <p className="text-sm text-slate-400 mt-1">Appointment Deposit</p>
                     <p className="text-xs text-slate-500 mt-2">Applied toward your final invoice · Fully refundable if rescheduled 24 hrs in advance</p>
+                  </div>
+                ) : (
+                  <div className="bg-slate-900/60 rounded-xl p-4 text-center">
+                    <p className="text-lg font-bold text-teal-300">No Deposit Required</p>
+                    <p className="text-sm text-slate-400 mt-1">Submit your request — Darrell will contact you to schedule and confirm the final price.</p>
                   </div>
                 )}
 
@@ -2571,33 +2576,45 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
                 </div>
 
                 <div className="space-y-2">
-                  <Button
-                    onClick={handleDepositPay}
-                    disabled={submitMutation.isPending}
-                    className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-400 hover:to-orange-500 text-white font-bold py-3 rounded-xl text-sm"
-                  >
-                    {submitMutation.isPending ? (
-                      "Sending invoice…"
-                    ) : isTrashValet ? (
-                      <><CreditCard className="h-4 w-4 mr-2" />Pay First Month — ${firstMonthCost}</>
-                    ) : (
-                      <><CreditCard className="h-4 w-4 mr-2" />Send ${DEPOSIT_AMOUNT} Deposit Invoice &amp; Confirm</>
-                    )}
-                  </Button>
-                  <p className="text-[11px] text-slate-500 text-center px-2">
-                    {isTrashValet
-                      ? "Invoice emailed instantly · No contract · Cancel anytime"
-                      : "Invoice emailed instantly · Applied toward final balance · Refundable with 24 hr notice"
-                    }
-                  </p>
-                  <Button
-                    variant="ghost"
-                    onClick={handleSkipDeposit}
-                    disabled={submitMutation.isPending}
-                    className="w-full text-slate-400 hover:text-slate-200 text-xs py-2"
-                  >
-                    {submitMutation.isPending ? "Submitting…" : isTrashValet ? "Submit without paying — we'll invoice you" : "Skip deposit — submit for review only"}
-                  </Button>
+                  {!isTrashValet && !depositInfo?.required ? (
+                    <Button
+                      onClick={handleSkipDeposit}
+                      disabled={submitMutation.isPending}
+                      className="w-full bg-gradient-to-r from-teal-600 to-blue-600 hover:from-teal-500 hover:to-blue-500 text-white font-bold py-3 rounded-xl text-sm"
+                    >
+                      {submitMutation.isPending ? "Submitting…" : <><CheckCircle2 className="h-4 w-4 mr-2" />Submit for Review</>}
+                    </Button>
+                  ) : (
+                    <>
+                      <Button
+                        onClick={handleDepositPay}
+                        disabled={submitMutation.isPending}
+                        className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-400 hover:to-orange-500 text-white font-bold py-3 rounded-xl text-sm"
+                      >
+                        {submitMutation.isPending ? (
+                          "Sending invoice…"
+                        ) : isTrashValet ? (
+                          <><CreditCard className="h-4 w-4 mr-2" />Pay First Month — ${firstMonthCost}</>
+                        ) : (
+                          <><CreditCard className="h-4 w-4 mr-2" />Send ${DEPOSIT_AMOUNT} Deposit Invoice &amp; Confirm</>
+                        )}
+                      </Button>
+                      <p className="text-[11px] text-slate-500 text-center px-2">
+                        {isTrashValet
+                          ? "Invoice emailed instantly · No contract · Cancel anytime"
+                          : "Invoice emailed instantly · Applied toward final balance · Refundable with 24 hr notice"
+                        }
+                      </p>
+                      <Button
+                        variant="ghost"
+                        onClick={handleSkipDeposit}
+                        disabled={submitMutation.isPending}
+                        className="w-full text-slate-400 hover:text-slate-200 text-xs py-2"
+                      >
+                        {submitMutation.isPending ? "Submitting…" : isTrashValet ? "Submit without paying — we'll invoice you" : "Skip deposit — submit for review only"}
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

@@ -356,9 +356,10 @@ export default function RewardsMarketplacePage() {
     }
   }, []);
 
-  const userTier = (((user as any)?.loyaltyTier) || 'bronze') as LoyaltyTierKey;
+  const rawLoyaltyTier = (user as any)?.loyaltyTier || 'bronze';
+  const userTier = (rawLoyaltyTier in LOYALTY_TIERS ? rawLoyaltyTier : 'bronze') as LoyaltyTierKey;
   const tierPoints = parseInt((user as any)?.tierPoints || '0', 10);
-  const tierConfig = LOYALTY_TIERS[userTier];
+  const tierConfig = LOYALTY_TIERS[userTier] ?? LOYALTY_TIERS.bronze;
   const nextTierKey = getNextTier(userTier);
   const nextTierConfig = nextTierKey ? LOYALTY_TIERS[nextTierKey] : null;
   const tierProgress = getTierProgress(tierPoints, userTier);

@@ -49,7 +49,7 @@ export function getNextTier(currentTier: LoyaltyTierKey): LoyaltyTierKey | null 
 }
 
 export function getTierProgress(tierPoints: number, currentTier: LoyaltyTierKey): number {
-  const tier = LOYALTY_TIERS[currentTier];
+  const tier = LOYALTY_TIERS[currentTier] ?? LOYALTY_TIERS.bronze;
   if (tier.maxPoints === Infinity) return 100;
   const rangeSize = tier.maxPoints - tier.minPoints + 1;
   const progress = tierPoints - tier.minPoints;
