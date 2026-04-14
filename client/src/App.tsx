@@ -425,7 +425,7 @@ function AuthenticatedApp() {
   }
   
   // === CREW APP (employees, admin, business_owner) ===
-  if (location.startsWith("/crew")) {
+  if (location.startsWith("/crew") || location === "/post-job") {
     return (
       <ComplianceCheck>
         <RouteGuard allowedRoles={['admin', 'employee', 'business_owner']}>
