@@ -4,7 +4,7 @@ import crypto from "crypto";
 import { getEasternDateStr, getEasternDayStart, getEasternDayEnd } from "./utils/dateUtils";
 import { storage } from "./storage";
 import { insertLeadSchema, insertContactSchema, insertCashoutRequestSchema, insertShopItemSchema, insertReviewSchema } from "@shared/schema";
-import { sendEmail, generateLeadNotificationEmail, generateContactNotificationEmail } from "./services/email";
+import { sendEmail, generateLeadNotificationEmail, generateContactNotificationEmail, notifyAdminNewQuote, notifyAdminNewLead, notifyAdminJobCompleted, notifyEmployeeJobAvailable, sendNotificationEmail } from "./services/email";
 import { setupAuth, isAuthenticated, isAuthenticatedAllowPending, signJwt, signRefreshToken, verifyRefreshToken } from "./auth";
 import bcrypt from "bcrypt";
 // REMOVED: Daily check-in service replaced by unified mining system with streaks
@@ -32,7 +32,7 @@ import { crewSuggestionService } from "./services/crew-suggestions";
 import { ObjectStorageService } from "./objectStorage";
 import { solanaTransferService } from "./services/solana-transfer";
 import { jupiterSwapService, SUPPORTED_TOKENS } from "./services/jupiter-swap";
-import { smsService } from "./services/sms";
+// smsService import removed — all notifications use email
 import { ensureMomsAccount } from "./services/generosityFund";
 import { dispatchGenericJob } from "./services/dispatchGeneric";
 import lawnCareRouter from "./routes/lawnCare";
@@ -1308,22 +1308,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
-        // Test SMS via Twilio
-        if (testSMS && targetPhone) {
-          try {
-            const smsResult = await smsService.sendSMS(targetPhone, 
-              "🚚 JC ON THE MOVE Test: SMS notifications are working correctly!"
-            );
-            results.sms = { success: smsResult.success, sentTo: targetPhone, messageSid: smsResult.messageSid, error: smsResult.error };
-            if (smsResult.success) {
-              console.log(`✅ Test SMS sent to ${targetPhone}`);
-            } else {
-              console.error(`❌ Test SMS failed:`, smsResult.error);
-            }
-          } catch (smsError: any) {
-            results.sms = { success: false, error: smsError.message };
-            console.error(`❌ Test SMS failed:`, smsError.message);
-          }
+        // SMS is no longer used for notifications
+        if (testSMS) {
+          results.notification = { success: false, error: "SMS notifications replaced by email" };
         }
 
         res.json({ success: true, results });
@@ -1370,7 +1357,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { testEmail, testSMS, targetEmail, targetPhone } = req.body;
-      const results: any = { email: null, sms: null };
+      const results: any = { email: null, notification: null };
 
       // Test Email via SendGrid
       if (testEmail) {
@@ -1394,27 +1381,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Test SMS via Twilio
+      // SMS is no longer used for notifications
       if (testSMS) {
-        try {
-          const phoneTo = targetPhone || user.phoneNumber;
-          if (!phoneTo) {
-            results.sms = { success: false, error: "No phone number provided" };
-          } else {
-            const smsResult = await smsService.sendSMS(phoneTo, 
-              "🚚 JC ON THE MOVE Test: This is a test SMS notification. If you received this, SMS notifications are working correctly!"
-            );
-            results.sms = { success: smsResult.success, sentTo: phoneTo, messageSid: smsResult.messageSid, error: smsResult.error };
-            if (smsResult.success) {
-              console.log(`✅ Test SMS sent to ${phoneTo}`);
-            } else {
-              console.error(`❌ Test SMS failed:`, smsResult.error);
-            }
-          }
-        } catch (smsError: any) {
-          results.sms = { success: false, error: smsError.message };
-          console.error(`❌ Test SMS failed:`, smsError.message);
-        }
+        results.notification = { success: false, error: "SMS notifications replaced by email" };
       }
 
       res.json({ success: true, results });
@@ -2218,16 +2187,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         console.log(`📧 Sent recovery OTP to ${matchedUser.email}`);
       } else {
-        const smsBody = `JC ON THE MOVE account recovery code: ${otp}\n\nExpires in 15 min. Don't share this code.`;
-        await smsService.sendSMS(matchedUser.phoneNumber!, smsBody);
-        console.log(`📱 Sent recovery OTP via SMS to ${matchedUser.phoneNumber}`);
+        // SMS no longer available — send recovery code via email if email is on file
+        if (!matchedUser.email) {
+          return res.status(400).json({ error: "Phone-based recovery is unavailable. No email address is on file for this account — please contact support." });
+        }
+        await sendEmail({
+          to: matchedUser.email,
+          from: process.env.COMPANY_EMAIL || 'michigankid906@gmail.com',
+          subject: 'JC ON THE MOVE — Account Recovery Code',
+          text: `JC ON THE MOVE account recovery code: ${otp}\n\nExpires in 15 min. Don't share this code.`,
+          html: `<p>Your JC ON THE MOVE account recovery code is: <strong>${otp}</strong></p><p>This code expires in 15 minutes.</p>`,
+        });
+        console.log(`📧 Sent recovery OTP via email to ${matchedUser.email} (phone-method fallback)`);
       }
 
       const masked = method === 'email'
         ? matchedUser.email!.replace(/(.{2}).*(@.*)/, '$1***$2')
-        : '***-***-' + matchedUser.phoneNumber!.slice(-4);
+        : matchedUser.email
+          ? matchedUser.email.replace(/(.{2}).*(@.*)/, '$1***$2')
+          : '***';
 
-      res.json({ success: true, method, masked });
+      const deliveredVia = method === 'email' ? 'email' : (matchedUser.email ? 'email' : 'phone');
+      res.json({ success: true, method: deliveredVia, masked });
     } catch (err) {
       console.error("Recovery request error:", err);
       res.status(500).json({ error: "Failed to send recovery code. Please try again." });
@@ -3147,10 +3128,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       } catch (emailErr) { console.error("Admin email failed:", emailErr); }
 
-      // Notify admin via SMS
       try {
-        await smsService.notifyNewQuote({ customerName: `${firstName} ${lastName}`, serviceType: "junk", phone: customerPhone || undefined });
-      } catch (smsErr) { console.error("Admin SMS failed:", smsErr); }
+        await notifyAdminNewQuote({ customerName: `${firstName} ${lastName}`, serviceType: "junk", phone: customerPhone || undefined, email: customerEmail || undefined });
+      } catch (e) { console.error('Admin email notification failed:', e); }
 
       const dispatched = assignedCrew.length >= tierCfg.movers;
       res.json({
@@ -3223,8 +3203,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       } catch (e) { console.error("Admin email failed:", e); }
       try {
-        await smsService.notifyNewQuote({ customerName: `${firstName} ${lastName}`, serviceType: "moving", phone: customerPhone || undefined });
-      } catch (e) { console.error("Admin SMS failed:", e); }
+        await notifyAdminNewQuote({ customerName: `${firstName} ${lastName}`, serviceType: "moving", phone: customerPhone || undefined, email: customerEmail || undefined });
+      } catch (e) { console.error('Admin email notification failed:', e); }
 
       const dispatched = assignedCrew.length >= moverCount;
       res.json({
@@ -3297,8 +3277,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       } catch (e) { console.error("Admin email failed:", e); }
       try {
-        await smsService.notifyNewQuote({ customerName: `${firstName} ${lastName}`, serviceType: "labor", phone: customerPhone || undefined });
-      } catch (e) { console.error("Admin SMS failed:", e); }
+        await notifyAdminNewQuote({ customerName: `${firstName} ${lastName}`, serviceType: "labor", phone: customerPhone || undefined, email: customerEmail || undefined });
+      } catch (e) { console.error('Admin email notification failed:', e); }
 
       const dispatched = assignedCrew.length >= moverCount;
       res.json({
@@ -3433,10 +3413,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           html: `<h2>New Window Cleaning Booking</h2><p><b>Customer:</b> ${customerName}<br><b>Phone:</b> ${customerPhone}<br><b>Email:</b> ${customerEmail}<br><b>Address:</b> ${address}<br><b>Windows:</b> ${standardWindows} standard, ${largeWindows} large, ${ladderWindows} ladder<br><b>Inside:</b> ${includeInside}, <b>Outside:</b> ${includeOutside}<br><b>Season:</b> ${seasonMode}<br><b>Total:</b> $${adjustedTotal}${quote.promoApplied ? ` <em>(${quote.promoDiscountPercent}% promo applied)</em>` : ""}${quote.addonDiscountApplied ? ` <em>+ 10% bundle discount</em>` : ""}${travelNote ? `<br><b>Travel:</b> ${travelNote}` : ""}${addons.length > 0 ? `<br><b style="color:orange">Add-On Requests:</b> ${addons.join(", ")} — follow up for separate quotes` : ""}</p>`,
         });
       } catch (emailErr) { console.error("Admin email failed:", emailErr); }
-
       try {
-        await smsService.notifyNewQuote({ customerName, serviceType: "window_cleaning", phone: customerPhone || undefined });
-      } catch (smsErr) { console.error("Admin SMS failed:", smsErr); }
+        await notifyAdminNewQuote({ customerName, serviceType: "window_cleaning", phone: customerPhone || undefined, email: customerEmail || undefined });
+      } catch (e) { console.error('Admin email notification failed:', e); }
 
       res.json({
         jobId: lead.id,
@@ -3509,31 +3488,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("Admin email notification failed (lead still saved):", emailError);
       }
 
-      // Send SMS notification for new quote to admin
       try {
-        await smsService.notifyNewQuote({
-          customerName: `${lead.firstName} ${lead.lastName}`,
-          serviceType: lead.serviceType,
-          phone: lead.phone || undefined,
-          moveDate: lead.moveDate || undefined
-        });
-      } catch (smsError) {
-        console.error("Admin SMS notification failed:", smsError);
-      }
-      
-      // Send SMS confirmation to customer (only if they consented)
-      if (lead.phone && lead.smsConsent) {
+        await notifyAdminNewQuote({ customerName: `${lead.firstName} ${lead.lastName}`, serviceType: lead.serviceType || "moving", phone: lead.phone || undefined, email: lead.email || undefined });
+      } catch (e) { console.error('Admin notification email failed:', e); }
+
+      // Send email confirmation to customer
+      if (lead.email) {
         try {
-          await smsService.sendSMS(
-            lead.phone,
-            `📝 JC ON THE MOVE\n\nThank you ${lead.firstName}! We received your ${lead.serviceType} quote request.\n\nWe'll review your request and get back to you soon with a quote!\n\nQuestions? Call us anytime.`
+          await sendNotificationEmail(
+            lead.email,
+            `Your JC ON THE MOVE Quote Request — ${lead.serviceType}`,
+            `<h2>Thank you, ${lead.firstName}!</h2><p>We received your <strong>${lead.serviceType}</strong> quote request. We'll review it and get back to you soon.</p><p>Questions? Call us anytime at (906) 285-9312.</p>`,
+            `Thank you ${lead.firstName}! We received your ${lead.serviceType} quote request. We'll review your request and get back to you soon with a quote! Questions? Call us anytime at (906) 285-9312.`
           );
-          console.log(`📱 SMS sent to customer: ${lead.phone}`);
-        } catch (customerSmsError) {
-          console.error("Customer SMS notification failed:", customerSmsError);
+          console.log(`📧 Confirmation email sent to customer: ${lead.email}`);
+        } catch (customerEmailError) {
+          console.error("Customer email confirmation failed:", customerEmailError);
         }
-      } else if (lead.phone && !lead.smsConsent) {
-        console.log(`📵 Customer did not consent to SMS: ${lead.phone}`);
       }
 
       // Award 200 JCMOVES for booking request (find or create customer account)
@@ -3640,15 +3611,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       try {
-        await smsService.notifyNewQuote({
-          customerName: `${lead.firstName} ${lead.lastName}`,
-          serviceType: lead.serviceType,
-          phone: lead.phone || undefined,
-          moveDate: lead.moveDate || undefined
-        });
-      } catch (smsError) {
-        console.error("Admin SMS notification failed:", smsError);
-      }
+        await notifyAdminNewQuote({ customerName: `${lead.firstName} ${lead.lastName}`, serviceType: lead.serviceType || "moving", phone: lead.phone || undefined, email: lead.email || undefined });
+      } catch (e) { console.error('Admin notification email failed:', e); }
 
       let rewardMessage = "";
       try {
@@ -4887,35 +4851,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         html: `${emailContent.html}<p><strong>Created by Employee ID:</strong> ${employeeId}</p>`,
       });
 
-      // Send SMS notification to admin for new lead
       try {
-        const creator = await storage.getUser(employeeId);
-        const creatorName = creator ? `${creator.firstName} ${creator.lastName}` : 'Unknown Employee';
-        
-        await smsService.notifyNewLead({
-          customerName: `${lead.firstName} ${lead.lastName}`,
-          serviceType: lead.serviceType,
-          phone: lead.phone || undefined,
-          createdBy: creatorName
-        });
-        console.log(`📱 SMS sent to admin for new lead created by ${creatorName}`);
-      } catch (smsError) {
-        console.error('Admin SMS notification failed:', smsError);
-      }
+        await notifyAdminNewLead({ customerName: `${lead.firstName} ${lead.lastName}`, serviceType: lead.serviceType || "moving", phone: lead.phone || undefined, email: lead.email || undefined, createdBy: employeeId ? `Employee ID ${employeeId}` : undefined });
+      } catch (e) { console.error('Admin notification email failed:', e); }
 
-      // Send SMS confirmation to customer (only if they consented)
-      if (lead.phone && lead.smsConsent) {
+      // Send email confirmation to customer
+      if (lead.email) {
         try {
-          await smsService.sendSMS(
-            lead.phone,
-            `📝 JC ON THE MOVE\n\nThank you ${lead.firstName}! We received your ${lead.serviceType} quote request.\n\nWe'll review your request and get back to you soon with a quote!\n\nQuestions? Call us anytime.`
+          await sendNotificationEmail(
+            lead.email,
+            `Your JC ON THE MOVE Quote Request — ${lead.serviceType}`,
+            `<h2>Thank you, ${lead.firstName}!</h2><p>We received your <strong>${lead.serviceType}</strong> quote request. We'll review it and get back to you soon.</p><p>Questions? Call us anytime at (906) 285-9312.</p>`,
+            `Thank you ${lead.firstName}! We received your ${lead.serviceType} quote request. We'll review your request and get back to you soon with a quote! Questions? Call us anytime at (906) 285-9312.`
           );
-          console.log(`📱 SMS sent to customer: ${lead.phone}`);
-        } catch (customerSmsError) {
-          console.error('Customer SMS notification failed:', customerSmsError);
+          console.log(`📧 Confirmation email sent to customer: ${lead.email}`);
+        } catch (customerEmailError) {
+          console.error('Customer email confirmation failed:', customerEmailError);
         }
-      } else if (lead.phone && !lead.smsConsent) {
-        console.log(`📵 Customer did not consent to SMS: ${lead.phone}`);
       }
 
       // Award lead creation bonus (configurable amount, up to 5/day)
@@ -5382,7 +5334,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Log the history
       await writeLeadHistory(id, currentStatus, status, actorId);
 
-      // Send SMS notifications for status changes
+      // Send email notifications for status changes
       try {
         const { notificationService } = await import("./services/notification");
         
@@ -5394,13 +5346,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             { jobId: updatedLead.id, type: 'job_available' }
           );
           
-          // Send SMS to all employees with phone numbers
+          // Send email to all employees with email addresses
           try {
             const allUsers = await storage.getAllUsers();
-            const employees = allUsers.filter(u => u.role === 'employee' && (u.status === 'active' || u.status === 'approved') && u.phoneNumber);
+            const employees = allUsers.filter(u => u.role === 'employee' && (u.status === 'active' || u.status === 'approved') && u.email);
             for (const emp of employees) {
-              if (emp.phoneNumber) {
-                await smsService.notifyJobAvailable(emp.phoneNumber, {
+              if (emp.email) {
+                await notifyEmployeeJobAvailable(emp.email, {
                   customerName: `${updatedLead.firstName} ${updatedLead.lastName}`,
                   serviceType: updatedLead.serviceType,
                   moveDate: updatedLead.confirmedDate || updatedLead.moveDate || undefined,
@@ -5408,16 +5360,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 });
               }
             }
-          } catch (e) { console.error('SMS to employees failed:', e); }
+          } catch (e) { console.error('Email to employees failed:', e); }
           
-          // Send SMS to customer confirming job availability
-          if (updatedLead.phone) {
+          // Send email to customer confirming job availability
+          if (updatedLead.email) {
             try {
-              await smsService.sendSMS(
-                updatedLead.phone,
-                `✅ JC ON THE MOVE\n\nGreat news! Your ${updatedLead.serviceType} job has been confirmed and is now available for scheduling. We'll be in touch soon!\n\nQuestions? Call us anytime.`
+              await sendNotificationEmail(
+                updatedLead.email,
+                `Your JC ON THE MOVE ${updatedLead.serviceType} Job is Confirmed`,
+                `<h2>Great news, ${updatedLead.firstName}!</h2><p>Your <strong>${updatedLead.serviceType}</strong> job has been confirmed and is now available for scheduling. We'll be in touch soon!</p><p>Questions? Call us anytime at (906) 285-9312.</p>`
               );
-            } catch (e) { console.error('Customer SMS failed:', e); }
+            } catch (e) { console.error('Customer email failed:', e); }
           }
         }
         
@@ -5432,26 +5385,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Don't fail the status update if token distribution fails
           }
 
-          // Send SMS to admin
+          // Send email to admin
           try {
             const assignedUser = updatedLead.assignedToUserId 
               ? await storage.getUser(updatedLead.assignedToUserId)
               : null;
-            await smsService.notifyJobCompleted({
+            await notifyAdminJobCompleted({
               customerName: `${updatedLead.firstName} ${updatedLead.lastName}`,
               serviceType: updatedLead.serviceType,
               completedBy: assignedUser ? `${assignedUser.firstName} ${assignedUser.lastName}` : undefined
             });
-          } catch (e) { console.error('Admin SMS failed:', e); }
+          } catch (e) { console.error('Admin email failed:', e); }
           
-          // Send SMS to customer thanking them
-          if (updatedLead.phone) {
+          // Send email to customer thanking them
+          if (updatedLead.email) {
             try {
-              await smsService.sendSMS(
-                updatedLead.phone,
-                `🎉 JC ON THE MOVE\n\nThank you for choosing us! Your ${updatedLead.serviceType} job has been completed.\n\nWe'd love your feedback! Please leave us a review.\n\nQuestions? Call anytime!`
+              await sendNotificationEmail(
+                updatedLead.email,
+                `Thank You — Your JC ON THE MOVE Job is Complete!`,
+                `<h2>Thank you for choosing us, ${updatedLead.firstName}!</h2><p>Your <strong>${updatedLead.serviceType}</strong> job has been completed. We'd love your feedback — please leave us a review!</p><p>Questions? Call anytime at (906) 285-9312!</p>`
               );
-            } catch (e) { console.error('Customer SMS failed:', e); }
+            } catch (e) { console.error('Customer email failed:', e); }
           }
         }
         
@@ -6331,28 +6285,28 @@ Thank you for your business!
         return res.status(404).json({ error: "Lead not found" });
       }
       
-      // Send SMS notifications if status changed
+      // Send email notifications if status changed
       if (newStatus && newStatus !== previousStatus) {
-        console.log(`📱 Status changed from ${previousStatus} to ${newStatus} - sending SMS notifications`);
+        console.log(`📧 Status changed from ${previousStatus} to ${newStatus} - sending email notifications`);
         
-        // Notify when job becomes available - send SMS to JC Crew
+        // Notify when job becomes available - email JC Crew
         if (newStatus === 'available') {
           try {
             const allUsers = await storage.getAllUsers();
-            const employees = allUsers.filter(u => u.role === 'employee' && (u.status === 'active' || u.status === 'approved') && u.phoneNumber);
-            console.log(`📱 Sending SMS to ${employees.length} JC Crew members`);
+            const employees = allUsers.filter(u => u.role === 'employee' && (u.status === 'active' || u.status === 'approved') && u.email);
+            console.log(`📧 Sending job alert email to ${employees.length} JC Crew members`);
             for (const emp of employees) {
-              if (emp.phoneNumber) {
-                await smsService.notifyJobAvailable(emp.phoneNumber, {
+              if (emp.email) {
+                await notifyEmployeeJobAvailable(emp.email, {
                   customerName: `${updatedLead.firstName} ${updatedLead.lastName}`,
                   serviceType: updatedLead.serviceType,
                   moveDate: updatedLead.confirmedDate || updatedLead.moveDate || undefined,
                   tokensReward: updatedLead.tokenAllocation ? parseFloat(updatedLead.tokenAllocation) : undefined
                 });
-                console.log(`✅ SMS sent to JC Crew: ${emp.firstName} ${emp.lastName}`);
+                console.log(`✅ Job alert email sent to JC Crew: ${emp.firstName} ${emp.lastName}`);
               }
             }
-          } catch (e) { console.error('SMS to JC Crew failed:', e); }
+          } catch (e) { console.error('Email to JC Crew failed:', e); }
         }
         
         // Distribute token rewards and notify when job is completed
@@ -6366,18 +6320,18 @@ Thank you for your business!
             // Non-fatal: advisory lock ensures partial runs can be retried
           }
 
-          // SMS notifications
+          // Email notifications
           try {
             const assignedUser = updatedLead.assignedToUserId 
               ? await storage.getUser(updatedLead.assignedToUserId)
               : null;
-            await smsService.notifyJobCompleted({
+            await notifyAdminJobCompleted({
               customerName: `${updatedLead.firstName} ${updatedLead.lastName}`,
               serviceType: updatedLead.serviceType,
               completedBy: assignedUser ? `${assignedUser.firstName} ${assignedUser.lastName}` : undefined
             });
-            console.log(`✅ SMS sent to admin for job completion`);
-          } catch (e) { console.error('Admin SMS failed:', e); }
+            console.log(`✅ Email sent to admin for job completion`);
+          } catch (e) { console.error('Admin email failed:', e); }
         }
       }
       
@@ -8059,7 +8013,6 @@ Thank you for your business!
       `;
 
       let emailSent = false;
-      let smsSent = false;
 
       try {
         emailSent = await sendEmail({
@@ -8073,19 +8026,9 @@ Thank you for your business!
         console.error("Quote email send error:", err);
       }
 
-      if (lead.phone) {
-        try {
-          const smsBody = `Hi ${lead.firstName}, your JC on the Move quote is ready: ${totalFormatted} total for ${serviceLabel}. Call or text (906) 285-9312 to confirm. — JC on the Move`;
-          const smsResult = await smsService.sendSMS(lead.phone, smsBody);
-          smsSent = smsResult.success;
-        } catch (err) {
-          console.error("Quote SMS send error:", err);
-        }
-      }
-
       // Invalidate cache so frontend refreshes
       const updatedLead = await storage.getLead(id);
-      res.json({ success: true, quoteSentAt: now.toISOString(), emailSent, smsSent, squareInvoiceCreated, paymentUrl: squarePaymentUrl, lead: updatedLead });
+      res.json({ success: true, quoteSentAt: now.toISOString(), emailSent, squareInvoiceCreated, paymentUrl: squarePaymentUrl, lead: updatedLead });
     } catch (error) {
       console.error("Error sending quote:", error);
       res.status(500).json({ error: "Failed to send quote" });
@@ -13371,15 +13314,16 @@ Thank you for your business!
         log.push(`[sim] Dispatch error (non-fatal): ${dispErr.message}`);
       }
 
-      // Notify customer via SMS
-      if (lead.phone) {
+      // Notify customer via email
+      if (lead.email) {
         try {
-          await smsService.sendSMS(
-            lead.phone,
-            `Hi ${lead.firstName || "there"}, your JC on the Move payment has been confirmed! Your crew has been dispatched. Questions? Call (906) 222-6009.`
+          await sendNotificationEmail(
+            lead.email,
+            "Your JC on the Move Payment is Confirmed!",
+            `<p>Hi ${lead.firstName || "there"}, your JC on the Move payment has been confirmed! Your crew has been dispatched. Questions? Call (906) 222-6009.</p>`
           );
-          log.push("[sim] Customer SMS sent");
-        } catch (_) { log.push("[sim] Customer SMS skipped (not configured)"); }
+          log.push("[sim] Customer email sent");
+        } catch (_) { log.push("[sim] Customer email skipped"); }
       }
 
       return res.json({ success: true, leadId, finalStatus: assignedCrew.length > 0 ? "dispatched" : "paid", crewAssigned: assignedCrew.length, log });
@@ -15732,17 +15676,7 @@ Thank you for your business!
           console.error(`[BTC Verify] Email notification failed:`, emailErr);
         }
 
-        if (payment.customerPhone) {
-          try {
-            await smsService.sendSMS(
-              payment.customerPhone,
-              `JC ON THE MOVE: Your Bitcoin payment of $${parseFloat(payment.usdAmount).toFixed(2)} for ${paymentContext} has been confirmed! ✅ Payment ID: ${payment.id.slice(0,8)}. Questions? Call (906) 285-9312.`
-            );
-            console.log(`[BTC Verify] Confirmation SMS sent to ${payment.customerPhone}`);
-          } catch (smsErr) {
-            console.error(`[BTC Verify] SMS notification failed:`, smsErr);
-          }
-        }
+        // Customer already notified via email above (SMS replaced)
       }
 
       res.json(updated);
@@ -18671,32 +18605,38 @@ Thank you for your business!
         await writeLeadHistory(req.params.id, "paid", "dispatched", user.id, "Crew dispatched by admin");
       } catch (_) {}
 
-      // SMS to assigned crew members if any
+      // Email assigned crew members if any
       const crewIds: string[] = (lead.crewMembers as string[] | null) || [];
-      const smsResults: any[] = [];
+      const emailResults: any[] = [];
       if (crewIds.length > 0) {
         for (const crewId of crewIds) {
           try {
             const crewMember = await storage.getUser(crewId);
-            if (crewMember?.phoneNumber) {
+            if (crewMember?.email) {
               const customerName = `${lead.firstName || ""} ${lead.lastName || ""}`.trim();
-              const msg = `🚚 JC ON THE MOVE — DISPATCH ALERT\n\nYou've been assigned a job!\n\nCustomer: ${customerName}\nService: ${lead.serviceType || "Move"}\nDate: ${lead.confirmedDate || lead.moveDate || "TBD"}\nPickup: ${lead.confirmedFromAddress || lead.fromAddress || "TBD"}\n\nOpen the app for full details. Questions? Call Darrell.`;
-              const result = await smsService.sendSMS(crewMember.phoneNumber, msg);
-              smsResults.push({ crewId, ...result });
+              const sent = await sendNotificationEmail(
+                crewMember.email,
+                `JC ON THE MOVE — Dispatch Alert: New Job Assigned`,
+                `<h2>You've been assigned a job!</h2><p><strong>Customer:</strong> ${customerName}<br><strong>Service:</strong> ${lead.serviceType || "Move"}<br><strong>Date:</strong> ${lead.confirmedDate || lead.moveDate || "TBD"}<br><strong>Pickup:</strong> ${lead.confirmedFromAddress || lead.fromAddress || "TBD"}</p><p>Open the app for full details. Questions? Call Darrell.</p>`
+              );
+              emailResults.push({ crewId, success: sent });
             }
           } catch (_) {}
         }
       }
 
-      // Also SMS customer if phone available
-      if (lead.phone) {
+      // Also email customer if email available
+      if (lead.email) {
         try {
-          const msg = `Hi ${lead.firstName || "there"}, your JC on the Move crew has been dispatched! They'll reach out before arrival. Questions? Call (906) 222-6009.`;
-          await smsService.sendSMS(lead.phone, msg);
+          await sendNotificationEmail(
+            lead.email,
+            "Your JC on the Move Crew Has Been Dispatched!",
+            `<p>Hi ${lead.firstName || "there"}, your JC on the Move crew has been dispatched! They'll reach out before arrival. Questions? Call (906) 222-6009.</p>`
+          );
         } catch (_) {}
       }
 
-      res.json({ success: true, status: "dispatched", smsResults });
+      res.json({ success: true, status: "dispatched", emailResults });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -18719,11 +18659,14 @@ Thank you for your business!
         await writeLeadHistory(req.params.id, lead.status, "under_review", user.id, "Deposit received — estimate scheduling unlocked");
       } catch (_) {}
 
-      // Notify customer
-      if (lead.phone) {
+      // Notify customer via email
+      if (lead.email) {
         try {
-          const msg = `Hi ${lead.firstName || "there"}! We've received your deposit for your ${lead.serviceType || "service"} estimate. Darrell will be in touch shortly to schedule your in-person visit. Call (906) 222-6009 with questions.`;
-          await smsService.sendSMS(lead.phone, msg);
+          await sendNotificationEmail(
+            lead.email,
+            "JC on the Move — Deposit Received",
+            `<p>Hi ${lead.firstName || "there"}! We've received your deposit for your ${lead.serviceType || "service"} estimate. Darrell will be in touch shortly to schedule your in-person visit. Call (906) 222-6009 with questions.</p>`
+          );
         } catch (_) {}
       }
 
@@ -19234,8 +19177,8 @@ Thank you for your business!
         });
       } catch (emailErr) { console.error("Admin email failed:", emailErr); }
       try {
-        await smsService.notifyNewQuote({ customerName, serviceType: "trash valet", phone: phone || undefined });
-      } catch (smsErr) { console.error("Admin SMS failed:", smsErr); }
+        await notifyAdminNewQuote({ customerName, serviceType: "trash_valet", phone: phone || undefined, email: email || undefined });
+      } catch (e) { console.error('Admin notification email failed:', e); }
 
       // Award JCMOVES tokens for trash valet subscription (non-blocking, idempotent)
       if (email) {
@@ -19408,10 +19351,9 @@ Thank you for your business!
 <b>Monthly (10% off):</b> $${giftResult.discountedMonthly}</p>`,
         });
       } catch (emailErr) { console.error("Gift plan email failed:", emailErr); }
-
       try {
-        await smsService.notifyNewQuote({ customerName: `${contact.name} (GIFT PLAN x2)`, serviceType: "trash valet gift", phone: contact.phone });
-      } catch (smsErr) { console.error("Gift plan SMS failed:", smsErr); }
+        await notifyAdminNewQuote({ customerName: contact.name, serviceType: "trash_valet_gift", phone: contact.phone || undefined, email: contact.email || undefined });
+      } catch (e) { console.error('Admin notification email failed:', e); }
 
       res.json({
         yourSubscriptionId: yourResult.sub.id,

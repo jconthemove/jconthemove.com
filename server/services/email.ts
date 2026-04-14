@@ -83,6 +83,87 @@ export async function sendEmail(params: EmailParams): Promise<boolean> {
   }
 }
 
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'upmichiganstatemovers@gmail.com';
+const FROM_EMAIL = process.env.COMPANY_EMAIL || 'michigankid906@gmail.com';
+
+export async function notifyAdminNewQuote(data: {
+  customerName: string;
+  serviceType: string;
+  phone?: string;
+  email?: string;
+  moveDate?: string;
+}): Promise<boolean> {
+  const html = `
+    <h2>🚚 New Quote Request — JC ON THE MOVE</h2>
+    <p><strong>Customer:</strong> ${data.customerName}</p>
+    <p><strong>Service:</strong> ${data.serviceType}</p>
+    <p><strong>Phone:</strong> ${data.phone || 'Not provided'}</p>
+    ${data.email ? `<p><strong>Email:</strong> ${data.email}</p>` : ''}
+    ${data.moveDate ? `<p><strong>Move Date:</strong> ${data.moveDate}</p>` : ''}
+    <p>Check the dashboard for details.</p>
+  `;
+  const text = `NEW QUOTE REQUEST\n\nCustomer: ${data.customerName}\nService: ${data.serviceType}\nPhone: ${data.phone || 'Not provided'}${data.email ? `\nEmail: ${data.email}` : ''}${data.moveDate ? `\nMove Date: ${data.moveDate}` : ''}\n\nCheck the dashboard for details.`;
+  return sendEmail({ to: ADMIN_EMAIL, from: FROM_EMAIL, subject: `New Quote Request — ${data.customerName} (${data.serviceType})`, html, text });
+}
+
+export async function notifyAdminNewLead(data: {
+  customerName: string;
+  serviceType: string;
+  phone?: string;
+  email?: string;
+  createdBy?: string;
+}): Promise<boolean> {
+  const html = `
+    <h2>📋 New Lead Created — JC ON THE MOVE</h2>
+    <p><strong>Customer:</strong> ${data.customerName}</p>
+    <p><strong>Service:</strong> ${data.serviceType}</p>
+    <p><strong>Phone:</strong> ${data.phone || 'Not provided'}</p>
+    ${data.email ? `<p><strong>Email:</strong> ${data.email}</p>` : ''}
+    ${data.createdBy ? `<p><strong>Created By:</strong> ${data.createdBy}</p>` : ''}
+    <p>Check the dashboard to review.</p>
+  `;
+  const text = `NEW LEAD CREATED\n\nCustomer: ${data.customerName}\nService: ${data.serviceType}\nPhone: ${data.phone || 'Not provided'}${data.email ? `\nEmail: ${data.email}` : ''}${data.createdBy ? `\nCreated by: ${data.createdBy}` : ''}\n\nCheck the dashboard to review.`;
+  return sendEmail({ to: ADMIN_EMAIL, from: FROM_EMAIL, subject: `New Lead Created — ${data.customerName} (${data.serviceType})`, html, text });
+}
+
+export async function notifyAdminJobCompleted(data: {
+  customerName: string;
+  serviceType: string;
+  completedBy?: string;
+}): Promise<boolean> {
+  const html = `
+    <h2>✅ Job Completed — JC ON THE MOVE</h2>
+    <p><strong>Customer:</strong> ${data.customerName}</p>
+    <p><strong>Service:</strong> ${data.serviceType}</p>
+    ${data.completedBy ? `<p><strong>Completed By:</strong> ${data.completedBy}</p>` : ''}
+    <p>Job has been marked as complete.</p>
+  `;
+  const text = `JOB COMPLETED\n\nCustomer: ${data.customerName}\nService: ${data.serviceType}${data.completedBy ? `\nCompleted by: ${data.completedBy}` : ''}\n\nJob marked as complete.`;
+  return sendEmail({ to: ADMIN_EMAIL, from: FROM_EMAIL, subject: `Job Completed — ${data.customerName} (${data.serviceType})`, html, text });
+}
+
+export async function notifyEmployeeJobAvailable(employeeEmail: string, data: {
+  customerName: string;
+  serviceType: string;
+  moveDate?: string;
+  tokensReward?: number;
+}): Promise<boolean> {
+  const html = `
+    <h2>🚚 New Job Available — JC ON THE MOVE</h2>
+    <p><strong>Customer:</strong> ${data.customerName}</p>
+    <p><strong>Service:</strong> ${data.serviceType}</p>
+    <p><strong>Date:</strong> ${data.moveDate || 'TBD'}</p>
+    ${data.tokensReward ? `<p><strong>Reward:</strong> ${data.tokensReward.toLocaleString()} JCMOVES</p>` : ''}
+    <p>Open the app to claim this job!</p>
+  `;
+  const text = `NEW JOB AVAILABLE\n\nCustomer: ${data.customerName}\nService: ${data.serviceType}\nDate: ${data.moveDate || 'TBD'}${data.tokensReward ? `\nReward: ${data.tokensReward.toLocaleString()} JCMOVES` : ''}\n\nOpen the app to claim this job!`;
+  return sendEmail({ to: employeeEmail, from: FROM_EMAIL, subject: `New Job Available — ${data.serviceType} for ${data.customerName}`, html, text });
+}
+
+export async function sendNotificationEmail(toEmail: string, subject: string, html: string, text?: string): Promise<boolean> {
+  return sendEmail({ to: toEmail, from: FROM_EMAIL, subject, html, text });
+}
+
 export function generateLeadNotificationEmail(lead: any) {
   const html = `
     <h2>New Lead Submission - JC ON THE MOVE</h2>

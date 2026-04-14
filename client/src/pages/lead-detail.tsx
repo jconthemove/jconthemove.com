@@ -439,7 +439,7 @@ export default function LeadDetailPage() {
       const invoiceNote = data.squareInvoiceCreated ? " + invoice" : "";
       toast({
         title: `Quote${invoiceNote} sent!`,
-        description: `Email: ${data.emailSent ? "✓" : "✗"}  SMS: ${data.smsSent ? "✓" : "✗"}${data.paymentUrl ? "  💳 Pay link included" : ""}`,
+        description: `Email: ${data.emailSent ? "✓" : "✗"}${data.paymentUrl ? "  💳 Pay link included" : ""}`,
       });
     },
     onError: (error: Error) => {
