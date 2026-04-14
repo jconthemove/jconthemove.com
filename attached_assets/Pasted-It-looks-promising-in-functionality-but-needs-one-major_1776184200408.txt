@@ -1,0 +1,102 @@
+It looks promising in functionality, but needs one major compliance redesign:
+Do not let staking itself buy better odds in a random drawing if non-stakers can’t get an equal free path. In sweepstakes/lottery analysis, the danger zone is the combination of prize + chance + consideration. FTC guidance says a sweepstakes must not require payment or purchase to enter or improve odds, and Michigan consumer guidance says a buyer/donor cannot get an advantage over a free entrant. �
+Federal Trade Commission +3
+So the strongest answer is:
+What looks good
+Your service discounts and worker bonus thresholds are the cleanest part.
+If staking 25,000 JCMOVES unlocks a 5% future service discount, and 100,000 unlocks 10%, that looks much more like a membership / loyalty / access tier than an investment return. Likewise, if workers lock tokens to unlock a higher bonus rate on jobs they personally complete, that is easier to frame as an internal platform utility / performance status system, not passive profit from your efforts. Under the SEC’s Howey-style analysis, the more you emphasize consumptive use, platform access, and user-driven utility—and avoid promises of profit from managerial efforts—the better your posture is. �
+SEC +2
+What needs to change
+The riskiest piece is this:
+“for every 50 JCMOVES they have in staking they get one lottery ticket”
+That can be read as pay/lock value → receive more entries into a prize drawing. If chance determines the winner, and staking increases odds, regulators may view that as adding consideration to a chance-based prize system. Michigan guidance is especially blunt that when consideration, chance, and prize are together, you are in gambling/raffle/lottery territory unless a lawful exception applies. �
+Michigan +2
+Better structure
+Use three separate lanes:
+1. Access lane
+Users can receive entries through free or ordinary platform actions:
+booking a service
+referral completion
+reading a daily scripture and claiming a daily bonus
+worker job completion
+account activity / streaks
+That works best only if the no-payment path is real, clearly disclosed, and not inferior. FTC and Michigan guidance both stress “no purchase necessary” and no advantage for paying entrants. �
+Federal Trade Commission +3
+2. Participation lane
+This is where you were looking for help. A clean definition is:
+Participation = non-cash, non-random utility unlocked by staking or activity.
+Examples:
+higher weekly claim cap for scripture rewards
+access to monthly “community challenge” pools based on points, not chance
+access to premium redemption items in the shop
+faster reward vesting
+early booking windows
+worker dispatch priority or premium-job eligibility
+governance-style voting on featured prizes or community goals
+Those are useful because they are not random cash yield and do not directly buy better odds in a drawing.
+3. Loyalty lane
+Your threshold idea fits here well:
+25,000 staked → 5% service discount
+100,000 staked → 10% service discount
+worker 25,000 staked → 5% extra JCMOVES on completed jobs
+worker 100,000 staked → 10% extra JCMOVES on completed jobs
+Functionally, that is strong. It encourages both customers and workers to hold tokens for ecosystem benefits. Compliance-wise, it is much safer than “stake for profit,” though you still need to handle tax/payroll treatment correctly when workers are compensated in digital assets. IRS guidance says digital assets paid as remuneration to employees are wages for employment tax purposes, and digital-asset payments to contractors are generally taxable income as well. �
+IRS +2
+Best version of your lottery design
+Instead of:
+Stake 50 JCMOVES = 1 lottery ticket
+Use:
+Stake thresholds unlock status perks
+Tickets come from free/activity-based actions
+Staking can unlock non-odds benefits around the drawing, not better odds
+Examples:
+stakers get a VIP badge
+stakers can see prize previews earlier
+stakers can access monthly bonus missions
+stakers can unlock ticket storage limits
+stakers can convert earned points into shop perks
+stakers can qualify for non-random milestone rewards
+If you really want staking connected to the drawing, the cleaner version is:
+staking unlocks eligibility to participate in a separate promotion
+but the actual entries still come through free methods available on equal terms
+and official rules clearly state no purchase necessary and equal odds for free-entry participants. �
+Federal Trade Commission +2
+My compliance read on each feature
+Daily scripture claim → 100 JCMOVES + 1 daily ticket
+This is workable if free, clearly disclosed, and not deceptive. Make sure it is a genuine promotional mechanic, not disguised pay-to-play. �
+Federal Trade Commission +2
+Booking a service gives a ticket
+This is where you need caution. You can do it only if there is also a free alternate method of entry with equal odds. Otherwise, it starts looking like consideration tied to a prize drawing. �
+Consumer Advice +2
+Referral gives a ticket
+Usually better than purchase-based entry, but still document the rules carefully and avoid deceptive referral incentives. Keep it part of a disclosed promotion with clear eligibility and odds disclosures. �
+Federal Trade Commission +1
+Stake thresholds give discounts
+This is one of your strongest features. It reads like a loyalty tier. �
+SEC +1
+Worker stake thresholds give bonus JCMOVES per completed job
+Functionally smart, but treat it as compensation / reward program design, not investment yield. Coordinate payroll/tax treatment carefully. �
+IRS +1
+Bottom line
+Functionality: strong.
+Compliance: fixable.
+Main red flag: staking should not directly buy more random-drawing odds unless your promotion structure is built so that free entrants have the same chance and no paid/staked advantage. �
+Consumer Advice +2
+The safer production model
+Use this:
+Tickets come from free/activity-based engagement
+Staking unlocks discounts, worker multipliers, premium redemption access, status, and platform privileges
+Worker bonuses are tied to completed labor, not passive holding
+No APY, no profit language, no “earn by staking” framing
+Official rules state no purchase necessary, equal odds, eligibility, prize terms, and how the free entry route works. �
+Federal Trade Commission +2
+A clean positioning line would be:
+Lock JCMOVES to unlock service discounts, worker bonus tiers, premium redemptions, and enhanced platform participation. Earn drawing entries through free community actions and platform engagement.
+That is much stronger than:
+“Stake tokens to earn more chances to win.”
+If you want, the next best move is for me to turn this into a compliance-first staking + rewards architecture with:
+safe ticket rules
+staking tiers for customers
+staking tiers for workers
+a weekly/monthly drawing model
+copy wording that avoids securities and sweepstakes mistakes 

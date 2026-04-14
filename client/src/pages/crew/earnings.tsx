@@ -161,18 +161,29 @@ export default function CrewEarningsPage() {
         </div>
       )}
 
-      {/* Balance Summary */}
+      {/* Balance Summary — clickable tiles */}
       <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: "Balance", value: formatTokens(tokenBalance), color: "text-purple-400" },
-          { label: "Total Earned", value: formatTokens(totalEarned), color: "text-green-400" },
-          { label: "Stakes", value: activeStakes.length.toString(), color: "text-blue-400" },
-        ].map(s => (
-          <div key={s.label} className="bg-slate-800/60 border border-slate-700/40 rounded-xl p-3 text-center">
-            <p className={`text-base font-black ${s.color}`}>{s.value}</p>
-            <p className="text-slate-500 text-xs">{s.label}</p>
+        <Link href="/rewards">
+          <div className="bg-slate-800/60 border border-purple-500/30 rounded-xl p-3 text-center cursor-pointer hover:bg-purple-950/30 hover:border-purple-500/50 transition-colors group">
+            <p className="text-base font-black text-purple-400">{formatTokens(tokenBalance)}</p>
+            <p className="text-slate-500 text-xs">Balance</p>
+            <p className="text-purple-500 text-[9px] mt-0.5 group-hover:text-purple-400">Spend →</p>
           </div>
-        ))}
+        </Link>
+        <a href="#history">
+          <div className="bg-slate-800/60 border border-green-500/20 rounded-xl p-3 text-center cursor-pointer hover:bg-green-950/20 hover:border-green-500/40 transition-colors group">
+            <p className="text-base font-black text-green-400">{formatTokens(totalEarned)}</p>
+            <p className="text-slate-500 text-xs">Total Earned</p>
+            <p className="text-green-600 text-[9px] mt-0.5 group-hover:text-green-400">History →</p>
+          </div>
+        </a>
+        <Link href="/staking">
+          <div className="bg-slate-800/60 border border-blue-500/20 rounded-xl p-3 text-center cursor-pointer hover:bg-blue-950/20 hover:border-blue-500/40 transition-colors group">
+            <p className="text-base font-black text-blue-400">{activeStakes.length}</p>
+            <p className="text-slate-500 text-xs">Stakes</p>
+            <p className="text-blue-600 text-[9px] mt-0.5 group-hover:text-blue-400">Manage →</p>
+          </div>
+        </Link>
       </div>
 
       {/* Mining Section */}
@@ -239,58 +250,67 @@ export default function CrewEarningsPage() {
         </CardContent>
       </Card>
 
-      {/* Active Stakes */}
-      {activeStakes.length > 0 && (
-        <Card className="border-white/5 bg-white/[0.03]">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-white flex items-center gap-2 text-base">
-              <Lock className="h-4 w-4 text-blue-400" /> Active Stakes
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {activeStakes.map((stake: Stake) => (
-              <div key={stake.id} className="p-3 bg-slate-900/50 rounded-lg border border-white/5">
-                <div className="flex justify-between items-start mb-1">
-                  <div>
-                    <p className="font-semibold text-white text-sm">{stake.tier?.name}</p>
-                    <p className="text-xs text-slate-400">{formatTokens(parseFloat(stake.amount))} JCMOVES staked</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-green-400 text-sm font-bold">+{formatTokens(pendingStakeRewards(stake))}</p>
-                    <p className="text-xs text-slate-500">pending</p>
-                  </div>
+      {/* Staking Perks */}
+      <div className="bg-slate-800/40 border border-blue-500/20 rounded-2xl p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Lock className="h-4 w-4 text-blue-400" />
+            <span className="font-bold text-white text-sm">Token Staking Perks</span>
+          </div>
+          <Link href="/staking">
+            <span className="text-blue-400 text-xs hover:text-blue-300">Manage →</span>
+          </Link>
+        </div>
+        <p className="text-slate-400 text-xs">Lock JCMOVES to unlock service discounts, worker job bonuses, and premium platform access.</p>
+
+        {/* Tier benefits */}
+        <div className="space-y-2">
+          {[
+            { threshold: 25_000, label: "Silver Tier", perks: ["5% service discount", "5% job bonus (workers)", "Premium shop access"], color: "border-slate-400/30 bg-slate-700/20", badge: "text-slate-300 bg-slate-700/40" },
+            { threshold: 100_000, label: "Gold Tier", perks: ["10% service discount", "10% job bonus (workers)", "Early booking windows", "VIP badge"], color: "border-yellow-500/30 bg-yellow-950/20", badge: "text-yellow-300 bg-yellow-900/30" },
+          ].map(tier => {
+            const totalStaked = activeStakes.reduce((sum: number, s: Stake) => sum + parseFloat(s.amount), 0);
+            const unlocked = totalStaked >= tier.threshold;
+            return (
+              <div key={tier.threshold} className={`rounded-xl border p-3 ${tier.color} ${!unlocked ? "opacity-60" : ""}`}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${tier.badge}`}>{tier.label}</span>
+                  <span className="text-[10px] text-slate-400">{(tier.threshold / 1000).toFixed(0)}k JCMOVES locked</span>
+                  {unlocked && <span className="text-green-400 text-[10px] font-bold">✓ UNLOCKED</span>}
                 </div>
-                <div className="flex items-center gap-1 text-xs text-slate-500">
-                  <Clock className="h-3 w-3" />
-                  <span>{daysRemaining(stake.endsAt)} days remaining</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {tier.perks.map(p => (
+                    <span key={p} className="text-[10px] text-slate-300 bg-white/5 rounded px-1.5 py-0.5">{p}</span>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {activeStakes.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Your active locks</p>
+            {activeStakes.map((stake: Stake) => (
+              <div key={stake.id} className="p-2.5 bg-slate-900/50 rounded-lg border border-white/5 flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-white text-xs">{stake.tier?.name}</p>
+                  <p className="text-[10px] text-slate-400">{formatTokens(parseFloat(stake.amount))} JCMOVES locked</p>
+                </div>
+                <div className="text-right">
+                  <div className="flex items-center gap-1 text-[10px] text-slate-500">
+                    <Clock className="h-3 w-3" />
+                    <span>{daysRemaining(stake.endsAt)}d left</span>
+                  </div>
                 </div>
               </div>
             ))}
-            <Link href="/staking">
-              <Button variant="outline" size="sm" className="w-full border-white/10 text-slate-400 hover:text-white mt-1">
-                Manage Staking <ChevronRight className="h-3 w-3 ml-1" />
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      )}
-
-      {activeStakes.length === 0 && (
-        <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl p-4 flex items-center justify-between">
-          <div>
-            <p className="font-semibold text-white text-sm">Token Staking</p>
-            <p className="text-slate-500 text-xs">Earn APR on your JCMOVES tokens</p>
           </div>
-          <Link href="/staking">
-            <Button size="sm" variant="outline" className="border-white/10 text-slate-300 hover:text-white">
-              Stake <ChevronRight className="h-3 w-3 ml-1" />
-            </Button>
-          </Link>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Rewards History */}
-      <div>
+      <div id="history">
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-bold text-white">Recent Earnings</h2>
           <span className="text-xs text-slate-400">{recentHistory.length} records</span>

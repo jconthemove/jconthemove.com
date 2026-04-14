@@ -13,8 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   Target, CalendarDays, Clock, TrendingUp, Calendar, Trophy, CheckCircle2, X,
-  Loader2, Users, Edit3, ChevronLeft, ChevronRight, Briefcase, Ban, Settings2,
-  LayoutGrid, Rows3,
+  Loader2, Users, Edit3, Settings2, Ban, Briefcase, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import type { User } from "@shared/schema";
 
@@ -90,7 +89,7 @@ export default function CrewSchedulePage() {
   const today = new Date();
   const [viewYear, setViewYear] = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth() + 1);
-  const [viewMode, setViewMode] = useState<"month" | "week" | "settings">("month");
+  const [viewMode, setViewMode] = useState<"settings">("settings");
   const [weekOffset, setWeekOffset] = useState(0);
   const [dayModal, setDayModal] = useState<DayModalState | null>(null);
 
@@ -456,32 +455,10 @@ export default function CrewSchedulePage() {
     <div className="max-w-2xl mx-auto px-4 pt-6 space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-black text-white">My Schedule</h1>
-          <p className="text-slate-400 text-sm">Calendar, availability & goals</p>
+          <h1 className="text-2xl font-black text-white">Schedule Settings</h1>
+          <p className="text-slate-400 text-sm">Availability, goals & job preferences</p>
         </div>
-        <div className="flex gap-1.5">
-          <button
-            onClick={() => setViewMode("month")}
-            className={`p-2 rounded-lg border transition-colors ${viewMode === "month" ? "border-blue-500 bg-blue-950/40 text-blue-400" : "border-slate-700 text-slate-400 hover:text-white"}`}
-            title="Month view"
-          >
-            <LayoutGrid className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => setViewMode("week")}
-            className={`p-2 rounded-lg border transition-colors ${viewMode === "week" ? "border-cyan-500 bg-cyan-950/40 text-cyan-400" : "border-slate-700 text-slate-400 hover:text-white"}`}
-            title="Week view"
-          >
-            <Rows3 className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => setViewMode("settings")}
-            className={`p-2 rounded-lg border transition-colors ${viewMode === "settings" ? "border-purple-500 bg-purple-950/40 text-purple-400" : "border-slate-700 text-slate-400 hover:text-white"}`}
-            title="Settings & Goals"
-          >
-            <Settings2 className="h-4 w-4" />
-          </button>
-        </div>
+        <Settings2 className="h-5 w-5 text-slate-500" />
       </div>
 
       {/* Stats Row */}
@@ -499,175 +476,7 @@ export default function CrewSchedulePage() {
         ))}
       </div>
 
-      {viewMode === "month" && (
-        <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl p-4 space-y-3">
-          {/* Month navigation */}
-          <div className="flex items-center justify-between">
-            <button onClick={goToPrevMonth} className="text-slate-400 hover:text-white p-1">
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-            <h2 className="text-sm font-bold text-white">{MONTH_NAMES[viewMonth - 1]} {viewYear}</h2>
-            <button onClick={goToNextMonth} className="text-slate-400 hover:text-white p-1">
-              <ChevronRight className="h-5 w-5" />
-            </button>
-          </div>
-
-          {/* Legend */}
-          <div className="flex items-center gap-3 text-[10px] text-slate-400 flex-wrap">
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-700 inline-block" /> Blocked</span>
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" /> Job</span>
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" /> Custom hrs</span>
-          </div>
-
-          {/* Day headers */}
-          <div className="grid grid-cols-7 gap-1">
-            {DAY_NAMES.map(d => (
-              <div key={d} className="text-center text-[10px] text-slate-500 font-semibold py-1">{d}</div>
-            ))}
-          </div>
-
-          {/* Calendar grid */}
-          {calendarLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-7 gap-1">
-                {calendarGrid.map((day, idx) => {
-                  if (!day) return <div key={idx} />;
-                  return <DayCell key={day} dateStr={getDayStr(day)} compact />;
-                })}
-              </div>
-              {calendarData && calendarData.jobs.length === 0 && (
-                <div className="text-center py-4 text-slate-500 text-sm">
-                  No jobs scheduled this month — check back soon!
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
-
-      {viewMode === "week" && (
-        <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl p-4 space-y-3">
-          {/* Week navigation */}
-          <div className="flex items-center justify-between">
-            <button onClick={() => setWeekOffset(o => o - 1)} className="text-slate-400 hover:text-white p-1">
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-            <div className="text-center">
-              <h2 className="text-sm font-bold text-white">
-                {weekDays[0].toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                {" — "}
-                {weekDays[6].toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-              </h2>
-              {weekOffset !== 0 && (
-                <button onClick={() => setWeekOffset(0)} className="text-[10px] text-cyan-400 hover:underline">Back to today</button>
-              )}
-            </div>
-            <button onClick={() => setWeekOffset(o => o + 1)} className="text-slate-400 hover:text-white p-1">
-              <ChevronRight className="h-5 w-5" />
-            </button>
-          </div>
-
-          {/* Legend */}
-          <div className="flex items-center gap-3 text-[10px] text-slate-400 flex-wrap">
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-700 inline-block" /> Blocked</span>
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" /> Job</span>
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" /> Custom hrs</span>
-          </div>
-
-          {/* Day header row */}
-          <div className="grid grid-cols-7 gap-1">
-            {weekDays.map((d, i) => (
-              <div key={i} className={`text-center text-[10px] font-semibold py-1 ${dateToStr(d) === todayStr ? "text-cyan-400" : "text-slate-500"}`}>
-                {DAY_NAMES[i]}
-              </div>
-            ))}
-          </div>
-
-          {/* Week day cells */}
-          {weekCalendarLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-7 gap-1">
-                {weekDays.map(d => <DayCell key={dateToStr(d)} dateStr={dateToStr(d)} forWeek />)}
-              </div>
-
-              {/* Empty state for week view */}
-              {!weekDays.some(d => getJobsForDate(dateToStr(d), true).length > 0) && (
-                <div className="text-center py-4 text-slate-500 text-sm">
-                  No jobs scheduled this week — check back soon!
-                </div>
-              )}
-
-              {/* Job detail cards for the week */}
-              {weekDays.some(d => getJobsForDate(dateToStr(d), true).length > 0) && (
-                <div className="space-y-2 mt-2">
-                  <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider flex items-center gap-1">
-                    <Briefcase className="h-3.5 w-3.5 text-blue-400" /> This week's jobs
-                  </p>
-                  {weekDays.flatMap(d => {
-                    const dateStr = dateToStr(d);
-                    return getJobsForDate(dateStr, true).map(j => {
-                      const timeWindow = getJobTimeWindow(j, true);
-                      const pickup = j.confirmedFromAddress || j.fromAddress;
-                      return (
-                        <div key={j.id} className="bg-blue-950/40 border border-blue-700/30 rounded-lg p-3 space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-lg">{SERVICE_ICONS[j.serviceType] || "📦"}</span>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <p className="text-sm font-medium text-white">{SERVICE_LABELS[j.serviceType] || j.serviceType}</p>
-                                <Badge className="text-[10px] bg-blue-900/60 text-blue-300 border-blue-700/30">
-                                  {j.status.replace(/_/g, " ")}
-                                </Badge>
-                              </div>
-                              <div className="flex items-center gap-3 mt-0.5 flex-wrap">
-                                <span className="text-xs text-slate-500 flex items-center gap-1">
-                                  <CalendarDays className="h-3 w-3" />
-                                  {d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
-                                </span>
-                                {timeWindow && (
-                                  <span className="text-xs text-cyan-400 flex items-center gap-1">
-                                    <Clock className="h-3 w-3" />
-                                    Your window: {timeWindow}
-                                  </span>
-                                )}
-                                {j.confirmedHours && (
-                                  <span className="text-xs text-slate-400 flex items-center gap-1">
-                                    ~{j.confirmedHours}h
-                                  </span>
-                                )}
-                              </div>
-                              {pickup && (
-                                <p className="text-xs text-slate-400 mt-0.5 truncate">{pickup}</p>
-                              )}
-                              <Link
-                                href={`/lead/${j.id}`}
-                                className="inline-flex items-center gap-1 text-[11px] text-cyan-400 hover:text-cyan-300 underline underline-offset-2 mt-1"
-                              >
-                                View job details →
-                              </Link>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    });
-                  })}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
-
-      {viewMode === "settings" && (
-        <div className="space-y-4">
+      <div className="space-y-4">
           {/* Goal Progress */}
           {myAvailability?.goals && (myAvailability.goals.weeklyJobGoal ?? 0) > 0 && (
             <div className="bg-slate-800/40 border border-cyan-500/20 rounded-xl p-3 space-y-2">
@@ -887,7 +696,7 @@ export default function CrewSchedulePage() {
             </div>
           )}
         </div>
-      )}
+      </div>
 
       {/* Day detail modal */}
       <Dialog open={!!dayModal} onOpenChange={open => !open && setDayModal(null)}>

@@ -16,10 +16,13 @@ import {
   Sun, Cloud, CloudSnow, CloudRain, Zap, Wind, BookOpen,
   Wifi, WifiOff, Coins, MapPin, Calendar, ChevronRight, Loader2, Trophy,
   XCircle, Plus, LogOut, Briefcase, Users, CheckCircle2,
-  ChevronDown,
+  ChevronDown, ChevronLeft, Ban, Settings2,
 } from "lucide-react";
 import { Link } from "wouter";
 import type { Lead, User } from "@shared/schema";
+
+const MONTH_NAMES_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const DAY_NAMES_SHORT = ["Su","Mo","Tu","We","Th","Fr","Sa"];
 
 type JobBoardLead = {
   id: string;
@@ -203,7 +206,50 @@ export default function CrewTodayPage() {
   const [weatherSheetOpen, setWeatherSheetOpen] = useState(false);
   const [assignmentsExpanded, setAssignmentsExpanded] = useState(false);
 
+  const [calYear, setCalYear] = useState(new Date().getFullYear());
+  const [calMonth, setCalMonth] = useState(new Date().getMonth() + 1);
+  const [selectedCalDay, setSelectedCalDay] = useState<string | null>(null);
+
   const timeSlots = useMemo(() => getAvailableTimeSlots(), [showTimePicker]);
+
+  const { data: calendarData, isLoading: calendarLoading } = useQuery<{
+    jobs: { id: string; serviceType: string; fromAddress: string | null; confirmedDate: string | null; moveDate: string | null; effectiveDate: string | null; confirmedFromAddress: string | null; status: string; confirmedHours: number | null }[];
+    blocks: { id: number; date: string; reason: string | null }[];
+    hourOverrides: { id: number; date: string; startHour: number; endHour: number; note: string | null }[];
+  }>({
+    queryKey: ["/api/workers/calendar", calYear, calMonth],
+    queryFn: async () => {
+      const res = await fetch(`/api/workers/calendar?year=${calYear}&month=${calMonth}`, { credentials: "include" });
+      return res.json();
+    },
+  });
+
+  const calendarGrid = useMemo(() => {
+    const firstDay = new Date(calYear, calMonth - 1, 1).getDay();
+    const daysInMonth = new Date(calYear, calMonth, 0).getDate();
+    const cells: (number | null)[] = [];
+    for (let i = 0; i < firstDay; i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+    while (cells.length % 7 !== 0) cells.push(null);
+    return cells;
+  }, [calYear, calMonth]);
+
+  function getCalDayStr(day: number) {
+    return `${calYear}-${String(calMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
+  function getEffDateStr(j: { effectiveDate: string | null; confirmedDate: string | null; moveDate: string | null }) {
+    return (j.effectiveDate || j.confirmedDate || j.moveDate || "").slice(0, 10);
+  }
+
+  function goToPrevCalMonth() {
+    if (calMonth === 1) { setCalYear(y => y - 1); setCalMonth(12); }
+    else setCalMonth(m => m - 1);
+  }
+  function goToNextCalMonth() {
+    if (calMonth === 12) { setCalYear(y => y + 1); setCalMonth(1); }
+    else setCalMonth(m => m + 1);
+  }
 
   // Sync duty state when user data arrives — but only override if localStorage beacon is expired
   useEffect(() => {
@@ -539,20 +585,6 @@ export default function CrewTodayPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 mb-2">
-          {[
-            { label: "Today", value: todayJobs.length, color: "text-orange-400", icon: "🔥" },
-            { label: "Assigned", value: myAssignments.length, color: "text-blue-400", icon: "📋" },
-            { label: "Done", value: completedLeads.length, color: "text-green-400", icon: "✅" },
-          ].map(s => (
-            <div key={s.label} className="bg-white/[0.04] rounded-lg p-2 text-center border border-white/5">
-              <div className="text-sm">{s.icon}</div>
-              <p className={`text-lg font-black ${s.color}`}>{s.value}</p>
-              <p className="text-slate-500 text-[10px]">{s.label}</p>
-            </div>
-          ))}
-        </div>
-
         {/* Availability Toggle — compact */}
         {dutyStatus ? (
           <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-2 space-y-1.5">
@@ -634,6 +666,115 @@ export default function CrewTodayPage() {
             </button>
           </div>
         )}
+      </div>
+
+      {/* Mini Calendar */}
+      <div className="rounded-2xl bg-slate-800/40 border border-blue-500/20 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-blue-400" />
+            <span className="text-white font-bold text-sm">My Job Calendar</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={goToPrevCalMonth} className="p-1 rounded text-slate-400 hover:text-white">
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="text-xs text-slate-300 font-semibold">{MONTH_NAMES_SHORT[calMonth - 1]} {calYear}</span>
+            <button onClick={goToNextCalMonth} className="p-1 rounded text-slate-400 hover:text-white">
+              <ChevronRight className="h-4 w-4" />
+            </button>
+            <Link href="/crew/schedule">
+              <Settings2 className="h-3.5 w-3.5 text-slate-500 hover:text-slate-300 ml-1" />
+            </Link>
+          </div>
+        </div>
+
+        {/* Day headers */}
+        <div className="grid grid-cols-7 gap-1 mb-1">
+          {DAY_NAMES_SHORT.map(d => (
+            <div key={d} className="text-center text-[9px] text-slate-500 font-semibold py-0.5">{d}</div>
+          ))}
+        </div>
+
+        {/* Calendar grid */}
+        {calendarLoading ? (
+          <div className="flex items-center justify-center py-6">
+            <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-7 gap-1">
+            {calendarGrid.map((day, idx) => {
+              if (!day) return <div key={idx} className="aspect-square" />;
+              const dateStr = getCalDayStr(day);
+              const jobs = (calendarData?.jobs ?? []).filter(j => getEffDateStr(j) === dateStr);
+              const isBlocked = (calendarData?.blocks ?? []).some(b => b.date === dateStr);
+              const isToday = dateStr === today.toISOString().slice(0, 10);
+              const isSelected = selectedCalDay === dateStr;
+              const isPast = dateStr < today.toISOString().slice(0, 10);
+              return (
+                <button
+                  key={day}
+                  onClick={() => setSelectedCalDay(isSelected ? null : dateStr)}
+                  className={`aspect-square flex flex-col items-center justify-center rounded-lg text-xs font-semibold transition-colors relative
+                    ${isSelected ? "bg-blue-600 text-white" : isToday ? "ring-1 ring-cyan-500 bg-cyan-950/40 text-cyan-400" : isBlocked ? "bg-red-950/40 text-red-400" : jobs.length > 0 ? "bg-blue-950/50 text-blue-300" : "text-slate-400 hover:bg-white/5"}
+                    ${isPast && !isToday ? "opacity-50" : ""}
+                  `}
+                >
+                  {day}
+                  {jobs.length > 0 && !isBlocked && (
+                    <span className="absolute bottom-0.5 w-1.5 h-1.5 rounded-full bg-blue-400" />
+                  )}
+                  {isBlocked && <Ban className="h-2.5 w-2.5 absolute bottom-0.5 text-red-500" />}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Legend */}
+        <div className="flex items-center gap-3 text-[9px] text-slate-500 mt-2">
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block" /> Job</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-700 inline-block" /> Blocked</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-cyan-500 inline-block" /> Today</span>
+        </div>
+
+        {/* Selected day jobs */}
+        {selectedCalDay && (() => {
+          const dayJobs = (calendarData?.jobs ?? []).filter(j => getEffDateStr(j) === selectedCalDay);
+          const d = new Date(selectedCalDay + "T12:00:00");
+          const label = d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+          return (
+            <div className="mt-3 border-t border-white/10 pt-3">
+              <p className="text-xs text-slate-400 font-semibold mb-2">{label}</p>
+              {dayJobs.length === 0 ? (
+                <p className="text-xs text-slate-500 italic">No jobs scheduled</p>
+              ) : (
+                <div className="space-y-2">
+                  {dayJobs.map(job => (
+                    <Link key={job.id} href={`/lead/${job.id}`}>
+                      <div className="flex items-center gap-2 bg-blue-950/40 border border-blue-700/30 rounded-lg p-2.5 hover:bg-blue-900/40 cursor-pointer">
+                        <span className="text-lg leading-none">{SERVICE_ICONS[job.serviceType] ?? "📦"}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-white truncate capitalize">{job.serviceType.replace(/-/g, " ")} Job</p>
+                          {(job.confirmedFromAddress || job.fromAddress) && (
+                            <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
+                              <MapPin className="h-3 w-3" />
+                              <span className="truncate">{job.confirmedFromAddress || job.fromAddress}</span>
+                            </p>
+                          )}
+                          <Badge className={`text-[9px] mt-1 ${job.status === "in_progress" ? "bg-green-500/20 text-green-300 border-green-500/30" : "bg-blue-500/20 text-blue-300 border-blue-700/30"}`}>
+                            {job.status.replace(/_/g, " ")}
+                          </Badge>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-slate-500 flex-shrink-0" />
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Daily Scripture */}
