@@ -117,7 +117,7 @@ export default function AdminRewardShopPage() {
   const [itemSearch, setItemSearch] = useState("");
   const [editItem, setEditItem] = useState<Partial<RewardItem> | null>(null);
   const [isNewItem, setIsNewItem] = useState(false);
-  const [redemptionFilter, setRedemptionFilter] = useState("pending_approval");
+  const [redemptionFilter, setRedemptionFilter] = useState("");
   const [actionRedemption, setActionRedemption] = useState<AdminRedemption | null>(null);
   const [actionStatus, setActionStatus] = useState("");
   const [adminNote, setAdminNote] = useState("");

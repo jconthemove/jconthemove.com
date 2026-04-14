@@ -117,6 +117,7 @@ const AdminSchedulePage = lazy(() => import("@/pages/admin/schedule"));
 const BookLawnCarePage = lazy(() => import("@/pages/book-lawn-care"));
 const AdminLawnCarePage = lazy(() => import("@/pages/admin-lawn-care"));
 const PricingPage = lazy(() => import("@/pages/pricing"));
+const HubPage = lazy(() => import("@/pages/hub"));
 
 // Thin fallback shown while a lazy page chunk is downloading
 function PageLoader() {
@@ -483,7 +484,7 @@ function AuthenticatedApp() {
         <Switch>
           {/* Primary routes - accessible on all devices */}
           <Route path="/">
-            <PageWrapper component={TeamHub} />
+            <PageWrapper component={HubPage} />
           </Route>
           <Route path="/dashboard">
             <Redirect to="/admin" />

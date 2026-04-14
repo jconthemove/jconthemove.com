@@ -18974,6 +18974,101 @@ Thank you for your business!
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
+  // ── Admin: grant lottery tickets to a user (activity-based) ─────────────────
+  app.post("/api/admin/lottery/grant-tickets", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!['admin','business_owner'].includes((req.session as any).userRole)) return res.status(403).json({ error: "Forbidden" });
+      const { target_user_id, ticket_count, round_type = 'weekly', reason = 'admin_grant' } = req.body;
+      const count = parseInt(String(ticket_count));
+      if (!target_user_id) return res.status(400).json({ error: "target_user_id required" });
+      if (!count || count < 1 || count > 500) return res.status(400).json({ error: "ticket_count must be 1–500" });
+
+      const { rows: roundRows } = await pool.query(
+        `SELECT * FROM lottery_rounds WHERE status='open' AND round_type=$1 ORDER BY id LIMIT 1`, [round_type]
+      );
+      if (!roundRows.length) return res.status(400).json({ error: `No open ${round_type} round. Create one first.` });
+      const round = roundRows[0];
+
+      await pool.query(
+        `UPDATE lottery_rounds SET total_entries = total_entries + $1, updated_at = NOW() WHERE id=$2`,
+        [count, round.id]
+      );
+
+      const { rows: [updatedRound] } = await pool.query(`SELECT * FROM lottery_rounds WHERE id=$1`, [round.id]);
+      const startIdx = (updatedRound.total_entries - count + 1);
+      const endIdx = updatedRound.total_entries;
+
+      await pool.query(
+        `INSERT INTO lottery_entries (round_id, user_id, tickets, entry_start_index, entry_end_index, source)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [round.id, target_user_id, count, startIdx, endIdx, reason]
+      );
+
+      const targetUser = await storage.getUser(target_user_id);
+      const grantedBy = (req.session as any).userId;
+      const adminUser = await storage.getUser(grantedBy);
+      const adminName = adminUser?.firstName || adminUser?.username || "Admin";
+      const targetName = targetUser?.firstName || targetUser?.username || "User";
+
+      await pool.query(
+        `INSERT INTO lottery_audit_logs (round_id, event_type, message, metadata) VALUES ($1,'GRANT',$2,$3)`,
+        [round.id,
+          `${adminName} granted ${count} ${round_type} ticket${count>1?'s':''} to ${targetName} (${reason})`,
+          JSON.stringify({ grantedBy, targetUserId: target_user_id, count, reason })]
+      );
+
+      res.json({ ok: true, tickets_granted: count, round_type, reason, target: targetName });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ── Admin: create a new lottery round ────────────────────────────────────────
+  app.post("/api/admin/lottery/new-round", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!['admin','business_owner'].includes((req.session as any).userRole)) return res.status(403).json({ error: "Forbidden" });
+      const { round_type = 'weekly', duration_days = 7, seed_amount = 500 } = req.body;
+      const validTypes = ['weekly', 'monthly'];
+      if (!validTypes.includes(round_type)) return res.status(400).json({ error: "round_type must be weekly or monthly" });
+
+      const existing = await pool.query(
+        `SELECT id FROM lottery_rounds WHERE status='open' AND round_type=$1 LIMIT 1`, [round_type]
+      );
+      if (existing.rows.length) return res.status(400).json({ error: `An open ${round_type} round already exists.` });
+
+      const { rows: [lastRound] } = await pool.query(
+        `SELECT round_number FROM lottery_rounds WHERE round_type=$1 ORDER BY id DESC LIMIT 1`, [round_type]
+      );
+      const newNumber = (lastRound?.round_number ?? 0) + 1;
+      const endTime = new Date(Date.now() + duration_days * 86400 * 1000);
+
+      const { rows: [newRound] } = await pool.query(
+        `INSERT INTO lottery_rounds (round_number, round_type, status, start_time, end_time, seed_amount, displayed_jackpot)
+         VALUES ($1, $2, 'open', NOW(), $3, $4, $4) RETURNING *`,
+        [newNumber, round_type, endTime.toISOString(), seed_amount]
+      );
+      await pool.query(
+        `INSERT INTO lottery_audit_logs (round_id, event_type, message) VALUES ($1,'ROUND_OPEN','New round created by admin')`,
+        [newRound.id]
+      );
+      res.json({ ok: true, round: newRound });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ── Admin: list users for ticket granting ────────────────────────────────────
+  app.get("/api/admin/lottery/users", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!['admin','business_owner'].includes((req.session as any).userRole)) return res.status(403).json({ error: "Forbidden" });
+      const { q = '' } = req.query;
+      const { rows } = await pool.query(
+        `SELECT id, first_name, last_name, email, username, role FROM users
+         WHERE ($1 = '' OR first_name ILIKE $2 OR last_name ILIKE $2 OR email ILIKE $2 OR username ILIKE $2)
+         AND role NOT IN ('admin','business_owner')
+         ORDER BY first_name, last_name LIMIT 30`,
+        [q, `%${q}%`]
+      );
+      res.json(rows);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
   // ── Trash Valet Routes ────────────────────────────────────────────────────────
 
   // Helper: verify caller is admin or business_owner

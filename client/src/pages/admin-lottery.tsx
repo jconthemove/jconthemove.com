@@ -1,16 +1,27 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { Link } from "wouter";
 import {
-  Ticket, Trophy, Clock, Coins, Flame, Crown, ChevronLeft,
-  Play, Lock, Unlock, RefreshCw, AlertTriangle, CheckCircle, BarChart3
+  Ticket, Trophy, Crown, ChevronLeft,
+  Play, Lock, Unlock, RefreshCw, AlertTriangle, CheckCircle, Gift, Plus, Search
 } from "lucide-react";
+
+const GRANT_REASONS = [
+  "job_booked",
+  "job_completed",
+  "crew_job_done",
+  "tier_upgrade",
+  "referral_bonus",
+  "milestone_bonus",
+  "admin_grant",
+];
 
 function fmt(n: number) { return (n ?? 0).toLocaleString(); }
 function timeAgo(d: string) {
@@ -33,11 +44,33 @@ export default function AdminLotteryPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [activeSection, setActiveSection] = useState<"rounds" | "winners" | "audit">("rounds");
+  const [activeSection, setActiveSection] = useState<"rounds" | "grant" | "winners" | "audit">("rounds");
+
+  // Grant tickets form state
+  const [userSearch, setUserSearch] = useState("");
+  const [selectedUser, setSelectedUser] = useState<any | null>(null);
+  const [grantTickets, setGrantTickets] = useState(1);
+  const [grantRoundType, setGrantRoundType] = useState<"weekly" | "monthly">("weekly");
+  const [grantReason, setGrantReason] = useState("admin_grant");
+
+  // New round form state
+  const [newRoundType, setNewRoundType] = useState<"weekly" | "monthly">("weekly");
+  const [newRoundDays, setNewRoundDays] = useState(7);
+  const [newRoundSeed, setNewRoundSeed] = useState(500);
 
   const { data, isLoading, refetch } = useQuery<{ rounds: any[]; winners: any[]; audit: any[] }>({
     queryKey: ["/api/admin/lottery/status"],
     refetchInterval: 30000,
+  });
+
+  const { data: userResults = [] } = useQuery<any[]>({
+    queryKey: ["/api/admin/lottery/users", userSearch],
+    queryFn: async () => {
+      if (userSearch.length < 2) return [];
+      const res = await fetch(`/api/admin/lottery/users?q=${encodeURIComponent(userSearch)}`, { credentials: "include" });
+      return res.json();
+    },
+    enabled: userSearch.length >= 2 && activeSection === "grant",
   });
 
   const drawMutation = useMutation({
@@ -72,6 +105,31 @@ export default function AdminLotteryPage() {
       toast({ title: "✅ Payout retried successfully" });
     },
     onError: (e: any) => toast({ title: "Retry failed", description: e.message, variant: "destructive" }),
+  });
+
+  const grantMutation = useMutation({
+    mutationFn: (body: any) => apiRequest("POST", "/api/admin/lottery/grant-tickets", body),
+    onSuccess: (res: any) => {
+      res.json().then((data: any) => {
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/lottery/status"] });
+        toast({ title: `✅ ${data.tickets_granted} ticket${data.tickets_granted !== 1 ? "s" : ""} granted to ${data.target}` });
+        setSelectedUser(null);
+        setUserSearch("");
+        setGrantTickets(1);
+      });
+    },
+    onError: (e: any) => toast({ title: "Grant failed", description: e.message, variant: "destructive" }),
+  });
+
+  const newRoundMutation = useMutation({
+    mutationFn: (body: any) => apiRequest("POST", "/api/admin/lottery/new-round", body),
+    onSuccess: (res: any) => {
+      res.json().then((data: any) => {
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/lottery/status"] });
+        toast({ title: `🎟️ New ${data.round?.round_type} round #${data.round?.round_number} created!` });
+      });
+    },
+    onError: (e: any) => toast({ title: "Failed to create round", description: e.message, variant: "destructive" }),
   });
 
   if (!["admin", "business_owner"].includes(user?.role || "")) {
@@ -177,19 +235,175 @@ export default function AdminLotteryPage() {
         ))}
 
         {/* Section tabs */}
-        <div className="flex gap-2 mb-4">
-          {(["rounds", "winners", "audit"] as const).map(s => (
+        <div className="flex gap-2 mb-4 flex-wrap">
+          {([
+            { id: "rounds", label: "📋 Rounds" },
+            { id: "grant", label: "🎟️ Grant Tickets" },
+            { id: "winners", label: "🏆 Winners" },
+            { id: "audit", label: "📜 Audit Log" },
+          ] as const).map(({ id, label }) => (
             <button
-              key={s}
-              onClick={() => setActiveSection(s)}
-              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeSection === s
+              key={id}
+              onClick={() => setActiveSection(id)}
+              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeSection === id
                 ? "bg-yellow-600/20 text-yellow-300 border border-yellow-500/30"
                 : "bg-white/5 text-slate-400 border border-white/5 hover:text-white"}`}
             >
-              {s === "rounds" ? "📋 Rounds" : s === "winners" ? "🏆 Winners" : "📜 Audit Log"}
+              {label}
             </button>
           ))}
         </div>
+
+        {/* GRANT TICKETS */}
+        {activeSection === "grant" && (
+          <div className="space-y-5">
+            {/* Create New Round */}
+            <Card className="border-yellow-500/20 bg-yellow-950/10">
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <Plus className="h-4 w-4 text-yellow-400" />
+                  <span className="font-black text-white text-sm">Create New Lottery Round</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <p className="text-[10px] text-slate-400 mb-1 uppercase tracking-wider">Type</p>
+                    <select
+                      value={newRoundType}
+                      onChange={e => setNewRoundType(e.target.value as any)}
+                      className="w-full bg-slate-800 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white"
+                    >
+                      <option value="weekly">⚡ Weekly</option>
+                      <option value="monthly">🌙 Monthly</option>
+                    </select>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-slate-400 mb-1 uppercase tracking-wider">Duration (days)</p>
+                    <Input
+                      type="number" min={1} max={60}
+                      value={newRoundDays}
+                      onChange={e => setNewRoundDays(parseInt(e.target.value) || 7)}
+                      className="bg-slate-800 border-white/10 text-xs h-8"
+                    />
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-slate-400 mb-1 uppercase tracking-wider">Seed (JC)</p>
+                    <Input
+                      type="number" min={0}
+                      value={newRoundSeed}
+                      onChange={e => setNewRoundSeed(parseInt(e.target.value) || 500)}
+                      className="bg-slate-800 border-white/10 text-xs h-8"
+                    />
+                  </div>
+                </div>
+                <Button
+                  className="w-full bg-yellow-600 hover:bg-yellow-500 text-black font-black text-xs"
+                  onClick={() => newRoundMutation.mutate({ round_type: newRoundType, duration_days: newRoundDays, seed_amount: newRoundSeed })}
+                  disabled={newRoundMutation.isPending}
+                >
+                  {newRoundMutation.isPending ? <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Plus className="h-3.5 w-3.5 mr-1.5" />}
+                  Create {newRoundType} Round
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Grant Tickets to User */}
+            <Card className="border-green-500/20 bg-green-950/10">
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <Gift className="h-4 w-4 text-green-400" />
+                  <span className="font-black text-white text-sm">Grant Lottery Tickets</span>
+                </div>
+                <p className="text-[11px] text-slate-400">Award tickets to a customer or crew member for completing an activity.</p>
+
+                {/* User search */}
+                <div className="relative">
+                  <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    placeholder="Search by name or email…"
+                    value={userSearch}
+                    onChange={e => { setUserSearch(e.target.value); setSelectedUser(null); }}
+                    className="bg-slate-800 border-white/10 text-sm pl-8 h-9"
+                  />
+                </div>
+
+                {/* User results */}
+                {userSearch.length >= 2 && !selectedUser && (
+                  <div className="bg-slate-900 border border-white/10 rounded-lg overflow-hidden max-h-48 overflow-y-auto">
+                    {userResults.length === 0 ? (
+                      <p className="text-xs text-slate-500 px-3 py-2">No users found</p>
+                    ) : userResults.map(u => (
+                      <button
+                        key={u.id}
+                        onClick={() => { setSelectedUser(u); setUserSearch(`${u.first_name || ""} ${u.last_name || ""}`.trim() || u.email); }}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-white/5 border-b border-white/5 last:border-0 flex items-center justify-between"
+                      >
+                        <div>
+                          <span className="text-white font-bold">{u.first_name} {u.last_name}</span>
+                          {u.email && <span className="text-slate-400 ml-1.5">{u.email}</span>}
+                        </div>
+                        <span className="text-slate-500 capitalize">{u.role}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {selectedUser && (
+                  <div className="bg-green-950/30 border border-green-500/20 rounded-lg px-3 py-2 flex items-center justify-between">
+                    <span className="text-sm font-bold text-green-300">{selectedUser.first_name} {selectedUser.last_name}</span>
+                    <button onClick={() => { setSelectedUser(null); setUserSearch(""); }} className="text-slate-400 hover:text-white text-xs">✕</button>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <p className="text-[10px] text-slate-400 mb-1 uppercase tracking-wider">Tickets</p>
+                    <Input
+                      type="number" min={1} max={500}
+                      value={grantTickets}
+                      onChange={e => setGrantTickets(parseInt(e.target.value) || 1)}
+                      className="bg-slate-800 border-white/10 text-xs h-8"
+                    />
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-slate-400 mb-1 uppercase tracking-wider">Round</p>
+                    <select
+                      value={grantRoundType}
+                      onChange={e => setGrantRoundType(e.target.value as any)}
+                      className="w-full bg-slate-800 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white h-8"
+                    >
+                      <option value="weekly">Weekly</option>
+                      <option value="monthly">Monthly</option>
+                    </select>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-slate-400 mb-1 uppercase tracking-wider">Reason</p>
+                    <select
+                      value={grantReason}
+                      onChange={e => setGrantReason(e.target.value)}
+                      className="w-full bg-slate-800 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white h-8"
+                    >
+                      {GRANT_REASONS.map(r => (
+                        <option key={r} value={r}>{r.replace(/_/g, " ")}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <Button
+                  className="w-full bg-green-700 hover:bg-green-600 text-white font-black text-xs"
+                  onClick={() => {
+                    if (!selectedUser) { return; }
+                    grantMutation.mutate({ target_user_id: selectedUser.id, ticket_count: grantTickets, round_type: grantRoundType, reason: grantReason });
+                  }}
+                  disabled={!selectedUser || grantMutation.isPending}
+                >
+                  {grantMutation.isPending ? <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Gift className="h-3.5 w-3.5 mr-1.5" />}
+                  Grant {grantTickets} Ticket{grantTickets !== 1 ? "s" : ""} to {selectedUser?.first_name || "…"}
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* ROUNDS */}
         {activeSection === "rounds" && (
