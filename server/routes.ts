@@ -17544,54 +17544,56 @@ Thank you for your business!
 
       const todayLeads  = activeLeads.filter(l => l.moveDate === today || l.confirmedDate === today);
       const liveJobs    = todayLeads.filter(l => l.status === "available");
-      const quotedJobs  = todayLeads.filter(l => l.status === "quote_requested");
 
-      const crewCapacity      = availableCrew.length;
-      const activeLoad        = liveJobs.reduce((s, j) => s + (j.crewSize || 2), 0);
-      const pendingPressure   = quotedJobs.length;
-      const remainingCapacity = Math.max(crewCapacity - activeLoad, 0);
+      const crewCapacity = availableCrew.length;
+      // Count crew slots consumed by active (in-progress) jobs
+      const activeLoad   = liveJobs.reduce((s, j) => s + (j.crewSize || 2), 0);
 
-      type StatusKey = "ready" | "limited" | "high_demand" | "scheduling_ahead";
+      // ── New 3-state color logic ──────────────────────────────────────────────
+      // Green  : no jobs booked for today at all (crew fully open)
+      // Yellow : jobs exist today but ≤50% of on-duty crew are assigned
+      // Red    : more than half the on-duty crew is currently assigned
+      // Gray   : after 6 PM CT or no crew online at all
+      type StatusKey = "available" | "jobs_today" | "busy" | "scheduling_ahead";
       let status: StatusKey = "scheduling_ahead";
 
-      if (ctHour >= 18) {
-        // After 6 PM CT → schedule ahead only
+      if (ctHour >= 18 || crewCapacity === 0) {
         status = "scheduling_ahead";
-      } else if (crewCapacity >= 3 && remainingCapacity >= 2 && pendingPressure <= 1 && ctHour < 16) {
-        // Before 4 PM with plenty of open capacity
-        status = "ready";
-      } else if (crewCapacity >= 2 && remainingCapacity >= 1) {
-        status = "limited";
-      } else if (crewCapacity >= 1) {
-        status = "high_demand";
+      } else if (todayLeads.length === 0) {
+        // No jobs booked for today → fully open
+        status = "available";
+      } else if (activeLoad <= crewCapacity / 2) {
+        // Jobs exist today but crew still has capacity
+        status = "jobs_today";
       } else {
-        status = "scheduling_ahead";
+        // More than half the crew is on assignment
+        status = "busy";
       }
 
       const PAYLOADS: Record<StatusKey, object> = {
-        ready: {
-          status: "ready",
-          title: "Crew Ready Now",
-          subtitle: "Same-day bookings are available",
-          badge: "Ready to Book",
+        available: {
+          status: "available",
+          title: "Available Now",
+          subtitle: "No jobs booked yet — first come, first served",
+          badge: "Open",
           tone: "green",
-          ctaHint: "Takes 60 seconds · Fast response",
+          ctaHint: "Book now — slots fill fast once the day starts",
         },
-        limited: {
-          status: "limited",
-          title: "Limited Availability Today",
-          subtitle: "Same-day spots are filling fast",
+        jobs_today: {
+          status: "jobs_today",
+          title: "Jobs Booked Today",
+          subtitle: "Crew is active — some same-day spots remain",
           badge: "Limited",
-          tone: "orange",
-          ctaHint: "Book now to lock in your spot",
+          tone: "yellow",
+          ctaHint: "Grab a slot before the crew fills up",
         },
-        high_demand: {
-          status: "high_demand",
-          title: "High Demand",
-          subtitle: "Openings are limited and booking quickly",
+        busy: {
+          status: "busy",
+          title: "Crew Busy",
+          subtitle: "More than half our crew is on assignment",
           badge: "Busy",
           tone: "red",
-          ctaHint: "Request your quote now",
+          ctaHint: "Schedule ahead — we'll lock in your time",
         },
         scheduling_ahead: {
           status: "scheduling_ahead",
@@ -17599,7 +17601,7 @@ Thank you for your business!
           subtitle: "Request your preferred time — we follow up fast",
           badge: "Scheduling",
           tone: "gray",
-          ctaHint: "Quotes are still open",
+          ctaHint: "Quotes are still open — book any time",
         },
       };
 

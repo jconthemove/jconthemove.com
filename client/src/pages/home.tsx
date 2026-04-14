@@ -130,119 +130,123 @@ export default function HomePage() {
       </nav>
 
       {/* ── HERO SECTION ── */}
-      <section className="px-4 pt-10 pb-8">
-        <div className="max-w-5xl mx-auto">
-          <div className="grid md:grid-cols-[1fr_380px] gap-8 items-center">
+      <section className="px-4 pt-7 pb-6">
+        <div className="max-w-3xl mx-auto">
 
-            {/* Left: Headline + trust badges + CTAs */}
-            <div>
-              <div className="inline-flex items-center gap-1.5 bg-blue-500/10 border border-blue-400/30 rounded-full px-3 py-1 mb-4">
-                <MapPin className="h-3 w-3 text-blue-400" />
-                <span className="text-blue-300 text-xs font-medium">Ironwood, Iron River, Green Bay, Wausau, and surrounding Northwoods areas</span>
-              </div>
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-white leading-tight mb-4">
+          {/* Location badge */}
+          <div className="inline-flex items-center gap-1.5 bg-blue-500/10 border border-blue-400/30 rounded-full px-3 py-1 mb-3">
+            <MapPin className="h-3 w-3 text-blue-400" />
+            <span className="text-blue-300 text-xs font-medium">Ironwood, Iron River, Green Bay, Wausau, and surrounding Northwoods areas</span>
+          </div>
+
+          {/* Headline + compact beacon side-by-side on desktop, stacked on mobile */}
+          <div className="flex flex-col md:flex-row md:items-start gap-4">
+
+            {/* Headline block */}
+            <div className="flex-1 min-w-0">
+              <h1 className="text-4xl md:text-5xl font-extrabold text-white leading-tight mb-2">
                 Fast, Reliable Moving<br />
                 <span className="text-blue-400">in the Northwoods</span>
               </h1>
-              <p className="text-slate-300 text-lg mb-6">
+              <p className="text-slate-300 text-base mb-4">
                 Moving, junk removal, and labor help across Ironwood and surrounding areas. Licensed, insured, and ready to work today.
               </p>
-              <div className="flex flex-wrap gap-3 mb-6">
+              <div className="flex flex-wrap gap-2 mb-4">
                 {[
                   { icon: Shield, label: "Licensed & Insured" },
                   { icon: Star, label: "5-Star Local Reputation" },
                   { icon: Zap, label: "Fast Response" },
                   { icon: CheckCircle2, label: "20+ Years Experience" },
                 ].map(({ icon: Icon, label }) => (
-                  <div key={label} className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-full px-3 py-1.5">
-                    <Icon className="h-3.5 w-3.5 text-blue-400" />
+                  <div key={label} className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-full px-3 py-1">
+                    <Icon className="h-3 w-3 text-blue-400" />
                     <span className="text-white/80 text-xs font-medium">{label}</span>
                   </div>
                 ))}
               </div>
               <div className="flex flex-wrap gap-3">
                 <Link href="/book">
-                  <Button className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-7 py-3 text-lg rounded-xl">
-                    <CalendarCheck className="h-5 w-5 mr-2" />
+                  <Button className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 py-2.5 text-base rounded-xl">
+                    <CalendarCheck className="h-4 w-4 mr-2" />
                     Book a Job
                   </Button>
                 </Link>
                 <Link href="/quote">
-                  <Button variant="outline" className="border-slate-600 text-white hover:bg-slate-700 font-bold px-6 py-2.5 text-base rounded-xl">
+                  <Button variant="outline" className="border-slate-600 text-white hover:bg-slate-700 font-bold px-5 py-2.5 text-sm rounded-xl">
                     <MessageCircle className="h-4 w-4 mr-2" />
                     Get a Quote
                   </Button>
                 </Link>
               </div>
-              <p className="mt-3 text-slate-500 text-xs">Next openings available today. Book now to lock your spot.</p>
-
-              {/* Hero ZIP ETA widget */}
-              <div className="mt-5 rounded-xl border border-white/10 bg-white/5 p-3">
-                <p className="text-slate-400 text-xs mb-2 font-medium">Enter your ZIP to see how far we are →</p>
-                <div className="flex gap-2">
-                  <input
-                    ref={heroInputRef}
-                    type="text"
-                    inputMode="numeric"
-                    value={heroZip}
-                    maxLength={5}
-                    onChange={(e) => {
-                      setHeroZip(e.target.value.replace(/\D/g, "").slice(0, 5));
-                      setHeroEtaData(null);
-                      setHeroEtaError("");
-                    }}
-                    onKeyDown={(e) => e.key === "Enter" && lookupHeroEta()}
-                    placeholder="Your ZIP code"
-                    className="flex-1 rounded-lg bg-slate-900 border border-slate-700 text-white text-sm px-3 py-2 placeholder:text-slate-500 focus:outline-none focus:border-blue-500 min-w-0"
-                  />
-                  <button
-                    onClick={lookupHeroEta}
-                    disabled={heroEtaLoading}
-                    className="flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white text-sm font-semibold px-4 py-2 transition-colors shrink-0"
-                  >
-                    {heroEtaLoading ? (
-                      <Zap className="h-3.5 w-3.5 animate-pulse" />
-                    ) : (
-                      <Zap className="h-3.5 w-3.5" />
-                    )}
-                    Check
-                  </button>
-                </div>
-                {heroEtaError && <p className="mt-1.5 text-xs text-slate-400">{heroEtaError}</p>}
-                {heroEtaData && (
-                  <div className={`mt-2 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium ${
-                    heroEtaData.availabilityLabel === "far"
-                      ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-200"
-                      : "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
-                  }`}>
-                    {heroEtaData.availabilityLabel !== "far" ? (
-                      <span className="relative flex h-2 w-2 flex-shrink-0">
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                        <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
-                      </span>
-                    ) : (
-                      <span className="h-2 w-2 flex-shrink-0 rounded-full bg-yellow-400" />
-                    )}
-                    {heroEtaData.availabilityLabel === "far" ? (
-                      <span>We serve this area — contact us to confirm availability</span>
-                    ) : (
-                      <span>
-                        {heroEtaData.crewCount > 0 ? `${heroEtaData.crewCount} Mover${heroEtaData.crewCount > 1 ? "s" : ""} Online · ` : ""}
-                        ~{heroEtaData.estimatedMinutes < 60
-                          ? `${heroEtaData.estimatedMinutes} min away`
-                          : `${Math.floor(heroEtaData.estimatedMinutes / 60)} hr${Math.floor(heroEtaData.estimatedMinutes / 60) > 1 ? "s" : ""}${heroEtaData.estimatedMinutes % 60 > 0 ? ` ${heroEtaData.estimatedMinutes % 60} min` : ""} away`}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
             </div>
 
-            {/* Right: Live Crew Status Card */}
-            <div>
+            {/* Compact beacon — fixed width on desktop */}
+            <div className="md:w-64 flex-shrink-0">
               <CrewStatusCard />
             </div>
           </div>
+
+          {/* ZIP ETA widget — below the headline+beacon block */}
+          <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3">
+            <p className="text-slate-400 text-xs mb-2 font-medium">Enter your ZIP to see how far we are →</p>
+            <div className="flex gap-2">
+              <input
+                ref={heroInputRef}
+                type="text"
+                inputMode="numeric"
+                value={heroZip}
+                maxLength={5}
+                onChange={(e) => {
+                  setHeroZip(e.target.value.replace(/\D/g, "").slice(0, 5));
+                  setHeroEtaData(null);
+                  setHeroEtaError("");
+                }}
+                onKeyDown={(e) => e.key === "Enter" && lookupHeroEta()}
+                placeholder="Your ZIP code"
+                className="flex-1 rounded-lg bg-slate-900 border border-slate-700 text-white text-sm px-3 py-2 placeholder:text-slate-500 focus:outline-none focus:border-blue-500 min-w-0"
+              />
+              <button
+                onClick={lookupHeroEta}
+                disabled={heroEtaLoading}
+                className="flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white text-sm font-semibold px-4 py-2 transition-colors shrink-0"
+              >
+                {heroEtaLoading ? (
+                  <Zap className="h-3.5 w-3.5 animate-pulse" />
+                ) : (
+                  <Zap className="h-3.5 w-3.5" />
+                )}
+                Check
+              </button>
+            </div>
+            {heroEtaError && <p className="mt-1.5 text-xs text-slate-400">{heroEtaError}</p>}
+            {heroEtaData && (
+              <div className={`mt-2 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium ${
+                heroEtaData.availabilityLabel === "far"
+                  ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-200"
+                  : "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+              }`}>
+                {heroEtaData.availabilityLabel !== "far" ? (
+                  <span className="relative flex h-2 w-2 flex-shrink-0">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                  </span>
+                ) : (
+                  <span className="h-2 w-2 flex-shrink-0 rounded-full bg-yellow-400" />
+                )}
+                {heroEtaData.availabilityLabel === "far" ? (
+                  <span>We serve this area — contact us to confirm availability</span>
+                ) : (
+                  <span>
+                    {heroEtaData.crewCount > 0 ? `${heroEtaData.crewCount} Mover${heroEtaData.crewCount > 1 ? "s" : ""} Online · ` : ""}
+                    ~{heroEtaData.estimatedMinutes < 60
+                      ? `${heroEtaData.estimatedMinutes} min away`
+                      : `${Math.floor(heroEtaData.estimatedMinutes / 60)} hr${Math.floor(heroEtaData.estimatedMinutes / 60) > 1 ? "s" : ""}${heroEtaData.estimatedMinutes % 60 > 0 ? ` ${heroEtaData.estimatedMinutes % 60} min` : ""} away`}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
         </div>
       </section>
 

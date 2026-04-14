@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Phone, ChevronRight, Sparkles, CalendarCheck } from "lucide-react";
+import { ChevronRight, CalendarCheck, Coins, Star } from "lucide-react";
 import { Link } from "wouter";
 
-type CrewStatusKey = "ready" | "limited" | "high_demand" | "scheduling_ahead";
-type Tone = "green" | "orange" | "red" | "gray";
+type CrewStatusKey = "available" | "jobs_today" | "busy" | "scheduling_ahead";
+type Tone = "green" | "yellow" | "red" | "gray";
 
 type CrewStatusResponse = {
   status: CrewStatusKey;
@@ -16,12 +16,12 @@ type CrewStatusResponse = {
 };
 
 const FALLBACK: CrewStatusResponse = {
-  status: "limited",
-  title: "Limited Availability Today",
-  subtitle: "Same-day spots are filling fast",
+  status: "jobs_today",
+  title: "Jobs Booked Today",
+  subtitle: "Crew is active — some same-day spots remain",
   badge: "Limited",
-  tone: "orange",
-  ctaHint: "Book now to lock in your spot",
+  tone: "yellow",
+  ctaHint: "Grab a slot before the crew fills up",
   refreshedAt: new Date().toISOString(),
 };
 
@@ -29,47 +29,55 @@ function toneStyles(tone: Tone) {
   switch (tone) {
     case "green":
       return {
-        ring:  "border-emerald-500/30",
-        glow:  "shadow-[0_0_36px_rgba(16,185,129,0.20)]",
-        dot:   "bg-emerald-400",
-        badge: "bg-emerald-500/15 text-emerald-300 border border-emerald-400/25",
-        cta:   "from-emerald-500 to-teal-600 shadow-emerald-900/30",
-        accent:"text-emerald-400",
+        ring:   "border-emerald-500/40",
+        dot:    "bg-emerald-400",
+        dotRing:"bg-emerald-400/30",
+        badge:  "bg-emerald-500/15 text-emerald-300 border border-emerald-400/30",
+        bar:    "bg-emerald-500/10 border-emerald-500/20",
+        barText:"text-emerald-300",
+        cta:    "from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500",
+        accent: "text-emerald-400",
+      };
+    case "yellow":
+      return {
+        ring:   "border-yellow-500/40",
+        dot:    "bg-yellow-400",
+        dotRing:"bg-yellow-400/30",
+        badge:  "bg-yellow-500/15 text-yellow-300 border border-yellow-400/30",
+        bar:    "bg-yellow-500/10 border-yellow-500/20",
+        barText:"text-yellow-300",
+        cta:    "from-yellow-500 to-amber-600 hover:from-yellow-400 hover:to-amber-500",
+        accent: "text-yellow-400",
       };
     case "red":
       return {
-        ring:  "border-red-500/30",
-        glow:  "shadow-[0_0_36px_rgba(239,68,68,0.18)]",
-        dot:   "bg-red-400",
-        badge: "bg-red-500/15 text-red-300 border border-red-400/25",
-        cta:   "from-red-500 to-orange-600 shadow-red-900/30",
-        accent:"text-red-400",
+        ring:   "border-red-500/40",
+        dot:    "bg-red-400",
+        dotRing:"bg-red-400/30",
+        badge:  "bg-red-500/15 text-red-300 border border-red-400/30",
+        bar:    "bg-red-500/10 border-red-500/20",
+        barText:"text-red-300",
+        cta:    "from-red-500 to-rose-600 hover:from-red-400 hover:to-rose-500",
+        accent: "text-red-400",
       };
-    case "gray":
+    default: // gray
       return {
-        ring:  "border-white/10",
-        glow:  "shadow-[0_0_24px_rgba(255,255,255,0.05)]",
-        dot:   "bg-zinc-400",
-        badge: "bg-white/8 text-zinc-300 border border-white/12",
-        cta:   "from-slate-600 to-slate-700 shadow-slate-900/30",
-        accent:"text-slate-400",
-      };
-    default: // orange
-      return {
-        ring:  "border-orange-500/30",
-        glow:  "shadow-[0_0_36px_rgba(251,146,60,0.20)]",
-        dot:   "bg-orange-400",
-        badge: "bg-orange-500/15 text-orange-300 border border-orange-400/25",
-        cta:   "from-orange-500 to-amber-600 shadow-orange-900/30",
-        accent:"text-orange-400",
+        ring:   "border-white/10",
+        dot:    "bg-zinc-400",
+        dotRing:"bg-zinc-400/20",
+        badge:  "bg-white/8 text-zinc-300 border border-white/12",
+        bar:    "bg-white/5 border-white/10",
+        barText:"text-zinc-300",
+        cta:    "from-slate-600 to-slate-700 hover:from-slate-500 hover:to-slate-600",
+        accent: "text-slate-400",
       };
   }
 }
 
 export default function CrewStatusCard() {
-  const [data, setData]       = useState<CrewStatusResponse>(FALLBACK);
+  const [data, setData]   = useState<CrewStatusResponse>(FALLBACK);
   const [loading, setLoading] = useState(true);
-  const [pulse, setPulse]     = useState(false);
+  const [pulse, setPulse] = useState(false);
 
   async function fetchStatus() {
     try {
@@ -79,7 +87,7 @@ export default function CrewStatusCard() {
       setData(prev => {
         if (prev.status !== next.status) {
           setPulse(true);
-          setTimeout(() => setPulse(false), 1000);
+          setTimeout(() => setPulse(false), 800);
         }
         return next;
       });
@@ -92,90 +100,72 @@ export default function CrewStatusCard() {
 
   useEffect(() => {
     fetchStatus();
-    const interval = setInterval(fetchStatus, 30_000);
-    return () => clearInterval(interval);
+    const id = setInterval(fetchStatus, 30_000);
+    return () => clearInterval(id);
   }, []);
 
   const s = useMemo(() => toneStyles(data.tone), [data.tone]);
 
   return (
-    <div
-      className={[
-        "relative overflow-hidden rounded-3xl border bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 p-5 text-white transition-all duration-500",
-        s.ring,
-        s.glow,
-        pulse ? "scale-[1.015]" : "scale-100",
-      ].join(" ")}
-    >
-      {/* Background radial accents */}
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.12),transparent_40%),radial-gradient(circle_at_bottom_left,rgba(251,146,60,0.10),transparent_35%)]" />
+    <div className={[
+      "relative overflow-hidden rounded-2xl border bg-slate-900/80 backdrop-blur-sm p-4 text-white transition-all duration-500",
+      s.ring,
+      pulse ? "scale-[1.01]" : "scale-100",
+    ].join(" ")}>
 
-      <div className="relative z-10 space-y-4">
-
-        {/* Header row */}
-        <div className="flex items-start justify-between gap-3">
+      {/* Status row */}
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          {/* Pulsing dot with ring */}
+          <span className="relative flex-shrink-0 flex h-3 w-3">
+            <span className={["absolute inline-flex h-full w-full rounded-full animate-ping opacity-60", s.dotRing].join(" ")} />
+            <span className={["relative inline-flex h-3 w-3 rounded-full", s.dot].join(" ")} />
+          </span>
           <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.20em] text-slate-500 mb-1.5">
-              JC ON THE MOVE · Live Status
-            </p>
-            <div className="flex items-center gap-2.5">
-              <span className={[
-                "h-2.5 w-2.5 flex-shrink-0 rounded-full",
-                s.dot,
-                pulse ? "animate-ping" : "animate-pulse",
-              ].join(" ")} />
-              <h3 className="text-xl font-extrabold leading-snug text-white">
-                {loading ? "Checking Availability…" : data.title}
-              </h3>
-            </div>
-            <p className={`mt-1 text-sm ${loading ? "text-slate-500" : "text-slate-300"}`}>
-              {loading ? "Refreshing live crew status…" : data.subtitle}
+            <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 leading-none mb-0.5">Live Status</p>
+            <p className="text-sm font-extrabold text-white leading-tight">
+              {loading ? "Checking…" : data.title}
             </p>
           </div>
-
-          <span className={[
-            "shrink-0 rounded-full px-3 py-1 text-xs font-bold whitespace-nowrap",
-            s.badge,
-          ].join(" ")}>
-            {data.badge}
-          </span>
         </div>
-
-        {/* CTA hint bar */}
-        <div className="flex items-center gap-2.5 rounded-2xl bg-white/5 border border-white/8 px-3.5 py-2.5">
-          <Sparkles className={`h-4 w-4 shrink-0 ${s.accent}`} />
-          <span className="text-sm text-slate-200">{data.ctaHint}</span>
-        </div>
-
-        {/* Action buttons */}
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <Link href="/book">
-            <a className={[
-              "flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r px-4 py-3 text-sm font-bold text-white shadow-lg transition-transform duration-150 active:scale-[0.97] cursor-pointer",
-              s.cta,
-            ].join(" ")}>
-              <CalendarCheck className="h-4 w-4" />
-              Book Now
-              <ChevronRight className="h-4 w-4" />
-            </a>
-          </Link>
-
-          <a
-            href="tel:+19062859312"
-            className="flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition-transform duration-150 active:scale-[0.97]"
-          >
-            <Phone className="h-4 w-4 text-slate-400" />
-            (906) 285-9312
-          </a>
-        </div>
-
-        {/* Refresh note */}
-        {!loading && (
-          <p className="text-[10px] text-slate-600 text-center">
-            Auto-refreshes every 30s · Last updated {new Date(data.refreshedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-          </p>
-        )}
+        <span className={["shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold whitespace-nowrap", s.badge].join(" ")}>
+          {data.badge}
+        </span>
       </div>
+
+      {/* Subtitle / ctaHint */}
+      <p className={["text-xs mb-3 leading-snug", s.barText].join(" ")}>
+        {loading ? "Refreshing crew data…" : data.ctaHint}
+      </p>
+
+      {/* Book Now CTA */}
+      <Link href="/book" className={[
+        "flex items-center justify-center gap-2 w-full rounded-xl bg-gradient-to-r px-4 py-2.5 text-sm font-bold text-white shadow-md transition-all duration-150 active:scale-[0.97] cursor-pointer",
+        s.cta,
+      ].join(" ")}>
+        <CalendarCheck className="h-4 w-4" />
+        Book Now
+        <ChevronRight className="h-4 w-4" />
+      </Link>
+
+      {/* JCMOVES incentive rows */}
+      <div className="mt-3 space-y-1.5">
+        <div className="flex items-center gap-2">
+          <Coins className="h-3 w-3 text-amber-400 flex-shrink-0" />
+          <span className="text-[10px] text-slate-400">Movers earn <span className="text-amber-400 font-semibold">100 JCMOVES/hr</span> when online</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Star className="h-3 w-3 text-purple-400 flex-shrink-0" />
+          <span className="text-[10px] text-slate-400"><span className="text-purple-400 font-semibold">Active stakers</span> get priority booking slots</span>
+        </div>
+      </div>
+
+      {/* Refresh timestamp */}
+      {!loading && (
+        <p className="text-[9px] text-slate-600 mt-2 text-right">
+          Updated {new Date(data.refreshedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+        </p>
+      )}
     </div>
   );
 }
