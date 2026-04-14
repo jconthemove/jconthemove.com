@@ -4,6 +4,7 @@ import fs from "fs";
 import cors from "cors";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import type { InsertRewardItem } from "@shared/schema";
 
 // ── Crash guard — log clearly before exiting so the auto-restart wrapper picks it up ──
 process.on("uncaughtException", (err) => {
@@ -114,6 +115,122 @@ app.use((req, res, next) => {
     // Seed the rewards marketplace catalog (idempotent)
     const { seedRewardShop } = await import('./seed-reward-shop');
     seedRewardShop().catch(e => console.error("Reward shop seed error:", e));
+
+    // Live migration: update mover prices + insert new service-credit items
+    (async () => {
+      try {
+        const { db } = await import('./db');
+        const { rewardItems, rewardCategories } = await import('@shared/schema');
+        const { eq } = await import('drizzle-orm');
+
+        // (a) Correct the two mover item prices to match the $85/hr target rate
+        await db.update(rewardItems)
+          .set({ tokenPrice: 60000, updatedAt: new Date() })
+          .where(eq(rewardItems.name, '2 Movers · 1 Hour (Local)'));
+
+        await db.update(rewardItems)
+          .set({ tokenPrice: 100000, updatedAt: new Date() })
+          .where(eq(rewardItems.name, '2 Movers · 2 Hours (Local)'));
+
+        // (b) Find the 🛠️ Service Credits category id
+        const [serviceCredits] = await db.select({ id: rewardCategories.id })
+          .from(rewardCategories)
+          .where(eq(rewardCategories.name, '🛠️ Service Credits'));
+
+        if (serviceCredits) {
+          const catId = serviceCredits.id;
+
+          const newItems: InsertRewardItem[] = [
+            {
+              name: '10-Window Wash — Free Session',
+              categoryId: catId,
+              shortDesc: 'One residential window-cleaning session, up to 10 windows',
+              fullDesc: 'Redeem 50,000 JCMOVES for a free residential window-cleaning session covering up to 10 windows. Admin schedules the appointment and will reach out to confirm a date that works for you.',
+              tokenPrice: 50000,
+              cashValue: '150.00',
+              status: 'active',
+              featured: false,
+              deliveryType: 'service_credit',
+              requiresApproval: true,
+              requiresSchedule: true,
+              expirationDays: 365,
+              promoBadge: null,
+              fulfillmentNote: 'Admin will contact you to schedule your window-cleaning session (up to 10 windows). Approval required before scheduling.',
+              adminNotes: 'Schedule 10-window residential wash. Confirm date with customer before booking. Approval required.',
+            },
+            {
+              name: '1 Month of Trash Valet — Free',
+              categoryId: catId,
+              shortDesc: 'One free month of weekly door-step trash pickup',
+              fullDesc: 'Redeem 30,000 JCMOVES for one free month of our weekly door-step trash valet subscription. Admin applies the credit directly to your subscription — no hassle, just show up at your door.',
+              tokenPrice: 30000,
+              cashValue: '79.99',
+              status: 'active',
+              featured: false,
+              deliveryType: 'service_credit',
+              createsInvoiceCredit: true,
+              requiresApproval: true,
+              expirationDays: 365,
+              promoBadge: null,
+              fulfillmentNote: 'Admin will apply a one-month subscription credit to your trash valet account within 24 hours.',
+              adminNotes: 'Apply 1-month trash valet subscription credit to customer account. Confirm with redemption ID.',
+            },
+            {
+              name: 'Handyman Deposit — Long Distance or 2× Local',
+              categoryId: catId,
+              shortDesc: '$150 deposit credit toward one long-distance or two local handyman jobs',
+              fullDesc: 'Redeem 50,000 JCMOVES for a $150 deposit credit redeemable toward one long-distance handyman call or two separate local handyman jobs. Credit expires 6 months from redemption date.',
+              tokenPrice: 50000,
+              cashValue: '150.00',
+              status: 'active',
+              featured: false,
+              deliveryType: 'service_credit',
+              createsInvoiceCredit: true,
+              requiresSchedule: true,
+              expirationDays: 180,
+              promoBadge: null,
+              fulfillmentNote: '$150 deposit credit applied toward your handyman job(s). Valid 6 months — covers one long-distance job or two local jobs.',
+              adminNotes: 'Apply $150 handyman deposit credit. Usable for 1 long-distance job or 2 local jobs. Expires 6 months from redemption. Reference redemption ID.',
+            },
+            {
+              name: 'Tiny Junk Removal ≤ 300 lbs (Local)',
+              categoryId: catId,
+              shortDesc: 'One local small-load junk haul, up to ~300 lbs',
+              fullDesc: 'Redeem 60,000 JCMOVES for one local small-load junk removal job — up to approximately 300 lbs. Excludes refrigerators, mattresses, TVs, and tires. Admin confirms the load details before scheduling.',
+              tokenPrice: 60000,
+              cashValue: '150.00',
+              status: 'active',
+              featured: false,
+              deliveryType: 'service_credit',
+              requiresApproval: true,
+              requiresSchedule: true,
+              expirationDays: 365,
+              promoBadge: null,
+              fulfillmentNote: 'Admin will confirm your junk load details before scheduling. Excludes refrigerators, mattresses, TVs, and tires. Local area only.',
+              adminNotes: 'Small junk removal, max ~300 lbs. CONFIRM load contents before scheduling — no fridges, mattresses, TVs, or tires. Local only. Admin approval required.',
+            },
+          ];
+
+          for (const item of newItems) {
+            const [existing] = await db.select({ id: rewardItems.id })
+              .from(rewardItems)
+              .where(eq(rewardItems.name, item.name));
+            if (!existing) {
+              await db.insert(rewardItems).values(item);
+              console.log(`✅ Inserted new reward item: ${item.name}`);
+            } else {
+              console.log(`ℹ️  Reward item already exists, skipping: ${item.name}`);
+            }
+          }
+        } else {
+          console.warn('⚠️  Service Credits category not found — skipping new item migration');
+        }
+
+        console.log('✅ Reward shop migration complete');
+      } catch (err) {
+        console.error('⚠️  Reward shop migration error (non-fatal):', err);
+      }
+    })();
 
     // Serve static files from attached_assets directory with proper video support
     app.use('/attached_assets', express.static(path.resolve(process.cwd(), 'attached_assets'), {
