@@ -56,8 +56,11 @@ interface AdminStats {
   totalLeads: number;
   activeJobs: number;
   monthlyRevenue: number;
+  allTimeRevenue: number;
   completedJobs: number;
   pendingLeads: number;
+  jcmovesBurned: number;
+  jcmovesFundBalance: number;
 }
 
 const navigationItems = [

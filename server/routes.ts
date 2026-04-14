@@ -9945,7 +9945,18 @@ Thank you for your business!
         SELECT COALESCE(SUM(token_cost), 0) AS tokens_redeemed FROM reward_redemptions WHERE status != 'cancelled'
       `);
 
+      // Real revenue from completed leads (current month + all-time)
+      const { rows: revenueRows } = await pool.query(`
+        SELECT
+          COALESCE(SUM(CAST(COALESCE(total_price, 0) AS DECIMAL)), 0) AS all_time_revenue,
+          COALESCE(SUM(CASE WHEN created_at >= date_trunc('month', CURRENT_DATE)
+                            THEN CAST(COALESCE(total_price, 0) AS DECIMAL) ELSE 0 END), 0) AS monthly_revenue
+        FROM leads
+        WHERE status = 'completed' AND archived_at IS NULL
+      `);
+
       const lc = leadCounts[0] || {};
+      const rv = revenueRows[0] || {};
       const stats = {
         totalUsers: parseInt(userCounts[0]?.total_users || '0'),
         totalLeads: parseInt(lc.total_leads || '0'),
@@ -9955,6 +9966,8 @@ Thank you for your business!
         pendingLeads: parseInt(lc.pending_leads || '0'),
         jcmovesBurned: parseFloat(burnRows[0]?.total_burned || '0') + parseFloat(redemptionRows[0]?.tokens_redeemed || '0'),
         jcmovesFundBalance: parseFloat(burnRows[0]?.fund_balance || '0'),
+        monthlyRevenue: parseFloat(rv.monthly_revenue || '0'),
+        allTimeRevenue: parseFloat(rv.all_time_revenue || '0'),
       };
 
       res.json(stats);

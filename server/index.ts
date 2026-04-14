@@ -136,17 +136,40 @@ app.use((req, res, next) => {
     (async () => {
       try {
         const { db } = await import('./db');
+        const { pool: migPool } = await import('./db');
         const { rewardItems, rewardCategories } = await import('@shared/schema');
         const { eq } = await import('drizzle-orm');
 
-        // (a) Correct the two mover item prices to match the $85/hr target rate
-        await db.update(rewardItems)
-          .set({ tokenPrice: 60000, updatedAt: new Date() })
-          .where(eq(rewardItems.name, '2 Movers · 1 Hour (Local)'));
+        // (a) Rename legacy "Free 2 Movers · 2 Hours (Local)" → canonical name and ensure price is 100 000
+        await migPool.query(`
+          UPDATE reward_items
+          SET name = '2 Movers · 2 Hours (Local)', token_price = 100000, updated_at = NOW()
+          WHERE name IN ('Free 2 Movers · 2 Hours (Local)', '2 Movers · 2 Hours (Local)')
+        `);
 
-        await db.update(rewardItems)
-          .set({ tokenPrice: 100000, updatedAt: new Date() })
-          .where(eq(rewardItems.name, '2 Movers · 2 Hours (Local)'));
+        // (b) Insert "2 Movers · 1 Hour (Local)" at 60 000 if it does not yet exist
+        await migPool.query(`
+          INSERT INTO reward_items
+            (name, category_id, short_desc, full_desc, token_price, cash_value, status, featured,
+             delivery_type, requires_approval, requires_schedule, expiration_days, promo_badge,
+             fulfillment_note, admin_notes)
+          SELECT
+            '2 Movers · 1 Hour (Local)',
+            id,
+            '2 professional movers for 1 hour — local jobs only',
+            'Redeem 60,000 JCMOVES for 2 professional movers for 1 hour on a local job. Admin will contact you to confirm the date and details.',
+            60000, '85.00', 'active', false,
+            'service_credit', true, true, 365, null,
+            'Admin will reach out to schedule your 2-mover / 1-hour local job.',
+            '2 movers, 1 hour local. Confirm date and logistics with customer. Approval required.'
+          FROM reward_categories
+          WHERE name = '🛠️ Service Credits'
+          AND NOT EXISTS (
+            SELECT 1 FROM reward_items WHERE name = '2 Movers · 1 Hour (Local)'
+          )
+          LIMIT 1
+        `);
+        console.log('✅ Mover items migrated (2 Movers · 1 Hr + 2 Movers · 2 Hr)');
 
         // (b) Find the 🛠️ Service Credits category id
         const [serviceCredits] = await db.select({ id: rewardCategories.id })
