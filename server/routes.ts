@@ -17550,23 +17550,25 @@ Thank you for your business!
       const activeLoad   = liveJobs.reduce((s, j) => s + (j.crewSize || 2), 0);
 
       // ── New 3-state color logic ──────────────────────────────────────────────
-      // Green  : no jobs booked for today at all (crew fully open)
-      // Yellow : jobs exist today but ≤50% of on-duty crew are assigned
-      // Red    : more than half the on-duty crew is currently assigned
+      // Green  : no confirmed/assigned jobs today (quote_requested rows don't count)
+      // Yellow : confirmed jobs exist today but activeLoad ≤ 50% of on-duty crew
+      // Red    : more than half the on-duty crew is currently on assignment
       // Gray   : after 6 PM CT or no crew online at all
+      // Note: liveJobs = status "available" = actual booked/assigned jobs only.
+      //       quote_requested leads do NOT push the beacon to yellow.
       type StatusKey = "available" | "jobs_today" | "busy" | "scheduling_ahead";
       let status: StatusKey = "scheduling_ahead";
 
       if (ctHour >= 18 || crewCapacity === 0) {
         status = "scheduling_ahead";
-      } else if (todayLeads.length === 0) {
-        // No jobs booked for today → fully open
+      } else if (liveJobs.length === 0) {
+        // No confirmed jobs today (quotes alone don't count) → fully open
         status = "available";
       } else if (activeLoad <= crewCapacity / 2) {
-        // Jobs exist today but crew still has capacity
+        // Confirmed jobs exist but ≤50% of crew assigned → some capacity remains
         status = "jobs_today";
       } else {
-        // More than half the crew is on assignment
+        // More than half the crew is on confirmed assignment
         status = "busy";
       }
 
