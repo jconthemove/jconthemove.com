@@ -695,7 +695,6 @@ export default function CrewSchedulePage() {
               </div>
             </div>
           )}
-        </div>
       </div>
 
       {/* Day detail modal */}
