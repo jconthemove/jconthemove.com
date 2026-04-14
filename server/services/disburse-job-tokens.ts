@@ -33,13 +33,54 @@ import { eq, and } from "drizzle-orm";
 import { storage } from "../storage";
 import type { Lead } from "@shared/schema";
 
-const TOKEN_PRICE         = 0.00000508432;
-const HOURS_RATE          = 25;    // JCMOVES per confirmed hour per crew member
-const FALLBACK_FLAT       = 500;   // JCMOVES flat per worker if setting not found
-const FALLBACK_EARN       = 15;    // JCMOVES per $1 if setting not found
-const FALLBACK_COMPLETION = 1500;  // JCMOVES flat bonus for customer on job completion
-const FALLBACK_REFERRAL   = 1000;  // JCMOVES awarded to referrer on first confirmed job
-const BONUS_MULTIPLIER    = 1.25;  // +25% for bonus-flagged movers
+const TOKEN_PRICE            = 0.00000508432;
+const HOURS_RATE             = 25;    // JCMOVES per confirmed hour per crew member
+const FALLBACK_FLAT          = 500;   // JCMOVES flat per worker if setting not found
+const FALLBACK_EARN          = 15;    // JCMOVES per $1 if setting not found
+const FALLBACK_COMPLETION    = 1500;  // JCMOVES flat bonus for customer on job completion
+const FALLBACK_REFERRAL      = 1000;  // JCMOVES awarded to referrer on first confirmed job
+const BONUS_MULTIPLIER       = 1.25;  // +25% for bonus-flagged movers
+const FALLBACK_SERVICE_BONUS = 150;   // Default service-type completion bonus
+
+// Strict canonical map from lead.serviceType to reward_settings key.
+// Only the exact service types listed here receive a named bonus;
+// all other values (including "cleaning", "demolition", "trash_valet", etc.) → default.
+const SERVICE_BONUS_MAP: Record<string, string> = {
+  // Moving
+  residential:       "moving_completion_bonus",
+  moving:            "moving_completion_bonus",
+  loading:           "moving_completion_bonus",
+  furniture:         "moving_completion_bonus",
+  // Junk removal
+  junk:              "junk_removal_completion_bonus",
+  junk_removal:      "junk_removal_completion_bonus",
+  "junk removal":    "junk_removal_completion_bonus",
+  // Labor
+  labor:             "labor_completion_bonus",
+  general:           "labor_completion_bonus",
+  labor_only:        "labor_completion_bonus",
+  // Snow removal
+  snow:              "snow_completion_bonus",
+  snow_removal:      "snow_completion_bonus",
+  "snow removal":    "snow_completion_bonus",
+  // Lawn care
+  lawn:              "lawn_completion_bonus",
+  lawn_care:         "lawn_completion_bonus",
+  "lawn care":       "lawn_completion_bonus",
+  // Window cleaning (only explicit "window cleaning" variants)
+  window_cleaning:       "window_cleaning_completion_bonus",
+  "window cleaning":     "window_cleaning_completion_bonus",
+  "window wash":         "window_cleaning_completion_bonus",
+  // Handyman
+  handyman:          "handyman_completion_bonus",
+  flooring:          "handyman_completion_bonus",
+  painting:          "handyman_completion_bonus",
+};
+
+function getServiceBonusKey(serviceType: string): string {
+  const key = (serviceType || "").toLowerCase().trim();
+  return SERVICE_BONUS_MAP[key] ?? "default_service_bonus";
+}
 
 export type DisbursementSummary = {
   customerTokens: number;
@@ -319,6 +360,29 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
             }
           } else {
             console.log(`ℹ️ Customer ${customer.email}: no price on file — flat bonus only`);
+          }
+
+          // ── B3. Service-type bonus ────────────────────────────────────────
+          const serviceType = lead.serviceType || "";
+          const bonusKey = getServiceBonusKey(serviceType);
+          const serviceBonus = (await getSetting(bonusKey)) ?? FALLBACK_SERVICE_BONUS;
+          const serviceBonusExists = await rewardAlreadyExists(leadId, customer.id, "service_type_bonus");
+          if (!serviceBonusExists) {
+            await db.insert(rewards).values({
+              userId: customer.id,
+              rewardType: "service_type_bonus",
+              tokenAmount: serviceBonus.toFixed(8),
+              cashValue: (serviceBonus * TOKEN_PRICE).toFixed(6),
+              status: "confirmed",
+              referenceId: leadId,
+              metadata: { jobId: leadId, serviceType, bonusKey, type: "service_type_bonus" },
+            });
+            await storage.creditWalletTokens(customer.id, serviceBonus);
+            summary.customerTokens += serviceBonus;
+            summary.customerId = customer.id;
+            console.log(`🎁 Customer ${customer.email}: service-type bonus +${serviceBonus} JCMOVES (${serviceType || "default"})`);
+          } else {
+            console.log(`ℹ️ Customer ${customer.email}: service-type bonus already exists — skipping`);
           }
 
           // ── C. REFERRAL BONUS (first completed job only) ──────────────────

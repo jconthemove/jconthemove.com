@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   Coins, TrendingUp, Gift, Clock, ShoppingBag, Loader2, CheckCircle,
-  Zap, Award, Users, Share2, Sparkles, Trophy, Copy, Check, AlertTriangle
+  Zap, Award, Users, Share2, Sparkles, Trophy, Copy, Check, AlertTriangle, Ticket
 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -129,6 +129,7 @@ export default function CustomerRewardsPage() {
   const [copiedCode, setCopiedCode] = useState(false);
   const [pendingItem, setPendingItem] = useState<ShopItem | null>(null);
   const [confirmItem, setConfirmItem] = useState<ShopItem | null>(null);
+  const [freeEntryResult, setFreeEntryResult] = useState<{ totalTickets: number; roundType: string; roundId: number } | null>(null);
 
   const { data: wallet, isLoading: walletLoading } = useQuery<WalletAccount>({
     queryKey: ["/api/rewards/wallet"],
@@ -138,6 +139,27 @@ export default function CustomerRewardsPage() {
   });
   const { data: shopData, isLoading: shopLoading } = useQuery<ShopResponse>({
     queryKey: ["/api/reward-shop/items"],
+  });
+  const { data: lotteryRounds } = useQuery<any[]>({
+    queryKey: ["/api/lottery/status"],
+  });
+  const { data: myLotteryEntries } = useQuery<any>({
+    queryKey: ["/api/lottery/my-entries"],
+  });
+
+  const freeEntryMutation = useMutation({
+    mutationFn: (roundType: string) => apiRequest("POST", "/api/lottery/free-entry", { round_type: roundType }),
+    onSuccess: async (res: Response) => {
+      const data = await res.json();
+      setFreeEntryResult({ totalTickets: data.totalTickets, roundType: data.round?.round_type || "weekly", roundId: data.round?.id });
+      queryClient.invalidateQueries({ queryKey: ["/api/lottery/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/lottery/my-entries"] });
+    },
+    onError: async (res: any) => {
+      let msg = "Could not claim free entry. Please try again.";
+      try { const d = await res.json?.(); msg = d?.error || msg; } catch (_) {}
+      toast({ title: "Free Entry", description: msg, variant: "destructive" });
+    },
   });
 
   const redeemMutation = useMutation({
@@ -211,6 +233,58 @@ export default function CustomerRewardsPage() {
                 </div>
               </div>
             </div>
+
+            {/* ── Free Lottery Entry ── */}
+            {(() => {
+              const rounds: any[] = Array.isArray(lotteryRounds) ? lotteryRounds : [];
+              const activeRound = rounds.find((r: any) => r.status === 'open');
+              if (!activeRound) return null;
+              const existingEntries: any[] = myLotteryEntries?.entries ?? [];
+              const hasExistingFreeEntry = existingEntries.some(
+                (e: any) => e.round_id === activeRound.id && e.source === 'free_entry'
+              );
+              const localClaimIsForThisRound = freeEntryResult !== null && freeEntryResult.roundId === activeRound.id;
+              const alreadyClaimed = localClaimIsForThisRound || hasExistingFreeEntry;
+              return (
+                <div className="mb-5 bg-gradient-to-br from-violet-950/40 to-purple-900/30 border border-violet-500/30 rounded-2xl p-4 shadow-sm">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Ticket className="h-4 w-4 text-violet-400" />
+                    <span className="font-bold text-sm text-white">Free Lottery Entry</span>
+                    <span className="ml-auto text-[10px] text-violet-300 bg-violet-900/40 px-2 py-0.5 rounded-full capitalize">{activeRound.round_type} Round</span>
+                  </div>
+                  <p className="text-xs text-zinc-400 mb-3">
+                    Get one free ticket for the current {activeRound.round_type} lottery — no JCMOVES needed.
+                    Jackpot: <span className="font-bold text-violet-300">{(activeRound.displayed_jackpot ?? 0).toLocaleString()} JCMOVES</span>
+                  </p>
+                  {alreadyClaimed ? (
+                    <div className="flex items-center gap-2 bg-violet-900/20 border border-violet-500/20 rounded-xl px-3 py-2">
+                      <CheckCircle className="h-4 w-4 text-violet-400 flex-shrink-0" />
+                      <div>
+                        <p className="text-xs font-semibold text-violet-300">Free entry already claimed for this round.</p>
+                        {localClaimIsForThisRound && freeEntryResult && (
+                          <p className="text-[10px] text-zinc-400">You now have {freeEntryResult.totalTickets} ticket{freeEntryResult.totalTickets !== 1 ? "s" : ""} this round.</p>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      disabled={freeEntryMutation.isPending}
+                      onClick={() => freeEntryMutation.mutate(activeRound.round_type || 'weekly')}
+                      className="w-full py-2.5 rounded-xl bg-violet-600 text-white font-bold text-sm hover:bg-violet-500 transition-all active:scale-95 disabled:opacity-60 flex items-center justify-center gap-2"
+                    >
+                      {freeEntryMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <>
+                          <Ticket className="h-4 w-4" /> Claim Free Ticket
+                        </>
+                      )}
+                    </button>
+                  )}
+                  <p className="text-[10px] text-zinc-500 mt-2 text-center">No purchase necessary. One free entry per person per round.</p>
+                </div>
+              );
+            })()}
 
             {/* ── Rewards Shop ── */}
             <div className="mb-5">

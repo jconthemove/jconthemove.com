@@ -900,18 +900,57 @@ export default function AdminRewardShopPage() {
               <p className="text-[10px] text-muted-foreground mt-2">* Est. value at $0.01 per JCMOVES. Does not include booking reward (+{bookingReward} JCMOVES flat).</p>
             </div>
 
-            {/* All Settings — Editable (excludes earn rate + booking reward which have dedicated controls above) */}
-            <div className="bg-card border border-border rounded-xl p-5">
-              <h3 className="text-sm font-bold mb-1">All Reward Settings</h3>
-              <p className="text-[10px] text-muted-foreground mb-4">Edit any value and hit Save to update it live across the entire system.</p>
-              <div className="space-y-3">
-                {(rewardSettingsData ?? [])
-                  .filter((s: any) => s.settingKey !== 'earn_rate_per_dollar' && s.settingKey !== 'customer_quote_accepted')
-                  .map((s: any) => (
-                    <AllSettingRow key={s.settingKey} setting={s} saveRateMutation={saveRateMutation} />
-                  ))}
-              </div>
-            </div>
+            {/* Service Completion Bonuses */}
+            {(() => {
+              const SERVICE_BONUS_KEYS = [
+                'moving_completion_bonus',
+                'junk_removal_completion_bonus',
+                'labor_completion_bonus',
+                'snow_completion_bonus',
+                'lawn_completion_bonus',
+                'window_cleaning_completion_bonus',
+                'handyman_completion_bonus',
+                'default_service_bonus',
+              ];
+              const serviceBonusRows = (rewardSettingsData ?? []).filter((s: any) => SERVICE_BONUS_KEYS.includes(s.settingKey));
+              if (serviceBonusRows.length === 0) return null;
+              return (
+                <div className="bg-card border border-border rounded-xl p-5">
+                  <h3 className="text-sm font-bold mb-1 flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-blue-400" /> Service Completion Bonuses
+                  </h3>
+                  <p className="text-[10px] text-muted-foreground mb-4">Extra JCMOVES awarded to customers on top of the flat completion bonus and per-dollar earn, based on the job's service type.</p>
+                  <div className="space-y-0">
+                    {serviceBonusRows.map((s: any) => (
+                      <AllSettingRow key={s.settingKey} setting={s} saveRateMutation={saveRateMutation} />
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* All Settings — Editable (excludes earn rate + booking reward + service bonuses which have dedicated controls above) */}
+            {(() => {
+              const SERVICE_BONUS_KEYS = [
+                'moving_completion_bonus', 'junk_removal_completion_bonus', 'labor_completion_bonus',
+                'snow_completion_bonus', 'lawn_completion_bonus', 'window_cleaning_completion_bonus',
+                'handyman_completion_bonus', 'default_service_bonus',
+              ];
+              const otherSettings = (rewardSettingsData ?? []).filter(
+                (s: any) => s.settingKey !== 'earn_rate_per_dollar' && s.settingKey !== 'customer_quote_accepted' && !SERVICE_BONUS_KEYS.includes(s.settingKey)
+              );
+              return (
+                <div className="bg-card border border-border rounded-xl p-5">
+                  <h3 className="text-sm font-bold mb-1">All Other Reward Settings</h3>
+                  <p className="text-[10px] text-muted-foreground mb-4">Edit any value and hit Save to update it live across the entire system.</p>
+                  <div className="space-y-3">
+                    {otherSettings.map((s: any) => (
+                      <AllSettingRow key={s.settingKey} setting={s} saveRateMutation={saveRateMutation} />
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
       </div>

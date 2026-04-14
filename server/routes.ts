@@ -130,6 +130,14 @@ async function ensureRewardSettingsSeeded() {
         { settingKey: "jewelry_purchase", label: "Jewelry Purchase Reward", description: "Tokens awarded after a Nature Made Jewls purchase", tokenAmount: "150.00", isActive: true },
         { settingKey: "customer_quote_completed", label: "Job Completion Bonus", description: "Flat JCMOVES bonus awarded to customer when their job is marked completed", tokenAmount: "1500.00", isActive: true },
         { settingKey: "redemption_auto_approve_threshold", label: "Redemption Auto-Approve Threshold", description: "Redemptions under this token amount are auto-approved. At or above this amount are held for manual admin review.", tokenAmount: "5000.00", isActive: true },
+        { settingKey: "moving_completion_bonus", label: "Moving Job Bonus", description: "Extra JCMOVES awarded to customers when a moving job is completed", tokenAmount: "500.00", isActive: true },
+        { settingKey: "junk_removal_completion_bonus", label: "Junk Removal Bonus", description: "Extra JCMOVES awarded to customers when a junk removal job is completed", tokenAmount: "300.00", isActive: true },
+        { settingKey: "labor_completion_bonus", label: "Labor Job Bonus", description: "Extra JCMOVES awarded to customers when a general labor job is completed", tokenAmount: "250.00", isActive: true },
+        { settingKey: "snow_completion_bonus", label: "Snow Removal Bonus", description: "Extra JCMOVES awarded to customers when a snow removal job is completed", tokenAmount: "200.00", isActive: true },
+        { settingKey: "lawn_completion_bonus", label: "Lawn Care Bonus", description: "Extra JCMOVES awarded to customers when a lawn care job is completed", tokenAmount: "200.00", isActive: true },
+        { settingKey: "window_cleaning_completion_bonus", label: "Window Cleaning Bonus", description: "Extra JCMOVES awarded to customers when a window cleaning job is completed", tokenAmount: "200.00", isActive: true },
+        { settingKey: "handyman_completion_bonus", label: "Handyman Bonus", description: "Extra JCMOVES awarded to customers when a handyman job is completed", tokenAmount: "200.00", isActive: true },
+        { settingKey: "default_service_bonus", label: "Default Service Bonus", description: "Extra JCMOVES awarded to customers for service types not listed above", tokenAmount: "150.00", isActive: true },
       ];
       await db.insert(rewardSettings).values(defaults);
       console.log("✅ Default reward settings seeded successfully");
@@ -166,6 +174,24 @@ async function ensureRewardSettingsSeeded() {
       if (!hasReferralJobBonus) {
         await db.insert(rewardSettings).values({ settingKey: "referral_job_bonus", label: "Referral First-Job Bonus", description: "JCMOVES awarded to the referrer when their referred user completes their first job", tokenAmount: "1000.00", isActive: true });
         console.log("✅ referral_job_bonus setting inserted — 1000 JCMOVES");
+      }
+      // Ensure service-type completion bonuses exist for existing databases
+      const serviceBonusDefaults = [
+        { settingKey: "moving_completion_bonus", label: "Moving Job Bonus", description: "Extra JCMOVES awarded to customers when a moving job is completed", tokenAmount: "500.00" },
+        { settingKey: "junk_removal_completion_bonus", label: "Junk Removal Bonus", description: "Extra JCMOVES awarded to customers when a junk removal job is completed", tokenAmount: "300.00" },
+        { settingKey: "labor_completion_bonus", label: "Labor Job Bonus", description: "Extra JCMOVES awarded to customers when a general labor job is completed", tokenAmount: "250.00" },
+        { settingKey: "snow_completion_bonus", label: "Snow Removal Bonus", description: "Extra JCMOVES awarded to customers when a snow removal job is completed", tokenAmount: "200.00" },
+        { settingKey: "lawn_completion_bonus", label: "Lawn Care Bonus", description: "Extra JCMOVES awarded to customers when a lawn care job is completed", tokenAmount: "200.00" },
+        { settingKey: "window_cleaning_completion_bonus", label: "Window Cleaning Bonus", description: "Extra JCMOVES awarded to customers when a window cleaning job is completed", tokenAmount: "200.00" },
+        { settingKey: "handyman_completion_bonus", label: "Handyman Bonus", description: "Extra JCMOVES awarded to customers when a handyman job is completed", tokenAmount: "200.00" },
+        { settingKey: "default_service_bonus", label: "Default Service Bonus", description: "Extra JCMOVES awarded to customers for service types not listed above", tokenAmount: "150.00" },
+      ];
+      for (const bonus of serviceBonusDefaults) {
+        const has = existing.find(s => s.settingKey === bonus.settingKey);
+        if (!has) {
+          await db.insert(rewardSettings).values({ ...bonus, isActive: true });
+          console.log(`✅ ${bonus.settingKey} setting inserted — ${bonus.tokenAmount} JCMOVES`);
+        }
       }
     }
   } catch (error) {
@@ -6445,6 +6471,28 @@ Thank you for your business!
       const earnRate        = getSetting("earn_rate_per_dollar") ?? 15;
       const TOKEN_PRICE     = 0.00000508432;
 
+      // Service bonus lookup — identical canonical map to disburseJobTokens
+      const SERVICE_BONUS_MAP_ADMIN: Record<string, string> = {
+        residential: "moving_completion_bonus", moving: "moving_completion_bonus",
+        loading: "moving_completion_bonus", furniture: "moving_completion_bonus",
+        junk: "junk_removal_completion_bonus", junk_removal: "junk_removal_completion_bonus",
+        "junk removal": "junk_removal_completion_bonus",
+        labor: "labor_completion_bonus", general: "labor_completion_bonus",
+        labor_only: "labor_completion_bonus",
+        snow: "snow_completion_bonus", snow_removal: "snow_completion_bonus",
+        "snow removal": "snow_completion_bonus",
+        lawn: "lawn_completion_bonus", lawn_care: "lawn_completion_bonus",
+        "lawn care": "lawn_completion_bonus",
+        window_cleaning: "window_cleaning_completion_bonus",
+        "window cleaning": "window_cleaning_completion_bonus",
+        "window wash": "window_cleaning_completion_bonus",
+        handyman: "handyman_completion_bonus", flooring: "handyman_completion_bonus",
+        painting: "handyman_completion_bonus",
+      };
+      const leadServiceType = (lead.serviceType || "").toLowerCase().trim();
+      const serviceBonusKey = SERVICE_BONUS_MAP_ADMIN[leadServiceType] ?? "default_service_bonus";
+      const serviceBonus = getSetting(serviceBonusKey) ?? 150;
+
       const awarded: { type: string; amount: number }[] = [];
 
       // Check & award flat completion bonus
@@ -6492,6 +6540,26 @@ Thank you for your business!
           awarded.push({ type: "per_dollar_earn", amount: earnTokens });
           console.log(`🎁 [manual] Customer ${customer.email}: per-dollar earn +${earnTokens} JCMOVES`);
         }
+      }
+
+      // Check & award service-type bonus
+      const serviceBonusCheck = await dbPool.query(
+        `SELECT 1 FROM rewards WHERE user_id = $1 AND reward_type = $2 AND reference_id = $3 LIMIT 1`,
+        [customer.id, "service_type_bonus", id]
+      );
+      if (serviceBonusCheck.rows.length === 0) {
+        await drizzleDb.insert(rewardsTable).values({
+          userId: customer.id,
+          rewardType: "service_type_bonus",
+          tokenAmount: serviceBonus.toFixed(8),
+          cashValue: (serviceBonus * TOKEN_PRICE).toFixed(6),
+          status: "confirmed",
+          referenceId: id,
+          metadata: { jobId: id, serviceType: lead.serviceType, bonusKey: serviceBonusKey, type: "service_type_bonus", manualAward: true },
+        });
+        await storage.creditWalletTokens(customer.id, serviceBonus);
+        awarded.push({ type: "service_type_bonus", amount: serviceBonus });
+        console.log(`🎁 [manual] Customer ${customer.email}: service-type bonus +${serviceBonus} JCMOVES (${lead.serviceType || "default"})`);
       }
 
       const total = awarded.reduce((s, a) => s + a.amount, 0);
@@ -18616,6 +18684,83 @@ Thank you for your business!
     }
   });
 
+  // ── Public: free entry (no-purchase-necessary, one per user per round) ───────
+  app.post("/api/lottery/free-entry", isAuthenticated, async (req: any, res) => {
+    const client = await pool.connect();
+    try {
+      const userId = (req.session as any).userId;
+      const { round_type = 'weekly' } = req.body;
+
+      await client.query('BEGIN');
+
+      // Lock the open round row for the requested type to prevent races
+      const { rows: roundRows } = await client.query(
+        `SELECT * FROM lottery_rounds WHERE status='open' AND round_type=$1 ORDER BY id LIMIT 1 FOR UPDATE`,
+        [round_type]
+      );
+      if (!roundRows.length) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: "No active lottery round. Try again later." });
+      }
+      const round = roundRows[0];
+
+      if (new Date() >= new Date(round.end_time)) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: "This round has closed. Next round opens Monday 9:01 AM." });
+      }
+
+      // Check if user already claimed a free entry for this exact round (inside transaction)
+      const { rows: existingFree } = await client.query(
+        `SELECT 1 FROM lottery_entries WHERE round_id=$1 AND user_id=$2 AND source='free_entry' LIMIT 1`,
+        [round.id, userId]
+      );
+      if (existingFree.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: "Free entry already claimed for this round." });
+      }
+
+      // Increment total_entries atomically and get the new range
+      const { rows: [updatedRound] } = await client.query(
+        `UPDATE lottery_rounds SET total_entries = total_entries + 1, updated_at = NOW()
+         WHERE id=$1 AND status='open' RETURNING *`,
+        [round.id]
+      );
+      if (!updatedRound) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: "Round is no longer open." });
+      }
+
+      const entryIndex = updatedRound.total_entries;
+      const { rows: [entry] } = await client.query(
+        `INSERT INTO lottery_entries (round_id, user_id, tickets, entry_start_index, entry_end_index, source)
+         VALUES ($1, $2, 1, $3, $3, 'free_entry') RETURNING *`,
+        [round.id, userId, entryIndex]
+      );
+
+      await client.query('COMMIT');
+
+      const user = await storage.getUser(userId);
+      const name = user?.firstName || user?.username || "Someone";
+      await pool.query(
+        `INSERT INTO lottery_audit_logs (round_id, event_type, message, metadata) VALUES ($1,'FREE_ENTRY',$2,$3)`,
+        [round.id, `${name} claimed a free ${round_type} lottery entry`, JSON.stringify({ userId, roundId: round.id })]
+      );
+
+      const { rows: myEntries } = await pool.query(
+        `SELECT COALESCE(SUM(tickets),0)::int AS total FROM lottery_entries WHERE round_id=$1 AND user_id=$2`,
+        [round.id, userId]
+      );
+      const totalTickets = myEntries[0]?.total ?? 1;
+
+      res.json({ ok: true, entry, totalTickets, round: updatedRound });
+    } catch (e: any) {
+      await client.query('ROLLBACK').catch(() => {});
+      res.status(500).json({ error: e.message });
+    } finally {
+      client.release();
+    }
+  });
+
   // ── Public: winner history ────────────────────────────────────────────────
   app.get("/api/lottery/history", isAuthenticated, async (_req, res) => {
     try {
@@ -19404,6 +19549,7 @@ async function ensureLotteryTables() {
       tickets INTEGER NOT NULL,
       entry_start_index INTEGER NOT NULL,
       entry_end_index INTEGER NOT NULL,
+      source TEXT NOT NULL DEFAULT 'purchase',
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
     CREATE TABLE IF NOT EXISTS lottery_purchases (
@@ -19437,6 +19583,10 @@ async function ensureLotteryTables() {
       metadata JSONB,
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
+  `);
+  // Add source column to existing lottery_entries tables (idempotent migration)
+  await pool.query(`
+    ALTER TABLE lottery_entries ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'purchase'
   `);
   console.log('🎟️  Lottery tables ready');
 }
