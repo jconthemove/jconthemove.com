@@ -17609,12 +17609,12 @@ Thank you for your business!
     } catch (err) {
       console.error("[crew-status] error:", err);
       return res.json({
-        status: "limited",
-        title: "Limited Availability Today",
-        subtitle: "Quotes are still open",
+        status: "jobs_today",
+        title: "Jobs Booked Today",
+        subtitle: "Crew is active — some same-day spots remain",
         badge: "Limited",
-        tone: "orange",
-        ctaHint: "Book now to lock in your spot",
+        tone: "yellow",
+        ctaHint: "Grab a slot before the crew fills up",
         refreshedAt: new Date().toISOString(),
       });
     }

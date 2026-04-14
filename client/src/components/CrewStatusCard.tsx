@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, CalendarCheck, Coins, Star } from "lucide-react";
-import { Link } from "wouter";
+import { Coins, Star } from "lucide-react";
 
 type CrewStatusKey = "available" | "jobs_today" | "busy" | "scheduling_ahead";
 type Tone = "green" | "yellow" | "red" | "gray";
@@ -137,16 +136,6 @@ export default function CrewStatusCard() {
       <p className={["text-xs mb-3 leading-snug", s.barText].join(" ")}>
         {loading ? "Refreshing crew data…" : data.ctaHint}
       </p>
-
-      {/* Book Now CTA */}
-      <Link href="/book" className={[
-        "flex items-center justify-center gap-2 w-full rounded-xl bg-gradient-to-r px-4 py-2.5 text-sm font-bold text-white shadow-md transition-all duration-150 active:scale-[0.97] cursor-pointer",
-        s.cta,
-      ].join(" ")}>
-        <CalendarCheck className="h-4 w-4" />
-        Book Now
-        <ChevronRight className="h-4 w-4" />
-      </Link>
 
       {/* JCMOVES incentive rows */}
       <div className="mt-3 space-y-1.5">
