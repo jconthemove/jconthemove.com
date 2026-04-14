@@ -1828,31 +1828,25 @@ const SERVICE_SLUG_MAP: Record<string, string> = {
   residential: "📦 Moving (local or long-distance)",
 };
 
+// Keyed by canonical service slug (normalized: lowercase, hyphens→underscores).
+// All aliases in SERVICE_SLUG_MAP collapse to one of these canonical keys.
 const SERVICE_OPENERS: Record<string, string> = {
-  "📦 Moving (local or long-distance)":
-    "🚛 Let's get you moved! Darrell's crew has handled 500+ moves across the Northwoods — local and long-distance. I'll build your instant quote in about 60 seconds.",
-  "🗑️ Junk Removal":
-    "🗑️ Time to clear it out! We haul furniture, appliances, yard waste, and more. Just a few quick questions and you'll have a quote ready.",
-  "🗑️ Trash Valet (weekly curbside)":
-    "🗑️ No more dragging cans to the curb. We pick up weekly right from your door. Let's get your service set up.",
-  "🪟 Window Cleaning":
-    "🪟 Streak-free windows, guaranteed. Let's get the details and build your instant quote.",
-  "🎨 Painting":
-    "🎨 Fresh paint transforms a space. Darrell will schedule a free estimate — inside, outside, or both.",
-  "🪵 Flooring":
-    "🪵 New floors, new look. We'll schedule a free on-site estimate to get you an accurate number.",
-  "🏠 Roofing":
-    "🏠 A solid roof protects everything. Darrell will come out for a free estimate — no pressure.",
-  "🔧 Handyman":
-    "🔧 No job too small! Repairs, installs, and fixes — Darrell handles it. Let's get the details.",
-  "❄️ Snow Removal":
-    "❄️ Don't get snowed in. We plow and shovel — fast and reliable. Let's get you set up.",
-  "🌿 Lawn Care":
-    "🌿 A clean lawn makes the whole place shine. Let's get your free estimate on the schedule.",
-  "✨ Move-In/Out Cleaning":
-    "✨ Moving out? We'll leave it spotless. Moving in? We'll get it fresh and ready. Free estimate coming right up.",
-  "⚒️ Light Demolition":
-    "⚒️ Demo day! We knock it down and haul it away — safe, fast, and fully insured. Free estimate below.",
+  moving:      "🚛 Let's get you moved! Darrell's crew has handled 500+ moves across the Northwoods — local and long-distance. I'll build your instant quote in about 60 seconds.",
+  residential: "🚛 Let's get you moved! Darrell's crew has handled 500+ moves across the Northwoods — local and long-distance. I'll build your instant quote in about 60 seconds.",
+  junk:        "🗑️ Time to clear it out! We haul furniture, appliances, yard waste, and more. A few quick questions and you'll have an instant quote ready.",
+  trash_valet: "🗑️ No more dragging cans to the curb. We pick up weekly right from your door — your instant quote is just a few taps away.",
+  window:      "🪟 Streak-free windows, guaranteed. Let's get the details and build your instant quote.",
+  window_cleaning: "🪟 Streak-free windows, guaranteed. Let's get the details and build your instant quote.",
+  painting:    "🎨 Fresh paint transforms a space. Darrell will schedule a free on-site estimate — inside, outside, or both.",
+  flooring:    "🪵 New floors, new look. We'll schedule a free on-site estimate to get you an accurate number.",
+  roofing:     "🏠 A solid roof protects everything. Darrell will come out for a free estimate — no pressure.",
+  handyman:    "🔧 No job too small! Repairs, installs, and fixes — Darrell handles it. Let's get the details for your free estimate.",
+  snow:        "❄️ Don't get snowed in. We plow and shovel — fast and reliable. Let's get your free estimate on the schedule.",
+  snow_removal:"❄️ Don't get snowed in. We plow and shovel — fast and reliable. Let's get your free estimate on the schedule.",
+  lawn:        "🌿 A clean lawn makes the whole place shine. Let's get your free estimate on the schedule.",
+  lawn_care:   "🌿 A clean lawn makes the whole place shine. Let's get your free estimate on the schedule.",
+  cleaning:    "✨ Moving out? We'll leave it spotless. Moving in? We'll get it fresh and ready. Darrell will reach out to schedule your free estimate.",
+  demolition:  "⚒️ Demo day! We knock it down and haul it away — safe, fast, and fully insured. Darrell will reach out to schedule your free estimate.",
 };
 
 interface ChatPhoto {
@@ -1983,7 +1977,9 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
     setQuoteVisible(false);
     const nextSteps = STEPS.filter(s => !s.show || s.show(newAnswers));
     const nextStep = nextSteps[1];
-    const opener = SERVICE_OPENERS[mapped] ?? `You selected: ${mapped}`;
+    // Normalize slug: lowercase, replace hyphens with underscores so all aliases resolve
+    const slug = (initialService || "").toLowerCase().replace(/-/g, "_");
+    const opener = SERVICE_OPENERS[slug] ?? `You selected: ${mapped}`;
     setMessages([
       { from: "bot", text: "👋 Hi — I'm JC! Quick quotes, real humans, no spam.", ts: Date.now() - 2 },
       { from: "bot", text: opener, ts: Date.now() - 1 },
