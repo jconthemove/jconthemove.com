@@ -37,7 +37,7 @@ import { ensureMomsAccount } from "./services/generosityFund";
 import { dispatchGenericJob } from "./services/dispatchGeneric";
 import { grantLotteryTicketsForActivity } from "./services/disburse-job-tokens";
 import { getDepositInfo, extractZip } from "@shared/depositRules";
-import { MIN_REDEMPTION_TOKENS, REDEMPTION_INCREMENT, roundToIncrement } from "@shared/tokenRedemptionRules";
+import { MIN_REDEMPTION_TOKENS, REDEMPTION_INCREMENT, roundToIncrement, validateRedemption } from "@shared/tokenRedemptionRules";
 import lawnCareRouter from "./routes/lawnCare";
 
 const STAKING_TREASURY_USER_ID = "staking-treasury-system";
@@ -13846,8 +13846,11 @@ Thank you for your business!
                 console.log(`[Square webhook] Lead ${localInvoice.leadId} status updated to paid`);
 
                 // Record revenue split on payment confirmation.
-                // Square total_money.amount is always in cents (smallest unit).
-                const squareCents = (invoice as any)?.total_money?.amount;
+                // Square total_money.amount is always in cents (smallest currency unit).
+                type SquareMoneyField = { amount?: number; currency?: string };
+                type SquareInvoicePayload = { total_money?: SquareMoneyField };
+                const squarePayload = invoice as SquareInvoicePayload;
+                const squareCents = squarePayload.total_money?.amount;
                 const amountUsd = typeof squareCents === 'number' && squareCents > 0
                   ? squareCents / 100
                   : parseFloat(lead.totalPrice || "0");
@@ -16902,14 +16905,16 @@ Thank you for your business!
       // Check inventory
       if (itemRow.inventory !== null && itemRow.inventory <= 0) return res.status(400).json({ error: "Item out of stock" });
 
-      // Enforce redemption rules: min 500 JCMOVES, cost must be a multiple of 500 (REDEMPTION_INCREMENT)
+      // Enforce full redemption rules: min 500, 500-increment, (no subtotal cap for shop items)
       const cost = itemRow.salePriceTokens ?? itemRow.tokenPrice;
-      if (cost < MIN_REDEMPTION_TOKENS) {
-        return res.status(400).json({ error: `Reward item cost must be at least ${MIN_REDEMPTION_TOKENS} JCMOVES` });
+      const redemptionCheck = validateRedemption(cost);
+      if (!redemptionCheck.valid) {
+        return res.status(400).json({ error: redemptionCheck.message });
       }
-      const normalizedCost = roundToIncrement(cost, REDEMPTION_INCREMENT);
-      if (normalizedCost !== cost) {
-        return res.status(400).json({ error: `Reward item cost must be a multiple of ${REDEMPTION_INCREMENT} JCMOVES. Got ${cost}, expected ${normalizedCost}.` });
+      if (redemptionCheck.effectiveTokens !== cost) {
+        return res.status(400).json({
+          error: `Reward item cost must be a multiple of ${REDEMPTION_INCREMENT} JCMOVES. Got ${cost}, nearest valid amount: ${redemptionCheck.effectiveTokens}.`,
+        });
       }
 
       // Check wallet balance
@@ -18615,8 +18620,15 @@ Thank you for your business!
 
       const { tokenPrice, cashPriceCents, tokenCap } = calcLaborQuote(m, min);
 
-      // Validate token amount requested
-      const finalTokenApplied = Math.min(tApplied, tokenCap);
+      // Validate token amount against full redemption rules (min 500, 500-increment, 20% subtotal cap)
+      const subtotalUsd = cashPriceCents / 100;
+      let finalTokenApplied = 0;
+      if (tApplied > 0) {
+        const rCheck = validateRedemption(tApplied, subtotalUsd);
+        if (!rCheck.valid) return res.status(400).json({ error: rCheck.message });
+        // Also honour the duration-based token cap from calcLaborQuote
+        finalTokenApplied = Math.min(rCheck.effectiveTokens, tokenCap);
+      }
       if (finalTokenApplied < 0) return res.status(400).json({ error: "Invalid token amount" });
 
       // If tokens are being applied, check balance and deduct
@@ -20166,14 +20178,16 @@ async function recordRevenueSplit(
   source: string = 'square_payment'
 ): Promise<void> {
   try {
-    // Idempotency guard: skip if a split was already recorded for this lead+source
+    // Idempotency guard: one revenue split per lead regardless of source.
+    // A lead can only be paid once — guard on lead_id alone to prevent
+    // cross-source duplicates (e.g. Square webhook + admin mark-paid).
     if (leadId) {
       const existing = await pool.query(
-        `SELECT id FROM revenue_allocations WHERE lead_id = $1 AND source = $2 LIMIT 1`,
-        [leadId, source]
+        `SELECT id FROM revenue_allocations WHERE lead_id = $1 LIMIT 1`,
+        [leadId]
       );
       if (existing.rows.length > 0) {
-        console.log(`💰 Revenue split already recorded for lead ${leadId} (${source}) — skipping duplicate`);
+        console.log(`💰 Revenue split already recorded for lead ${leadId} — skipping duplicate (source: ${source})`);
         return;
       }
     }
