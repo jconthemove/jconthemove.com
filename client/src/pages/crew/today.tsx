@@ -22,8 +22,9 @@ import { Link } from "wouter";
 import type { Lead, User } from "@shared/schema";
 import { UserStatusBar } from "@/components/UserStatusBar";
 import { LevelBadge } from "@/components/LevelBadge";
+import { WorkerBadge } from "@/components/WorkerBadge";
 import { ConfettiBurst } from "@/components/ConfettiBurst";
-import type { LoyaltyTierKey } from "@/lib/loyalty";
+import { getWorkerLevel, type LoyaltyTierKey } from "@/lib/loyalty";
 
 const MONTH_NAMES_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const DAY_NAMES_SHORT = ["Su","Mo","Tu","We","Th","Fr","Sa"];
@@ -518,7 +519,7 @@ export default function CrewTodayPage() {
   });
 
   const completedLeads = leads.filter(l => l.status === "completed");
-  const { leaderboard, myRank, myCount } = useMemo(() => {
+  const { leaderboard, myRank, myCount, allTimeJobCounts } = useMemo(() => {
     const startOfWeek = new Date();
     startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
     startOfWeek.setHours(0, 0, 0, 0);
@@ -526,20 +527,26 @@ export default function CrewTodayPage() {
       const d = l.confirmedDate || l.moveDate || l.createdAt;
       return d ? new Date(d as string) >= startOfWeek : false;
     });
-    const counts: Record<string, number> = {};
+    const weekCounts: Record<string, number> = {};
     (thisWeekCompleted.length > 0 ? thisWeekCompleted : completedLeads).forEach(l => {
       const key = l.createdByUserId || "";
-      if (key) counts[key] = (counts[key] || 0) + 1;
+      if (key) weekCounts[key] = (weekCounts[key] || 0) + 1;
+    });
+    const allTimeCounts: Record<string, number> = {};
+    completedLeads.forEach(l => {
+      const key = l.createdByUserId || "";
+      if (key) allTimeCounts[key] = (allTimeCounts[key] || 0) + 1;
     });
     const sorted = employees
-      .filter(e => counts[e.id])
-      .map(e => ({ ...e, count: counts[e.id] as number }))
+      .filter(e => weekCounts[e.id])
+      .map(e => ({ ...e, count: weekCounts[e.id] as number, allTimeCount: allTimeCounts[e.id] ?? 0 }))
       .sort((a, b) => b.count - a.count);
     const myIdx = sorted.findIndex(e => e.id === String(user?.id));
     return {
       leaderboard: sorted.slice(0, 3),
       myRank: myIdx >= 0 ? myIdx + 1 : null,
       myCount: myIdx >= 0 ? sorted[myIdx].count : 0,
+      allTimeJobCounts: allTimeCounts,
     };
   }, [completedLeads, employees, user?.id]);
 
@@ -686,8 +693,8 @@ export default function CrewTodayPage() {
         )}
       </div>
 
-      {/* Tier & balance status */}
-      <UserStatusBar variant="dark" />
+      {/* Tier & balance status — shows worker level for crew members */}
+      <UserStatusBar variant="dark" jobCount={allTimeJobCounts[String(user?.id)] ?? 0} />
 
       {/* Mini Calendar */}
       <div className="rounded-2xl bg-slate-800/40 border border-blue-500/20 p-4">
@@ -847,22 +854,39 @@ export default function CrewTodayPage() {
             <Badge className="bg-orange-500/20 text-orange-300 border-orange-500/30">{todayJobs.length}</Badge>
           </div>
           <div className="space-y-2">
-            {todayJobs.map(job => (
-              <Link key={job.id} href={`/lead/${job.id}`}>
-                <div className="flex items-center gap-3 bg-white/[0.03] rounded-xl p-3 border border-white/5 cursor-pointer hover:bg-white/[0.06] transition-colors">
-                  <span className="text-2xl">{SERVICE_ICONS[job.serviceType] ?? "🚛"}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white text-sm font-semibold truncate">{job.firstName} {job.lastName}</p>
-                    {job.fromAddress && (
-                      <p className="text-slate-400 text-xs flex items-center gap-1">
-                        <MapPin className="h-3 w-3" />{job.fromAddress}
-                      </p>
-                    )}
+            {todayJobs.map(job => {
+              const assignedCrew = (Array.isArray(job.crewMembers) ? (job.crewMembers as string[]) : [])
+                .map(id => employees.find(e => e.id === id))
+                .filter((e): e is User => !!e)
+                .slice(0, 3);
+              return (
+                <Link key={job.id} href={`/lead/${job.id}`}>
+                  <div className="flex items-center gap-3 bg-white/[0.03] rounded-xl p-3 border border-white/5 cursor-pointer hover:bg-white/[0.06] transition-colors">
+                    <span className="text-2xl">{SERVICE_ICONS[job.serviceType] ?? "🚛"}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-sm font-semibold truncate">{job.firstName} {job.lastName}</p>
+                      {job.fromAddress && (
+                        <p className="text-slate-400 text-xs flex items-center gap-1">
+                          <MapPin className="h-3 w-3" />{job.fromAddress}
+                        </p>
+                      )}
+                      {assignedCrew.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {assignedCrew.map(emp => (
+                            <WorkerBadge
+                              key={emp.id}
+                              jobCount={allTimeJobCounts[emp.id] ?? 0}
+                              size="xs"
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-slate-500" />
                   </div>
-                  <ChevronRight className="h-4 w-4 text-slate-500" />
-                </div>
-              </Link>
-            ))}
+                </Link>
+              );
+            })}
           </div>
         </div>
       )}
@@ -1122,10 +1146,11 @@ export default function CrewTodayPage() {
           <div className="space-y-1.5">
             {leaderboard.map((emp, i) => {
               const isMe = emp.id === String(user?.id);
+              const workerLevel = getWorkerLevel(emp.allTimeCount);
               return (
                 <div
                   key={emp.id}
-                  className={`flex items-center gap-3 p-2 rounded-lg border ${
+                  className={`flex items-center gap-2 p-2 rounded-lg border ${
                     isMe ? "bg-amber-500/10 border-amber-500/30" : "bg-white/[0.02] border-white/5"
                   }`}
                 >
@@ -1134,6 +1159,7 @@ export default function CrewTodayPage() {
                     {emp.firstName || emp.username}
                     {isMe && <span className="text-[10px] text-amber-500 ml-1">(you)</span>}
                   </p>
+                  <WorkerBadge level={workerLevel} size="xs" />
                   <LevelBadge tier={(emp.loyaltyTier ?? "bronze") as LoyaltyTierKey} size="xs" />
                   <span className="text-amber-300 font-black text-sm">{emp.count}</span>
                 </div>

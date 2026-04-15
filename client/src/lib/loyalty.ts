@@ -30,6 +30,23 @@ export const TIER_POINT_WAYS = [
 
 export type LoyaltyTierKey = keyof typeof LOYALTY_TIERS;
 
+// Worker achievement levels — based on completed job count (employees only)
+export const WORKER_LEVELS = {
+  mover: { minJobs: 0,  label: "Mover",  emoji: "🔵", color: "text-blue-400",   border: "border-blue-400/40",   bg: "bg-blue-400/10"  },
+  crew:  { minJobs: 10, label: "Crew",   emoji: "🟠", color: "text-orange-400", border: "border-orange-400/40", bg: "bg-orange-400/10" },
+  pro:   { minJobs: 25, label: "Pro",    emoji: "🟡", color: "text-yellow-400", border: "border-yellow-400/40", bg: "bg-yellow-400/10" },
+  elite: { minJobs: 50, label: "Elite",  emoji: "⭐", color: "text-purple-400", border: "border-purple-400/40", bg: "bg-purple-400/10" },
+} as const;
+
+export type WorkerLevelKey = keyof typeof WORKER_LEVELS;
+
+export function getWorkerLevel(completedJobs: number): WorkerLevelKey {
+  if (completedJobs >= 50) return "elite";
+  if (completedJobs >= 25) return "pro";
+  if (completedJobs >= 10) return "crew";
+  return "mover";
+}
+
 export function calculateJCMovesReward(jobAmount: number, tier: LoyaltyTierKey = 'bronze'): number {
   const tierConfig = LOYALTY_TIERS[tier] ?? LOYALTY_TIERS.bronze;
   return Math.round(jobAmount * tierConfig.tokensPerDollar);

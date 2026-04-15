@@ -2,11 +2,14 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { Coins, Flame } from "lucide-react";
 import { LevelBadge } from "./LevelBadge";
-import { LOYALTY_TIERS, getTierProgress, getNextTier, formatTokens, type LoyaltyTierKey } from "@/lib/loyalty";
+import { WorkerBadge } from "./WorkerBadge";
+import { LOYALTY_TIERS, getTierProgress, getNextTier, formatTokens, getWorkerLevel, type LoyaltyTierKey } from "@/lib/loyalty";
 import { cn } from "@/lib/utils";
+
 interface UserStatusBarProps {
   className?: string;
   variant?: "dark" | "light";
+  jobCount?: number;
 }
 
 interface WalletData {
@@ -17,7 +20,7 @@ interface MiningStatusData {
   streakCount: number;
 }
 
-export function UserStatusBar({ className, variant = "dark" }: UserStatusBarProps) {
+export function UserStatusBar({ className, variant = "dark", jobCount }: UserStatusBarProps) {
   const { user } = useAuth();
 
   const { data: wallet } = useQuery<WalletData>({
@@ -41,6 +44,8 @@ export function UserStatusBar({ className, variant = "dark" }: UserStatusBarProp
   const progress = getTierProgress(tierPoints, tier);
   const tokenBalance = parseFloat(wallet?.tokenBalance ?? "0");
   const streak = miningStatus?.streakCount ?? 0;
+  const isEmployee = user?.role === "employee";
+  const workerLevel = isEmployee ? getWorkerLevel(jobCount ?? 0) : null;
 
   const isDark = variant === "dark";
 
@@ -52,7 +57,7 @@ export function UserStatusBar({ className, variant = "dark" }: UserStatusBarProp
         className
       )}
     >
-      {/* Top row: balance + streak + tier badge */}
+      {/* Top row: balance + streak + badges */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
@@ -71,7 +76,10 @@ export function UserStatusBar({ className, variant = "dark" }: UserStatusBarProp
             </div>
           )}
         </div>
-        <LevelBadge tier={tier} size="sm" />
+        <div className="flex items-center gap-1.5">
+          {workerLevel && <WorkerBadge level={workerLevel} size="xs" />}
+          <LevelBadge tier={tier} size="sm" />
+        </div>
       </div>
 
       {/* Progress bar toward next tier */}

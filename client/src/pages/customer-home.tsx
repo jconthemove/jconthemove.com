@@ -11,10 +11,11 @@ import { BookingChatbot } from "@/components/booking-chatbot";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { UserStatusBar } from "@/components/UserStatusBar";
 import { ConfettiBurst } from "@/components/ConfettiBurst";
+import { calculateJCMovesReward, TOKEN_ECONOMY, type LoyaltyTierKey } from "@/lib/loyalty";
 
 // ── Job Status Card (post-booking polling) ────────────────────────────────────
 
-function JobStatusCard({ jobId, totalPrice, onDismiss }: { jobId: string; totalPrice: number; onDismiss: () => void }) {
+function JobStatusCard({ jobId, totalPrice, tier, onDismiss }: { jobId: string; totalPrice: number; tier: LoyaltyTierKey; onDismiss: () => void }) {
   const [celebrationFired, setCelebrationFired] = useState(false);
   const [showJobComplete, setShowJobComplete] = useState(false);
 
@@ -38,7 +39,7 @@ function JobStatusCard({ jobId, totalPrice, onDismiss }: { jobId: string; totalP
     }
   }, [isCompleted, celebrationFired]);
 
-  const estimatedTokens = Math.floor(totalPrice * 15);
+  const estimatedTokens = calculateJCMovesReward(totalPrice, tier);
 
   return (
     <div className="relative bg-zinc-900 border border-zinc-700 rounded-2xl p-4 space-y-3 overflow-hidden">
@@ -157,6 +158,10 @@ export default function CustomerHomePage() {
   const tokenBalance = parseFloat(wallet?.tokenBalance || "0");
   const isApril = new Date().getMonth() === 3;
 
+  const userTier = (user?.loyaltyTier && user.loyaltyTier in { bronze: 1, silver: 1, gold: 1, vip: 1 }
+    ? user.loyaltyTier
+    : "bronze") as LoyaltyTierKey;
+
   function handleBooked(id: string, price: number) {
     setExpanded(null);
     setActiveBooking({ jobId: id, totalPrice: price });
@@ -235,6 +240,7 @@ export default function CustomerHomePage() {
           <JobStatusCard
             jobId={activeBooking.jobId}
             totalPrice={activeBooking.totalPrice}
+            tier={userTier}
             onDismiss={() => setActiveBooking(null)}
           />
         )}
@@ -275,7 +281,7 @@ export default function CustomerHomePage() {
           </div>
         </div>
 
-        {/* Earn More shortcut */}
+        {/* Earn More shortcut — rates from TOKEN_ECONOMY */}
         <div className="rounded-2xl border border-orange-500/20 bg-zinc-900/60 overflow-hidden">
           <button
             onClick={() => setLocation("/earn")}
@@ -287,7 +293,9 @@ export default function CustomerHomePage() {
               </div>
               <div className="text-left">
                 <p className="text-sm font-bold text-white">Earn More JCMOVES</p>
-                <p className="text-xs text-zinc-500">Fastest path: book a service → 15 tokens per $1</p>
+                <p className="text-xs text-zinc-500">
+                  Book a service · {TOKEN_ECONOMY.TOKENS_PER_USD_EARNED} tokens per $1 spent (Bronze base)
+                </p>
               </div>
             </div>
             <ChevronRight className="h-4 w-4 text-zinc-600" />
@@ -295,7 +303,9 @@ export default function CustomerHomePage() {
           <div className="border-t border-zinc-800 grid grid-cols-3 divide-x divide-zinc-800">
             <div className="px-3 py-2 text-center">
               <p className="text-[10px] text-zinc-500">Book a Job</p>
-              <p className="text-xs font-bold text-orange-300">15×/$ <span className="text-zinc-500 font-normal">spent</span></p>
+              <p className="text-xs font-bold text-orange-300">
+                {TOKEN_ECONOMY.TOKENS_PER_USD_EARNED}<span className="text-zinc-500 font-normal">×/$</span>
+              </p>
             </div>
             <div className="px-3 py-2 text-center">
               <p className="text-[10px] text-zinc-500">Referral</p>
