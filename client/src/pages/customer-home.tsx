@@ -2,7 +2,9 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
-import { Coins, Phone, MessageSquare, ChevronRight, Loader2, Search, Truck, Trash2, Wrench, Snowflake, PaintBucket, Layers, Leaf, Sparkles, MessageCircle } from "lucide-react";
+import { Coins, Phone, MessageSquare, ChevronRight, Loader2, Search, Sparkles, MessageCircle } from "lucide-react";
+import ServiceCard from "@/components/ServiceCard";
+import { getService } from "@/lib/services";
 import { JunkFlow, MovingFlow } from "@/components/ServiceSelector";
 import LiveCrewBeacon from "@/components/LiveCrewBeacon";
 import { BookingChatbot } from "@/components/booking-chatbot";
@@ -191,214 +193,37 @@ export default function CustomerHomePage() {
 
         {/* Unified service grid */}
         <div>
-          <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2">Services</h2>
-          <div className="grid grid-cols-2 gap-2">
-
-            {/* Moving */}
-            <button
-              onClick={() => setExpanded("moving")}
-              className="flex flex-col items-start gap-1.5 p-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
-            >
-              <div className="w-8 h-8 rounded-xl bg-zinc-800 flex items-center justify-center">
-                <Truck className="h-4 w-4 text-zinc-400" />
-              </div>
-              <div>
-                <p className="font-bold text-sm text-white">Moving</p>
-                <p className="text-zinc-500 text-xs leading-snug">Full-service movers</p>
-              </div>
-            </button>
-
-            {/* Junk Removal */}
-            <button
-              onClick={() => setExpanded("junk")}
-              className="flex flex-col items-start gap-1.5 p-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
-            >
-              <div className="w-8 h-8 rounded-xl bg-zinc-800 flex items-center justify-center">
-                <Trash2 className="h-4 w-4 text-zinc-400" />
-              </div>
-              <div>
-                <p className="font-bold text-sm text-white">Junk Removal</p>
-                <p className="text-zinc-500 text-xs leading-snug">Pickup & haul away</p>
-              </div>
-            </button>
-
-            {/* Labor Only */}
-            <button
-              onClick={() => setLocation("/post-job")}
-              className="flex flex-col items-start gap-1.5 p-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
-            >
-              <div className="w-8 h-8 rounded-xl bg-zinc-800 flex items-center justify-center">
-                <Wrench className="h-4 w-4 text-amber-400" />
-              </div>
-              <div>
-                <p className="font-bold text-sm text-white">Labor Only</p>
-                <p className="text-zinc-500 text-xs leading-snug">Helpers by the hour</p>
-              </div>
-            </button>
-
-            {/* Snow Removal */}
-            <button
-              onClick={() => setLocation("/book?service=snow")}
-              className="flex flex-col items-start gap-1.5 p-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
-            >
-              <div className="w-8 h-8 rounded-xl bg-zinc-800 flex items-center justify-center">
-                <Snowflake className="h-4 w-4 text-cyan-400" />
-              </div>
-              <div>
-                <p className="font-bold text-sm text-white">Snow Removal</p>
-                <p className="text-zinc-500 text-xs leading-snug">Request a quote</p>
-              </div>
-            </button>
-
-            {/* Window Cleaning */}
-            <button
-              onClick={() => setLocation("/window-cleaning")}
-              className="relative flex flex-col items-start gap-1.5 p-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
-            >
-              {isApril && (
-                <span className="absolute -top-2 left-3 text-[9px] font-bold bg-orange-500 text-white px-2 py-0.5 rounded-full whitespace-nowrap">
-                  April Special — 20% Off
-                </span>
-              )}
-              <div className="w-8 h-8 rounded-xl bg-orange-500/15 flex items-center justify-center text-base">
-                🪟
-              </div>
-              <div>
-                <p className="font-bold text-sm text-white">Clean Windows</p>
-                <p className="text-zinc-500 text-xs leading-snug">Streak-free · $5/pane</p>
-              </div>
-            </button>
-
-            {/* Trash Valet */}
-            <button
-              onClick={() => setLocation("/trash-valet")}
-              className={`relative flex flex-col items-start gap-1.5 p-3 rounded-2xl border transition-all active:scale-[0.97] text-left ${
-                trashSub
-                  ? "bg-zinc-900 border-emerald-500/20 hover:border-emerald-500/40"
-                  : "bg-zinc-900 border-zinc-800 hover:border-zinc-700"
-              }`}
-            >
-              {trashSub && (
-                <span className="absolute -top-2 left-3 text-[9px] font-bold bg-emerald-600 text-white px-2 py-0.5 rounded-full">
-                  Active
-                </span>
-              )}
-              <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-base ${trashSub ? "bg-emerald-500/10" : "bg-orange-500/10"}`}>
-                🗑️
-              </div>
-              <div>
-                <p className="font-bold text-sm text-white">Trash Valet</p>
-                {trashSub ? (
-                  <p className="text-zinc-500 text-xs leading-snug">
-                    Next: {getNextServiceDate(trashSub.serviceDayOfWeek)}
-                  </p>
-                ) : (
-                  <p className="text-zinc-500 text-xs leading-snug">Curbside pull-out · from $30/mo</p>
-                )}
-              </div>
-            </button>
-
-            {/* Painting */}
-            <button
-              onClick={() => setLocation("/book?service=painting")}
-              className="flex flex-col items-start gap-1.5 p-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
-            >
-              <div className="w-8 h-8 rounded-xl bg-rose-500/15 flex items-center justify-center">
-                <PaintBucket className="h-4 w-4 text-rose-400" />
-              </div>
-              <div>
-                <p className="font-bold text-sm text-white">Painting</p>
-                <p className="text-zinc-500 text-xs leading-snug">Interior & exterior</p>
-              </div>
-            </button>
-
-            {/* Flooring */}
-            <button
-              onClick={() => setLocation("/book?service=flooring")}
-              className="flex flex-col items-start gap-1.5 p-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
-            >
-              <div className="w-8 h-8 rounded-xl bg-teal-500/15 flex items-center justify-center">
-                <Layers className="h-4 w-4 text-teal-400" />
-              </div>
-              <div>
-                <p className="font-bold text-sm text-white">Flooring</p>
-                <p className="text-zinc-500 text-xs leading-snug">Install & refinish</p>
-              </div>
-            </button>
-
-            {/* Lawn Care — Coming Soon */}
-            <button
-              onClick={() => setLocation("/book?service=lawn-care")}
-              className="relative flex flex-col items-start gap-1.5 p-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
-            >
-              <span className="absolute -top-2 left-3 text-[9px] font-bold bg-zinc-700 text-zinc-300 px-2 py-0.5 rounded-full whitespace-nowrap">
-                Coming Soon
-              </span>
-              <div className="w-8 h-8 rounded-xl bg-green-500/15 flex items-center justify-center">
-                <Leaf className="h-4 w-4 text-green-400" />
-              </div>
-              <div>
-                <p className="font-bold text-sm text-white">Lawn Care</p>
-                <p className="text-zinc-500 text-xs leading-snug">Request a quote</p>
-              </div>
-            </button>
-
-            {/* Handyman */}
-            <button
-              onClick={() => setLocation("/book?service=handyman")}
-              className="flex flex-col items-start gap-1.5 p-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
-            >
-              <div className="w-8 h-8 rounded-xl bg-amber-500/15 flex items-center justify-center">
-                <Wrench className="h-4 w-4 text-amber-400" />
-              </div>
-              <div>
-                <p className="font-bold text-sm text-white">Handyman</p>
-                <p className="text-zinc-500 text-xs leading-snug">Repairs & projects</p>
-              </div>
-            </button>
-
-            {/* Light Demolition */}
-            <button
-              onClick={() => setLocation("/book?service=demolition")}
-              className="flex flex-col items-start gap-1.5 p-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
-            >
-              <div className="w-8 h-8 rounded-xl bg-red-500/15 flex items-center justify-center text-base">
-                ⚒️
-              </div>
-              <div>
-                <p className="font-bold text-sm text-white">Light Demo</p>
-                <p className="text-zinc-500 text-xs leading-snug">Tearout & removal</p>
-              </div>
-            </button>
-
-            {/* Roofing */}
-            <button
-              onClick={() => setLocation("/book?service=roofing")}
-              className="flex flex-col items-start gap-1.5 p-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
-            >
-              <div className="w-8 h-8 rounded-xl bg-slate-500/15 flex items-center justify-center text-base">
-                🏠
-              </div>
-              <div>
-                <p className="font-bold text-sm text-white">Roofing</p>
-                <p className="text-zinc-500 text-xs leading-snug">Repair & replacement</p>
-              </div>
-            </button>
-
-            {/* Move-In/Out Cleaning */}
-            <button
-              onClick={() => setLocation("/book?service=cleaning")}
-              className="flex flex-col items-start gap-1.5 p-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 active:scale-[0.97] transition-all text-left"
-            >
-              <div className="w-8 h-8 rounded-xl bg-violet-500/15 flex items-center justify-center">
-                <Sparkles className="h-4 w-4 text-violet-400" />
-              </div>
-              <div>
-                <p className="font-bold text-sm text-white">Move Cleaning</p>
-                <p className="text-zinc-500 text-xs leading-snug">Move-in/out clean</p>
-              </div>
-            </button>
-
+          <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-3">Services</h2>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {(
+              [
+                { key: "residential",    onClick: () => setExpanded("moving"),                badge: undefined,                                                    badgeColor: undefined   },
+                { key: "junk",           onClick: () => setExpanded("junk"),                  badge: undefined,                                                    badgeColor: undefined   },
+                { key: "labor",          onClick: () => setLocation("/post-job"),             badge: undefined,                                                    badgeColor: undefined   },
+                { key: "snow",           onClick: () => setLocation("/book?service=snow"),    badge: undefined,                                                    badgeColor: undefined   },
+                { key: "window_cleaning",onClick: () => setLocation("/window-cleaning"),      badge: isApril ? "April Special — 20% Off" : undefined,              badgeColor: "orange" as const },
+                { key: "trash_valet",    onClick: () => setLocation("/trash-valet"),          badge: trashSub ? "Active" : undefined,                              badgeColor: "green"  as const },
+                { key: "painting",       onClick: () => setLocation("/book?service=painting"),badge: undefined,                                                    badgeColor: undefined   },
+                { key: "flooring",       onClick: () => setLocation("/book?service=flooring"),badge: undefined,                                                    badgeColor: undefined   },
+                { key: "lawn_care",      onClick: () => setLocation("/book?service=lawn-care"),badge: undefined,                                                   badgeColor: undefined   },
+                { key: "handyman",       onClick: () => setLocation("/book?service=handyman"),badge: undefined,                                                    badgeColor: undefined   },
+                { key: "demolition",     onClick: () => setLocation("/book?service=demolition"),badge: undefined,                                                  badgeColor: undefined   },
+                { key: "roofing",        onClick: () => setLocation("/book?service=roofing"), badge: undefined,                                                    badgeColor: undefined   },
+                { key: "cleaning",       onClick: () => setLocation("/book?service=cleaning"),badge: undefined,                                                    badgeColor: undefined   },
+              ] as Array<{ key: string; onClick: () => void; badge?: string; badgeColor?: "green" | "orange" | "zinc" | "blue" }>
+            ).map(({ key, onClick, badge, badgeColor }) => {
+              const svc = getService(key);
+              if (!svc) return null;
+              return (
+                <ServiceCard
+                  key={key}
+                  service={svc}
+                  onClick={onClick}
+                  badge={badge}
+                  badgeColor={badgeColor}
+                />
+              );
+            })}
           </div>
         </div>
 

@@ -11,7 +11,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Truck, Trash2, Snowflake, Sparkles, Send, Camera, X, ImagePlus, Wrench, HardHat, Layers, PaintBucket } from "lucide-react";
+import { Send, Camera, X, ImagePlus } from "lucide-react";
+import ServiceCard from "@/components/ServiceCard";
+import { getService } from "@/lib/services";
 import { DatePicker } from "@/components/ui/date-picker";
 import ServiceBundleAddon from "@/components/ServiceBundleAddon";
 
@@ -30,15 +32,8 @@ interface QuoteFormProps {
   showRewardsInfo?: boolean;
 }
 
-const serviceOptions = [
-  { value: "residential", label: "Moving", subLabel: "Loading & Unloading", icon: Truck, color: "from-blue-600 to-blue-800" },
-  { value: "junk", label: "Junk Removal", subLabel: "Haul Away", icon: Trash2, color: "from-orange-600 to-orange-800" },
-  { value: "snow", label: "Snow Removal", subLabel: "Plowing & Shoveling", icon: Snowflake, color: "from-cyan-600 to-cyan-800" },
-  { value: "cleaning", label: "Move In/Out", subLabel: "Cleaning", icon: Sparkles, color: "from-green-600 to-green-800" },
-  { value: "handyman", label: "Handyman", subLabel: "General Repairs", icon: Wrench, color: "from-amber-600 to-amber-800" },
-  { value: "demolition", label: "Light Demo", subLabel: "Demolition", icon: HardHat, color: "from-red-600 to-red-800" },
-  { value: "flooring", label: "Flooring", subLabel: "Install & Repair", icon: Layers, color: "from-stone-600 to-stone-800" },
-  { value: "painting", label: "Painting", subLabel: "Interior & Exterior", icon: PaintBucket, color: "from-violet-600 to-violet-800" },
+const QUOTE_FORM_SERVICE_KEYS = [
+  "residential", "junk", "snow", "cleaning", "handyman", "demolition", "flooring", "painting",
 ];
 
 export default function QuoteForm({ 
@@ -198,8 +193,8 @@ export default function QuoteForm({
   };
 
   const getServiceTitle = () => {
-    const service = serviceOptions.find(s => s.value === selectedService);
-    return service ? `${service.label} Quote` : (isEmployee ? "Add a Job" : "Get Your Free Quote");
+    const svc = getService(selectedService);
+    return svc ? `${svc.label} Quote` : (isEmployee ? "Add a Job" : "Get Your Free Quote");
   };
 
   const cardClasses = isEmployee 
@@ -236,38 +231,19 @@ export default function QuoteForm({
           <div>
             <Label className={`block text-sm font-medium ${labelClasses} mb-3`}>Service Type *</Label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {serviceOptions.map((service) => {
-                const IconComponent = service.icon;
-                const isSelected = selectedService === service.value;
+              {QUOTE_FORM_SERVICE_KEYS.map(key => {
+                const svc = getService(key);
+                if (!svc) return null;
                 return (
-                  <label key={service.value} className="relative cursor-pointer">
-                    <input
-                      type="radio"
-                      value={service.value}
-                      className="peer sr-only"
-                      checked={isSelected}
-                      onChange={(e) => {
-                        setSelectedService(e.target.value);
-                        form.setValue("serviceType", e.target.value);
-                      }}
-                      data-testid={`radio-service-${service.value}`}
-                    />
-                    <div className={`p-3 border-2 rounded-xl transition-all duration-200 ${
-                      isSelected 
-                        ? 'border-transparent bg-gradient-to-br ' + service.color + ' shadow-lg shadow-blue-900/20 scale-[1.02]' 
-                        : isEmployee 
-                          ? 'border-slate-600 bg-slate-800/50 hover:border-blue-500/50 hover:bg-slate-700/50'
-                          : 'border-slate-600 bg-slate-700/50 hover:border-slate-500'
-                    }`}>
-                      <IconComponent className={`mx-auto mb-1 h-6 w-6 ${isSelected ? 'text-white' : isEmployee ? 'text-blue-400' : 'text-slate-300'}`} />
-                      <span className={`font-semibold block text-center text-xs ${isSelected ? 'text-white' : isEmployee ? 'text-slate-200' : 'text-slate-200'}`}>
-                        {service.label}
-                      </span>
-                      <span className={`text-[10px] block text-center ${isSelected ? 'text-white/80' : isEmployee ? 'text-slate-400' : 'text-slate-400'}`}>
-                        {service.subLabel}
-                      </span>
-                    </div>
-                  </label>
+                  <ServiceCard
+                    key={key}
+                    service={svc}
+                    selected={selectedService === key}
+                    onClick={() => {
+                      setSelectedService(key);
+                      form.setValue("serviceType", key);
+                    }}
+                  />
                 );
               })}
             </div>
@@ -547,5 +523,3 @@ export default function QuoteForm({
     </Card>
   );
 }
-
-export { serviceOptions };

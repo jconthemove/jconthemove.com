@@ -2,14 +2,14 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
-  Truck, Trash2, Snowflake, Sparkles, Wrench, HardHat, Layers, PaintBucket,
   CheckCircle2, Star, Shield, Zap, MapPin, Phone, Gift,
-  ArrowRight, CalendarCheck, MessageCircle, Droplets, Home, Leaf, RefreshCcw,
-  type LucideIcon
+  ArrowRight, CalendarCheck, MessageCircle,
 } from "lucide-react";
 import { SiGoogle } from "react-icons/si";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import CrewStatusCard from "@/components/CrewStatusCard";
+import ServiceCard from "@/components/ServiceCard";
+import { getService } from "@/lib/services";
 
 interface Testimonial {
   id: string;
@@ -34,7 +34,23 @@ const BANNER_MESSAGES = [
   "📞 Call Now — (906) 285-9312",
 ];
 
+const HOME_SERVICES: Array<{ key: string; href: string }> = [
+  { key: "residential",   href: "/book?service=moving"       },
+  { key: "junk",          href: "/book?service=junk"         },
+  { key: "trash_valet",   href: "/book?service=trash-valet"  },
+  { key: "window_cleaning", href: "/book?service=window"     },
+  { key: "cleaning",      href: "/book?service=cleaning"     },
+  { key: "snow",          href: "/book?service=snow"         },
+  { key: "handyman",      href: "/book?service=handyman"     },
+  { key: "demolition",    href: "/book?service=demolition"   },
+  { key: "flooring",      href: "/book?service=flooring"     },
+  { key: "painting",      href: "/book?service=painting"     },
+  { key: "roofing",       href: "/book?service=roofing"      },
+  { key: "lawn_care",     href: "/book/lawn-care"            },
+];
+
 export default function HomePage() {
+  const [, setLocation] = useLocation();
   const [bannerIdx, setBannerIdx] = useState(0);
 
   const { data: liveTestimonials } = useQuery<Testimonial[]>({
@@ -263,32 +279,18 @@ export default function HomePage() {
               </span>
             </Link>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            {([
-              { icon: Truck,        label: "Moving",         sub: "Local & long distance",  href: "/book?service=moving",       iconCls: "text-blue-400",   borderCls: "hover:border-blue-500/50"    },
-              { icon: Trash2,       label: "Junk Removal",   sub: "Haul away & disposal",   href: "/book?service=junk",         iconCls: "text-orange-400", borderCls: "hover:border-orange-500/50"  },
-              { icon: RefreshCcw,   label: "Trash Valet",    sub: "Weekly curbside pickup",  href: "/book?service=trash-valet",  iconCls: "text-green-400",  borderCls: "hover:border-green-500/50"   },
-              { icon: Droplets,     label: "Window Cleaning",sub: "Streak-free guarantee",   href: "/book?service=window",       iconCls: "text-sky-400",    borderCls: "hover:border-sky-500/50"     },
-              { icon: Sparkles,     label: "Move-In/Out",    sub: "Cleaning & labor",        href: "/book?service=cleaning",     iconCls: "text-teal-400",   borderCls: "hover:border-teal-500/50"    },
-              { icon: Snowflake,    label: "Snow Removal",   sub: "Plowing & shoveling",    href: "/book?service=snow",         iconCls: "text-cyan-400",   borderCls: "hover:border-cyan-500/50"    },
-              { icon: Wrench,       label: "Handyman",        sub: "General repairs",        href: "/book?service=handyman",     iconCls: "text-yellow-400", borderCls: "hover:border-yellow-500/50"  },
-              { icon: HardHat,      label: "Light Demo",      sub: "Tear-out & cleanout",    href: "/book?service=demolition",   iconCls: "text-red-400",    borderCls: "hover:border-red-500/50"     },
-              { icon: Layers,       label: "Flooring",        sub: "Install & removal",      href: "/book?service=flooring",     iconCls: "text-purple-400", borderCls: "hover:border-purple-500/50"  },
-              { icon: PaintBucket,  label: "Painting",        sub: "Interior & exterior",    href: "/book?service=painting",     iconCls: "text-pink-400",   borderCls: "hover:border-pink-500/50"    },
-              { icon: Home,         label: "Roofing",         sub: "Repair & replacement",   href: "/book?service=roofing",      iconCls: "text-amber-400",  borderCls: "hover:border-amber-500/50"   },
-              { icon: Leaf,         label: "Lawn Care",       sub: "Mowing, trimming & more",href: "/book/lawn-care",            iconCls: "text-lime-400",   borderCls: "hover:border-lime-500/50"    },
-            ] as { icon: LucideIcon; label: string; sub: string; href: string; iconCls: string; borderCls: string; comingSoon?: boolean }[]).map(({ icon: Icon, label, sub, href, iconCls, borderCls, comingSoon }) => (
-              <Link key={label} href={comingSoon ? "#" : href} className="block" onClick={comingSoon ? (e) => e.preventDefault() : undefined}>
-                <div className={`relative bg-slate-800/60 border border-slate-700/50 ${comingSoon ? "opacity-75 cursor-default" : `${borderCls} cursor-pointer hover:bg-slate-700/60`} rounded-xl p-4 transition-all h-full`}>
-                  {comingSoon && (
-                    <span className="absolute top-2 right-2 text-[9px] font-bold bg-lime-500/20 text-lime-400 border border-lime-500/30 rounded-full px-1.5 py-0.5 uppercase tracking-wider">Soon</span>
-                  )}
-                  <Icon className={`h-7 w-7 ${iconCls} mb-2`} />
-                  <p className="text-white font-semibold text-sm">{label}</p>
-                  <p className="text-slate-500 text-xs mt-0.5">{sub}</p>
-                </div>
-              </Link>
-            ))}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-8">
+            {HOME_SERVICES.map(({ key, href }) => {
+              const svc = getService(key);
+              if (!svc) return null;
+              return (
+                <ServiceCard
+                  key={key}
+                  service={svc}
+                  onClick={() => setLocation(href)}
+                />
+              );
+            })}
           </div>
 
         </div>

@@ -2,11 +2,13 @@ import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowLeft, Truck, Trash2, Snowflake, Wrench, MapPin, Calendar, FileText,
-  CheckCircle, Coins, Loader2, ChevronRight, Camera, X, Image, Video, Upload,
-  Users, Clock, Package, CheckCircle2, Minus, Plus, HelpCircle, DollarSign,
-  Tag, AlertCircle, Gem, Layers, PaintBucket, Leaf, Sparkles
+  ArrowLeft, MapPin, Calendar, FileText,
+  CheckCircle, Coins, Loader2, ChevronRight, Camera, X, Upload,
+  Package, CheckCircle2, Minus, Plus, HelpCircle, DollarSign,
+  Tag, AlertCircle, Gem, Image, Video, Users, Clock,
 } from "lucide-react";
+import ServiceCard from "@/components/ServiceCard";
+import { getService } from "@/lib/services";
 import { Badge } from "@/components/ui/badge";
 import { DatePicker } from "@/components/ui/date-picker";
 import { cn } from "@/lib/utils";
@@ -15,17 +17,9 @@ import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
 
-const SERVICES = [
-  { value: "residential",     label: "Moving",           sub: "Local & long distance",              icon: Truck,       color: "bg-blue-50 dark:bg-blue-900/20 text-blue-600 border-blue-200 dark:border-blue-800"     },
-  { value: "junk",            label: "Junk Removal",     sub: "Haul away & disposal",               icon: Trash2,      color: "bg-orange-50 dark:bg-orange-900/20 text-orange-600 border-orange-200 dark:border-orange-800" },
-  { value: "snow",            label: "Snow Removal",     sub: "Plowing & shoveling",                icon: Snowflake,   color: "bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 border-cyan-200 dark:border-cyan-800"     },
-  { value: "handyman",        label: "Handyman",          sub: "General repairs & labor",            icon: Wrench,      color: "bg-amber-50 dark:bg-amber-900/20 text-amber-600 border-amber-200 dark:border-amber-800" },
-  { value: "flooring",        label: "Flooring",          sub: "Install & refinish",                 icon: Layers,      color: "bg-teal-50 dark:bg-teal-900/20 text-teal-600 border-teal-200 dark:border-teal-800"     },
-  { value: "painting",        label: "Painting",          sub: "Interior & exterior",                icon: PaintBucket, color: "bg-rose-50 dark:bg-rose-900/20 text-rose-600 border-rose-200 dark:border-rose-800"     },
-  { value: "lawn_care",       label: "Lawn Care",         sub: "Mowing & maintenance",               icon: Leaf,        color: "bg-green-50 dark:bg-green-900/20 text-green-600 border-green-200 dark:border-green-800" },
-  { value: "window_cleaning", label: "Window Cleaning",   sub: "Streak-free shine",                  icon: Sparkles,    color: "bg-sky-50 dark:bg-sky-900/20 text-sky-600 border-sky-200 dark:border-sky-800"         },
-  { value: "trash_valet",     label: "Trash Valet",       sub: "Curbside pull-out",                  icon: Package,     color: "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 border-emerald-200 dark:border-emerald-800" },
-  { value: "custom",          label: "Something Else",    sub: "Describe what you need — we'll quote you", icon: HelpCircle, color: "bg-violet-50 dark:bg-violet-900/20 text-violet-600 border-violet-200 dark:border-violet-800" },
+const POST_JOB_SERVICE_KEYS = [
+  "residential", "junk", "snow", "handyman", "flooring", "painting",
+  "lawn_care", "window_cleaning", "trash_valet", "custom",
 ];
 
 const EARN_RATE = 15;
@@ -532,7 +526,7 @@ export default function PostJobPage() {
     },
   });
 
-  const selectedService = SERVICES.find(s => s.value === form.serviceType);
+  const selectedService = getService(form.serviceType);
   const totalSteps = needsPackageStep ? 4 : 3;
   const displayStep = pkgStep ? 2 : step === 2 && !pkgStep ? (needsPackageStep ? 3 : 2) : step;
 
@@ -609,39 +603,31 @@ export default function PostJobPage() {
         {step === 1 && (
           <div>
             <h2 className="font-bold text-zinc-900 dark:text-white mb-4">What do you need?</h2>
-            <div className="space-y-3">
-              {SERVICES.map(({ value, label, sub, icon: Icon, color }) => (
-                <button
-                  key={value}
-                  onClick={() => {
-                    set("serviceType", value);
-                    setSelectedPkgId(null);
-                    setPkgSkipped(false);
-                    setAddonQtys({});
-                    if (PACKAGE_SERVICES.includes(value)) {
-                      setStep(2);
-                      setPkgStep(true);
-                    } else {
-                      setStep(2);
-                      setPkgStep(false);
-                    }
-                  }}
-                  className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 transition-all active:scale-[0.98] ${
-                    form.serviceType === value
-                      ? "border-jc-orange bg-jc-orange/5"
-                      : "border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900"
-                  }`}
-                >
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${color}`}>
-                    <Icon className="h-6 w-6" />
-                  </div>
-                  <div className="text-left flex-1">
-                    <p className="font-semibold text-zinc-900 dark:text-white">{label}</p>
-                    <p className="text-xs text-zinc-400">{sub}</p>
-                  </div>
-                  <ChevronRight className="h-5 w-5 text-zinc-300 dark:text-zinc-600" />
-                </button>
-              ))}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {POST_JOB_SERVICE_KEYS.map(key => {
+                const svc = getService(key);
+                if (!svc) return null;
+                return (
+                  <ServiceCard
+                    key={key}
+                    service={svc}
+                    selected={form.serviceType === key}
+                    onClick={() => {
+                      set("serviceType", key);
+                      setSelectedPkgId(null);
+                      setPkgSkipped(false);
+                      setAddonQtys({});
+                      if (PACKAGE_SERVICES.includes(key)) {
+                        setStep(2);
+                        setPkgStep(true);
+                      } else {
+                        setStep(2);
+                        setPkgStep(false);
+                      }
+                    }}
+                  />
+                );
+              })}
             </div>
           </div>
         )}
@@ -1066,13 +1052,13 @@ export default function PostJobPage() {
             <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 p-4 shadow-sm space-y-3">
               <div className="flex items-center gap-3">
                 {selectedService && (
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${selectedService.color}`}>
-                    <selectedService.icon className="h-5 w-5" />
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${selectedService.iconBg}`}>
+                    <selectedService.icon className={`h-5 w-5 ${selectedService.iconColor}`} />
                   </div>
                 )}
                 <div>
                   <p className="font-semibold text-zinc-900 dark:text-white">{selectedService?.label}</p>
-                  <p className="text-xs text-zinc-400">{selectedService?.sub}</p>
+                  <p className="text-xs text-zinc-400">{selectedService?.tags.join(" · ")}</p>
                 </div>
               </div>
 

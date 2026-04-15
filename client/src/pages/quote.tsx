@@ -3,7 +3,8 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Sparkles, X } from "lucide-react";
 import { Link } from "wouter";
-import QuoteForm, { serviceOptions } from "@/components/QuoteForm";
+import QuoteForm from "@/components/QuoteForm";
+import { getService } from "@/lib/services";
 import { useAuth } from "@/hooks/useAuth";
 
 function AccountCTABanner({ onDismiss }: { onDismiss: () => void }) {
@@ -68,8 +69,8 @@ export default function QuotePage() {
   }, [location]);
 
   const getServiceTitle = () => {
-    const service = serviceOptions.find(s => s.value === prefilledService);
-    return service ? `${service.label} Quote` : "Get Your Free Quote";
+    const svc = getService(prefilledService);
+    return svc ? `${svc.label} Quote` : "Get Your Free Quote";
   };
 
   const handleSuccess = () => {
