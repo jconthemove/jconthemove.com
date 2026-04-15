@@ -12,7 +12,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Send, CheckCircle2, ArrowRight, Sparkles, RotateCcw, ChevronRight, AlertCircle, Users, DollarSign, Camera, X, CreditCard, Clock } from "lucide-react";
 import { calculateWindowCleaningQuote } from "@shared/windowCleaningPricing";
 import { calculateTrashValetQuote, TRASH_VALET_TRAVEL_THRESHOLD_MILES, TRASH_VALET_OUT_OF_AREA_MINIMUM } from "@shared/trashValetPricing";
-import { getDepositInfo, isIronwoodArea, IRONWOOD_ZIP } from "@shared/depositRules";
+import { getDepositInfo } from "@shared/depositRules";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
 
 // ─────────────────────────────────────────────
