@@ -9192,7 +9192,8 @@ Thank you for your business!
   // Get revenue allocations (40/30/20/10 split log)
   app.get("/api/treasury/revenue-allocations", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
-      const limit = parseInt(req.query.limit as string) || 50;
+      const rawLimit = parseInt(req.query.limit as string) || 50;
+      const limit = Math.min(Math.max(rawLimit, 1), 200);
       const { rows } = await pool.query(
         `SELECT
            id, lead_id AS "leadId", payment_amount_usd AS "paymentAmountUsd",

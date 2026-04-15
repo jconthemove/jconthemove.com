@@ -286,9 +286,15 @@ app.use((req, res, next) => {
         await normPool.query(`
           UPDATE reward_items
           SET token_price = CEIL(token_price::numeric / 500) * 500,
-              updated_at   = NOW()
-          WHERE token_price > 0
-            AND MOD(token_price, 500) != 0
+              sale_price_tokens = CASE
+                WHEN sale_price_tokens IS NOT NULL AND sale_price_tokens > 0
+                     AND MOD(sale_price_tokens, 500) != 0
+                THEN CEIL(sale_price_tokens::numeric / 500) * 500
+                ELSE sale_price_tokens
+              END,
+              updated_at = NOW()
+          WHERE (token_price > 0 AND MOD(token_price, 500) != 0)
+             OR (sale_price_tokens IS NOT NULL AND sale_price_tokens > 0 AND MOD(sale_price_tokens, 500) != 0)
         `);
       } catch (err) {
         console.error('⚠️  Reward shop migration error (non-fatal):', err);
