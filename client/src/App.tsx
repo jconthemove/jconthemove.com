@@ -116,6 +116,10 @@ const AdminAnalyticsPage = lazy(() => import("@/pages/admin/analytics"));
 const AdminSchedulePage = lazy(() => import("@/pages/admin/schedule"));
 const BookLawnCarePage = lazy(() => import("@/pages/book-lawn-care"));
 const AdminLawnCarePage = lazy(() => import("@/pages/admin-lawn-care"));
+const LawnCarePage = lazy(() => import("@/pages/lawn-care"));
+const MoveOutCleaningPage = lazy(() => import("@/pages/move-out-cleaning"));
+const RoofingPage = lazy(() => import("@/pages/roofing"));
+const DemolitionPage = lazy(() => import("@/pages/demolition"));
 const PricingPage = lazy(() => import("@/pages/pricing"));
 const HubPage = lazy(() => import("@/pages/hub"));
 
@@ -345,6 +349,18 @@ function CustomerApp() {
           </Route>
           <Route path="/window-cleaning">
             <WindowCleaningPage />
+          </Route>
+          <Route path="/lawn-care">
+            <LawnCarePage />
+          </Route>
+          <Route path="/cleaning">
+            <MoveOutCleaningPage />
+          </Route>
+          <Route path="/roofing">
+            <RoofingPage />
+          </Route>
+          <Route path="/demolition">
+            <DemolitionPage />
           </Route>
           <Route path="/packages">
             <ServicePackagesPage />
@@ -731,6 +747,12 @@ function Router() {
 
       {/* Window Cleaning booking page - accessible to all */}
       <Route path="/window-cleaning" component={WindowCleaningPage} />
+
+      {/* Service pages - accessible to all */}
+      <Route path="/lawn-care" component={LawnCarePage} />
+      <Route path="/cleaning" component={MoveOutCleaningPage} />
+      <Route path="/roofing" component={RoofingPage} />
+      <Route path="/demolition" component={DemolitionPage} />
       
       {/* Sponsors page - accessible to all */}
       <Route path="/sponsors" component={SponsorsPage} />

@@ -145,6 +145,20 @@ export default function CustomerHomePage() {
   const [showChatbot, setShowChatbot] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
 
+  // Back-button interception: when any sheet/chatbot is open, browser back closes it
+  useEffect(() => {
+    const anySheetOpen = showChatbot || expanded !== null;
+    if (anySheetOpen) {
+      window.history.pushState({ sheetOpen: true }, "");
+    }
+    function handlePop() {
+      if (showChatbot) setShowChatbot(false);
+      else if (expanded !== null) setExpanded(null);
+    }
+    window.addEventListener("popstate", handlePop);
+    return () => window.removeEventListener("popstate", handlePop);
+  }, [showChatbot, expanded]);
+
   const { data: wallet } = useQuery<{ tokenBalance: string }>({
     queryKey: ["/api/rewards/wallet"],
     retry: 2,
@@ -259,11 +273,11 @@ export default function CustomerHomePage() {
                 { key: "trash_valet",    onClick: () => setLocation("/trash-valet"),          badge: trashSub ? "Active" : undefined,                              badgeColor: "green"  as const },
                 { key: "painting",       onClick: () => setLocation("/book?service=painting"),badge: undefined,                                                    badgeColor: undefined   },
                 { key: "flooring",       onClick: () => setLocation("/book?service=flooring"),badge: undefined,                                                    badgeColor: undefined   },
-                { key: "lawn_care",      onClick: () => setLocation("/book?service=lawn-care"),badge: undefined,                                                   badgeColor: undefined   },
+                { key: "lawn_care",      onClick: () => setLocation("/lawn-care"),            badge: undefined,                                                   badgeColor: undefined   },
                 { key: "handyman",       onClick: () => setLocation("/book?service=handyman"),badge: undefined,                                                    badgeColor: undefined   },
-                { key: "demolition",     onClick: () => setLocation("/book?service=demolition"),badge: undefined,                                                  badgeColor: undefined   },
-                { key: "roofing",        onClick: () => setLocation("/book?service=roofing"), badge: undefined,                                                    badgeColor: undefined   },
-                { key: "cleaning",       onClick: () => setLocation("/book?service=cleaning"),badge: undefined,                                                    badgeColor: undefined   },
+                { key: "demolition",     onClick: () => setLocation("/demolition"),           badge: undefined,                                                    badgeColor: undefined   },
+                { key: "roofing",        onClick: () => setLocation("/roofing"),              badge: undefined,                                                    badgeColor: undefined   },
+                { key: "cleaning",       onClick: () => setLocation("/cleaning"),             badge: undefined,                                                    badgeColor: undefined   },
               ] as Array<{ key: string; onClick: () => void; badge?: string; badgeColor?: "green" | "orange" | "zinc" | "blue" }>
             ).map(({ key, onClick, badge, badgeColor }) => {
               const svc = getService(key);

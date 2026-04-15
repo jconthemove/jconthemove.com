@@ -1824,7 +1824,11 @@ const SERVICE_SLUG_MAP: Record<string, string> = {
   snow: "❄️ Snow Removal",
   snow_removal: "❄️ Snow Removal",
   cleaning: "✨ Move-In/Out Cleaning",
+  "move-in/out cleaning": "✨ Move-In/Out Cleaning",
+  "move in/out cleaning": "✨ Move-In/Out Cleaning",
   demolition: "⚒️ Light Demolition",
+  "light demolition": "⚒️ Light Demolition",
+  "lawn care": "🌿 Lawn Care",
   residential: "📦 Moving (local or long-distance)",
 };
 

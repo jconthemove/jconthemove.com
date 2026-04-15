@@ -126,7 +126,6 @@ export const SERVICES: ServiceConfig[] = [
     duration: [1, 3],
     earn: [50, 200],
     description: "Mowing, trimming & more — lawn kept sharp",
-    status: "coming-soon",
   },
   {
     key: "window_cleaning",
