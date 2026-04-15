@@ -56,6 +56,12 @@ export default function ProfilePage() {
     enabled: !!user,
   });
 
+  const { data: stakingPerk } = useQuery<{ stakedTotal: number; perkPercent: number; perkLabel: string }>({
+    queryKey: ['/api/staking/my-perk'],
+    enabled: !!user,
+    staleTime: 60_000,
+  });
+
   useEffect(() => {
     if (user?.username) {
       setUsername(user.username);
@@ -213,8 +219,13 @@ export default function ProfilePage() {
                   {user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : 'Welcome!'}
                 </h1>
                 <p className="text-blue-100" data-testid="text-username">@{user?.username || 'set username'}</p>
-                <div className="flex items-center gap-2 mt-1">
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
                   <span className="px-2 py-0.5 bg-white/20 rounded-full text-xs text-white capitalize">{user?.role || 'Member'}</span>
+                  {stakingPerk && stakingPerk.perkPercent > 0 && (
+                    <span className="px-2 py-0.5 bg-orange-500/30 border border-orange-400/40 rounded-full text-xs text-orange-200 font-semibold">
+                      🔒 {stakingPerk.perkPercent}% booking perk
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

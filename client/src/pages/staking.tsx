@@ -380,6 +380,9 @@ function JcmovesStakingView({ isAuthenticated }: { isAuthenticated: boolean }) {
       {/* Pool stats */}
       <JcmovesPoolStatsCard poolStats={poolStats} />
 
+      {/* Your Staking Perk — dedicated perk status card */}
+      <MyPerkCard staked={staked} discountPct={discountPct} />
+
       {/* 10% Bonus Status Card */}
       <Card className={`border-2 transition-all ${isStakingActive
         ? "border-emerald-500/50 bg-gradient-to-br from-emerald-950/40 to-green-950/20"
@@ -555,6 +558,71 @@ function JcmovesStakingView({ isAuthenticated }: { isAuthenticated: boolean }) {
 }
 
 // ── Sub-components ───────────────────────────────────────────────────────────
+
+function MyPerkCard({ staked, discountPct }: { staked: number; discountPct: number }) {
+  const hasPerk = discountPct > 0;
+  const nextTier = STAKE_TIERS.find(t => staked < t.threshold);
+  const currentTier = [...STAKE_TIERS].reverse().find(t => staked >= t.threshold);
+  const progressToNextTier = nextTier
+    ? Math.min(100, ((staked - (currentTier?.threshold ?? 0)) / (nextTier.threshold - (currentTier?.threshold ?? 0))) * 100)
+    : 100;
+
+  return (
+    <Card className={`border-2 transition-all ${
+      discountPct >= 10 ? "border-yellow-500/50 bg-gradient-to-br from-yellow-950/30 to-amber-950/20"
+      : discountPct >= 5 ? "border-orange-500/40 bg-gradient-to-br from-orange-950/25 to-amber-950/10"
+      : "border-slate-700/40 bg-gradient-to-br from-slate-900/40 to-slate-800/20"
+    }`}>
+      <CardContent className="p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Shield className={`h-5 w-5 ${hasPerk ? "text-orange-400" : "text-slate-500"}`} />
+          <h3 className="font-bold text-base text-slate-200">Your Staking Perk</h3>
+          {hasPerk && (
+            <Badge className="ml-auto bg-orange-500/20 text-orange-300 border border-orange-500/40 font-bold">
+              {currentTier?.icon} {discountPct}% OFF ACTIVE
+            </Badge>
+          )}
+        </div>
+
+        {hasPerk ? (
+          <div className="bg-orange-950/30 border border-orange-500/20 rounded-xl p-3 space-y-1">
+            <p className="text-sm font-semibold text-orange-200">
+              {currentTier?.icon} {discountPct}% off all Moving &amp; Junk Removal bookings
+            </p>
+            <p className="text-xs text-slate-400">
+              Applied automatically at quote time — no code needed.{" "}
+              {nextTier
+                ? `Stake ${fmt(nextTier.threshold - staked)} more JCMOVES to reach ${nextTier.icon} ${nextTier.label} tier (${nextTier.discount} off).`
+                : "Maximum tier — 10% off every service!"}
+            </p>
+          </div>
+        ) : (
+          <div className="bg-slate-800/40 border border-slate-700/30 rounded-xl p-3 space-y-1">
+            <p className="text-sm text-slate-400">
+              No active booking perk — stake <span className="text-white font-semibold">25,000+ JCMOVES</span> to unlock 5% off all services.
+            </p>
+          </div>
+        )}
+
+        {nextTier && (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-400">{staked > 0 ? `${fmt(staked)} staked` : "Not staking yet"}</span>
+              <span className="text-slate-400">{nextTier.icon} {nextTier.label} — {nextTier.discount} off</span>
+            </div>
+            <Progress value={progressToNextTier} className="h-1.5" />
+            <p className="text-[11px] text-slate-500">
+              {fmt(Math.max(0, nextTier.threshold - staked))} more JCMOVES to next perk tier
+            </p>
+          </div>
+        )}
+        {!nextTier && staked >= 100_000 && (
+          <p className="text-xs text-yellow-400 font-semibold">💎 Maximum perk tier reached — 10% off all services!</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 function JcmovesPoolStatsCard({ poolStats }: { poolStats?: PoolStats }) {
   return (
