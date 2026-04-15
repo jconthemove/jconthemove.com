@@ -17,6 +17,7 @@ import {
   Copy, Check, Ticket, Coffee, Tag, CreditCard, ExternalLink
 } from "lucide-react";
 import { LOYALTY_TIERS, calculateJCMovesReward, getNextTier, getTierProgress, TIER_POINT_WAYS, formatTokens as fmtTokens, type LoyaltyTierKey } from "@/lib/loyalty";
+import { PLATFORM_REDEEM_RATE } from "@shared/rewards";
 import { SpinWheelDialog } from "@/components/spin-wheel";
 import { LotteryPanel } from "@/components/lottery-panel";
 import { ShopSwitcher } from "@/components/shop-switcher";
@@ -1204,7 +1205,12 @@ export default function RewardsMarketplacePage() {
                 </div>
                 <div className="flex items-center gap-2 mt-3 pt-3 border-t border-yellow-500/20">
                   <Coins className="h-4 w-4 text-yellow-500" />
-                  <span className="font-bold text-yellow-500">{formatTokens(redeemItem.salePriceTokens ?? redeemItem.tokenPrice)} JCMOVES</span>
+                  <div>
+                    <span className="font-bold text-yellow-500">{formatTokens(redeemItem.salePriceTokens ?? redeemItem.tokenPrice)} JCMOVES</span>
+                    <span className="text-[10px] text-muted-foreground block">
+                      ≈ ${((redeemItem.salePriceTokens ?? redeemItem.tokenPrice) / PLATFORM_REDEEM_RATE).toFixed(2)} platform credit · {PLATFORM_REDEEM_RATE} JCMOVES = $1.00
+                    </span>
+                  </div>
                   <span className="text-xs text-muted-foreground ml-auto">Balance after: {formatTokens(Math.floor(walletBalance - (redeemItem.salePriceTokens ?? redeemItem.tokenPrice)))}</span>
                 </div>
               </div>

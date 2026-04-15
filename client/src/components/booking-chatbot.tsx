@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Send, CheckCircle2, ArrowRight, Sparkles, RotateCcw, ChevronRight, AlertCircle, Users, DollarSign, Camera, X, CreditCard, Clock } from "lucide-react";
 import { calculateWindowCleaningQuote } from "@shared/windowCleaningPricing";
 import { calculateTrashValetQuote, TRASH_VALET_TRAVEL_THRESHOLD_MILES, TRASH_VALET_OUT_OF_AREA_MINIMUM } from "@shared/trashValetPricing";
+import { getDepositInfo, isIronwoodArea, IRONWOOD_ZIP } from "@shared/depositRules";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
 
 // ─────────────────────────────────────────────
@@ -19,50 +20,8 @@ import { PlacesAutocomplete } from "@/components/places-autocomplete";
 // ─────────────────────────────────────────────
 const PRICEABLE_SERVICES = ["Moving", "Junk Removal", "Trash Valet", "Window Cleaning"];
 const QUOTE_ONLY_SERVICES = ["Painting", "Flooring", "Roofing", "Handyman", "Lawn Care", "Snow Removal", "Move-In/Out Cleaning", "Light Demolition"];
-const IRONWOOD_ZIP = "49938";
 const TRAVEL_CHARGE_PER_TIER = 50;  // $50 per 25-mile band from Ironwood
 const TRAVEL_TIER_MILES      = 25;  // miles per tier
-
-function isIronwoodZip(zip: string): boolean {
-  const clean = zip.trim();
-  if (clean === IRONWOOD_ZIP) return true;
-  const match = clean.match(/\b(\d{5})\b/);
-  return match ? match[1] === IRONWOOD_ZIP : false;
-}
-
-function getDepositInfo(service: string, zip: string): { required: boolean; amount: number; termsHtml: string } {
-  const isLocal = isIronwoodZip(zip);
-
-  if (service === "Handyman") {
-    if (isLocal) {
-      return {
-        required: true,
-        amount: 50,
-        termsHtml: "$50 non-refundable estimate deposit (credited toward your project upon booking).",
-      };
-    } else {
-      return {
-        required: true,
-        amount: 100,
-        termsHtml: "$100 non-refundable estimate deposit (credited toward your project upon booking).",
-      };
-    }
-  }
-
-  if (["Painting", "Flooring", "Roofing"].includes(service)) {
-    if (isLocal) {
-      return { required: false, amount: 0, termsHtml: "" };
-    } else {
-      return {
-        required: true,
-        amount: 100,
-        termsHtml: "$100 non-refundable estimate deposit (credited toward your project if you book within 6 months).",
-      };
-    }
-  }
-
-  return { required: false, amount: 0, termsHtml: "" };
-}
 
 // ─────────────────────────────────────────────
 // Types

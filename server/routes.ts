@@ -36,6 +36,8 @@ import { jupiterSwapService, SUPPORTED_TOKENS } from "./services/jupiter-swap";
 import { ensureMomsAccount } from "./services/generosityFund";
 import { dispatchGenericJob } from "./services/dispatchGeneric";
 import { grantLotteryTicketsForActivity } from "./services/disburse-job-tokens";
+import { getDepositInfo, extractZip } from "@shared/depositRules";
+import { MIN_REDEMPTION_TOKENS } from "@shared/tokenRedemptionRules";
 import lawnCareRouter from "./routes/lawnCare";
 
 const STAKING_TREASURY_USER_ID = "staking-treasury-system";
@@ -9187,6 +9189,38 @@ Thank you for your business!
     }
   });
 
+  // Get revenue allocations (40/30/20/10 split log)
+  app.get("/api/treasury/revenue-allocations", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const { rows } = await pool.query(
+        `SELECT
+           id, lead_id AS "leadId", payment_amount_usd AS "paymentAmountUsd",
+           buyback_usd AS "buybackUsd", staking_usd AS "stakingUsd",
+           jackpot_usd AS "jackpotUsd", liquidity_usd AS "liquidityUsd",
+           source, created_at AS "createdAt"
+         FROM revenue_allocations
+         ORDER BY created_at DESC
+         LIMIT $1`,
+        [limit]
+      );
+      const { rows: totals } = await pool.query(
+        `SELECT
+           COALESCE(SUM(payment_amount_usd), 0)::numeric AS total_revenue,
+           COALESCE(SUM(buyback_usd), 0)::numeric AS total_buyback,
+           COALESCE(SUM(staking_usd), 0)::numeric AS total_staking,
+           COALESCE(SUM(jackpot_usd), 0)::numeric AS total_jackpot,
+           COALESCE(SUM(liquidity_usd), 0)::numeric AS total_liquidity,
+           COUNT(*) AS total_count
+         FROM revenue_allocations`
+      );
+      res.json({ allocations: rows, totals: totals[0] });
+    } catch (error) {
+      console.error("Error getting revenue allocations:", error);
+      res.status(500).json({ error: "Failed to get revenue allocations" });
+    }
+  });
+
   // Get treasury dashboard summary (quick stats for widgets)
   app.get("/api/treasury/summary", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
@@ -13811,6 +13845,17 @@ Thank you for your business!
                 await storage.updateLeadStatus(localInvoice.leadId, "paid");
                 console.log(`[Square webhook] Lead ${localInvoice.leadId} status updated to paid`);
 
+                // Record revenue split on payment confirmation
+                const paymentAmountUsd = parseFloat(
+                  (invoice as Record<string, unknown>).total_money
+                    ? String(((invoice as Record<string, unknown>).total_money as Record<string, unknown>)?.amount ?? 0)
+                    : (lead.totalPrice ? String(lead.totalPrice) : "0")
+                );
+                const amountUsd = paymentAmountUsd > 100 ? paymentAmountUsd / 100 : paymentAmountUsd;
+                if (amountUsd > 0) {
+                  await recordRevenueSplit(amountUsd, localInvoice.leadId, 'square_payment');
+                }
+
                 // Auto-dispatch crew after payment confirmed
                 try {
                   const { dispatchGenericJob } = await import("./services/dispatchGeneric");
@@ -16858,10 +16903,15 @@ Thank you for your business!
       // Check inventory
       if (itemRow.inventory !== null && itemRow.inventory <= 0) return res.status(400).json({ error: "Item out of stock" });
 
+      // Enforce minimum redemption floor (platform rule: 500 JCMOVES minimum)
+      const cost = itemRow.salePriceTokens ?? itemRow.tokenPrice;
+      if (cost < MIN_REDEMPTION_TOKENS) {
+        return res.status(400).json({ error: `Reward item cost must be at least ${MIN_REDEMPTION_TOKENS} JCMOVES` });
+      }
+
       // Check wallet balance
       const wallet = await storage.getWalletAccount(userId);
       const balance = parseFloat(wallet?.tokenBalance || "0");
-      const cost = itemRow.salePriceTokens ?? itemRow.tokenPrice;
       if (balance < cost) return res.status(400).json({ error: `Insufficient tokens. You have ${Math.floor(balance).toLocaleString()} JCMOVES, need ${cost.toLocaleString()}` });
 
       // Check per-user monthly limit
@@ -18724,22 +18774,11 @@ Thank you for your business!
       else if (svcRaw.toLowerCase().includes("snow")) serviceType = "snow";
       else if (svcRaw.toLowerCase().includes("lawn")) serviceType = "lawn";
 
-      // Enforce deposit rules server-side — never trust client-provided values
-      const IRONWOOD_ZIP = "49938";
-      const isLocal = fromZip.trim() === IRONWOOD_ZIP;
+      // Enforce deposit rules server-side using shared logic (identical to client chatbot)
       const QUOTE_ONLY_SERVICES_SERVER = ["painting", "flooring", "roofing", "handyman", "lawn"];
       const serverIsQuoteOnly = QUOTE_ONLY_SERVICES_SERVER.includes(serviceType);
-      let serverDepositRequired = false;
-      let serverDepositAmount = 0;
-      if (serviceType === "handyman") {
-        serverDepositRequired = true;
-        serverDepositAmount = isLocal ? 50 : 100;
-      } else if (["painting", "flooring", "roofing"].includes(serviceType)) {
-        if (!isLocal) {
-          serverDepositRequired = true;
-          serverDepositAmount = 100;
-        }
-      }
+      const { required: serverDepositRequired, amount: serverDepositAmount } =
+        getDepositInfo(serviceType, extractZip(fromZip || customerZip || ""));
 
       // Store all chatbot Q&A in details as JSON (uses server-computed deposit values)
       const photoList = Array.isArray(submittedPhotos) ? submittedPhotos : [];
@@ -18946,6 +18985,12 @@ Thank you for your business!
         await writeLeadHistory(req.params.id, lead.status, "paid", user.id, "Payment confirmed by admin");
       } catch (_) {}
 
+      // Record treasury revenue split on admin payment confirmation
+      const totalPriceUsd = parseFloat(lead.totalPrice || lead.basePrice || "0");
+      if (totalPriceUsd > 0) {
+        await recordRevenueSplit(totalPriceUsd, req.params.id, 'admin_confirmation');
+      }
+
       await db.update(leads)
         .set({ status: "dispatched" as any, lastQuoteUpdatedAt: new Date() })
         .where(eq(leads.id, req.params.id));
@@ -19044,6 +19089,10 @@ Thank you for your business!
       console.error('[CrewExpire] auto-expire error:', e);
     }
   }, 60_000);
+
+  // ── Treasury Revenue Split Tracking ──────────────────────────────────────────
+  await ensureRevenueAllocationsTable();
+  console.log('💰 Revenue allocations table ready');
 
   // ── JCMOVES Lottery System ────────────────────────────────────────────────────
   await ensureLotteryTables();
@@ -20083,6 +20132,62 @@ Thank you for your business!
 
   const httpServer = createServer(app);
   return httpServer;
+}
+
+// ── Revenue split helpers ─────────────────────────────────────────────────────
+
+async function ensureRevenueAllocationsTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS revenue_allocations (
+      id SERIAL PRIMARY KEY,
+      lead_id TEXT,
+      payment_amount_usd NUMERIC(10,2) NOT NULL,
+      buyback_usd NUMERIC(10,2) NOT NULL,
+      staking_usd NUMERIC(10,2) NOT NULL,
+      jackpot_usd NUMERIC(10,2) NOT NULL,
+      liquidity_usd NUMERIC(10,2) NOT NULL,
+      source TEXT NOT NULL DEFAULT 'square_payment',
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_revenue_allocations_lead ON revenue_allocations(lead_id);
+  `);
+}
+
+/**
+ * Record a 40/30/20/10 revenue split when a customer payment is confirmed.
+ * Non-fatal — all errors are caught and logged only.
+ */
+async function recordRevenueSplit(
+  paymentAmountUsd: number,
+  leadId: string | null,
+  source: string = 'square_payment'
+): Promise<void> {
+  try {
+    const buyback   = Math.round(paymentAmountUsd * 0.40 * 100) / 100;
+    const staking   = Math.round(paymentAmountUsd * 0.30 * 100) / 100;
+    const jackpot   = Math.round(paymentAmountUsd * 0.20 * 100) / 100;
+    const liquidity = Math.round(paymentAmountUsd * 0.10 * 100) / 100;
+
+    await pool.query(
+      `INSERT INTO revenue_allocations
+         (lead_id, payment_amount_usd, buyback_usd, staking_usd, jackpot_usd, liquidity_usd, source)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [leadId, paymentAmountUsd, buyback, staking, jackpot, liquidity, source]
+    );
+
+    // Credit the buyback fund (token buy-pressure reserve)
+    const [fundRow] = await db.select().from(buybackFund).limit(1);
+    if (fundRow) {
+      await db.update(buybackFund).set({
+        lastUpdated: new Date(),
+        feeContributionCount: (fundRow.feeContributionCount ?? 0) + 1,
+      }).where(eq(buybackFund.id, fundRow.id));
+    }
+
+    console.log(`💰 Revenue split recorded: $${paymentAmountUsd} → buyback $${buyback} / staking $${staking} / jackpot $${jackpot} / liquidity $${liquidity} (lead: ${leadId || 'N/A'})`);
+  } catch (err) {
+    console.error(`⚠️ recordRevenueSplit failed (non-fatal):`, err);
+  }
 }
 
 // ── Lottery helpers (module-level) ────────────────────────────────────────────
