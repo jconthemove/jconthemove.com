@@ -40,8 +40,9 @@ import lawnCareRouter from "./routes/lawnCare";
 const STAKING_TREASURY_USER_ID = "staking-treasury-system";
 
 /**
- * Silently grants lottery tickets for an activity (booking or job completion).
- * If there is no open round for the requested type, the function returns without error.
+ * Grants lottery tickets for an activity (booking or job completion).
+ * If there is no open round for the requested type, auto-creates a standard 7-day weekly
+ * (or 30-day monthly) round so the ticket is never lost.
  * Never throws — all errors are caught and logged only.
  */
 async function grantLotteryTicketsForActivity(
@@ -51,11 +52,30 @@ async function grantLotteryTicketsForActivity(
   roundType: 'weekly' | 'monthly' = 'weekly'
 ): Promise<void> {
   try {
-    const { rows: roundRows } = await pool.query(
+    let { rows: roundRows } = await pool.query(
       `SELECT * FROM lottery_rounds WHERE status='open' AND round_type=$1 ORDER BY id LIMIT 1`,
       [roundType]
     );
-    if (!roundRows.length) return; // No active round — silently skip
+
+    // Auto-create a round if none is open so the ticket is never lost
+    if (!roundRows.length) {
+      const durationDays = roundType === 'monthly' ? 30 : 7;
+      const seedAmount   = roundType === 'monthly' ? 2000 : 500;
+      const { rows: created } = await pool.query(
+        `INSERT INTO lottery_rounds
+           (round_type, status, start_time, end_time, seed_amount, tickets_sold, total_entries,
+            winner_pool, burn_pool, treasury_pool, displayed_jackpot, round_number)
+         VALUES ($1, 'open', NOW(), NOW() + ($2 || ' days')::interval,
+                 $3, 0, 0,
+                 ROUND($3 * 0.70), ROUND($3 * 0.05), ROUND($3 * 0.25), $3,
+                 COALESCE((SELECT MAX(round_number) FROM lottery_rounds WHERE round_type=$1), 0) + 1)
+         RETURNING *`,
+        [roundType, durationDays, seedAmount]
+      );
+      roundRows = created;
+      console.log(`🎟️ Auto-created ${roundType} lottery round #${created[0]?.round_number}`);
+    }
+
     const round = roundRows[0];
 
     // Atomically claim a ticket range
@@ -3661,8 +3681,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ? parseFloat(settings[0].tokenAmount)
           : 250; // Default 250 JCMOVES
         
-        // Find existing user by email or create placeholder for future registration
-        let existingUser = await db.select().from(users).where(eq(users.email, lead.email)).limit(1);
+        // Find existing user by email (case-insensitive to avoid mismatch)
+        const { rows: existingUserRows } = await pool.query(
+          `SELECT * FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+          [lead.email.trim()]
+        );
+        const existingUser = existingUserRows;
         
         if (existingUser.length > 0) {
           // Award tokens to existing account
@@ -3765,7 +3789,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ? parseFloat(settings[0].tokenAmount)
           : 250;
 
-        const existingUser = await db.select().from(users).where(eq(users.email, lead.email)).limit(1);
+        const { rows: mktUserRows } = await pool.query(
+          `SELECT * FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+          [lead.email.trim()]
+        );
+        const existingUser = mktUserRows;
         if (existingUser.length > 0) {
           await storage.creditWalletTokens(existingUser[0].id, bonusTokens);
           await db.insert(rewards).values({
