@@ -201,18 +201,16 @@ export default function CustomerHomePage() {
               </span>
               <span className="text-[10px] text-zinc-500 font-medium">JCMOVES</span>
             </button>
-            {cashBalance > 0 && (
-              <button
-                onClick={() => setLocation("/rewards")}
-                className="flex items-center gap-1.5 bg-emerald-950/60 border border-emerald-500/30 rounded-lg px-2.5 py-1"
-              >
-                <DollarSign className="h-3 w-3 text-emerald-400" />
-                <span className="text-xs font-bold text-emerald-300">
-                  {cashBalance.toFixed(2)}
-                </span>
-                <span className="text-[9px] text-emerald-600 font-medium">USD Credit</span>
-              </button>
-            )}
+            <button
+              onClick={() => setLocation("/rewards")}
+              className="flex items-center gap-1.5 bg-emerald-950/60 border border-emerald-500/30 rounded-lg px-2.5 py-1"
+            >
+              <DollarSign className="h-3 w-3 text-emerald-400" />
+              <span className="text-xs font-bold text-emerald-300">
+                {cashBalance.toFixed(2)}
+              </span>
+              <span className="text-[9px] text-emerald-600 font-medium">USD Credit</span>
+            </button>
           </div>
         </div>
 

@@ -613,16 +613,17 @@ export default function RewardsMarketplacePage() {
                     </div>
                     <div className="text-[10px] text-muted-foreground">JCMOVES</div>
                   </div>
-                  {cashBalance > 0 && (
-                    <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-xl px-4 py-2.5 text-center min-w-[120px]">
-                      <div className="text-[10px] text-emerald-600 mb-0.5">Service Credit</div>
-                      <div className="flex items-center justify-center gap-1">
-                        <DollarSign className="h-3.5 w-3.5 text-emerald-400" />
-                        <span className="text-base font-bold text-emerald-300">{cashBalance.toFixed(2)}</span>
-                      </div>
-                      <div className="text-[9px] text-emerald-700">JCMOVES USD</div>
+                  <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-xl px-4 py-2.5 text-center min-w-[120px]">
+                    <div className="text-[10px] text-emerald-600 mb-0.5">Service Credit</div>
+                    <div className="flex items-center justify-center gap-1">
+                      <DollarSign className="h-3.5 w-3.5 text-emerald-400" />
+                      <span className="text-base font-bold text-emerald-300">{cashBalance.toFixed(2)}</span>
                     </div>
-                  )}
+                    <div className="text-[9px] text-emerald-700">JCMOVES USD</div>
+                  </div>
+                  <div className="text-[9px] text-emerald-700/70 text-center px-1 leading-tight">
+                    1 JCMOVES USD = $1.00 · redeemable on future bookings.
+                  </div>
                 </div>
                 {nextGoal && (
                   <div className="bg-card border border-border rounded-xl px-4 py-3 min-w-[160px]">

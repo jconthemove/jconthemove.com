@@ -13675,8 +13675,19 @@ Thank you for your business!
         return res.status(503).json({ error: "Square is not configured" });
       }
 
+      const prevStatus = invoice.status;
       const newStatus = await squareInvoiceService.syncInvoiceStatus(invoice.squareInvoiceId);
-      
+
+      // If status just transitioned to paid, mint JCMOVES USD and record revenue split
+      if (newStatus === 'paid' && prevStatus !== 'paid' && invoice.leadId) {
+        const lead = await storage.getLead(invoice.leadId);
+        const amountUsd = parseFloat(lead?.totalPrice || lead?.basePrice || invoice.amount || "0");
+        if (amountUsd > 0) {
+          await recordRevenueSplit(amountUsd, invoice.leadId, 'invoice_sync');
+          await creditJcMovesUsd(invoice.leadId, amountUsd, 'invoice_sync');
+        }
+      }
+
       res.json({ success: true, status: newStatus });
     } catch (error: any) {
       console.error("Error syncing invoice:", error);
@@ -20319,17 +20330,27 @@ async function creditJcMovesUsd(
       [userId]
     );
 
-    // Credit cash_balance
-    await pool.query(
-      `UPDATE wallet_accounts SET cash_balance = cash_balance + $1 WHERE user_id = $2`,
+    // Credit cash_balance and read back the new balance for the ledger entry
+    const { rows: updatedRows } = await pool.query(
+      `UPDATE wallet_accounts SET cash_balance = cash_balance + $1 WHERE user_id = $2
+       RETURNING cash_balance`,
       [amountUsd.toFixed(2), userId]
     );
+    const balanceAfter = updatedRows[0]?.cash_balance ?? amountUsd.toFixed(2);
 
-    // Record in rewards table for ledger + idempotency
+    // Record in rewards table for idempotency guard (one row per lead)
     await pool.query(
       `INSERT INTO rewards (user_id, reward_type, token_amount, cash_value, status, reference_id, metadata)
        VALUES ($1, 'jcmoves_usd_mint', '0', $2, 'confirmed', $3, $4)`,
       [userId, amountUsd.toFixed(2), leadId, JSON.stringify({ source, leadId })]
+    );
+
+    // Write wallet_transactions ledger entry (type = jcmoves_usd_mint)
+    // user_wallet_id is nullable — we use null since this is cash_balance, not the crypto wallet
+    await pool.query(
+      `INSERT INTO wallet_transactions (transaction_type, amount, balance_after, status, metadata)
+       VALUES ('jcmoves_usd_mint', $1, $2, 'confirmed', $3::jsonb)`,
+      [amountUsd.toFixed(2), balanceAfter, JSON.stringify({ userId, leadId, source, currency: 'JCMOVES_USD' })]
     );
 
     console.log(`[JCMOVES USD] Minted $${amountUsd.toFixed(2)} credit for user ${userId} (lead ${leadId}, source: ${source})`);
