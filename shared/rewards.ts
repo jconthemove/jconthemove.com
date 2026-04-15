@@ -13,10 +13,10 @@ export const EARN_RATE_PER_DOLLAR = 15;
 // ── Redemption rate ───────────────────────────────────────────────────────────
 /**
  * Platform redemption rate: 500 JCMOVES = $1.00 service credit.
- * This is the INTERNAL platform rate. Do NOT use the live market/DexScreener
- * price for any customer-facing redemption display.
+ * Canonical source: shared/tokenRedemptionRules.ts — re-exported here for
+ * backward-compatible imports from shared/rewards.
  */
-export const PLATFORM_REDEEM_RATE = 500; // tokens per $1.00
+export { PLATFORM_REDEEM_RATE } from "./tokenRedemptionRules";
 
 // ── Service bonuses ──────────────────────────────────────────────────────────
 /**

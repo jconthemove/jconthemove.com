@@ -37,7 +37,7 @@ import { ensureMomsAccount } from "./services/generosityFund";
 import { dispatchGenericJob } from "./services/dispatchGeneric";
 import { grantLotteryTicketsForActivity } from "./services/disburse-job-tokens";
 import { getDepositInfo, extractZip } from "@shared/depositRules";
-import { MIN_REDEMPTION_TOKENS } from "@shared/tokenRedemptionRules";
+import { MIN_REDEMPTION_TOKENS, REDEMPTION_INCREMENT, roundToIncrement } from "@shared/tokenRedemptionRules";
 import lawnCareRouter from "./routes/lawnCare";
 
 const STAKING_TREASURY_USER_ID = "staking-treasury-system";
@@ -13845,13 +13845,12 @@ Thank you for your business!
                 await storage.updateLeadStatus(localInvoice.leadId, "paid");
                 console.log(`[Square webhook] Lead ${localInvoice.leadId} status updated to paid`);
 
-                // Record revenue split on payment confirmation
-                const paymentAmountUsd = parseFloat(
-                  (invoice as Record<string, unknown>).total_money
-                    ? String(((invoice as Record<string, unknown>).total_money as Record<string, unknown>)?.amount ?? 0)
-                    : (lead.totalPrice ? String(lead.totalPrice) : "0")
-                );
-                const amountUsd = paymentAmountUsd > 100 ? paymentAmountUsd / 100 : paymentAmountUsd;
+                // Record revenue split on payment confirmation.
+                // Square total_money.amount is always in cents (smallest unit).
+                const squareCents = (invoice as any)?.total_money?.amount;
+                const amountUsd = typeof squareCents === 'number' && squareCents > 0
+                  ? squareCents / 100
+                  : parseFloat(lead.totalPrice || "0");
                 if (amountUsd > 0) {
                   await recordRevenueSplit(amountUsd, localInvoice.leadId, 'square_payment');
                 }
@@ -16903,10 +16902,14 @@ Thank you for your business!
       // Check inventory
       if (itemRow.inventory !== null && itemRow.inventory <= 0) return res.status(400).json({ error: "Item out of stock" });
 
-      // Enforce minimum redemption floor (platform rule: 500 JCMOVES minimum)
+      // Enforce redemption rules: min 500 JCMOVES, cost must be a multiple of 500 (REDEMPTION_INCREMENT)
       const cost = itemRow.salePriceTokens ?? itemRow.tokenPrice;
       if (cost < MIN_REDEMPTION_TOKENS) {
         return res.status(400).json({ error: `Reward item cost must be at least ${MIN_REDEMPTION_TOKENS} JCMOVES` });
+      }
+      const normalizedCost = roundToIncrement(cost, REDEMPTION_INCREMENT);
+      if (normalizedCost !== cost) {
+        return res.status(400).json({ error: `Reward item cost must be a multiple of ${REDEMPTION_INCREMENT} JCMOVES. Got ${cost}, expected ${normalizedCost}.` });
       }
 
       // Check wallet balance
@@ -20163,6 +20166,18 @@ async function recordRevenueSplit(
   source: string = 'square_payment'
 ): Promise<void> {
   try {
+    // Idempotency guard: skip if a split was already recorded for this lead+source
+    if (leadId) {
+      const existing = await pool.query(
+        `SELECT id FROM revenue_allocations WHERE lead_id = $1 AND source = $2 LIMIT 1`,
+        [leadId, source]
+      );
+      if (existing.rows.length > 0) {
+        console.log(`💰 Revenue split already recorded for lead ${leadId} (${source}) — skipping duplicate`);
+        return;
+      }
+    }
+
     const buyback   = Math.round(paymentAmountUsd * 0.40 * 100) / 100;
     const staking   = Math.round(paymentAmountUsd * 0.30 * 100) / 100;
     const jackpot   = Math.round(paymentAmountUsd * 0.20 * 100) / 100;
