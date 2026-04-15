@@ -134,6 +134,8 @@ export interface Answers {
   snowAddons?: string[];
   // Move-In/Out Cleaning fields
   cleanHomeSize?: string;
+  cleanBathrooms?: string;
+  cleanAppliances?: string[];
   cleanType?: string;
   cleanAddons?: string[];
   // Light Demolition fields
@@ -730,6 +732,32 @@ const STEPS: Step[] = [
       "🏠 2 Bedrooms",
       "🏠 3 Bedrooms",
       "🏠 4 Bedrooms+",
+    ],
+    show: (a) => isCleaningService(a),
+  },
+  {
+    id: "cleanBathrooms",
+    question: "How many bathrooms does the home have?",
+    type: "choice",
+    options: [
+      "🚿 1 bathroom",
+      "🚿🚿 2 bathrooms",
+      "🚿🚿🚿 3 bathrooms",
+      "🚿+ 4+ bathrooms",
+    ],
+    show: (a) => isCleaningService(a),
+  },
+  {
+    id: "cleanAppliances",
+    question: "Any appliances or cabinets we should focus on?",
+    subtext: "Select all that apply — helps us estimate the scope.",
+    type: "multiselect",
+    options: [
+      "🍳 Inside oven",
+      "🧊 Inside refrigerator",
+      "🍽️ Inside dishwasher",
+      "🗄️ Inside kitchen cabinets",
+      "None / Not sure",
     ],
     show: (a) => isCleaningService(a),
   },
@@ -2348,6 +2376,8 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
         if (answers.snowDrivewayType) scopeParts.push(`Driveway: ${answers.snowDrivewayType}`);
         if (answers.snowAddons?.length) scopeParts.push(`Add-ons: ${answers.snowAddons.join(", ")}`);
         if (answers.cleanHomeSize) scopeParts.push(`Home size: ${answers.cleanHomeSize}`);
+        if (answers.cleanBathrooms) scopeParts.push(`Bathrooms: ${answers.cleanBathrooms}`);
+        if (answers.cleanAppliances?.length) scopeParts.push(`Appliances/cabinets: ${answers.cleanAppliances.join(", ")}`);
         if (answers.cleanType) scopeParts.push(`Clean type: ${answers.cleanType}`);
         if (answers.cleanAddons?.length) scopeParts.push(`Add-ons: ${answers.cleanAddons.join(", ")}`);
         if (answers.demoCrewSize) scopeParts.push(`Crew: ${answers.demoCrewSize}`);

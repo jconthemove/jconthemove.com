@@ -75,7 +75,7 @@ export default function DemolitionPage() {
             label: "Get a Quote",
             onClick: () => setShowChatbot(true),
             phoneNumber: "+19062859312",
-            colorClass: "bg-red-700 hover:bg-red-600",
+            colorClass: "bg-yellow-600 hover:bg-yellow-500 text-zinc-950",
           }}
         />
 
@@ -105,7 +105,7 @@ export default function DemolitionPage() {
           <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-3">Every Job Includes</p>
           {ALL_INCLUDES.map((item) => (
             <div key={item} className="flex items-center gap-2">
-              <CheckCircle2 className="h-3.5 w-3.5 text-red-400 flex-shrink-0" />
+              <CheckCircle2 className="h-3.5 w-3.5 text-yellow-400 flex-shrink-0" />
               <span className="text-zinc-300 text-sm">{item}</span>
             </div>
           ))}
@@ -135,7 +135,7 @@ export default function DemolitionPage() {
 
         <Button
           onClick={() => setShowChatbot(true)}
-          className="w-full h-13 bg-red-700 hover:bg-red-600 text-white font-bold text-sm rounded-2xl py-4"
+          className="w-full h-13 bg-yellow-600 hover:bg-yellow-500 text-zinc-950 font-bold text-sm rounded-2xl py-4"
         >
           Get a Demo Quote — Free Estimate
         </Button>

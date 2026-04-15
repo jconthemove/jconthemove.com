@@ -20,7 +20,9 @@ export function useSheetBackButton(isOpen: boolean, onClose: () => void) {
       window.removeEventListener("popstate", handlePop);
       if (pushedRef.current) {
         pushedRef.current = false;
-        window.history.back();
+        if (window.history.state?.sheetOpen) {
+          window.history.back();
+        }
       }
     };
   }, [isOpen]);

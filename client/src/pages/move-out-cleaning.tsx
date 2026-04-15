@@ -14,8 +14,8 @@ const PACKAGES = [
     desc: "Surface-level refresh — ideal before movers arrive or for recently vacated spaces",
     price: "From $120",
     tags: ["2–3 hrs", "1–2 crew"],
-    color: "from-purple-600/20 to-purple-900/10",
-    border: "border-purple-600/30",
+    color: "from-teal-600/20 to-teal-900/10",
+    border: "border-teal-600/30",
   },
   {
     label: "Deep Clean",
@@ -23,8 +23,8 @@ const PACKAGES = [
     desc: "Full top-to-bottom — inside appliances, baseboards, inside cabinets, all surfaces",
     price: "From $220",
     tags: ["4–6 hrs", "1–3 crew"],
-    color: "from-violet-600/20 to-violet-900/10",
-    border: "border-violet-500/50",
+    color: "from-teal-500/20 to-teal-900/10",
+    border: "border-teal-500/50",
     tag: "Most Popular",
   },
   {
@@ -33,8 +33,8 @@ const PACKAGES = [
     desc: "Everything in Deep Clean plus carpet treatment, window cleaning, and garage/basement",
     price: "From $350",
     tags: ["6–8 hrs", "2–3 crew"],
-    color: "from-fuchsia-600/20 to-fuchsia-900/10",
-    border: "border-fuchsia-600/30",
+    color: "from-cyan-600/20 to-cyan-900/10",
+    border: "border-cyan-600/30",
     tag: "Best Value",
   },
 ];
@@ -99,7 +99,7 @@ export default function MoveOutCleaningPage() {
             label: "Get a Quote",
             onClick: () => setShowChatbot(true),
             phoneNumber: "+19062859312",
-            colorClass: "bg-purple-600 hover:bg-purple-500",
+            colorClass: "bg-teal-700 hover:bg-teal-600",
           }}
         />
 
@@ -112,7 +112,7 @@ export default function MoveOutCleaningPage() {
                 className={`relative rounded-2xl bg-gradient-to-br ${pkg.color} border ${pkg.border} p-4`}
               >
                 {pkg.tag && (
-                  <span className="absolute top-3 right-3 text-[9px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-full uppercase tracking-wide">
+                  <span className="absolute top-3 right-3 text-[9px] font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30 px-2 py-0.5 rounded-full uppercase tracking-wide">
                     {pkg.tag}
                   </span>
                 )}
@@ -138,7 +138,7 @@ export default function MoveOutCleaningPage() {
           <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-3">Deep Clean Includes</p>
           {ALL_INCLUDES.map((item) => (
             <div key={item} className="flex items-center gap-2">
-              <CheckCircle2 className="h-3.5 w-3.5 text-purple-400 flex-shrink-0" />
+              <CheckCircle2 className="h-3.5 w-3.5 text-teal-400 flex-shrink-0" />
               <span className="text-zinc-300 text-sm">{item}</span>
             </div>
           ))}
@@ -168,7 +168,7 @@ export default function MoveOutCleaningPage() {
 
         <Button
           onClick={() => setShowChatbot(true)}
-          className="w-full h-13 bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm rounded-2xl py-4"
+          className="w-full h-13 bg-teal-700 hover:bg-teal-600 text-white font-bold text-sm rounded-2xl py-4"
         >
           Book a Cleaning — Get My Quote
         </Button>

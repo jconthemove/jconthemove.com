@@ -9,29 +9,33 @@ import { useSheetBackButton } from "@/hooks/useSheetBackButton";
 
 const PACKAGES = [
   {
-    label: "One-Time Cleanup",
-    emoji: "🍂",
-    desc: "Single visit to get your yard back in shape — mow, trim, and blow",
-    tags: ["1–2 hrs", "1–2 crew"],
+    label: "Basic",
+    emoji: "🌿",
+    desc: "Mow & blow — quick clean cut with clippings cleared. Best for maintained lawns.",
+    price: "From $45",
+    tags: ["45–75 min", "1–2 crew"],
     color: "from-green-600/20 to-green-900/10",
     border: "border-green-600/30",
   },
   {
-    label: "Weekly Service",
-    emoji: "📅",
-    desc: "Regular weekly mowing, trim & edge — best rate for ongoing care",
-    tags: ["Recurring", "Best Value"],
+    label: "Standard",
+    emoji: "✂️",
+    desc: "Mow + trim & edge along walks, drives, and beds + blow clean.",
+    price: "From $75",
+    tags: ["1–2 hrs", "1–2 crew"],
     color: "from-emerald-600/20 to-emerald-900/10",
     border: "border-emerald-500/50",
     tag: "Most Popular",
   },
   {
-    label: "Full Service",
+    label: "Premium",
     emoji: "🏡",
-    desc: "Mowing + trimming + edging + blowing + any add-ons — everything in one visit",
-    tags: ["1–3 hrs", "1–2 crew"],
+    desc: "Everything in Standard plus leaf removal, fertilization check, and hedge trim.",
+    price: "From $130",
+    tags: ["2–3 hrs", "1–2 crew"],
     color: "from-teal-600/20 to-teal-900/10",
     border: "border-teal-600/30",
+    tag: "Best Value",
   },
 ];
 
@@ -120,6 +124,7 @@ export default function LawnCarePage() {
                       {pkg.tags.map((t) => (
                         <span key={t} className="text-[10px] font-semibold text-zinc-400 bg-zinc-800/60 px-2 py-0.5 rounded-full">{t}</span>
                       ))}
+                      {pkg.price && <span className="text-green-300 text-xs font-bold ml-auto">{pkg.price}</span>}
                     </div>
                   </div>
                 </div>
