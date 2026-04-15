@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useLocation } from "wouter";
-import { Leaf, CheckCircle2, Clock, Users, ChevronLeft, Phone, MessageCircle, Calendar } from "lucide-react";
+import { Clock, Users, ChevronLeft, Calendar, MessageCircle } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { BookingChatbot } from "@/components/booking-chatbot";
 import { Button } from "@/components/ui/button";
@@ -85,24 +85,18 @@ export default function LawnCarePage() {
             { icon: Users, value: "1–2 crew", label: "per job" },
             { icon: Calendar, value: "Weekly", label: "plans avail." },
           ]}
+          howItWorks={[
+            { step: "1", label: "Fill out your free quote" },
+            { step: "2", label: "Darrell contacts you" },
+            { step: "3", label: "Crew shows up" },
+          ]}
+          cta={{
+            label: "Get a Free Quote",
+            onClick: () => setShowChatbot(true),
+            phoneNumber: "+19062859312",
+            colorClass: "bg-green-700 hover:bg-green-600",
+          }}
         />
-
-        <div className="flex gap-3">
-          <Button
-            onClick={() => setShowChatbot(true)}
-            className="flex-1 h-12 bg-green-700 hover:bg-green-600 text-white font-bold text-sm rounded-2xl"
-          >
-            <MessageCircle className="h-4 w-4 mr-2" />
-            Get a Free Quote
-          </Button>
-          <Button
-            onClick={() => window.open("tel:+19062859312", "_self")}
-            variant="outline"
-            className="h-12 px-4 border-zinc-700 text-zinc-300 hover:text-white rounded-2xl"
-          >
-            <Phone className="h-4 w-4" />
-          </Button>
-        </div>
 
         <div>
           <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-3">Packages</h2>

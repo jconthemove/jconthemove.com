@@ -179,6 +179,8 @@ export interface Answers {
   lawnServices?: string[];
   lawnFrequency?: string;
   lawnCondition?: string;
+  // Moving crew preference
+  crewPreference?: string;
 }
 
 export interface MovingQuote {
@@ -1160,12 +1162,28 @@ const STEPS: Step[] = [
     },
   },
 
+  // ── MOVING CREW PREFERENCE ────────────────────────────────────────────────
+  {
+    id: "crewPreference",
+    question: "How would you like to handle your crew?",
+    subtext: "Choosing your own crew lets you pick availability and movers. We can also assign the best crew for your job.",
+    type: "choice",
+    options: [
+      "🧑‍🤝‍🧑 Choose my own crew",
+      "✅ Assign the best crew for me",
+    ],
+    show: (a) => isMovingService(a) && isPriceableService(a) && !isQuoteOnlyService(a),
+  },
+
   // ── PACKAGE SELECTION (priceable services) ────────────────────────────────
   {
     id: "selectedPackage",
     question: "Choose your crew package:",
     type: "package_select",
-    show: (a) => isPriceableService(a) && !isQuoteOnlyService(a),
+    show: (a) =>
+      isPriceableService(a) &&
+      !isQuoteOnlyService(a) &&
+      (!isMovingService(a) || (a.crewPreference || "").includes("Choose my own crew")),
   },
 
   // ── PROMO CODE (moving & junk — after package select, near the end) ───────
@@ -2364,6 +2382,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
         if (answers.roofingWasteRemoval) scopeParts.push(`Waste removal: ${answers.roofingWasteRemoval}`);
         if (answers.roofingMaterials) scopeParts.push(`Roofing materials: ${answers.roofingMaterials}`);
         if (answers.jobScope) scopeParts.push(answers.jobScope);
+        if (answers.crewPreference) scopeParts.push(`Crew: ${answers.crewPreference}`);
         if (answers.lawnPropertySize) scopeParts.push(`Lawn size: ${answers.lawnPropertySize}`);
         if (answers.lawnServices?.length) scopeParts.push(`Services: ${answers.lawnServices.join(", ")}`);
         if (answers.lawnFrequency) scopeParts.push(`Frequency: ${answers.lawnFrequency}`);

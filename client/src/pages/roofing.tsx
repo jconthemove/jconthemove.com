@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useLocation } from "wouter";
-import { Home, CheckCircle2, Clock, Users, ChevronLeft, Phone, MessageCircle, AlertTriangle } from "lucide-react";
+import { Home, CheckCircle2, Clock, Users, ChevronLeft, MessageCircle, AlertTriangle } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { BookingChatbot } from "@/components/booking-chatbot";
 import { Button } from "@/components/ui/button";
@@ -65,6 +65,17 @@ export default function RoofingPage() {
             { icon: Users, value: "2–4 crew", label: "per job" },
             { icon: Home, value: "Free", label: "estimate" },
           ]}
+          howItWorks={[
+            { step: "1", label: "Free on-site inspection" },
+            { step: "2", label: "Written estimate" },
+            { step: "3", label: "We roof it right" },
+          ]}
+          cta={{
+            label: "Get a Free Estimate",
+            onClick: () => setShowChatbot(true),
+            phoneNumber: "+19062859312",
+            colorClass: "bg-stone-600 hover:bg-stone-500",
+          }}
         />
 
         <div className="flex items-start gap-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 px-4 py-3">
@@ -72,23 +83,6 @@ export default function RoofingPage() {
           <p className="text-amber-300 text-xs">
             <span className="font-bold">Out-of-area note:</span> Jobs outside Ironwood/Gogebic County require a $100 estimate deposit (credited toward your project if booked within 6 months).
           </p>
-        </div>
-
-        <div className="flex gap-3">
-          <Button
-            onClick={() => setShowChatbot(true)}
-            className="flex-1 h-12 bg-stone-600 hover:bg-stone-500 text-white font-bold text-sm rounded-2xl"
-          >
-            <MessageCircle className="h-4 w-4 mr-2" />
-            Get a Free Estimate
-          </Button>
-          <Button
-            onClick={() => window.open("tel:+19062859312", "_self")}
-            variant="outline"
-            className="h-12 px-4 border-zinc-700 text-zinc-300 hover:text-white rounded-2xl"
-          >
-            <Phone className="h-4 w-4" />
-          </Button>
         </div>
 
         <div>

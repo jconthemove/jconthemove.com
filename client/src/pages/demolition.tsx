@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useLocation } from "wouter";
-import { HardHat, CheckCircle2, Clock, Users, ChevronLeft, Phone, MessageCircle, AlertTriangle, Truck } from "lucide-react";
+import { CheckCircle2, Clock, Users, ChevronLeft, MessageCircle, AlertTriangle, Truck } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { BookingChatbot } from "@/components/booking-chatbot";
 import { Button } from "@/components/ui/button";
@@ -66,6 +66,17 @@ export default function DemolitionPage() {
             { icon: Users, value: "2–4 crew", label: "as needed" },
             { icon: Truck, value: "We Haul", label: "all debris" },
           ]}
+          howItWorks={[
+            { step: "1", label: "Free quote & hazard check" },
+            { step: "2", label: "Schedule crew" },
+            { step: "3", label: "We demo & haul" },
+          ]}
+          cta={{
+            label: "Get a Quote",
+            onClick: () => setShowChatbot(true),
+            phoneNumber: "+19062859312",
+            colorClass: "bg-red-700 hover:bg-red-600",
+          }}
         />
 
         <div className="flex items-start gap-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 px-4 py-3">
@@ -73,23 +84,6 @@ export default function DemolitionPage() {
           <p className="text-amber-300 text-xs">
             <span className="font-bold">Hazard screening required:</span> We check for mold, asbestos, and pests before starting. Jobs with confirmed hazards require certified remediation before demo work.
           </p>
-        </div>
-
-        <div className="flex gap-3">
-          <Button
-            onClick={() => setShowChatbot(true)}
-            className="flex-1 h-12 bg-red-700 hover:bg-red-600 text-white font-bold text-sm rounded-2xl"
-          >
-            <MessageCircle className="h-4 w-4 mr-2" />
-            Get a Quote
-          </Button>
-          <Button
-            onClick={() => window.open("tel:+19062859312", "_self")}
-            variant="outline"
-            className="h-12 px-4 border-zinc-700 text-zinc-300 hover:text-white rounded-2xl"
-          >
-            <Phone className="h-4 w-4" />
-          </Button>
         </div>
 
         <div>

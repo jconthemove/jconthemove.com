@@ -1,10 +1,23 @@
-import { type LucideIcon, CheckCircle2, ShieldCheck } from "lucide-react";
+import { type LucideIcon, CheckCircle2, ShieldCheck, ChevronRight, Phone } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface PlacardStat {
   icon: LucideIcon;
   value: string;
   label: string;
+}
+
+export interface PlacardHowItWorksStep {
+  step: string;
+  label: string;
+}
+
+export interface PlacardCta {
+  label: string;
+  onClick: () => void;
+  phoneNumber?: string;
+  colorClass?: string;
+  hoverClass?: string;
 }
 
 export interface ServicePlacardTheme {
@@ -16,6 +29,8 @@ export interface ServicePlacardTheme {
   featuresBorderColor: string;
   statsBorderColor: string;
   featureIcon?: "check" | "shield";
+  howItWorksBg?: string;
+  howItWorksBorder?: string;
 }
 
 export interface ServicePlacardProps {
@@ -27,6 +42,8 @@ export interface ServicePlacardProps {
   featuresLabel: string;
   features: string[];
   stats: PlacardStat[];
+  howItWorks?: PlacardHowItWorksStep[];
+  cta?: PlacardCta;
 }
 
 const THEMES: Record<string, ServicePlacardTheme> = {
@@ -38,6 +55,8 @@ const THEMES: Record<string, ServicePlacardTheme> = {
     subheadlineGlowRgba: "rgba(192,132,252,0.4)",
     featuresBorderColor: "rgba(168,85,247,0.2)",
     statsBorderColor: "rgba(168,85,247,0.15)",
+    howItWorksBg: "rgba(168,85,247,0.06)",
+    howItWorksBorder: "rgba(168,85,247,0.2)",
   },
   roofing: {
     gradient: "linear-gradient(160deg, #1c1a16 0%, #2e2a20 35%, #1a1710 65%, #0d0b08 100%)",
@@ -48,6 +67,8 @@ const THEMES: Record<string, ServicePlacardTheme> = {
     featuresBorderColor: "rgba(120,113,108,0.25)",
     statsBorderColor: "rgba(120,113,108,0.15)",
     featureIcon: "shield",
+    howItWorksBg: "rgba(120,113,108,0.06)",
+    howItWorksBorder: "rgba(120,113,108,0.2)",
   },
   demolition: {
     gradient: "linear-gradient(160deg, #1c0a0a 0%, #2e1010 35%, #1a0808 65%, #0d0404 100%)",
@@ -57,6 +78,8 @@ const THEMES: Record<string, ServicePlacardTheme> = {
     subheadlineGlowRgba: "rgba(248,113,113,0.4)",
     featuresBorderColor: "rgba(239,68,68,0.2)",
     statsBorderColor: "rgba(239,68,68,0.15)",
+    howItWorksBg: "rgba(239,68,68,0.06)",
+    howItWorksBorder: "rgba(239,68,68,0.2)",
   },
   lawn: {
     gradient: "linear-gradient(160deg, #071c0a 0%, #0d2e12 35%, #071808 65%, #030d04 100%)",
@@ -66,6 +89,8 @@ const THEMES: Record<string, ServicePlacardTheme> = {
     subheadlineGlowRgba: "rgba(74,222,128,0.4)",
     featuresBorderColor: "rgba(34,197,94,0.2)",
     statsBorderColor: "rgba(34,197,94,0.15)",
+    howItWorksBg: "rgba(34,197,94,0.06)",
+    howItWorksBorder: "rgba(34,197,94,0.2)",
   },
 };
 
@@ -82,6 +107,8 @@ export default function ServicePlacard({
   featuresLabel,
   features,
   stats,
+  howItWorks,
+  cta,
 }: ServicePlacardProps) {
   const FeatureIcon = theme.featureIcon === "shield" ? ShieldCheck : CheckCircle2;
 
@@ -148,6 +175,59 @@ export default function ServicePlacard({
             </div>
           ))}
         </div>
+
+        {howItWorks && howItWorks.length > 0 && (
+          <div
+            className="rounded-2xl px-4 py-3"
+            style={{
+              background: theme.howItWorksBg ?? "rgba(255,255,255,0.05)",
+              border: `1px solid ${theme.howItWorksBorder ?? theme.featuresBorderColor}`,
+            }}
+          >
+            <p className={cn("text-[10px] font-black uppercase tracking-widest mb-2.5", theme.accentColor)}>
+              How It Works
+            </p>
+            <div className="flex items-start gap-1">
+              {howItWorks.map((s, i) => (
+                <div key={i} className="flex-1 flex flex-col items-center text-center">
+                  <div
+                    className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black mb-1"
+                    style={{ background: theme.howItWorksBg ?? "rgba(255,255,255,0.1)", border: `1px solid ${theme.howItWorksBorder ?? theme.featuresBorderColor}` }}
+                  >
+                    <span className={theme.accentColor}>{s.step}</span>
+                  </div>
+                  <p className="text-zinc-300 text-[9px] leading-snug">{s.label}</p>
+                  {i < howItWorks.length - 1 && (
+                    <ChevronRight className="h-3 w-3 text-zinc-600 absolute" style={{ right: `calc(${100 / howItWorks.length}% * ${i + 1} - 6px)`, top: "50%" }} />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {cta && (
+          <div className="flex gap-2">
+            <button
+              onClick={cta.onClick}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 h-12 rounded-2xl font-bold text-sm text-white transition-colors",
+                cta.colorClass ?? "bg-teal-700 hover:bg-teal-600",
+                cta.hoverClass,
+              )}
+            >
+              {cta.label}
+            </button>
+            {cta.phoneNumber && (
+              <button
+                onClick={() => window.open(`tel:${cta.phoneNumber}`, "_self")}
+                className="h-12 px-4 rounded-2xl border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors"
+              >
+                <Phone className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

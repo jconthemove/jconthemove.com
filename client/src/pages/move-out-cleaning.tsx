@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useLocation } from "wouter";
-import { Sparkles, CheckCircle2, Clock, Users, ChevronLeft, Phone, MessageCircle } from "lucide-react";
+import { Sparkles, CheckCircle2, Clock, Users, ChevronLeft, MessageCircle } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { BookingChatbot } from "@/components/booking-chatbot";
 import { Button } from "@/components/ui/button";
@@ -90,24 +90,18 @@ export default function MoveOutCleaningPage() {
             { icon: Users, value: "1–3 crew", label: "per job size" },
             { icon: Sparkles, value: "From $120", label: "standard clean" },
           ]}
+          howItWorks={[
+            { step: "1", label: "Pick your package" },
+            { step: "2", label: "We confirm & schedule" },
+            { step: "3", label: "Crew cleans & you inspect" },
+          ]}
+          cta={{
+            label: "Get a Quote",
+            onClick: () => setShowChatbot(true),
+            phoneNumber: "+19062859312",
+            colorClass: "bg-purple-600 hover:bg-purple-500",
+          }}
         />
-
-        <div className="flex gap-3">
-          <Button
-            onClick={() => setShowChatbot(true)}
-            className="flex-1 h-12 bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm rounded-2xl"
-          >
-            <MessageCircle className="h-4 w-4 mr-2" />
-            Get a Quote
-          </Button>
-          <Button
-            onClick={() => window.open("tel:+19062859312", "_self")}
-            variant="outline"
-            className="h-12 px-4 border-zinc-700 text-zinc-300 hover:text-white rounded-2xl"
-          >
-            <Phone className="h-4 w-4" />
-          </Button>
-        </div>
 
         <div>
           <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-3">Packages</h2>

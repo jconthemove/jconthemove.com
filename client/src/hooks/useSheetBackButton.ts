@@ -1,14 +1,27 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 export function useSheetBackButton(isOpen: boolean, onClose: () => void) {
+  const pushedRef = useRef(false);
+
   useEffect(() => {
-    if (isOpen) {
-      window.history.pushState({ sheetOpen: true }, "");
-    }
+    if (!isOpen) return;
+
+    window.history.pushState({ sheetOpen: true }, "");
+    pushedRef.current = true;
+
     function handlePop() {
-      if (isOpen) onClose();
+      pushedRef.current = false;
+      onClose();
     }
+
     window.addEventListener("popstate", handlePop);
-    return () => window.removeEventListener("popstate", handlePop);
-  }, [isOpen, onClose]);
+
+    return () => {
+      window.removeEventListener("popstate", handlePop);
+      if (pushedRef.current) {
+        pushedRef.current = false;
+        window.history.back();
+      }
+    };
+  }, [isOpen]);
 }
