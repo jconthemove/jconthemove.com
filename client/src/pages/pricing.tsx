@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Truck, Trash2, Snowflake, Sparkles, Wrench, HardHat, Layers, PaintBucket,
   Droplets, Leaf, RefreshCcw, Phone, ChevronDown, ChevronUp,
-  CheckCircle2, ArrowRight, Users, Clock, Info, DollarSign, Zap,
+  CheckCircle2, ArrowRight, Users, Clock, Info, DollarSign, Zap, Tag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -139,6 +139,14 @@ export default function PricingPage() {
       </div>
 
       <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
+
+        {/* ── BUNDLE DISCOUNT BADGE ───────────────────────────────────────────── */}
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/25">
+          <Tag className="h-3.5 w-3.5 text-emerald-400 flex-shrink-0" />
+          <p className="text-xs text-emerald-300 font-medium">
+            Bundle 2+ services and save — ask about combo pricing when you book.
+          </p>
+        </div>
 
         {/* ── MOVING ─────────────────────────────────────────────────────────── */}
         <ServiceSection
@@ -468,6 +476,7 @@ export default function PricingPage() {
             ))}
           </div>
           <QuoteOnlyNote color="text-pink-400" />
+          <DepositFineprint />
         </ServiceSection>
 
         {/* ── OTHER SERVICES ─────────────────────────────────────────────────── */}
@@ -498,6 +507,9 @@ export default function PricingPage() {
             ))}
           </div>
           <QuoteOnlyNote color="text-yellow-400" />
+          <p className="text-[10px] text-slate-500 mt-2.5 leading-snug">
+            * Flooring installations require a 50% deposit at job start to cover materials. Remaining balance due upon completion.
+          </p>
         </ServiceSection>
 
         {/* ── CALL TO ACTION ──────────────────────────────────────────────────── */}
@@ -602,5 +614,13 @@ function QuoteOnlyNote({ color }: { color: string }) {
         Pricing varies by project scope. Tap <span className="text-white font-semibold">Get Quote</span> or call us — we'll give you a free, no-pressure estimate within 24 hours.
       </span>
     </div>
+  );
+}
+
+function DepositFineprint() {
+  return (
+    <p className="text-[10px] text-slate-500 mt-2.5 leading-snug">
+      * A 50% deposit is collected at job start to secure materials and scheduling. Remaining balance due upon completion.
+    </p>
   );
 }

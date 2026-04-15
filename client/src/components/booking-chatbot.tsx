@@ -1908,6 +1908,10 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
       if (!saved) return;
       const d = JSON.parse(saved);
       if (!d.answers || d.stepIdx == null) return;
+      if (d.savedAt && Date.now() - d.savedAt > 5 * 60 * 1000) {
+        localStorage.removeItem(STORAGE_KEY);
+        return;
+      }
       setAnswers(d.answers);
       if (Array.isArray(d.messages) && d.messages.length > 0) setMessages(d.messages);
       setStepIdx(d.stepIdx);
@@ -1931,6 +1935,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
     if (stepIdx === 0 && Object.keys(answers).length === 0) return;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        savedAt: Date.now(),
         answers,
         messages,
         stepIdx,

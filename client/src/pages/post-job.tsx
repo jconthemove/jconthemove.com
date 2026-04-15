@@ -1121,6 +1121,13 @@ export default function PostJobPage() {
               </div>
             </div>
 
+            {/* Deposit fine print for flooring / painting */}
+            {(form.serviceType === "flooring" || form.serviceType === "painting") && (
+              <p className="text-[10px] text-zinc-400 dark:text-zinc-500 leading-snug px-1">
+                * A 50% deposit is collected at job start to secure materials and scheduling. Remaining balance due upon completion.
+              </p>
+            )}
+
             {/* Promo code input */}
             <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 p-4 shadow-sm space-y-2">
               <label className="flex items-center gap-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
