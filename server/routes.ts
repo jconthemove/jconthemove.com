@@ -10946,24 +10946,36 @@ Thank you for your business!
     }
   });
 
-  // Community Top Earners — anonymized (first name only + wallet balance)
+  // Community Top Earners — anonymized (customers only, this week's rewards, first name + last initial)
   app.get("/api/gamification/top-earners", isAuthenticated, async (_req, res) => {
     try {
       const rows = await pool.query(`
-        SELECT u.first_name, wa.token_balance, u.loyalty_tier
-        FROM wallet_accounts wa
-        JOIN users u ON u.id = wa.user_id
-        WHERE u.role IN ('customer','employee')
-          AND wa.token_balance::numeric > 0
-        ORDER BY wa.token_balance::numeric DESC
+        SELECT u.first_name, u.last_name, u.loyalty_tier,
+               COALESCE(SUM(r.token_amount::numeric), 0) AS week_tokens
+        FROM users u
+        LEFT JOIN rewards r ON r.user_id = u.id
+          AND r.earned_date >= NOW() - INTERVAL '7 days'
+          AND r.status IN ('confirmed', 'redeemed')
+        WHERE u.role = 'customer'
+          AND u.status IN ('active', 'approved')
+        GROUP BY u.id, u.first_name, u.last_name, u.loyalty_tier
+        HAVING COALESCE(SUM(r.token_amount::numeric), 0) > 0
+        ORDER BY week_tokens DESC
         LIMIT 5
       `);
-      const earners = rows.rows.map((r: any, i: number) => ({
-        rank: i + 1,
-        displayName: r.first_name ? `${r.first_name[0].toUpperCase()}${r.first_name.slice(1, 3).toLowerCase()}***` : `Member #${i + 1}`,
-        tokenBalance: parseFloat(r.token_balance || "0"),
-        loyaltyTier: r.loyalty_tier || "bronze",
-      }));
+      const earners = rows.rows.map((r: any, i: number) => {
+        const first = r.first_name ? r.first_name.trim() : "";
+        const last = r.last_name ? r.last_name.trim() : "";
+        const displayName = first
+          ? `${first} ${last ? last[0].toUpperCase() + "." : ""}`.trim()
+          : `Member #${i + 1}`;
+        return {
+          rank: i + 1,
+          displayName,
+          weekTokens: parseFloat(r.week_tokens || "0"),
+          loyaltyTier: r.loyalty_tier || "bronze",
+        };
+      });
       res.json({ earners });
     } catch (error) {
       console.error("top-earners error:", error);

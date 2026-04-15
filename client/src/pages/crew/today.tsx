@@ -21,6 +21,9 @@ import {
 import { Link } from "wouter";
 import type { Lead, User } from "@shared/schema";
 import { UserStatusBar } from "@/components/UserStatusBar";
+import { LevelBadge } from "@/components/LevelBadge";
+import { ConfettiBurst } from "@/components/ConfettiBurst";
+import type { LoyaltyTierKey } from "@/lib/loyalty";
 
 const MONTH_NAMES_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const DAY_NAMES_SHORT = ["Su","Mo","Tu","We","Th","Fr","Sa"];
@@ -333,6 +336,7 @@ export default function CrewTodayPage() {
   });
 
   const [applyingId, setApplyingId] = useState<string | null>(null);
+  const [claimedJobId, setClaimedJobId] = useState<string | null>(null);
   const applyMutation = useMutation({
     mutationFn: async (leadId: string) => {
       const res = await apiRequest("POST", `/api/leads/${leadId}/crew-apply`, {});
@@ -342,11 +346,12 @@ export default function CrewTodayPage() {
       }
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_data, leadId) => {
       queryClient.invalidateQueries({ queryKey: ["/api/leads/job-board"] });
       queryClient.invalidateQueries({ queryKey: ["/api/leads/my-jobs"] });
       setApplyingId(null);
-      toast({ title: "✅ Signed up!", description: "The admin will confirm your assignment." });
+      setClaimedJobId(leadId);
+      setTimeout(() => setClaimedJobId(null), 2000);
     },
     onError: (e: Error) => {
       setApplyingId(null);
@@ -513,18 +518,30 @@ export default function CrewTodayPage() {
   });
 
   const completedLeads = leads.filter(l => l.status === "completed");
-  const leaderboard = useMemo(() => {
+  const { leaderboard, myRank, myCount } = useMemo(() => {
+    const startOfWeek = new Date();
+    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+    startOfWeek.setHours(0, 0, 0, 0);
+    const thisWeekCompleted = completedLeads.filter(l => {
+      const d = l.confirmedDate || l.moveDate || l.createdAt;
+      return d ? new Date(d as string) >= startOfWeek : false;
+    });
     const counts: Record<string, number> = {};
-    completedLeads.forEach(l => {
+    (thisWeekCompleted.length > 0 ? thisWeekCompleted : completedLeads).forEach(l => {
       const key = l.createdByUserId || "";
       if (key) counts[key] = (counts[key] || 0) + 1;
     });
-    return employees
+    const sorted = employees
       .filter(e => counts[e.id])
       .map(e => ({ ...e, count: counts[e.id] as number }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 3);
-  }, [completedLeads, employees]);
+      .sort((a, b) => b.count - a.count);
+    const myIdx = sorted.findIndex(e => e.id === String(user?.id));
+    return {
+      leaderboard: sorted.slice(0, 3),
+      myRank: myIdx >= 0 ? myIdx + 1 : null,
+      myCount: myIdx >= 0 ? sorted[myIdx].count : 0,
+    };
+  }, [completedLeads, employees, user?.id]);
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
@@ -961,7 +978,8 @@ export default function CrewTodayPage() {
                 ? new Date(job.moveDate.split("T")[0] + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
                 : "Date TBD";
               return (
-                <div key={job.id} className="bg-white/[0.04] rounded-xl p-3 border border-white/5 space-y-2">
+                <div key={job.id} className="relative bg-white/[0.04] rounded-xl p-3 border border-white/5 space-y-2 overflow-hidden">
+                  <ConfettiBurst active={claimedJobId === job.id} variant="inline" />
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <span className="text-xl leading-none">{SERVICE_ICONS[job.serviceType] ?? "🚛"}</span>
@@ -992,16 +1010,22 @@ export default function CrewTodayPage() {
                       <Users className="h-3 w-3" />
                       {slotsOpen} slot{slotsOpen !== 1 ? "s" : ""} open · {job.crewSize || 2} needed
                     </span>
-                    <Button
-                      size="sm"
-                      disabled={applyingId === job.id && applyMutation.isPending}
-                      onClick={() => { setApplyingId(job.id); applyMutation.mutate(job.id); }}
-                      className="h-7 text-xs bg-blue-600 hover:bg-blue-500 text-white font-semibold px-3"
-                    >
-                      {applyingId === job.id && applyMutation.isPending
-                        ? <Loader2 className="h-3 w-3 animate-spin" />
-                        : "Sign Up"}
-                    </Button>
+                    {claimedJobId === job.id ? (
+                      <div className="flex items-center gap-1.5 bg-green-500/20 border border-green-500/40 rounded-full px-3 py-1 animate-pulse">
+                        <span className="text-green-300 text-xs font-bold">✓ Signed up!</span>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        disabled={applyingId === job.id && applyMutation.isPending}
+                        onClick={() => { setApplyingId(job.id); applyMutation.mutate(job.id); }}
+                        className="h-7 text-xs bg-blue-600 hover:bg-blue-500 text-white font-semibold px-3"
+                      >
+                        {applyingId === job.id && applyMutation.isPending
+                          ? <Loader2 className="h-3 w-3 animate-spin" />
+                          : "Sign Up"}
+                      </Button>
+                    )}
                   </div>
                 </div>
               );
@@ -1088,19 +1112,41 @@ export default function CrewTodayPage() {
       {/* Mini Leaderboard */}
       {leaderboard.length > 0 && (
         <div className="rounded-2xl bg-gradient-to-br from-amber-950/40 via-slate-900 to-slate-950 border border-amber-500/20 p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Trophy className="h-4 w-4 text-amber-400" />
-            <span className="font-bold text-white text-sm">Crew Leaderboard</span>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Trophy className="h-4 w-4 text-amber-400" />
+              <span className="font-bold text-white text-sm">Crew Leaderboard</span>
+            </div>
+            <span className="text-[10px] text-amber-600">This week</span>
           </div>
           <div className="space-y-1.5">
-            {leaderboard.map((emp, i) => (
-              <div key={emp.id} className="flex items-center gap-3 p-2 rounded-lg bg-white/[0.02] border border-white/5">
-                <span className="text-lg w-6">{medals[i]}</span>
-                <p className="text-white text-sm font-semibold flex-1">{emp.firstName || emp.username}</p>
-                <span className="text-amber-300 font-black">{emp.count} jobs</span>
-              </div>
-            ))}
+            {leaderboard.map((emp, i) => {
+              const isMe = emp.id === String(user?.id);
+              return (
+                <div
+                  key={emp.id}
+                  className={`flex items-center gap-3 p-2 rounded-lg border ${
+                    isMe ? "bg-amber-500/10 border-amber-500/30" : "bg-white/[0.02] border-white/5"
+                  }`}
+                >
+                  <span className="text-lg w-6">{medals[i]}</span>
+                  <p className={`text-sm font-semibold flex-1 ${isMe ? "text-amber-300" : "text-white"}`}>
+                    {emp.firstName || emp.username}
+                    {isMe && <span className="text-[10px] text-amber-500 ml-1">(you)</span>}
+                  </p>
+                  <LevelBadge tier={(emp.loyaltyTier ?? "bronze") as LoyaltyTierKey} size="xs" />
+                  <span className="text-amber-300 font-black text-sm">{emp.count}</span>
+                </div>
+              );
+            })}
           </div>
+          {myRank !== null && myRank > 3 && (
+            <div className="mt-2 pt-2 border-t border-white/5 flex items-center gap-2">
+              <span className="text-xs text-slate-400">Your rank:</span>
+              <span className="text-xs font-bold text-amber-300">#{myRank}</span>
+              <span className="text-xs text-slate-500">— {myCount} job{myCount !== 1 ? "s" : ""} this week</span>
+            </div>
+          )}
         </div>
       )}
 

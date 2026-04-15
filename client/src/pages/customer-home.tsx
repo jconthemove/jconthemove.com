@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
-import { Coins, Phone, MessageSquare, ChevronRight, Loader2, Search, Sparkles, MessageCircle } from "lucide-react";
+import { Coins, Phone, MessageSquare, ChevronRight, Loader2, Search, Sparkles, MessageCircle, Zap } from "lucide-react";
 import ServiceCard from "@/components/ServiceCard";
 import { getService } from "@/lib/services";
 import { JunkFlow, MovingFlow } from "@/components/ServiceSelector";
@@ -10,37 +10,14 @@ import LiveCrewBeacon from "@/components/LiveCrewBeacon";
 import { BookingChatbot } from "@/components/booking-chatbot";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { UserStatusBar } from "@/components/UserStatusBar";
-
-function ConfettiPop({ active }: { active: boolean }) {
-  if (!active) return null;
-  const pieces = Array.from({ length: 14 }, (_, i) => i);
-  const colors = ["#f97316","#22c55e","#a855f7","#eab308","#3b82f6","#ec4899"];
-  return (
-    <div className="pointer-events-none fixed inset-0 overflow-hidden z-[999]">
-      {pieces.map((i) => {
-        const x = 20 + Math.random() * 60;
-        const color = colors[i % colors.length];
-        return (
-          <div
-            key={i}
-            className="absolute w-2 h-2 rounded-full"
-            style={{
-              left: `${x}%`,
-              top: "40%",
-              background: color,
-              animation: `confettiFall 0.9s ease-out ${i * 40}ms forwards`,
-            }}
-          />
-        );
-      })}
-      <style>{`@keyframes confettiFall{0%{transform:translateY(0) scale(1);opacity:1;}100%{transform:translateY(120px) scale(0.3);opacity:0;}}`}</style>
-    </div>
-  );
-}
+import { ConfettiBurst } from "@/components/ConfettiBurst";
 
 // ── Job Status Card (post-booking polling) ────────────────────────────────────
 
 function JobStatusCard({ jobId, totalPrice, onDismiss }: { jobId: string; totalPrice: number; onDismiss: () => void }) {
+  const [celebrationFired, setCelebrationFired] = useState(false);
+  const [showJobComplete, setShowJobComplete] = useState(false);
+
   const { data, isLoading } = useQuery<{ status: string; crewCount: number; crewSize: number; serviceType: string }>({
     queryKey: ["/api/jobs", jobId, "status"],
     queryFn: () => fetch(`/api/jobs/${jobId}/status`).then(r => r.json()),
@@ -48,13 +25,25 @@ function JobStatusCard({ jobId, totalPrice, onDismiss }: { jobId: string; totalP
   });
 
   const status = data?.status ?? "";
+  const isCompleted = status === "completed" || status === "paid";
   const crewReady = ["available", "assigned", "in_progress"].includes(status) && (data?.crewCount ?? 0) > 0;
   const priceConfirmed = status === "quoted";
   const isJunk = data?.serviceType === "junk";
 
+  useEffect(() => {
+    if (isCompleted && !celebrationFired) {
+      setCelebrationFired(true);
+      setShowJobComplete(true);
+      setTimeout(() => setShowJobComplete(false), 2500);
+    }
+  }, [isCompleted, celebrationFired]);
+
+  const estimatedTokens = Math.floor(totalPrice * 15);
+
   return (
-    <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-4">
-      <div className="flex items-center justify-between mb-3">
+    <div className="relative bg-zinc-900 border border-zinc-700 rounded-2xl p-4 space-y-3 overflow-hidden">
+      <ConfettiBurst active={showJobComplete} variant="inline" />
+      <div className="flex items-center justify-between">
         <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Booking Status</span>
         <button onClick={onDismiss} className="text-zinc-600 text-xs hover:text-zinc-400">Dismiss</button>
       </div>
@@ -62,6 +51,20 @@ function JobStatusCard({ jobId, totalPrice, onDismiss }: { jobId: string; totalP
         <div className="flex items-center gap-2 text-zinc-400">
           <Loader2 className="h-4 w-4 animate-spin" />
           <span className="text-sm">Checking status…</span>
+        </div>
+      ) : isCompleted ? (
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xl">🎉</span>
+            <span className="font-bold text-white">Job Complete!</span>
+          </div>
+          <p className="text-sm text-zinc-400">
+            Thank you for choosing JC On The Move! Your tokens have been credited.
+          </p>
+          <div className="mt-2 flex items-center gap-2 bg-orange-500/10 border border-orange-500/20 rounded-xl px-3 py-2">
+            <Coins className="h-3.5 w-3.5 text-orange-400 flex-shrink-0" />
+            <p className="text-xs text-orange-300 font-bold">+{estimatedTokens.toLocaleString()} JCMOVES earned!</p>
+          </div>
         </div>
       ) : crewReady ? (
         <div>
@@ -94,6 +97,16 @@ function JobStatusCard({ jobId, totalPrice, onDismiss }: { jobId: string; totalP
           </div>
           <p className="text-sm text-zinc-400">Total: <span className="text-white font-semibold">${totalPrice}</span></p>
           <p className="text-xs text-zinc-500 mt-0.5">Our team will reach out to confirm — watch for a call from (906) 285-9312.</p>
+        </div>
+      )}
+      {/* Token earn preview */}
+      {estimatedTokens > 0 && (
+        <div className="flex items-center gap-2 bg-orange-500/10 border border-orange-500/20 rounded-xl px-3 py-2">
+          <Coins className="h-3.5 w-3.5 text-orange-400 flex-shrink-0" />
+          <p className="text-xs text-orange-300">
+            <span className="font-bold">+{estimatedTokens.toLocaleString()} JCMOVES</span>
+            <span className="text-orange-500 ml-1">credited when this job completes</span>
+          </p>
         </div>
       )}
     </div>
@@ -153,7 +166,7 @@ export default function CustomerHomePage() {
 
   return (
     <div className="min-h-screen bg-zinc-950 pb-28">
-      <ConfettiPop active={showConfetti} />
+      <ConfettiBurst active={showConfetti} variant="overlay" />
       <div className="max-w-[430px] mx-auto px-4 pt-4 space-y-4">
 
         {/* Header */}
@@ -173,6 +186,9 @@ export default function CustomerHomePage() {
             <span className="text-[10px] text-zinc-500 font-medium">JCMOVES</span>
           </button>
         </div>
+
+        {/* Top HUD — tier + streak + wallet progress */}
+        <UserStatusBar variant="dark" />
 
         {/* HERO CHATBOT CTA */}
         <button
@@ -259,25 +275,38 @@ export default function CustomerHomePage() {
           </div>
         </div>
 
-        {/* Earn strip */}
-        <button
-          onClick={() => setLocation("/earn")}
-          className="w-full flex items-center justify-between bg-zinc-900 border border-orange-500/20 rounded-2xl px-4 py-3 hover:border-orange-500/40 active:scale-[0.98] transition-all"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-orange-500/15 flex items-center justify-center">
-              <Coins className="h-5 w-5 text-orange-400" />
+        {/* Earn More shortcut */}
+        <div className="rounded-2xl border border-orange-500/20 bg-zinc-900/60 overflow-hidden">
+          <button
+            onClick={() => setLocation("/earn")}
+            className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.02] active:scale-[0.98] transition-all"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-orange-500/15 flex items-center justify-center">
+                <Zap className="h-5 w-5 text-orange-400" />
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-bold text-white">Earn More JCMOVES</p>
+                <p className="text-xs text-zinc-500">Fastest path: book a service → 15 tokens per $1</p>
+              </div>
             </div>
-            <div className="text-left">
-              <p className="text-sm font-bold text-white">Earn JCMOVES</p>
-              <p className="text-xs text-zinc-500">15 tokens per $1 spent · redeem for rewards</p>
+            <ChevronRight className="h-4 w-4 text-zinc-600" />
+          </button>
+          <div className="border-t border-zinc-800 grid grid-cols-3 divide-x divide-zinc-800">
+            <div className="px-3 py-2 text-center">
+              <p className="text-[10px] text-zinc-500">Book a Job</p>
+              <p className="text-xs font-bold text-orange-300">15×/$ <span className="text-zinc-500 font-normal">spent</span></p>
             </div>
+            <div className="px-3 py-2 text-center">
+              <p className="text-[10px] text-zinc-500">Referral</p>
+              <p className="text-xs font-bold text-orange-300">5,000 <span className="text-zinc-500 font-normal">tokens</span></p>
+            </div>
+            <button onClick={() => setLocation("/rewards")} className="px-3 py-2 text-center hover:bg-white/[0.02] transition-colors">
+              <p className="text-[10px] text-zinc-500">Redeem</p>
+              <p className="text-xs font-bold text-amber-300">Shop →</p>
+            </button>
           </div>
-          <ChevronRight className="h-4 w-4 text-zinc-600" />
-        </button>
-
-        {/* Tier status bar */}
-        <UserStatusBar variant="dark" />
+        </div>
 
       </div>
 

@@ -398,7 +398,7 @@ export default function RewardsMarketplacePage() {
     enabled: !!user && activeTab === "history",
   });
 
-  const { data: topEarnersData } = useQuery<{ earners: { rank: number; displayName: string; tokenBalance: number; loyaltyTier: string }[] }>({
+  const { data: topEarnersData } = useQuery<{ earners: { rank: number; displayName: string; weekTokens: number; loyaltyTier: string }[] }>({
     queryKey: ["/api/gamification/top-earners"],
     enabled: !!user && activeTab === "shop",
     staleTime: 60000,
@@ -658,7 +658,7 @@ export default function RewardsMarketplacePage() {
                 <div className="flex items-center gap-2 mb-3">
                   <Trophy className="h-4 w-4 text-amber-400" />
                   <span className="text-sm font-bold text-white">Community Top Earners</span>
-                  <span className="text-[10px] text-amber-500/70 ml-1">This month</span>
+                  <span className="text-[10px] text-amber-500/70 ml-1">This week</span>
                 </div>
                 <div className="space-y-2">
                   {topEarnersData.earners.map((earner, i) => (
@@ -666,7 +666,7 @@ export default function RewardsMarketplacePage() {
                       <span className="text-base w-5 text-center">{["🥇","🥈","🥉","4️⃣","5️⃣"][i]}</span>
                       <p className="text-sm text-white font-medium flex-1">{earner.displayName}</p>
                       <LevelBadge tier={earner.loyaltyTier as LoyaltyTierKey} size="xs" />
-                      <span className="text-xs text-amber-300 font-bold tabular-nums">{fmtTokens(Math.floor(earner.tokenBalance))}</span>
+                      <span className="text-xs text-amber-300 font-bold tabular-nums">+{fmtTokens(Math.floor(earner.weekTokens))}</span>
                     </div>
                   ))}
                 </div>

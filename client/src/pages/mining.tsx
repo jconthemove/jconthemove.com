@@ -7,6 +7,7 @@ import { Loader2, Zap, Users, Coins, Flame, Star, TrendingUp, ShoppingBag, Brief
 import { Link } from "wouter";
 import { notificationService } from "@/lib/notifications";
 import { NotificationToggle } from "@/components/notification-prompt";
+import { ConfettiBurst } from "@/components/ConfettiBurst";
 
 interface MiningStatus {
   currentSession: any;
@@ -85,33 +86,6 @@ function CircularTimer({ timeRemaining }: { timeRemaining: number }) {
   );
 }
 
-function ConfettiBurst({ active }: { active: boolean }) {
-  if (!active) return null;
-  const pieces = Array.from({ length: 18 }, (_, i) => i);
-  const colors = ["#f97316", "#a855f7", "#22c55e", "#eab308", "#3b82f6", "#ec4899"];
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl z-20">
-      {pieces.map((i) => {
-        const angle = (i / pieces.length) * 360;
-        const color = colors[i % colors.length];
-        return (
-          <div
-            key={i}
-            className="absolute w-2 h-2 rounded-full animate-confetti"
-            style={{
-              left: "50%",
-              top: "50%",
-              background: color,
-              transform: `rotate(${angle}deg) translateY(-60px)`,
-              animation: `confettiBurst 0.7s ease-out forwards`,
-              animationDelay: `${i * 20}ms`,
-            }}
-          />
-        );
-      })}
-    </div>
-  );
-}
 
 export default function MiningPage() {
   const { toast } = useToast();
@@ -247,7 +221,7 @@ export default function MiningPage() {
 
         {/* ── ZONE 1: HERO — Token + Claim ── */}
         <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-purple-900 via-purple-800 to-indigo-900 border border-purple-700/50 shadow-2xl p-6">
-          <ConfettiBurst active={showConfetti} />
+          <ConfettiBurst active={showConfetti} variant="inline" />
 
           {/* Wallet balance row */}
           <div className="flex items-center justify-between mb-4">
