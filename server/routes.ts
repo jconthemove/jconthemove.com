@@ -10946,6 +10946,31 @@ Thank you for your business!
     }
   });
 
+  // Community Top Earners — anonymized (first name only + wallet balance)
+  app.get("/api/gamification/top-earners", isAuthenticated, async (_req, res) => {
+    try {
+      const rows = await pool.query(`
+        SELECT u.first_name, wa.token_balance, u.loyalty_tier
+        FROM wallet_accounts wa
+        JOIN users u ON u.id = wa.user_id
+        WHERE u.role IN ('customer','employee')
+          AND wa.token_balance::numeric > 0
+        ORDER BY wa.token_balance::numeric DESC
+        LIMIT 5
+      `);
+      const earners = rows.rows.map((r: any, i: number) => ({
+        rank: i + 1,
+        displayName: r.first_name ? `${r.first_name[0].toUpperCase()}${r.first_name.slice(1, 3).toLowerCase()}***` : `Member #${i + 1}`,
+        tokenBalance: parseFloat(r.token_balance || "0"),
+        loyaltyTier: r.loyalty_tier || "bronze",
+      }));
+      res.json({ earners });
+    } catch (error) {
+      console.error("top-earners error:", error);
+      res.json({ earners: [] });
+    }
+  });
+
   // Award job completion points (internal endpoint for job workflow)
   app.post("/api/gamification/job-completion", isAuthenticated, async (req: any, res) => {
     try {

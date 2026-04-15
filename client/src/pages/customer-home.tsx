@@ -9,6 +9,34 @@ import { JunkFlow, MovingFlow } from "@/components/ServiceSelector";
 import LiveCrewBeacon from "@/components/LiveCrewBeacon";
 import { BookingChatbot } from "@/components/booking-chatbot";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { UserStatusBar } from "@/components/UserStatusBar";
+
+function ConfettiPop({ active }: { active: boolean }) {
+  if (!active) return null;
+  const pieces = Array.from({ length: 14 }, (_, i) => i);
+  const colors = ["#f97316","#22c55e","#a855f7","#eab308","#3b82f6","#ec4899"];
+  return (
+    <div className="pointer-events-none fixed inset-0 overflow-hidden z-[999]">
+      {pieces.map((i) => {
+        const x = 20 + Math.random() * 60;
+        const color = colors[i % colors.length];
+        return (
+          <div
+            key={i}
+            className="absolute w-2 h-2 rounded-full"
+            style={{
+              left: `${x}%`,
+              top: "40%",
+              background: color,
+              animation: `confettiFall 0.9s ease-out ${i * 40}ms forwards`,
+            }}
+          />
+        );
+      })}
+      <style>{`@keyframes confettiFall{0%{transform:translateY(0) scale(1);opacity:1;}100%{transform:translateY(120px) scale(0.3);opacity:0;}}`}</style>
+    </div>
+  );
+}
 
 // ── Job Status Card (post-booking polling) ────────────────────────────────────
 
@@ -101,6 +129,7 @@ export default function CustomerHomePage() {
   const [activeBooking, setActiveBooking] = useState<{ jobId: string; totalPrice: number } | null>(null);
   const [expanded, setExpanded] = useState<ExpandedService>(null);
   const [showChatbot, setShowChatbot] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
 
   const { data: wallet } = useQuery<{ tokenBalance: string }>({
     queryKey: ["/api/rewards/wallet"],
@@ -118,10 +147,13 @@ export default function CustomerHomePage() {
   function handleBooked(id: string, price: number) {
     setExpanded(null);
     setActiveBooking({ jobId: id, totalPrice: price });
+    setShowConfetti(true);
+    setTimeout(() => setShowConfetti(false), 1200);
   }
 
   return (
     <div className="min-h-screen bg-zinc-950 pb-28">
+      <ConfettiPop active={showConfetti} />
       <div className="max-w-[430px] mx-auto px-4 pt-4 space-y-4">
 
         {/* Header */}
@@ -243,6 +275,9 @@ export default function CustomerHomePage() {
           </div>
           <ChevronRight className="h-4 w-4 text-zinc-600" />
         </button>
+
+        {/* Tier status bar */}
+        <UserStatusBar variant="dark" />
 
       </div>
 

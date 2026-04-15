@@ -20,6 +20,7 @@ import { LOYALTY_TIERS, calculateJCMovesReward, getNextTier, getTierProgress, TI
 import { SpinWheelDialog } from "@/components/spin-wheel";
 import { LotteryPanel } from "@/components/lottery-panel";
 import { ShopSwitcher } from "@/components/shop-switcher";
+import { LevelBadge } from "@/components/LevelBadge";
 
 interface RewardCategory {
   id: number;
@@ -397,6 +398,12 @@ export default function RewardsMarketplacePage() {
     enabled: !!user && activeTab === "history",
   });
 
+  const { data: topEarnersData } = useQuery<{ earners: { rank: number; displayName: string; tokenBalance: number; loyaltyTier: string }[] }>({
+    queryKey: ["/api/gamification/top-earners"],
+    enabled: !!user && activeTab === "shop",
+    staleTime: 60000,
+  });
+
   const redeemMutation = useMutation({
     mutationFn: (data: { itemId: number; userNotes?: string; scheduledDate?: string }) =>
       apiRequest("POST", "/api/reward-shop/redeem", data),
@@ -644,6 +651,28 @@ export default function RewardsMarketplacePage() {
         {/* Shop tab */}
         {activeTab === "shop" && (
           <>
+
+            {/* 🏆 Community Top Earners */}
+            {!search && !activeCat && topEarnersData?.earners && topEarnersData.earners.length > 0 && (
+              <div className="mb-5 rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-950/30 to-slate-900/60 p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Trophy className="h-4 w-4 text-amber-400" />
+                  <span className="text-sm font-bold text-white">Community Top Earners</span>
+                  <span className="text-[10px] text-amber-500/70 ml-1">This month</span>
+                </div>
+                <div className="space-y-2">
+                  {topEarnersData.earners.map((earner, i) => (
+                    <div key={earner.rank} className="flex items-center gap-3 bg-white/[0.02] rounded-xl px-3 py-2 border border-white/5">
+                      <span className="text-base w-5 text-center">{["🥇","🥈","🥉","4️⃣","5️⃣"][i]}</span>
+                      <p className="text-sm text-white font-medium flex-1">{earner.displayName}</p>
+                      <LevelBadge tier={earner.loyaltyTier as LoyaltyTierKey} size="xs" />
+                      <span className="text-xs text-amber-300 font-bold tabular-nums">{fmtTokens(Math.floor(earner.tokenBalance))}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[9px] text-slate-600 mt-2">Names partially hidden for privacy.</p>
+              </div>
+            )}
 
             {/* ⚡ Quantum Spin Feature Card */}
             {!search && !activeCat && (

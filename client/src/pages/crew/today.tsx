@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import type { Lead, User } from "@shared/schema";
+import { UserStatusBar } from "@/components/UserStatusBar";
 
 const MONTH_NAMES_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const DAY_NAMES_SHORT = ["Su","Mo","Tu","We","Th","Fr","Sa"];
@@ -667,6 +668,9 @@ export default function CrewTodayPage() {
           </div>
         )}
       </div>
+
+      {/* Tier & balance status */}
+      <UserStatusBar variant="dark" />
 
       {/* Mini Calendar */}
       <div className="rounded-2xl bg-slate-800/40 border border-blue-500/20 p-4">
