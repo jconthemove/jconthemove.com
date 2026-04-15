@@ -37,6 +37,7 @@ const REWARD_LABELS: Record<string, { label: string; icon: string }> = {
   worker_hours_bonus:           { label: "Hours Bonus",          icon: "🕐" },
   admin_grant:                  { label: "Admin Bonus",          icon: "🎁" },
   staking_reward:               { label: "Staking Perk",         icon: "🔒" },
+  daily_mining:                 { label: "Daily Mining",          icon: "⛏️" },
 };
 
 function timeAgo(dateStr: string): string {

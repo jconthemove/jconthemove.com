@@ -584,7 +584,7 @@ export default function CustomerPortal() {
                       <p className="text-yellow-400/70 text-xs">Weekly & Monthly Mega draws</p>
                     </div>
                   </div>
-                  <Badge className="bg-yellow-500/20 text-yellow-300 border-yellow-500/30 text-xs">10 JCMOVES/ticket</Badge>
+                  <Badge className="bg-yellow-500/20 text-yellow-300 border-yellow-500/30 text-xs">Free Tickets</Badge>
                 </div>
                 <div className="flex items-center justify-between mt-3">
                   <div className="text-left">

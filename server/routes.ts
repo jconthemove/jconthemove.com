@@ -5582,7 +5582,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 [updatedLead.email.trim()]
               );
               if (customerRows.length > 0) {
-                await grantLotteryTicketsForActivity(customerRows[0].id, 3, 'job_completion');
+                await grantLotteryTicketsForActivity(customerRows[0].id, 3, 'completion');
               }
             }
           } catch (lotteryErr) {
@@ -6532,7 +6532,7 @@ Thank you for your business!
                 [updatedLead.email.trim()]
               );
               if (custRows.length > 0) {
-                await grantLotteryTicketsForActivity(custRows[0].id, 3, 'job_completion');
+                await grantLotteryTicketsForActivity(custRows[0].id, 3, 'completion');
               }
             }
           } catch (lotteryErr) {
@@ -8594,40 +8594,67 @@ Thank you for your business!
   });
 
   // Get rewards history with pagination and server-side totals
+  // Unions: rewards table + mining claims + reward redemptions (as spend events)
   app.get("/api/rewards/history", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = (req.session as any).userId;
+      const userId = req.user?.id || (req.session as any).userId;
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = parseInt(req.query.offset as string) || 0;
-      
-      const rewardsHistory = await db
-        .select({
-          id: rewards.id,
-          rewardType: rewards.rewardType,
-          tokenAmount: rewards.tokenAmount,
-          status: rewards.status,
-          earnedDate: rewards.earnedDate,
-          redeemedDate: rewards.redeemedDate,
-          metadata: rewards.metadata
-        })
-        .from(rewards)
-        .where(eq(rewards.userId, userId))
-        .orderBy(desc(rewards.earnedDate))
-        .limit(limit)
-        .offset(offset);
 
-      const [aggregates] = await db
-        .select({
-          count: sql<number>`count(*)::int`,
-          totalTokens: sql<string>`COALESCE(sum(token_amount::numeric), 0)::text`,
-        })
-        .from(rewards)
-        .where(eq(rewards.userId, userId));
+      // Main rewards table (booking, completion, referral, sign-up, etc.)
+      const { rows: rewardsRows } = await pool.query(
+        `SELECT
+           id::text,
+           reward_type AS "rewardType",
+           token_amount::text AS "tokenAmount",
+           status,
+           earned_date AS "earnedDate",
+           metadata
+         FROM rewards
+         WHERE user_id = $1
+         ORDER BY earned_date DESC
+         LIMIT $2 OFFSET $3`,
+        [userId, limit, offset]
+      );
+
+      // Mining claims (daily check-in / mining system)
+      const { rows: miningRows } = await pool.query(
+        `SELECT
+           id::text,
+           'daily_mining' AS "rewardType",
+           token_amount::text AS "tokenAmount",
+           'confirmed' AS status,
+           claim_time AS "earnedDate",
+           NULL AS metadata
+         FROM mining_claims
+         WHERE user_id = $1
+         ORDER BY claim_time DESC
+         LIMIT $2`,
+        [userId, limit]
+      );
+
+      // Merge and sort by earnedDate desc, apply limit + offset
+      const all = [...rewardsRows, ...miningRows].sort(
+        (a, b) => new Date(b.earnedDate).getTime() - new Date(a.earnedDate).getTime()
+      );
+      const paginated = all.slice(offset, offset + limit);
+
+      // Totals
+      const { rows: totals } = await pool.query(
+        `SELECT
+           (SELECT COALESCE(SUM(token_amount::numeric), 0) FROM rewards WHERE user_id = $1)
+           + (SELECT COALESCE(SUM(token_amount::numeric), 0) FROM mining_claims WHERE user_id = $1)
+           AS total_tokens,
+           (SELECT COUNT(*) FROM rewards WHERE user_id = $1)
+           + (SELECT COUNT(*) FROM mining_claims WHERE user_id = $1)
+           AS total_count`,
+        [userId]
+      );
 
       res.json({
-        rewards: rewardsHistory,
-        total: aggregates?.count || 0,
-        totalTokensEarned: aggregates?.totalTokens || "0",
+        rewards: paginated,
+        total: parseInt(totals[0]?.total_count || "0"),
+        totalTokensEarned: (parseFloat(totals[0]?.total_tokens || "0")).toFixed(2),
       });
     } catch (error) {
       console.error("Error getting rewards history:", error);
