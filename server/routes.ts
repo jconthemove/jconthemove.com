@@ -21,7 +21,7 @@ import { z } from "zod";
 import { EncryptionService } from "./services/encryption";
 import { eq, desc, sql, and, gte, lte, or, ilike, inArray, isNull } from 'drizzle-orm';
 import { db, pool } from './db';
-import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, giftCards, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens, promoCodes, reviews, rewardCategories, rewardItems, rewardRedemptions, buybackFund, laborQuotes } from '@shared/schema';
+import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, giftCards, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens, promoCodes, reviews, rewardCategories, rewardItems, rewardRedemptions, buybackFund, laborQuotes, jobTradeRequests } from '@shared/schema';
 import { getFaucetPayService } from "./services/faucetpay";
 import { getAdvertisingService } from "./services/advertising";
 import { FAUCET_CONFIG, calculateJCMovesReward, getTierFromSpend, getTierFromPoints, LOYALTY_TIERS, TIER_POINT_AWARDS, type TierPointActivity } from "./constants";
@@ -603,6 +603,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log('✅ Lawn care tables ready');
   } catch (migErr) {
     console.error('⚠️ Lawn care tables migration error (non-fatal):', migErr);
+  }
+
+  // Schema migration: create job_trade_requests table
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS job_trade_requests (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        lead_id VARCHAR NOT NULL REFERENCES leads(id),
+        requester_id VARCHAR NOT NULL REFERENCES users(id),
+        target_id VARCHAR NOT NULL REFERENCES users(id),
+        status TEXT NOT NULL DEFAULT 'pending',
+        requester_note TEXT,
+        admin_note TEXT,
+        reviewed_by_user_id VARCHAR REFERENCES users(id),
+        reviewed_at TIMESTAMP,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_trade_requests_lead ON job_trade_requests(lead_id);
+      CREATE INDEX IF NOT EXISTS idx_trade_requests_requester ON job_trade_requests(requester_id);
+      CREATE INDEX IF NOT EXISTS idx_trade_requests_target ON job_trade_requests(target_id);
+      CREATE INDEX IF NOT EXISTS idx_trade_requests_status ON job_trade_requests(status);
+    `);
+    console.log('✅ job_trade_requests table ready');
+  } catch (migErr) {
+    console.error('⚠️ job_trade_requests migration error (non-fatal):', migErr);
   }
 
   // Schema migration: add loyalty tier columns to users if not present
@@ -5157,12 +5182,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fromAddress: leads.fromAddress,
         toAddress: leads.toAddress,
         moveDate: leads.moveDate,
+        confirmedDate: leads.confirmedDate,
+        arrivalWindow: leads.arrivalWindow,
         crewSize: leads.crewSize,
         status: leads.status,
         basePrice: leads.basePrice,
+        totalPrice: leads.totalPrice,
+        confirmedHours: leads.confirmedHours,
+        hasHotTub: leads.hasHotTub,
+        hasPiano: leads.hasPiano,
+        hasHeavySafe: leads.hasHeavySafe,
+        hasPoolTable: leads.hasPoolTable,
         details: leads.details,
+        dispatchNotes: leads.dispatchNotes,
         crewMembers: leads.crewMembers,
-        confirmedDate: leads.confirmedDate,
         createdAt: leads.createdAt,
       })
         .from(leads)
@@ -5174,12 +5207,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         )
         .orderBy(desc(leads.createdAt));
 
-      const masked = openLeads.map(lead => ({
-        ...lead,
-        estimatedTokens: lead.basePrice ? Math.floor(Number(lead.basePrice) * 15) + 1500 : 1500,
-        alreadyApplied: Array.isArray(lead.crewMembers) && lead.crewMembers.includes(userId),
-        crewSlotsFilled: Array.isArray(lead.crewMembers) ? lead.crewMembers.length : 0,
-      }));
+      // Canonical worker payout: 500 flat + 25/hr * estimatedHrs (matches disburse-job-tokens.ts)
+      const FLAT_TOKEN_BASE = 500;
+      const TOKENS_PER_HOUR = 25;
+      const DEFAULT_HOURS = 3;
+
+      const masked = openLeads.map(lead => {
+        const estimatedHrs = lead.confirmedHours || DEFAULT_HOURS;
+        return {
+          ...lead,
+          estimatedTokens: FLAT_TOKEN_BASE + TOKENS_PER_HOUR * estimatedHrs,
+          alreadyApplied: Array.isArray(lead.crewMembers) && lead.crewMembers.includes(userId),
+          crewSlotsFilled: Array.isArray(lead.crewMembers) ? lead.crewMembers.length : 0,
+        };
+      });
 
       res.json(masked);
     } catch (error) {
@@ -7551,6 +7592,191 @@ Thank you for your business!
     } catch (error) {
       console.error("Error applying to job:", error);
       res.status(500).json({ error: "Failed to sign up for job" });
+    }
+  });
+
+  // ── Trade Requests ─────────────────────────────────────────────────────────
+
+  // Core handler for trade request creation — used by both route aliases below
+  const handleTradeRequestCreate = async (req: any, res: any) => {
+    try {
+      const leadId = req.params.id;
+      const requesterId = req.currentUser.id;
+      const { targetId, requesterNote } = req.body;
+
+      if (!targetId || typeof targetId !== "string") {
+        return res.status(400).json({ error: "targetId is required" });
+      }
+      if (targetId === requesterId) {
+        return res.status(400).json({ error: "Cannot trade a job with yourself" });
+      }
+
+      const [lead] = await db.select().from(leads).where(eq(leads.id, leadId));
+      if (!lead) return res.status(404).json({ error: "Job not found" });
+
+      if (["completed", "cancelled"].includes(lead.status)) {
+        return res.status(400).json({ error: "Cannot trade a completed or cancelled job" });
+      }
+
+      const crewMembers: string[] = Array.isArray(lead.crewMembers) ? lead.crewMembers : [];
+
+      if (!crewMembers.includes(requesterId)) {
+        return res.status(403).json({ error: "You are not assigned to this job" });
+      }
+
+      if (crewMembers.includes(targetId)) {
+        return res.status(400).json({ error: "Target worker is already on this job's crew" });
+      }
+
+      // Verify target user exists and is an eligible approved employee
+      const [targetUser] = await db.select({ id: users.id, status: users.status, role: users.role })
+        .from(users)
+        .where(eq(users.id, targetId))
+        .limit(1);
+
+      if (!targetUser) {
+        return res.status(404).json({ error: "Target worker not found" });
+      }
+      if (targetUser.status !== "approved" && targetUser.role !== "admin") {
+        return res.status(400).json({ error: "Target worker is not an eligible crew member" });
+      }
+
+      // Check for existing pending request for this job by this requester
+      const existing = await db.select().from(jobTradeRequests)
+        .where(and(
+          eq(jobTradeRequests.leadId, leadId),
+          eq(jobTradeRequests.requesterId, requesterId),
+          eq(jobTradeRequests.status, "pending")
+        )).limit(1);
+
+      if (existing.length > 0) {
+        return res.status(400).json({ error: "You already have a pending trade request for this job" });
+      }
+
+      const [inserted] = await db.insert(jobTradeRequests).values({
+        leadId,
+        requesterId,
+        targetId,
+        requesterNote: requesterNote || null,
+      }).returning();
+
+      res.json({ success: true, tradeRequest: inserted });
+    } catch (error) {
+      console.error("Error creating trade request:", error);
+      res.status(500).json({ error: "Failed to submit trade request" });
+    }
+  };
+
+  // POST /api/leads/:id/trade-request — request to trade a job slot (primary path)
+  app.post("/api/leads/:id/trade-request", isAuthenticated, requireEmployee, handleTradeRequestCreate);
+
+  // POST /api/jobs/:id/trade-request — alias for consistency with task spec
+  app.post("/api/jobs/:id/trade-request", isAuthenticated, requireEmployee, handleTradeRequestCreate);
+
+  // GET /api/trade-requests/my — worker's own trade requests
+  app.get("/api/trade-requests/my", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const userId = req.currentUser.id;
+      const rows = await db.select().from(jobTradeRequests)
+        .where(or(
+          eq(jobTradeRequests.requesterId, userId),
+          eq(jobTradeRequests.targetId, userId)
+        ))
+        .orderBy(desc(jobTradeRequests.createdAt))
+        .limit(50);
+      res.json(rows);
+    } catch (error) {
+      console.error("Error fetching my trade requests:", error);
+      res.status(500).json({ error: "Failed to fetch trade requests" });
+    }
+  });
+
+  // GET /api/trade-requests — admin: all trade requests with enriched data
+  app.get("/api/trade-requests", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const rows = await db.select().from(jobTradeRequests)
+        .orderBy(desc(jobTradeRequests.createdAt))
+        .limit(200);
+
+      // Enrich with user names and job info
+      const userIds = [...new Set(rows.flatMap(r => [r.requesterId, r.targetId]))];
+      const leadIds = [...new Set(rows.map(r => r.leadId))];
+
+      const [usersData, leadsData] = await Promise.all([
+        userIds.length > 0
+          ? db.select({ id: users.id, firstName: users.firstName, lastName: users.lastName })
+              .from(users).where(inArray(users.id, userIds))
+          : Promise.resolve([]),
+        leadIds.length > 0
+          ? db.select({ id: leads.id, firstName: leads.firstName, lastName: leads.lastName, serviceType: leads.serviceType, moveDate: leads.moveDate, fromAddress: leads.fromAddress })
+              .from(leads).where(inArray(leads.id, leadIds))
+          : Promise.resolve([]),
+      ]);
+
+      const userMap = Object.fromEntries(usersData.map(u => [u.id, u]));
+      const leadMap = Object.fromEntries(leadsData.map(l => [l.id, l]));
+
+      const enriched = rows.map(r => ({
+        ...r,
+        requester: userMap[r.requesterId] ?? null,
+        target: userMap[r.targetId] ?? null,
+        job: leadMap[r.leadId] ?? null,
+      }));
+
+      res.json(enriched);
+    } catch (error) {
+      console.error("Error fetching trade requests:", error);
+      res.status(500).json({ error: "Failed to fetch trade requests" });
+    }
+  });
+
+  // PATCH /api/trade-requests/:id/review — admin approve or deny a trade request
+  app.patch("/api/trade-requests/:id/review", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { status, adminNote } = req.body;
+      const adminId = req.currentUser.id;
+
+      if (!["approved", "denied"].includes(status)) {
+        return res.status(400).json({ error: "status must be 'approved' or 'denied'" });
+      }
+
+      const [tradeReq] = await db.select().from(jobTradeRequests).where(eq(jobTradeRequests.id, id));
+      if (!tradeReq) return res.status(404).json({ error: "Trade request not found" });
+      if (tradeReq.status !== "pending") {
+        return res.status(400).json({ error: "Trade request has already been reviewed" });
+      }
+
+      await db.update(jobTradeRequests)
+        .set({ status, adminNote: adminNote || null, reviewedByUserId: adminId, reviewedAt: new Date() })
+        .where(eq(jobTradeRequests.id, id));
+
+      // If approved, swap crew members on the lead (deduplicate to prevent double-adds)
+      if (status === "approved") {
+        const [lead] = await db.select().from(leads).where(eq(leads.id, tradeReq.leadId));
+        if (lead) {
+          // Guard: do not mutate crew on jobs that are already completed or cancelled
+          if (["completed", "cancelled"].includes(lead.status)) {
+            return res.status(400).json({
+              error: "Cannot approve a trade for a job that is already completed or cancelled"
+            });
+          }
+          const crewMembers: string[] = Array.isArray(lead.crewMembers) ? lead.crewMembers : [];
+          const newCrew = [...new Set(
+            crewMembers
+              .filter(m => m !== tradeReq.requesterId)
+              .concat(tradeReq.targetId)
+          )];
+          await db.update(leads)
+            .set({ crewMembers: newCrew })
+            .where(eq(leads.id, tradeReq.leadId));
+        }
+      }
+
+      res.json({ success: true, status });
+    } catch (error) {
+      console.error("Error reviewing trade request:", error);
+      res.status(500).json({ error: "Failed to review trade request" });
     }
   });
 

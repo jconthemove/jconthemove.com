@@ -2247,6 +2247,38 @@ export type IdempotencyKey = typeof idempotencyKeys.$inferSelect;
 export const insertIdempotencyKeySchema = createInsertSchema(idempotencyKeys).omit({ id: true, createdAt: true });
 export type InsertIdempotencyKey = z.infer<typeof insertIdempotencyKeySchema>;
 
+// ── Job Trade Requests ────────────────────────────────────────────────────────
+// Workers assigned to a job can request to swap their slot with another worker.
+// Admin reviews and approves/denies. On approval the crewMembers array is updated.
+export const jobTradeRequests = pgTable("job_trade_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  leadId: varchar("lead_id").notNull().references(() => leads.id),
+  requesterId: varchar("requester_id").notNull().references(() => users.id),
+  targetId: varchar("target_id").notNull().references(() => users.id),
+  status: text("status").notNull().default("pending"), // 'pending' | 'approved' | 'denied'
+  requesterNote: text("requester_note"),
+  adminNote: text("admin_note"),
+  reviewedByUserId: varchar("reviewed_by_user_id").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_trade_requests_lead").on(table.leadId),
+  index("idx_trade_requests_requester").on(table.requesterId),
+  index("idx_trade_requests_target").on(table.targetId),
+  index("idx_trade_requests_status").on(table.status),
+]);
+
+export const insertJobTradeRequestSchema = createInsertSchema(jobTradeRequests).omit({
+  id: true,
+  status: true,
+  adminNote: true,
+  reviewedByUserId: true,
+  reviewedAt: true,
+  createdAt: true,
+});
+export type JobTradeRequest = typeof jobTradeRequests.$inferSelect;
+export type InsertJobTradeRequest = z.infer<typeof insertJobTradeRequestSchema>;
+
 // ── Site Traffic Analytics ───────────────────────────────────────────────────
 export const pageViews = pgTable("page_views", {
   id: serial("id").primaryKey(),

@@ -7,37 +7,59 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Textarea } from "@/components/ui/textarea";
 import {
-  MapPin, Calendar, Loader2, ChevronRight, Briefcase,
-  Coins, Users, CheckCircle2, ClipboardList, Plus, Truck
+  MapPin, Calendar, Loader2, ChevronRight, Briefcase, Coins, Users,
+  CheckCircle2, ClipboardList, Plus, Truck, Clock, ArrowLeftRight,
+  Star, AlertCircle, ChevronDown
 } from "lucide-react";
-import { Link, useLocation } from "wouter";
-import { getStatusColors } from "@/lib/job-status";
-import type { Lead } from "@shared/schema";
+import { useLocation } from "wouter";
+import type { User } from "@shared/schema";
 
 const SERVICE_ICONS: Record<string, string> = {
   residential: "🚛", commercial: "🏢", junk: "🗑️", snow: "❄️",
-  cleaning: "✨", handyman: "🔧", demolition: "⚒️", flooring: "🪵", painting: "🎨",
+  cleaning: "✨", handyman: "🔧", demolition: "⚒️", flooring: "🪵",
+  painting: "🎨", moving: "🚛", labor: "💪",
 };
 
 const SERVICE_LABELS: Record<string, string> = {
-  residential: "Residential Move", commercial: "Commercial Move",
-  junk: "Junk Removal", snow: "Snow Removal", cleaning: "Cleaning",
-  handyman: "Handyman", demolition: "Demolition", flooring: "Flooring", painting: "Painting",
+  residential: "Residential Move", commercial: "Commercial Move", junk: "Junk Removal",
+  snow: "Snow Removal", cleaning: "Cleaning", handyman: "Handyman", demolition: "Demolition",
+  flooring: "Flooring", painting: "Painting", moving: "Moving", labor: "Labor",
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  new: "New", quoted: "Quoted", available: "Confirmed",
-  in_progress: "In Progress", completed: "Completed",
-};
+function extractCity(address: string | null): string {
+  if (!address) return "";
+  const parts = address.split(",").map(s => s.trim());
+  return parts[1] || parts[0] || "";
+}
 
-function StatusPill({ status }: { status: string }) {
-  const colors = getStatusColors(status);
-  return (
-    <Badge variant="outline" className={`text-xs ${colors.text} ${colors.cardBorder}`}>
-      {STATUS_LABELS[status] || status.replace(/_/g, " ")}
-    </Badge>
-  );
+function extractState(address: string | null): string {
+  if (!address) return "";
+  const parts = address.split(",").map(s => s.trim());
+  if (parts.length >= 3) return parts[2].split(" ")[0];
+  if (parts.length >= 2) {
+    const last = parts[parts.length - 1].split(" ");
+    return last.find(p => /^[A-Z]{2}$/.test(p)) || "";
+  }
+  return "";
+}
+
+function formatDateShort(dateStr: string | null): string {
+  if (!dateStr) return "TBD";
+  try {
+    const d = new Date(dateStr.includes("T") ? dateStr : dateStr + "T12:00:00");
+    return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  } catch { return dateStr; }
+}
+
+const FLAT_TOKEN_BASE = 500;
+const TOKENS_PER_HOUR = 25;
+const DEFAULT_HOURS = 3;
+
+function calcEstimatedTokens(hours: number | null): number {
+  return FLAT_TOKEN_BASE + TOKENS_PER_HOUR * (hours || DEFAULT_HOURS);
 }
 
 type JobBoardLead = {
@@ -46,83 +68,190 @@ type JobBoardLead = {
   fromAddress: string | null;
   toAddress: string | null;
   moveDate: string | null;
+  confirmedDate: string | null;
+  arrivalWindow: string | null;
   crewSize: number | null;
   status: string;
-  price: string | null;
+  basePrice: string | null;
+  totalPrice: string | null;
   details: string | null;
   estimatedTokens: number;
   alreadyApplied: boolean;
   crewSlotsFilled: number;
+  confirmedHours: number | null;
+  hasHotTub: boolean | null;
+  hasPiano: boolean | null;
+  hasHeavySafe: boolean | null;
+  hasPoolTable: boolean | null;
+  crewMembers: string[] | null;
+  firstName?: string;
+  lastName?: string;
+  dispatchNotes?: string | null;
 };
 
-function JobBoardCard({ job, onApply, isPending }: { job: JobBoardLead; onApply: () => void; isPending: boolean }) {
+type EnrichedLead = {
+  id: string;
+  serviceType: string;
+  fromAddress: string | null;
+  toAddress: string | null;
+  moveDate: string | null;
+  confirmedDate: string | null;
+  arrivalWindow: string | null;
+  crewSize: number | null;
+  status: string;
+  basePrice: string | null;
+  totalPrice: string | null;
+  details: string | null;
+  confirmedHours: number | null;
+  hasHotTub: boolean | null;
+  hasPiano: boolean | null;
+  hasHeavySafe: boolean | null;
+  hasPoolTable: boolean | null;
+  crewMembers: string[] | null;
+  firstName: string;
+  lastName: string;
+  dispatchNotes: string | null;
+};
+
+type TradeRequestStatus = {
+  id: string;
+  leadId: string;
+  requesterId: string;
+  targetId: string;
+  status: string;
+  requesterNote: string | null;
+};
+
+function PremiumBadge({ label, color }: { label: string; color: string }) {
+  return (
+    <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${color}`}>
+      {label}
+    </span>
+  );
+}
+
+function CrewAvatarChip({ name }: { name: string }) {
+  const initials = name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
+  return (
+    <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-600 text-white text-[10px] font-bold ring-2 ring-slate-800 -ml-1.5 first:ml-0">
+      {initials}
+    </span>
+  );
+}
+
+function JobBoardCard({
+  job,
+  onApply,
+  onViewDetail,
+  isPending,
+  crewNames,
+}: {
+  job: JobBoardLead;
+  onApply: () => void;
+  onViewDetail: () => void;
+  isPending: boolean;
+  crewNames: string[];
+}) {
   const isFull = job.crewSlotsFilled >= (job.crewSize || 2);
   const slotsOpen = (job.crewSize || 2) - job.crewSlotsFilled;
+  const effectiveDate = job.confirmedDate || job.moveDate;
+  const city = extractCity(job.fromAddress);
+  const state = extractState(job.fromAddress);
+  const estimatedTokens = job.estimatedTokens || calcEstimatedTokens(job.confirmedHours);
+  const estimatedHrs = job.confirmedHours || 3;
+
+  const hasPremiums = job.hasHotTub || job.hasPiano || job.hasHeavySafe || job.hasPoolTable;
 
   return (
-    <Card className="bg-slate-800/40 border border-slate-700/50 hover:border-slate-600/60 transition-colors">
+    <Card className="bg-slate-800/40 border border-slate-700/50 hover:border-blue-500/40 transition-all cursor-pointer active:scale-[0.99]"
+      onClick={onViewDetail}
+    >
       <CardContent className="p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="text-2xl leading-none mt-0.5">
-              {SERVICE_ICONS[job.serviceType] || "📦"}
-            </div>
-            <div>
-              <p className="font-semibold text-white text-sm">
-                {SERVICE_LABELS[job.serviceType] || job.serviceType}
-              </p>
-              <StatusPill status={job.status} />
-            </div>
+        <div className="flex items-start gap-3">
+          <div className="text-3xl leading-none mt-0.5 flex-shrink-0">
+            {SERVICE_ICONS[job.serviceType] || "📦"}
           </div>
-          <div className="text-right">
-            <p className="text-orange-400 font-bold text-sm flex items-center gap-1 justify-end">
-              <Coins className="h-3.5 w-3.5" />
-              ~{job.estimatedTokens.toLocaleString()}
-            </p>
-            <p className="text-slate-500 text-xs">JCMOVES</p>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="font-bold text-white text-sm leading-tight">
+                  {SERVICE_LABELS[job.serviceType] || job.serviceType}
+                </p>
+                {(city || state) && (
+                  <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
+                    <MapPin className="h-3 w-3 text-slate-500 flex-shrink-0" />
+                    {[city, state].filter(Boolean).join(", ")}
+                  </p>
+                )}
+              </div>
+              <div className="text-right flex-shrink-0">
+                <p className="text-orange-400 font-black text-base flex items-center gap-1 justify-end">
+                  <Coins className="h-3.5 w-3.5" />
+                  ~{estimatedTokens.toLocaleString()}
+                </p>
+                <p className="text-slate-500 text-[10px]">JCMOVES</p>
+              </div>
+            </div>
+
+            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+              {effectiveDate && (
+                <span className="flex items-center gap-1 text-xs text-slate-300">
+                  <Calendar className="h-3 w-3 text-slate-500" />
+                  {formatDateShort(effectiveDate)}
+                </span>
+              )}
+              {job.arrivalWindow && (
+                <span className="flex items-center gap-1 text-xs text-slate-400">
+                  <Clock className="h-3 w-3 text-slate-500" />
+                  {job.arrivalWindow}
+                </span>
+              )}
+              <span className="flex items-center gap-1 text-xs text-slate-400">
+                <Users className="h-3 w-3 text-slate-500" />
+                {job.crewSlotsFilled}/{job.crewSize || 2} crew
+                {isFull
+                  ? <span className="text-green-400 ml-0.5">full</span>
+                  : <span className="text-yellow-400 ml-0.5">{slotsOpen} open</span>
+                }
+              </span>
+              <span className="text-xs text-slate-400">
+                ~{estimatedHrs}h · ~${(Math.round(estimatedTokens * 0.00000508432 * 100) / 100).toFixed(0)}
+              </span>
+            </div>
+
+            {hasPremiums && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {job.hasHotTub && <PremiumBadge label="🛁 Hot Tub" color="bg-orange-500/20 text-orange-300" />}
+                {job.hasPiano && <PremiumBadge label="🎹 Piano" color="bg-purple-500/20 text-purple-300" />}
+                {job.hasHeavySafe && <PremiumBadge label="🔒 Safe" color="bg-red-500/20 text-red-300" />}
+                {job.hasPoolTable && <PremiumBadge label="🎱 Pool Table" color="bg-blue-500/20 text-blue-300" />}
+              </div>
+            )}
+
+            {crewNames.length > 0 && (
+              <div className="mt-2 flex items-center gap-1">
+                <div className="flex">
+                  {crewNames.slice(0, 4).map((name, i) => (
+                    <CrewAvatarChip key={i} name={name} />
+                  ))}
+                </div>
+                <span className="text-xs text-slate-500 ml-2">
+                  {crewNames.slice(0, 2).map(n => n.split(" ")[0]).join(", ")}
+                  {crewNames.length > 2 ? ` +${crewNames.length - 2}` : ""}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="mt-3 space-y-1.5">
-          {job.fromAddress && (
-            <div className="flex items-center gap-2 text-xs text-slate-400">
-              <MapPin className="h-3.5 w-3.5 flex-shrink-0 text-slate-500" />
-              <span className="truncate">{job.fromAddress}</span>
-              {job.toAddress && <span className="text-slate-600">→ {job.toAddress}</span>}
-            </div>
-          )}
-          {job.moveDate && (
-            <div className="flex items-center gap-2 text-xs text-slate-400">
-              <Calendar className="h-3.5 w-3.5 flex-shrink-0 text-slate-500" />
-              <span>{new Date(job.moveDate).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</span>
-            </div>
-          )}
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            <Users className="h-3.5 w-3.5 flex-shrink-0 text-slate-500" />
-            <span>
-              {job.crewSize || 2} movers needed
-              {job.crewSlotsFilled > 0 && (
-                <span className="text-blue-400 ml-1">· {job.crewSlotsFilled} signed up</span>
-              )}
-              {isFull && <span className="text-green-400 ml-1">· Full</span>}
-              {!isFull && slotsOpen > 0 && (
-                <span className="text-yellow-400 ml-1">· {slotsOpen} slot{slotsOpen !== 1 ? "s" : ""} open</span>
-              )}
-            </span>
-          </div>
-          {job.details && (
-            <p className="text-xs text-slate-500 line-clamp-2 mt-1">{job.details}</p>
-          )}
-        </div>
-
-        <div className="mt-3">
+        <div className="mt-3 flex gap-2" onClick={e => e.stopPropagation()}>
           {job.alreadyApplied ? (
-            <div className="flex items-center gap-2 text-green-400 text-sm">
-              <CheckCircle2 className="h-4 w-4" />
-              <span className="font-medium">You're signed up — awaiting confirmation</span>
+            <div className="flex items-center gap-2 text-green-400 text-sm w-full">
+              <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+              <span className="font-medium">Signed up — awaiting confirmation</span>
             </div>
           ) : isFull ? (
-            <Button size="sm" disabled className="w-full bg-slate-700 text-slate-500 cursor-not-allowed">
+            <Button size="sm" disabled className="flex-1 bg-slate-700 text-slate-500 cursor-not-allowed text-xs">
               Crew Full
             </Button>
           ) : (
@@ -130,14 +259,376 @@ function JobBoardCard({ job, onApply, isPending }: { job: JobBoardLead; onApply:
               size="sm"
               onClick={onApply}
               disabled={isPending}
-              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold"
+              className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs"
             >
               {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign Up for This Job"}
             </Button>
           )}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onViewDetail}
+            className="border-slate-600 text-slate-400 hover:text-white text-xs"
+          >
+            Details <ChevronRight className="h-3.5 w-3.5 ml-1" />
+          </Button>
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function MyJobCard({
+  lead,
+  onViewDetail,
+  crewNames,
+  myTradeRequest,
+}: {
+  lead: EnrichedLead;
+  onViewDetail: () => void;
+  crewNames: string[];
+  myTradeRequest: TradeRequestStatus | null;
+}) {
+  const effectiveDate = lead.confirmedDate || lead.moveDate;
+  const city = extractCity(lead.fromAddress);
+  const state = extractState(lead.fromAddress);
+  const estimatedTokens = calcEstimatedTokens(lead.confirmedHours);
+
+  const statusBadge: Record<string, string> = {
+    pending: "bg-yellow-500/20 text-yellow-300",
+    approved: "bg-green-500/20 text-green-300",
+    denied: "bg-red-500/20 text-red-300",
+  };
+
+  return (
+    <Card
+      className="bg-slate-800/40 border border-slate-700/50 hover:border-blue-500/40 transition-all cursor-pointer active:scale-[0.99]"
+      onClick={onViewDetail}
+    >
+      <CardContent className="p-4">
+        <div className="flex items-start gap-3">
+          <div className="text-2xl leading-none mt-0.5 flex-shrink-0">
+            {SERVICE_ICONS[lead.serviceType] || "📦"}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="font-bold text-white text-sm">{SERVICE_LABELS[lead.serviceType] || lead.serviceType}</p>
+                <p className="text-xs text-slate-400">{lead.firstName} {lead.lastName}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-orange-400 font-bold text-sm flex items-center gap-1 justify-end">
+                  <Coins className="h-3 w-3" />
+                  ~{estimatedTokens.toLocaleString()}
+                </p>
+                <p className="text-slate-600 text-[10px]">JCMOVES</p>
+              </div>
+            </div>
+            <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+              {(city || state) && (
+                <span className="text-xs text-slate-400 flex items-center gap-1">
+                  <MapPin className="h-3 w-3 text-slate-500" />
+                  {[city, state].filter(Boolean).join(", ")}
+                </span>
+              )}
+              {effectiveDate && (
+                <span className="text-xs text-slate-400 flex items-center gap-1">
+                  <Calendar className="h-3 w-3 text-slate-500" />
+                  {formatDateShort(effectiveDate)}
+                </span>
+              )}
+              {lead.arrivalWindow && (
+                <span className="text-xs text-slate-400 flex items-center gap-1">
+                  <Clock className="h-3 w-3 text-slate-500" />
+                  {lead.arrivalWindow}
+                </span>
+              )}
+            </div>
+            {myTradeRequest && (
+              <div className={`mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge[myTradeRequest.status] || "bg-slate-700 text-slate-400"}`}>
+                <ArrowLeftRight className="h-3 w-3" />
+                Trade {myTradeRequest.status.charAt(0).toUpperCase() + myTradeRequest.status.slice(1)}
+              </div>
+            )}
+          </div>
+          <ChevronRight className="h-4 w-4 text-slate-600 flex-shrink-0 mt-1" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function JobDetailSheet({
+  open,
+  onClose,
+  lead,
+  isAssigned,
+  myId,
+  employees,
+  tradeRequests,
+}: {
+  open: boolean;
+  onClose: () => void;
+  lead: JobBoardLead | EnrichedLead | null;
+  isAssigned: boolean;
+  myId: string;
+  employees: User[];
+  tradeRequests: TradeRequestStatus[];
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [showTradeForm, setShowTradeForm] = useState(false);
+  const [tradeTargetId, setTradeTargetId] = useState("");
+  const [tradeNote, setTradeNote] = useState("");
+
+  const myTradeRequest = tradeRequests.find(r => r.leadId === lead?.id && r.requesterId === myId) || null;
+
+  const tradeMutation = useMutation({
+    mutationFn: async () => {
+      if (!lead) throw new Error("No lead");
+      const res = await apiRequest("POST", `/api/leads/${lead.id}/trade-request`, {
+        targetId: tradeTargetId,
+        requesterNote: tradeNote || undefined,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Failed" }));
+        throw new Error(err.error || "Failed to submit trade request");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/trade-requests/my"] });
+      setShowTradeForm(false);
+      setTradeTargetId("");
+      setTradeNote("");
+      toast({ title: "Trade request submitted", description: "The admin will review your request." });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    },
+  });
+
+  if (!lead) return null;
+
+  const effectiveDate = lead.confirmedDate || lead.moveDate;
+  const city = extractCity(lead.fromAddress);
+  const state = extractState(lead.fromAddress);
+  const estimatedTokens = calcEstimatedTokens(lead.confirmedHours);
+  const estimatedHrs = lead.confirmedHours || 3;
+  const flatPay = 500;
+  const hrPay = 25;
+  const crewMembersArr: string[] = Array.isArray(lead.crewMembers) ? lead.crewMembers : [];
+
+  const crewEmployees = crewMembersArr
+    .map(id => employees.find(e => e.id === id))
+    .filter(Boolean) as User[];
+
+  const availableForTrade = employees.filter(
+    e => e.id !== myId && !crewMembersArr.includes(e.id) && e.status === "approved"
+  );
+
+  const statusBadge: Record<string, string> = {
+    pending: "bg-yellow-500/20 text-yellow-300 border-yellow-500/30",
+    approved: "bg-green-500/20 text-green-300 border-green-500/30",
+    denied: "bg-red-500/20 text-red-300 border-red-500/30",
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={v => !v && onClose()}>
+      <SheetContent side="bottom" className="bg-slate-900 border-t border-slate-700 text-white h-[92vh] overflow-y-auto rounded-t-2xl">
+        <SheetHeader className="pb-4 border-b border-slate-700/60">
+          <div className="flex items-center gap-3">
+            <span className="text-3xl">{SERVICE_ICONS[lead.serviceType] || "📦"}</span>
+            <div>
+              <SheetTitle className="text-white text-lg">
+                {SERVICE_LABELS[lead.serviceType] || lead.serviceType}
+              </SheetTitle>
+              {(city || state) && (
+                <p className="text-slate-400 text-sm flex items-center gap-1 mt-0.5">
+                  <MapPin className="h-3.5 w-3.5 text-slate-500" />
+                  {[city, state].filter(Boolean).join(", ")}
+                </p>
+              )}
+            </div>
+          </div>
+        </SheetHeader>
+
+        <div className="pt-4 space-y-5">
+          {/* Date & Time */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-slate-800/60 rounded-xl p-3">
+              <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Date</p>
+              <p className="text-sm font-semibold text-white">{formatDateShort(effectiveDate)}</p>
+            </div>
+            <div className="bg-slate-800/60 rounded-xl p-3">
+              <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Arrival</p>
+              <p className="text-sm font-semibold text-white">{lead.arrivalWindow || "TBD"}</p>
+            </div>
+          </div>
+
+          {/* Pickup Address */}
+          {lead.fromAddress && (
+            <div className="bg-slate-800/60 rounded-xl p-3">
+              <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Pickup</p>
+              <p className="text-sm text-white">{lead.fromAddress}</p>
+              {lead.toAddress && (
+                <>
+                  <p className="text-xs text-slate-500 mt-2 mb-1">Delivery</p>
+                  <p className="text-sm text-white">{lead.toAddress}</p>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Pay Breakdown */}
+          <div className="bg-gradient-to-br from-orange-950/40 to-slate-800/60 border border-orange-500/20 rounded-xl p-4">
+            <p className="text-xs text-orange-400 uppercase tracking-wide font-semibold mb-3">Estimated Pay</p>
+            <div className="flex items-end justify-between">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Coins className="h-4 w-4 text-orange-400" />
+                  <span className="text-2xl font-black text-orange-400">~{estimatedTokens.toLocaleString()}</span>
+                  <span className="text-slate-400 text-sm">JCMOVES</span>
+                </div>
+                <p className="text-xs text-slate-400 pl-6">{flatPay} flat + {hrPay}/hr × {estimatedHrs}h</p>
+              </div>
+            </div>
+            {(lead.hasHotTub || lead.hasPiano || lead.hasHeavySafe || lead.hasPoolTable) && (
+              <div className="mt-3 pt-3 border-t border-orange-500/20">
+                <p className="text-xs text-orange-300 font-semibold mb-1.5">Premium items:</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {lead.hasHotTub && <PremiumBadge label="🛁 Hot Tub" color="bg-orange-500/20 text-orange-300" />}
+                  {lead.hasPiano && <PremiumBadge label="🎹 Piano" color="bg-purple-500/20 text-purple-300" />}
+                  {lead.hasHeavySafe && <PremiumBadge label="🔒 Safe" color="bg-red-500/20 text-red-300" />}
+                  {lead.hasPoolTable && <PremiumBadge label="🎱 Pool Table" color="bg-blue-500/20 text-blue-300" />}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Crew */}
+          <div>
+            <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-2">
+              Crew ({crewMembersArr.length}/{lead.crewSize || 2})
+            </p>
+            {crewEmployees.length === 0 ? (
+              <p className="text-sm text-slate-500">No crew assigned yet</p>
+            ) : (
+              <div className="space-y-2">
+                {crewEmployees.map(emp => (
+                  <div key={emp.id} className="flex items-center gap-3 bg-slate-800/40 rounded-lg px-3 py-2">
+                    <div className="w-8 h-8 rounded-full bg-blue-700 flex items-center justify-center text-white text-xs font-bold">
+                      {((emp.firstName || "?")[0] + (emp.lastName || "?")[0]).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-white">{emp.firstName} {emp.lastName}</p>
+                      <p className="text-xs text-slate-500">{emp.id === myId ? "You" : "Crew member"}</p>
+                    </div>
+                    {emp.id === myId && (
+                      <Badge className="ml-auto bg-blue-600/20 text-blue-300 border-blue-500/30 text-[10px]">You</Badge>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Notes */}
+          {lead.dispatchNotes && (
+            <div className="bg-slate-800/40 rounded-xl p-3">
+              <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Dispatch Notes</p>
+              <p className="text-sm text-slate-300">{lead.dispatchNotes}</p>
+            </div>
+          )}
+
+          {/* Trade Request Section */}
+          {isAssigned && (
+            <div className="border border-slate-700/60 rounded-xl p-4">
+              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-3 flex items-center gap-2">
+                <ArrowLeftRight className="h-3.5 w-3.5" /> Trade Request
+              </p>
+
+              {myTradeRequest ? (
+                <div>
+                  <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border ${statusBadge[myTradeRequest.status] || "bg-slate-700 text-slate-400"}`}>
+                    <ArrowLeftRight className="h-3.5 w-3.5" />
+                    Trade request {myTradeRequest.status}
+                  </div>
+                  {myTradeRequest.status === "pending" && (
+                    <p className="text-xs text-slate-400 mt-2">Waiting for admin review.</p>
+                  )}
+                  {myTradeRequest.status === "approved" && (
+                    <p className="text-xs text-green-400 mt-2">Trade approved — you've been swapped off this job.</p>
+                  )}
+                  {myTradeRequest.status === "denied" && (
+                    <p className="text-xs text-red-400 mt-2">Trade was denied. You remain on this job.</p>
+                  )}
+                </div>
+              ) : showTradeForm ? (
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-xs text-slate-400 mb-2">Who should take your spot?</p>
+                    <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                      {availableForTrade.length === 0 ? (
+                        <p className="text-xs text-slate-500">No available crew members to trade with.</p>
+                      ) : (
+                        availableForTrade.map(emp => (
+                          <button
+                            key={emp.id}
+                            onClick={() => setTradeTargetId(emp.id)}
+                            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-colors ${
+                              tradeTargetId === emp.id
+                                ? "bg-blue-600/20 border border-blue-500/50 text-white"
+                                : "bg-slate-800/60 text-slate-300 hover:bg-slate-700/60"
+                            }`}
+                          >
+                            <div className="w-7 h-7 rounded-full bg-slate-600 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                              {((emp.firstName || "?")[0] + (emp.lastName || "?")[0]).toUpperCase()}
+                            </div>
+                            <span className="text-sm">{emp.firstName} {emp.lastName}</span>
+                            {tradeTargetId === emp.id && <CheckCircle2 className="h-4 w-4 ml-auto text-blue-400" />}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                  <Textarea
+                    placeholder="Optional note to admin…"
+                    value={tradeNote}
+                    onChange={e => setTradeNote(e.target.value)}
+                    className="bg-slate-800 border-slate-700 text-white text-sm resize-none"
+                    rows={2}
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => tradeMutation.mutate()}
+                      disabled={!tradeTargetId || tradeMutation.isPending}
+                      className="flex-1 bg-orange-600 hover:bg-orange-500 text-white font-semibold"
+                    >
+                      {tradeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Submit Trade Request"}
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setShowTradeForm(false)} className="border-slate-600 text-slate-400">
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowTradeForm(true)}
+                  className="border-slate-600 text-slate-300 hover:text-white hover:border-orange-500/50"
+                >
+                  <ArrowLeftRight className="h-3.5 w-3.5 mr-2" />
+                  Request Trade
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -146,19 +637,30 @@ export default function CrewJobsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
-  const isAdmin = ["admin", "business_owner"].includes(user?.role || "");
   const [applyingId, setApplyingId] = useState<string | null>(null);
-
-  const { data: myJobs = [], isLoading: myJobsLoading } = useQuery<Lead[]>({
-    queryKey: [isAdmin ? "/api/leads" : "/api/leads/my-jobs"],
-    staleTime: 0,
-    refetchOnMount: true,
-  });
+  const [selectedJob, setSelectedJob] = useState<JobBoardLead | EnrichedLead | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   const { data: boardJobs = [], isLoading: boardLoading } = useQuery<JobBoardLead[]>({
     queryKey: ["/api/leads/job-board"],
     staleTime: 0,
     refetchOnMount: true,
+    refetchInterval: 30000,
+  });
+
+  const { data: myJobs = [], isLoading: myJobsLoading } = useQuery<EnrichedLead[]>({
+    queryKey: ["/api/leads/my-jobs"],
+    staleTime: 0,
+    refetchOnMount: true,
+  });
+
+  const { data: employees = [] } = useQuery<User[]>({
+    queryKey: ["/api/employees"],
+  });
+
+  const { data: myTradeRequests = [] } = useQuery<TradeRequestStatus[]>({
+    queryKey: ["/api/trade-requests/my"],
+    staleTime: 30000,
   });
 
   const applyMutation = useMutation({
@@ -170,11 +672,11 @@ export default function CrewJobsPage() {
       }
       return res.json();
     },
-    onSuccess: (_, leadId) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/leads/job-board"] });
       queryClient.invalidateQueries({ queryKey: ["/api/leads/my-jobs"] });
       setApplyingId(null);
-      toast({ title: "✅ Signed up!", description: "The admin will confirm your assignment." });
+      toast({ title: "Signed up!", description: "Admin will confirm your assignment." });
     },
     onError: (e: Error) => {
       setApplyingId(null);
@@ -182,17 +684,40 @@ export default function CrewJobsPage() {
     },
   });
 
-  const activeJobs = useMemo(() =>
-    myJobs.filter(l => !["completed", "cancelled"].includes(l.status)), [myJobs]);
-  const completedJobs = useMemo(() =>
-    myJobs.filter(l => l.status === "completed"), [myJobs]);
+  const activeJobs = useMemo(
+    () => myJobs.filter(l => !["completed", "cancelled"].includes(l.status)),
+    [myJobs]
+  );
+  const completedJobs = useMemo(
+    () => myJobs.filter(l => l.status === "completed"),
+    [myJobs]
+  );
+
+  const getCrewNames = (crewMembers: string[] | null): string[] => {
+    if (!crewMembers) return [];
+    return crewMembers
+      .map(id => employees.find(e => e.id === id))
+      .filter(Boolean)
+      .map(e => `${(e as User).firstName || ""} ${(e as User).lastName || ""}`.trim());
+  };
+
+  const openDetail = (job: JobBoardLead | EnrichedLead) => {
+    setSelectedJob(job);
+    setDetailOpen(true);
+  };
+
+  const isAssigned = selectedJob
+    ? Array.isArray(selectedJob.crewMembers) && selectedJob.crewMembers.includes(user?.id || "")
+    : false;
+
+  const openCount = boardJobs.filter(j => !j.alreadyApplied && (j.crewSize || 2) > j.crewSlotsFilled).length;
 
   return (
     <div className="max-w-2xl mx-auto px-4 pt-6 pb-8">
       <div className="flex items-center justify-between mb-5">
         <div>
           <h1 className="text-2xl font-black text-white">Jobs</h1>
-          <p className="text-slate-400 text-sm">Your assignments & open job board</p>
+          <p className="text-slate-400 text-sm">Job board & your assignments</p>
         </div>
         <Button size="sm" className="bg-blue-600 hover:bg-blue-500" onClick={() => navigate("/post-job")}>
           <Plus className="h-4 w-4 mr-1" /> Add Lead
@@ -204,9 +729,9 @@ export default function CrewJobsPage() {
           <TabsTrigger value="board" className="flex-1 data-[state=active]:bg-blue-600/20 data-[state=active]:text-blue-300">
             <Briefcase className="h-3.5 w-3.5 mr-1.5" />
             Job Board
-            {boardJobs.filter(j => !j.alreadyApplied).length > 0 && (
+            {openCount > 0 && (
               <span className="ml-1.5 bg-blue-500 text-white text-xs rounded-full px-1.5 py-0.5 leading-none">
-                {boardJobs.filter(j => !j.alreadyApplied).length}
+                {openCount}
               </span>
             )}
           </TabsTrigger>
@@ -222,27 +747,24 @@ export default function CrewJobsPage() {
         </TabsList>
 
         <TabsContent value="board" className="space-y-3">
-          <p className="text-slate-500 text-xs">
-            Open jobs you can sign up for. Admin confirms your spot before the job date.
-          </p>
+          <p className="text-slate-500 text-xs">Tap a card for full details. Sign up to be assigned.</p>
           {boardLoading ? (
             <div className="flex justify-center py-10"><Loader2 className="h-7 w-7 animate-spin text-blue-400" /></div>
           ) : boardJobs.length === 0 ? (
             <div className="text-center py-14 text-slate-500">
               <Truck className="h-10 w-10 mx-auto mb-3 opacity-30" />
               <p className="font-medium">No open jobs right now</p>
-              <p className="text-xs mt-1">Check back soon — new jobs appear here when they're added</p>
+              <p className="text-xs mt-1">Check back soon</p>
             </div>
           ) : (
             boardJobs.map(job => (
               <JobBoardCard
                 key={job.id}
                 job={job}
-                onApply={() => {
-                  setApplyingId(job.id);
-                  applyMutation.mutate(job.id);
-                }}
+                onApply={() => { setApplyingId(job.id); applyMutation.mutate(job.id); }}
+                onViewDetail={() => openDetail(job)}
                 isPending={applyingId === job.id && applyMutation.isPending}
+                crewNames={getCrewNames(job.crewMembers)}
               />
             ))
           )}
@@ -263,71 +785,33 @@ export default function CrewJobsPage() {
                 <div className="space-y-2">
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Active ({activeJobs.length})</p>
                   {activeJobs.map(lead => {
-                    const sc = getStatusColors(lead.status);
+                    const myTrade = myTradeRequests.find(r => r.leadId === lead.id && r.requesterId === user?.id) || null;
                     return (
-                      <Card key={lead.id} className={`border-l-4 ${sc.border} bg-white/[0.03] border-t border-r border-b border-slate-700/40`}>
-                        <CardContent className="p-4">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                <p className="font-semibold text-white text-sm">
-                                  {lead.firstName} {lead.lastName}
-                                </p>
-                                <StatusPill status={lead.status} />
-                                {lead.serviceType && (
-                                  <span className="text-xs text-slate-400">
-                                    {SERVICE_ICONS[lead.serviceType]} {SERVICE_LABELS[lead.serviceType] || lead.serviceType}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex flex-wrap gap-3 text-xs text-slate-400">
-                                {lead.moveDate && (
-                                  <span className="flex items-center gap-1">
-                                    <Calendar className="h-3 w-3" />
-                                    {new Date(lead.moveDate).toLocaleDateString()}
-                                  </span>
-                                )}
-                                {lead.fromAddress && (
-                                  <span className="flex items-center gap-1">
-                                    <MapPin className="h-3 w-3" />
-                                    <span className="truncate max-w-[180px]">{lead.fromAddress}</span>
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            <Link href={`/lead/${lead.id}`}>
-                              <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400 hover:text-white flex-shrink-0">
-                                <ChevronRight className="h-4 w-4" />
-                              </Button>
-                            </Link>
-                          </div>
-                        </CardContent>
-                      </Card>
+                      <MyJobCard
+                        key={lead.id}
+                        lead={lead}
+                        onViewDetail={() => openDetail(lead)}
+                        crewNames={getCrewNames(lead.crewMembers)}
+                        myTradeRequest={myTrade}
+                      />
                     );
                   })}
                 </div>
               )}
-
               {completedJobs.length > 0 && (
                 <div className="space-y-2 mt-4">
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Completed ({completedJobs.length})</p>
                   {completedJobs.slice(0, 5).map(lead => (
-                    <Card key={lead.id} className="bg-white/[0.02] border border-slate-800/60">
+                    <Card key={lead.id} className="bg-white/[0.02] border border-slate-800/60 cursor-pointer" onClick={() => openDetail(lead)}>
                       <CardContent className="p-3">
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-sm text-slate-300 font-medium">{lead.firstName} {lead.lastName}</p>
                             <p className="text-xs text-slate-500">
-                              {lead.serviceType && `${SERVICE_LABELS[lead.serviceType] || lead.serviceType} · `}
-                              {lead.moveDate && new Date(lead.moveDate).toLocaleDateString()}
+                              {SERVICE_LABELS[lead.serviceType] || lead.serviceType} · {formatDateShort(lead.confirmedDate || lead.moveDate)}
                             </p>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <CheckCircle2 className="h-4 w-4 text-green-500" />
-                            <Link href={`/lead/${lead.id}`}>
-                              <ChevronRight className="h-4 w-4 text-slate-600 hover:text-slate-400" />
-                            </Link>
-                          </div>
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
                         </div>
                       </CardContent>
                     </Card>
@@ -338,6 +822,16 @@ export default function CrewJobsPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      <JobDetailSheet
+        open={detailOpen}
+        onClose={() => { setDetailOpen(false); setSelectedJob(null); }}
+        lead={selectedJob}
+        isAssigned={isAssigned}
+        myId={user?.id || ""}
+        employees={employees}
+        tradeRequests={myTradeRequests}
+      />
     </div>
   );
 }

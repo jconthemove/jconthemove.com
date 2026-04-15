@@ -1,5 +1,801 @@
-import LeadsPage from "@/pages/leads";
+import { useState, useMemo } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  MapPin, Calendar, Loader2, Phone, Mail, Users, DollarSign, Bitcoin,
+  CheckCircle2, Clock, Send, Star, ArrowLeftRight, ChevronRight,
+  Coins, Search, Truck, Minus, Plus, RefreshCw, Receipt, UserCheck,
+  UserX, XCircle, Check, X
+} from "lucide-react";
+import type { User } from "@shared/schema";
+
+const SERVICE_ICONS: Record<string, string> = {
+  residential: "🚛", commercial: "🏢", junk: "🗑️", snow: "❄️",
+  cleaning: "✨", handyman: "🔧", demolition: "⚒️", flooring: "🪵",
+  painting: "🎨", moving: "🚛", labor: "💪",
+};
+
+const SERVICE_LABELS: Record<string, string> = {
+  residential: "Residential Move", commercial: "Commercial Move", junk: "Junk Removal",
+  snow: "Snow Removal", cleaning: "Cleaning", handyman: "Handyman", demolition: "Demolition",
+  flooring: "Flooring", painting: "Painting", moving: "Moving", labor: "Labor",
+};
+
+const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
+  quote_requested: { label: "Quote Req.", color: "bg-yellow-500/20 text-yellow-300 border-yellow-500/30" },
+  chatbot_pending: { label: "Chatbot", color: "bg-teal-500/20 text-teal-300 border-teal-500/30" },
+  available: { label: "Confirmed", color: "bg-blue-500/20 text-blue-300 border-blue-500/30" },
+  in_progress: { label: "In Progress", color: "bg-purple-500/20 text-purple-300 border-purple-500/30" },
+  completed: { label: "Completed", color: "bg-green-500/20 text-green-300 border-green-500/30" },
+  cancelled: { label: "Cancelled", color: "bg-red-500/20 text-red-300 border-red-500/30" },
+};
+
+function formatDateShort(dateStr: string | null | undefined): string {
+  if (!dateStr) return "TBD";
+  try {
+    const d = new Date(dateStr.includes("T") ? dateStr : dateStr + "T12:00:00");
+    return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  } catch { return dateStr; }
+}
+
+type Lead = {
+  id: string;
+  orderNumber?: number | null;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  serviceType: string;
+  fromAddress: string;
+  toAddress?: string;
+  moveDate?: string;
+  confirmedDate?: string;
+  arrivalWindow?: string;
+  crewSize?: number;
+  status: string;
+  basePrice?: string;
+  totalPrice?: string;
+  depositRequired?: boolean;
+  depositAmount?: string;
+  depositPaid?: boolean;
+  confirmedHours?: number;
+  crewMembers?: string[];
+  crewBonusFlags?: Record<string, boolean>;
+  hasHotTub?: boolean;
+  hasPiano?: boolean;
+  hasHeavySafe?: boolean;
+  hasPoolTable?: boolean;
+  squarePaymentUrl?: string;
+  details?: string;
+  quoteNotes?: string;
+  dispatchNotes?: string;
+  reviewToken?: string;
+  archivedAt?: string | null;
+};
+
+type EnrichedTradeRequest = {
+  id: string;
+  leadId: string;
+  requesterId: string;
+  targetId: string;
+  status: string;
+  requesterNote: string | null;
+  adminNote: string | null;
+  requester: { id: string; firstName: string | null; lastName: string | null } | null;
+  target: { id: string; firstName: string | null; lastName: string | null } | null;
+  job: { id: string; firstName: string; lastName: string; serviceType: string } | null;
+};
+
+function StatusBadge({ status }: { status: string }) {
+  const cfg = STATUS_CONFIG[status] || { label: status, color: "bg-slate-700/50 text-slate-400" };
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${cfg.color}`}>
+      {cfg.label}
+    </span>
+  );
+}
+
+function extractCity(address: string | null | undefined): string {
+  if (!address) return "";
+  const parts = address.split(",").map(s => s.trim());
+  return parts[1] || parts[0] || "";
+}
+
+function AdminJobCard({ lead, onClick, employees }: {
+  lead: Lead;
+  onClick: () => void;
+  employees: User[];
+}) {
+  const effectiveDate = lead.confirmedDate || lead.moveDate;
+  const crewMembers = Array.isArray(lead.crewMembers) ? lead.crewMembers : [];
+  const crewSlotsFilled = crewMembers.length;
+  const crewSlotsNeeded = lead.crewSize || 2;
+  const crewFull = crewSlotsFilled >= crewSlotsNeeded;
+
+  const crewNames = crewMembers
+    .map(id => employees.find(e => e.id === id))
+    .filter(Boolean)
+    .map(e => `${(e as User).firstName || ""}`.trim())
+    .slice(0, 3);
+
+  const city = extractCity(lead.fromAddress);
+  const hasPremiums = lead.hasHotTub || lead.hasPiano || lead.hasHeavySafe || lead.hasPoolTable;
+
+  return (
+    <Card
+      className="bg-slate-800/40 border border-slate-700/50 hover:border-blue-500/40 transition-all cursor-pointer active:scale-[0.99]"
+      onClick={onClick}
+    >
+      <CardContent className="p-4">
+        <div className="flex items-start gap-3">
+          <div className="text-2xl leading-none mt-0.5 flex-shrink-0">
+            {SERVICE_ICONS[lead.serviceType] || "📦"}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-bold text-white text-sm truncate">{lead.firstName} {lead.lastName}</p>
+                  <StatusBadge status={lead.status} />
+                </div>
+                <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                  <p className="text-xs text-slate-400">{SERVICE_LABELS[lead.serviceType] || lead.serviceType}</p>
+                  {city && (
+                    <span className="text-xs text-slate-500 flex items-center gap-0.5">
+                      <MapPin className="h-3 w-3" />{city}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="text-right flex-shrink-0">
+                {lead.totalPrice ? (
+                  <p className="font-black text-green-400 text-sm">${parseFloat(lead.totalPrice).toLocaleString()}</p>
+                ) : lead.basePrice ? (
+                  <p className="font-bold text-slate-300 text-sm">${parseFloat(lead.basePrice).toLocaleString()}</p>
+                ) : (
+                  <p className="text-xs text-slate-600">No quote</p>
+                )}
+                {lead.depositRequired && (
+                  <span className={`text-[10px] flex items-center gap-0.5 justify-end mt-0.5 ${lead.depositPaid ? "text-green-400" : "text-yellow-400"}`}>
+                    {lead.depositPaid ? <Check className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+                    Deposit {lead.depositPaid ? "paid" : "due"}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+              {lead.phone && (
+                <span className="text-xs text-slate-400 flex items-center gap-1">
+                  <Phone className="h-3 w-3 text-slate-500" />
+                  {lead.phone}
+                </span>
+              )}
+              {effectiveDate && (
+                <span className="text-xs text-slate-400 flex items-center gap-1">
+                  <Calendar className="h-3 w-3 text-slate-500" />
+                  {formatDateShort(effectiveDate)}
+                </span>
+              )}
+              <span className={`text-xs flex items-center gap-1 ${crewFull ? "text-green-400" : "text-yellow-400"}`}>
+                <Users className="h-3 w-3" />
+                {crewSlotsFilled}/{crewSlotsNeeded}
+                {crewFull ? " full" : " open"}
+              </span>
+            </div>
+            {hasPremiums && (
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {lead.hasHotTub && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-500/20 text-orange-300">🛁 Hot Tub</span>}
+                {lead.hasPiano && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300">🎹 Piano</span>}
+                {lead.hasHeavySafe && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-300">🔒 Safe</span>}
+                {lead.hasPoolTable && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300">🎱 Pool Table</span>}
+              </div>
+            )}
+          </div>
+          <ChevronRight className="h-4 w-4 text-slate-600 flex-shrink-0 mt-1" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function POSRow({ label, value, accent }: { label: string; value: React.ReactNode; accent?: boolean }) {
+  return (
+    <div className="flex items-center justify-between py-2 border-b border-slate-800/60 last:border-0">
+      <span className="text-xs text-slate-500 uppercase tracking-wide">{label}</span>
+      <span className={`text-sm font-semibold ${accent ? "text-green-400" : "text-white"}`}>{value}</span>
+    </div>
+  );
+}
+
+function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: {
+  lead: Lead | null;
+  onClose: () => void;
+  employees: User[];
+  tradeRequests: EnrichedTradeRequest[];
+  open: boolean;
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [basePrice, setBasePrice] = useState("");
+  const [totalPrice, setTotalPrice] = useState("");
+  const [quoteNote, setQuoteNote] = useState("");
+  const [btcAmount, setBtcAmount] = useState("");
+  const [btcLink, setBtcLink] = useState<string | null>(null);
+  const [tradeNote, setTradeNote] = useState<Record<string, string>>({});
+
+  const jobTradeRequests = tradeRequests.filter(r => r.leadId === lead?.id && r.status === "pending");
+
+  const crewMembersArr = Array.isArray(lead?.crewMembers) ? lead!.crewMembers! : [];
+  const crewEmployees = crewMembersArr
+    .map(id => employees.find(e => e.id === id))
+    .filter(Boolean) as User[];
+
+  const availableToAdd = employees.filter(
+    e => !crewMembersArr.includes(e.id) && (e.status === "approved" || e.role === "admin")
+  );
+
+  const savePriceMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PATCH", `/api/leads/${lead!.id}/quote`, {
+        ...(basePrice ? { basePrice } : {}),
+        ...(totalPrice ? { totalPrice } : {}),
+        ...(quoteNote ? { quoteNotes: quoteNote } : {}),
+      });
+      if (!res.ok) throw new Error("Failed to save");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      toast({ title: "Saved", description: "Quote updated." });
+    },
+    onError: () => toast({ title: "Error", description: "Could not save.", variant: "destructive" }),
+  });
+
+  const sendInvoiceMutation = useMutation({
+    mutationFn: async () => {
+      const amount = parseFloat(totalPrice || lead?.totalPrice || "0");
+      if (!amount) throw new Error("No price set");
+      const res = await apiRequest("POST", `/api/invoices/lead/${lead!.id}`, {
+        amount,
+        description: `${lead!.serviceType} — ${lead!.firstName} ${lead!.lastName}`,
+        deliveryMethod: "email",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Failed" }));
+        throw new Error(err.error || "Failed to send invoice");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      toast({ title: "Invoice sent!", description: "Square invoice sent to customer." });
+    },
+    onError: (e: Error) => toast({ title: "Invoice failed", description: e.message, variant: "destructive" }),
+  });
+
+  const generateBtcMutation = useMutation({
+    mutationFn: async () => {
+      const amount = parseFloat(btcAmount || totalPrice || lead?.totalPrice || "0");
+      if (!amount) throw new Error("No amount set");
+      const res = await apiRequest("POST", `/api/bitcoin/payment-link`, {
+        referenceType: "job_payment",
+        referenceId: lead!.id,
+        customerName: `${lead!.firstName} ${lead!.lastName}`,
+        customerEmail: lead!.email,
+        customerPhone: lead!.phone,
+        usdAmount: amount,
+        notes: `Moving job — ${lead!.firstName} ${lead!.lastName}`,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Failed" }));
+        throw new Error(err.error || "Failed to generate BTC link");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setBtcLink(data.paymentUrl || data.checkoutUrl || null);
+      toast({ title: "BTC link ready", description: "Copy link to share with customer." });
+    },
+    onError: (e: Error) => toast({ title: "BTC failed", description: e.message, variant: "destructive" }),
+  });
+
+  const markDepositMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/leads/${lead!.id}/mark-deposit-received`, {});
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      toast({ title: "Deposit marked paid" });
+    },
+    onError: () => toast({ title: "Error", variant: "destructive" }),
+  });
+
+  const addCrewMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const newCrew = [...crewMembersArr, userId];
+      const res = await apiRequest("PATCH", `/api/leads/${lead!.id}/quote`, { crewMembers: newCrew });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      toast({ title: "Crew updated" });
+    },
+    onError: () => toast({ title: "Error", variant: "destructive" }),
+  });
+
+  const removeCrewMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const newCrew = crewMembersArr.filter(id => id !== userId);
+      const res = await apiRequest("PATCH", `/api/leads/${lead!.id}/quote`, { crewMembers: newCrew });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      toast({ title: "Crew updated" });
+    },
+    onError: () => toast({ title: "Error", variant: "destructive" }),
+  });
+
+  const reviewTradeMutation = useMutation({
+    mutationFn: async ({ tradeId, status }: { tradeId: string; status: string }) => {
+      const res = await apiRequest("PATCH", `/api/trade-requests/${tradeId}/review`, {
+        status,
+        adminNote: tradeNote[tradeId] || undefined,
+      });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    onSuccess: (_, { status }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/trade-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      toast({ title: status === "approved" ? "Trade approved" : "Trade denied" });
+    },
+    onError: () => toast({ title: "Error", variant: "destructive" }),
+  });
+
+  const sendReviewLinkMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/leads/${lead!.id}/request-review`, {});
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    onSuccess: () => toast({ title: "Review link sent", description: "Customer will receive the review link." }),
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  if (!lead) return null;
+
+  const effectiveDate = lead.confirmedDate || lead.moveDate;
+  const displayPrice = totalPrice || lead.totalPrice;
+  const displayBasePrice = basePrice || lead.basePrice;
+
+  return (
+    <Sheet open={open} onOpenChange={v => !v && onClose()}>
+      <SheetContent
+        side="right"
+        className="bg-slate-900 border-l border-slate-700 text-white w-full sm:max-w-xl overflow-y-auto"
+      >
+        <SheetHeader className="pb-4 border-b border-slate-700/60">
+          <div className="flex items-start gap-3">
+            <span className="text-3xl">{SERVICE_ICONS[lead.serviceType] || "📦"}</span>
+            <div className="flex-1 min-w-0">
+              <SheetTitle className="text-white text-lg leading-tight">
+                {lead.firstName} {lead.lastName}
+              </SheetTitle>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                <StatusBadge status={lead.status} />
+                <span className="text-xs text-slate-400">{SERVICE_LABELS[lead.serviceType] || lead.serviceType}</span>
+              </div>
+            </div>
+          </div>
+        </SheetHeader>
+
+        <div className="pt-4 space-y-5 pb-8">
+          {/* Customer Info — POS Receipt Style */}
+          <div className="bg-slate-800/60 rounded-xl p-4">
+            <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold mb-3 flex items-center gap-1.5">
+              <Receipt className="h-3 w-3" /> Customer
+            </p>
+            <POSRow label="Name" value={`${lead.firstName} ${lead.lastName}`} />
+            <POSRow label="Phone" value={
+              <a href={`tel:${lead.phone}`} className="text-blue-400 hover:text-blue-300">{lead.phone}</a>
+            } />
+            <POSRow label="Email" value={
+              <a href={`mailto:${lead.email}`} className="text-blue-400 hover:text-blue-300 truncate max-w-[180px] block">{lead.email}</a>
+            } />
+            <POSRow label="Date" value={formatDateShort(effectiveDate)} />
+            {lead.arrivalWindow && <POSRow label="Arrival" value={lead.arrivalWindow} />}
+            {lead.fromAddress && <POSRow label="From" value={<span className="text-xs text-right max-w-[200px] block">{lead.fromAddress}</span>} />}
+            {lead.toAddress && <POSRow label="To" value={<span className="text-xs text-right max-w-[200px] block">{lead.toAddress}</span>} />}
+          </div>
+
+          {/* Quote Block — POS style */}
+          <div className="bg-slate-800/60 rounded-xl p-4">
+            <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold mb-3 flex items-center gap-1.5">
+              <DollarSign className="h-3 w-3" /> Quote
+            </p>
+
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <div>
+                <label className="text-[10px] text-slate-500 uppercase">Base Price</label>
+                <Input
+                  value={basePrice || lead.basePrice || ""}
+                  onChange={e => setBasePrice(e.target.value)}
+                  placeholder="0.00"
+                  className="bg-slate-700/60 border-slate-600 text-white font-bold text-sm mt-0.5 h-9"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-slate-500 uppercase">Total Price</label>
+                <Input
+                  value={totalPrice || lead.totalPrice || ""}
+                  onChange={e => setTotalPrice(e.target.value)}
+                  placeholder="0.00"
+                  className="bg-slate-700/60 border-slate-600 text-white font-bold text-sm mt-0.5 h-9"
+                />
+              </div>
+            </div>
+
+            {(basePrice || totalPrice) && (
+              <Button
+                size="sm"
+                onClick={() => savePriceMutation.mutate()}
+                disabled={savePriceMutation.isPending}
+                className="w-full bg-slate-700 hover:bg-slate-600 text-white text-xs mb-3"
+              >
+                {savePriceMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5 mr-1" />}
+                Save Price
+              </Button>
+            )}
+
+            {/* POS action buttons */}
+            <div className="space-y-2">
+              <Button
+                size="sm"
+                onClick={() => sendInvoiceMutation.mutate()}
+                disabled={sendInvoiceMutation.isPending || (!displayPrice && !displayBasePrice)}
+                className="w-full bg-green-700 hover:bg-green-600 text-white font-semibold text-xs"
+              >
+                {sendInvoiceMutation.isPending
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" />
+                  : <Receipt className="h-3.5 w-3.5 mr-2" />}
+                Send Square Invoice
+              </Button>
+
+              <div className="flex gap-2">
+                <Input
+                  value={btcAmount}
+                  onChange={e => setBtcAmount(e.target.value)}
+                  placeholder="USD amount"
+                  className="bg-slate-700/60 border-slate-600 text-white text-xs h-8 flex-1"
+                />
+                <Button
+                  size="sm"
+                  onClick={() => generateBtcMutation.mutate()}
+                  disabled={generateBtcMutation.isPending}
+                  className="bg-orange-700 hover:bg-orange-600 text-white text-xs h-8 px-3 flex-shrink-0"
+                >
+                  {generateBtcMutation.isPending
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <Bitcoin className="h-3.5 w-3.5" />}
+                  BTC Link
+                </Button>
+              </div>
+
+              {btcLink && (
+                <div className="bg-orange-950/40 border border-orange-500/30 rounded-lg px-3 py-2">
+                  <p className="text-[10px] text-orange-400 mb-1">Bitcoin payment link:</p>
+                  <a href={btcLink} target="_blank" rel="noopener noreferrer" className="text-xs text-orange-300 break-all hover:underline">{btcLink}</a>
+                </div>
+              )}
+
+              {lead.depositRequired && (
+                <Button
+                  size="sm"
+                  onClick={() => markDepositMutation.mutate()}
+                  disabled={markDepositMutation.isPending || lead.depositPaid}
+                  className={`w-full text-xs font-semibold ${lead.depositPaid ? "bg-green-800/40 text-green-400 cursor-default" : "bg-blue-700 hover:bg-blue-600 text-white"}`}
+                >
+                  {lead.depositPaid
+                    ? <><Check className="h-3.5 w-3.5 mr-1.5" /> Deposit Paid</>
+                    : <><DollarSign className="h-3.5 w-3.5 mr-1.5" /> Mark Deposit Paid</>}
+                </Button>
+              )}
+            </div>
+
+            {lead.squarePaymentUrl && (
+              <div className="mt-3 pt-3 border-t border-slate-700/60">
+                <a
+                  href={lead.squarePaymentUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" /> View Square Payment Page
+                </a>
+              </div>
+            )}
+          </div>
+
+          {/* Crew Block */}
+          <div className="bg-slate-800/60 rounded-xl p-4">
+            <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold mb-3 flex items-center gap-1.5">
+              <Users className="h-3 w-3" /> Crew ({crewMembersArr.length}/{lead.crewSize || 2})
+            </p>
+
+            {crewEmployees.length > 0 && (
+              <div className="space-y-2 mb-3">
+                {crewEmployees.map(emp => (
+                  <div key={emp.id} className="flex items-center gap-2.5 bg-slate-700/40 rounded-lg px-3 py-2">
+                    <div className="w-7 h-7 rounded-full bg-blue-700 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
+                      {((emp.firstName || "?")[0] + (emp.lastName || "?")[0]).toUpperCase()}
+                    </div>
+                    <span className="text-sm text-white flex-1">{emp.firstName} {emp.lastName}</span>
+                    <button
+                      onClick={() => removeCrewMutation.mutate(emp.id)}
+                      className="text-slate-500 hover:text-red-400 transition-colors"
+                    >
+                      <UserX className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {availableToAdd.length > 0 && (
+              <div>
+                <p className="text-[10px] text-slate-500 mb-2">Add crew member:</p>
+                <div className="space-y-1 max-h-36 overflow-y-auto">
+                  {availableToAdd.slice(0, 10).map(emp => (
+                    <button
+                      key={emp.id}
+                      onClick={() => addCrewMutation.mutate(emp.id)}
+                      disabled={addCrewMutation.isPending}
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-slate-700/30 hover:bg-slate-700/70 text-slate-300 hover:text-white transition-colors text-sm"
+                    >
+                      <UserCheck className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
+                      {emp.firstName} {emp.lastName}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Trade Requests Block */}
+          {jobTradeRequests.length > 0 && (
+            <div className="bg-slate-800/60 rounded-xl p-4">
+              <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold mb-3 flex items-center gap-1.5">
+                <ArrowLeftRight className="h-3 w-3" /> Trade Requests ({jobTradeRequests.length})
+              </p>
+              <div className="space-y-3">
+                {jobTradeRequests.map(tr => (
+                  <div key={tr.id} className="bg-slate-700/40 rounded-xl p-3 space-y-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="font-medium text-white">
+                        {tr.requester?.firstName} {tr.requester?.lastName}
+                      </span>
+                      <ArrowLeftRight className="h-3.5 w-3.5 text-slate-500" />
+                      <span className="font-medium text-white">
+                        {tr.target?.firstName} {tr.target?.lastName}
+                      </span>
+                    </div>
+                    {tr.requesterNote && (
+                      <p className="text-xs text-slate-400 bg-slate-800/40 rounded px-2 py-1">"{tr.requesterNote}"</p>
+                    )}
+                    <Input
+                      placeholder="Optional admin note…"
+                      value={tradeNote[tr.id] || ""}
+                      onChange={e => setTradeNote(prev => ({ ...prev, [tr.id]: e.target.value }))}
+                      className="bg-slate-800 border-slate-700 text-white text-xs h-8"
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => reviewTradeMutation.mutate({ tradeId: tr.id, status: "approved" })}
+                        disabled={reviewTradeMutation.isPending}
+                        className="flex-1 bg-green-700 hover:bg-green-600 text-white text-xs"
+                      >
+                        <Check className="h-3.5 w-3.5 mr-1" /> Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => reviewTradeMutation.mutate({ tradeId: tr.id, status: "denied" })}
+                        disabled={reviewTradeMutation.isPending}
+                        variant="outline"
+                        className="flex-1 border-red-500/40 text-red-400 hover:bg-red-950/20 text-xs"
+                      >
+                        <X className="h-3.5 w-3.5 mr-1" /> Deny
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Review Block */}
+          <div className="bg-slate-800/60 rounded-xl p-4">
+            <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold mb-3 flex items-center gap-1.5">
+              <Star className="h-3 w-3" /> Review
+            </p>
+            <Button
+              size="sm"
+              onClick={() => sendReviewLinkMutation.mutate()}
+              disabled={sendReviewLinkMutation.isPending}
+              className="w-full bg-purple-700 hover:bg-purple-600 text-white font-semibold text-xs"
+            >
+              {sendReviewLinkMutation.isPending
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" />
+                : <Send className="h-3.5 w-3.5 mr-2" />}
+              Send Review Link
+            </Button>
+          </div>
+
+          {/* Notes */}
+          {lead.quoteNotes && (
+            <div className="bg-slate-800/40 rounded-xl p-3">
+              <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Quote Notes</p>
+              <p className="text-sm text-slate-300">{lead.quoteNotes}</p>
+            </div>
+          )}
+          {lead.details && (
+            <div className="bg-slate-800/40 rounded-xl p-3">
+              <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Job Details</p>
+              <p className="text-sm text-slate-300 whitespace-pre-wrap">{lead.details}</p>
+            </div>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
 
 export default function AdminJobsPage() {
-  return <LeadsPage />;
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [search, setSearch] = useState("");
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+
+  const { data: leads = [], isLoading } = useQuery<Lead[]>({
+    queryKey: ["/api/leads"],
+    staleTime: 0,
+    refetchOnMount: true,
+    refetchInterval: 30000,
+  });
+
+  const { data: employees = [] } = useQuery<User[]>({
+    queryKey: ["/api/employees"],
+  });
+
+  const { data: tradeRequests = [] } = useQuery<EnrichedTradeRequest[]>({
+    queryKey: ["/api/trade-requests"],
+    staleTime: 30000,
+  });
+
+  const filteredLeads = useMemo(() => {
+    const q = search.toLowerCase();
+    const active = leads.filter(l => !["completed", "cancelled"].includes(l.status) && !l.archivedAt);
+    if (!q) return active;
+    return active.filter(l =>
+      `${l.firstName} ${l.lastName}`.toLowerCase().includes(q) ||
+      l.phone?.includes(q) ||
+      l.email?.toLowerCase().includes(q) ||
+      l.serviceType?.toLowerCase().includes(q)
+    );
+  }, [leads, search]);
+
+  const completedLeads = useMemo(() => leads.filter(l => l.status === "completed"), [leads]);
+
+  const pendingTradeCount = tradeRequests.filter(r => r.status === "pending").length;
+
+  const openDetail = (lead: Lead) => {
+    setSelectedLead(lead);
+    setDetailOpen(true);
+  };
+
+  return (
+    <div className="max-w-3xl mx-auto px-4 pt-6 pb-8">
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h1 className="text-2xl font-black text-white">Jobs</h1>
+          <p className="text-slate-400 text-sm">Tap a job to manage it</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {pendingTradeCount > 0 && (
+            <Badge className="bg-orange-500/20 text-orange-300 border border-orange-500/30">
+              <ArrowLeftRight className="h-3 w-3 mr-1" />
+              {pendingTradeCount} trade{pendingTradeCount !== 1 ? "s" : ""}
+            </Badge>
+          )}
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-slate-600 text-slate-400"
+            onClick={() => queryClient.invalidateQueries({ queryKey: ["/api/leads"] })}
+          >
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Search */}
+      <div className="relative mb-5">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+        <Input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search by name, phone, email…"
+          className="pl-9 bg-slate-800/60 border-slate-700 text-white placeholder:text-slate-500"
+        />
+      </div>
+
+      {/* Stats row */}
+      <div className="grid grid-cols-3 gap-3 mb-5">
+        <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-3 text-center">
+          <div className="text-xl font-black text-white">{filteredLeads.length}</div>
+          <div className="text-[10px] text-slate-400 mt-0.5">Active</div>
+        </div>
+        <div className="bg-slate-800/60 border border-green-500/20 rounded-xl p-3 text-center">
+          <div className="text-xl font-black text-green-400">{completedLeads.length}</div>
+          <div className="text-[10px] text-slate-400 mt-0.5">Completed</div>
+        </div>
+        <div className="bg-slate-800/60 border border-orange-500/20 rounded-xl p-3 text-center">
+          <div className="text-xl font-black text-orange-400">{pendingTradeCount}</div>
+          <div className="text-[10px] text-slate-400 mt-0.5">Trade Req.</div>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
+        </div>
+      ) : filteredLeads.length === 0 ? (
+        <div className="text-center py-14 text-slate-500">
+          <Truck className="h-10 w-10 mx-auto mb-3 opacity-30" />
+          <p className="font-medium">{search ? "No jobs match your search" : "No active jobs"}</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredLeads.map(lead => (
+            <AdminJobCard
+              key={lead.id}
+              lead={lead}
+              onClick={() => openDetail(lead)}
+              employees={employees}
+            />
+          ))}
+          {completedLeads.length > 0 && !search && (
+            <div className="mt-6 space-y-2">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Completed ({completedLeads.length})</p>
+              {completedLeads.slice(0, 5).map(lead => (
+                <AdminJobCard key={lead.id} lead={lead} onClick={() => openDetail(lead)} employees={employees} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <AdminJobDetailPanel
+        open={detailOpen}
+        lead={selectedLead}
+        onClose={() => { setDetailOpen(false); setSelectedLead(null); }}
+        employees={employees}
+        tradeRequests={tradeRequests}
+      />
+    </div>
+  );
 }
