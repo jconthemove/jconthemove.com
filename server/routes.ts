@@ -18652,8 +18652,14 @@ Thank you for your business!
       if (tApplied > 0) {
         const rCheck = validateRedemption(tApplied, subtotalUsd);
         if (!rCheck.valid) return res.status(400).json({ error: rCheck.message });
-        // Also honour the duration-based token cap from calcLaborQuote
-        finalTokenApplied = Math.min(rCheck.effectiveTokens, tokenCap);
+        // Intersect with duration-based tokenCap from calcLaborQuote, then re-normalize
+        // to 500-increment because tokenCap may not itself be a multiple of 500
+        const cappedByDuration = Math.min(rCheck.effectiveTokens, tokenCap);
+        finalTokenApplied = roundToIncrement(cappedByDuration);
+        // After normalization the amount may fall below MIN — reject gracefully
+        if (finalTokenApplied < MIN_REDEMPTION_TOKENS) {
+          return res.status(400).json({ error: `Token amount (${cappedByDuration}) rounds to less than the minimum ${MIN_REDEMPTION_TOKENS} JCMOVES after the duration cap is applied` });
+        }
       }
       if (finalTokenApplied < 0) return res.status(400).json({ error: "Invalid token amount" });
 
@@ -20191,6 +20197,8 @@ async function ensureRevenueAllocationsTable() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_revenue_allocations_lead ON revenue_allocations(lead_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS uidx_revenue_allocations_lead
+      ON revenue_allocations(lead_id) WHERE lead_id IS NOT NULL;
   `);
 }
 
