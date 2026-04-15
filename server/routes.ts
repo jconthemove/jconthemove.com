@@ -37,7 +37,7 @@ import { ensureMomsAccount } from "./services/generosityFund";
 import { dispatchGenericJob } from "./services/dispatchGeneric";
 import { grantLotteryTicketsForActivity } from "./services/disburse-job-tokens";
 import { getDepositInfo, extractZip } from "@shared/depositRules";
-import { MIN_REDEMPTION_TOKENS, REDEMPTION_INCREMENT, roundToIncrement, validateRedemption } from "@shared/tokenRedemptionRules";
+import { MIN_REDEMPTION_TOKENS, REDEMPTION_INCREMENT, roundToIncrement, validateRedemption, tokensToDollars } from "@shared/tokenRedemptionRules";
 import lawnCareRouter from "./routes/lawnCare";
 
 const STAKING_TREASURY_USER_ID = "staking-treasury-system";
@@ -17235,11 +17235,35 @@ Thank you for your business!
     return cleaned;
   }
 
+  /**
+   * Validate that a reward item's token price(s) comply with redemption rules:
+   * must be >= MIN_REDEMPTION_TOKENS (500) and a multiple of REDEMPTION_INCREMENT (500).
+   * Returns an error string if invalid, otherwise null.
+   */
+  function validateRewardItemTokenPrice(body: Record<string, any>): string | null {
+    for (const field of ["tokenPrice", "salePriceTokens"] as const) {
+      const val = body[field];
+      if (val == null) continue;
+      const n = Number(val);
+      if (!Number.isFinite(n) || n <= 0) continue; // let DB constraints handle non-positive
+      if (n < MIN_REDEMPTION_TOKENS) {
+        return `${field} must be at least ${MIN_REDEMPTION_TOKENS} JCMOVES`;
+      }
+      if (roundToIncrement(n) !== n) {
+        return `${field} must be a multiple of ${REDEMPTION_INCREMENT} JCMOVES (got ${n})`;
+      }
+    }
+    return null;
+  }
+
   app.post("/api/admin/reward-shop/items", isAuthenticated, async (req: any, res) => {
     try {
       const user = await storage.getUser((req.session as any).userId);
       if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
-      const [item] = await db.insert(rewardItems).values(sanitizeRewardItemBody(req.body)).returning();
+      const safeBody = sanitizeRewardItemBody(req.body);
+      const priceErr = validateRewardItemTokenPrice(safeBody);
+      if (priceErr) return res.status(400).json({ error: priceErr });
+      const [item] = await db.insert(rewardItems).values(safeBody).returning();
       res.json(item);
     } catch (e: any) {
       res.status(500).json({ error: e.message || "Failed to create item" });
@@ -17252,6 +17276,8 @@ Thank you for your business!
       const user = await storage.getUser((req.session as any).userId);
       if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
       const safeBody = sanitizeRewardItemBody(req.body);
+      const priceErr = validateRewardItemTokenPrice(safeBody);
+      if (priceErr) return res.status(400).json({ error: priceErr });
       const [item] = await db.update(rewardItems).set({ ...safeBody, updatedAt: new Date() }).where(eq(rewardItems.id, parseInt(req.params.id))).returning();
       res.json(item);
     } catch (e: any) {
@@ -18639,8 +18665,8 @@ Thank you for your business!
         await storage.debitWalletTokens(userId, finalTokenApplied);
       }
 
-      // Cash due = cash price minus cash value of tokens applied
-      const tokenValueCents = Math.round((finalTokenApplied / tokenPrice) * cashPriceCents);
+      // Cash due = cash price minus dollar value of tokens applied at fixed platform rate (500 tokens = $1)
+      const tokenValueCents = Math.round(tokensToDollars(finalTokenApplied) * 100);
       const cashDueCents = Math.max(0, cashPriceCents - tokenValueCents);
 
       // Quote expires in 45 days

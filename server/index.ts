@@ -279,6 +279,17 @@ app.use((req, res, next) => {
         }
 
         console.log('✅ Reward shop migration complete');
+
+        // Normalize any legacy items whose token_price is not a multiple of 500
+        // (rounds up to the nearest 500-increment so redemptions don't hard-fail)
+        const { pool: normPool } = await import('./db');
+        await normPool.query(`
+          UPDATE reward_items
+          SET token_price = CEIL(token_price::numeric / 500) * 500,
+              updated_at   = NOW()
+          WHERE token_price > 0
+            AND MOD(token_price, 500) != 0
+        `);
       } catch (err) {
         console.error('⚠️  Reward shop migration error (non-fatal):', err);
       }
