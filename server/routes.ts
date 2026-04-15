@@ -16308,6 +16308,27 @@ Thank you for your business!
     }
   });
 
+  app.get("/api/staking/my-perk", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id || req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const wallet = await storage.getWalletAccount(userId);
+      const stakedTotal = parseFloat(wallet?.stakedBalance ?? "0");
+      let perkPercent = 0;
+      let perkLabel = "Stake 25,000+ JCMOVES to unlock a service discount";
+      if (stakedTotal >= 100_000) {
+        perkPercent = 10;
+        perkLabel = "10% off all services 🥇";
+      } else if (stakedTotal >= 25_000) {
+        perkPercent = 5;
+        perkLabel = "5% off all services 🥉";
+      }
+      res.json({ stakedTotal, perkPercent, perkLabel });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.post("/api/staking/stake", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user?.id || req.session?.userId;

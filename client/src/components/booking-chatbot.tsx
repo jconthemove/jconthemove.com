@@ -160,6 +160,9 @@ export interface MovingQuote {
   travelCharge?: number;
   jcmovesApplied?: boolean;
   jcmovesDiscount?: number;
+  stakingPerkApplied?: boolean;
+  stakingPerkDiscount?: number;
+  stakingPerkPct?: number;
 }
 
 interface TrashValetQuoteResult {
@@ -190,6 +193,9 @@ interface JunkQuote {
   travelCharge?: number;
   jcmovesApplied?: boolean;
   jcmovesDiscount?: number;
+  stakingPerkApplied?: boolean;
+  stakingPerkDiscount?: number;
+  stakingPerkPct?: number;
 }
 
 interface QuoteOnlyResult {
@@ -1216,7 +1222,7 @@ const STEPS: Step[] = [
 // ─────────────────────────────────────────────
 // Moving Quote Engine
 // ─────────────────────────────────────────────
-export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatPrice = 222, distanceMiles = 0): MovingQuote {
+export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatPrice = 222, distanceMiles = 0, stakingPerkPct = 0): MovingQuote {
   const RATE = ratePerMoverHour;
   const round5 = (n: number) => Math.ceil(n / 5) * 5;
 
@@ -1383,8 +1389,16 @@ export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatP
     : 0;
   const jcmovesApplied = jcmovesDiscount > 0;
 
-  const baseMin = promoApplied ? jc222FlatPrice : rawMin - jcmovesDiscount;
-  const baseMax = promoApplied ? jc222FlatPrice : rawMax - jcmovesDiscount;
+  // ── Staking perk discount: auto-applied when threshold is met ────────────
+  // Only applied if no promo code is active (JC222 or JCMOVES take priority)
+  const stakingDiscount = stakingPerkPct > 0 && !promoApplied && !isJCMOVES
+    ? Math.round(rawMin * stakingPerkPct / 100)
+    : 0;
+  const stakingPerkApplied = stakingDiscount > 0;
+
+  const totalDiscount = jcmovesDiscount || stakingDiscount;
+  const baseMin = promoApplied ? jc222FlatPrice : rawMin - totalDiscount;
+  const baseMax = promoApplied ? jc222FlatPrice : rawMax - totalDiscount;
   const minPrice = baseMin + travelCharge;
   const maxPrice = baseMax + travelCharge;
   const midPrice = (minPrice + maxPrice) / 2;
@@ -1401,18 +1415,21 @@ export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatP
     tokensEstimate,
     specialSurcharge,
     promoApplied,
-    promoCode:      isJC222 ? "JC222" : isJCMOVES ? "JCMOVES" : undefined,
-    rawMinPrice:    promoApplied ? rawMin : undefined,
-    travelCharge:   travelCharge || undefined,
-    jcmovesApplied: jcmovesApplied || undefined,
-    jcmovesDiscount: jcmovesDiscount || undefined,
+    promoCode:          isJC222 ? "JC222" : isJCMOVES ? "JCMOVES" : undefined,
+    rawMinPrice:        promoApplied ? rawMin : undefined,
+    travelCharge:       travelCharge || undefined,
+    jcmovesApplied:     jcmovesApplied || undefined,
+    jcmovesDiscount:    jcmovesDiscount || undefined,
+    stakingPerkApplied: stakingPerkApplied || undefined,
+    stakingPerkDiscount: stakingDiscount || undefined,
+    stakingPerkPct:     stakingPerkApplied ? stakingPerkPct : undefined,
   };
 }
 
 // ─────────────────────────────────────────────
 // Junk Removal Quote Engine
 // ─────────────────────────────────────────────
-function computeJunkQuote(a: Answers, ratePerMoverHour = 85, distanceMiles = 0): JunkQuote {
+function computeJunkQuote(a: Answers, ratePerMoverHour = 85, distanceMiles = 0, stakingPerkPct = 0): JunkQuote {
   const RATE = ratePerMoverHour;
   const r5 = (n: number) => Math.ceil(n / 5) * 5;
 
@@ -1469,22 +1486,32 @@ function computeJunkQuote(a: Answers, ratePerMoverHour = 85, distanceMiles = 0):
     : 0;
   const jcmovesApplied = jcmovesDiscount > 0;
 
-  const minPrice = rawMin - jcmovesDiscount + travelCharge;
-  const maxPrice = rawMax - jcmovesDiscount + travelCharge;
+  // ── Staking perk discount: auto-applied when threshold is met ────────────
+  const stakingDiscount = stakingPerkPct > 0 && !isJCMOVES
+    ? Math.round(rawMin * stakingPerkPct / 100)
+    : 0;
+  const stakingPerkApplied = stakingDiscount > 0;
+
+  const totalDiscount = jcmovesDiscount || stakingDiscount;
+  const minPrice = rawMin - totalDiscount + travelCharge;
+  const maxPrice = rawMax - totalDiscount + travelCharge;
   const tokensEstimate = Math.round(((minPrice + maxPrice) / 2) * 50);
 
   return {
     type: "junk", tier, crew, minHrs, maxHrs, minPrice, maxPrice, tokensEstimate, specialSurcharge,
-    travelCharge:    travelCharge    || undefined,
-    jcmovesApplied:  jcmovesApplied  || undefined,
-    jcmovesDiscount: jcmovesDiscount || undefined,
+    travelCharge:        travelCharge        || undefined,
+    jcmovesApplied:      jcmovesApplied      || undefined,
+    jcmovesDiscount:     jcmovesDiscount     || undefined,
+    stakingPerkApplied:  stakingPerkApplied  || undefined,
+    stakingPerkDiscount: stakingDiscount     || undefined,
+    stakingPerkPct:      stakingPerkApplied ? stakingPerkPct : undefined,
   };
 }
 
 // ─────────────────────────────────────────────
 // Compute Quote for Any Service
 // ─────────────────────────────────────────────
-function computeQuoteForAnswers(a: Answers, ratePerMoverHour = 85, jc222FlatPrice = 222, distanceMiles = 0): QuoteResult | null {
+function computeQuoteForAnswers(a: Answers, ratePerMoverHour = 85, jc222FlatPrice = 222, distanceMiles = 0, stakingPerkPct = 0): QuoteResult | null {
   const svc = getServiceLabel(a.serviceType || "");
 
   if (QUOTE_ONLY_SERVICES.includes(svc)) {
@@ -1503,7 +1530,7 @@ function computeQuoteForAnswers(a: Answers, ratePerMoverHour = 85, jc222FlatPric
   }
 
   if (svc === "Junk Removal") {
-    return computeJunkQuote(a, ratePerMoverHour, distanceMiles);
+    return computeJunkQuote(a, ratePerMoverHour, distanceMiles, stakingPerkPct);
   }
 
   if (svc === "Trash Valet") {
@@ -1550,7 +1577,7 @@ function computeQuoteForAnswers(a: Answers, ratePerMoverHour = 85, jc222FlatPric
   }
 
   // Moving or Junk
-  return computeMovingQuote(a, ratePerMoverHour, jc222FlatPrice, distanceMiles);
+  return computeMovingQuote(a, ratePerMoverHour, jc222FlatPrice, distanceMiles, stakingPerkPct);
 }
 
 // ─────────────────────────────────────────────
@@ -1936,6 +1963,14 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
   const liveRate      = pricingConfig?.ratePerMoverHour ?? 85;
   const liveJc222     = pricingConfig?.jc222Price       ?? 222;
 
+  // Fetch staking perk for auto-discount at quote time
+  const { data: stakingPerk } = useQuery<{ stakedTotal: number; perkPercent: number; perkLabel: string }>({
+    queryKey: ["/api/staking/my-perk"],
+    enabled: !!user,
+    staleTime: 60_000,
+  });
+  const stakingPerkPct = stakingPerk?.perkPercent ?? 0;
+
   const [photos, setPhotos] = useState<ChatPhoto[]>([]);
   const [answers, setAnswers] = useState<Answers>({});
   const [messages, setMessages] = useState<Message[]>([
@@ -2067,7 +2102,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
     if (!currentStep) return;
     if (currentStep.type !== "package_select") return;
     if (crewPackages.length > 0) return;
-    const q = computeQuoteForAnswers(answers, liveRate, liveJc222, distanceMiles);
+    const q = computeQuoteForAnswers(answers, liveRate, liveJc222, distanceMiles, stakingPerkPct);
     if (!q) return;
     setPendingQuote(q);
     const pkgs = buildCrewPackages(answers, q, liveRate, liveJc222);
@@ -2137,7 +2172,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
     if (stepId === "promoCode") {
       const code = ((Array.isArray(value) ? value[0] : value) as string || "").toUpperCase().trim();
       if (code === "JCMOVES") {
-        const q = computeQuoteForAnswers(newAnswers, liveRate, liveJc222, distanceMiles);
+        const q = computeQuoteForAnswers(newAnswers, liveRate, liveJc222, distanceMiles, stakingPerkPct);
         const disc = (q as any)?.jcmovesDiscount;
         setTimeout(() => botSay(disc
           ? `✅ JCMOVES code applied! You're saving $${disc} — we appreciate your support.`
@@ -2168,7 +2203,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
 
       // When we reach the package select step, compute packages
       if (nextStep.id === "selectedPackage") {
-        const q = computeQuoteForAnswers(newAnswers, liveRate, liveJc222, distanceMiles);
+        const q = computeQuoteForAnswers(newAnswers, liveRate, liveJc222, distanceMiles, stakingPerkPct);
         setPendingQuote(q);
         const pkgs = buildCrewPackages(newAnswers, q, liveRate, liveJc222);
         setCrewPackages(pkgs);
@@ -2187,7 +2222,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
     } else {
       // All done — compute final quote & show
       setTimeout(() => {
-        const q = computeQuoteForAnswers(newAnswers, liveRate, liveJc222, distanceMiles);
+        const q = computeQuoteForAnswers(newAnswers, liveRate, liveJc222, distanceMiles, stakingPerkPct);
         setPendingQuote(q);
 
         const svc = getServiceLabel(newAnswers.serviceType || "");
@@ -2597,6 +2632,14 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
                     <div className="mt-2 inline-flex items-center gap-1 bg-green-900/50 border border-green-500/40 rounded-full px-3 py-1">
                       <span className="text-[11px] font-bold text-green-400">🏷️ JC222 Applied</span>
                       <span className="text-[10px] text-green-300/80">— $300 floor → $222</span>
+                    </div>
+                  )}
+                  {(pendingQuote.type === "moving" || pendingQuote.type === "junk") && (pendingQuote as MovingQuote | JunkQuote).stakingPerkApplied && (
+                    <div className="mt-2 inline-flex items-center gap-1.5 bg-orange-900/40 border border-orange-500/40 rounded-full px-3 py-1">
+                      <span className="text-[11px] font-bold text-orange-300">🔒 Staking Perk Applied</span>
+                      <span className="text-[10px] text-orange-300/80">
+                        — {(pendingQuote as MovingQuote | JunkQuote).stakingPerkPct}% off · saving ${(pendingQuote as MovingQuote | JunkQuote).stakingPerkDiscount}
+                      </span>
                     </div>
                   )}
                   <p className="text-[11px] text-slate-500 mt-1">Final price confirmed by Darrell after review</p>

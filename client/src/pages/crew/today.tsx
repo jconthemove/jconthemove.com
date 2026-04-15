@@ -364,6 +364,11 @@ export default function CrewTodayPage() {
 
   const { data: employees = [] } = useQuery<User[]>({ queryKey: ["/api/employees"] });
   const { data: wallet } = useQuery<{ balance: string }>({ queryKey: ["/api/rewards/balance"] });
+  const { data: stakingPerk } = useQuery<{ stakedTotal: number; perkPercent: number; perkLabel: string }>({
+    queryKey: ["/api/staking/my-perk"],
+    enabled: !!user,
+    staleTime: 60_000,
+  });
 
   const { data: trashJobsData = [] } = useQuery<TrashJobRow[]>({
     queryKey: ["/api/trash/jobs"],
@@ -630,6 +635,11 @@ export default function CrewTodayPage() {
               <p className="text-xs text-slate-500">Balance</p>
               <p className="text-base font-black text-purple-400">{tokenBalance}</p>
               <p className="text-[10px] text-slate-500">JCMOVES</p>
+              {stakingPerk && stakingPerk.perkPercent > 0 && (
+                <div className="inline-flex items-center gap-1 bg-orange-500/15 border border-orange-500/30 rounded-full px-2 py-0.5 mt-1">
+                  <span className="text-[10px] font-bold text-orange-300">🔒 {stakingPerk.perkPercent}% off</span>
+                </div>
+              )}
             </div>
             <button
               onClick={handleLogout}
