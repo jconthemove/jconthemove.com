@@ -2800,6 +2800,9 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
       {/* Input area */}
       {!isDone && currentStep && (
         <div className="shrink-0 pt-2 border-t border-slate-800/60">
+          {stepIdx > 0 && (isFlooringService(answers) || isPaintingService(answers) || isRoofingService(answers)) && (
+            <p className="text-[10px] text-slate-500 px-1 pb-1.5">50% deposit required at job start · remainder due on completion.</p>
+          )}
           {/* CHOICE */}
           {currentStep.type === "choice" && (
             <div className="grid grid-cols-1 gap-1.5">
@@ -2813,6 +2816,9 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
                   <ChevronRight className="h-3.5 w-3.5 text-slate-500 group-hover:text-teal-400 transition-colors" />
                 </button>
               ))}
+              {currentStep.id === "serviceType" && (
+                <p className="text-[11px] text-slate-500 text-center pt-1">💡 Bundle 2+ services = 10% off.</p>
+              )}
             </div>
           )}
 
@@ -2957,10 +2963,10 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
                   <DollarSign className="h-4 w-4 text-orange-400" />
                   <p className="text-sm font-bold text-orange-300">Estimate Deposit Required</p>
                 </div>
-                <p className="text-sm text-orange-100/80 mb-3">
-                  A <strong className="text-white">${depositInfo.amount} non-refundable deposit</strong> is required to schedule your in-person estimate.
+                <p className="text-xs text-orange-100/60 mb-2">
+                  A ${depositInfo.amount} non-refundable deposit is required to schedule your in-person estimate.
                 </p>
-                <p className="text-xs text-orange-300/70 mb-3">{depositInfo.termsHtml}</p>
+                <p className="text-[10px] text-orange-300/50 mb-3">{depositInfo.termsHtml}</p>
                 <label className="flex items-start gap-2 cursor-pointer">
                   <input
                     type="checkbox"
@@ -2968,7 +2974,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
                     onChange={(e) => setDepositChecked(e.target.checked)}
                     className="mt-0.5 shrink-0 accent-orange-500"
                   />
-                  <span className="text-xs text-slate-300">
+                  <span className="text-[11px] text-slate-400">
                     I understand and agree to the ${depositInfo.amount} non-refundable estimate deposit. This amount will be credited toward my project upon booking.
                   </span>
                 </label>

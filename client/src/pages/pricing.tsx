@@ -512,6 +512,16 @@ export default function PricingPage() {
           </p>
         </ServiceSection>
 
+        {/* ── PAYMENT & DEPOSIT POLICY ────────────────────────────────────────── */}
+        <div className="rounded-2xl border border-slate-700/50 bg-slate-800/20 px-5 py-4 mt-2">
+          <p className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Payment &amp; Deposit Policy</p>
+          <p className="text-slate-500 text-xs leading-relaxed">
+            <span className="text-slate-400">Estimate visits</span> — Handyman and out-of-area Painting/Flooring/Roofing estimates require a $50–$100 non-refundable deposit, credited toward your project if you book within 6 months.{" "}
+            <span className="text-slate-400">Job-start</span> — Flooring, Painting, and Roofing jobs require a 50% deposit when the crew arrives; remainder is due on completion.{" "}
+            <span className="text-slate-400">All other services</span> — Payment is due on completion; no deposit required.
+          </p>
+        </div>
+
         {/* ── CALL TO ACTION ──────────────────────────────────────────────────── */}
         <div className="rounded-2xl border border-slate-700 bg-gradient-to-br from-slate-800/80 to-slate-900/80 p-6 text-center mt-6">
           <div className="flex items-center justify-center gap-2 mb-2">

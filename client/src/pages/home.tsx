@@ -52,6 +52,7 @@ const HOME_SERVICES: Array<{ key: string; href: string }> = [
 export default function HomePage() {
   const [, setLocation] = useLocation();
   const [bannerIdx, setBannerIdx] = useState(0);
+  const [showBundleTip, setShowBundleTip] = useState(false);
 
   const { data: liveTestimonials } = useQuery<Testimonial[]>({
     queryKey: ["/api/testimonials?status=published&featured=true&limit=3"],
@@ -271,7 +272,18 @@ export default function HomePage() {
         <div className="max-w-5xl mx-auto">
           <p className="text-blue-400 text-xs font-semibold uppercase tracking-widest text-center mb-2">What We Do</p>
           <h2 className="text-2xl md:text-3xl font-bold text-white text-center mb-2">All Services</h2>
-          <p className="text-slate-400 text-sm text-center mb-4">Tap any service to start booking or get a quote.</p>
+          <p className="text-slate-400 text-sm text-center mb-3">Tap any service to start booking or get a quote.</p>
+          <div className="flex justify-center mb-3">
+            <button
+              onClick={() => setShowBundleTip(prev => !prev)}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-full px-3 py-1 transition-colors cursor-pointer"
+            >
+              🎁 Bundle &amp; Save 10%
+            </button>
+          </div>
+          {showBundleTip && (
+            <p className="text-center text-xs text-slate-400 mb-3">Book 2 or more services together and we'll take 10% off your total — just mention it when you book.</p>
+          )}
           <div className="flex justify-center mb-6">
             <Link href="/pricing">
               <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-orange-400 border border-orange-500/30 bg-orange-500/10 hover:bg-orange-500/20 rounded-full px-4 py-1.5 transition-colors cursor-pointer">
