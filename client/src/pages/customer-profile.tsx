@@ -11,15 +11,32 @@ import { apiRequest, clearTokens, queryClient } from "@/lib/queryClient";
 
 type ProfileTab = "profile" | "history";
 
-interface RewardHistoryItem {
-  id: number;
+interface RedemptionMetadata {
+  itemName: string;
+  couponCode: string | null;
+}
+
+interface EarnHistoryItem {
+  id: string;
   rewardType: string;
   tokenAmount: string;
-  direction?: 'earn' | 'spend';
+  direction: 'earn';
   status: string;
   earnedDate: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, string | number | boolean | null>;
 }
+
+interface SpendHistoryItem {
+  id: string;
+  rewardType: 'redemption';
+  tokenAmount: string;
+  direction: 'spend';
+  status: string;
+  earnedDate: string;
+  metadata: RedemptionMetadata;
+}
+
+type RewardHistoryItem = EarnHistoryItem | SpendHistoryItem;
 
 const REWARD_LABELS: Record<string, { label: string; icon: string }> = {
   booking_request:              { label: "Job Booked",           icon: "📋" },
@@ -270,12 +287,12 @@ export default function CustomerProfilePage() {
               <div className="space-y-2">
                 {historyData.rewards.map((item) => {
                   const isSpend = item.direction === 'spend';
-                  const info = REWARD_LABELS[item.rewardType] ?? {
-                    label: isSpend
-                      ? (item.metadata as any)?.itemName || "Reward Redeemed"
-                      : item.rewardType.replace(/_/g, " "),
-                    icon: isSpend ? "🎁" : "💫",
-                  };
+                  const displayLabel = isSpend
+                    ? (item as SpendHistoryItem).metadata.itemName || "Reward Redeemed"
+                    : (REWARD_LABELS[item.rewardType]?.label ?? item.rewardType.replace(/_/g, " "));
+                  const displayIcon = isSpend
+                    ? "🎁"
+                    : (REWARD_LABELS[item.rewardType]?.icon ?? "💫");
                   const amount = Math.round(parseFloat(item.tokenAmount || "0"));
                   return (
                     <div
@@ -289,13 +306,11 @@ export default function CustomerProfilePage() {
                       <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0 ${
                         isSpend ? "bg-red-100 dark:bg-red-900/30" : "bg-jc-orange/10"
                       }`}>
-                        {info.icon}
+                        {displayIcon}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100 capitalize">
-                          {isSpend && item.metadata && (item.metadata as any).itemName
-                            ? (item.metadata as any).itemName
-                            : info.label}
+                          {displayLabel}
                         </p>
                         <p className="text-[11px] text-zinc-400">{timeAgo(item.earnedDate)}</p>
                       </div>

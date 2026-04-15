@@ -35,78 +35,10 @@ import { jupiterSwapService, SUPPORTED_TOKENS } from "./services/jupiter-swap";
 // smsService import removed — all notifications use email
 import { ensureMomsAccount } from "./services/generosityFund";
 import { dispatchGenericJob } from "./services/dispatchGeneric";
+import { grantLotteryTicketsForActivity } from "./services/disburse-job-tokens";
 import lawnCareRouter from "./routes/lawnCare";
 
 const STAKING_TREASURY_USER_ID = "staking-treasury-system";
-
-/**
- * Grants lottery tickets for an activity (booking or job completion).
- * If there is no open round for the requested type, auto-creates a standard 7-day weekly
- * (or 30-day monthly) round so the ticket is never lost.
- * Never throws — all errors are caught and logged only.
- */
-async function grantLotteryTicketsForActivity(
-  userId: string,
-  count: number,
-  source: string,
-  roundType: 'weekly' | 'monthly' = 'weekly'
-): Promise<void> {
-  try {
-    let { rows: roundRows } = await pool.query(
-      `SELECT * FROM lottery_rounds WHERE status='open' AND round_type=$1 ORDER BY id LIMIT 1`,
-      [roundType]
-    );
-
-    // Auto-create a round if none is open so the ticket is never lost
-    if (!roundRows.length) {
-      const durationDays = roundType === 'monthly' ? 30 : 7;
-      const seedAmount   = roundType === 'monthly' ? 2000 : 500;
-      const { rows: created } = await pool.query(
-        `INSERT INTO lottery_rounds
-           (round_type, status, start_time, end_time, seed_amount, tickets_sold, total_entries,
-            winner_pool, burn_pool, treasury_pool, displayed_jackpot, round_number)
-         VALUES ($1, 'open', NOW(), NOW() + ($2 || ' days')::interval,
-                 $3, 0, 0,
-                 ROUND($3 * 0.70), ROUND($3 * 0.05), ROUND($3 * 0.25), $3,
-                 COALESCE((SELECT MAX(round_number) FROM lottery_rounds WHERE round_type=$1), 0) + 1)
-         RETURNING *`,
-        [roundType, durationDays, seedAmount]
-      );
-      roundRows = created;
-      console.log(`🎟️ Auto-created ${roundType} lottery round #${created[0]?.round_number}`);
-    }
-
-    const round = roundRows[0];
-
-    // Atomically claim a ticket range
-    const { rows: [updatedRound] } = await pool.query(
-      `UPDATE lottery_rounds SET total_entries = total_entries + $1, updated_at = NOW()
-       WHERE id=$2 AND status='open' RETURNING *`,
-      [count, round.id]
-    );
-    if (!updatedRound) return; // Round closed just now — skip
-
-    const endIdx = updatedRound.total_entries;
-    const startIdx = endIdx - count + 1;
-
-    await pool.query(
-      `INSERT INTO lottery_entries (round_id, user_id, tickets, entry_start_index, entry_end_index, source)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [round.id, userId, count, startIdx, endIdx, source]
-    );
-
-    await pool.query(
-      `INSERT INTO lottery_audit_logs (round_id, event_type, message, metadata)
-       VALUES ($1,$2,$3,$4)`,
-      [round.id, 'AUTO_GRANT', `Auto-granted ${count} ticket${count !== 1 ? 's' : ''} (${source})`,
-       JSON.stringify({ userId, count, source, roundId: round.id })]
-    );
-
-    console.log(`🎟️ Lottery: granted ${count} ticket${count !== 1 ? 's' : ''} to ${userId} (${source})`);
-  } catch (err) {
-    console.error(`⚠️ grantLotteryTicketsForActivity failed (non-fatal):`, err);
-  }
-}
 
 async function ensureStakingTreasuryUser() {
   try {
