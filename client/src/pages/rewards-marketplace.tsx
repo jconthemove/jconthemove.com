@@ -14,7 +14,7 @@ import {
   Coins, Search, Filter, CheckCircle2, Clock, ChevronRight,
   Star, Zap, Trophy, Package, Gift, MapPin, Snowflake, Gamepad2,
   Wrench, Crown, ShoppingBag, History, Calculator, Users, TrendingUp, Info, Flame, Sparkles,
-  Copy, Check, Ticket, Coffee, Tag, CreditCard, ExternalLink
+  Copy, Check, Ticket, Coffee, Tag, CreditCard, ExternalLink, DollarSign
 } from "lucide-react";
 import { LOYALTY_TIERS, calculateJCMovesReward, getNextTier, getTierProgress, TIER_POINT_WAYS, formatTokens as fmtTokens, type LoyaltyTierKey } from "@/lib/loyalty";
 import { PLATFORM_REDEEM_RATE } from "@shared/rewards";
@@ -382,6 +382,12 @@ export default function RewardsMarketplacePage() {
     refetchInterval: 60000,
   });
 
+  const { data: walletData } = useQuery<{ tokenBalance: string; cashBalance: string }>({
+    queryKey: ["/api/rewards/wallet"],
+    enabled: !!user,
+    staleTime: 30000,
+  });
+
   const { data: categories } = useQuery<RewardCategory[]>({
     queryKey: ["/api/reward-shop/categories"],
     enabled: !!user,
@@ -446,6 +452,7 @@ export default function RewardsMarketplacePage() {
   });
 
   const walletBalance = shopData?.walletBalance ?? 0;
+  const cashBalance = parseFloat(walletData?.cashBalance ?? "0");
   const allItems = shopData?.items ?? [];
 
   const filtered = useMemo(() => {
@@ -597,13 +604,25 @@ export default function RewardsMarketplacePage() {
             </div>
             <div className="flex flex-col gap-3">
               <div className="flex gap-3">
-                <div className="bg-card border border-border rounded-xl px-4 py-3 text-center min-w-[120px]">
-                  <div className="text-xs text-muted-foreground mb-0.5">Your Balance</div>
-                  <div className="flex items-center justify-center gap-1.5">
-                    <Coins className="h-4 w-4 text-yellow-500" />
-                    <span className="text-lg font-bold text-yellow-500">{formatTokens(Math.floor(walletBalance))}</span>
+                <div className="flex flex-col gap-2">
+                  <div className="bg-card border border-border rounded-xl px-4 py-3 text-center min-w-[120px]">
+                    <div className="text-xs text-muted-foreground mb-0.5">Your Balance</div>
+                    <div className="flex items-center justify-center gap-1.5">
+                      <Coins className="h-4 w-4 text-yellow-500" />
+                      <span className="text-lg font-bold text-yellow-500">{formatTokens(Math.floor(walletBalance))}</span>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">JCMOVES</div>
                   </div>
-                  <div className="text-[10px] text-muted-foreground">JCMOVES</div>
+                  {cashBalance > 0 && (
+                    <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-xl px-4 py-2.5 text-center min-w-[120px]">
+                      <div className="text-[10px] text-emerald-600 mb-0.5">Service Credit</div>
+                      <div className="flex items-center justify-center gap-1">
+                        <DollarSign className="h-3.5 w-3.5 text-emerald-400" />
+                        <span className="text-base font-bold text-emerald-300">{cashBalance.toFixed(2)}</span>
+                      </div>
+                      <div className="text-[9px] text-emerald-700">JCMOVES USD</div>
+                    </div>
+                  )}
                 </div>
                 {nextGoal && (
                   <div className="bg-card border border-border rounded-xl px-4 py-3 min-w-[160px]">

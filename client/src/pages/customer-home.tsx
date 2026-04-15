@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
-import { Coins, Phone, MessageSquare, ChevronRight, Loader2, Search, Sparkles, MessageCircle, Zap } from "lucide-react";
+import { Coins, Phone, MessageSquare, ChevronRight, Loader2, Search, Sparkles, MessageCircle, Zap, DollarSign } from "lucide-react";
 import ServiceCard from "@/components/ServiceCard";
 import { getService } from "@/lib/services";
 import { JunkFlow, MovingFlow } from "@/components/ServiceSelector";
@@ -154,7 +154,7 @@ export default function CustomerHomePage() {
   useSheetBackButton(expanded === "moving", handleCloseMoving);
   useSheetBackButton(expanded === "junk", handleCloseJunk);
 
-  const { data: wallet } = useQuery<{ tokenBalance: string }>({
+  const { data: wallet } = useQuery<{ tokenBalance: string; cashBalance: string }>({
     queryKey: ["/api/rewards/wallet"],
     retry: 2,
   });
@@ -165,6 +165,7 @@ export default function CustomerHomePage() {
   });
 
   const tokenBalance = parseFloat(wallet?.tokenBalance || "0");
+  const cashBalance = parseFloat(wallet?.cashBalance || "0");
   const isApril = new Date().getMonth() === 3;
 
   const userTier = (user?.loyaltyTier && user.loyaltyTier in { bronze: 1, silver: 1, gold: 1, vip: 1 }
@@ -189,16 +190,30 @@ export default function CustomerHomePage() {
             <p className="text-zinc-500 text-sm">Hey, {user?.firstName || "there"}</p>
             <h1 className="text-2xl font-black text-white">Need Help Today?</h1>
           </div>
-          <button
-            onClick={() => setLocation("/wallet")}
-            className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2"
-          >
-            <Coins className="h-4 w-4 text-orange-400" />
-            <span className="text-sm font-bold text-white">
-              {tokenBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-            </span>
-            <span className="text-[10px] text-zinc-500 font-medium">JCMOVES</span>
-          </button>
+          <div className="flex flex-col items-end gap-1.5">
+            <button
+              onClick={() => setLocation("/wallet")}
+              className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2"
+            >
+              <Coins className="h-4 w-4 text-orange-400" />
+              <span className="text-sm font-bold text-white">
+                {tokenBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              </span>
+              <span className="text-[10px] text-zinc-500 font-medium">JCMOVES</span>
+            </button>
+            {cashBalance > 0 && (
+              <button
+                onClick={() => setLocation("/rewards")}
+                className="flex items-center gap-1.5 bg-emerald-950/60 border border-emerald-500/30 rounded-lg px-2.5 py-1"
+              >
+                <DollarSign className="h-3 w-3 text-emerald-400" />
+                <span className="text-xs font-bold text-emerald-300">
+                  {cashBalance.toFixed(2)}
+                </span>
+                <span className="text-[9px] text-emerald-600 font-medium">USD Credit</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Top HUD — tier + streak + wallet progress (injected from parent query) */}

@@ -469,6 +469,11 @@ export default function AdminTreasuryPage() {
     staleTime: 120000,
   });
 
+  const { data: jcMovesUsdCirculation } = useQuery<{ totalUsd: number; walletCount: number }>({
+    queryKey: ["/api/admin/jcmoves-usd-circulation"],
+    staleTime: 60000,
+  });
+
   const [yieldSources, setYieldSources] = useState<Array<{ id: string; label: string; icon: string; monthlyUsd: number; enabled: boolean }>>([]);
   const [yieldBonusPct, setYieldBonusPct] = useState("0");
   const [yieldSourcesLoaded, setYieldSourcesLoaded] = useState(false);
@@ -2975,7 +2980,7 @@ export default function AdminTreasuryPage() {
                       </div>
 
                       {/* Top stats row */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                         <div className="p-3 rounded-xl border border-cyan-500/20 bg-cyan-950/20 text-center">
                           <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">On-Chain Treasury</p>
                           <p className="text-xl font-black text-cyan-300">{fmt(tokenEconomy.onChainBalance)}</p>
@@ -2995,6 +3000,15 @@ export default function AdminTreasuryPage() {
                           <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Total Distributed</p>
                           <p className="text-xl font-black text-yellow-300">{fmt(tokenEconomy.totalDistributed)}</p>
                           <p className="text-[10px] text-slate-500">rewards + prizes + accrued</p>
+                        </div>
+                        <div className="p-3 rounded-xl border border-emerald-500/20 bg-emerald-950/20 text-center">
+                          <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">JCMOVES USD Out</p>
+                          <p className="text-xl font-black text-emerald-300">
+                            ${(jcMovesUsdCirculation?.totalUsd ?? 0).toFixed(2)}
+                          </p>
+                          <p className="text-[10px] text-slate-500">
+                            {jcMovesUsdCirculation?.walletCount ?? 0} wallet{(jcMovesUsdCirculation?.walletCount ?? 0) !== 1 ? "s" : ""}
+                          </p>
                         </div>
                       </div>
 

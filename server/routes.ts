@@ -10691,7 +10691,20 @@ Thank you for your business!
     }
   });
 
-  // Admin Token Ledger - Shows all JCMOVES transactions across customers and employees
+  // JCMOVES USD total in circulation
+  app.get("/api/admin/jcmoves-usd-circulation", isAuthenticated, requireBusinessOwner, async (_req, res) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT COALESCE(SUM(cash_balance), 0)::text AS total_usd, COUNT(*)::int AS wallet_count
+         FROM wallet_accounts WHERE cash_balance > 0`
+      );
+      const row = rows[0] ?? { total_usd: "0", wallet_count: 0 };
+      res.json({ totalUsd: parseFloat(row.total_usd), walletCount: row.wallet_count });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.get("/api/admin/token-ledger", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
       const { limit = 100, type, role } = req.query;
@@ -13857,6 +13870,7 @@ Thank you for your business!
                   : parseFloat(lead.totalPrice || "0");
                 if (amountUsd > 0) {
                   await recordRevenueSplit(amountUsd, localInvoice.leadId, 'square_payment');
+                  await creditJcMovesUsd(localInvoice.leadId, amountUsd, 'square_webhook');
                 }
 
                 // Auto-dispatch crew after payment confirmed
@@ -19037,6 +19051,7 @@ Thank you for your business!
       const totalPriceUsd = parseFloat(lead.totalPrice || lead.basePrice || "0");
       if (totalPriceUsd > 0) {
         await recordRevenueSplit(totalPriceUsd, req.params.id, 'admin_confirmation');
+        await creditJcMovesUsd(req.params.id, totalPriceUsd, 'admin_mark_paid');
       }
 
       await db.update(leads)
@@ -20251,6 +20266,75 @@ async function recordRevenueSplit(
     console.log(`💰 Revenue split recorded: $${paymentAmountUsd} → buyback $${buyback} / staking $${staking} / jackpot $${jackpot} / liquidity $${liquidity} (lead: ${leadId || 'N/A'})`);
   } catch (err) {
     console.error(`⚠️ recordRevenueSplit failed (non-fatal):`, err);
+  }
+}
+
+// ── JCMOVES USD: Mint service credit on confirmed payment ────────────────────
+// Credits `cash_balance` in wallet_accounts for the customer who owns the lead.
+// Uses the `rewards` table (rewardType='jcmoves_usd_mint') for idempotency.
+async function creditJcMovesUsd(
+  leadId: string,
+  amountUsd: number,
+  source: string = 'payment'
+): Promise<void> {
+  try {
+    if (amountUsd <= 0) return;
+
+    // Idempotency: one mint per lead
+    const existing = await pool.query(
+      `SELECT id FROM rewards WHERE reward_type = 'jcmoves_usd_mint' AND reference_id = $1 LIMIT 1`,
+      [leadId]
+    );
+    if (existing.rows.length > 0) {
+      console.log(`[JCMOVES USD] Already minted for lead ${leadId} — skipping (source: ${source})`);
+      return;
+    }
+
+    // Find customer by email from lead
+    const leadRow = await pool.query(
+      `SELECT email FROM leads WHERE id = $1 LIMIT 1`,
+      [leadId]
+    );
+    if (!leadRow.rows.length || !leadRow.rows[0].email) {
+      console.warn(`[JCMOVES USD] No email on lead ${leadId} — cannot mint`);
+      return;
+    }
+    const email = leadRow.rows[0].email as string;
+
+    const userRow = await pool.query(
+      `SELECT id FROM users WHERE email = $1 LIMIT 1`,
+      [email]
+    );
+    if (!userRow.rows.length) {
+      console.warn(`[JCMOVES USD] No user found for email ${email} (lead ${leadId}) — cannot mint`);
+      return;
+    }
+    const userId = userRow.rows[0].id as string;
+
+    // Ensure wallet exists
+    await pool.query(
+      `INSERT INTO wallet_accounts (user_id, token_balance, cash_balance)
+       VALUES ($1, '0', '0.00')
+       ON CONFLICT (user_id) DO NOTHING`,
+      [userId]
+    );
+
+    // Credit cash_balance
+    await pool.query(
+      `UPDATE wallet_accounts SET cash_balance = cash_balance + $1 WHERE user_id = $2`,
+      [amountUsd.toFixed(2), userId]
+    );
+
+    // Record in rewards table for ledger + idempotency
+    await pool.query(
+      `INSERT INTO rewards (user_id, reward_type, token_amount, cash_value, status, reference_id, metadata)
+       VALUES ($1, 'jcmoves_usd_mint', '0', $2, 'confirmed', $3, $4)`,
+      [userId, amountUsd.toFixed(2), leadId, JSON.stringify({ source, leadId })]
+    );
+
+    console.log(`[JCMOVES USD] Minted $${amountUsd.toFixed(2)} credit for user ${userId} (lead ${leadId}, source: ${source})`);
+  } catch (err) {
+    console.error(`⚠️ creditJcMovesUsd failed (non-fatal):`, err);
   }
 }
 
