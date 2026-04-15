@@ -8594,7 +8594,7 @@ Thank you for your business!
   });
 
   // Get rewards history with pagination and server-side totals
-  // Unions: rewards table + mining claims + reward redemptions (as spend events)
+  // Unions: rewards table + mining claims + redemptions (as spend events)
   app.get("/api/rewards/history", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user?.id || (req.session as any).userId;
@@ -8607,46 +8607,61 @@ Thank you for your business!
            id::text,
            reward_type AS "rewardType",
            token_amount::text AS "tokenAmount",
+           'earn' AS "direction",
            status,
            earned_date AS "earnedDate",
            metadata
          FROM rewards
-         WHERE user_id = $1
-         ORDER BY earned_date DESC
-         LIMIT $2 OFFSET $3`,
-        [userId, limit, offset]
+         WHERE user_id = $1`,
+        [userId]
       );
 
-      // Mining claims (daily check-in / mining system)
+      // Mining claims (daily mining system)
       const { rows: miningRows } = await pool.query(
         `SELECT
            id::text,
            'daily_mining' AS "rewardType",
            token_amount::text AS "tokenAmount",
+           'earn' AS "direction",
            'confirmed' AS status,
            claim_time AS "earnedDate",
            NULL AS metadata
          FROM mining_claims
+         WHERE user_id = $1`,
+        [userId]
+      );
+
+      // Redemptions (token spends)
+      const { rows: redemptionRows } = await pool.query(
+        `SELECT
+           id::text,
+           'redemption' AS "rewardType",
+           token_cost::text AS "tokenAmount",
+           'spend' AS "direction",
+           status,
+           created_at AS "earnedDate",
+           json_build_object('itemName', item_name, 'couponCode', coupon_code) AS metadata
+         FROM reward_redemptions
          WHERE user_id = $1
-         ORDER BY claim_time DESC
-         LIMIT $2`,
-        [userId, limit]
+           AND status NOT IN ('cancelled')`,
+        [userId]
       );
 
       // Merge and sort by earnedDate desc, apply limit + offset
-      const all = [...rewardsRows, ...miningRows].sort(
+      const all = [...rewardsRows, ...miningRows, ...redemptionRows].sort(
         (a, b) => new Date(b.earnedDate).getTime() - new Date(a.earnedDate).getTime()
       );
       const paginated = all.slice(offset, offset + limit);
 
-      // Totals
+      // Totals (earned only, not counting spends)
       const { rows: totals } = await pool.query(
         `SELECT
            (SELECT COALESCE(SUM(token_amount::numeric), 0) FROM rewards WHERE user_id = $1)
            + (SELECT COALESCE(SUM(token_amount::numeric), 0) FROM mining_claims WHERE user_id = $1)
-           AS total_tokens,
+           AS total_earned,
            (SELECT COUNT(*) FROM rewards WHERE user_id = $1)
            + (SELECT COUNT(*) FROM mining_claims WHERE user_id = $1)
+           + (SELECT COUNT(*) FROM reward_redemptions WHERE user_id = $1 AND status NOT IN ('cancelled'))
            AS total_count`,
         [userId]
       );
@@ -8654,7 +8669,7 @@ Thank you for your business!
       res.json({
         rewards: paginated,
         total: parseInt(totals[0]?.total_count || "0"),
-        totalTokensEarned: (parseFloat(totals[0]?.total_tokens || "0")).toFixed(2),
+        totalTokensEarned: (parseFloat(totals[0]?.total_earned || "0")).toFixed(2),
       });
     } catch (error) {
       console.error("Error getting rewards history:", error);

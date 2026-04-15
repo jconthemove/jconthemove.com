@@ -15,6 +15,7 @@ interface RewardHistoryItem {
   id: number;
   rewardType: string;
   tokenAmount: string;
+  direction?: 'earn' | 'spend';
   status: string;
   earnedDate: string;
   metadata?: Record<string, any>;
@@ -38,6 +39,7 @@ const REWARD_LABELS: Record<string, { label: string; icon: string }> = {
   admin_grant:                  { label: "Admin Bonus",          icon: "🎁" },
   staking_reward:               { label: "Staking Perk",         icon: "🔒" },
   daily_mining:                 { label: "Daily Mining",          icon: "⛏️" },
+  redemption:                   { label: "Reward Redeemed",       icon: "🎁" },
 };
 
 function timeAgo(dateStr: string): string {
@@ -267,27 +269,40 @@ export default function CustomerProfilePage() {
             {!historyLoading && historyData && historyData.rewards.length > 0 && (
               <div className="space-y-2">
                 {historyData.rewards.map((item) => {
+                  const isSpend = item.direction === 'spend';
                   const info = REWARD_LABELS[item.rewardType] ?? {
-                    label: item.rewardType.replace(/_/g, " "),
-                    icon: "💫",
+                    label: isSpend
+                      ? (item.metadata as any)?.itemName || "Reward Redeemed"
+                      : item.rewardType.replace(/_/g, " "),
+                    icon: isSpend ? "🎁" : "💫",
                   };
                   const amount = Math.round(parseFloat(item.tokenAmount || "0"));
                   return (
                     <div
-                      key={item.id}
-                      className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-100 dark:border-zinc-800 px-4 py-3 flex items-center gap-3 shadow-sm"
+                      key={`${item.rewardType}-${item.id}`}
+                      className={`rounded-xl border px-4 py-3 flex items-center gap-3 shadow-sm ${
+                        isSpend
+                          ? "bg-red-50 dark:bg-red-950/20 border-red-100 dark:border-red-900/30"
+                          : "bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800"
+                      }`}
                     >
-                      <div className="w-9 h-9 rounded-xl bg-jc-orange/10 flex items-center justify-center text-lg shrink-0">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0 ${
+                        isSpend ? "bg-red-100 dark:bg-red-900/30" : "bg-jc-orange/10"
+                      }`}>
                         {info.icon}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100 capitalize">
-                          {info.label}
+                          {isSpend && item.metadata && (item.metadata as any).itemName
+                            ? (item.metadata as any).itemName
+                            : info.label}
                         </p>
                         <p className="text-[11px] text-zinc-400">{timeAgo(item.earnedDate)}</p>
                       </div>
                       <div className="text-right shrink-0">
-                        <div className="text-sm font-black text-jc-orange">+{amount.toLocaleString()}</div>
+                        <div className={`text-sm font-black ${isSpend ? "text-red-500 dark:text-red-400" : "text-jc-orange"}`}>
+                          {isSpend ? "−" : "+"}{amount.toLocaleString()}
+                        </div>
                         <div className="text-[9px] text-zinc-400 font-medium">JCMOVES</div>
                       </div>
                     </div>
