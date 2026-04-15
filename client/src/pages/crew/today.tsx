@@ -540,6 +540,18 @@ export default function CrewTodayPage() {
 
   const completedLeads = leads.filter(l => l.status === "completed");
   const { leaderboard, myRank, myCount, allTimeJobCounts } = useMemo(() => {
+    // Attribute each completed job to all crew members who worked it (crewMembers array)
+    // and the assigned lead (assignedToUserId). This is the correct worker metric.
+    const attributeJobToWorkers = (l: typeof completedLeads[number], counts: Record<string, number>) => {
+      const members: string[] = Array.isArray(l.crewMembers) ? (l.crewMembers as string[]) : [];
+      if (l.assignedToUserId && !members.includes(l.assignedToUserId)) {
+        members.push(l.assignedToUserId);
+      }
+      members.forEach(id => {
+        if (id) counts[id] = (counts[id] || 0) + 1;
+      });
+    };
+
     const startOfWeek = new Date();
     startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
     startOfWeek.setHours(0, 0, 0, 0);
@@ -549,13 +561,11 @@ export default function CrewTodayPage() {
     });
     const weekCounts: Record<string, number> = {};
     (thisWeekCompleted.length > 0 ? thisWeekCompleted : completedLeads).forEach(l => {
-      const key = l.createdByUserId || "";
-      if (key) weekCounts[key] = (weekCounts[key] || 0) + 1;
+      attributeJobToWorkers(l, weekCounts);
     });
     const allTimeCounts: Record<string, number> = {};
     completedLeads.forEach(l => {
-      const key = l.createdByUserId || "";
-      if (key) allTimeCounts[key] = (allTimeCounts[key] || 0) + 1;
+      attributeJobToWorkers(l, allTimeCounts);
     });
     const sorted = employees
       .filter(e => weekCounts[e.id])

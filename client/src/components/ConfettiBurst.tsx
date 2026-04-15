@@ -30,7 +30,7 @@ export function ConfettiBurst({ active, variant = "inline" }: ConfettiBurstProps
                 left: `${x}%`,
                 top: "35%",
                 background: COLORS[i % COLORS.length],
-                animation: `confettiFall 0.95s ease-out ${i * 35}ms forwards`,
+                animation: `confettiFall 0.32s ease-out ${i * 18}ms forwards`,
               }}
             />
           );
@@ -55,7 +55,7 @@ export function ConfettiBurst({ active, variant = "inline" }: ConfettiBurstProps
               left: "50%",
               top: "50%",
               background: COLORS[i % COLORS.length],
-              animation: `confettiBurst 0.7s ease-out ${i * 20}ms forwards`,
+              animation: `confettiBurst 0.28s ease-out ${i * 12}ms forwards`,
               "--cb-angle": `${angle}deg`,
             } as React.CSSProperties}
           />
