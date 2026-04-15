@@ -1,18 +1,11 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useLocation } from "wouter";
 import { Leaf, CheckCircle2, Clock, Users, ChevronLeft, Phone, MessageCircle, Calendar } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { BookingChatbot } from "@/components/booking-chatbot";
 import { Button } from "@/components/ui/button";
-
-const SERVICES = [
-  { emoji: "🌿", label: "Mowing", desc: "Grass cut to height, clippings cleared or mulched" },
-  { emoji: "✂️", label: "Trimming & Edging", desc: "Crisp lines along walks, drives & beds" },
-  { emoji: "🍂", label: "Yard Cleanup", desc: "Leaf removal, debris clearing, and general tidy-up" },
-  { emoji: "🌱", label: "Fertilization", desc: "Seasonal nutrients to keep your lawn thick & green" },
-  { emoji: "🌾", label: "Overseeding", desc: "Fill in bare spots and strengthen the turf" },
-  { emoji: "✂️", label: "Hedge Trimming", desc: "Shrubs and hedges shaped neat and clean" },
-];
+import ServicePlacard, { getPlacardTheme } from "@/components/ServicePlacard";
+import { useSheetBackButton } from "@/hooks/useSheetBackButton";
 
 const PACKAGES = [
   {
@@ -35,11 +28,20 @@ const PACKAGES = [
   {
     label: "Full Service",
     emoji: "🏡",
-    desc: "Mowing + trimming + edging + blowing — everything in one visit",
+    desc: "Mowing + trimming + edging + blowing + any add-ons — everything in one visit",
     tags: ["1–3 hrs", "1–2 crew"],
     color: "from-teal-600/20 to-teal-900/10",
     border: "border-teal-600/30",
   },
+];
+
+const SERVICES = [
+  { emoji: "🌿", label: "Mowing", desc: "Grass cut to height, clippings cleared or mulched" },
+  { emoji: "✂️", label: "Trimming & Edging", desc: "Crisp lines along walks, drives & beds" },
+  { emoji: "🍂", label: "Yard Cleanup", desc: "Leaf removal, debris clearing, and general tidy-up" },
+  { emoji: "🌱", label: "Fertilization", desc: "Seasonal nutrients to keep your lawn thick & green" },
+  { emoji: "🌾", label: "Overseeding", desc: "Fill in bare spots and strengthen the turf" },
+  { emoji: "✂️", label: "Hedge Trimming", desc: "Shrubs and hedges shaped neat and clean" },
 ];
 
 const FAQS = [
@@ -49,16 +51,19 @@ const FAQS = [
   { q: "Do you bring your own equipment?", a: "Yes — we supply all mowers, trimmers, blowers, and tools." },
 ];
 
+const theme = getPlacardTheme("lawn");
+
 export default function LawnCarePage() {
   const [, setLocation] = useLocation();
   const [showChatbot, setShowChatbot] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const handleClose = useCallback(() => setShowChatbot(false), []);
+  useSheetBackButton(showChatbot, handleClose);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white pb-24">
       <div className="max-w-[480px] mx-auto px-4 pt-4 space-y-5">
 
-        {/* Back */}
         <button
           onClick={() => setLocation("/")}
           className="flex items-center gap-1.5 text-zinc-500 text-sm hover:text-zinc-300 transition-colors"
@@ -67,75 +72,21 @@ export default function LawnCarePage() {
           Back
         </button>
 
-        {/* Hero Placard */}
-        <div
-          className="relative rounded-3xl overflow-hidden"
-          style={{
-            background: "linear-gradient(160deg, #071c0a 0%, #0d2e12 35%, #071808 65%, #030d04 100%)",
-            boxShadow: "0 0 0 1.5px rgba(34,197,94,0.18), 0 8px 40px rgba(0,0,0,0.7)",
-          }}
-        >
-          <div
-            className="absolute inset-0 opacity-[0.05]"
-            style={{
-              backgroundImage: `repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255,255,255,0.05) 3px, rgba(255,255,255,0.05) 4px)`,
-            }}
-          />
-          <div className="relative z-10 px-5 pt-6 pb-5 space-y-4">
-            <div className="text-center space-y-1">
-              <p className="text-green-400 text-xs font-bold uppercase tracking-[0.25em]">🌿 Lawn Care</p>
-              <h1 className="text-4xl font-black leading-none tracking-tight text-white"
-                style={{ textShadow: "0 2px 12px rgba(0,0,0,0.8)" }}>
-                SHARP LAWN.
-              </h1>
-              <h1 className="text-4xl font-black leading-none tracking-tight"
-                style={{ color: "#4ade80", textShadow: "0 2px 16px rgba(74,222,128,0.4)" }}>
-                ZERO HASSLE.
-              </h1>
-              <p className="text-zinc-300 text-sm font-medium mt-2">
-                Mowing, trimming, cleanups & more.
-              </p>
-            </div>
+        <ServicePlacard
+          theme={theme}
+          tagline="🌿 Lawn Care"
+          headline="SHARP LAWN."
+          subheadline="ZERO HASSLE."
+          bodyText="Mowing, trimming, cleanups & more."
+          featuresLabel="We Handle"
+          features={["Mowing", "Trimming & Edging", "Leaf Removal", "Fertilization"]}
+          stats={[
+            { icon: Clock, value: "1–3 hrs", label: "per visit" },
+            { icon: Users, value: "1–2 crew", label: "per job" },
+            { icon: Calendar, value: "Weekly", label: "plans avail." },
+          ]}
+        />
 
-            <div
-              className="rounded-2xl px-4 py-3"
-              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(34,197,94,0.2)" }}
-            >
-              <p className="text-green-400 text-[10px] font-black uppercase tracking-widest mb-2">We Handle</p>
-              <div className="grid grid-cols-2 gap-1">
-                {["Mowing", "Trimming & Edging", "Leaf Removal", "Fertilization"].map((item) => (
-                  <div key={item} className="flex items-center gap-1.5">
-                    <CheckCircle2 className="h-3 w-3 text-green-400 flex-shrink-0" />
-                    <span className="text-zinc-200 text-xs">{item}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex gap-3">
-              <div className="flex-1 rounded-xl px-3 py-2 text-center"
-                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(34,197,94,0.15)" }}>
-                <Clock className="h-4 w-4 text-green-400 mx-auto mb-1" />
-                <p className="text-white text-sm font-bold">1–3 hrs</p>
-                <p className="text-zinc-500 text-[10px]">per visit</p>
-              </div>
-              <div className="flex-1 rounded-xl px-3 py-2 text-center"
-                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(34,197,94,0.15)" }}>
-                <Users className="h-4 w-4 text-green-400 mx-auto mb-1" />
-                <p className="text-white text-sm font-bold">1–2 crew</p>
-                <p className="text-zinc-500 text-[10px]">per job</p>
-              </div>
-              <div className="flex-1 rounded-xl px-3 py-2 text-center"
-                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(34,197,94,0.15)" }}>
-                <Calendar className="h-4 w-4 text-green-400 mx-auto mb-1" />
-                <p className="text-white text-sm font-bold">Weekly</p>
-                <p className="text-zinc-500 text-[10px]">plans avail.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* CTA Buttons */}
         <div className="flex gap-3">
           <Button
             onClick={() => setShowChatbot(true)}
@@ -153,7 +104,6 @@ export default function LawnCarePage() {
           </Button>
         </div>
 
-        {/* Packages */}
         <div>
           <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-3">Packages</h2>
           <div className="space-y-3">
@@ -184,7 +134,6 @@ export default function LawnCarePage() {
           </div>
         </div>
 
-        {/* Services */}
         <div>
           <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-3">All Services</h2>
           <div className="space-y-2">
@@ -200,7 +149,6 @@ export default function LawnCarePage() {
           </div>
         </div>
 
-        {/* FAQs */}
         <div>
           <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-3">FAQs</h2>
           <div className="space-y-2">
@@ -223,7 +171,6 @@ export default function LawnCarePage() {
           </div>
         </div>
 
-        {/* Bottom CTA */}
         <Button
           onClick={() => setShowChatbot(true)}
           className="w-full h-13 bg-green-700 hover:bg-green-600 text-white font-bold text-sm rounded-2xl py-4"
@@ -232,7 +179,6 @@ export default function LawnCarePage() {
         </Button>
       </div>
 
-      {/* Chatbot Sheet */}
       <Sheet open={showChatbot} onOpenChange={setShowChatbot}>
         <SheetContent
           side="bottom"
@@ -244,7 +190,7 @@ export default function LawnCarePage() {
           </SheetHeader>
           <div className="flex-1 overflow-hidden min-h-0">
             <BookingChatbot
-              onClose={() => setShowChatbot(false)}
+              onClose={handleClose}
               embedded={true}
               showCloseButton={false}
               className="h-full"

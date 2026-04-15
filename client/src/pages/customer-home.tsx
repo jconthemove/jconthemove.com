@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
@@ -12,6 +12,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { UserStatusBar } from "@/components/UserStatusBar";
 import { ConfettiBurst } from "@/components/ConfettiBurst";
 import { calculateJCMovesReward, TOKEN_ECONOMY, type LoyaltyTierKey } from "@/lib/loyalty";
+import { useSheetBackButton } from "@/hooks/useSheetBackButton";
 
 // ── Job Status Card (post-booking polling) ────────────────────────────────────
 
@@ -145,19 +146,13 @@ export default function CustomerHomePage() {
   const [showChatbot, setShowChatbot] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
 
-  // Back-button interception: when any sheet/chatbot is open, browser back closes it
-  useEffect(() => {
-    const anySheetOpen = showChatbot || expanded !== null;
-    if (anySheetOpen) {
-      window.history.pushState({ sheetOpen: true }, "");
-    }
-    function handlePop() {
-      if (showChatbot) setShowChatbot(false);
-      else if (expanded !== null) setExpanded(null);
-    }
-    window.addEventListener("popstate", handlePop);
-    return () => window.removeEventListener("popstate", handlePop);
-  }, [showChatbot, expanded]);
+  // Back-button interception: browser back closes whichever sheet is open
+  const handleCloseChatbot = useCallback(() => setShowChatbot(false), []);
+  const handleCloseMoving = useCallback(() => setExpanded(null), []);
+  const handleCloseJunk = useCallback(() => setExpanded(null), []);
+  useSheetBackButton(showChatbot, handleCloseChatbot);
+  useSheetBackButton(expanded === "moving", handleCloseMoving);
+  useSheetBackButton(expanded === "junk", handleCloseJunk);
 
   const { data: wallet } = useQuery<{ tokenBalance: string }>({
     queryKey: ["/api/rewards/wallet"],

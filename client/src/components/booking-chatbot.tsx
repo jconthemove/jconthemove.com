@@ -174,6 +174,11 @@ export interface Answers {
   roofingMaterials?: string;
   // Employee photo upload
   employeePhotos?: string;
+  // Lawn Care structured fields
+  lawnPropertySize?: string;
+  lawnServices?: string[];
+  lawnFrequency?: string;
+  lawnCondition?: string;
 }
 
 export interface MovingQuote {
@@ -332,7 +337,7 @@ function isLawnService(a: Answers) {
 
 function hasStructuredSteps(a: Answers) {
   return isSnowService(a) || isCleaningService(a) || isDemoService(a) ||
-    isHandymanService(a) || isFlooringService(a) || isPaintingService(a) || isRoofingService(a);
+    isHandymanService(a) || isFlooringService(a) || isPaintingService(a) || isRoofingService(a) || isLawnService(a);
 }
 
 function needsDepositCheck(a: Answers) {
@@ -626,14 +631,62 @@ const STEPS: Step[] = [
 
   // ── QUOTE-ONLY SERVICE STEPS ──────────────────────────────────────────────
 
-  // Generic scope — only for Lawn Care (all other quote-only services have structured steps)
+  // ── LAWN CARE ──────────────────────────────────────────────────────────────
   {
-    id: "jobScope",
-    question: "Describe the scope of work:",
-    subtext: "Rough size, number of rooms, square footage, or area — whatever you know.",
-    type: "text",
-    placeholder: "e.g. front and back yard, approx 1/4 acre",
-    show: (a) => isQuoteOnlyService(a) && isLawnService(a),
+    id: "lawnPropertySize",
+    question: "How big is your lawn / property?",
+    subtext: "Pick the closest match.",
+    type: "choice",
+    options: [
+      "🌱 Small — under 5,000 sq ft",
+      "🌿 Medium — 5,000–10,000 sq ft",
+      "🌳 Large — 10,000–20,000 sq ft",
+      "🏡 X-Large — 20,000+ sq ft",
+      "❓ Not sure — I'll describe it",
+    ],
+    show: (a) => isLawnService(a),
+  },
+  {
+    id: "lawnServices",
+    question: "What services do you need?",
+    subtext: "Select all that apply.",
+    type: "multiselect",
+    options: [
+      "🌿 Mowing",
+      "✂️ Trimming & Edging",
+      "🍂 Leaf / Debris Removal",
+      "🌱 Fertilization",
+      "🌾 Overseeding",
+      "✂️ Hedge Trimming",
+      "Other / Custom",
+    ],
+    show: (a) => isLawnService(a),
+  },
+  {
+    id: "lawnFrequency",
+    question: "How often do you need service?",
+    type: "choice",
+    options: [
+      "📅 One-Time",
+      "🔄 Weekly (best rate)",
+      "📆 Bi-Weekly",
+      "🗓️ Monthly",
+      "❓ Not sure yet",
+    ],
+    show: (a) => isLawnService(a),
+  },
+  {
+    id: "lawnCondition",
+    question: "What's the current condition of your lawn?",
+    subtext: "This helps us estimate time and crew size.",
+    type: "choice",
+    options: [
+      "✅ Well Maintained — regular upkeep, neat",
+      "🌿 Slightly Overgrown — a bit long",
+      "🌾 Overgrown — several weeks no service",
+      "🌵 Heavily Overgrown — tall grass, weeds, brush",
+    ],
+    show: (a) => isLawnService(a),
   },
 
   // ── SNOW REMOVAL ─────────────────────────────────────────────────────────
@@ -680,12 +733,13 @@ const STEPS: Step[] = [
   },
   {
     id: "cleanType",
-    question: "What type of clean do you need?",
-    subtext: "Deep clean includes inside appliances, baseboards, and detailed scrubbing.",
+    question: "Which cleaning package fits your needs?",
+    subtext: "Standard is a quick refresh. Deep and Premium go further.",
     type: "choice",
     options: [
-      "✨ Light Clean — surface-level refresh",
-      "🧹 Deep Clean — thorough top-to-bottom",
+      "🧹 Standard Clean — surface refresh, floors, bath & kitchen wipe-down",
+      "✨ Deep Clean — top-to-bottom: inside appliances, baseboards, cabinets",
+      "💎 Premium Clean — Deep Clean + carpet treatment + windows + garage/basement",
     ],
     show: (a) => isCleaningService(a),
   },
@@ -2310,6 +2364,10 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
         if (answers.roofingWasteRemoval) scopeParts.push(`Waste removal: ${answers.roofingWasteRemoval}`);
         if (answers.roofingMaterials) scopeParts.push(`Roofing materials: ${answers.roofingMaterials}`);
         if (answers.jobScope) scopeParts.push(answers.jobScope);
+        if (answers.lawnPropertySize) scopeParts.push(`Lawn size: ${answers.lawnPropertySize}`);
+        if (answers.lawnServices?.length) scopeParts.push(`Services: ${answers.lawnServices.join(", ")}`);
+        if (answers.lawnFrequency) scopeParts.push(`Frequency: ${answers.lawnFrequency}`);
+        if (answers.lawnCondition) scopeParts.push(`Condition: ${answers.lawnCondition}`);
 
         const payload = {
           firstName,
@@ -2791,6 +2849,24 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
                   <Button variant="outline" size="sm" onClick={onClose} className="w-full border-slate-600 text-slate-300 hover:bg-slate-800">
                     Done <ArrowRight className="h-3 w-3 ml-1" />
                   </Button>
+                )}
+
+                {/* Service page CTA — shown when chatbot opened outside dedicated page */}
+                {(isRoofingService(answers) || isDemoService(answers) || isCleaningService(answers) || isLawnService(answers)) && (
+                  <a
+                    href={
+                      isRoofingService(answers) ? "/roofing"
+                        : isDemoService(answers) ? "/demolition"
+                          : isCleaningService(answers) ? "/cleaning"
+                            : "/lawn-care"
+                    }
+                    className="block rounded-xl bg-slate-800/40 border border-slate-700/40 px-4 py-3 flex items-center justify-between hover:bg-slate-700/40 transition-colors"
+                  >
+                    <span className="text-sm text-slate-300">
+                      View full service details &amp; packages
+                    </span>
+                    <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" />
+                  </a>
                 )}
 
                 <BookingConfirmedTiles />
