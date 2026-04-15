@@ -192,8 +192,8 @@ export default function CustomerHomePage() {
           </button>
         </div>
 
-        {/* Top HUD — tier + streak + wallet progress */}
-        <UserStatusBar variant="dark" />
+        {/* Top HUD — tier + streak + wallet progress (injected from parent query) */}
+        <UserStatusBar variant="dark" injectedTokenBalance={tokenBalance} />
 
         {/* HERO CHATBOT CTA */}
         <button

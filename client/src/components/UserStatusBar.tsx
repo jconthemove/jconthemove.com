@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Coins, Flame } from "lucide-react";
 import { LevelBadge } from "./LevelBadge";
@@ -10,6 +11,9 @@ interface UserStatusBarProps {
   className?: string;
   variant?: "dark" | "light";
   jobCount?: number;
+  /** Optional injected data — avoids duplicate queries when parent already fetched */
+  injectedTokenBalance?: number;
+  injectedStreak?: number;
 }
 
 interface WalletData {
@@ -20,19 +24,47 @@ interface MiningStatusData {
   streakCount: number;
 }
 
-export function UserStatusBar({ className, variant = "dark", jobCount }: UserStatusBarProps) {
+function useCountUp(target: number, duration = 800): number {
+  const [value, setValue] = useState(0);
+  const rafRef = useRef<number | null>(null);
+  const startRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (target <= 0) { setValue(0); return; }
+    startRef.current = null;
+    const tick = (now: number) => {
+      if (!startRef.current) startRef.current = now;
+      const elapsed = now - startRef.current;
+      const progress = Math.min(elapsed / duration, 1);
+      setValue(Math.floor(progress * target));
+      if (progress < 1) rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, [target, duration]);
+
+  return value;
+}
+
+export function UserStatusBar({
+  className,
+  variant = "dark",
+  jobCount,
+  injectedTokenBalance,
+  injectedStreak,
+}: UserStatusBarProps) {
   const { user } = useAuth();
 
   const { data: wallet } = useQuery<WalletData>({
     queryKey: ["/api/rewards/wallet"],
     staleTime: 30000,
-    enabled: !!user,
+    enabled: !!user && injectedTokenBalance === undefined,
   });
 
   const { data: miningStatus } = useQuery<MiningStatusData>({
     queryKey: ["/api/mining/status"],
     staleTime: 60000,
-    enabled: !!user,
+    enabled: !!user && injectedStreak === undefined,
   });
 
   const rawTier = user?.loyaltyTier ?? "bronze";
@@ -42,10 +74,12 @@ export function UserStatusBar({ className, variant = "dark", jobCount }: UserSta
   const nextTierKey = getNextTier(tier);
   const nextTierConfig = nextTierKey ? LOYALTY_TIERS[nextTierKey] : null;
   const progress = getTierProgress(tierPoints, tier);
-  const tokenBalance = parseFloat(wallet?.tokenBalance ?? "0");
-  const streak = miningStatus?.streakCount ?? 0;
+
+  const tokenBalance = injectedTokenBalance ?? parseFloat(wallet?.tokenBalance ?? "0");
+  const streak = injectedStreak ?? miningStatus?.streakCount ?? 0;
   const isEmployee = user?.role === "employee";
   const workerLevel = isEmployee ? getWorkerLevel(jobCount ?? 0) : null;
+  const animatedBalance = useCountUp(tokenBalance);
 
   const isDark = variant === "dark";
 
@@ -62,8 +96,8 @@ export function UserStatusBar({ className, variant = "dark", jobCount }: UserSta
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
             <Coins className="h-4 w-4 text-orange-400 flex-shrink-0" />
-            <span className={cn("text-sm font-bold", isDark ? "text-white" : "text-white")}>
-              {formatTokens(tokenBalance)}
+            <span className={cn("text-sm font-bold tabular-nums", isDark ? "text-white" : "text-white")}>
+              {formatTokens(animatedBalance)}
             </span>
             <span className={cn("text-[10px] font-medium", isDark ? "text-zinc-500" : "text-white/50")}>
               JCMOVES
