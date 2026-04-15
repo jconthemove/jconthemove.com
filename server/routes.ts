@@ -39,6 +39,55 @@ import lawnCareRouter from "./routes/lawnCare";
 
 const STAKING_TREASURY_USER_ID = "staking-treasury-system";
 
+/**
+ * Silently grants lottery tickets for an activity (booking or job completion).
+ * If there is no open round for the requested type, the function returns without error.
+ * Never throws — all errors are caught and logged only.
+ */
+async function grantLotteryTicketsForActivity(
+  userId: string,
+  count: number,
+  source: string,
+  roundType: 'weekly' | 'monthly' = 'weekly'
+): Promise<void> {
+  try {
+    const { rows: roundRows } = await pool.query(
+      `SELECT * FROM lottery_rounds WHERE status='open' AND round_type=$1 ORDER BY id LIMIT 1`,
+      [roundType]
+    );
+    if (!roundRows.length) return; // No active round — silently skip
+    const round = roundRows[0];
+
+    // Atomically claim a ticket range
+    const { rows: [updatedRound] } = await pool.query(
+      `UPDATE lottery_rounds SET total_entries = total_entries + $1, updated_at = NOW()
+       WHERE id=$2 AND status='open' RETURNING *`,
+      [count, round.id]
+    );
+    if (!updatedRound) return; // Round closed just now — skip
+
+    const endIdx = updatedRound.total_entries;
+    const startIdx = endIdx - count + 1;
+
+    await pool.query(
+      `INSERT INTO lottery_entries (round_id, user_id, tickets, entry_start_index, entry_end_index, source)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [round.id, userId, count, startIdx, endIdx, source]
+    );
+
+    await pool.query(
+      `INSERT INTO lottery_audit_logs (round_id, event_type, message, metadata)
+       VALUES ($1,$2,$3,$4)`,
+      [round.id, 'AUTO_GRANT', `Auto-granted ${count} ticket${count !== 1 ? 's' : ''} (${source})`,
+       JSON.stringify({ userId, count, source, roundId: round.id })]
+    );
+
+    console.log(`🎟️ Lottery: granted ${count} ticket${count !== 1 ? 's' : ''} to ${userId} (${source})`);
+  } catch (err) {
+    console.error(`⚠️ grantLotteryTicketsForActivity failed (non-fatal):`, err);
+  }
+}
+
 async function ensureStakingTreasuryUser() {
   try {
     const [existing] = await db.select().from(users).where(eq(users.id, STAKING_TREASURY_USER_ID));
@@ -3630,6 +3679,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
           rewardMessage = ` Earned ${bonusTokens} JCMOVES!`;
           console.log(`🎁 Awarded ${bonusTokens} JCMOVES to existing customer ${lead.email} for booking request`);
+          await grantLotteryTicketsForActivity(existingUser[0].id, 1, 'booking');
         } else {
           // Store pending reward for when they register
           console.log(`📋 Customer ${lead.email} not registered - reward will be applied on registration`);
@@ -3730,6 +3780,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
           rewardMessage = ` Earned ${bonusTokens} JCMOVES!`;
           console.log(`🎁 Awarded ${bonusTokens} JCMOVES to customer ${lead.email} for marketplace job post`);
+          await grantLotteryTicketsForActivity(existingUser[0].id, 1, 'booking');
         }
       } catch (rewardErr) {
         console.error("Marketplace reward error:", rewardErr);
@@ -5495,6 +5546,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Don't fail the status update if token distribution fails
           }
 
+          // Grant 3 lottery tickets to the customer on job completion
+          try {
+            if (updatedLead.email) {
+              const { rows: customerRows } = await pool.query(
+                `SELECT id FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+                [updatedLead.email.trim()]
+              );
+              if (customerRows.length > 0) {
+                await grantLotteryTicketsForActivity(customerRows[0].id, 3, 'job_completion');
+              }
+            }
+          } catch (lotteryErr) {
+            console.error("Lottery ticket grant on completion failed (non-fatal):", lotteryErr);
+          }
+
           // Send email to admin
           try {
             const assignedUser = updatedLead.assignedToUserId 
@@ -6428,6 +6494,21 @@ Thank you for your business!
           } catch (tokenError) {
             console.error("Error distributing tokens via quote endpoint:", tokenError);
             // Non-fatal: advisory lock ensures partial runs can be retried
+          }
+
+          // Grant 3 lottery tickets to the customer on job completion
+          try {
+            if (updatedLead.email) {
+              const { rows: custRows } = await pool.query(
+                `SELECT id FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+                [updatedLead.email.trim()]
+              );
+              if (custRows.length > 0) {
+                await grantLotteryTicketsForActivity(custRows[0].id, 3, 'job_completion');
+              }
+            }
+          } catch (lotteryErr) {
+            console.error("Lottery ticket grant on completion (admin path) failed (non-fatal):", lotteryErr);
           }
 
           // Email notifications
