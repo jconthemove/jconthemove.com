@@ -242,6 +242,8 @@ export const walletAccounts = pgTable("wallet_accounts", {
   totalEarned: decimal("total_earned", { precision: 18, scale: 8 }).default("0.00000000"),
   totalRedeemed: decimal("total_redeemed", { precision: 18, scale: 8 }).default("0.00000000"),
   totalCashedOut: decimal("total_cashed_out", { precision: 10, scale: 2 }).default("0.00"),
+  stakedBalance: decimal("staked_balance", { precision: 18, scale: 8 }).default("0.00000000"),
+  unstakeCooldownUntil: timestamp("unstake_cooldown_until"),
   lastActivity: timestamp("last_activity").default(sql`now()`),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });

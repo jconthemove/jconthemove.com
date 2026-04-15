@@ -37,35 +37,6 @@ import { ensureMomsAccount } from "./services/generosityFund";
 import { dispatchGenericJob } from "./services/dispatchGeneric";
 import lawnCareRouter from "./routes/lawnCare";
 
-async function ensureStakingTiersSeeded() {
-  try {
-    const existing = await db.select().from(stakingTiers);
-    if (existing.length === 0) {
-      console.log("Seeding staking tiers...");
-      const tiers = [
-        { name: "Flexible", durationDays: 0, annualRatePercent: "5.00", minStake: "50.00000000", maxStake: null, earlyUnstakePenaltyPercent: "0.00", isActive: true },
-        { name: "Bronze", durationDays: 30, annualRatePercent: "10.00", minStake: "100.00000000", maxStake: null, earlyUnstakePenaltyPercent: "0.00", isActive: true },
-        { name: "Silver", durationDays: 90, annualRatePercent: "15.00", minStake: "250.00000000", maxStake: null, earlyUnstakePenaltyPercent: "0.00", isActive: true },
-        { name: "Gold", durationDays: 180, annualRatePercent: "20.00", minStake: "500.00000000", maxStake: null, earlyUnstakePenaltyPercent: "0.00", isActive: true },
-        { name: "Diamond", durationDays: 365, annualRatePercent: "30.00", minStake: "1000.00000000", maxStake: null, earlyUnstakePenaltyPercent: "0.00", isActive: true },
-      ];
-      await db.insert(stakingTiers).values(tiers);
-      console.log("✅ Staking tiers seeded successfully");
-    } else {
-      const rateMap: Record<string, string> = { "Flexible": "5.00", "Bronze": "10.00", "Silver": "15.00", "Gold": "20.00", "Diamond": "30.00" };
-      for (const tier of existing) {
-        const expectedRate = rateMap[tier.name];
-        if (expectedRate && tier.annualRatePercent !== expectedRate) {
-          await db.update(stakingTiers).set({ annualRatePercent: expectedRate }).where(eq(stakingTiers.id, tier.id));
-          console.log(`Updated ${tier.name} tier APR: ${tier.annualRatePercent}% → ${expectedRate}%`);
-        }
-      }
-    }
-  } catch (error) {
-    console.error("Failed to seed staking tiers:", error);
-  }
-}
-
 const STAKING_TREASURY_USER_ID = "staking-treasury-system";
 
 async function ensureStakingTreasuryUser() {
@@ -1068,8 +1039,106 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('⚠️ calibration_sessions migration error (non-fatal):', csErr);
   }
 
-  // Seed staking tiers and treasury user on startup (ensures production has them)
-  await ensureStakingTiersSeeded();
+  // Ensure new staking pool columns exist in wallet_accounts
+  try {
+    await pool.query(`
+      ALTER TABLE wallet_accounts ADD COLUMN IF NOT EXISTS staked_balance NUMERIC(18,8) NOT NULL DEFAULT 0;
+      ALTER TABLE wallet_accounts ADD COLUMN IF NOT EXISTS unstake_cooldown_until TIMESTAMPTZ;
+    `);
+    console.log('✅ Staking pool columns ready');
+  } catch (e) { console.error('Staking pool column migration error:', e); }
+
+  // One-time migration: convert old tier-based stakes → new single-pool staked_balance
+  try {
+    // Skip if migration was already completed (idempotency marker)
+    const { rows: migFlagRows } = await pool.query(
+      `SELECT setting_value FROM spin_config WHERE setting_key='migration_staking_pool_v1' LIMIT 1`
+    );
+    if (migFlagRows[0]?.setting_value === 'done') {
+      // Migration previously completed — skip scan
+    } else {
+
+    const { rows: migratable } = await pool.query<{
+      id: string; user_id: string; amount: string; daily_rate: string; last_payout_at: string;
+    }>(`SELECT id, user_id, amount, daily_rate, last_payout_at FROM stakes WHERE status='active'`);
+
+    if (migratable.length > 0) {
+      console.log(`Migrating ${migratable.length} active stake(s) to new pool system...`);
+      for (const row of migratable) {
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+
+          const now = new Date();
+          const lastPayout = new Date(row.last_payout_at);
+          const daysSince = (now.getTime() - lastPayout.getTime()) / 86400000;
+          const principal = parseFloat(row.amount);
+          const accrued = parseFloat((principal * parseFloat(row.daily_rate) * daysSince).toFixed(8));
+
+          // Ensure wallet_accounts row exists for this user (upsert)
+          await client.query(
+            `INSERT INTO wallet_accounts (user_id, token_balance, total_earned, staked_balance)
+             VALUES ($1, '0.00000000', '0.00000000', '0.00000000')
+             ON CONFLICT (user_id) DO NOTHING`,
+            [row.user_id]
+          );
+
+          // Credit accrued APR tokens (inline — same connection, inside transaction)
+          if (accrued > 0) {
+            await client.query(
+              `UPDATE wallet_accounts
+               SET token_balance = (COALESCE(token_balance::numeric, 0) + $1)::text,
+                   total_earned  = (COALESCE(total_earned::numeric,  0) + $1)::text
+               WHERE user_id = $2`,
+              [accrued.toFixed(8), row.user_id]
+            );
+            console.log(`  → Credited ${accrued} accrued tokens (raw, no bonus) to user ${row.user_id}`);
+          }
+
+          // Move principal from stake → staked_balance
+          const waResult = await client.query(
+            `UPDATE wallet_accounts
+             SET staked_balance = (COALESCE(staked_balance::numeric, 0) + $1)::text
+             WHERE user_id = $2`,
+            [principal.toFixed(8), row.user_id]
+          );
+          if ((waResult.rowCount ?? 0) < 1) {
+            throw new Error(`No wallet_accounts row for user ${row.user_id} during stake migration`);
+          }
+
+          // Mark stake as migrated (idempotency guard)
+          await client.query(
+            `UPDATE stakes SET status='migrated', unstaked_at=NOW() WHERE id=$1 AND status='active'`,
+            [row.id]
+          );
+
+          await client.query('COMMIT');
+          console.log(`  → Migrated stake ${row.id}: ${principal} JCMOVES principal + ${accrued} accrued → user ${row.user_id}`);
+        } catch (migErr) {
+          await client.query('ROLLBACK');
+          throw migErr;
+        } finally {
+          client.release();
+        }
+      }
+      console.log('✅ Stake migration complete');
+    }
+
+    // Record migration completion marker so future boots skip the scan
+    await pool.query(
+      `INSERT INTO spin_config (setting_key, setting_value)
+       VALUES ('migration_staking_pool_v1', 'done')
+       ON CONFLICT (setting_key) DO UPDATE SET setting_value = 'done'`
+    );
+
+    } // end else (migration not yet done)
+  } catch (e) {
+    // Log prominently — unmigrated stakes will remain in 'active' status
+    // and will be retried on next boot (idempotency guaranteed by per-stake transaction + marker)
+    console.error('⚠️  Stake migration error — some legacy stakes may still be active. Will retry on next restart.', e);
+  }
+
+  // Keep treasury user for balance integrity (keeps staking treasury wallet funded)
   await ensureStakingTreasuryUser();
   await ensureMomsAccount();
   const { ensureNomineesTable } = await import("./services/nominees");
@@ -16058,39 +16127,26 @@ Thank you for your business!
 
   // ==================== STAKING TREASURY ROUTES ====================
 
-  app.get("/api/staking/tiers", async (_req, res) => {
-    try {
-      res.set("Cache-Control", "no-store, no-cache, must-revalidate");
-      res.set("Pragma", "no-cache");
-      const tiers = await storage.getStakingTiers();
-      res.json(tiers);
-    } catch (error: any) {
-      console.error("Error fetching staking tiers:", error);
-      res.status(500).json({ error: error.message });
-    }
+  app.get("/api/staking/tiers", (_req, res) => {
+    res.status(410).json({ error: "Legacy APR staking tiers have been retired. JCMOVES staking now uses a single-pool model with automatic 10% earnings bonus." });
   });
 
-  app.get("/api/staking/my-stakes", isAuthenticated, async (req: any, res) => {
+  app.get("/api/staking/my-stakes", isAuthenticated, (_req: any, res) => {
+    res.status(410).json({ error: "Legacy per-stake history is no longer available. Use GET /api/staking/my-pool for your current staked balance." });
+  });
+
+  // ── New single-pool staking endpoints ──────────────────────────────────────
+
+  app.get("/api/staking/my-pool", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user?.id || req.session?.userId;
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
-      const userStakes = await storage.getUserStakes(userId);
-      // Fetch auto_compound flags from raw SQL (column added via ALTER TABLE)
-      const { rows: acRows } = await pool.query(
-        `SELECT id, auto_compound FROM stakes WHERE user_id=$1`, [userId]
-      );
-      const acMap: Record<string, boolean> = {};
-      for (const r of acRows) acMap[r.id] = r.auto_compound;
-      const enriched = userStakes.map((s: any) => {
-        const result = { ...s, autoCompound: acMap[s.id] ?? false };
-        if (s.tier?.name === "Diamond") {
-          const daysSinceStart = (Date.now() - new Date(s.startedAt).getTime()) / (1000 * 60 * 60 * 24);
-          const celebrationDaysLeft = Math.max(0, Math.ceil(90 - daysSinceStart));
-          return { ...result, diamondCelebration: { active: celebrationDaysLeft > 0, daysLeft: celebrationDaysLeft, bonusPercent: 10 } };
-        }
-        return result;
+      const pool_data = await storage.getStakingPool(userId);
+      const wallet = await storage.getWalletAccount(userId);
+      res.json({
+        ...pool_data,
+        freeBalance: parseFloat(wallet?.tokenBalance || "0"),
       });
-      res.json(enriched);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -16100,134 +16156,86 @@ Thank you for your business!
     try {
       const userId = req.user?.id || req.session?.userId;
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
-      const { tierId, amount } = req.body;
-      if (!tierId || !amount || amount <= 0) return res.status(400).json({ error: "Invalid stake parameters" });
-      const stake = await storage.createStake(userId, tierId, parseFloat(amount));
-      res.json(stake);
+      const { amount } = req.body;
+      if (!amount || parseFloat(amount) <= 0) return res.status(400).json({ error: "Invalid amount" });
+      await storage.stakeTokens(userId, parseFloat(amount));
+      const pool_data = await storage.getStakingPool(userId);
+      const wallet = await storage.getWalletAccount(userId);
+      res.json({ success: true, ...pool_data, freeBalance: parseFloat(wallet?.tokenBalance || "0") });
     } catch (error: any) {
       res.status(400).json({ error: error.message });
     }
   });
 
-  app.post("/api/staking/:stakeId/claim", isAuthenticated, async (req: any, res) => {
+  app.post("/api/staking/unstake", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user?.id || req.session?.userId;
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
-      // Check auto_compound flag before claiming
-      const { rows: acRows } = await pool.query(
-        `SELECT auto_compound FROM stakes WHERE id=$1 AND user_id=$2 AND status='active' LIMIT 1`,
-        [req.params.stakeId, userId]
-      );
-      const autoCompound = acRows[0]?.auto_compound === true;
-      const result = await storage.claimStakingRewards(req.params.stakeId, userId);
-      if (autoCompound && result.earned > 0) {
-        // Move earned amount back into the stake (compound) instead of leaving in wallet
-        await pool.query(
-          `UPDATE stakes SET amount = amount + $1 WHERE id=$2`,
-          [result.earned.toFixed(8), req.params.stakeId]
+      const result = await storage.unstakeTokens(userId);
+      res.json({ success: true, ...result });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/staking/unstake-all", (_req: any, res) => {
+    res.status(410).json({ error: "Use POST /api/staking/unstake instead." });
+  });
+
+  app.get("/api/staking/leaderboard", async (_req, res) => {
+    try {
+      const leaderboard = await storage.getStakingLeaderboard(25);
+      const userIds = leaderboard.map(r => r.userId);
+      let displayNames: Record<string, string> = {};
+      if (userIds.length > 0) {
+        const { rows } = await pool.query<{ id: string; first_name: string; last_name: string }>(
+          `SELECT id, first_name, last_name FROM users WHERE id = ANY($1)`, [userIds]
         );
-        await pool.query(
-          `UPDATE wallet_accounts SET token_balance = GREATEST(0, token_balance - $1) WHERE user_id=$2`,
-          [result.earned.toFixed(8), userId]
-        );
-        res.json({ ...result, autoCompounded: true, message: `${result.earned.toFixed(4)} JCMOVES compounded into your stake!` });
-      } else {
-        res.json(result);
+        for (const r of rows) {
+          displayNames[r.id] = [r.first_name, r.last_name].filter(Boolean).join(" ") || "Member";
+        }
       }
+      res.json(leaderboard.map(r => ({ ...r, displayName: displayNames[r.userId] || "Member" })));
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      res.status(500).json({ error: error.message });
     }
   });
 
-  app.post("/api/staking/:stakeId/unstake", isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user?.id || req.session?.userId;
-      if (!userId) return res.status(401).json({ error: "Not authenticated" });
-      const result = await storage.unstake(req.params.stakeId, userId);
-      res.json(result);
-    } catch (error: any) {
-      res.status(400).json({ error: error.message });
-    }
+  // ── Legacy per-stake claim/unstake (kept for ETH staking compatibility) ────
+
+  app.post("/api/staking/:stakeId/claim", isAuthenticated, (_req: any, res) => {
+    res.status(410).json({ error: "Legacy per-stake APR claims are no longer supported. JCMOVES staking has migrated to the single-pool system with automatic 10% earnings bonuses." });
+  });
+
+  app.post("/api/staking/:stakeId/unstake", isAuthenticated, (_req: any, res) => {
+    res.status(410).json({ error: "Legacy per-stake unstake is no longer supported. Use POST /api/staking/unstake to unstake your full balance." });
   });
 
   app.get("/api/staking/treasury", isAuthenticated, requireBusinessOwner, async (_req: any, res) => {
     try {
       const treasuryBalance = await storage.getStakingTreasuryBalance();
-      const tiers = await storage.getStakingTiers();
-      const allStakes = await db.select({
-        status: stakes.status,
-        amount: stakes.amount,
-        totalEarned: stakes.totalEarned,
-        tierName: stakingTiers.name,
-        dailyRate: stakes.dailyRate,
-      }).from(stakes).innerJoin(stakingTiers, eq(stakes.tierId, stakingTiers.id));
-
-      const activeStakes = allStakes.filter(s => s.status === "active");
-      const totalActiveStaked = activeStakes.reduce((sum, s) => sum + parseFloat(s.amount), 0);
-      const totalRewardsPaid = allStakes.reduce((sum, s) => sum + parseFloat(s.totalEarned || "0"), 0);
-
-      const dailyObligations = activeStakes.reduce((sum, s) => {
-        return sum + parseFloat(s.amount) * parseFloat(s.dailyRate);
-      }, 0);
-      const monthlyObligations = dailyObligations * 30;
-      const yearlyObligations = dailyObligations * 365;
-
+      const { rows: poolRows } = await pool.query(
+        `SELECT COUNT(*) AS staker_count,
+                COALESCE(SUM(COALESCE(staked_balance::numeric,0)),0) AS total_staked
+         FROM wallet_accounts WHERE COALESCE(staked_balance::numeric,0) > 0`
+      );
+      const { rows: bonusRows } = await pool.query(
+        `SELECT COALESCE(SUM(CAST(token_amount AS NUMERIC)),0) AS total_bonus_paid FROM rewards WHERE reward_type='staking_bonus'`
+      );
+      const stakerCount = parseInt(poolRows[0]?.staker_count || '0');
+      const totalStaked = parseFloat(poolRows[0]?.total_staked || '0');
+      const totalBonusPaid = parseFloat(bonusRows[0]?.total_bonus_paid || '0');
       const treasuryBal = parseFloat(treasuryBalance.tokenBalance);
-      const healthScore = totalActiveStaked > 0 ? treasuryBal / totalActiveStaked : 999;
-      const coverageRatio = monthlyObligations > 0 ? treasuryBal / monthlyObligations : 999;
-      const runwayDays = dailyObligations > 0 ? Math.floor(treasuryBal / dailyObligations) : 99999;
-
-      let healthStatus: "critical" | "warning" | "healthy" | "strong" = "strong";
-      if (healthScore < 1.0) healthStatus = "critical";
-      else if (healthScore < 1.5) healthStatus = "warning";
-      else if (healthScore < 2.0) healthStatus = "healthy";
-
-      let aprMultiplier = 1.0;
-      if (healthScore < 0.5) aprMultiplier = 0.25;
-      else if (healthScore < 1.0) aprMultiplier = 0.5;
-      else if (healthScore < 1.5) aprMultiplier = 0.75;
-      else if (healthScore < 2.0) aprMultiplier = 0.9;
-
-      const tierBreakdown = tiers.map(tier => {
-        const tierStakes = activeStakes.filter(s => s.tierName === tier.name);
-        const tierStaked = tierStakes.reduce((sum, s) => sum + parseFloat(s.amount), 0);
-        const tierDailyObligation = tierStakes.reduce((sum, s) => sum + parseFloat(s.amount) * parseFloat(s.dailyRate), 0);
-        return {
-          name: tier.name,
-          durationDays: tier.durationDays,
-          baseApr: tier.annualRatePercent,
-          effectiveApr: (parseFloat(tier.annualRatePercent) * aprMultiplier).toFixed(2),
-          activeStakes: tierStakes.length,
-          totalStaked: tierStaked.toFixed(2),
-          dailyObligation: tierDailyObligation.toFixed(4),
-        };
-      });
-
+      const coverageRatio = totalStaked > 0 ? treasuryBal / totalStaked : 999;
       res.json({
         balance: treasuryBalance.tokenBalance,
         totalDeposited: treasuryBalance.totalDeposited,
         totalPaidOut: treasuryBalance.totalPaidOut,
-        totalActiveStaked: totalActiveStaked.toFixed(2),
-        totalRewardsPaid: totalRewardsPaid.toFixed(2),
-        activeStakeCount: activeStakes.length,
-        totalStakeCount: allStakes.length,
-        tierBreakdown,
-        healthMetrics: {
-          healthScore: parseFloat(healthScore.toFixed(2)),
-          healthStatus,
-          coverageRatio: parseFloat(coverageRatio.toFixed(2)),
-          runwayDays,
-          dailyObligations: parseFloat(dailyObligations.toFixed(4)),
-          monthlyObligations: parseFloat(monthlyObligations.toFixed(2)),
-          yearlyObligations: parseFloat(yearlyObligations.toFixed(2)),
-          aprMultiplier,
-          thresholds: {
-            critical: "< 1.0x (APR reduced 50-75%)",
-            warning: "1.0x - 1.5x (APR reduced 10-25%)",
-            healthy: "1.5x - 2.0x (APR reduced up to 10%)",
-            strong: "> 2.0x (Full APR rates)",
-          },
-        },
+        stakerCount,
+        totalPoolStaked: totalStaked.toFixed(2),
+        totalBonusPaid: totalBonusPaid.toFixed(2),
+        coverageRatio: parseFloat(coverageRatio.toFixed(4)),
+        model: "single-pool-10pct-bonus",
       });
     } catch (error: any) {
       console.error("Error fetching staking treasury:", error);
@@ -16238,39 +16246,27 @@ Thank you for your business!
   app.get("/api/staking/health", isAuthenticated, async (_req: any, res) => {
     try {
       const treasuryBalance = await storage.getStakingTreasuryBalance();
-      const allStakes = await db.select({
-        status: stakes.status,
-        amount: stakes.amount,
-        dailyRate: stakes.dailyRate,
-      }).from(stakes).innerJoin(stakingTiers, eq(stakes.tierId, stakingTiers.id));
-
-      const activeStakes = allStakes.filter(s => s.status === "active");
-      const totalActiveStaked = activeStakes.reduce((sum, s) => sum + parseFloat(s.amount), 0);
-      const dailyObligations = activeStakes.reduce((sum, s) => sum + parseFloat(s.amount) * parseFloat(s.dailyRate), 0);
-
+      const { rows: poolRows } = await pool.query(
+        `SELECT COUNT(*) AS staker_count,
+                COALESCE(SUM(COALESCE(staked_balance::numeric,0)),0) AS total_staked
+         FROM wallet_accounts WHERE COALESCE(staked_balance::numeric,0) > 0`
+      );
+      const totalStaked = parseFloat(poolRows[0]?.total_staked || '0');
       const treasuryBal = parseFloat(treasuryBalance.tokenBalance);
-      const healthScore = totalActiveStaked > 0 ? treasuryBal / totalActiveStaked : 999;
-      const runwayDays = dailyObligations > 0 ? Math.floor(treasuryBal / dailyObligations) : 99999;
+      const coverageRatio = totalStaked > 0 ? treasuryBal / totalStaked : 999;
 
       let healthStatus: "critical" | "warning" | "healthy" | "strong" = "strong";
-      if (healthScore < 1.0) healthStatus = "critical";
-      else if (healthScore < 1.5) healthStatus = "warning";
-      else if (healthScore < 2.0) healthStatus = "healthy";
-
-      let aprMultiplier = 1.0;
-      if (healthScore < 0.5) aprMultiplier = 0.25;
-      else if (healthScore < 1.0) aprMultiplier = 0.5;
-      else if (healthScore < 1.5) aprMultiplier = 0.75;
-      else if (healthScore < 2.0) aprMultiplier = 0.9;
+      if (coverageRatio < 0.5) healthStatus = "critical";
+      else if (coverageRatio < 1.0) healthStatus = "warning";
+      else if (coverageRatio < 2.0) healthStatus = "healthy";
 
       res.json({
-        healthScore: parseFloat(healthScore.toFixed(2)),
         healthStatus,
-        runwayDays: Math.min(runwayDays, 99999),
-        aprMultiplier,
+        coverageRatio: parseFloat(coverageRatio.toFixed(4)),
         treasuryBalance: parseFloat(treasuryBal.toFixed(2)),
-        totalStaked: parseFloat(totalActiveStaked.toFixed(2)),
-        dailyObligations: parseFloat(dailyObligations.toFixed(4)),
+        totalPoolStaked: parseFloat(totalStaked.toFixed(2)),
+        stakerCount: parseInt(poolRows[0]?.staker_count || '0'),
+        bonusModel: "10pct-auto-on-credit",
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -16281,10 +16277,12 @@ Thank you for your business!
   app.get("/api/staking/pool-stats", async (_req, res) => {
     try {
       const { rows: stakerRows } = await pool.query(
-        `SELECT COUNT(DISTINCT user_id) AS total_stakers,
-                COALESCE(SUM(CASE WHEN status='active' THEN CAST(amount AS NUMERIC) ELSE 0 END),0) AS total_active_staked,
-                COALESCE(SUM(CAST(total_earned AS NUMERIC)),0) AS total_rewards_paid
-         FROM stakes`
+        `SELECT COUNT(*) AS total_stakers,
+                COALESCE(SUM(COALESCE(staked_balance::numeric, 0)), 0) AS total_active_staked
+         FROM wallet_accounts WHERE COALESCE(staked_balance::numeric, 0) > 0`
+      );
+      const { rows: bonusRows } = await pool.query(
+        `SELECT COALESCE(SUM(CAST(token_amount AS NUMERIC)), 0) AS total_rewards_paid FROM rewards WHERE reward_type='staking_bonus'`
       );
       const { rows: cfgRows } = await pool.query(
         `SELECT setting_key, setting_value FROM spin_config WHERE setting_key IN ('staking_yield_sources','staking_treasury_bonus_pct')`
@@ -16296,7 +16294,7 @@ Thank you for your business!
       res.json({
         totalStakers: parseInt(stakerRows[0]?.total_stakers || '0'),
         totalActiveStaked: parseFloat(stakerRows[0]?.total_active_staked || '0'),
-        totalRewardsPaid: parseFloat(stakerRows[0]?.total_rewards_paid || '0'),
+        totalRewardsPaid: parseFloat(bonusRows[0]?.total_rewards_paid || '0'),
         monthlyTreasuryInflow: monthlyInflow,
         treasuryBonusPct: parseFloat(cfg['staking_treasury_bonus_pct'] || '0'),
       });

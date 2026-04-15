@@ -142,6 +142,7 @@ export interface IStorage {
   updateWalletAccount(userId: string, updates: Partial<WalletAccount>): Promise<void>;
   awardJobCompletionTokens(userId: string, tokenAmount: number, jobId: string): Promise<void>;
   creditWalletTokens(userId: string, tokenAmount: number): Promise<void>;
+  creditWalletTokensRaw(userId: string, tokenAmount: number): Promise<void>;
   debitWalletTokens(userId: string, tokenAmount: number): Promise<void>;
   getRewardsByUserAndTypeToday(userId: string, rewardType: string): Promise<any[]>;
   
@@ -241,6 +242,12 @@ export interface IStorage {
   claimStakingRewards(stakeId: string, userId: string): Promise<{ earned: number }>;
   unstake(stakeId: string, userId: string): Promise<{ returned: number; penalty: number; earned: number }>;
   getStakingTreasuryBalance(): Promise<{ tokenBalance: string; totalDeposited: string; totalPaidOut: string }>;
+  // New single-pool staking
+  getStakingPool(userId: string): Promise<{ stakedBalance: number; unstakeCooldownUntil: Date | null; discountPct: number }>;
+  stakeTokens(userId: string, amount: number): Promise<void>;
+  unstakeTokens(userId: string): Promise<{ returned: number }>;
+  getStakingLeaderboard(limit?: number): Promise<{ userId: string; stakedBalance: number; rank: number }[]>;
+  getStakingDiscountPct(userId: string): Promise<number>;
 
   // Sponsor operations
   createSponsor(sponsor: InsertSponsor): Promise<Sponsor>;
@@ -2077,21 +2084,61 @@ export class DatabaseStorage implements IStorage {
       wallet = await this.createWalletAccount({ userId });
     }
 
+    const stakedBalance = parseFloat(wallet.stakedBalance ?? "0");
+    const isStakingActive = !INTERNAL_WALLET_IDS.has(userId) && !userId.startsWith("nominee-") && stakedBalance > 0;
+    const bonus = isStakingActive ? Math.floor(tokenAmount * 0.10) : 0;
+    const totalCredit = tokenAmount + bonus;
+
     const currentBalance = parseFloat(wallet.tokenBalance || "0");
     const currentEarned = parseFloat(wallet.totalEarned || "0");
-    const newBalance = currentBalance + tokenAmount;
-    const newTotalEarned = currentEarned + tokenAmount;
 
     await this.updateWalletAccount(userId, {
-      tokenBalance: newBalance.toFixed(8),
-      totalEarned: newTotalEarned.toFixed(8),
+      tokenBalance: (currentBalance + totalCredit).toFixed(8),
+      totalEarned: (currentEarned + totalCredit).toFixed(8),
     });
 
+    if (bonus > 0) {
+      const newBalance = (currentBalance + totalCredit).toFixed(8);
+      await db.insert(rewards).values({
+        userId,
+        rewardType: "staking_bonus",
+        tokenAmount: bonus.toFixed(8),
+        cashValue: "0.00",
+        status: "confirmed",
+        earnedDate: new Date(),
+        metadata: { baseAmount: tokenAmount, bonusPct: 10 },
+      });
+      const { pool: dbPool } = await import('./db');
+      const { rows: walletRows } = await dbPool.query<{ id: string }>(
+        `SELECT id FROM user_wallets WHERE user_id = $1 LIMIT 1`,
+        [userId]
+      );
+      const userWalletId = walletRows[0]?.id ?? null;
+      await dbPool.query(
+        `INSERT INTO wallet_transactions (user_wallet_id, transaction_type, amount, balance_after, status, metadata)
+         VALUES ($1, 'staking_bonus', $2, $3, 'confirmed', $4::jsonb)`,
+        [userWalletId, bonus.toFixed(8), newBalance, JSON.stringify({ userId, baseAmount: tokenAmount, bonusPct: 10 })]
+      );
+    }
+
     if (!INTERNAL_WALLET_IDS.has(userId) && !userId.startsWith("nominee-")) {
+      // Use base tokenAmount only (not totalCredit) — staking bonus is treasury-funded
+      // and should not flow into generosity/nominee funds to avoid circular treasury drain.
       creditGenerosityFund(tokenAmount, `credit_to_${userId}`).catch(() => {});
       creditNominees(tokenAmount, `credit_to_${userId}`).catch(() => {});
       creditPlatformGenerosityFund(tokenAmount, `credit_to_${userId}`).catch(() => {});
     }
+  }
+
+  async creditWalletTokensRaw(userId: string, tokenAmount: number): Promise<void> {
+    let wallet = await this.getWalletAccount(userId);
+    if (!wallet) wallet = await this.createWalletAccount({ userId });
+    const currentBalance = parseFloat(wallet.tokenBalance || "0");
+    const currentEarned = parseFloat(wallet.totalEarned || "0");
+    await this.updateWalletAccount(userId, {
+      tokenBalance: (currentBalance + tokenAmount).toFixed(8),
+      totalEarned: (currentEarned + tokenAmount).toFixed(8),
+    });
   }
 
   async debitWalletTokens(userId: string, tokenAmount: number): Promise<void> {
@@ -3070,6 +3117,66 @@ export class DatabaseStorage implements IStorage {
     await this.creditWalletTokens(userId, returned);
 
     return { returned, penalty, earned: pendingEarned };
+  }
+
+  // ── New single-pool staking ──────────────────────────────────────────────────
+
+  async getStakingPool(userId: string): Promise<{ stakedBalance: number; unstakeCooldownUntil: Date | null; discountPct: number }> {
+    const wallet = await this.getWalletAccount(userId);
+    const stakedBalance = parseFloat(wallet?.stakedBalance ?? "0");
+    const unstakeCooldownUntil = wallet?.unstakeCooldownUntil ?? null;
+    const discountPct = await this.getStakingDiscountPct(userId);
+    return { stakedBalance, unstakeCooldownUntil, discountPct };
+  }
+
+  async getStakingDiscountPct(userId: string): Promise<number> {
+    const wallet = await this.getWalletAccount(userId);
+    const stakedBalance = parseFloat(wallet?.stakedBalance ?? "0");
+    if (stakedBalance >= 100_000) return 10;
+    if (stakedBalance >= 25_000)  return 5;
+    return 0;
+  }
+
+  async stakeTokens(userId: string, amount: number): Promise<void> {
+    let wallet = await this.getWalletAccount(userId);
+    if (!wallet) wallet = await this.createWalletAccount({ userId });
+    const freeBalance = parseFloat(wallet.tokenBalance || "0");
+    if (freeBalance < amount) throw new Error("Insufficient free balance to stake");
+    const currentStaked = parseFloat(wallet.stakedBalance ?? "0");
+    const cooldownDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await this.updateWalletAccount(userId, {
+      tokenBalance: (freeBalance - amount).toFixed(8),
+      stakedBalance: (currentStaked + amount).toFixed(8),
+      unstakeCooldownUntil: cooldownDate,
+    });
+  }
+
+  async unstakeTokens(userId: string): Promise<{ returned: number }> {
+    const wallet = await this.getWalletAccount(userId);
+    if (!wallet) throw new Error("Wallet not found");
+    const stakedBalance = parseFloat(wallet.stakedBalance ?? "0");
+    if (stakedBalance <= 0) throw new Error("No staked balance to unstake");
+    const cooldownUntil = wallet.unstakeCooldownUntil;
+    if (cooldownUntil && new Date(cooldownUntil) > new Date()) {
+      const hours = Math.ceil((new Date(cooldownUntil).getTime() - Date.now()) / 3600000);
+      throw new Error(`Unstake cooldown active. Available in ${hours} hour${hours !== 1 ? "s" : ""}.`);
+    }
+    const freeBalance = parseFloat(wallet.tokenBalance || "0");
+    await this.updateWalletAccount(userId, {
+      tokenBalance: (freeBalance + stakedBalance).toFixed(8),
+      stakedBalance: "0.00000000",
+      unstakeCooldownUntil: null,
+    });
+    return { returned: stakedBalance };
+  }
+
+  async getStakingLeaderboard(limit = 20): Promise<{ userId: string; stakedBalance: number; rank: number }[]> {
+    const { pool: dbPool } = await import('./db');
+    const { rows } = await dbPool.query<{ user_id: string; staked_balance: string }>(
+      `SELECT user_id, staked_balance FROM wallet_accounts WHERE COALESCE(staked_balance::numeric,0) > 0 ORDER BY staked_balance::numeric DESC LIMIT $1`,
+      [limit]
+    );
+    return rows.map((r, i) => ({ userId: r.user_id, stakedBalance: parseFloat(r.staked_balance), rank: i + 1 }));
   }
 
   // ── Worker Availability & Goals ─────────────────────────────────────────────
