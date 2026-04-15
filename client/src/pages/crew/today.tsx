@@ -338,6 +338,8 @@ export default function CrewTodayPage() {
 
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [claimedJobId, setClaimedJobId] = useState<string | null>(null);
+  const [workerCelebration, setWorkerCelebration] = useState<{ tokens: number } | null>(null);
+  const prevCompletedIdsRef = useRef<Set<string>>(new Set());
   const applyMutation = useMutation({
     mutationFn: async (leadId: string) => {
       const res = await apiRequest("POST", `/api/leads/${leadId}/crew-apply`, {});
@@ -415,6 +417,24 @@ export default function CrewTodayPage() {
       setClaimStreak(streakData.streak);
     }
   }, [streakData]);
+
+  // Detect worker-side job completion (job I was assigned to just moved to "completed")
+  useEffect(() => {
+    if (!user?.id || !leads.length) return;
+    const myCompletedJobs = leads.filter(l => {
+      if (l.status !== "completed") return false;
+      const members: string[] = Array.isArray(l.crewMembers) ? (l.crewMembers as string[]) : [];
+      return members.includes(String(user.id)) || l.assignedToUserId === String(user.id);
+    });
+    const newlyCompleted = myCompletedJobs.filter(j => !prevCompletedIdsRef.current.has(j.id));
+    if (newlyCompleted.length > 0 && prevCompletedIdsRef.current.size > 0) {
+      const job = newlyCompleted[0];
+      const est = job.estimatedTokens > 0 ? job.estimatedTokens : 100;
+      setWorkerCelebration({ tokens: est });
+      setTimeout(() => setWorkerCelebration(null), 4000);
+    }
+    prevCompletedIdsRef.current = new Set(myCompletedJobs.map(j => j.id));
+  }, [leads, user?.id]);
 
   const scriptureClaimMutation = useMutation({
     mutationFn: async () => {
@@ -696,6 +716,70 @@ export default function CrewTodayPage() {
       {/* Tier & balance status — shows worker level for crew members */}
       <UserStatusBar variant="dark" jobCount={allTimeJobCounts[String(user?.id)] ?? 0} />
 
+      {/* Worker-side job completion celebration overlay */}
+      {workerCelebration && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <ConfettiBurst active variant="overlay" />
+          <div className="bg-slate-900/95 border border-green-500/50 rounded-2xl p-6 text-center shadow-2xl mx-4 pointer-events-auto">
+            <div className="text-4xl mb-2">🎉</div>
+            <p className="text-white font-bold text-lg">Job Complete!</p>
+            <p className="text-green-400 font-semibold text-sm mt-1">
+              +{workerCelebration.tokens.toLocaleString()} JCMOVES earned
+            </p>
+            <button
+              onClick={() => setWorkerCelebration(null)}
+              className="mt-3 text-xs text-slate-400 underline"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Dynamic Earn More shortcut — context-aware fastest path */}
+      {(() => {
+        const notClaimed = !streakData?.claimedToday;
+        const offline = !dutyStatus;
+        const myWeekTokens = allTimeJobCounts[String(user?.id)] ?? 0;
+        if (notClaimed) {
+          return (
+            <Link href="/earn/mining">
+              <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 cursor-pointer hover:bg-amber-500/15 transition-colors">
+                <span className="text-xl">🪙</span>
+                <div className="flex-1">
+                  <p className="text-amber-300 text-xs font-bold">Claim your daily reward</p>
+                  <p className="text-slate-400 text-[11px]">Streak day {(streakData?.streak ?? 0) + 1} — don't break it!</p>
+                </div>
+                <ChevronRight className="h-4 w-4 text-amber-400" />
+              </div>
+            </Link>
+          );
+        }
+        if (offline) {
+          return (
+            <div className="flex items-center gap-3 bg-blue-500/10 border border-blue-500/30 rounded-xl p-3">
+              <span className="text-xl">📡</span>
+              <div className="flex-1">
+                <p className="text-blue-300 text-xs font-bold">Go online to earn JCMOVES</p>
+                <p className="text-slate-400 text-[11px]">100 tokens/hr while active on jobs</p>
+              </div>
+            </div>
+          );
+        }
+        return (
+          <Link href="/earn/leaderboard">
+            <div className="flex items-center gap-3 bg-green-500/10 border border-green-500/30 rounded-xl p-3 cursor-pointer hover:bg-green-500/15 transition-colors">
+              <span className="text-xl">🏆</span>
+              <div className="flex-1">
+                <p className="text-green-300 text-xs font-bold">You're online &amp; earning</p>
+                <p className="text-slate-400 text-[11px]">{myWeekTokens} jobs completed · check leaderboard</p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-green-400" />
+            </div>
+          </Link>
+        );
+      })()}
+
       {/* Mini Calendar */}
       <div className="rounded-2xl bg-slate-800/40 border border-blue-500/20 p-4">
         <div className="flex items-center justify-between mb-3">
@@ -873,11 +957,15 @@ export default function CrewTodayPage() {
                       {assignedCrew.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1">
                           {assignedCrew.map(emp => (
-                            <WorkerBadge
-                              key={emp.id}
-                              jobCount={allTimeJobCounts[emp.id] ?? 0}
-                              size="xs"
-                            />
+                            <div key={emp.id} className="flex items-center gap-0.5 bg-white/5 rounded-full pl-0.5 pr-1.5 py-0.5 border border-white/10">
+                              <div className="w-4 h-4 rounded-full bg-blue-600/60 flex items-center justify-center text-[8px] font-bold text-white">
+                                {((emp.firstName?.[0] ?? "") + (emp.lastName?.[0] ?? "")).toUpperCase() || "?"}
+                              </div>
+                              <WorkerBadge
+                                jobCount={allTimeJobCounts[emp.id] ?? 0}
+                                size="xs"
+                              />
+                            </div>
                           ))}
                         </div>
                       )}
@@ -1035,8 +1123,15 @@ export default function CrewTodayPage() {
                       {slotsOpen} slot{slotsOpen !== 1 ? "s" : ""} open · {job.crewSize || 2} needed
                     </span>
                     {claimedJobId === job.id ? (
-                      <div className="flex items-center gap-1.5 bg-green-500/20 border border-green-500/40 rounded-full px-3 py-1 animate-pulse">
-                        <span className="text-green-300 text-xs font-bold">✓ Signed up!</span>
+                      <div className="flex flex-col items-end gap-0.5">
+                        <div className="flex items-center gap-1.5 bg-green-500/20 border border-green-500/40 rounded-full px-3 py-1">
+                          <span className="text-green-300 text-xs font-bold">✓ Signed up!</span>
+                        </div>
+                        {job.estimatedTokens > 0 && (
+                          <span className="text-[10px] text-orange-400 font-semibold">
+                            ~{job.estimatedTokens.toLocaleString()} JCMOVES on completion
+                          </span>
+                        )}
                       </div>
                     ) : (
                       <Button
