@@ -505,7 +505,7 @@ export function generateBundleFollowupEmail(opts: {
           <p style="margin:10px 0 0;font-size:14px;color:#94a3b8;line-height:1.7;">
             ${isUrgent
               ? `Thanks for trusting JC ON THE MOVE! We want to make sure you never miss out on savings — so here's your <strong style="color:#f97316;">${discountPct}% bundle discount</strong>. Book a second service within 7 days and keep the same deal you'd get by bundling at checkout.`
-              : `It's been a little while since your last service — we hope everything is going great! We want to keep the savings coming your way, so here's a <strong style="color:#22c55e;">${discountPct}% discount</strong> just for you. Valid for the next 30 days.`
+              : `It's been a little while since your last service — we hope everything is going great! We want to keep the savings coming your way, so here's a <strong style="color:#22c55e;">${discountPct}% discount</strong> just for you. This code expires on <strong>${expiryStr}</strong>.`
             }
           </p>
           <p style="margin:10px 0 0;font-size:14px;color:#94a3b8;">Just use code <strong style="color:#fff;font-family:monospace;">${promoCode}</strong> when you book — online or over the phone.</p>
@@ -585,7 +585,7 @@ Hey ${firstName},
 
 ${isUrgent
   ? `Thanks for trusting JC ON THE MOVE! Book a second service within 7 days and save ${discountPct}%.`
-  : `It's been a little while — here's ${discountPct}% off your next service, valid for 30 days.`
+  : `It's been a little while — here's ${discountPct}% off your next service, expires ${expiryStr}.`
 }
 
 YOUR PROMO CODE: ${promoCode}
