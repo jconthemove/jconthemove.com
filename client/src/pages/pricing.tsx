@@ -28,6 +28,7 @@ const SERVICE_SECTIONS = [
   { id: "lawn",      label: "Lawn Care",       icon: Leaf,        color: "text-lime-400",   bg: "bg-lime-500/10",   border: "border-lime-500/30"   },
   { id: "snow",      label: "Snow Removal",    icon: Snowflake,   color: "text-cyan-400",   bg: "bg-cyan-500/10",   border: "border-cyan-500/30"   },
   { id: "painting",  label: "Painting",        icon: PaintBucket, color: "text-pink-400",   bg: "bg-pink-500/10",   border: "border-pink-500/30"   },
+  { id: "jumpstart", label: "Jump Start",       icon: Zap,         color: "text-amber-400",  bg: "bg-amber-500/10",  border: "border-amber-500/30"  },
   { id: "other",     label: "More Services",   icon: Wrench,      color: "text-yellow-400", bg: "bg-yellow-500/10", border: "border-yellow-500/30" },
 ];
 
@@ -477,6 +478,65 @@ export default function PricingPage() {
           </div>
           <QuoteOnlyNote color="text-pink-400" />
           <DepositFineprint />
+        </ServiceSection>
+
+        {/* ── JUMP START ─────────────────────────────────────────────────────── */}
+        <ServiceSection
+          id="jumpstart"
+          icon={Zap}
+          label="Jump Start"
+          tagline="Dead battery? We come to you — flat rate, no membership"
+          color="text-amber-400"
+          bg="bg-amber-500/10"
+          border="border-amber-500/30"
+          bookHref="/book?service=jumpstart"
+          bookLabel="Book a Jump Start"
+          isOpen={activeSection === "jumpstart"}
+          onToggle={() => toggle("jumpstart")}
+          badge="From $25"
+        >
+          <p className="text-slate-400 text-xs uppercase tracking-wider mb-2 font-semibold">Distance-Based Flat Rates</p>
+          <div className="overflow-x-auto rounded-xl border border-slate-700 mb-4">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-700 bg-slate-800/60">
+                  <th className="text-left px-4 py-2.5 text-slate-400 font-semibold text-xs">Distance from Service Address</th>
+                  <th className="px-4 py-2.5 text-slate-400 font-semibold text-xs text-right">Flat Price</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { range: "≤ 5 miles",       price: "$25",   popular: true  },
+                  { range: "5 – 15 miles",    price: "$30",   popular: false },
+                  { range: "15 – 50 miles",   price: "$45",   popular: false },
+                  { range: "50 – 100 miles",  price: "$150",  popular: false },
+                  { range: "100+ miles",      price: "Quote", popular: false },
+                ].map(({ range, price, popular }) => (
+                  <tr key={range} className={cn("border-b border-slate-800 last:border-0", popular && "bg-amber-500/5")}>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-white font-semibold">{range}</span>
+                        {popular && <Badge className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] px-1.5">Most Common</Badge>}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <span className={cn("font-black text-lg", price === "Quote" ? "text-slate-400" : "text-amber-300")}>{price}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="space-y-1.5 text-xs text-slate-400 mb-3">
+            <div className="flex items-start gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-amber-400 flex-shrink-0 mt-0.5" />Portable jump pack — works on most gas and diesel vehicles</div>
+            <div className="flex items-start gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-amber-400 flex-shrink-0 mt-0.5" />Cars, trucks, vans, SUVs &amp; motorcycles</div>
+            <div className="flex items-start gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-amber-400 flex-shrink-0 mt-0.5" />No membership or AAA required</div>
+            <div className="flex items-start gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-amber-400 flex-shrink-0 mt-0.5" />100+ miles: call for custom quote before booking</div>
+          </div>
+          <div className="bg-slate-800/40 rounded-xl border border-slate-700 p-3 text-xs text-slate-400 flex items-start gap-2">
+            <Info className="h-3.5 w-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
+            <span>Distance is measured from the service address. For 100+ mile requests, Darrell will confirm pricing before dispatching.</span>
+          </div>
         </ServiceSection>
 
         {/* ── OTHER SERVICES ─────────────────────────────────────────────────── */}

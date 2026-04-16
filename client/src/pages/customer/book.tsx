@@ -12,6 +12,7 @@ const QUICK_SERVICES = [
   { label: "Handyman",        emoji: "🔧", slug: "handyman",    icon: Wrench,     color: "from-orange-900/60 to-orange-800/40 border-orange-500/30 hover:border-orange-400/60" },
   { label: "Painting",        emoji: "🎨", slug: "painting",    icon: Paintbrush, color: "from-purple-900/60 to-purple-800/40 border-purple-500/30 hover:border-purple-400/60" },
   { label: "Light Demo",      emoji: "🔨", slug: "demolition",  icon: Hammer,     color: "from-red-900/60 to-red-800/40 border-red-500/30 hover:border-red-400/60" },
+  { label: "Jump Start",      emoji: "⚡", slug: "jumpstart",   icon: Hammer,     color: "from-amber-900/60 to-amber-800/40 border-amber-500/30 hover:border-amber-400/60" },
 ];
 
 export default function CustomerBookPage() {

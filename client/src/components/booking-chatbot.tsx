@@ -12,13 +12,14 @@ import { useAuth } from "@/hooks/useAuth";
 import { Send, CheckCircle2, ArrowRight, Sparkles, RotateCcw, ChevronRight, AlertCircle, Users, DollarSign, Camera, X, CreditCard, Clock } from "lucide-react";
 import { calculateWindowCleaningQuote } from "@shared/windowCleaningPricing";
 import { calculateTrashValetQuote, TRASH_VALET_TRAVEL_THRESHOLD_MILES, TRASH_VALET_OUT_OF_AREA_MINIMUM } from "@shared/trashValetPricing";
+import { calculateJumpStartQuote } from "@shared/jumpStartPricing";
 import { getDepositInfo } from "@shared/depositRules";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
 
 // ─────────────────────────────────────────────
 // Service categories
 // ─────────────────────────────────────────────
-const PRICEABLE_SERVICES = ["Moving", "Junk Removal", "Trash Valet", "Window Cleaning"];
+const PRICEABLE_SERVICES = ["Moving", "Junk Removal", "Trash Valet", "Window Cleaning", "Jump Start"];
 const QUOTE_ONLY_SERVICES = ["Painting", "Flooring", "Roofing", "Handyman", "Lawn Care", "Snow Removal", "Move-In/Out Cleaning", "Light Demolition"];
 const TRAVEL_CHARGE_PER_TIER = 50;  // $50 per 25-mile band from Ironwood
 const TRAVEL_TIER_MILES      = 25;  // miles per tier
@@ -150,6 +151,8 @@ export interface Answers {
   lawnCondition?: string;
   // Moving crew preference
   crewPreference?: string;
+  // Jump Start fields
+  vehicleType?: string;
 }
 
 export interface MovingQuote {
@@ -213,7 +216,16 @@ interface QuoteOnlyResult {
   maxPrice: number;
 }
 
-type QuoteResult = MovingQuote | JunkQuote | TrashValetQuoteResult | WindowQuoteResult | QuoteOnlyResult;
+interface JumpStartQuoteResult {
+  type: "jump_start";
+  flatPrice: number;
+  isCustomQuote: boolean;
+  distanceTier: string;
+  minPrice: number;
+  maxPrice: number;
+}
+
+type QuoteResult = MovingQuote | JunkQuote | TrashValetQuoteResult | WindowQuoteResult | QuoteOnlyResult | JumpStartQuoteResult;
 
 export interface CrewPackage {
   id: string;
@@ -250,6 +262,7 @@ function getServiceLabel(rawType: string): string {
   if (rawType.includes("Snow")) return "Snow Removal";
   if (rawType.includes("Cleaning") || rawType.includes("Move-In")) return "Move-In/Out Cleaning";
   if (rawType.includes("Demo") || rawType.includes("Demolition")) return "Light Demolition";
+  if (rawType.includes("Jump Start") || rawType.includes("Jump start")) return "Jump Start";
   return "Moving";
 }
 
@@ -312,6 +325,10 @@ function isLawnService(a: Answers) {
   return getServiceLabel(a.serviceType || "") === "Lawn Care";
 }
 
+function isJumpStartService(a: Answers) {
+  return getServiceLabel(a.serviceType || "") === "Jump Start";
+}
+
 function hasStructuredSteps(a: Answers) {
   return isSnowService(a) || isCleaningService(a) || isDemoService(a) ||
     isHandymanService(a) || isFlooringService(a) || isPaintingService(a) || isRoofingService(a) || isLawnService(a);
@@ -347,6 +364,7 @@ const STEPS: Step[] = [
       "🌿 Lawn Care",
       "✨ Move-In/Out Cleaning",
       "⚒️ Light Demolition",
+      "⚡ Jump Start",
     ],
   },
 
@@ -1222,6 +1240,16 @@ const STEPS: Step[] = [
     },
   },
 
+  // ── JUMP START STEPS ─────────────────────────────────────────────────────
+  {
+    id: "vehicleType",
+    question: "What type of vehicle needs a jump start?",
+    subtext: "Darrell uses a portable jump pack — works for most vehicles.",
+    type: "choice",
+    options: ["🚗 Car", "🚐 Truck or Van", "🚙 SUV", "🏍️ Motorcycle", "❓ Other"],
+    show: (a) => isJumpStartService(a),
+  },
+
   // ── MOVING CREW PREFERENCE ────────────────────────────────────────────────
   {
     id: "crewPreference",
@@ -1911,6 +1939,18 @@ function computeQuoteForAnswers(a: Answers, ratePerMoverHour = 85, jc222FlatPric
     };
   }
 
+  if (svc === "Jump Start") {
+    const js = calculateJumpStartQuote(distanceMiles);
+    return {
+      type: "jump_start",
+      flatPrice: js.flatPrice,
+      isCustomQuote: js.isCustomQuote,
+      distanceTier: js.distanceTier,
+      minPrice: js.flatPrice,
+      maxPrice: js.flatPrice,
+    } as JumpStartQuoteResult;
+  }
+
   // Moving or Junk
   return computeMovingQuote(a, ratePerMoverHour, jc222FlatPrice, distanceMiles, stakingPerkPct);
 }
@@ -2203,6 +2243,28 @@ export function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMove
     ];
   }
 
+  if (q.type === "jump_start") {
+    const jsq = q as JumpStartQuoteResult;
+    if (jsq.isCustomQuote) {
+      return [{
+        id: "pkg_jumpstart_custom",
+        label: "Custom Quote Required",
+        desc: "100+ miles from Ironwood — Darrell will call to confirm pricing before dispatch.",
+        minPrice: 0,
+        maxPrice: 0,
+        tag: "100+ mi",
+      }];
+    }
+    return [{
+      id: "pkg_jumpstart",
+      label: `⚡ Jump Start — ${jsq.distanceTier}`,
+      desc: `Portable jump pack · flat rate · Darrell comes to you · no membership needed`,
+      minPrice: jsq.flatPrice,
+      maxPrice: jsq.flatPrice,
+      tag: "Flat Rate",
+    }];
+  }
+
   return [];
 }
 
@@ -2251,6 +2313,10 @@ const SERVICE_SLUG_MAP: Record<string, string> = {
   "light demolition": "⚒️ Light Demolition",
   "lawn care": "🌿 Lawn Care",
   residential: "📦 Moving (local or long-distance)",
+  jumpstart: "⚡ Jump Start",
+  "jump-start": "⚡ Jump Start",
+  "jump_start": "⚡ Jump Start",
+  "jump start": "⚡ Jump Start",
 };
 
 // Keyed by canonical service slug (normalized: lowercase, hyphens→underscores).
@@ -2272,6 +2338,8 @@ const SERVICE_OPENERS: Record<string, string> = {
   lawn_care:   "🌿 A clean lawn makes the whole place shine. Let's get your free estimate on the schedule.",
   cleaning:    "✨ Moving out? We'll leave it spotless. Moving in? We'll get it fresh and ready. Darrell will reach out to schedule your free estimate.",
   demolition:  "⚒️ Demo day! We knock it down and haul it away — safe, fast, and fully insured. Darrell will reach out to schedule your free estimate.",
+  jumpstart:   "⚡ Dead battery? Darrell's on his way! We use a portable jump pack — flat rate, no membership, no wait. Tell me where you are and we'll get your price instantly.",
+  jump_start:  "⚡ Dead battery? Darrell's on his way! We use a portable jump pack — flat rate, no membership, no wait. Tell me where you are and we'll get your price instantly.",
 };
 
 interface ChatPhoto {
@@ -2802,6 +2870,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
         if (answers.distanceReport) scopeParts.push(`Distance: ${answers.distanceReport}`);
         if (answers.truckSituation) scopeParts.push(`Truck: ${answers.truckSituation}`);
         if (answers.truckSize) scopeParts.push(`Truck size: ${answers.truckSize}`);
+        if (answers.vehicleType) scopeParts.push(`Vehicle: ${answers.vehicleType}`);
         if (answers.lawnPropertySize) scopeParts.push(`Lawn size: ${answers.lawnPropertySize}`);
         if (answers.lawnServices?.length) scopeParts.push(`Services: ${answers.lawnServices.join(", ")}`);
         if (answers.lawnFrequency) scopeParts.push(`Frequency: ${answers.lawnFrequency}`);
