@@ -5583,15 +5583,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
             } catch (e) { console.error('Customer email failed:', e); }
           }
 
-          // Bundle follow-up email: 10% promo code if not already sent
-          if (updatedLead.email && !updatedLead.bundleFollowupSentAt) {
+          // Bundle follow-up email: 10% promo code — only for single-service (non-bundle) bookings
+          if (updatedLead.email && !updatedLead.bundleFollowupSentAt && !updatedLead.selectedPackageId) {
             try {
               const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
-              // Look up customer userId by email for code linkage
+              // Look up customer userId by email (case-insensitive)
+              const emailNorm = updatedLead.email.trim().toLowerCase();
               const [customerRow] = await db
                 .select({ id: users.id })
                 .from(users)
-                .where(eq(users.email, updatedLead.email.trim().toLowerCase()))
+                .where(sql`lower(${users.email}) = ${emailNorm}`)
                 .limit(1);
               const custUserId = customerRow?.id ?? null;
               const promoCode = await generateBundleFollowupCode(custUserId, 10, expiresAt);
@@ -12648,8 +12649,10 @@ Thank you for your business!
       const dayAgo8 = new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000);
       const dayAgo30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-      // Find completed leads where the 10% was sent, 5% not yet sent, within 8–30 days of JOB COMPLETION
-      // Eligibility anchored to tokensDisbursedAt (set by disburseJobTokens on completion), not email-send time
+      // Find completed SINGLE-SERVICE (non-bundle) leads where the 10% was sent,
+      // 5% not yet sent, within 8–30 days of JOB COMPLETION.
+      // Eligibility anchored to tokensDisbursedAt (set by disburseJobTokens on completion), not email-send time.
+      // Bundle bookings (selectedPackageId IS NOT NULL) are excluded — they already got a deal.
       const eligible = await db
         .select()
         .from(leads)
@@ -12658,6 +12661,7 @@ Thank you for your business!
             eq(leads.status, "completed"),
             isNull(leads.archivedAt),
             isNull(leads.bundle5SentAt),
+            isNull(leads.selectedPackageId),              // single-service bookings only
             sql`${leads.bundleFollowupSentAt} IS NOT NULL`,
             sql`COALESCE(${leads.tokensDisbursedAt}, ${leads.bundleFollowupSentAt}) >= ${dayAgo30}`,
             sql`COALESCE(${leads.tokensDisbursedAt}, ${leads.bundleFollowupSentAt}) <= ${dayAgo8}`
@@ -12674,11 +12678,12 @@ Thank you for your business!
           // Expiry anchored to actual job completion date (day 30 from completion)
           const completionDate = lead.tokensDisbursedAt ?? lead.bundleFollowupSentAt ?? now;
           const expiresAt = new Date(completionDate.getTime() + 30 * 24 * 60 * 60 * 1000);
-          // Look up customer userId
+          // Look up customer userId (case-insensitive)
+          const leadEmailNorm = lead.email.trim().toLowerCase();
           const [customerRow] = await db
             .select({ id: users.id })
             .from(users)
-            .where(eq(users.email, lead.email.trim().toLowerCase()))
+            .where(sql`lower(${users.email}) = ${leadEmailNorm}`)
             .limit(1);
           const custUserId = customerRow?.id ?? null;
           const promoCode = await generateBundleFollowupCode(custUserId, 5, expiresAt);
