@@ -237,6 +237,7 @@ export interface CrewPackage {
   hours?: number;
   tag?: string;
   originalPrice?: number;
+  priceLabel?: string;
 }
 
 interface Message {
@@ -2253,6 +2254,7 @@ export function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMove
         minPrice: 0,
         maxPrice: 0,
         tag: "100+ mi",
+        priceLabel: "Custom Quote",
       }];
     }
     return [{
@@ -3080,6 +3082,15 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
                 </div>
               )}
 
+              {pendingQuote.type === "jump_start" && (pendingQuote as JumpStartQuoteResult).isCustomQuote && (
+                <div className="bg-slate-800/60 rounded-xl p-3 text-center mb-3">
+                  <p className="text-xs text-slate-400 mb-1">⚡ Jump Start Pricing</p>
+                  <p className="text-2xl font-bold text-amber-300">Custom Quote</p>
+                  <p className="text-[11px] text-slate-500 mt-1">100+ miles — Darrell will call to confirm pricing before dispatch</p>
+                </div>
+              )}
+
+              {!(pendingQuote.type === "jump_start" && (pendingQuote as JumpStartQuoteResult).isCustomQuote) && (
               <div className="bg-slate-900/60 rounded-xl p-3 text-center mb-3">
                   <p className="text-xs text-slate-400 mb-1">
                     {pendingQuote.type === "trash_valet" ? "Price Range" : "Estimated Price Range"}
@@ -3108,6 +3119,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
                   )}
                   <p className="text-[11px] text-slate-500 mt-1">Final price confirmed by Darrell after review</p>
                 </div>
+              )}
               </div>
 
             {/* Selected package summary — shown after package step is done */}
@@ -3126,9 +3138,11 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
                   </div>
                 </div>
                 <p className="text-sm font-bold text-teal-300 shrink-0">
-                  {selectedPackageObj.minPrice !== selectedPackageObj.maxPrice
-                    ? `$${selectedPackageObj.minPrice}–$${selectedPackageObj.maxPrice}`
-                    : `$${selectedPackageObj.minPrice.toLocaleString()}`}
+                  {selectedPackageObj.priceLabel
+                    ? selectedPackageObj.priceLabel
+                    : selectedPackageObj.minPrice !== selectedPackageObj.maxPrice
+                      ? `$${selectedPackageObj.minPrice}–$${selectedPackageObj.maxPrice}`
+                      : `$${selectedPackageObj.minPrice.toLocaleString()}`}
                 </p>
               </div>
             )}
@@ -3726,9 +3740,11 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
                           <span className="text-xs text-slate-500 line-through">${pkg.originalPrice}</span>
                         )}
                         <span className="text-sm font-bold text-teal-300">
-                          {pkg.minPrice === pkg.maxPrice
-                            ? `$${pkg.minPrice}`
-                            : `$${pkg.minPrice}–$${pkg.maxPrice}`}
+                          {pkg.priceLabel
+                            ? pkg.priceLabel
+                            : pkg.minPrice === pkg.maxPrice
+                              ? `$${pkg.minPrice}`
+                              : `$${pkg.minPrice}–$${pkg.maxPrice}`}
                         </span>
                       </div>
                     </div>

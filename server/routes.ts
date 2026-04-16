@@ -19005,6 +19005,7 @@ Thank you for your business!
       else if (svcRaw.toLowerCase().includes("handyman")) serviceType = "handyman";
       else if (svcRaw.toLowerCase().includes("snow")) serviceType = "snow";
       else if (svcRaw.toLowerCase().includes("lawn")) serviceType = "lawn";
+      else if (svcRaw.toLowerCase().includes("jump")) serviceType = "jump_start";
 
       // Enforce deposit rules server-side using shared logic (identical to client chatbot)
       const QUOTE_ONLY_SERVICES_SERVER = ["painting", "flooring", "roofing", "handyman", "lawn"];
