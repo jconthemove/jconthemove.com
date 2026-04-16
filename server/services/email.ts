@@ -456,12 +456,12 @@ export function generateBundleFollowupEmail(opts: {
   const expiryStr = expiresAt.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
   const isUrgent = discountPct === 10;
 
-  // Build service grid HTML (4 cols × 3 rows)
+  // Build service grid HTML (3 cols × 4 rows, responsive)
   const serviceRows: string[] = [];
-  for (let i = 0; i < ALL_SERVICES.length; i += 4) {
-    const row = ALL_SERVICES.slice(i, i + 4);
+  for (let i = 0; i < ALL_SERVICES.length; i += 3) {
+    const row = ALL_SERVICES.slice(i, i + 3);
     const cells = row.map(svc => `
-      <td width="25%" style="padding:6px;">
+      <td width="33%" style="padding:6px;">
         <table width="100%" cellpadding="0" cellspacing="0" style="background:#1e293b;border:1px solid #334155;border-radius:8px;text-align:center;">
           <tr><td style="padding:12px 8px 8px;font-size:22px;">${svc.emoji}</td></tr>
           <tr><td style="padding:0 6px 4px;font-size:11px;font-weight:700;color:#e2e8f0;">${svc.name}</td></tr>

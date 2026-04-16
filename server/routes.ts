@@ -282,25 +282,35 @@ async function linkEmployeePromoCodes() {
 async function generateBundleFollowupCode(
   userId: string | null,
   discountPct: 10 | 5,
-  expiresAt: Date
+  expiresAt: Date,
+  attempt = 0
 ): Promise<string> {
-  const suffix = crypto.randomBytes(3).toString("hex").toUpperCase();
+  if (attempt >= 5) throw new Error("Could not generate unique bundle promo code after 5 attempts");
+  const suffix = crypto.randomBytes(4).toString("hex").toUpperCase();
   const code = discountPct === 10 ? `BUNDLE10-${suffix}` : `BUNDLE5-${suffix}`;
-  await db.insert(promoCodes).values({
-    code,
-    description: discountPct === 10
-      ? `Bundle saver — ${discountPct}% off your next service (7-day window after job completion)`
-      : `Late-book bonus — ${discountPct}% off your next service (30-day window after job completion)`,
-    discountPercent: String(discountPct),
-    discountPercentJewelry: "0",
-    rewardTokens: "0",
-    referralRewardTokens: "0",
-    maxUses: 1,
-    isActive: true,
-    expiresAt,
-    ...(userId ? { referralUserId: userId } : {}),
-  });
-  return code;
+  try {
+    await db.insert(promoCodes).values({
+      code,
+      description: discountPct === 10
+        ? `Bundle saver — ${discountPct}% off your next service (7-day window after job completion)`
+        : `Late-book bonus — ${discountPct}% off your next service (30-day window after job completion)`,
+      discountPercent: String(discountPct),
+      discountPercentJewelry: "0",
+      rewardTokens: "0",
+      referralRewardTokens: "0",
+      maxUses: 1,
+      isActive: true,
+      expiresAt,
+      ...(userId ? { referralUserId: userId } : {}),
+    });
+    return code;
+  } catch (err: any) {
+    // Retry on unique constraint violation
+    if (err?.code === "23505") {
+      return generateBundleFollowupCode(userId, discountPct, expiresAt, attempt + 1);
+    }
+    throw err;
+  }
 }
 
 async function ensureJackpotsSeeded() {
@@ -12638,7 +12648,8 @@ Thank you for your business!
       const dayAgo8 = new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000);
       const dayAgo30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-      // Find completed leads where the 10% was sent, 5% not yet sent, within 8–30 days window
+      // Find completed leads where the 10% was sent, 5% not yet sent, within 8–30 days of JOB COMPLETION
+      // Eligibility anchored to tokensDisbursedAt (set by disburseJobTokens on completion), not email-send time
       const eligible = await db
         .select()
         .from(leads)
@@ -12648,8 +12659,8 @@ Thank you for your business!
             isNull(leads.archivedAt),
             isNull(leads.bundle5SentAt),
             sql`${leads.bundleFollowupSentAt} IS NOT NULL`,
-            gte(leads.bundleFollowupSentAt, dayAgo30),
-            lte(leads.bundleFollowupSentAt, dayAgo8)
+            sql`COALESCE(${leads.tokensDisbursedAt}, ${leads.bundleFollowupSentAt}) >= ${dayAgo30}`,
+            sql`COALESCE(${leads.tokensDisbursedAt}, ${leads.bundleFollowupSentAt}) <= ${dayAgo8}`
           )
         );
 
@@ -12660,9 +12671,9 @@ Thank you for your business!
       for (const lead of eligible) {
         if (!lead.email) continue;
         try {
-          const expiresAt = new Date(
-            (lead.bundleFollowupSentAt?.getTime() ?? now.getTime()) + 30 * 24 * 60 * 60 * 1000
-          );
+          // Expiry anchored to actual job completion date (day 30 from completion)
+          const completionDate = lead.tokensDisbursedAt ?? lead.bundleFollowupSentAt ?? now;
+          const expiresAt = new Date(completionDate.getTime() + 30 * 24 * 60 * 60 * 1000);
           // Look up customer userId
           const [customerRow] = await db
             .select({ id: users.id })
