@@ -4,7 +4,7 @@ import crypto from "crypto";
 import { getEasternDateStr, getEasternDayStart, getEasternDayEnd } from "./utils/dateUtils";
 import { storage } from "./storage";
 import { insertLeadSchema, insertContactSchema, insertCashoutRequestSchema, insertShopItemSchema, insertReviewSchema } from "@shared/schema";
-import { sendEmail, generateLeadNotificationEmail, generateContactNotificationEmail, notifyAdminNewQuote, notifyAdminNewLead, notifyAdminJobCompleted, notifyEmployeeJobAvailable, sendNotificationEmail } from "./services/email";
+import { sendEmail, generateLeadNotificationEmail, generateContactNotificationEmail, notifyAdminNewQuote, notifyAdminNewLead, notifyAdminJobCompleted, notifyEmployeeJobAvailable, sendNotificationEmail, sendBundleFollowupEmail } from "./services/email";
 import { setupAuth, isAuthenticated, isAuthenticatedAllowPending, signJwt, signRefreshToken, verifyRefreshToken } from "./auth";
 import bcrypt from "bcrypt";
 // REMOVED: Daily check-in service replaced by unified mining system with streaks
@@ -274,6 +274,33 @@ async function linkEmployeePromoCodes() {
   } catch (err) {
     console.error('Failed to link employee promo codes:', err);
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bundle follow-up promo code generator
+// ─────────────────────────────────────────────────────────────────────────────
+async function generateBundleFollowupCode(
+  userId: string | null,
+  discountPct: 10 | 5,
+  expiresAt: Date
+): Promise<string> {
+  const suffix = crypto.randomBytes(3).toString("hex").toUpperCase();
+  const code = discountPct === 10 ? `BUNDLE10-${suffix}` : `BUNDLE5-${suffix}`;
+  await db.insert(promoCodes).values({
+    code,
+    description: discountPct === 10
+      ? `Bundle saver — ${discountPct}% off your next service (7-day window after job completion)`
+      : `Late-book bonus — ${discountPct}% off your next service (30-day window after job completion)`,
+    discountPercent: String(discountPct),
+    discountPercentJewelry: "0",
+    rewardTokens: "0",
+    referralRewardTokens: "0",
+    maxUses: 1,
+    isActive: true,
+    expiresAt,
+    ...(userId ? { referralUserId: userId } : {}),
+  });
+  return code;
 }
 
 async function ensureJackpotsSeeded() {
@@ -5544,6 +5571,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 `<h2>Thank you for choosing us, ${updatedLead.firstName}!</h2><p>Your <strong>${updatedLead.serviceType}</strong> job has been completed. We'd love your feedback — please leave us a review!</p><p>Questions? Call anytime at (906) 285-9312!</p>`
               );
             } catch (e) { console.error('Customer email failed:', e); }
+          }
+
+          // Bundle follow-up email: 10% promo code if not already sent
+          if (updatedLead.email && !updatedLead.bundleFollowupSentAt) {
+            try {
+              const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+              // Look up customer userId by email for code linkage
+              const [customerRow] = await db
+                .select({ id: users.id })
+                .from(users)
+                .where(eq(users.email, updatedLead.email.trim().toLowerCase()))
+                .limit(1);
+              const custUserId = customerRow?.id ?? null;
+              const promoCode = await generateBundleFollowupCode(custUserId, 10, expiresAt);
+              await sendBundleFollowupEmail({
+                to: updatedLead.email,
+                firstName: updatedLead.firstName || "there",
+                promoCode,
+                discountPct: 10,
+                expiresAt,
+              });
+              // Mark sent
+              await db.update(leads)
+                .set({ bundleFollowupSentAt: new Date() })
+                .where(eq(leads.id, updatedLead.id));
+              console.log(`✅ Bundle follow-up 10% email sent to ${updatedLead.email} — code ${promoCode}`);
+            } catch (bundleErr) {
+              console.error("Bundle follow-up email failed (non-fatal):", bundleErr);
+            }
           }
         }
         
@@ -12571,6 +12627,72 @@ Thank you for your business!
       res.json({ success: true });
     } catch (error: any) {
       console.error("Error deleting promo code:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Admin: send 5% bundle follow-up reminders for eligible completed leads (8–30 days ago)
+  app.post("/api/admin/send-bundle-followup-reminders", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const now = new Date();
+      const dayAgo8 = new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000);
+      const dayAgo30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+      // Find completed leads where the 10% was sent, 5% not yet sent, within 8–30 days window
+      const eligible = await db
+        .select()
+        .from(leads)
+        .where(
+          and(
+            eq(leads.status, "completed"),
+            isNull(leads.archivedAt),
+            isNull(leads.bundle5SentAt),
+            sql`${leads.bundleFollowupSentAt} IS NOT NULL`,
+            gte(leads.bundleFollowupSentAt, dayAgo30),
+            lte(leads.bundleFollowupSentAt, dayAgo8)
+          )
+        );
+
+      let sent = 0;
+      let failed = 0;
+      const results: { email: string; code: string; status: string }[] = [];
+
+      for (const lead of eligible) {
+        if (!lead.email) continue;
+        try {
+          const expiresAt = new Date(
+            (lead.bundleFollowupSentAt?.getTime() ?? now.getTime()) + 30 * 24 * 60 * 60 * 1000
+          );
+          // Look up customer userId
+          const [customerRow] = await db
+            .select({ id: users.id })
+            .from(users)
+            .where(eq(users.email, lead.email.trim().toLowerCase()))
+            .limit(1);
+          const custUserId = customerRow?.id ?? null;
+          const promoCode = await generateBundleFollowupCode(custUserId, 5, expiresAt);
+          await sendBundleFollowupEmail({
+            to: lead.email,
+            firstName: lead.firstName || "there",
+            promoCode,
+            discountPct: 5,
+            expiresAt,
+          });
+          await db.update(leads)
+            .set({ bundle5SentAt: new Date() })
+            .where(eq(leads.id, lead.id));
+          results.push({ email: lead.email, code: promoCode, status: "sent" });
+          sent++;
+        } catch (err) {
+          console.error(`Bundle 5% reminder failed for ${lead.email}:`, err);
+          results.push({ email: lead.email, code: "", status: "failed" });
+          failed++;
+        }
+      }
+
+      res.json({ sent, failed, total: eligible.length, results });
+    } catch (error: any) {
+      console.error("Error sending bundle follow-up reminders:", error);
       res.status(500).json({ error: error.message });
     }
   });

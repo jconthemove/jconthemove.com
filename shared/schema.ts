@@ -118,6 +118,10 @@ export const leads = pgTable("leads", {
   // Soft-delete: set when admin archives a job instead of permanently deleting
   archivedAt: timestamp("archived_at"),
 
+  // Bundle follow-up email tracking
+  bundleFollowupSentAt: timestamp("bundle_followup_sent_at"), // When 10% follow-up email was sent
+  bundle5SentAt: timestamp("bundle5_sent_at"),               // When 5% reminder email was sent
+
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
 
