@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { BookingChatbot } from "@/components/booking-chatbot";
 import { useAuth } from "@/hooks/useAuth";
 import { Link } from "wouter";
-import { Phone, ArrowLeft, Truck, Trash2, Snowflake, Wrench, Paintbrush, Hammer } from "lucide-react";
+import { Phone, ArrowLeft, Truck, Trash2, Snowflake, Wrench, Paintbrush, Hammer, Zap } from "lucide-react";
 
 const QUICK_SERVICES = [
   { label: "Moving",          emoji: "📦", slug: "moving",       icon: Truck,      color: "from-blue-900/60 to-blue-800/40 border-blue-500/30 hover:border-blue-400/60" },
@@ -12,7 +12,7 @@ const QUICK_SERVICES = [
   { label: "Handyman",        emoji: "🔧", slug: "handyman",    icon: Wrench,     color: "from-orange-900/60 to-orange-800/40 border-orange-500/30 hover:border-orange-400/60" },
   { label: "Painting",        emoji: "🎨", slug: "painting",    icon: Paintbrush, color: "from-purple-900/60 to-purple-800/40 border-purple-500/30 hover:border-purple-400/60" },
   { label: "Light Demo",      emoji: "🔨", slug: "demolition",  icon: Hammer,     color: "from-red-900/60 to-red-800/40 border-red-500/30 hover:border-red-400/60" },
-  { label: "Jump Start",      emoji: "⚡", slug: "jumpstart",   icon: Hammer,     color: "from-amber-900/60 to-amber-800/40 border-amber-500/30 hover:border-amber-400/60" },
+  { label: "Jump Start",      emoji: "⚡", slug: "jumpstart",   icon: Zap,        color: "from-amber-900/60 to-amber-800/40 border-amber-500/30 hover:border-amber-400/60" },
 ];
 
 export default function CustomerBookPage() {
