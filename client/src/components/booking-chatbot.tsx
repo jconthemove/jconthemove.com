@@ -26,7 +26,7 @@ const TRAVEL_TIER_MILES      = 25;  // miles per tier
 // ─────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────
-type StepType = "choice" | "multiselect" | "text" | "address" | "contact" | "notes" | "deposit_ack" | "package_select" | "photo_upload";
+type StepType = "choice" | "multiselect" | "text" | "address" | "contact" | "notes" | "deposit_ack" | "package_select" | "photo_upload" | "moving_recs";
 
 interface Step {
   id: string;
@@ -43,7 +43,11 @@ interface Step {
 export interface Answers {
   serviceType?: string;
   serviceCategory?: "priceable" | "quote_only";
+  // General location (captured first, before service type)
+  serviceAddress?: string;
   // Moving fields
+  jobSize?: string;          // "Single item…" | "Studio or 1-bed" | "2–3 bed" | "4+ bed"
+  distanceReport?: string;   // self-reported distance bracket for moving
   fromZip?: string;
   toZip?: string;
   loadType?: string;
@@ -59,6 +63,10 @@ export interface Answers {
   specialItems?: string[];
   packingHelp?: string;
   truckSituation?: string;
+  truckSize?: string;        // "15' truck" | "26' truck"
+  selectedMovingRec?: string;      // ID of the selected MovingRecommendation card
+  selectedMovingRecLabel?: string; // e.g. "2 movers + 15' truck"
+  selectedMovingRecNotes?: string; // full rate note written into job notes
   // Trash Valet fields
   trashCans?: string;
   trashBags?: string;
@@ -315,6 +323,13 @@ function needsDepositCheck(a: Answers) {
 
 const STEPS: Step[] = [
   {
+    id: "serviceAddress",
+    question: "Where do you need help?",
+    subtext: "Enter your address or city — we'll check availability and distance.",
+    type: "address",
+    placeholder: "123 Main St, Ironwood, MI",
+  },
+  {
     id: "serviceType",
     question: "What service do you need?",
     subtext: "Pick the one that best describes your situation.",
@@ -337,6 +352,19 @@ const STEPS: Step[] = [
 
   // ── MOVING STEPS ──────────────────────────────────────────────────────────
   {
+    id: "jobSize",
+    question: "What are you moving?",
+    subtext: "Pick the closest match — this helps us recommend the right crew.",
+    type: "choice",
+    options: [
+      "📦 Single item or a couple small things",
+      "🛋️ Studio or 1-bedroom",
+      "🏠 2–3 bedroom home",
+      "🏡 4+ bedroom / full house",
+    ],
+    show: (a) => isMovingService(a),
+  },
+  {
     id: "loadType",
     question: "What are we doing?",
     subtext: "Load only = we load the truck at the pickup. Unload only = we unload at the destination. Both = full move.",
@@ -346,7 +374,8 @@ const STEPS: Step[] = [
       "🔽 Unload only (we unload at destination)",
       "🔄 Both — load AND unload",
     ],
-    show: (a) => isMovingService(a),
+    // Tiny jobs: the "single item" framing implies both — no need for this question
+    show: (a) => isMovingService(a) && !(a.jobSize || "").includes("Single item"),
   },
   {
     id: "fromZip",
@@ -354,7 +383,8 @@ const STEPS: Step[] = [
     subtext: "Start typing — we'll suggest addresses as you go.",
     type: "address",
     placeholder: "123 Main St, Ironwood, MI",
-    show: (a) => isMovingService(a) && !(a.loadType || "").includes("Unload only"),
+    // Skip if serviceAddress already captured the pickup location upfront
+    show: (a) => isMovingService(a) && !(a.loadType || "").includes("Unload only") && !a.serviceAddress,
   },
   {
     id: "toZip",
@@ -441,7 +471,8 @@ const STEPS: Step[] = [
       "🚶 Short walk (30–100 ft)",
       "🏃 Long carry (100 ft+)",
     ],
-    show: (a) => isMovingService(a),
+    // Hidden — simplified Moving flow uses jobSize + specialItems for scope
+    show: (a) => false,
   },
   {
     id: "furniture",
@@ -458,7 +489,8 @@ const STEPS: Step[] = [
       "Refrigerator", "Washer / Dryer",
       "Stove / Range", "None of the above",
     ],
-    show: (a) => isMovingService(a),
+    // Hidden for Moving — `jobSize` step covers scope; for Junk service only
+    show: (a) => false,
   },
   {
     id: "boxCount",
@@ -469,12 +501,13 @@ const STEPS: Step[] = [
       "Under 10 boxes", "10–25 boxes", "25–50 boxes",
       "50–75 boxes", "75–100 boxes", "100+ boxes",
     ],
-    show: (a) => isMovingService(a),
+    // Hidden for Moving — `jobSize` covers the scope
+    show: (a) => false,
   },
   {
     id: "specialItems",
-    question: "Any specialty / heavy items?",
-    subtext: "These require extra crew or equipment.",
+    question: "Any heavy or specialty items?",
+    subtext: "Heavy = over 100 lbs. These items need extra crew or special equipment — a 1-person job becomes a 2-person job.",
     type: "multiselect",
     options: [
       "🎹 Upright Piano",
@@ -482,6 +515,8 @@ const STEPS: Step[] = [
       "🎱 Pool Table",
       "♨️ Hot Tub",
       "🔒 Heavy Safe (300 lbs+)",
+      "🏋️ Large Appliance or Fitness Equipment (100 lbs+)",
+      "📦 Other Heavy Item (100 lbs+)",
       "None of these",
     ],
     show: (a) => isMovingService(a) || isJunkService(a),
@@ -492,7 +527,7 @@ const STEPS: Step[] = [
     subtext: "We need your address to schedule pickup.",
     type: "address",
     placeholder: "123 Main St, Ironwood, MI",
-    show: (a) => isJunkService(a),
+    show: (a) => isJunkService(a) && !a.serviceAddress,
   },
   {
     id: "packingHelp",
@@ -504,18 +539,50 @@ const STEPS: Step[] = [
       "📦 Pack a few fragile items",
       "🏠 Full packing service (whole home)",
     ],
+    show: (a) => isMovingService(a) && !(a.jobSize || "").includes("Single item"),
+  },
+  {
+    id: "distanceReport",
+    question: "How far is the move?",
+    subtext: "Pick the closest match. We'll confirm the exact distance.",
+    type: "choice",
+    options: [
+      "📍 Local — within 20 miles of Ironwood",
+      "🗺️ About 1 hour away (30–70 miles)",
+      "🛣️ About 2 hours away (70–140 miles)",
+      "🌎 About 3 hours or more (140+ miles)",
+    ],
     show: (a) => isMovingService(a),
   },
   {
     id: "truckSituation",
-    question: "Truck situation?",
+    question: "Do you have a moving truck?",
+    subtext: "Our trucks include fuel, mileage, and all travel — one flat bundled price.",
     type: "choice",
     options: [
-      "🚛 I need JC to provide a truck",
-      "🚗 I have my own truck / rental",
-      "📋 Not sure yet",
+      "🚗 I'll bring my own truck (or rental)",
+      "🚛 JC ON THE MOVE provides the truck",
     ],
-    show: (a) => isMovingService(a) && (a.serviceType || "").includes("Moving"),
+    // Tiny jobs use flat rates — no truck question
+    show: (a) => isMovingService(a) && !(a.jobSize || "").includes("Single item"),
+  },
+  {
+    id: "truckSize",
+    question: "Which truck size?",
+    subtext: "The 15' is great for studios and 1–2 bedrooms. The 26' handles large homes and heavy loads.",
+    type: "choice",
+    options: [
+      "🚐 15' truck — studio, 1–2 bed, smaller loads",
+      "🚛 26' truck — 3+ bed, large home, heavy loads",
+    ],
+    show: (a) => isMovingService(a) && (a.truckSituation || "").includes("JC ON THE MOVE"),
+  },
+  {
+    id: "movingRec",
+    question: "Here's your instant quote:",
+    subtext: "Pick the option that works best for you.",
+    type: "moving_recs",
+    show: (a) => isMovingService(a),
   },
 
   // ── TRASH VALET STEPS ──────────────────────────────────────────────────────
@@ -1165,7 +1232,8 @@ const STEPS: Step[] = [
       "🧑‍🤝‍🧑 Choose my own crew",
       "✅ Assign the best crew for me",
     ],
-    show: (a) => isMovingService(a) && isPriceableService(a) && !isQuoteOnlyService(a),
+    // Hidden for Moving — the movingRec recommendation cards handle crew selection
+    show: (a) => false,
   },
 
   // ── PACKAGE SELECTION (priceable services) ────────────────────────────────
@@ -1220,6 +1288,265 @@ const STEPS: Step[] = [
 ];
 
 // ─────────────────────────────────────────────
+// Moving — Bundled Recommendation Engine
+// ─────────────────────────────────────────────
+
+export interface MovingRecommendation {
+  id: string;
+  label: string;          // e.g. "2 movers + 15' truck"
+  price: string;          // e.g. "$370"  or  "$125 promo"
+  priceNote?: string;     // e.g. "2-hr minimum"
+  rateNote?: string;      // e.g. "$185/hr"
+  reason: string;
+  isBestMatch: boolean;
+  customQuote: boolean;   // Darrell follow-up instead of instant price
+  crew: number;
+  totalMin: number;
+  totalMax: number;
+  notes: string;          // written into job notes on submit
+}
+
+/** Resolve which distance bracket applies, preferring Google Maps over self-report */
+export function getMovingDistanceBracket(
+  distanceMiles: number,
+  distanceReport: string | undefined,
+): "local" | "1hr" | "2hr" | "3hr" {
+  if (distanceMiles > 0) {
+    if (distanceMiles <= 25) return "local";
+    if (distanceMiles <= 70) return "1hr";
+    if (distanceMiles <= 140) return "2hr";
+    return "3hr";
+  }
+  const r = distanceReport || "";
+  if (r.includes("Local")) return "local";
+  if (r.includes("1 hour")) return "1hr";
+  if (r.includes("2 hours")) return "2hr";
+  if (r.includes("3 hours")) return "3hr";
+  return "local";
+}
+
+/**
+ * Build 1–3 smart recommendation cards for Moving jobs.
+ * Uses bundled flat rates when JC provides a truck; falls back to labor-only rates.
+ */
+export function buildMovingRecommendations(
+  a: Answers,
+  distanceMiles: number,
+  stakingPerkPct = 0,
+): MovingRecommendation[] {
+  const bracket = getMovingDistanceBracket(distanceMiles, a.distanceReport);
+  const isTiny = (a.jobSize || "").includes("Single item");
+  const specials = (a.specialItems || []).filter(s => s !== "None of these");
+  const hasMajorSpecialty = specials.some(s =>
+    ["🎹 Grand Piano", "🎹 Upright Piano", "🎱 Pool Table", "♨️ Hot Tub", "🔒 Heavy Safe (300 lbs+)"].includes(s)
+  );
+  const truckIsJC = (a.truckSituation || "").includes("JC ON THE MOVE");
+  const is26 = (a.truckSize || "").includes("26'");
+  const applyPerk = (n: number) =>
+    stakingPerkPct > 0 ? Math.round(n * (1 - stakingPerkPct / 100)) : n;
+  const perkNote = stakingPerkPct > 0 ? ` (${stakingPerkPct}% loyalty perk applied)` : "";
+
+  // ── TINY JOB PATH ──────────────────────────────────────────────────────────
+  if (isTiny) {
+    if (hasMajorSpecialty) {
+      if (bracket === "local") {
+        const total = applyPerk(450);
+        return [{
+          id: "tiny_specialty_local",
+          label: "Specialty crew — 3 movers",
+          price: `$${total}`,
+          priceNote: "flat rate · no truck needed",
+          reason: "Piano, pool table, or safe — 3-mover specialty crew handles it safely.",
+          isBestMatch: true,
+          customQuote: false,
+          crew: 3,
+          totalMin: total,
+          totalMax: total,
+          notes: `Tiny specialty job · 3-mover crew · flat $450 · ${specials.join(", ")}${perkNote}`,
+        }];
+      }
+      // 1hr travel + major specialty → custom quote
+      return [{
+        id: "tiny_specialty_travel_custom",
+        label: "Custom quote — Darrell follows up",
+        price: "Custom",
+        reason: "Specialty item + travel requires a custom quote. Darrell typically responds within 1 hour.",
+        isBestMatch: true,
+        customQuote: true,
+        crew: 3,
+        totalMin: 0,
+        totalMax: 0,
+        notes: `Tiny specialty job · travel · custom quote · ${specials.join(", ")}`,
+      }];
+    }
+    // Tiny — no specialty
+    if (bracket === "local") {
+      const promo = applyPerk(125);
+      const regular = applyPerk(150);
+      return [{
+        id: "tiny_local_promo",
+        label: "Single item — promo rate",
+        price: `$${promo} promo`,
+        priceNote: `reg. $${regular}`,
+        reason: "Local single-item move. Promo pricing while available.",
+        isBestMatch: true,
+        customQuote: false,
+        crew: 1,
+        totalMin: promo,
+        totalMax: regular,
+        notes: `Tiny local job · promo $${promo} (reg. $${regular})${perkNote}`,
+      }];
+    }
+    if (bracket === "1hr") {
+      const total = applyPerk(225);
+      return [{
+        id: "tiny_1hr",
+        label: "Single item — with travel",
+        price: `$${total}`,
+        priceNote: "flat · includes travel",
+        reason: "~1 hour each way. Flat rate covers everything.",
+        isBestMatch: true,
+        customQuote: false,
+        crew: 1,
+        totalMin: total,
+        totalMax: total,
+        notes: `Tiny job · 1-hr travel · flat $${total}${perkNote}`,
+      }];
+    }
+    // 2hr+ tiny → custom quote
+    return [{
+      id: "tiny_long_custom",
+      label: "Custom quote — Darrell follows up",
+      price: "Custom",
+      reason: "Long-distance single-item moves get a custom quote. Darrell typically responds within 1 hour.",
+      isBestMatch: true,
+      customQuote: true,
+      crew: 1,
+      totalMin: 0,
+      totalMax: 0,
+      notes: "Tiny job · long-distance · custom quote",
+    }];
+  }
+
+  // ── JC PROVIDES TRUCK ──────────────────────────────────────────────────────
+  if (truckIsJC) {
+    if (bracket === "local") {
+      const opt2 = applyPerk(370);
+      const opt3 = applyPerk(450);
+      return [
+        {
+          id: "local_jc_2mover_15",
+          label: "2 movers + 15' truck",
+          price: `$${opt2}`,
+          priceNote: "2-hr minimum",
+          rateNote: `$185/hr${perkNote}`,
+          reason: "Best for studios, 1–2 bedrooms, and smaller loads.",
+          isBestMatch: !is26,
+          customQuote: false,
+          crew: 2,
+          totalMin: opt2,
+          totalMax: opt2 + 200,
+          notes: `Local bundled · 2 movers + 15' truck · $185/hr · 2-hr min${perkNote}`,
+        },
+        {
+          id: "local_jc_3mover_15",
+          label: "3 movers + 15' truck",
+          price: `$${opt3}`,
+          priceNote: "2-hr minimum",
+          rateNote: `$225/hr${perkNote}`,
+          reason: "Faster for 2–3 bedrooms or homes with lots of stairs.",
+          isBestMatch: is26,
+          customQuote: false,
+          crew: 3,
+          totalMin: opt3,
+          totalMax: opt3 + 300,
+          notes: `Local bundled · 3 movers + 15' truck · $225/hr · 2-hr min${perkNote}`,
+        },
+      ];
+    }
+    // Traveling — table lookup
+    const tables: Record<string, Record<string, { rate: number; hrs: number }>> = {
+      "15'": { "1hr": { rate: 225, hrs: 4 }, "2hr": { rate: 210, hrs: 6 }, "3hr": { rate: 200, hrs: 8 } },
+      "26'": { "1hr": { rate: 325, hrs: 4 }, "2hr": { rate: 310, hrs: 6 }, "3hr": { rate: 300, hrs: 8 } },
+    };
+    const sz = is26 ? "26'" : "15'";
+    const altSz = is26 ? "15'" : "26'";
+    const b = bracket === "local" ? "1hr" : bracket;
+    const { rate, hrs } = tables[sz][b];
+    const { rate: altRate, hrs: altHrs } = tables[altSz][b];
+    const total = applyPerk(rate * hrs);
+    const altTotal = applyPerk(altRate * altHrs);
+    const crew = is26 ? 3 : 2;
+    const altCrew = is26 ? 2 : 3;
+    const distLabel = bracket === "1hr" ? "~1 hr" : bracket === "2hr" ? "~2 hrs" : "~3+ hrs";
+    return [
+      {
+        id: `travel_jc_${sz.replace("'", "")}`,
+        label: `${crew} movers + ${sz} truck`,
+        price: `$${total.toLocaleString()}`,
+        priceNote: `${hrs}-hr minimum · ${distLabel} away`,
+        rateNote: `$${rate}/hr · all-inclusive${perkNote}`,
+        reason: `All-in bundle: crew, truck, fuel, and travel${perkNote ? " · loyalty discount applied" : ""}.`,
+        isBestMatch: true,
+        customQuote: false,
+        crew,
+        totalMin: total,
+        totalMax: total + crew * hrs * 20,
+        notes: `Traveling bundled · ${crew} movers + ${sz} truck · $${rate}/hr · ${hrs}-hr min · ${distLabel}${perkNote}`,
+      },
+      {
+        id: `travel_jc_${altSz.replace("'", "")}`,
+        label: `${altCrew} movers + ${altSz} truck`,
+        price: `$${altTotal.toLocaleString()}`,
+        priceNote: `${altHrs}-hr minimum · ${distLabel} away`,
+        rateNote: `$${altRate}/hr · all-inclusive${perkNote}`,
+        reason: is26 ? "Smaller truck for lighter loads." : "Larger truck for bigger homes.",
+        isBestMatch: false,
+        customQuote: false,
+        crew: altCrew,
+        totalMin: altTotal,
+        totalMax: altTotal + altCrew * altHrs * 20,
+        notes: `Traveling bundled · ${altCrew} movers + ${altSz} truck · $${altRate}/hr · ${altHrs}-hr min · ${distLabel}${perkNote}`,
+      },
+    ];
+  }
+
+  // ── LABOR ONLY ─────────────────────────────────────────────────────────────
+  // Map jobSize → crew + hours then apply $85/mover/hr + travel charge
+  const laborSizeMap: Record<string, { crew: number; minHrs: number; maxHrs: number }> = {
+    "Studio":  { crew: 2, minHrs: 2, maxHrs: 3 },
+    "2–3 bed": { crew: 2, minHrs: 3, maxHrs: 5 },
+    "4+ bed":  { crew: 3, minHrs: 4, maxHrs: 7 },
+  };
+  const sizeKey = (a.jobSize || "").includes("Studio") ? "Studio"
+    : (a.jobSize || "").includes("2–3") ? "2–3 bed"
+    : (a.jobSize || "").includes("4+") ? "4+ bed"
+    : "Studio";
+  const { crew: lCrew, minHrs, maxHrs } = laborSizeMap[sizeKey];
+  const laborRate = 85;
+  const travelCharge = bracket === "1hr" ? 100 : bracket === "2hr" ? 200 : bracket === "3hr" ? 300 : 0;
+  const laborMin = applyPerk(lCrew * minHrs * laborRate) + travelCharge;
+  const laborMax = applyPerk(lCrew * maxHrs * laborRate) + travelCharge;
+  const travelLabel = travelCharge > 0 ? ` + $${travelCharge} travel` : "";
+  return [
+    {
+      id: "labor_only",
+      label: `${lCrew} movers — labor only`,
+      price: `$${laborMin.toLocaleString()}–$${laborMax.toLocaleString()}`,
+      priceNote: travelCharge > 0 ? `Includes $${travelCharge} one-way travel charge` : `${minHrs}–${maxHrs}-hr estimate`,
+      rateNote: `$${laborRate}/mover/hr${perkNote}`,
+      reason: "You bring your own truck or rental. We load, move, and unload.",
+      isBestMatch: true,
+      customQuote: false,
+      crew: lCrew,
+      totalMin: laborMin,
+      totalMax: laborMax,
+      notes: `Labor only · ${lCrew} movers · $${laborRate}/hr · ${travelCharge > 0 ? `$${travelCharge} travel charge` : "no travel charge"}${perkNote}`,
+    },
+  ];
+}
+
+// ─────────────────────────────────────────────
 // Moving Quote Engine
 // ─────────────────────────────────────────────
 export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatPrice = 222, distanceMiles = 0, stakingPerkPct = 0): MovingQuote {
@@ -1242,20 +1569,27 @@ export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatP
 
   // ── Special items ──────────────────────────────────────────────────────────
   const specials = (a.specialItems || []).filter(s => s !== "None of these");
-  const hasGrandPiano   = specials.includes("🎹 Grand Piano");
-  const hasUprightPiano = specials.includes("🎹 Upright Piano");
-  const hasPoolTable    = specials.includes("🎱 Pool Table");
-  const hasHotTub       = specials.includes("♨️ Hot Tub");
-  const hasHeavySafe    = specials.includes("🔒 Heavy Safe (300 lbs+)");
-  const hasMajorSpecial = hasGrandPiano || hasUprightPiano || hasPoolTable || hasHotTub;
+  const hasGrandPiano    = specials.includes("🎹 Grand Piano");
+  const hasUprightPiano  = specials.includes("🎹 Upright Piano");
+  const hasPoolTable     = specials.includes("🎱 Pool Table");
+  const hasHotTub        = specials.includes("♨️ Hot Tub");
+  const hasHeavySafe     = specials.includes("🔒 Heavy Safe (300 lbs+)");
+  // 100 lbs+ items: large appliance, fitness equipment, or any other heavy item declared by customer
+  const hasHeavyAppliance = specials.includes("🏋️ Large Appliance or Fitness Equipment (100 lbs+)");
+  const hasOtherHeavy     = specials.includes("📦 Other Heavy Item (100 lbs+)");
+  const hasMajorSpecial  = hasGrandPiano || hasUprightPiano || hasPoolTable || hasHotTub;
+  // Any item over 100 lbs — turns a 1-person job into a 2-person job minimum
+  const hasAnyHeavy100   = hasHeavySafe || hasHeavyAppliance || hasOtherHeavy;
 
   // Specialty item surcharges — $400 for ≤500 lbs items, $600 for 500+ lbs items (standalone)
   let specialSurcharge = 0;
-  if (hasGrandPiano)   specialSurcharge += 600; // 500+ lbs
-  if (hasUprightPiano) specialSurcharge += 400; // ≤500 lbs
-  if (hasPoolTable)    specialSurcharge += 400; // ≤500 lbs
-  if (hasHotTub)       specialSurcharge += 600; // 500+ lbs
-  if (hasHeavySafe)    specialSurcharge += 400; // ≤500 lbs (300+ lbs safes)
+  if (hasGrandPiano)    specialSurcharge += 600; // 500+ lbs
+  if (hasUprightPiano)  specialSurcharge += 400; // ≤500 lbs
+  if (hasPoolTable)     specialSurcharge += 400; // ≤500 lbs
+  if (hasHotTub)        specialSurcharge += 600; // 500+ lbs
+  if (hasHeavySafe)     specialSurcharge += 400; // ≤500 lbs (300+ lbs safes)
+  if (hasHeavyAppliance) specialSurcharge += 150; // 100+ lbs appliance/equipment — less than specialty
+  if (hasOtherHeavy)    specialSurcharge += 100; // generic heavy item surcharge
 
   // ── Furniture & box counts ─────────────────────────────────────────────────
   const furnCount = (a.furniture || []).filter(f => f !== "None of the above").length;
@@ -1293,7 +1627,8 @@ export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatP
 
   // ── Determine tier ─────────────────────────────────────────────────────────
   let tier: "tiny" | "small" | "medium" | "large";
-  if (score === -1 && !isBoth && !hasMajorSpecial && !hasHeavySafe) {
+  // Any item over 100 lbs prevents a solo/tiny job — needs at least 2 movers
+  if (score === -1 && !isBoth && !hasMajorSpecial && !hasAnyHeavy100) {
     tier = "tiny";
   } else if (score <= 2) {
     tier = "small";
@@ -1304,8 +1639,8 @@ export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatP
   }
 
   // Special upgrade rules
-  // Heavy safe + stairs → minimum Small with 3 movers
-  if (tier === "tiny" && hasHeavySafe && hasAnyStairs) tier = "small";
+  // Any 100+ lb item + stairs → minimum Small (2 movers)
+  if (tier === "tiny" && hasAnyHeavy100 && hasAnyStairs) tier = "small";
   // Load+Unload always minimum Medium
   if (isBoth && tier === "small") tier = "medium";
 
@@ -1319,12 +1654,12 @@ export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatP
     minHrs = 2;   // minimum is 2 mover-hours ($170) — same whether 1×2hrs or 2×1hr
     maxHrs = 2;
   } else if (tier === "small") {
-    crew   = (hasHeavySafe || hasMajorSpecial) && hasAnyStairs ? 3 : 2;
+    crew   = (hasAnyHeavy100 || hasMajorSpecial) && hasAnyStairs ? 3 : 2;
     minHrs = 2;
     maxHrs = isBoth ? 3 : 2;
   } else if (tier === "medium") {
     // Default 2×4; with stairs or heavy items 3×2.5
-    if (hasAnyStairs || hasMajorSpecial || hasHeavySafe || highStairFloors >= 2) {
+    if (hasAnyStairs || hasMajorSpecial || hasAnyHeavy100 || highStairFloors >= 2) {
       crew   = 3;
       minHrs = 2.5;
       maxHrs = 3.5;
@@ -1976,7 +2311,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
   const [messages, setMessages] = useState<Message[]>([
     {
       from: "bot",
-      text: "👋 Hi — I'm JC! I'll help you get a quote for any of our services in about 60 seconds. No pressure, no spam — real human review before anything is sent.",
+      text: "👋 Hello! I'm JC — Darrell's booking assistant for JC On The Move. I'll have a quote ready in about 60 seconds. No pressure, no spam.",
       ts: Date.now(),
     },
   ]);
@@ -1995,6 +2330,8 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
   const [selectedPackageObj, setSelectedPackageObj] = useState<CrewPackage | null>(null);
   const [depositInfo, setDepositInfo] = useState<{ required: boolean; amount: number; termsHtml: string } | null>(null);
   const [depositChecked, setDepositChecked] = useState(false);
+  const [movingRecs, setMovingRecs] = useState<MovingRecommendation[]>([]);
+  const [selectedMovingRec, setSelectedMovingRec] = useState<MovingRecommendation | null>(null);
 
   // ── localStorage session persistence ──────────────────────────────────────
   const STORAGE_KEY = `jc_chatbot_session_${initialService || "default"}`;
@@ -2071,6 +2408,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
     if (!initialService) return;
     const mapped = SERVICE_SLUG_MAP[initialService.toLowerCase()];
     if (!mapped) return;
+    // Pre-fill service type but keep serviceAddress blank — we ask it first
     const newAnswers: Answers = { serviceType: mapped };
     setAnswers(newAnswers);
     // Reset any stale state from previous sessions
@@ -2078,17 +2416,17 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
     setSelectedPackageObj(null);
     setPendingQuote(null);
     setQuoteVisible(false);
-    const nextSteps = STEPS.filter(s => !s.show || s.show(newAnswers));
-    const nextStep = nextSteps[1];
-    // Normalize slug: lowercase, replace hyphens with underscores so all aliases resolve
+    // Normalize slug for service opener lookup
     const slug = (initialService || "").toLowerCase().replace(/-/g, "_");
     const opener = SERVICE_OPENERS[slug] ?? `You selected: ${mapped}`;
+    // Step 0 is the new serviceAddress step — always ask it first
+    const addressStep = STEPS[0]; // serviceAddress
     setMessages([
-      { from: "bot", text: "👋 Hi — I'm JC! Quick quotes, real humans, no spam.", ts: Date.now() - 2 },
-      { from: "bot", text: opener, ts: Date.now() - 1 },
-      ...(nextStep ? [{ from: "bot" as const, text: nextStep.question + (nextStep.subtext ? `\n\n_${nextStep.subtext}_` : ""), ts: Date.now() + 1 }] : []),
+      { from: "bot", text: "👋 Hello! I'm JC — Darrell's booking assistant for JC On The Move.", ts: Date.now() - 3 },
+      { from: "bot", text: opener, ts: Date.now() - 2 },
+      { from: "bot", text: addressStep.question + (addressStep.subtext ? `\n\n_${addressStep.subtext}_` : ""), ts: Date.now() - 1 },
     ]);
-    setStepIdx(1);
+    setStepIdx(0);
   }, [initialService]);
 
   useEffect(() => {
@@ -2152,8 +2490,8 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
       userSay(shortAnswer(stepId, value));
     }
 
-    // Async distance fetch: fires when address is captured, resolves before package step
-    if (stepId === "fromZip" || stepId === "junkLocation") {
+    // Async distance fetch: fires when any address is captured (location-first flow or traditional)
+    if (stepId === "serviceAddress" || stepId === "fromZip" || stepId === "junkLocation") {
       const addr = (value as string || "").trim();
       if (addr.length >= 5) {
         fetch(`/api/utility/estimate-drive-miles?address=${encodeURIComponent(addr)}`)
@@ -2187,7 +2525,12 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
       if (s.employeeOnly && !isEmployee) return false;
       return !s.show || s.show(newAnswers);
     });
-    const nextIdx = stepIdx + 1;
+    let nextIdx = stepIdx + 1;
+    // If the next step is serviceType but it was pre-filled (by initialService),
+    // skip it automatically so the customer isn't re-asked what they already chose.
+    if (nextVisibleSteps[nextIdx]?.id === "serviceType" && newAnswers.serviceType) {
+      nextIdx += 1;
+    }
 
     if (nextIdx < nextVisibleSteps.length) {
       const nextStep = nextVisibleSteps[nextIdx];
@@ -2209,8 +2552,15 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
         setCrewPackages(pkgs);
       }
 
+      // When we reach the moving recommendations step, compute recommendations
+      if (nextStep.id === "movingRec") {
+        const recs = buildMovingRecommendations(newAnswers, distanceMiles, stakingPerkPct);
+        setMovingRecs(recs);
+        setSelectedMovingRec(null);
+      }
+
       setTimeout(() => {
-        if (nextStep.id !== "depositAcknowledged" && nextStep.id !== "selectedPackage") {
+        if (nextStep.id !== "depositAcknowledged" && nextStep.id !== "selectedPackage" && nextStep.id !== "movingRec") {
           botSay(nextStep.question + (nextStep.subtext ? `\n\n_${nextStep.subtext}_` : ""));
         }
         setStepIdx(nextIdx);
@@ -2301,6 +2651,39 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
     advanceStep("selectedPackage", selectedPackageObj.id);
   }
 
+  function handleMovingRecSelect(rec: MovingRecommendation) {
+    setSelectedMovingRec(rec);
+    // Persist label + notes in answers so the server receives them in the chatbot-quote payload
+    setAnswers(prev => ({
+      ...prev,
+      selectedMovingRecLabel: rec.label,
+      selectedMovingRecNotes: rec.notes,
+    }));
+    if (!rec.customQuote) {
+      // Synthesise a MovingQuote so the deposit step has a price to work with
+      const syntheticQuote: MovingQuote = {
+        type: "moving",
+        crew: rec.crew,
+        minHrs: 0,
+        maxHrs: 0,
+        minPrice: rec.totalMin,
+        maxPrice: rec.totalMax,
+        specialSurcharge: 0,
+        travelCharge: 0,
+        tokensEstimate: Math.round(rec.totalMin * 15),
+        promoApplied: false,
+        stakingPerkApplied: stakingPerkPct > 0,
+        stakingPerkPct,
+        stakingPerkDiscount: 0,
+        jcmovesDiscount: 0,
+        tier: "small",
+      };
+      setPendingQuote(syntheticQuote);
+    }
+    // Advance to the next step (fromZip / moveDate etc.)
+    advanceStep("movingRec", rec.id);
+  }
+
   function handlePhotoUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const files = event.target.files;
     if (!files) return;
@@ -2353,7 +2736,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
       const svc = getServiceLabel(answers.serviceType || "");
       const isQuoteOnly = QUOTE_ONLY_SERVICES.includes(svc);
       const dep = depositInfo;
-      const zip = answers.jobLocation || answers.depositZip || answers.junkLocation || answers.windowLocation || answers.fromZip || "";
+      const zip = answers.jobLocation || answers.depositZip || answers.serviceAddress || answers.junkLocation || answers.windowLocation || answers.fromZip || "";
 
       if (isEmployee) {
         const nameParts = (answers.contactName || "").trim().split(/\s+/);
@@ -2407,6 +2790,18 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
         if (answers.roofingMaterials) scopeParts.push(`Roofing materials: ${answers.roofingMaterials}`);
         if (answers.jobScope) scopeParts.push(answers.jobScope);
         if (answers.crewPreference) scopeParts.push(`Crew: ${answers.crewPreference}`);
+        // Moving recommendation selection — inject the bundled rate details into notes
+        if (answers.selectedMovingRecLabel) {
+          scopeParts.push(`Selected option: ${answers.selectedMovingRecLabel}`);
+        } else if (answers.jobSize) {
+          scopeParts.push(`Job size: ${answers.jobSize}`);
+        }
+        if (answers.selectedMovingRecNotes) {
+          scopeParts.push(answers.selectedMovingRecNotes);
+        }
+        if (answers.distanceReport) scopeParts.push(`Distance: ${answers.distanceReport}`);
+        if (answers.truckSituation) scopeParts.push(`Truck: ${answers.truckSituation}`);
+        if (answers.truckSize) scopeParts.push(`Truck size: ${answers.truckSize}`);
         if (answers.lawnPropertySize) scopeParts.push(`Lawn size: ${answers.lawnPropertySize}`);
         if (answers.lawnServices?.length) scopeParts.push(`Services: ${answers.lawnServices.join(", ")}`);
         if (answers.lawnFrequency) scopeParts.push(`Frequency: ${answers.lawnFrequency}`);
@@ -2418,7 +2813,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
           email: answers.contactEmail || "",
           phone: answers.contactPhone || "",
           serviceType: svc,
-          fromAddress: answers.jobLocation || answers.fromZip || answers.junkLocation || "",
+          fromAddress: answers.jobLocation || answers.serviceAddress || answers.fromZip || answers.junkLocation || "",
           toAddress: answers.toZip || "",
           moveDate: answers.moveDate || "",
           details: [...scopeParts, answers.notes || ""].filter(Boolean).join(" | "),
@@ -3169,6 +3564,67 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
                   <ChevronRight className="h-3.5 w-3.5 ml-1" />
                 </Button>
               </div>
+            </div>
+          )}
+
+          {/* MOVING RECOMMENDATION CARDS */}
+          {currentStep.type === "moving_recs" && movingRecs.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-slate-200 mb-1">Your instant quote:</p>
+              {movingRecs.map((rec) => {
+                const isBest = rec.isBestMatch;
+                const isSel = selectedMovingRec?.id === rec.id;
+                if (rec.customQuote) {
+                  return (
+                    <div key={rec.id} className="p-3 rounded-xl border-2 border-amber-500/60 bg-amber-900/20">
+                      <div className="flex items-start gap-2 mb-1">
+                        <span className="text-base">📞</span>
+                        <span className="text-sm font-semibold text-white">{rec.label}</span>
+                      </div>
+                      <p className="text-xs text-slate-400 pl-6">{rec.reason}</p>
+                      <p className="text-xs text-amber-400 pl-6 mt-1">Darrell typically responds within 1 hour.</p>
+                    </div>
+                  );
+                }
+                return (
+                  <button
+                    key={rec.id}
+                    onClick={() => handleMovingRecSelect(rec)}
+                    className={`w-full text-left p-3 rounded-xl border-2 transition-all ${
+                      isSel
+                        ? "border-teal-500 bg-teal-900/30"
+                        : isBest
+                        ? "border-amber-500/70 bg-amber-900/20 hover:border-amber-400"
+                        : "border-slate-700/60 bg-slate-800/60 hover:border-teal-500/40"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-0.5">
+                      <div className="flex items-center gap-2">
+                        {isSel
+                          ? <CheckCircle2 className="h-4 w-4 text-teal-400 shrink-0" />
+                          : <div className="h-4 w-4 rounded-full border-2 border-slate-600 shrink-0" />}
+                        <span className="text-sm font-semibold text-white">{rec.label}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                        {isBest && !isSel && <Badge className="text-[10px] bg-amber-700/60 text-amber-200 border-0">⭐ Best Match</Badge>}
+                        <span className="text-sm font-bold text-teal-300">{rec.price}</span>
+                      </div>
+                    </div>
+                    {rec.priceNote && <p className="text-xs text-slate-500 pl-6">{rec.priceNote}</p>}
+                    {rec.rateNote  && <p className="text-xs text-slate-500 pl-6">{rec.rateNote}</p>}
+                    <p className="text-xs text-slate-400 pl-6 mt-0.5">{rec.reason}</p>
+                  </button>
+                );
+              })}
+              {movingRecs.some(r => r.customQuote) && (
+                <Button
+                  onClick={() => advanceStep("movingRec", "custom_quote")}
+                  className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-semibold py-2.5 rounded-xl text-sm mt-1"
+                  size="sm"
+                >
+                  Request custom quote <ChevronRight className="h-3.5 w-3.5 ml-1" />
+                </Button>
+              )}
             </div>
           )}
 
