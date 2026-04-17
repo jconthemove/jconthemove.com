@@ -1089,94 +1089,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
   } catch (e) { console.error('Staking pool column migration error:', e); }
 
   // One-time migration: convert old tier-based stakes → new single-pool staked_balance
-  try {
-    // Skip if migration was already completed (idempotency marker)
-    const { rows: migFlagRows } = await pool.query(
-      `SELECT setting_value FROM spin_config WHERE setting_key='migration_staking_pool_v1' LIMIT 1`
-    );
-    if (migFlagRows[0]?.setting_value === 'done') {
-      // Migration previously completed — skip scan
-    } else {
-
-    const { rows: migratable } = await pool.query<{
-      id: string; user_id: string; amount: string; daily_rate: string; last_payout_at: string;
-    }>(`SELECT id, user_id, amount, daily_rate, last_payout_at FROM stakes WHERE status='active'`);
-
-    if (migratable.length > 0) {
-      console.log(`Migrating ${migratable.length} active stake(s) to new pool system...`);
-      for (const row of migratable) {
-        const client = await pool.connect();
-        try {
-          await client.query('BEGIN');
-
-          const now = new Date();
-          const lastPayout = new Date(row.last_payout_at);
-          const daysSince = (now.getTime() - lastPayout.getTime()) / 86400000;
-          const principal = parseFloat(row.amount);
-          const accrued = parseFloat((principal * parseFloat(row.daily_rate) * daysSince).toFixed(8));
-
-          // Ensure wallet_accounts row exists for this user (upsert)
-          await client.query(
-            `INSERT INTO wallet_accounts (user_id, token_balance, total_earned, staked_balance)
-             VALUES ($1, '0.00000000', '0.00000000', '0.00000000')
-             ON CONFLICT (user_id) DO NOTHING`,
-            [row.user_id]
-          );
-
-          // Credit accrued APR tokens (inline — same connection, inside transaction)
-          if (accrued > 0) {
-            await client.query(
-              `UPDATE wallet_accounts
-               SET token_balance = COALESCE(token_balance, 0) + $1::numeric,
-                   total_earned  = COALESCE(total_earned,  0) + $1::numeric
-               WHERE user_id = $2`,
-              [accrued.toFixed(8), row.user_id]
-            );
-            console.log(`  → Credited ${accrued} accrued tokens (raw, no bonus) to user ${row.user_id}`);
-          }
-
-          // Move principal from stake → staked_balance
-          const waResult = await client.query(
-            `UPDATE wallet_accounts
-             SET staked_balance = COALESCE(staked_balance, 0) + $1::numeric
-             WHERE user_id = $2`,
-            [principal.toFixed(8), row.user_id]
-          );
-          if ((waResult.rowCount ?? 0) < 1) {
-            throw new Error(`No wallet_accounts row for user ${row.user_id} during stake migration`);
-          }
-
-          // Mark stake as migrated (idempotency guard)
-          await client.query(
-            `UPDATE stakes SET status='migrated', unstaked_at=NOW() WHERE id=$1 AND status='active'`,
-            [row.id]
-          );
-
-          await client.query('COMMIT');
-          console.log(`  → Migrated stake ${row.id}: ${principal} JCMOVES principal + ${accrued} accrued → user ${row.user_id}`);
-        } catch (migErr) {
-          await client.query('ROLLBACK');
-          throw migErr;
-        } finally {
-          client.release();
+  // Runs in background after server boot so HTTP listener comes up immediately.
+  setImmediate(() => {
+    (async () => {
+      try {
+        const { rows: migFlagRows } = await pool.query(
+          `SELECT setting_value FROM spin_config WHERE setting_key='migration_staking_pool_v1' LIMIT 1`
+        );
+        if (migFlagRows[0]?.setting_value === 'done') {
+          return;
         }
+
+        const { rows: migratable } = await pool.query<{
+          id: string; user_id: string; amount: string; daily_rate: string; last_payout_at: string;
+        }>(`SELECT id, user_id, amount, daily_rate, last_payout_at FROM stakes WHERE status='active'`);
+
+        if (migratable.length > 0) {
+          console.log(`[bg] Migrating ${migratable.length} active stake(s) to new pool system...`);
+          for (const row of migratable) {
+            const client = await pool.connect();
+            try {
+              await client.query('BEGIN');
+
+              const now = new Date();
+              const lastPayout = new Date(row.last_payout_at);
+              const daysSince = (now.getTime() - lastPayout.getTime()) / 86400000;
+              const principal = parseFloat(row.amount);
+              const accrued = parseFloat((principal * parseFloat(row.daily_rate) * daysSince).toFixed(8));
+
+              await client.query(
+                `INSERT INTO wallet_accounts (user_id, token_balance, total_earned, staked_balance)
+                 VALUES ($1, '0.00000000', '0.00000000', '0.00000000')
+                 ON CONFLICT (user_id) DO NOTHING`,
+                [row.user_id]
+              );
+
+              if (accrued > 0) {
+                await client.query(
+                  `UPDATE wallet_accounts
+                   SET token_balance = COALESCE(token_balance, 0) + $1::numeric,
+                       total_earned  = COALESCE(total_earned,  0) + $1::numeric
+                   WHERE user_id = $2`,
+                  [accrued.toFixed(8), row.user_id]
+                );
+              }
+
+              const waResult = await client.query(
+                `UPDATE wallet_accounts
+                 SET staked_balance = COALESCE(staked_balance, 0) + $1::numeric
+                 WHERE user_id = $2`,
+                [principal.toFixed(8), row.user_id]
+              );
+              if ((waResult.rowCount ?? 0) < 1) {
+                throw new Error(`No wallet_accounts row for user ${row.user_id} during stake migration`);
+              }
+
+              await client.query(
+                `UPDATE stakes SET status='migrated', unstaked_at=NOW() WHERE id=$1 AND status='active'`,
+                [row.id]
+              );
+
+              await client.query('COMMIT');
+            } catch (migErr) {
+              await client.query('ROLLBACK');
+              console.error(`[bg] stake ${row.id} migration failed:`, migErr);
+            } finally {
+              client.release();
+            }
+          }
+          console.log('[bg] ✅ Stake migration complete');
+        }
+
+        await pool.query(
+          `INSERT INTO spin_config (setting_key, setting_value)
+           VALUES ('migration_staking_pool_v1', 'done')
+           ON CONFLICT (setting_key) DO UPDATE SET setting_value = 'done'`
+        );
+      } catch (e) {
+        console.error('[bg] ⚠️  Stake migration error — will retry on next restart.', e);
       }
-      console.log('✅ Stake migration complete');
-    }
-
-    // Record migration completion marker so future boots skip the scan
-    await pool.query(
-      `INSERT INTO spin_config (setting_key, setting_value)
-       VALUES ('migration_staking_pool_v1', 'done')
-       ON CONFLICT (setting_key) DO UPDATE SET setting_value = 'done'`
-    );
-
-    } // end else (migration not yet done)
-  } catch (e) {
-    // Log prominently — unmigrated stakes will remain in 'active' status
-    // and will be retried on next boot (idempotency guaranteed by per-stake transaction + marker)
-    console.error('⚠️  Stake migration error — some legacy stakes may still be active. Will retry on next restart.', e);
-  }
+    })();
+  });
 
   // Keep treasury user for balance integrity (keeps staking treasury wallet funded)
   await ensureStakingTreasuryUser();
