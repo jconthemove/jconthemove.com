@@ -1127,8 +1127,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (accrued > 0) {
             await client.query(
               `UPDATE wallet_accounts
-               SET token_balance = (COALESCE(token_balance::numeric, 0) + $1)::text,
-                   total_earned  = (COALESCE(total_earned::numeric,  0) + $1)::text
+               SET token_balance = COALESCE(token_balance, 0) + $1::numeric,
+                   total_earned  = COALESCE(total_earned,  0) + $1::numeric
                WHERE user_id = $2`,
               [accrued.toFixed(8), row.user_id]
             );
@@ -1138,7 +1138,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Move principal from stake → staked_balance
           const waResult = await client.query(
             `UPDATE wallet_accounts
-             SET staked_balance = (COALESCE(staked_balance::numeric, 0) + $1)::text
+             SET staked_balance = COALESCE(staked_balance, 0) + $1::numeric
              WHERE user_id = $2`,
             [principal.toFixed(8), row.user_id]
           );
