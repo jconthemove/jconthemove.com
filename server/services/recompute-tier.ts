@@ -29,10 +29,19 @@ export async function recomputeUserTier(userId: string): Promise<LoyaltyTier> {
   let jobs12mo = 0;
 
   if (email) {
+    // Use stable completion timestamps (tokens_disbursed_at, falling back to
+    // completion_rewarded_at then created_at). These are only set on completion
+    // so they don't drift when an admin edits an old lead.
     const { rows: jobRows } = await pool.query<{ jobs6mo: string; jobs12mo: string }>(
       `SELECT
-         COUNT(*) FILTER (WHERE COALESCE(updated_at, created_at) >= NOW() - INTERVAL '6 months') AS jobs6mo,
-         COUNT(*) FILTER (WHERE COALESCE(updated_at, created_at) >= NOW() - INTERVAL '12 months') AS jobs12mo
+         COUNT(*) FILTER (
+           WHERE COALESCE(tokens_disbursed_at, completion_rewarded_at, created_at)
+             >= NOW() - INTERVAL '6 months'
+         ) AS jobs6mo,
+         COUNT(*) FILTER (
+           WHERE COALESCE(tokens_disbursed_at, completion_rewarded_at, created_at)
+             >= NOW() - INTERVAL '12 months'
+         ) AS jobs12mo
        FROM leads
        WHERE LOWER(email) = LOWER($1)
          AND status IN ('completed', 'paid')`,

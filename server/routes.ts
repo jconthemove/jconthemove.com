@@ -19411,7 +19411,10 @@ Thank you for your business!
       );
       const intentId = intentRows[0].id as number;
 
-      const linkResp = await client.checkout.paymentLinks.create({
+      type SquarePaymentLink = { id?: string; url?: string; orderId?: string };
+      type SquarePaymentLinkResponse = { result?: { paymentLink?: SquarePaymentLink }; paymentLink?: SquarePaymentLink };
+
+      const linkResp: SquarePaymentLinkResponse = await client.checkout.paymentLinks.create({
         idempotencyKey: randomUUID(),
         quickPay: {
           name: `JCMOVES USD Credit Top-Up ($${amountUsd.toFixed(2)})`,
@@ -19426,7 +19429,7 @@ Thank you for your business!
         paymentNote: `Prepaid JCMOVES USD credit (intent ${intentId}, user ${userId})`,
       });
 
-      const paymentLink = (linkResp as any).result?.paymentLink || (linkResp as any).paymentLink;
+      const paymentLink: SquarePaymentLink | undefined = linkResp.result?.paymentLink ?? linkResp.paymentLink;
       if (!paymentLink?.url) {
         await pool.query(`UPDATE prepaid_credit_intents SET status='failed' WHERE id=$1`, [intentId]);
         return res.status(500).json({ error: "Failed to create checkout link" });
@@ -19476,14 +19479,23 @@ Thank you for your business!
       if (!squareToken) return res.status(500).json({ error: "Square not configured" });
       const { SquareClient, SquareEnvironment } = await import("square");
       const client = new SquareClient({ token: squareToken, environment: SquareEnvironment.Production });
-      const orderResp: any = await (client as any).orders.get({ orderId: intent.square_order_id }).catch(() => null);
-      const order = orderResp?.result?.order || orderResp?.order;
-      const tenders: any[] = order?.tenders ?? [];
+      type SquareTender = { payment_id?: string; paymentId?: string };
+      type SquareOrder = { tenders?: SquareTender[] };
+      type SquareOrderResponse = { result?: { order?: SquareOrder }; order?: SquareOrder };
+      const ordersApi = (client as unknown as { orders: { get: (args: { orderId: string }) => Promise<SquareOrderResponse> } }).orders;
+      const orderResp: SquareOrderResponse | null = await ordersApi
+        .get({ orderId: intent.square_order_id })
+        .catch(() => null);
+      const order: SquareOrder | undefined = orderResp?.result?.order ?? orderResp?.order;
+      const tenders: SquareTender[] = order?.tenders ?? [];
       const completedTender = tenders.find(t => t.payment_id || t.paymentId);
       if (!completedTender) {
         return res.json({ success: false, pending: true });
       }
-      const paymentId = completedTender.payment_id || completedTender.paymentId;
+      const paymentId = completedTender.payment_id ?? completedTender.paymentId;
+      if (!paymentId) {
+        return res.json({ success: false, pending: true });
+      }
       await creditJcMovesUsdFromPrepaid(userId, parseFloat(intent.amount_usd), paymentId);
       await pool.query(
         `UPDATE prepaid_credit_intents
@@ -19498,7 +19510,8 @@ Thank you for your business!
     }
   });
 
-  // Admin treasury — total prepaid credit minted to date
+  // Admin treasury — prepaid credit purchased / redeemed / outstanding liability.
+  // outstandingLiabilityUsd = totalPurchasedUsd − totalRedeemedUsd  (what we owe customers).
   app.get("/api/admin/treasury/prepaid-credit", isAuthenticated, requireBusinessOwner, async (_req, res) => {
     try {
       const { rows } = await pool.query<{ total_usd: string; count: string }>(
@@ -19510,16 +19523,45 @@ Thank you for your business!
          FROM wallet_transactions
          WHERE transaction_type = 'jcmoves_usd_redeem'`
       );
+      const purchased = parseFloat(rows[0]?.total_usd ?? '0');
+      const redeemed  = parseFloat(totalRedeemedRows.rows[0]?.total ?? '0');
       res.json({
-        totalMintedUsd: parseFloat(rows[0]?.total_usd ?? '0'),
-        totalIntents: parseInt(rows[0]?.count ?? '0', 10),
-        totalRedeemedUsd: parseFloat(totalRedeemedRows.rows[0]?.total ?? '0'),
+        totalPurchasedUsd:        purchased,
+        totalMintedUsd:           purchased,    // alias for back-compat with existing UI
+        totalIntents:             parseInt(rows[0]?.count ?? '0', 10),
+        totalRedeemedUsd:         redeemed,
+        outstandingLiabilityUsd:  Math.max(0, purchased - redeemed),
       });
-    } catch (err: any) {
-      console.error("[admin treasury prepaid] error:", err);
-      res.status(500).json({ error: err.message });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[admin treasury prepaid] error:", msg);
+      res.status(500).json({ error: msg });
     }
   });
+
+  // ── Wallet guardrails: explicit refusal of cash withdrawal & peer transfer ─
+  // Per JCMOVES policy, JCMOVES USD is service credit only and JCMOVES tokens
+  // cannot be transferred between users. These endpoints exist to return a
+  // clear 403 if any client (including a future feature flag) attempts them.
+  const refuseWithdrawal = (_req: any, res: any) =>
+    res.status(403).json({
+      error: "Cash withdrawal is not supported",
+      reason: "JCMOVES USD is a service credit, not money. It can only be used to pay JC ON THE MOVE invoices. Refunds for cancelled jobs are issued back to your wallet as JCMOVES USD credit.",
+    });
+  const refusePeerTransfer = (_req: any, res: any) =>
+    res.status(403).json({
+      error: "Peer-to-peer transfers are not supported",
+      reason: "Neither JCMOVES tokens nor JCMOVES USD credit can be transferred between user accounts.",
+    });
+
+  app.post("/api/wallet/withdraw",        isAuthenticated, refuseWithdrawal);
+  app.post("/api/wallet/cashout",         isAuthenticated, refuseWithdrawal);
+  app.post("/api/jcmoves-usd/withdraw",   isAuthenticated, refuseWithdrawal);
+  app.post("/api/jcmoves-usd/cashout",    isAuthenticated, refuseWithdrawal);
+  app.post("/api/wallet/transfer",        isAuthenticated, refusePeerTransfer);
+  app.post("/api/wallet/send",            isAuthenticated, refusePeerTransfer);
+  app.post("/api/jcmoves-usd/transfer",   isAuthenticated, refusePeerTransfer);
+  app.post("/api/jcmoves/transfer",       isAuthenticated, refusePeerTransfer);
 
   // ── JCMOVES Lottery System ────────────────────────────────────────────────────
   await ensureLotteryTables();

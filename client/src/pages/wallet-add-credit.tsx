@@ -9,7 +9,7 @@ import { ArrowLeft, DollarSign, ShieldCheck } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
-const PRESETS = [25, 50, 100, 250, 500];
+const PRESETS = [50, 100, 250, 500];
 
 export default function WalletAddCreditPage() {
   const { toast } = useToast();
