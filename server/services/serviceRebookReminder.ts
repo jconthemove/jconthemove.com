@@ -49,7 +49,7 @@ export const SERVICE_CONFIGS: Record<ServiceKey, ServiceConfig> = {
     leadServiceTypes: ["snow", "snow_removal"],
     // /snow-removal is an admin/service-log page; route customers to the
     // marketplace booking form so the lead carries rebookSource + sentAt.
-    deepLinkPath: "/post-job?service=snow_removal",
+    deepLinkPath: "/post-job?serviceType=snow_removal",
     utmSource: "rebook_email_snow",
     ctaText: "Re-book My Snow Service",
     advisoryLockKey: 916491002,
