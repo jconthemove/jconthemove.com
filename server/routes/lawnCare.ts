@@ -289,6 +289,216 @@ router.get("/lot-size", async (req: Request, res: Response) => {
   }
 });
 
+// In-memory anti-abuse throttle for the public rebook endpoints.
+// Map<normalizedPhone, lastTimestampMs>. Lives only in this process; that
+// is enough to stop accidental double-taps and casual scripted abuse.
+const rebookThrottle = new Map<string, number>();
+const REBOOK_THROTTLE_MS = 30_000;
+
+// Per-IP throttle for the public summary endpoint to deter phone-number
+// enumeration. Modest: 20 lookups per minute per IP.
+const summaryHits = new Map<string, number[]>();
+const SUMMARY_WINDOW_MS = 60_000;
+const SUMMARY_MAX_HITS = 20;
+function summaryRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const arr = (summaryHits.get(ip) || []).filter(t => now - t < SUMMARY_WINDOW_MS);
+  if (arr.length >= SUMMARY_MAX_HITS) {
+    summaryHits.set(ip, arr);
+    return false;
+  }
+  arr.push(now);
+  summaryHits.set(ip, arr);
+  return true;
+}
+
+function maskAddress(addr: string | null | undefined): string {
+  if (!addr) return "your address on file";
+  // "712 Wilson St, Ironwood, MI 49938" -> "712 W••••• St, Ironwood, MI"
+  const parts = addr.split(",").map(p => p.trim());
+  const street = parts[0] || "";
+  const tokens = street.split(/\s+/);
+  const masked = tokens.map((t, i) => {
+    if (i === 0) return t; // keep house number
+    if (/^(St|Ave|Rd|Blvd|Ln|Dr|Ct|Way|Pl|Pkwy|Hwy)\.?$/i.test(t)) return t;
+    if (t.length <= 1) return t;
+    return t[0] + "•".repeat(Math.max(3, t.length - 1));
+  }).join(" ");
+  const tail = parts.slice(1, 3).join(", "); // city, state — drop zip
+  return tail ? `${masked}, ${tail}` : masked;
+}
+
+function maskName(name: string | null | undefined): string {
+  if (!name) return "Returning customer";
+  const tokens = name.trim().split(/\s+/);
+  const first = tokens[0] || "";
+  const last = tokens[1] || "";
+  return last ? `${first} ${last[0]}.` : first;
+}
+
+// GET /api/lawn-care/last-quote-summary?phone=... — PUBLIC.
+// Returns a redacted summary of the customer's most recent lawn quote so
+// they can confirm "yes that's me" before tapping re-book. Never returns
+// raw email, full name, full address, or notes — only what's needed to
+// recognize the prior service.
+router.get("/last-quote-summary", async (req: Request, res: Response) => {
+  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "unknown";
+  if (!summaryRateLimit(ip)) {
+    return res.status(429).json({ found: false, error: "Too many lookups. Try again in a minute." });
+  }
+  const phoneRaw = String(req.query.phone || "");
+  const digits = phoneRaw.replace(/\D/g, "");
+  if (digits.length < 7) return res.json({ found: false });
+
+  try {
+    const rows = await db
+      .select()
+      .from(lawnCareQuotes)
+      .where(sql`regexp_replace(${lawnCareQuotes.phone}, '\\D', '', 'g') = ${digits}`)
+      .orderBy(desc(lawnCareQuotes.createdAt))
+      .limit(1);
+
+    if (rows.length === 0) return res.json({ found: false });
+    const q = rows[0];
+    const rawIds = ((q.addOns as string[]) || []);
+    const addOnIds = rawIds;
+    const addOnLabels = rawIds.map((id) => ADD_ON_LABELS[id] || id);
+
+    return res.json({
+      found: true,
+      summary: {
+        nameDisplay: maskName(q.customerName),
+        addressMasked: maskAddress(q.address),
+        serviceCategory: q.serviceCategory,
+        serviceFrequency: q.serviceFrequency,
+        propertySize: q.propertySize,
+        propertyCondition: q.propertyCondition,
+        addOnIds,
+        addOnLabels,
+        // Back-compat: keep `addOns` as labels for any older client cache.
+        addOns: addOnLabels,
+        lastTotal: q.totalQuoted,
+        isCustomEstimate: !!q.isCustomEstimate,
+        lastDate: q.createdAt,
+      },
+    });
+  } catch (err) {
+    console.error("last-quote-summary error:", err);
+    return res.status(500).json({ error: "Lookup failed" });
+  }
+});
+
+// POST /api/lawn-care/rebook — PUBLIC. Body: { phone }.
+// Re-creates a fresh lawn-care quote from the customer's most recent
+// matching quote, recomputing pricing with today's engine. Sends the
+// same admin email as a brand-new quote.
+router.post("/rebook", async (req: Request, res: Response) => {
+  const phoneRaw = String((req.body || {}).phone || "");
+  const digits = phoneRaw.replace(/\D/g, "");
+  if (digits.length < 7) return res.status(400).json({ error: "Invalid phone" });
+
+  // Throttle to deter accidental spam
+  const lastAt = rebookThrottle.get(digits) || 0;
+  const now = Date.now();
+  if (now - lastAt < REBOOK_THROTTLE_MS) {
+    return res.status(429).json({
+      error: "Please wait a moment before requesting another quote.",
+      retryAfterMs: REBOOK_THROTTLE_MS - (now - lastAt),
+    });
+  }
+
+  try {
+    const rows = await db
+      .select()
+      .from(lawnCareQuotes)
+      .where(sql`regexp_replace(${lawnCareQuotes.phone}, '\\D', '', 'g') = ${digits}`)
+      .orderBy(desc(lawnCareQuotes.createdAt))
+      .limit(1);
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "No previous quote found for that phone." });
+    }
+    const prev = rows[0];
+
+    const pricing = calculateLawnCareQuote({
+      serviceCategory: prev.serviceCategory,
+      serviceFrequency: prev.serviceFrequency,
+      propertySize: prev.propertySize,
+      squareFootage: prev.squareFootage ?? undefined,
+      propertyCondition: prev.propertyCondition,
+      addOns: (prev.addOns as string[]) || [],
+      hasFence: !!prev.hasFence,
+      hasPets: !!prev.hasPets,
+      hasSteepSlope: !!prev.hasSteepSlope,
+      needsHaulAway: !!prev.needsHaulAway,
+      zip: prev.zip || undefined,
+    });
+
+    rebookThrottle.set(digits, now);
+
+    const [quote] = await db.insert(lawnCareQuotes).values({
+      customerName: prev.customerName,
+      phone: prev.phone,
+      email: prev.email,
+      address: prev.address,
+      city: prev.city,
+      state: prev.state,
+      zip: prev.zip,
+      serviceType: "lawn_care",
+      serviceCategory: prev.serviceCategory,
+      serviceFrequency: prev.serviceFrequency,
+      propertySize: prev.propertySize,
+      squareFootage: prev.squareFootage ?? undefined,
+      propertyCondition: prev.propertyCondition,
+      addOns: prev.addOns as string[],
+      notes: prev.notes ? `[Re-booked] ${prev.notes}` : "[Re-booked from previous quote]",
+      hasFence: !!prev.hasFence,
+      hasPets: !!prev.hasPets,
+      hasSteepSlope: !!prev.hasSteepSlope,
+      needsHaulAway: !!prev.needsHaulAway,
+      recommendedCrewType: pricing.recommendedCrewType,
+      recommendedCrewSize: pricing.recommendedCrewSize,
+      basePrice: String(pricing.basePrice),
+      conditionMultiplier: String(pricing.conditionMultiplier),
+      frequencyMultiplier: String(pricing.frequencyMultiplier),
+      addOnTotal: String(pricing.addOnTotal),
+      travelFee: String(pricing.travelFee),
+      totalQuoted: String(pricing.totalQuoted),
+      isCustomEstimate: pricing.isCustomEstimate,
+      status: "quote_requested",
+    }).returning();
+
+    if (prev.email) {
+      disburseServiceTokens({
+        serviceType: "lawn_care",
+        referenceId: quote.id,
+        customerEmail: prev.email,
+        totalPrice: pricing.totalQuoted,
+      }).catch(err => console.error("Lawn care rebook token disburse error:", err));
+    }
+
+    const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
+    const briefHtml = buildJobBriefHtml(quote, pricing);
+    const briefText = buildJobBriefText(quote, pricing);
+    try {
+      await sendEmail({
+        to: companyEmail,
+        from: companyEmail,
+        subject: `Lawn Care Re-Book — ${prev.customerName}`,
+        text: `Returning customer re-booked their last service.\n\nCustomer: ${prev.customerName}\nPhone: ${prev.phone}\nEmail: ${prev.email || "N/A"}\nAddress: ${prev.address}\nService: ${prev.serviceCategory} — ${prev.serviceFrequency}\nTotal: $${pricing.totalQuoted}${pricing.isCustomEstimate ? " (custom estimate)" : ""}\n\n${briefText}`,
+        html: `<h2>🔁 Lawn Care Re-Book</h2><p>Returning customer tapped re-book.</p><p><b>Customer:</b> ${prev.customerName}<br><b>Phone:</b> ${prev.phone}<br><b>Email:</b> ${prev.email || "N/A"}<br><b>Address:</b> ${prev.address}<br><b>Service:</b> ${prev.serviceCategory} — ${prev.serviceFrequency}<br><b>Total:</b> $${pricing.totalQuoted}${pricing.isCustomEstimate ? " <em>(custom estimate)</em>" : ""}</p>${briefHtml}`,
+      });
+    } catch (emailErr) {
+      console.error("Lawn care rebook admin email failed:", emailErr);
+    }
+
+    return res.json({ success: true, quote, pricing, rebooked: true });
+  } catch (err) {
+    console.error("Lawn care rebook error:", err);
+    return res.status(500).json({ error: "Failed to re-book" });
+  }
+});
+
 // GET /api/lawn-care/by-phone?phone=... — crew or admin only.
 // Returns the minimum fields required to render the on-job crew brief
 // for the most recent matching lawn care quote.

@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Link } from "wouter";
 import {
   Leaf, Phone, ChevronRight, ChevronLeft, CheckCircle2, Loader2, Sparkles,
-  Truck, Clock, MessageCircle, Mail,
+  Truck, Clock, MessageCircle, Mail, RotateCw, History,
 } from "lucide-react";
 import BookingConfirmedTiles from "@/components/BookingConfirmedTiles";
 import { cn } from "@/lib/utils";
@@ -25,6 +25,21 @@ import LawnPriceBreakdown, { type LawnPricing } from "@/components/LawnPriceBrea
 import {
   SIZE_CARDS, CONDITION_CARDS, SERVICE_CARDS, FREQUENCY_CARDS, EXPLAINERS, ADD_ON_LABELS,
 } from "@/lib/lawnYardData";
+
+interface RebookSummary {
+  nameDisplay: string;
+  addressMasked: string;
+  serviceCategory: string;
+  serviceFrequency: string;
+  propertySize: string;
+  propertyCondition: string;
+  addOnIds?: string[];   // canonical IDs (preferred)
+  addOnLabels?: string[]; // human labels
+  addOns: string[];      // back-compat: labels
+  lastTotal: string;
+  isCustomEstimate: boolean;
+  lastDate: string;
+}
 
 const ADD_ONS = [
   { id: "edging", label: "Edging", price: 15 },
@@ -91,6 +106,10 @@ export default function BookLawnCare() {
     sqFt: number; tier: string; label: string;
   } | null>(null);
   const lastDetectedAddress = useRef<string>("");
+  const [rebookPhone, setRebookPhone] = useState("");
+  const [rebookSummary, setRebookSummary] = useState<RebookSummary | null>(null);
+  const [rebookLooked, setRebookLooked] = useState(false);
+  const [rebookOpen, setRebookOpen] = useState(false);
 
   const form = useForm<ContactForm>({
     resolver: zodResolver(contactSchema),
@@ -130,6 +149,55 @@ export default function BookLawnCare() {
       // silent fail per spec
     }
   }
+
+  // Returning-customer lookup
+  const lookupMutation = useMutation({
+    mutationFn: async (phone: string) => {
+      const r = await fetch(`/api/lawn-care/last-quote-summary?phone=${encodeURIComponent(phone)}`);
+      return r.json();
+    },
+    onSuccess: (data: any) => {
+      setRebookLooked(true);
+      setRebookSummary(data?.found ? data.summary : null);
+    },
+    onError: () => {
+      setRebookLooked(true);
+      setRebookSummary(null);
+    },
+  });
+
+  const rebookMutation = useMutation({
+    mutationFn: (phone: string) => apiRequest("POST", "/api/lawn-care/rebook", { phone }),
+    onSuccess: async (res) => {
+      const data: any = await res.json();
+      if (data?.quote && data?.pricing) {
+        // Use last summary's choices to render the same Yard Details + add-on chips
+        if (rebookSummary) {
+          setServiceCategory(rebookSummary.serviceCategory);
+          setFrequency(rebookSummary.serviceFrequency);
+          setPropertySize(rebookSummary.propertySize);
+          setPropertyCondition(rebookSummary.propertyCondition);
+          // Prefer canonical IDs from the server; fall back to reverse-
+          // mapping labels for back-compat with older payloads.
+          if (rebookSummary.addOnIds && rebookSummary.addOnIds.length) {
+            setSelectedAddOns(rebookSummary.addOnIds);
+          } else {
+            const labelToId = Object.entries(ADD_ON_LABELS).reduce<Record<string, string>>(
+              (acc, [id, label]) => { acc[label] = id; return acc; }, {});
+            setSelectedAddOns((rebookSummary.addOns || []).map((l) => labelToId[l]).filter(Boolean));
+          }
+        }
+        setQuoteResult({ quote: data.quote, pricing: data.pricing });
+        setStep(7);
+      } else {
+        toast({ title: "Re-book failed", description: "Please use the regular booking form below.", variant: "destructive" });
+      }
+    },
+    onError: async (err: any) => {
+      const msg = err?.message?.includes("429") ? "Please wait a moment and try again." : "Please use the regular booking form below.";
+      toast({ title: "Couldn't re-book just now", description: msg, variant: "destructive" });
+    },
+  });
 
   const quoteMutation = useMutation({
     mutationFn: (data: object) => apiRequest("POST", "/api/lawn-care/quote", data),
@@ -192,25 +260,50 @@ export default function BookLawnCare() {
 
       <div className="max-w-xl mx-auto px-4 py-6">
 
-        {/* Step 1 — Service Category */}
+        {/* Step 1 — Service Category (with returning-customer rebook panel) */}
         {step === 1 && (
-          <StepWrap
-            title="What service do you need?"
-            subtitle="Pick the closest match — we'll fine-tune at the property."
-            onBack={undefined}
-            onNext={() => { if (serviceCategory) next(); else toast({ title: "Select a service type" }); }}
-          >
-            <div className="grid grid-cols-1 gap-3">
-              {SERVICE_CARDS.map((card) => (
-                <LawnYardCardTile
-                  key={card.id}
-                  card={card}
-                  selected={serviceCategory === card.id}
-                  onClick={() => setServiceCategory(card.id)}
-                />
-              ))}
-            </div>
-          </StepWrap>
+          <>
+            <RebookPanel
+              open={rebookOpen}
+              onOpen={() => setRebookOpen(true)}
+              phone={rebookPhone}
+              setPhone={setRebookPhone}
+              looked={rebookLooked}
+              summary={rebookSummary}
+              onLookup={() => {
+                const digits = rebookPhone.replace(/\D/g, "");
+                if (digits.length < 7) {
+                  toast({ title: "Enter at least 7 digits of your phone." });
+                  return;
+                }
+                lookupMutation.mutate(rebookPhone);
+              }}
+              looking={lookupMutation.isPending}
+              onRebook={() => rebookMutation.mutate(rebookPhone)}
+              rebooking={rebookMutation.isPending}
+              onReset={() => {
+                setRebookLooked(false);
+                setRebookSummary(null);
+              }}
+            />
+            <StepWrap
+              title="What service do you need?"
+              subtitle="Pick the closest match — we'll fine-tune at the property."
+              onBack={undefined}
+              onNext={() => { if (serviceCategory) next(); else toast({ title: "Select a service type" }); }}
+            >
+              <div className="grid grid-cols-1 gap-3">
+                {SERVICE_CARDS.map((card) => (
+                  <LawnYardCardTile
+                    key={card.id}
+                    card={card}
+                    selected={serviceCategory === card.id}
+                    onClick={() => setServiceCategory(card.id)}
+                  />
+                ))}
+              </div>
+            </StepWrap>
+          </>
         )}
 
         {/* Step 2 — Frequency */}
@@ -493,6 +586,150 @@ function StepWrap({
           </Button>
         )}
       </div>
+    </div>
+  );
+}
+
+function RebookPanel({
+  open, onOpen, phone, setPhone, looked, summary, onLookup, looking, onRebook, rebooking, onReset,
+}: {
+  open: boolean;
+  onOpen: () => void;
+  phone: string;
+  setPhone: (v: string) => void;
+  looked: boolean;
+  summary: RebookSummary | null;
+  onLookup: () => void;
+  looking: boolean;
+  onRebook: () => void;
+  rebooking: boolean;
+  onReset: () => void;
+}) {
+  if (!open) {
+    return (
+      <button
+        onClick={onOpen}
+        data-testid="rebook-open"
+        className="w-full mb-5 rounded-xl border border-teal-500/30 bg-teal-500/5 hover:bg-teal-500/10 px-4 py-3 flex items-center gap-3 transition-all text-left"
+      >
+        <div className="w-9 h-9 rounded-full bg-teal-500/20 flex items-center justify-center shrink-0">
+          <RotateCw className="h-4 w-4 text-teal-300" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-white text-sm leading-tight">Returning customer?</p>
+          <p className="text-xs text-slate-400 mt-0.5">Re-book your last service in one tap</p>
+        </div>
+        <ChevronRight className="h-4 w-4 text-slate-500 shrink-0" />
+      </button>
+    );
+  }
+
+  return (
+    <div className="mb-5 rounded-xl border border-teal-500/30 bg-teal-500/5 px-4 py-4">
+      <div className="flex items-start gap-3 mb-3">
+        <div className="w-9 h-9 rounded-full bg-teal-500/20 flex items-center justify-center shrink-0">
+          <RotateCw className="h-4 w-4 text-teal-300" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-white text-sm leading-tight">Re-book your last service</p>
+          <p className="text-xs text-slate-400 mt-0.5">Enter the phone you used last time.</p>
+        </div>
+      </div>
+
+      {!summary && (
+        <div className="flex gap-2">
+          <Input
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="(555) 000-0000"
+            type="tel"
+            data-testid="rebook-phone-input"
+            className="bg-slate-800 border-slate-700 text-white"
+          />
+          <Button
+            onClick={onLookup}
+            disabled={looking}
+            data-testid="rebook-lookup"
+            className="bg-teal-500 hover:bg-teal-600 text-slate-900 font-semibold shrink-0"
+          >
+            {looking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Find"}
+          </Button>
+        </div>
+      )}
+
+      {looked && !summary && (
+        <p className="text-xs text-slate-400 mt-2 leading-snug">
+          We couldn't find a previous service for that number. Use the form below — first time's the charm.
+        </p>
+      )}
+
+      {summary && (
+        <div className="mt-1 space-y-3" data-testid="rebook-summary">
+          <div className="rounded-lg bg-slate-800/60 border border-slate-700/60 px-3 py-3">
+            <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
+              <History className="h-3 w-3" /> Last service
+            </div>
+            <p className="text-sm text-white font-medium">{summary.nameDisplay}</p>
+            <p className="text-xs text-slate-400 mt-0.5">{summary.addressMasked}</p>
+            <div className="grid grid-cols-2 gap-2 mt-2.5 text-xs">
+              <div>
+                <p className="text-slate-500 text-[10px] uppercase tracking-wider">Service</p>
+                <p className="text-slate-200 capitalize">{summary.serviceCategory.replace(/_/g, " ")}</p>
+              </div>
+              <div>
+                <p className="text-slate-500 text-[10px] uppercase tracking-wider">Frequency</p>
+                <p className="text-slate-200 capitalize">{summary.serviceFrequency.replace(/_/g, " ")}</p>
+              </div>
+              <div>
+                <p className="text-slate-500 text-[10px] uppercase tracking-wider">Yard</p>
+                <p className="text-slate-200 capitalize">{summary.propertySize}</p>
+              </div>
+              <div>
+                <p className="text-slate-500 text-[10px] uppercase tracking-wider">Last total</p>
+                <p className="text-lime-400 font-bold">
+                  {summary.isCustomEstimate ? "Custom" : `$${summary.lastTotal}`}
+                </p>
+              </div>
+            </div>
+            {summary.addOns.length > 0 && (
+              <div className="mt-2.5 pt-2.5 border-t border-slate-700/60">
+                <p className="text-slate-500 text-[10px] uppercase tracking-wider mb-1.5">Add-ons</p>
+                <div className="flex flex-wrap gap-1">
+                  {summary.addOns.map((label) => (
+                    <span key={label} className="text-[11px] bg-teal-500/10 border border-teal-500/30 text-teal-200 rounded-full px-2 py-0.5">
+                      {label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={onReset}
+              className="border-slate-700 text-white hover:bg-slate-800"
+            >
+              Not me
+            </Button>
+            <Button
+              onClick={onRebook}
+              disabled={rebooking}
+              data-testid="rebook-confirm"
+              className="flex-1 bg-lime-500 hover:bg-lime-600 text-slate-900 font-semibold"
+            >
+              {rebooking ? (
+                <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Re-booking…</>
+              ) : (
+                <>Book it again <ChevronRight className="h-4 w-4 ml-1" /></>
+              )}
+            </Button>
+          </div>
+          <p className="text-[11px] text-slate-500 leading-snug text-center">
+            We'll resend the same job to Darrell. Today's pricing applies.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
