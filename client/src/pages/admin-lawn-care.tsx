@@ -76,15 +76,15 @@ export default function AdminLawnCare() {
   };
   const [previewOpen, setPreviewOpen] = useState(false);
   const previewQ = useQuery<RebookPreview>({
-    queryKey: ["/api/lawn-care/admin/rebook-reminder/preview"],
+    queryKey: ["/api/admin/lawn-care/rebook-reminder/preview"],
     enabled: previewOpen,
   });
   const sendRemindersMutation = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/lawn-care/admin/rebook-reminder/send", {}),
+    mutationFn: () => apiRequest("POST", "/api/admin/lawn-care/rebook-reminder/send", {}),
     onSuccess: async (res) => {
       const data = await res.json();
       toast({ title: `Sent ${data.sent} reminder${data.sent === 1 ? "" : "s"}`, description: data.failed ? `${data.failed} failed — see server logs` : `${data.attempted} attempted` });
-      queryClient.invalidateQueries({ queryKey: ["/api/lawn-care/admin/rebook-reminder/preview"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/lawn-care/rebook-reminder/preview"] });
     },
     onError: () => toast({ title: "Failed to send reminders", variant: "destructive" }),
   });
