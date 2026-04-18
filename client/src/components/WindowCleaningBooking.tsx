@@ -74,12 +74,18 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
 
   const [showDetails, setShowDetails] = useState(false);
 
-  // Re-book email attribution (Task #108): capture utm_source on first render
-  // so we can forward it with the booking POST. Re-book email deep links look
-  // like /window-cleaning?rebook=1&utm_source=rebook_email_window.
+  // Re-book email attribution (Task #108): capture utm_source + rebookSentAt
+  // on first render so we can forward them with the booking POST. Re-book
+  // email deep links look like
+  // /window-cleaning?rebook=1&utm_source=rebook_email_window&rebookSentAt=ISO.
   const [rebookSource] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     const v = new URLSearchParams(window.location.search).get("utm_source");
+    return v ? v.trim() : null;
+  });
+  const [rebookSentAt] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    const v = new URLSearchParams(window.location.search).get("rebookSentAt");
     return v ? v.trim() : null;
   });
 
@@ -128,6 +134,7 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
         travelFee,
         distanceMiles,
         rebookSource: rebookSource || undefined,
+        rebookSentAt: rebookSentAt || undefined,
       });
       if (!res.ok) {
         const errBody = await res.json() as { error?: string };

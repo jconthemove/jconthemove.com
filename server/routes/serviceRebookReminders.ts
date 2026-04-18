@@ -187,10 +187,13 @@ router.get(
       const remindersSent = Number(remindersRow?.n ?? 0);
 
       // Pull leads matching this service's leadServiceTypes since the anchor.
+      // Email-attributed rows MUST have a valid rebookSentAt linking them to
+      // a specific send. Organic rows just need the source tag.
       const rows = await db
         .select({
           id: leads.id,
           rebookSource: leads.rebookSource,
+          rebookSentAt: leads.rebookSentAt,
           status: leads.status,
           totalPrice: leads.totalPrice,
           basePrice: leads.basePrice,
@@ -206,7 +209,19 @@ router.get(
       const PAID_STATUSES = new Set(["paid", "completed", "scheduled", "confirmed", "in_progress"]);
       const sources = [cfg.utmSource, ORGANIC_REBOOK_SOURCE];
       const bySource = sources.map((src) => {
-        const subset = rows.filter((r) => r.rebookSource === src);
+        const subset = rows.filter((r) => {
+          if (r.rebookSource !== src) return false;
+          // Email-attributed rows: require a valid rebookSentAt at-or-before
+          // the booking timestamp. This excludes spoofed sources without a
+          // matching send and stops attribution from being forged client-side.
+          if (src === cfg.utmSource) {
+            if (!r.rebookSentAt) return false;
+            if (r.createdAt && new Date(r.rebookSentAt).getTime() > new Date(r.createdAt).getTime() + 60_000) {
+              return false;
+            }
+          }
+          return true;
+        });
         const paid = subset.filter((r) => PAID_STATUSES.has(String(r.status || "")));
         const paidRevenue = paid.reduce((sum, r) => {
           const v = parseFloat(String(r.totalPrice ?? r.basePrice ?? "0"));

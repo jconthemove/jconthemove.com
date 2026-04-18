@@ -470,12 +470,18 @@ export default function PostJobPage() {
     });
   };
 
-  // Re-book email attribution (Task #108): capture utm_source on first render
-  // so the marketplace POST can persist it on the lead. Snow & junk re-book
-  // emails point at /post-job?rebook=1&utm_source=rebook_email_{snow,junk}.
+  // Re-book email attribution (Task #108): capture utm_source + rebookSentAt
+  // on first render so the marketplace POST can persist them on the lead.
+  // Snow & junk re-book emails point at
+  // /post-job?rebook=1&utm_source=rebook_email_{snow,junk}&rebookSentAt=ISO.
   const rebookSourceRef = useRef<string | null>(
     typeof window !== "undefined"
       ? (new URLSearchParams(window.location.search).get("utm_source") || null)
+      : null,
+  );
+  const rebookSentAtRef = useRef<string | null>(
+    typeof window !== "undefined"
+      ? (new URLSearchParams(window.location.search).get("rebookSentAt") || null)
       : null,
   );
 
@@ -499,6 +505,7 @@ export default function PostJobPage() {
         basePrice: estimatedTotal > 0 ? estimatedTotal.toFixed(2) : undefined,
         promoCode: promoResult?.valid && promoResult.code ? promoResult.code : undefined,
         rebookSource: rebookSourceRef.current || undefined,
+        rebookSentAt: rebookSentAtRef.current || undefined,
       });
       return res.json();
     },

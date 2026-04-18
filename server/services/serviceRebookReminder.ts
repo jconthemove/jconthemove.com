@@ -92,6 +92,23 @@ export function normalizeLeadRebookSource(raw: unknown): string | null {
   return ALLOWED_LEAD_REBOOK_SOURCES.has(s) ? s : ORGANIC_REBOOK_SOURCE;
 }
 
+// Parse a rebookSentAt query param. Discard anything that isn't a valid date
+// or falls outside the recent attribution window (no future, no older than
+// 120 days — slightly past REBOOK_RESEND_WINDOW_DAYS to forgive late clicks).
+const REBOOK_SENT_AT_MAX_AGE_MS = 120 * 24 * 60 * 60 * 1000;
+export function normalizeLeadRebookSentAt(raw: unknown): Date | null {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (s.length === 0) return null;
+  const parsed = new Date(s);
+  if (isNaN(parsed.getTime())) return null;
+  const now = Date.now();
+  const t = parsed.getTime();
+  if (t > now + 60_000) return null;                 // no future-dated clicks
+  if (t < now - REBOOK_SENT_AT_MAX_AGE_MS) return null; // too old to attribute
+  return parsed;
+}
+
 export const REBOOK_ELIGIBILITY_DAYS = 30;
 export const REBOOK_RESEND_WINDOW_DAYS = 60;
 export const REBOOK_SWEEP_HARD_CAP = 1000;
@@ -221,7 +238,11 @@ export function buildReminderEmail(
   const firstNameRaw = (opts.customerName || "there").split(/\s+/)[0];
   const firstName = escHtml(firstNameRaw);
   const phoneDigits = (opts.phone || "").replace(/\D/g, "");
-  const deepLink = `${APP_URL}${config.deepLinkPath}?rebook=1&phone=${encodeURIComponent(phoneDigits)}&utm_source=${config.utmSource}`;
+  // rebookSentAt encodes when this specific reminder was generated so the
+  // booking endpoints can persist it on the resulting lead for per-send
+  // attribution (Task #108). Server-side validated; 120-day max age.
+  const sentAtIso = new Date().toISOString();
+  const deepLink = `${APP_URL}${config.deepLinkPath}?rebook=1&phone=${encodeURIComponent(phoneDigits)}&utm_source=${config.utmSource}&rebookSentAt=${encodeURIComponent(sentAtIso)}`;
   const lastTotal = opts.totalQuoted ? `$${parseFloat(opts.totalQuoted).toFixed(2)}` : null;
 
   const lastDateObj = opts.lastServiceAt ? new Date(opts.lastServiceAt) : null;

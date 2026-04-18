@@ -134,6 +134,10 @@ export const leads = pgTable("leads", {
   // brand-new leads and 'organic' for returning customers who came back on
   // their own. Mirrors lawnCareQuotes.rebookSource.
   rebookSource: text("rebook_source"),
+  // Timestamp of the originating re-book reminder email (forwarded as
+  // rebookSentAt query param on the deep link). Server-side validated and
+  // clamped to a recent window so a customer can't backdate attribution.
+  rebookSentAt: timestamp("rebook_sent_at"),
 
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });

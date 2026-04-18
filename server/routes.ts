@@ -3447,6 +3447,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Re-book email attribution (Task #108) — utm_source forwarded from the
     // booking page when the customer arrived from a re-book reminder email.
     rebookSource:    z.string().trim().optional(),
+    rebookSentAt:    z.string().trim().optional(),
   });
 
   app.post(
@@ -3484,9 +3485,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         addonSelected, addons,
         travelFee, distanceMiles,
         rebookSource: rawRebookSource,
+        rebookSentAt: rawRebookSentAt,
       } = parseResult.data;
-      const { normalizeLeadRebookSource } = await import("./services/serviceRebookReminder");
-      const rebookSource = normalizeLeadRebookSource(rawRebookSource);
+      const { normalizeLeadRebookSource, normalizeLeadRebookSentAt, ORGANIC_REBOOK_SOURCE } = await import("./services/serviceRebookReminder");
+      const normalizedSource = normalizeLeadRebookSource(rawRebookSource);
+      const candidateSentAt = normalizedSource && normalizedSource !== ORGANIC_REBOOK_SOURCE
+        ? normalizeLeadRebookSentAt(rawRebookSentAt)
+        : null;
+      // Per-send attribution rule: a non-organic source is only honored when
+      // it ships with a valid rebookSentAt. If the timestamp is missing,
+      // expired, or invalid we demote to "organic" so analytics never counts
+      // a spoofed/legacy link as an email-driven conversion.
+      const rebookSource = normalizedSource && normalizedSource !== ORGANIC_REBOOK_SOURCE && !candidateSentAt
+        ? ORGANIC_REBOOK_SOURCE
+        : normalizedSource;
+      const rebookSentAt = rebookSource && rebookSource !== ORGANIC_REBOOK_SOURCE ? candidateSentAt : null;
 
       const { calculateWindowCleaningQuote } = await import("@shared/windowCleaningPricing");
       const isApril = new Date().getMonth() === 3;
@@ -3584,6 +3597,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         bundleDiscountAmount: bundleDiscount.amount.toFixed(2),
         bundleDiscountReason: bundleDiscount.reason,
         rebookSource,
+        rebookSentAt,
         createdByUserId: (req.session as any)?.userId || req.user?.id || null,
       }).returning();
 
@@ -3892,10 +3906,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("[marketplace] Zod validation failed:", JSON.stringify(parseResult.error.errors, null, 2));
         return res.status(400).json({ error: "Invalid lead data", details: parseResult.error.errors });
       }
-      // Strip any caller-supplied rebookSource from the insert payload — the
-      // allow-list normalization below is the only path that may write it,
-      // so a failed update can never leave a raw/unknown value persisted.
-      const { rebookSource: _rawSource, ...leadData } = parseResult.data;
+      // Strip any caller-supplied rebookSource / rebookSentAt from the insert
+      // payload — the allow-list normalization below is the only path that
+      // may write them, so a failed update can never leave a raw/unknown
+      // value persisted.
+      const { rebookSource: _rawSource, rebookSentAt: _rawSentAt, ...leadData } = parseResult.data;
 
       // Bundle discount: marketplace posts can also be bundled. We compute
       // BEFORE insert and pass the discount fields through, then update the
@@ -3918,14 +3933,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const lead = await storage.createLead(leadData);
 
       // Re-book email attribution (Task #108): persist normalized rebookSource
-      // when the customer arrived from a re-book reminder email. The raw value
-      // was stripped from the insert payload above so this update is the only
-      // write path — a failure here leaves rebookSource NULL (safe default).
-      const { normalizeLeadRebookSource: normMktRebookSource } = await import("./services/serviceRebookReminder");
-      const mktRebookSource = normMktRebookSource((req.body as Record<string, unknown>)?.rebookSource);
+      // and rebookSentAt when the customer arrived from a re-book reminder
+      // email. Raw values were stripped from the insert payload above so this
+      // update is the only write path — a failure here leaves both NULL
+      // (safe default).
+      const { normalizeLeadRebookSource: normMktRebookSource, normalizeLeadRebookSentAt: normMktRebookSentAt, ORGANIC_REBOOK_SOURCE: MKT_ORGANIC } = await import("./services/serviceRebookReminder");
+      const mktNormalizedSource = normMktRebookSource((req.body as Record<string, unknown>)?.rebookSource);
+      const mktCandidateSentAt = mktNormalizedSource && mktNormalizedSource !== MKT_ORGANIC
+        ? normMktRebookSentAt((req.body as Record<string, unknown>)?.rebookSentAt)
+        : null;
+      // Per-send attribution: demote non-organic source to organic if its
+      // rebookSentAt is missing/invalid. Same rule as window-cleaning above.
+      const mktRebookSource = mktNormalizedSource && mktNormalizedSource !== MKT_ORGANIC && !mktCandidateSentAt
+        ? MKT_ORGANIC
+        : mktNormalizedSource;
+      const mktRebookSentAt = mktRebookSource && mktRebookSource !== MKT_ORGANIC ? mktCandidateSentAt : null;
       if (mktRebookSource) {
         try {
-          await db.update(leads).set({ rebookSource: mktRebookSource }).where(eq(leads.id, lead.id));
+          await db.update(leads).set({
+            rebookSource: mktRebookSource,
+            rebookSentAt: mktRebookSentAt,
+          }).where(eq(leads.id, lead.id));
         } catch (e) {
           console.warn("[marketplace] rebookSource persist failed:", (e as Error).message);
         }

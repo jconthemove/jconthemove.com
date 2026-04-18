@@ -471,6 +471,15 @@ type RebookPreview = {
   lastRun: { ranAt: string; attempted: number; sent: number; failed: number; skipped: boolean; trigger: "scheduler" | "manual" } | null;
 };
 
+type RebookAttribution = {
+  serviceKey: string;
+  label: string;
+  windowStart: string | null;
+  remindersSent: number;
+  bySource: { source: string; label: string; totalLeads: number; paidBookings: number; paidRevenue: number }[];
+  emailConversionRatePct: number;
+};
+
 function RebookReminderCard({ serviceKey, label, emoji, envFlag, accent }: {
   serviceKey: string; label: string; emoji: string; envFlag: string; accent: AccentColor;
 }) {
@@ -480,6 +489,13 @@ function RebookReminderCard({ serviceKey, label, emoji, envFlag, accent }: {
 
   const previewQ = useQuery<RebookPreview>({
     queryKey: ["/api/admin/service-rebook", serviceKey, "preview"],
+    enabled: open,
+  });
+
+  // Per-service conversion / paid-revenue snapshot. Loads alongside preview
+  // so the admin sees email vs organic attribution at a glance (Task #108).
+  const attributionQ = useQuery<RebookAttribution>({
+    queryKey: ["/api/admin/service-rebook", serviceKey, "attribution"],
     enabled: open,
   });
 
@@ -494,6 +510,7 @@ function RebookReminderCard({ serviceKey, label, emoji, envFlag, accent }: {
           : `${data.attempted} attempted`,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/service-rebook", serviceKey, "preview"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/service-rebook", serviceKey, "attribution"] });
     },
     onError: () => toast({ title: "Failed to send reminders", variant: "destructive" }),
   });
@@ -554,6 +571,34 @@ function RebookReminderCard({ serviceKey, label, emoji, envFlag, accent }: {
               <div className="text-[10px] text-slate-500 mb-2" data-testid={`last-run-${serviceKey}`}>
                 {fmtLastRun(previewQ.data.lastRun)}
               </div>
+              {attributionQ.data && attributionQ.data.remindersSent > 0 && (
+                <div
+                  className={`mb-2 rounded-md border ${a.border} ${a.bg} px-2 py-1.5`}
+                  data-testid={`attribution-${serviceKey}`}
+                >
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-300 font-semibold">Conversion</span>
+                    <span className={`${a.text} font-bold`}>
+                      {attributionQ.data.emailConversionRatePct}% from {attributionQ.data.remindersSent} sent
+                    </span>
+                  </div>
+                  <div className="mt-1 grid grid-cols-2 gap-1.5 text-[10px]">
+                    {attributionQ.data.bySource.map((s) => (
+                      <div key={s.source} className="bg-slate-900/60 rounded px-1.5 py-1" data-testid={`attribution-row-${serviceKey}-${s.source}`}>
+                        <div className="text-slate-400 truncate">{s.label}</div>
+                        <div className="text-white font-semibold">
+                          {s.paidBookings} paid · ${s.paidRevenue.toFixed(0)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {attributionQ.data && attributionQ.data.remindersSent === 0 && (
+                <div className="mb-2 text-[10px] text-slate-500 italic" data-testid={`attribution-empty-${serviceKey}`}>
+                  No reminders sent yet — conversion stats appear after the first send.
+                </div>
+              )}
               {previewQ.data.eligible.length > 0 ? (
                 <div className="space-y-1 max-h-40 overflow-y-auto">
                   {previewQ.data.eligible.map(e => (
