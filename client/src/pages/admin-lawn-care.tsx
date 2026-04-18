@@ -66,11 +66,20 @@ export default function AdminLawnCare() {
     skipped: boolean;
     trigger: "scheduler" | "manual";
   } | null;
+  type SourceStat = {
+    source: string;
+    label: string;
+    rebooks: number;
+    reminders: number | null;
+    conversionRate: number | null;
+  };
   type AttributionStats = {
     windowDays: number;
     rebooks: number;
     reminders: number;
     conversionRate: number | null;
+    totalRebooks: number;
+    bySource: SourceStat[];
   } | null;
   type RebookPreview = {
     eligibilityDays: number;
@@ -158,15 +167,38 @@ export default function AdminLawnCare() {
                   Nudges paid customers 30+ days out, max once every 60 days. Disabled by default — set <code className="text-lime-400">ENABLE_REBOOK_REMINDER_EMAILS=true</code> for the daily sweep.
                 </p>
                 {attributionQ.data && (
-                  <p className="text-xs mt-1.5 text-slate-300" data-testid="rebook-attribution-stat">
-                    <span className="text-lime-400 font-semibold">{attributionQ.data.rebooks}</span>
-                    {" re-book"}{attributionQ.data.rebooks === 1 ? "" : "s"} from{" "}
-                    <span className="text-lime-400 font-semibold">{attributionQ.data.reminders}</span>
-                    {" reminder"}{attributionQ.data.reminders === 1 ? "" : "s"} sent in last {attributionQ.data.windowDays} days
-                    {attributionQ.data.conversionRate !== null && (
-                      <span className="text-slate-500"> · {(attributionQ.data.conversionRate * 100).toFixed(1)}% conversion</span>
+                  <div className="text-xs mt-2 text-slate-300 space-y-1" data-testid="rebook-attribution-stat">
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500">
+                      Re-books in last {attributionQ.data.windowDays} days · {attributionQ.data.totalRebooks} total
+                    </p>
+                    {attributionQ.data.bySource.length === 0 ? (
+                      <p className="text-slate-500 italic">No re-books yet.</p>
+                    ) : (
+                      <ul className="space-y-0.5">
+                        {attributionQ.data.bySource.map((s) => (
+                          <li
+                            key={s.source}
+                            className="flex flex-wrap items-baseline gap-x-2"
+                            data-testid={`rebook-attribution-row-${s.source}`}
+                          >
+                            <span className="text-slate-200">{s.label}:</span>
+                            <span className="text-lime-400 font-semibold">{s.rebooks}</span>
+                            <span className="text-slate-400">
+                              re-book{s.rebooks === 1 ? "" : "s"}
+                            </span>
+                            {s.reminders !== null && (
+                              <span className="text-slate-500">
+                                from {s.reminders} reminder{s.reminders === 1 ? "" : "s"} sent
+                                {s.conversionRate !== null && (
+                                  <> · {(s.conversionRate * 100).toFixed(1)}% conversion</>
+                                )}
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
                     )}
-                  </p>
+                  </div>
                 )}
               </div>
             </div>

@@ -496,9 +496,12 @@ router.get("/last-quote-summary", async (req: Request, res: Response) => {
   }
 });
 
-// Attribution allow-list. Anything outside this set is silently dropped so
-// arbitrary user-supplied utm strings can't pollute the dashboard.
-const ALLOWED_REBOOK_SOURCES = new Set([REBOOK_EMAIL_SOURCE]);
+// Attribution allow-list. Anything outside this set is silently coerced to
+// "organic" so arbitrary user-supplied utm strings can't pollute the
+// dashboard, but the re-book is still tracked as a re-book (not lumped in
+// with brand-new leads).
+const ORGANIC_REBOOK_SOURCE = "organic";
+const ALLOWED_REBOOK_SOURCES = new Set([REBOOK_EMAIL_SOURCE, ORGANIC_REBOOK_SOURCE]);
 
 // GET /api/lawn-care/rebook-unsubscribe?email=...&phone=...&token=... — PUBLIC.
 // One-click unsubscribe from re-book reminder emails. The token is an HMAC
@@ -561,7 +564,10 @@ router.post("/rebook", async (req: Request, res: Response) => {
   // utm_source query param it received via the deep link). Drop anything
   // not on the allow-list so we never store junk.
   const sourceRaw = String((req.body || {}).source || "").trim().toLowerCase();
-  const rebookSource = ALLOWED_REBOOK_SOURCES.has(sourceRaw) ? sourceRaw : null;
+  // Default to "organic" so every re-book is tagged. This lets the admin
+  // attribution stat distinguish a returning customer who came back on
+  // their own from a brand-new lead (which still has rebookSource = NULL).
+  const rebookSource = ALLOWED_REBOOK_SOURCES.has(sourceRaw) ? sourceRaw : ORGANIC_REBOOK_SOURCE;
 
   // Composite throttle: per-phone AND per-IP+phone, both 30s. Stops
   // accidental double-taps and stops a single client from cycling phones.
@@ -826,26 +832,81 @@ router.post("/activate-plan/:id", requireAuth, requireAdminRole, async (req: Req
   }
 });
 
-// Attribution stat: how many re-books with the rebook_email marker landed
-// in the last `windowDays` and how many reminder emails were sent in that
-// same window. Both numbers are computed from existing tables (no new
-// counters), so they reflect ground truth even after backfills/edits.
+// Attribution stat: re-books in the last `windowDays`, broken down by the
+// rebookSource marker (rebook_email, organic = no marker, etc.) plus the
+// number of reminder emails sent in that same window so each source can
+// show its own conversion rate. Computed live from existing tables — no
+// new counters — so the numbers stay correct after backfills/edits.
 const REBOOK_ATTRIBUTION_WINDOW_DAYS = 60;
+const ORGANIC_SOURCE = "organic";
+const REBOOK_SOURCE_LABELS: Record<string, string> = {
+  [REBOOK_EMAIL_SOURCE]: "Re-book Email",
+  [ORGANIC_SOURCE]: "Organic (no source)",
+};
+function labelForSource(source: string): string {
+  return REBOOK_SOURCE_LABELS[source] || source.replace(/_/g, " ");
+}
+type SourceStat = {
+  source: string;
+  label: string;
+  rebooks: number;
+  reminders: number | null;
+  conversionRate: number | null;
+};
 async function getRebookAttributionStats(windowDays: number = REBOOK_ATTRIBUTION_WINDOW_DAYS) {
   const cutoff = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
-  const [rebRow] = await db
-    .select({ n: sql<number>`count(*)::int` })
+
+  // Re-books grouped by source. The /rebook endpoint always tags every
+  // re-booking with a source (defaulting to "organic"), so any non-NULL
+  // rebookSource row is a real re-book — brand-new leads stay NULL and
+  // are correctly excluded.
+  const groupRows = await db
+    .select({
+      source: sql<string>`${lawnCareQuotes.rebookSource}`,
+      n: sql<number>`count(*)::int`,
+    })
     .from(lawnCareQuotes)
-    .where(sql`${lawnCareQuotes.rebookSource} = ${REBOOK_EMAIL_SOURCE} AND ${lawnCareQuotes.createdAt} >= ${cutoff}`);
-  // Reminders dispatched (status='sent') in the window.
+    .where(sql`${lawnCareQuotes.rebookSource} IS NOT NULL AND ${lawnCareQuotes.createdAt} >= ${cutoff}`)
+    .groupBy(lawnCareQuotes.rebookSource);
+
+  // Reminders dispatched (status='sent') in the window — only meaningful
+  // for the rebook_email source today.
   const [remRow] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(lawnCareRebookReminders)
     .where(sql`${lawnCareRebookReminders.status} = 'sent' AND ${lawnCareRebookReminders.sentAt} >= ${cutoff}`);
-  const rebooks = Number(rebRow?.n || 0);
   const reminders = Number(remRow?.n || 0);
-  const conversionRate = reminders > 0 ? rebooks / reminders : null;
-  return { windowDays, rebooks, reminders, conversionRate };
+
+  const counts = new Map<string, number>();
+  for (const r of groupRows) counts.set(r.source, Number(r.n || 0));
+  // Always include the known sources so the card has stable rows even at
+  // zero. Future channels (sms, social, …) get added as soon as one
+  // re-book lands with that tag.
+  for (const known of [REBOOK_EMAIL_SOURCE, ORGANIC_SOURCE]) {
+    if (!counts.has(known)) counts.set(known, 0);
+  }
+
+  const bySource: SourceStat[] = Array.from(counts.entries())
+    .map(([source, rebooks]) => {
+      const isEmail = source === REBOOK_EMAIL_SOURCE;
+      const sourceReminders = isEmail ? reminders : null;
+      const conversionRate =
+        sourceReminders && sourceReminders > 0 ? rebooks / sourceReminders : null;
+      return { source, label: labelForSource(source), rebooks, reminders: sourceReminders, conversionRate };
+    })
+    .sort((a, b) => b.rebooks - a.rebooks || a.label.localeCompare(b.label));
+
+  const totalRebooks = bySource.reduce((sum, s) => sum + s.rebooks, 0);
+  const emailRow = bySource.find(s => s.source === REBOOK_EMAIL_SOURCE);
+  // Top-level fields preserved for back-compat with any existing readers.
+  return {
+    windowDays,
+    rebooks: emailRow?.rebooks ?? 0,
+    reminders,
+    conversionRate: emailRow?.conversionRate ?? null,
+    totalRebooks,
+    bySource,
+  };
 }
 
 // GET /api/lawn-care/rebook-reminders/attribution — admin only
