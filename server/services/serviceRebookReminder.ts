@@ -47,7 +47,9 @@ export const SERVICE_CONFIGS: Record<ServiceKey, ServiceConfig> = {
     label: "Snow Removal",
     emoji: "❄️",
     leadServiceTypes: ["snow", "snow_removal"],
-    deepLinkPath: "/snow-removal",
+    // /snow-removal is an admin/service-log page; route customers to the
+    // marketplace booking form so the lead carries rebookSource + sentAt.
+    deepLinkPath: "/post-job?service=snow_removal",
     utmSource: "rebook_email_snow",
     ctaText: "Re-book My Snow Service",
     advisoryLockKey: 916491002,
@@ -242,7 +244,10 @@ export function buildReminderEmail(
   // booking endpoints can persist it on the resulting lead for per-send
   // attribution (Task #108). Server-side validated; 120-day max age.
   const sentAtIso = new Date().toISOString();
-  const deepLink = `${APP_URL}${config.deepLinkPath}?rebook=1&phone=${encodeURIComponent(phoneDigits)}&utm_source=${config.utmSource}&rebookSentAt=${encodeURIComponent(sentAtIso)}`;
+  // Use & if the configured deepLinkPath already carries a query string
+  // (e.g. /post-job?service=snow_removal); otherwise start the query with ?.
+  const sep = config.deepLinkPath.includes("?") ? "&" : "?";
+  const deepLink = `${APP_URL}${config.deepLinkPath}${sep}rebook=1&phone=${encodeURIComponent(phoneDigits)}&utm_source=${config.utmSource}&rebookSentAt=${encodeURIComponent(sentAtIso)}`;
   const lastTotal = opts.totalQuoted ? `$${parseFloat(opts.totalQuoted).toFixed(2)}` : null;
 
   const lastDateObj = opts.lastServiceAt ? new Date(opts.lastServiceAt) : null;
