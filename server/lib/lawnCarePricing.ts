@@ -41,11 +41,13 @@ export const CONDITION_LABELS: Record<string, string> = {
   heavily_overgrown: "heavily overgrown",
 };
 
+export const RECURRING_DISCOUNT_RATE = 0.05;
+
 export const FREQUENCY_MULTIPLIERS: Record<string, number> = {
   one_time: 1.0,
-  bi_weekly: 0.9,
-  weekly: 0.85,
-  monthly: 0.95,
+  weekly: 1 - RECURRING_DISCOUNT_RATE,
+  bi_weekly: 1 - RECURRING_DISCOUNT_RATE,
+  monthly: 1 - RECURRING_DISCOUNT_RATE,
 };
 
 export const FREQUENCY_LABELS: Record<string, string> = {
@@ -278,7 +280,7 @@ export function calculateLawnCareQuote(input: LawnCareQuoteInput): LawnCarePrice
       : `${conditionMultiplier}× because ${CONDITION_LABELS[conditionKey] || conditionKey} (more cuts/passes needed).`,
     frequency: frequencyMultiplier === 1
       ? "One-time visit (no recurring discount)."
-      : `${Math.round((1 - frequencyMultiplier) * 100)}% off for ${FREQUENCY_LABELS[frequencyKey] || frequencyKey} service.`,
+      : `${Math.round((1 - frequencyMultiplier) * 100)}% recurring loyalty discount for ${FREQUENCY_LABELS[frequencyKey] || frequencyKey} service.`,
     crew: `${crewSize}-person ${crewType} crew — fits this size + condition.`,
   };
 

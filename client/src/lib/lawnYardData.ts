@@ -141,22 +141,22 @@ export const FREQUENCY_CARDS: YardCard[] = [
   {
     id: "weekly",
     label: "Weekly",
-    desc: "Same day every week. Best price + first dibs on slots.",
-    hint: "15% off — best value",
+    desc: "Same day every week. First dibs on slots.",
+    hint: "5% recurring loyalty discount",
     illustration: "📅",
   },
   {
     id: "bi_weekly",
     label: "Every 2 Weeks",
     desc: "Most popular for normal lawns in Michigan.",
-    hint: "10% off",
+    hint: "5% recurring loyalty discount",
     illustration: "🗓️",
   },
   {
     id: "monthly",
     label: "Monthly",
     desc: "Touch-ups for slow-growing lawns or occasional cleanup.",
-    hint: "5% off",
+    hint: "5% recurring loyalty discount",
     illustration: "📆",
   },
 ];
@@ -165,7 +165,7 @@ export const FREQUENCY_CARDS: YardCard[] = [
 export const EXPLAINERS = {
   size: "Yard size sets the base price. Pick what looks closest — when the crew arrives we'll measure, and we'll only adjust the price if it's way off (we tell you first, always).",
   condition: "If your grass is taller or weedier than usual, it takes more passes and time. We multiply the base price by a small factor so it stays fair to both sides.",
-  frequency: "Recurring plans get a discount because they save us setup and travel time. Weekly is the best deal; one-time is the standard rate.",
+  frequency: "Any recurring plan (weekly, every 2 weeks, or monthly) earns a flat 5% loyalty discount on every visit because it saves us setup and travel time. One-time visits are the standard rate.",
   addOns: "Add-ons are extras like edging, fertilization, or hauling away leaves. Each has a flat add-on price you'll see itemized on your quote.",
 };
 
