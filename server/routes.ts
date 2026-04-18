@@ -3600,8 +3600,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           to: companyEmail,
           from: companyEmail,
           subject: `New Window Cleaning Booking — ${customerName}`,
-          text: `New window cleaning job submitted.\n\nCustomer: ${customerName}\nPhone: ${customerPhone}\nEmail: ${customerEmail}\nAddress: ${address}\nWindows: ${standardWindows} standard, ${largeWindows} large, ${ladderWindows} ladder\nInside: ${includeInside}, Outside: ${includeOutside}, Season: ${seasonMode}\nPanes: ${quote.paneCount}\nTotal: $${adjustedTotal}${quote.promoApplied ? ` (${quote.promoDiscountPercent}% promo applied)` : ""}${quote.addonDiscountApplied ? ` + 10% bundle discount` : ""}${travelNote}${addons.length > 0 ? `\nRequested Add-Ons: ${addons.join(", ")} — please follow up for separate quotes` : ""}\n\nView job in admin panel.`,
-          html: `<h2>New Window Cleaning Booking</h2><p><b>Customer:</b> ${customerName}<br><b>Phone:</b> ${customerPhone}<br><b>Email:</b> ${customerEmail}<br><b>Address:</b> ${address}<br><b>Windows:</b> ${standardWindows} standard, ${largeWindows} large, ${ladderWindows} ladder<br><b>Inside:</b> ${includeInside}, <b>Outside:</b> ${includeOutside}<br><b>Season:</b> ${seasonMode}<br><b>Total:</b> $${adjustedTotal}${quote.promoApplied ? ` <em>(${quote.promoDiscountPercent}% promo applied)</em>` : ""}${quote.addonDiscountApplied ? ` <em>+ 10% bundle discount</em>` : ""}${travelNote ? `<br><b>Travel:</b> ${travelNote}` : ""}${addons.length > 0 ? `<br><b style="color:orange">Add-On Requests:</b> ${addons.join(", ")} — follow up for separate quotes` : ""}</p>`,
+          text: `New window cleaning job submitted.\n\nCustomer: ${customerName}\nPhone: ${customerPhone}\nEmail: ${customerEmail}\nAddress: ${address}\nWindows: ${standardWindows} standard, ${largeWindows} large, ${ladderWindows} ladder\nInside: ${includeInside}, Outside: ${includeOutside}, Season: ${seasonMode}\nPanes: ${quote.paneCount}\n${bundleDiscount.applied ? `\nPRICE BREAKDOWN (bundle discount auto-applied):\n  Subtotal: $${baseQuote.total.toFixed(2)}\n  Bundle discount (10%, max $50): -$${bundleDiscount.amount.toFixed(2)}\n  Reason: ${bundleDiscount.reason === "cross_service_history" ? "Loyalty bundle (prior JC service in last 90 days)" : `Bundled with ${bundleAddons.join(", ") || "another service"}`}\n  Final total: $${adjustedTotal}\n` : `\nTotal: $${adjustedTotal}${quote.promoApplied ? ` (${quote.promoDiscountPercent}% promo applied)` : ""}\n`}${travelNote}${addons.length > 0 ? `\nRequested Add-Ons: ${addons.join(", ")} — please follow up for separate quotes` : ""}\n\nView job in admin panel.`,
+          html: `<h2>New Window Cleaning Booking</h2><p><b>Customer:</b> ${customerName}<br><b>Phone:</b> ${customerPhone}<br><b>Email:</b> ${customerEmail}<br><b>Address:</b> ${address}<br><b>Windows:</b> ${standardWindows} standard, ${largeWindows} large, ${ladderWindows} ladder<br><b>Inside:</b> ${includeInside}, <b>Outside:</b> ${includeOutside}<br><b>Season:</b> ${seasonMode}</p>${bundleDiscount.applied ? `<div style="margin-top:8px;padding:8px;border:1px solid #16a34a33;background:#16a34a0d;border-radius:6px"><b style="color:green">⚡ Bundle Discount Applied</b><br>Subtotal: $${baseQuote.total.toFixed(2)}<br>Bundle discount (10%, max $50): <b>-$${bundleDiscount.amount.toFixed(2)}</b><br>Reason: ${bundleDiscount.reason === "cross_service_history" ? "Loyalty bundle (prior JC service in last 90 days)" : `Bundled with ${bundleAddons.join(", ") || "another service"}`}<br><b>Final total: $${adjustedTotal}</b></div>` : `<p><b>Total:</b> $${adjustedTotal}${quote.promoApplied ? ` <em>(${quote.promoDiscountPercent}% promo applied)</em>` : ""}</p>`}${travelNote ? `<p><b>Travel:</b> ${travelNote}</p>` : ""}${addons.length > 0 ? `<p><b style="color:orange">Add-On Requests:</b> ${addons.join(", ")} — follow up for separate quotes</p>` : ""}`,
         });
       } catch (emailErr) { console.error("Admin email failed:", emailErr); }
       try {
@@ -3617,6 +3617,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         travelFee: serverTravelFee,
         total: adjustedTotal,
         promoApplied: quote.promoApplied,
+        bundleDiscount: bundleDiscount.applied
+          ? {
+              applied: true,
+              amount: bundleDiscount.amount,
+              percent: bundleDiscount.percent,
+              reason: bundleDiscount.reason,
+              subtotalBefore: baseQuote.total,
+              finalTotal: adjustedTotal,
+            }
+          : { applied: false },
         message: "Booking received! Our team will reach out to confirm.",
       });
     } catch (err) {
@@ -19390,10 +19400,20 @@ Thank you for your business!
         const depositLine = serverDepositRequired
           ? `<p><strong>⚠️ Deposit Required:</strong> $${serverDepositAmount} (${serverIsQuoteOnly ? "in-person estimate" : "booking"})</p>`
           : "";
+        const bundleBlock = chatbotBundleDiscount.applied
+          ? `<div style="margin-top:8px;padding:8px;border:1px solid #16a34a33;background:#16a34a0d;border-radius:6px">
+              <b style="color:green">⚡ Bundle Discount Applied</b><br>
+              Subtotal: $${chatbotSubtotal.toFixed(2)}<br>
+              Bundle discount (10%, max $50): <b>-$${chatbotBundleDiscount.amount.toFixed(2)}</b><br>
+              Reason: ${chatbotBundleDiscount.reason === "cross_service_history" ? "Loyalty bundle (prior JC service in last 90 days)" : `Bundled with ${chatbotBundleAddons.join(", ") || "another service"}`}<br>
+              <b>Final total: $${chatbotBundleDiscount.finalTotal.toFixed(2)}</b><br>
+              <i>Already saved on the lead — no manual invoice adjustment needed.</i>
+            </div>`
+          : "";
 
         await sendEmail({
           to: "upmichiganstatemovers@gmail.com",
-          subject: `🤖 New Chatbot Quote: ${name} — ${svcRaw}`,
+          subject: `🤖 New Chatbot Quote: ${name} — ${svcRaw}${chatbotBundleDiscount.applied ? " [Bundle Discount Applied]" : ""}`,
           html: `<h2>New chatbot quote submitted</h2>
             <p><strong>Name:</strong> ${name}</p>
             <p><strong>Phone:</strong> ${phone}</p>
@@ -19409,11 +19429,27 @@ Thank you for your business!
             ${depositLine}
             <p><strong>Estimated Range:</strong> $${quote.minPrice}–$${quote.maxPrice}</p>
             ${(quote.crew || selectedPackage?.crew) ? `<p><strong>Crew:</strong> ${quote.crew || selectedPackage.crew} movers, ${quote.minHrs || ""}–${quote.maxHrs || ""} hrs</p>` : ""}
+            ${bundleBlock}
             <p><a href="https://jconthemove.replit.app/admin/quote-review">Review at Admin Dashboard →</a></p>`,
         });
       } catch (_) {}
 
-      res.json({ leadId: lead.id, message: "Quote submitted for review", depositInvoiceSent, depositInvoiceUrl });
+      res.json({
+        leadId: lead.id,
+        message: "Quote submitted for review",
+        depositInvoiceSent,
+        depositInvoiceUrl,
+        bundleDiscount: chatbotBundleDiscount.applied
+          ? {
+              applied: true,
+              amount: chatbotBundleDiscount.amount,
+              percent: chatbotBundleDiscount.percent,
+              reason: chatbotBundleDiscount.reason,
+              subtotalBefore: chatbotSubtotal,
+              finalTotal: chatbotBundleDiscount.finalTotal,
+            }
+          : { applied: false },
+      });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }

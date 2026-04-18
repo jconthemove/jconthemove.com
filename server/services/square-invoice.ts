@@ -355,9 +355,15 @@ export class SquareInvoiceService {
     const bundleDiscountAmt = parseFloat(String((lead as Lead).bundleDiscountAmount || "0")) || 0;
     const netLineSum = lineItems.reduce((s, li) => s + li.total, 0);
     const expectedNet = parseFloat(String(lead.totalPrice || "0")) || 0;
+    // We can only safely scale ad-hoc (non-catalog) line items. If ANY
+    // line item resolves to a catalog variation, we can't change its
+    // price client-side, so injecting an order-level discount on top
+    // would undercharge the customer. Skip injection in that case.
+    const hasCatalogItem = lineItems.some(li => li.id && catalogMappings[li.id]);
     const isAutoDiscountCase =
       bundleDiscountAmt > 0 &&
       expectedNet > 0 &&
+      !hasCatalogItem &&
       Math.abs(netLineSum - expectedNet) < 0.01;
     const grossMultiplier = isAutoDiscountCase
       ? (netLineSum + bundleDiscountAmt) / netLineSum
