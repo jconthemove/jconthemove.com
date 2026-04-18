@@ -766,6 +766,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       ALTER TABLE leads ADD COLUMN IF NOT EXISTS deposit_amount_gate NUMERIC(10,2);
       ALTER TABLE leads ADD COLUMN IF NOT EXISTS deposit_paid BOOLEAN NOT NULL DEFAULT false;
       ALTER TABLE leads ADD COLUMN IF NOT EXISTS is_quote_only BOOLEAN NOT NULL DEFAULT false;
+      -- Task #108: per-send re-book email attribution
+      ALTER TABLE leads ADD COLUMN IF NOT EXISTS rebook_source TEXT;
+      ALTER TABLE leads ADD COLUMN IF NOT EXISTS rebook_sent_at TIMESTAMP;
     `);
     console.log('✅ Leads deposit_required/deposit_paid/is_quote_only columns ready');
   } catch (migErr) {
