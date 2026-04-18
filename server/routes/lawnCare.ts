@@ -270,7 +270,10 @@ router.post("/quote", async (req: Request, res: Response) => {
       console.error("Lawn care admin email failed:", emailErr);
     }
 
-    return res.json({ success: true, quote, pricing, bundleDiscount });
+    const responsePricing = bundleDiscount.applied
+      ? { ...pricing, totalQuoted: finalTotalQuoted }
+      : pricing;
+    return res.json({ success: true, quote, pricing: responsePricing, bundleDiscount });
   } catch (err: any) {
     console.error("Lawn care quote error:", err);
     if (err?.name === "ZodError") return res.status(400).json({ error: "Invalid request", details: err.errors });

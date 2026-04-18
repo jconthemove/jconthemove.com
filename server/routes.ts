@@ -3705,11 +3705,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const createPayload: typeof leadData = bundleDiscount.applied
         ? {
             ...leadData,
+            status: "new",
             totalPrice: String(bundleDiscount.finalTotal),
             bundleDiscountAmount: bundleDiscount.amount.toFixed(2),
             bundleDiscountReason: bundleDiscount.reason,
           }
-        : leadData;
+        : { ...leadData, status: "new" };
       const lead = await storage.createLead(createPayload);
 
       if (bundleDiscount.applied) {
@@ -3891,7 +3892,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // lead's totalPrice in-place so downstream code (Square invoice, admin
       // emails) see the discounted total.
       const { evaluateBundleDiscount, logBundleDiscountApplication } = await import("./services/bundleDiscount");
-      const mktBundleAddons: string[] = Array.isArray((req.body as any).bundleAddons) ? (req.body as any).bundleAddons : [];
+      const rawMktBundleAddons: unknown = (req.body as Record<string, unknown>)?.bundleAddons;
+      const mktBundleAddons: string[] = Array.isArray(rawMktBundleAddons)
+        ? rawMktBundleAddons.filter((x): x is string => typeof x === "string")
+        : [];
       const mktSubtotal = parseFloat(String(leadData.totalPrice || "0")) || 0;
       const mktBundleDiscount = await evaluateBundleDiscount({
         currentService: leadData.serviceType || "moving",
