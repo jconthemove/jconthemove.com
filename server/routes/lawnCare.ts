@@ -403,6 +403,19 @@ function maskAddress(addr: string | null | undefined): string {
   return tail ? `${masked}, ${tail}` : masked;
 }
 
+function maskEmail(email: string | null | undefined): string {
+  if (!email) return "—";
+  const [local, domain] = email.split("@");
+  if (!domain) return "—";
+  const maskedLocal = local.length <= 2 ? local[0] + "•" : local[0] + "•".repeat(Math.max(2, local.length - 2)) + local.slice(-1);
+  return `${maskedLocal}@${domain}`;
+}
+function maskPhone(phone: string | null | undefined): string {
+  const digits = (phone || "").replace(/\D/g, "");
+  if (digits.length < 4) return "—";
+  return `•••-•••-${digits.slice(-4)}`;
+}
+
 function maskName(name: string | null | undefined): string {
   if (!name) return "Returning customer";
   const tokens = name.trim().split(/\s+/);
@@ -752,9 +765,9 @@ async function rebookReminderPreviewHandler(_req: Request, res: Response) {
       eligibleCount: eligible.length,
       eligible: eligible.map(q => ({
         id: q.id,
-        customerName: q.customerName,
-        email: q.email,
-        phone: q.phone,
+        customerName: maskName(q.customerName),
+        email: maskEmail(q.email),
+        phone: maskPhone(q.phone),
         serviceCategory: q.serviceCategory,
         totalQuoted: q.totalQuoted,
         lastUpdated: q.updatedAt,
@@ -778,9 +791,12 @@ async function rebookReminderSendHandler(_req: Request, res: Response) {
   }
 }
 
-// Canonical admin paths (per task spec) — singular "rebook-reminder".
-router.get("/admin/rebook-reminder/preview", requireAuth, requireAdminRole, rebookReminderPreviewHandler);
-router.post("/admin/rebook-reminder/send", requireAuth, requireAdminRole, rebookReminderSendHandler);
+// Canonical admin handler paths (singular "rebook-reminder"). The router
+// is mounted at BOTH "/api/lawn-care" and "/api/admin/lawn-care" so these
+// resolve to the spec'd "/api/admin/lawn-care/rebook-reminder/{preview,send}"
+// as well as a lawn-care-prefixed twin. Both still require admin auth.
+router.get("/rebook-reminder/preview", requireAuth, requireAdminRole, rebookReminderPreviewHandler);
+router.post("/rebook-reminder/send", requireAuth, requireAdminRole, rebookReminderSendHandler);
 
 // Back-compat aliases — earlier versions of the admin UI used these.
 router.get("/rebook-reminders/preview", requireAuth, requireAdminRole, rebookReminderPreviewHandler);

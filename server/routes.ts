@@ -20613,6 +20613,10 @@ Thank you for your business!
   // ── Lawn Care Module ──────────────────────────────────────────────────────────
   app.use("/api/lawn-care", lawnCareRouter);
 
+  // Admin re-book reminder endpoints — also mounted under /api/admin/lawn-care
+  // per the task contract. The same router file owns these handlers.
+  app.use("/api/admin/lawn-care", lawnCareRouter);
+
   const httpServer = createServer(app);
   return httpServer;
 }

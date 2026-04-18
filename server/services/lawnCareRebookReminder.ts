@@ -78,27 +78,35 @@ export async function findEligibleRebookReminders(limit = REBOOK_BATCH_LIMIT): P
     .where(sql`${lawnCareRebookReminders.sentAt} >= ${dedupeCutoff}`);
   const blockedPhones = new Set(recentRows.map(r => (r.phone || "").replace(/\D/g, "")).filter(Boolean));
 
-  // Eligibility = the customer's most recent paid/completed one-time job
+  // Eligibility = the customer's MOST RECENT paid/completed one-time job
   // is 30+ days old. Lawn-care quotes don't have a "completed" status today
   // (paid is the terminal state for one-time jobs), but we accept both so
   // this keeps working if a "completed" status is added later.
-  const candidates = await db
+  //
+  // Critical correctness rule: dedupe to the latest quote per phone FIRST,
+  // then apply the 30-day cutoff. Filtering before deduping would let a
+  // customer with both an old (40d) and a recent (10d) completed quote
+  // get a reminder, because the recent quote would be excluded from view.
+  const allCompleted = await db
     .select()
     .from(lawnCareQuotes)
     .where(and(
       inArray(lawnCareQuotes.status, ["paid", "completed"]),
-      lt(lawnCareQuotes.updatedAt, eligibilityCutoff),
       sql`${lawnCareQuotes.email} IS NOT NULL AND ${lawnCareQuotes.email} <> ''`,
     ))
-    .orderBy(desc(lawnCareQuotes.updatedAt))
-    .limit(limit * 4);
+    .orderBy(desc(lawnCareQuotes.updatedAt));
 
-  const seenPhones = new Set<string>();
-  const out: EligibleQuote[] = [];
-  for (const q of candidates) {
+  const latestPerPhone = new Map<string, LawnCareQuote>();
+  for (const q of allCompleted) {
     const phoneKey = (q.phone || "").replace(/\D/g, "");
-    if (!phoneKey || seenPhones.has(phoneKey) || blockedPhones.has(phoneKey)) continue;
-    seenPhones.add(phoneKey);
+    if (!phoneKey) continue;
+    if (!latestPerPhone.has(phoneKey)) latestPerPhone.set(phoneKey, q);
+  }
+
+  const out: EligibleQuote[] = [];
+  for (const [phoneKey, q] of latestPerPhone) {
+    if (blockedPhones.has(phoneKey)) continue;
+    if (!q.updatedAt || q.updatedAt >= eligibilityCutoff) continue;
     out.push(q);
     if (out.length >= limit) break;
   }
