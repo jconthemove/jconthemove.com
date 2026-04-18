@@ -10,6 +10,8 @@ export interface LawnPricing {
   addOnTotal: number;
   travelFee: number;
   totalQuoted: number;
+  bundleDiscountAmount?: number | string | null;
+  bundleDiscountReason?: "bundle_intent" | "cross_service_history" | null;
   isCustomEstimate: boolean;
   recommendedCrewType: string;
   recommendedCrewSize: number;
@@ -72,6 +74,18 @@ export default function LawnPriceBreakdown({ pricing, serviceFrequency, variant 
   });
   if (pricing.travelFee > 0) {
     lines.push({ label: "Travel fee", amount: `+$${pricing.travelFee}`, subtle: "Outside our standard area" });
+  }
+  const bundleAmt = typeof pricing.bundleDiscountAmount === "string"
+    ? parseFloat(pricing.bundleDiscountAmount)
+    : (pricing.bundleDiscountAmount ?? 0);
+  if (bundleAmt && bundleAmt > 0) {
+    lines.push({
+      label: "Bundle discount (10%, max $50)",
+      amount: `−$${bundleAmt.toFixed(2)}`,
+      subtle: pricing.bundleDiscountReason === "cross_service_history"
+        ? "Loyalty bundle — thanks for booking another JC service in the last 90 days!"
+        : "Auto-applied when you bundle services",
+    });
   }
 
   return (

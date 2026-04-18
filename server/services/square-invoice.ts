@@ -341,6 +341,28 @@ export class SquareInvoiceService {
 
     const catalogMappings = await this.getCatalogMappings();
 
+    // Bundle discount (Task #114). Upstream callers pass lineItems whose
+    // totals sum to the *already-discounted* lead.totalPrice. To make the
+    // discount visible on the customer's invoice (a real Square discount
+    // line) without changing the amount they owe, we:
+    //   1) Detect the auto-applied case (line-item sum ≈ lead.totalPrice).
+    //   2) Scale each line item up to its gross value.
+    //   3) Add an order-level FIXED_AMOUNT discount equal to the saved
+    //      lead.bundleDiscountAmount.
+    // Net total stays the same; the customer sees subtotal + discount line.
+    // If line items don't match the discounted total (admin manually edited
+    // them), we skip injection to avoid double-discounting.
+    const bundleDiscountAmt = parseFloat(String((lead as Lead).bundleDiscountAmount || "0")) || 0;
+    const netLineSum = lineItems.reduce((s, li) => s + li.total, 0);
+    const expectedNet = parseFloat(String(lead.totalPrice || "0")) || 0;
+    const isAutoDiscountCase =
+      bundleDiscountAmt > 0 &&
+      expectedNet > 0 &&
+      Math.abs(netLineSum - expectedNet) < 0.01;
+    const grossMultiplier = isAutoDiscountCase
+      ? (netLineSum + bundleDiscountAmt) / netLineSum
+      : 1;
+
     const squareLineItems = lineItems.map(li => {
       const catalogVariationId = li.id ? catalogMappings[li.id] : undefined;
       if (catalogVariationId) {
@@ -349,23 +371,31 @@ export class SquareInvoiceService {
           quantity: String(li.qty),
         };
       }
+      const scaledUnitPrice = li.unitPrice * grossMultiplier;
       return {
         name: li.name,
         quantity: String(li.qty),
         basePriceMoney: {
-          amount: BigInt(Math.round(li.unitPrice * 100)),
+          amount: BigInt(Math.round(scaledUnitPrice * 100)),
           currency: "USD" as const,
         },
       };
     });
 
-    // Bundle discount note (Task #114): the discount is *already baked into*
-    // each lineItem.total upstream (admin-edited line items reflect the final
-    // discounted lead.totalPrice). We deliberately do NOT push a Square
-    // order-level discount here — doing so would double-discount, since the
-    // line items are already net. The discount is surfaced to the customer
-    // via the booking confirmation, the admin email, and the audit log.
-    const totalAmount = lineItems.reduce((s, li) => s + li.total, 0);
+    const orderDiscounts = isAutoDiscountCase
+      ? [{
+          name: "Bundle Discount (10%, capped at $50)",
+          type: "FIXED_AMOUNT" as const,
+          amountMoney: {
+            amount: BigInt(Math.round(bundleDiscountAmt * 100)),
+            currency: "USD" as const,
+          },
+          scope: "ORDER" as const,
+        }]
+      : undefined;
+
+    // Final amount we expect to charge the customer.
+    const totalAmount = isAutoDiscountCase ? expectedNet : netLineSum;
 
     const orderResponse = await client.orders.create({
       idempotencyKey: `order-itemized-${lead.id}-${Date.now()}`,
@@ -373,6 +403,7 @@ export class SquareInvoiceService {
         locationId,
         customerId,
         lineItems: squareLineItems,
+        ...(orderDiscounts ? { discounts: orderDiscounts } : {}),
       },
     });
 

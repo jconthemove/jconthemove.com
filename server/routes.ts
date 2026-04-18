@@ -3688,16 +3688,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         subtotal: bdSubtotal,
       });
 
-      // Always start as "new" so crew job board can see it immediately
-      const lead = await storage.createLead({
-        ...leadData,
-        status: "new" as any,
-        ...(bundleDiscount.applied ? {
-          totalPrice: String(bundleDiscount.finalTotal),
-          bundleDiscountAmount: bundleDiscount.amount.toFixed(2),
-          bundleDiscountReason: bundleDiscount.reason,
-        } : {}),
-      });
+      // Always start as "new" so crew job board can see it immediately.
+      // Build the storage payload from the typed leadData and merge bundle
+      // discount fields when applicable. `status` is set on the result row
+      // by storage.createLead (default 'new') so we don't pass it here.
+      const createPayload: typeof leadData = bundleDiscount.applied
+        ? {
+            ...leadData,
+            totalPrice: String(bundleDiscount.finalTotal),
+            bundleDiscountAmount: bundleDiscount.amount.toFixed(2),
+            bundleDiscountReason: bundleDiscount.reason,
+          }
+        : leadData;
+      const lead = await storage.createLead(createPayload);
 
       if (bundleDiscount.applied) {
         logBundleDiscountApplication({
@@ -3714,12 +3717,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Send email notification (non-blocking — a failed email must never reject the booking)
       const emailContent = generateLeadNotificationEmail(lead);
       const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
-      const bundleNote = bundleAddons.length > 0
-        ? `\n\n⚡ BUNDLE DISCOUNT: ${bundleAddons.join(", ")} — apply 10% off + up to $50 off on the add-on(s) when invoicing.`
-        : "";
-      const bundleHtml = bundleAddons.length > 0
-        ? `<br><br><b style="color:green">⚡ Bundle Add-On (10% off + up to $50 off):</b> ${bundleAddons.join(", ")} — apply discount when invoicing.`
-        : "";
+      // Bundle discount note. When the discount has actually been applied,
+      // show the full subtotal → discount → final-total breakdown so the
+      // admin can verify (no more "apply later" guesswork). When the
+      // customer only ticked add-ons but didn't qualify, fall back to a
+      // soft heads-up.
+      let bundleNote = "";
+      let bundleHtml = "";
+      if (bundleDiscount.applied) {
+        const subtotalStr = bdSubtotal.toFixed(2);
+        const discountStr = bundleDiscount.amount.toFixed(2);
+        const finalStr = bundleDiscount.finalTotal.toFixed(2);
+        const reasonLabel = bundleDiscount.reason === "cross_service_history"
+          ? "loyalty bundle (prior JC service in last 90 days)"
+          : `bundled with ${bundleAddons.join(", ") || "another service"}`;
+        bundleNote = `\n\n⚡ BUNDLE DISCOUNT APPLIED (${reasonLabel}):\n  Subtotal: $${subtotalStr}\n  Bundle discount (10%, capped at $50): -$${discountStr}\n  Final total: $${finalStr}\n  Already saved on lead.totalPrice — no manual invoice adjustment needed.`;
+        bundleHtml = `<br><br><b style="color:green">⚡ Bundle Discount Applied</b> (${reasonLabel})<br>` +
+          `&nbsp;&nbsp;Subtotal: $${subtotalStr}<br>` +
+          `&nbsp;&nbsp;Bundle discount (10%, capped at $50): <b>-$${discountStr}</b><br>` +
+          `&nbsp;&nbsp;<b>Final total: $${finalStr}</b><br>` +
+          `&nbsp;&nbsp;<i>Already saved on the lead — no manual invoice adjustment needed.</i>`;
+      } else if (bundleAddons.length > 0) {
+        bundleNote = `\n\nℹ️ Customer expressed interest in bundling: ${bundleAddons.join(", ")} (did not auto-qualify for the bundle discount this time).`;
+        bundleHtml = `<br><br><b style="color:#888">ℹ️ Bundle interest:</b> ${bundleAddons.join(", ")} (did not auto-qualify).`;
+      }
       try {
         await sendEmail({
           to: companyEmail,

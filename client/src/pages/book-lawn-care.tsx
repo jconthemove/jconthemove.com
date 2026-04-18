@@ -76,6 +76,8 @@ interface QuoteResult {
     customerName: string;
     serviceCategory: string;
     serviceFrequency: string;
+    bundleDiscountAmount?: string | null;
+    bundleDiscountReason?: "bundle_intent" | "cross_service_history" | null;
   };
   pricing: LawnPricing & {
     basePrice: number;
@@ -904,7 +906,15 @@ function ConfirmationPanel({
           </div>
         )}
 
-        <LawnPriceBreakdown pricing={result.pricing} serviceFrequency={frequency} variant="customer" />
+        <LawnPriceBreakdown
+          pricing={{
+            ...result.pricing,
+            bundleDiscountAmount: result.quote.bundleDiscountAmount ?? null,
+            bundleDiscountReason: result.quote.bundleDiscountReason ?? null,
+          }}
+          serviceFrequency={frequency}
+          variant="customer"
+        />
 
         {/* What happens next — 4-step timeline */}
         <div className="rounded-xl bg-slate-800/40 border border-slate-700/40 px-4 py-3">
