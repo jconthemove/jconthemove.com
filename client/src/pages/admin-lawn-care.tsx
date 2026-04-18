@@ -72,12 +72,16 @@ export default function AdminLawnCare() {
     rebooks: number;
     reminders: number | null;
     conversionRate: number | null;
+    paidRebooks: number;
+    paidRevenue: number;
   };
   type AttributionStats = {
     windowDays: number;
     rebooks: number;
     reminders: number;
     conversionRate: number | null;
+    paidRebooks: number;
+    paidRevenue: number;
     totalRebooks: number;
     bySource: SourceStat[];
   } | null;
@@ -194,6 +198,18 @@ export default function AdminLawnCare() {
                                 )}
                               </span>
                             )}
+                            <span
+                              className="text-slate-500"
+                              data-testid={`rebook-attribution-revenue-${s.source}`}
+                            >
+                              · <span className="text-lime-400 font-semibold">
+                                ${s.paidRevenue.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                              </span>
+                              {" earned"}
+                              {s.paidRebooks > 0 && (
+                                <> ({s.paidRebooks} paid)</>
+                              )}
+                            </span>
                           </li>
                         ))}
                       </ul>

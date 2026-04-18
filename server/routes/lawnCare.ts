@@ -885,6 +885,8 @@ type SourceStat = {
   rebooks: number;
   reminders: number | null;
   conversionRate: number | null;
+  paidRebooks: number;
+  paidRevenue: number;
 };
 async function getRebookAttributionStats(windowDays: number = REBOOK_ATTRIBUTION_WINDOW_DAYS) {
   const cutoff = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
@@ -900,6 +902,18 @@ async function getRebookAttributionStats(windowDays: number = REBOOK_ATTRIBUTION
     })
     .from(lawnCareQuotes)
     .where(sql`${lawnCareQuotes.rebookSource} IS NOT NULL AND ${lawnCareQuotes.createdAt} >= ${cutoff}`)
+    .groupBy(lawnCareQuotes.rebookSource);
+
+  // Paid revenue + count of paid/completed quotes per source — closes the
+  // loop on ROI by counting dollars actually delivered, not just leads.
+  const paidRows = await db
+    .select({
+      source: sql<string>`${lawnCareQuotes.rebookSource}`,
+      n: sql<number>`count(*)::int`,
+      revenue: sql<string>`coalesce(sum(${lawnCareQuotes.totalQuoted}), 0)::text`,
+    })
+    .from(lawnCareQuotes)
+    .where(sql`${lawnCareQuotes.rebookSource} IS NOT NULL AND ${lawnCareQuotes.createdAt} >= ${cutoff} AND ${lawnCareQuotes.status} IN ('paid','completed')`)
     .groupBy(lawnCareQuotes.rebookSource);
 
   // Reminders dispatched (status='sent') in the window — only meaningful
@@ -919,13 +933,30 @@ async function getRebookAttributionStats(windowDays: number = REBOOK_ATTRIBUTION
     if (!counts.has(known)) counts.set(known, 0);
   }
 
+  const paidBySource = new Map<string, { count: number; revenue: number }>();
+  for (const r of paidRows) {
+    paidBySource.set(r.source, {
+      count: Number(r.n || 0),
+      revenue: Number(r.revenue || 0),
+    });
+  }
+
   const bySource: SourceStat[] = Array.from(counts.entries())
     .map(([source, rebooks]) => {
       const isEmail = source === REBOOK_EMAIL_SOURCE;
       const sourceReminders = isEmail ? reminders : null;
       const conversionRate =
         sourceReminders && sourceReminders > 0 ? rebooks / sourceReminders : null;
-      return { source, label: labelForSource(source), rebooks, reminders: sourceReminders, conversionRate };
+      const paid = paidBySource.get(source) || { count: 0, revenue: 0 };
+      return {
+        source,
+        label: labelForSource(source),
+        rebooks,
+        reminders: sourceReminders,
+        conversionRate,
+        paidRebooks: paid.count,
+        paidRevenue: paid.revenue,
+      };
     })
     .sort((a, b) => b.rebooks - a.rebooks || a.label.localeCompare(b.label));
 
@@ -937,6 +968,8 @@ async function getRebookAttributionStats(windowDays: number = REBOOK_ATTRIBUTION
     rebooks: emailRow?.rebooks ?? 0,
     reminders,
     conversionRate: emailRow?.conversionRate ?? null,
+    paidRebooks: emailRow?.paidRebooks ?? 0,
+    paidRevenue: emailRow?.paidRevenue ?? 0,
     totalRebooks,
     bySource,
   };
