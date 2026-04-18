@@ -119,6 +119,26 @@ export default function BookLawnCare() {
 
   const watchedAddress = form.watch("address");
 
+  // Deep-link: ?rebook=1&phone=... — auto-open the returning-customer panel
+  // and pre-fill the phone so a one-tap re-book is one button-press away.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("rebook") !== "1") return;
+    const phoneParam = (params.get("phone") || "").trim();
+    setRebookOpen(true);
+    if (phoneParam) {
+      setRebookPhone(phoneParam);
+      // Trigger lookup immediately so the user sees their last-quote summary
+      // without having to tap "Look up".
+      const digits = phoneParam.replace(/\D/g, "");
+      if (digits.length >= 7) {
+        lookupMutation.mutate(phoneParam);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Drive distance estimate
   useEffect(() => {
     const addr = (watchedAddress || "").trim();

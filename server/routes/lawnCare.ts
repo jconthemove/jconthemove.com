@@ -14,6 +14,13 @@ import { eq, desc, sql } from "drizzle-orm";
 import { z } from "zod";
 import { sendEmail } from "../services/email";
 import { disburseServiceTokens } from "../services/disburse-service-tokens";
+import {
+  findEligibleRebookReminders,
+  runRebookReminderSweep,
+  buildRebookReminderEmail,
+  REBOOK_ELIGIBILITY_DAYS,
+  REBOOK_RESEND_WINDOW_DAYS,
+} from "../services/lawnCareRebookReminder";
 
 const router = Router();
 
@@ -721,6 +728,51 @@ router.post("/activate-plan/:id", requireAuth, requireAdminRole, async (req: Req
   } catch (err) {
     console.error("Activate lawn care plan error:", err);
     return res.status(500).json({ error: "Failed to activate plan" });
+  }
+});
+
+// GET /api/lawn-care/rebook-reminders/preview — admin only
+// Lists customers eligible for a re-book email, plus a render of the first email.
+router.get("/rebook-reminders/preview", requireAuth, requireAdminRole, async (_req: Request, res: Response) => {
+  try {
+    const eligible = await findEligibleRebookReminders(50);
+    const sample = eligible[0]
+      ? buildRebookReminderEmail({
+          customerName: eligible[0].customerName,
+          phone: eligible[0].phone,
+          serviceCategory: eligible[0].serviceCategory,
+          totalQuoted: eligible[0].totalQuoted,
+        })
+      : null;
+    return res.json({
+      eligibilityDays: REBOOK_ELIGIBILITY_DAYS,
+      resendWindowDays: REBOOK_RESEND_WINDOW_DAYS,
+      eligibleCount: eligible.length,
+      eligible: eligible.map(q => ({
+        id: q.id,
+        customerName: q.customerName,
+        email: q.email,
+        phone: q.phone,
+        serviceCategory: q.serviceCategory,
+        totalQuoted: q.totalQuoted,
+        lastUpdated: q.updatedAt,
+      })),
+      sampleEmail: sample,
+    });
+  } catch (err) {
+    console.error("Re-book reminder preview error:", err);
+    return res.status(500).json({ error: "Failed to load preview" });
+  }
+});
+
+// POST /api/lawn-care/rebook-reminders/send — admin only. Manual sweep trigger.
+router.post("/rebook-reminders/send", requireAuth, requireAdminRole, async (_req: Request, res: Response) => {
+  try {
+    const result = await runRebookReminderSweep();
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    console.error("Re-book reminder send error:", err);
+    return res.status(500).json({ error: "Failed to send reminders" });
   }
 });
 

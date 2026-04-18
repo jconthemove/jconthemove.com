@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Leaf, CheckCircle2, DollarSign, RefreshCw, AlertCircle, Phone, MapPin, Calendar, Users } from "lucide-react";
+import { Loader2, Leaf, CheckCircle2, DollarSign, RefreshCw, AlertCircle, Phone, MapPin, Calendar, Users, Mail, Send, Eye } from "lucide-react";
 import type { LawnCareQuote, LawnCarePlan } from "@shared/schema";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
@@ -57,6 +57,29 @@ export default function AdminLawnCare() {
   const markPaidMutation = useAction("mark-paid");
   const activatePlanMutation = useAction("activate-plan");
 
+  // ── Re-book Reminder card ──────────────────────────────────────────────
+  type RebookPreview = {
+    eligibilityDays: number;
+    resendWindowDays: number;
+    eligibleCount: number;
+    eligible: { id: number; customerName: string; email: string | null; phone: string; serviceCategory: string; totalQuoted: string | null; lastUpdated: string }[];
+    sampleEmail: { html: string; text: string; subject: string } | null;
+  };
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const previewQ = useQuery<RebookPreview>({
+    queryKey: ["/api/lawn-care/rebook-reminders/preview"],
+    enabled: previewOpen,
+  });
+  const sendRemindersMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/lawn-care/rebook-reminders/send", {}),
+    onSuccess: async (res) => {
+      const data = await res.json();
+      toast({ title: `Sent ${data.sent} reminder${data.sent === 1 ? "" : "s"}`, description: data.failed ? `${data.failed} failed — see server logs` : `${data.attempted} attempted` });
+      queryClient.invalidateQueries({ queryKey: ["/api/lawn-care/rebook-reminders/preview"] });
+    },
+    onError: () => toast({ title: "Failed to send reminders", variant: "destructive" }),
+  });
+
   return (
     <div className="min-h-screen bg-slate-900 text-white p-4 md:p-6">
       <div className="max-w-5xl mx-auto">
@@ -77,6 +100,77 @@ export default function AdminLawnCare() {
               {plansQ.data?.filter((p) => p.isActive).length ?? 0} active plans
             </Badge>
           </div>
+        </div>
+
+        {/* Re-book Reminder Card */}
+        <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4 mb-5" data-testid="rebook-reminder-card">
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div className="flex items-start gap-3">
+              <div className="bg-lime-500/10 border border-lime-500/20 rounded-lg p-2">
+                <Mail className="h-4 w-4 text-lime-400" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-white text-sm">Re-book Reminder Emails</h3>
+                <p className="text-slate-400 text-xs mt-0.5">
+                  Nudges paid customers 30+ days out, max once every 60 days. Disabled by default — set <code className="text-lime-400">ENABLE_REBOOK_REMINDER_EMAILS=true</code> for the daily sweep.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <Button size="sm" variant="outline" className="border-slate-600 text-slate-200 text-xs" onClick={() => setPreviewOpen(o => !o)} data-testid="button-preview-rebook">
+                <Eye className="h-3 w-3 mr-1" /> {previewOpen ? "Hide" : "Preview"}
+              </Button>
+              <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-slate-900 text-xs font-semibold" onClick={() => sendRemindersMutation.mutate()} disabled={sendRemindersMutation.isPending} data-testid="button-send-rebook">
+                {sendRemindersMutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Send className="h-3 w-3 mr-1" />} Send Now
+              </Button>
+            </div>
+          </div>
+
+          {previewOpen && (
+            <div className="mt-3 pt-3 border-t border-slate-700">
+              {previewQ.isLoading ? (
+                <div className="flex items-center justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-lime-400" /></div>
+              ) : previewQ.data ? (
+                <>
+                  <div className="text-xs text-slate-400 mb-2">
+                    <span className="text-lime-400 font-semibold">{previewQ.data.eligibleCount}</span> customer{previewQ.data.eligibleCount === 1 ? "" : "s"} eligible
+                    {" · "}
+                    Window: {previewQ.data.eligibilityDays}d eligible / {previewQ.data.resendWindowDays}d re-send
+                  </div>
+                  {previewQ.data.eligible.length > 0 ? (
+                    <div className="space-y-1 max-h-48 overflow-y-auto">
+                      {previewQ.data.eligible.map(e => (
+                        <div key={e.id} className="bg-slate-900/40 rounded p-2 text-xs flex items-center justify-between gap-2" data-testid={`eligible-${e.id}`}>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-white font-medium truncate">{e.customerName}</div>
+                            <div className="text-slate-500 truncate">{e.email} · {e.serviceCategory.replace(/_/g, " ")} · {e.totalQuoted ? fmtMoney(e.totalQuoted) : "—"}</div>
+                          </div>
+                          <div className="text-slate-500 text-[10px] shrink-0">{fmtDate(e.lastUpdated)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-slate-500 text-xs italic">No customers currently eligible.</p>
+                  )}
+                  {previewQ.data.sampleEmail && (
+                    <details className="mt-3">
+                      <summary className="text-xs text-lime-400 cursor-pointer">View sample email ({previewQ.data.sampleEmail.subject})</summary>
+                      {/* sandbox=""=no scripts, no same-origin — safe to render arbitrary HTML */}
+                      <iframe
+                        title="Re-book reminder email preview"
+                        sandbox=""
+                        srcDoc={previewQ.data.sampleEmail.html}
+                        className="mt-2 w-full h-96 bg-white rounded border border-slate-700"
+                        data-testid="preview-iframe"
+                      />
+                    </details>
+                  )}
+                </>
+              ) : (
+                <p className="text-red-400 text-xs">Failed to load preview.</p>
+              )}
+            </div>
+          )}
         </div>
 
         <Tabs value={tab} onValueChange={setTab}>

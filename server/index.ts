@@ -301,6 +301,30 @@ app.use((req, res, next) => {
       }
     })();
 
+    // ── Daily Lawn Care Re-book Reminder Sweep ──────────────────────────────
+    // Off by default. Set ENABLE_REBOOK_REMINDER_EMAILS=true to enable.
+    if (process.env.ENABLE_REBOOK_REMINDER_EMAILS === "true") {
+      const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+      const runSweep = async () => {
+        try {
+          const { runRebookReminderSweep } = await import("./services/lawnCareRebookReminder");
+          const result = await runRebookReminderSweep();
+          console.log(`[rebook-reminder] sweep complete — attempted=${result.attempted} sent=${result.sent} failed=${result.failed}`);
+          if (result.failures.length) {
+            console.warn(`[rebook-reminder] failures:`, result.failures);
+          }
+        } catch (err) {
+          console.error("[rebook-reminder] sweep error:", err);
+        }
+      };
+      // Run once 60s after boot, then every 24h.
+      setTimeout(runSweep, 60_000);
+      setInterval(runSweep, ONE_DAY_MS);
+      console.log("✅ Lawn care re-book reminder sweep scheduled (daily)");
+    } else {
+      console.log("ℹ️  Lawn care re-book reminder sweep disabled (set ENABLE_REBOOK_REMINDER_EMAILS=true to enable)");
+    }
+
     // Serve static files from attached_assets directory with proper video support
     app.use('/attached_assets', express.static(path.resolve(process.cwd(), 'attached_assets'), {
       setHeaders: (res, filePath) => {

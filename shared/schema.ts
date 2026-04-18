@@ -2200,6 +2200,19 @@ export const insertLawnCareQuoteSchema = createInsertSchema(lawnCareQuotes).omit
 export type LawnCareQuote = typeof lawnCareQuotes.$inferSelect;
 export type InsertLawnCareQuote = z.infer<typeof insertLawnCareQuoteSchema>;
 
+// ── Lawn Care Re-book Reminder Sends ──────────────────────────────────────────
+// One row per (quoteId, sentAt) pair. The sweep checks the most recent send
+// per quote against the 60-day window before sending again. Writing this row
+// happens BEFORE the email is dispatched so a crash mid-batch can't cause a
+// re-spam on the next run.
+export const lawnCareRebookReminders = pgTable("lawn_care_rebook_reminders", {
+  id: serial("id").primaryKey(),
+  quoteId: integer("quote_id").notNull(),
+  sentAt: timestamp("sent_at").notNull().default(sql`now()`),
+  status: text("status").notNull().default("sent"), // 'sent' | 'failed'
+});
+export type LawnCareRebookReminder = typeof lawnCareRebookReminders.$inferSelect;
+
 // ── Lawn Care Recurring Plans ─────────────────────────────────────────────────
 export const lawnCarePlans = pgTable("lawn_care_plans", {
   id: serial("id").primaryKey(),
