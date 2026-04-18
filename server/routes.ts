@@ -3901,16 +3901,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       console.log("[marketplace] incoming body keys:", Object.keys(req.body || {}));
       console.log("[marketplace] serviceType:", req.body?.serviceType, "fromAddress:", req.body?.fromAddress, "phone:", JSON.stringify(req.body?.phone), "email:", JSON.stringify(req.body?.email));
-      const parseResult = insertLeadSchema.safeParse(req.body);
+      // Strip caller-supplied rebookSource / rebookSentAt BEFORE schema
+      // parsing — insertLeadSchema models rebookSentAt as a Date, but the
+      // client forwards an ISO string from the URL. The normalization
+      // helpers below are the only sanctioned write path for these fields.
+      const rawRebookSourceMkt = (req.body as Record<string, unknown>)?.rebookSource;
+      const rawRebookSentAtMkt = (req.body as Record<string, unknown>)?.rebookSentAt;
+      const { rebookSource: _stripSrc, rebookSentAt: _stripSentAt, ...bodyForParse } = (req.body || {}) as Record<string, unknown>;
+      const parseResult = insertLeadSchema.safeParse(bodyForParse);
       if (!parseResult.success) {
         console.error("[marketplace] Zod validation failed:", JSON.stringify(parseResult.error.errors, null, 2));
         return res.status(400).json({ error: "Invalid lead data", details: parseResult.error.errors });
       }
-      // Strip any caller-supplied rebookSource / rebookSentAt from the insert
-      // payload — the allow-list normalization below is the only path that
-      // may write them, so a failed update can never leave a raw/unknown
-      // value persisted.
-      const { rebookSource: _rawSource, rebookSentAt: _rawSentAt, ...leadData } = parseResult.data;
+      const leadData = parseResult.data;
 
       // Bundle discount: marketplace posts can also be bundled. We compute
       // BEFORE insert and pass the discount fields through, then update the
@@ -3938,9 +3941,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // update is the only write path — a failure here leaves both NULL
       // (safe default).
       const { normalizeLeadRebookSource: normMktRebookSource, normalizeLeadRebookSentAt: normMktRebookSentAt, ORGANIC_REBOOK_SOURCE: MKT_ORGANIC } = await import("./services/serviceRebookReminder");
-      const mktNormalizedSource = normMktRebookSource((req.body as Record<string, unknown>)?.rebookSource);
+      const mktNormalizedSource = normMktRebookSource(rawRebookSourceMkt);
       const mktCandidateSentAt = mktNormalizedSource && mktNormalizedSource !== MKT_ORGANIC
-        ? normMktRebookSentAt((req.body as Record<string, unknown>)?.rebookSentAt)
+        ? normMktRebookSentAt(rawRebookSentAtMkt)
         : null;
       // Per-send attribution: demote non-organic source to organic if its
       // rebookSentAt is missing/invalid. Same rule as window-cleaning above.
