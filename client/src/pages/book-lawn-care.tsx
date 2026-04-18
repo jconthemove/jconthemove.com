@@ -151,14 +151,18 @@ export default function BookLawnCare() {
   }
 
   // Returning-customer lookup
-  const lookupMutation = useMutation({
+  const lookupMutation = useMutation<
+    { found: boolean; summary?: RebookSummary },
+    Error,
+    string
+  >({
     mutationFn: async (phone: string) => {
       const r = await fetch(`/api/lawn-care/last-quote-summary?phone=${encodeURIComponent(phone)}`);
       return r.json();
     },
-    onSuccess: (data: any) => {
+    onSuccess: (data) => {
       setRebookLooked(true);
-      setRebookSummary(data?.found ? data.summary : null);
+      setRebookSummary(data?.found && data.summary ? data.summary : null);
     },
     onError: () => {
       setRebookLooked(true);
@@ -169,7 +173,7 @@ export default function BookLawnCare() {
   const rebookMutation = useMutation({
     mutationFn: (phone: string) => apiRequest("POST", "/api/lawn-care/rebook", { phone }),
     onSuccess: async (res) => {
-      const data: any = await res.json();
+      const data = (await res.json()) as Partial<QuoteResult> & { rebooked?: boolean };
       if (data?.quote && data?.pricing) {
         // Use last summary's choices to render the same Yard Details + add-on chips
         if (rebookSummary) {
@@ -193,8 +197,8 @@ export default function BookLawnCare() {
         toast({ title: "Re-book failed", description: "Please use the regular booking form below.", variant: "destructive" });
       }
     },
-    onError: async (err: any) => {
-      const msg = err?.message?.includes("429") ? "Please wait a moment and try again." : "Please use the regular booking form below.";
+    onError: (err: Error) => {
+      const msg = err.message.includes("429") ? "Please wait a moment and try again." : "Please use the regular booking form below.";
       toast({ title: "Couldn't re-book just now", description: msg, variant: "destructive" });
     },
   });

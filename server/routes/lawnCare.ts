@@ -312,6 +312,34 @@ function summaryRateLimit(ip: string): boolean {
   return true;
 }
 
+// Geocode + haversine helper. Mirrors the logic in
+// /api/utility/estimate-drive-miles so rebook pricing reproduces the
+// same travel-fee outcome the original quote saw without an HTTP self-call.
+const BASE_LAT = 46.4539; // Ironwood, MI
+const BASE_LNG = -90.1715;
+function haversineMiles(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 3958.8;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+async function estimateDistanceMiles(address: string | null | undefined): Promise<number> {
+  if (!address || address.trim().length < 4) return 0;
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1&countrycodes=us`;
+    const r = await fetch(url, { headers: { "User-Agent": "JCOnTheMove/1.0 contact@jcontmove.com" } });
+    if (!r.ok) return 0;
+    const data = (await r.json()) as Array<{ lat: string; lon: string }>;
+    if (!data?.length) return 0;
+    return haversineMiles(BASE_LAT, BASE_LNG, parseFloat(data[0].lat), parseFloat(data[0].lon));
+  } catch {
+    return 0;
+  }
+}
+
 function maskAddress(addr: string | null | undefined): string {
   if (!addr) return "your address on file";
   // "712 Wilson St, Ironwood, MI 49938" -> "712 W••••• St, Ironwood, MI"
@@ -420,6 +448,10 @@ router.post("/rebook", async (req: Request, res: Response) => {
     }
     const prev = rows[0];
 
+    // Recompute drive distance from the saved address so travel-fee
+    // parity holds vs. a fresh booking. Falls back to 0 silently.
+    const distanceMiles = await estimateDistanceMiles(prev.address);
+
     const pricing = calculateLawnCareQuote({
       serviceCategory: prev.serviceCategory,
       serviceFrequency: prev.serviceFrequency,
@@ -432,6 +464,7 @@ router.post("/rebook", async (req: Request, res: Response) => {
       hasSteepSlope: !!prev.hasSteepSlope,
       needsHaulAway: !!prev.needsHaulAway,
       zip: prev.zip || undefined,
+      distanceMiles,
     });
 
     rebookThrottle.set(digits, now);
