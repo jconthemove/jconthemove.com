@@ -425,13 +425,22 @@ router.post("/rebook", async (req: Request, res: Response) => {
   const digits = phoneRaw.replace(/\D/g, "");
   if (digits.length < 7) return res.status(400).json({ error: "Invalid phone" });
 
-  // Throttle to deter accidental spam
-  const lastAt = rebookThrottle.get(digits) || 0;
+  // Composite throttle: per-phone AND per-IP+phone, both 30s. Stops
+  // accidental double-taps and stops a single client from cycling phones.
+  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "unknown";
+  const compositeKey = `${ip}|${digits}`;
   const now = Date.now();
-  if (now - lastAt < REBOOK_THROTTLE_MS) {
+  const lastByPhone = rebookThrottle.get(digits) || 0;
+  const lastByComposite = rebookThrottle.get(compositeKey) || 0;
+  const waitMs = Math.max(
+    REBOOK_THROTTLE_MS - (now - lastByPhone),
+    REBOOK_THROTTLE_MS - (now - lastByComposite),
+  );
+  if (waitMs > 0) {
+    res.setHeader("Retry-After", Math.ceil(waitMs / 1000).toString());
     return res.status(429).json({
       error: "Please wait a moment before requesting another quote.",
-      retryAfterMs: REBOOK_THROTTLE_MS - (now - lastAt),
+      retryAfterMs: waitMs,
     });
   }
 
@@ -468,6 +477,7 @@ router.post("/rebook", async (req: Request, res: Response) => {
     });
 
     rebookThrottle.set(digits, now);
+    rebookThrottle.set(compositeKey, now);
 
     const [quote] = await db.insert(lawnCareQuotes).values({
       customerName: prev.customerName,
