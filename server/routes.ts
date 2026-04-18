@@ -3600,8 +3600,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           to: companyEmail,
           from: companyEmail,
           subject: `New Window Cleaning Booking — ${customerName}`,
-          text: `New window cleaning job submitted.\n\nCustomer: ${customerName}\nPhone: ${customerPhone}\nEmail: ${customerEmail}\nAddress: ${address}\nWindows: ${standardWindows} standard, ${largeWindows} large, ${ladderWindows} ladder\nInside: ${includeInside}, Outside: ${includeOutside}, Season: ${seasonMode}\nPanes: ${quote.paneCount}\n${bundleDiscount.applied ? `\nPRICE BREAKDOWN (bundle discount auto-applied):\n  Subtotal: $${baseQuote.total.toFixed(2)}\n  Bundle discount (10%, max $50): -$${bundleDiscount.amount.toFixed(2)}\n  Reason: ${bundleDiscount.reason === "cross_service_history" ? "Loyalty bundle (prior JC service in last 90 days)" : `Bundled with ${bundleAddons.join(", ") || "another service"}`}\n  Final total: $${adjustedTotal}\n` : `\nTotal: $${adjustedTotal}${quote.promoApplied ? ` (${quote.promoDiscountPercent}% promo applied)` : ""}\n`}${travelNote}${addons.length > 0 ? `\nRequested Add-Ons: ${addons.join(", ")} — please follow up for separate quotes` : ""}\n\nView job in admin panel.`,
-          html: `<h2>New Window Cleaning Booking</h2><p><b>Customer:</b> ${customerName}<br><b>Phone:</b> ${customerPhone}<br><b>Email:</b> ${customerEmail}<br><b>Address:</b> ${address}<br><b>Windows:</b> ${standardWindows} standard, ${largeWindows} large, ${ladderWindows} ladder<br><b>Inside:</b> ${includeInside}, <b>Outside:</b> ${includeOutside}<br><b>Season:</b> ${seasonMode}</p>${bundleDiscount.applied ? `<div style="margin-top:8px;padding:8px;border:1px solid #16a34a33;background:#16a34a0d;border-radius:6px"><b style="color:green">⚡ Bundle Discount Applied</b><br>Subtotal: $${baseQuote.total.toFixed(2)}<br>Bundle discount (10%, max $50): <b>-$${bundleDiscount.amount.toFixed(2)}</b><br>Reason: ${bundleDiscount.reason === "cross_service_history" ? "Loyalty bundle (prior JC service in last 90 days)" : `Bundled with ${bundleAddons.join(", ") || "another service"}`}<br><b>Final total: $${adjustedTotal}</b></div>` : `<p><b>Total:</b> $${adjustedTotal}${quote.promoApplied ? ` <em>(${quote.promoDiscountPercent}% promo applied)</em>` : ""}</p>`}${travelNote ? `<p><b>Travel:</b> ${travelNote}</p>` : ""}${addons.length > 0 ? `<p><b style="color:orange">Add-On Requests:</b> ${addons.join(", ")} — follow up for separate quotes</p>` : ""}`,
+          text: `New window cleaning job submitted.\n\nCustomer: ${customerName}\nPhone: ${customerPhone}\nEmail: ${customerEmail}\nAddress: ${address}\nWindows: ${standardWindows} standard, ${largeWindows} large, ${ladderWindows} ladder\nInside: ${includeInside}, Outside: ${includeOutside}, Season: ${seasonMode}\nPanes: ${quote.paneCount}\n${bundleDiscount.applied ? `\nPRICE BREAKDOWN (bundle discount auto-applied):\n  Subtotal: $${baseQuote.total.toFixed(2)}\n  Bundle discount (10%, max $50): -$${bundleDiscount.amount.toFixed(2)}\n  Reason: ${bundleDiscount.reason === "cross_service_history" ? "Loyalty bundle (prior JC service in last 90 days)" : `Bundled with ${intentAddons.join(", ") || "another service"}`}\n  Final total: $${adjustedTotal}\n` : `\nTotal: $${adjustedTotal}${quote.promoApplied ? ` (${quote.promoDiscountPercent}% promo applied)` : ""}\n`}${travelNote}${addons.length > 0 ? `\nRequested Add-Ons: ${addons.join(", ")} — please follow up for separate quotes` : ""}\n\nView job in admin panel.`,
+          html: `<h2>New Window Cleaning Booking</h2><p><b>Customer:</b> ${customerName}<br><b>Phone:</b> ${customerPhone}<br><b>Email:</b> ${customerEmail}<br><b>Address:</b> ${address}<br><b>Windows:</b> ${standardWindows} standard, ${largeWindows} large, ${ladderWindows} ladder<br><b>Inside:</b> ${includeInside}, <b>Outside:</b> ${includeOutside}<br><b>Season:</b> ${seasonMode}</p>${bundleDiscount.applied ? `<div style="margin-top:8px;padding:8px;border:1px solid #16a34a33;background:#16a34a0d;border-radius:6px"><b style="color:green">⚡ Bundle Discount Applied</b><br>Subtotal: $${baseQuote.total.toFixed(2)}<br>Bundle discount (10%, max $50): <b>-$${bundleDiscount.amount.toFixed(2)}</b><br>Reason: ${bundleDiscount.reason === "cross_service_history" ? "Loyalty bundle (prior JC service in last 90 days)" : `Bundled with ${intentAddons.join(", ") || "another service"}`}<br><b>Final total: $${adjustedTotal}</b></div>` : `<p><b>Total:</b> $${adjustedTotal}${quote.promoApplied ? ` <em>(${quote.promoDiscountPercent}% promo applied)</em>` : ""}</p>`}${travelNote ? `<p><b>Travel:</b> ${travelNote}</p>` : ""}${addons.length > 0 ? `<p><b style="color:orange">Add-On Requests:</b> ${addons.join(", ")} — follow up for separate quotes</p>` : ""}`,
         });
       } catch (emailErr) { console.error("Admin email failed:", emailErr); }
       try {
@@ -3824,7 +3824,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error('Booking request reward error:', rewardError);
       }
 
-      res.json({ success: true, leadId: lead.id, orderNumber: lead.orderNumber ?? null, message: `Quote submitted!${rewardMessage}` });
+      res.json({
+        success: true,
+        leadId: lead.id,
+        orderNumber: lead.orderNumber ?? null,
+        message: `Quote submitted!${rewardMessage}`,
+        bundleDiscount: bundleDiscount.applied
+          ? {
+              applied: true,
+              amount: bundleDiscount.amount,
+              percent: bundleDiscount.percent,
+              reason: bundleDiscount.reason,
+              subtotalBefore: bdSubtotal,
+              finalTotal: bundleDiscount.finalTotal,
+            }
+          : { applied: false },
+      });
     } catch (error) {
       console.error("Error creating lead:", error);
       res.status(400).json({ error: "Invalid lead data" });
