@@ -50,7 +50,10 @@ function escHtml(v: string | null | undefined): string {
 
 export const REBOOK_ELIGIBILITY_DAYS = 30;
 export const REBOOK_RESEND_WINDOW_DAYS = 60;
-export const REBOOK_BATCH_LIMIT = 25;
+// Safety cap on a single sweep run. Set high enough that normal traffic
+// will never hit it, but bounded so a runaway eligibility query can't
+// dispatch unbounded mail in one tick.
+export const REBOOK_SWEEP_HARD_CAP = 1000;
 
 const FROM_EMAIL = process.env.FROM_EMAIL || "michigankid906@gmail.com";
 const COMPANY_PHONE = process.env.COMPANY_PHONE || "(906) 285-9312";
@@ -65,7 +68,8 @@ export type EligibleQuote = Pick<
 // had a reminder sent in the past 60 days. Dedupe is **per customer (phone)**
 // — if any quote belonging to that phone has been reminded within 60 days,
 // the whole customer is blocked, even on a different quote id.
-export async function findEligibleRebookReminders(limit = REBOOK_BATCH_LIMIT): Promise<EligibleQuote[]> {
+export async function findEligibleRebookReminders(limit?: number): Promise<EligibleQuote[]> {
+  const cap = typeof limit === "number" && limit > 0 ? limit : Number.POSITIVE_INFINITY;
   const eligibilityCutoff = new Date(Date.now() - REBOOK_ELIGIBILITY_DAYS * 24 * 60 * 60 * 1000);
   const dedupeCutoff = new Date(Date.now() - REBOOK_RESEND_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
@@ -111,7 +115,7 @@ export async function findEligibleRebookReminders(limit = REBOOK_BATCH_LIMIT): P
     if (!q.updatedAt || q.updatedAt >= eligibilityCutoff) continue;
     if (!isValidEmail(q.email)) continue;
     out.push(q);
-    if (out.length >= limit) break;
+    if (out.length >= cap) break;
   }
   return out;
 }
@@ -242,7 +246,7 @@ export async function sendRebookReminderForQuote(quote: EligibleQuote): Promise<
 // manual admin click during the daily scheduler tick, or two app instances)
 // cannot race on the same candidate set and double-send.
 export async function runRebookReminderSweep(
-  limit = REBOOK_BATCH_LIMIT,
+  limit: number = REBOOK_SWEEP_HARD_CAP,
   trigger: "scheduler" | "manual" = "manual",
 ): Promise<{
   attempted: number; sent: number; failed: number; failures: { quoteId: number; error: string }[]; skipped?: boolean;

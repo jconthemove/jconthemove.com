@@ -749,7 +749,10 @@ router.post("/activate-plan/:id", requireAuth, requireAdminRole, async (req: Req
 // Lists customers eligible for a re-book email, plus a render of the first email.
 async function rebookReminderPreviewHandler(_req: Request, res: Response) {
   try {
-    const eligible = await findEligibleRebookReminders(50);
+    // Uncapped: preview must report the TRUE count of customers who would
+    // receive a reminder. We slice for the displayed sample list separately.
+    const allEligible = await findEligibleRebookReminders();
+    const eligible = allEligible.slice(0, 50);
     const sample = eligible[0]
       ? buildRebookReminderEmail({
           customerName: eligible[0].customerName,
@@ -762,7 +765,8 @@ async function rebookReminderPreviewHandler(_req: Request, res: Response) {
     return res.json({
       eligibilityDays: REBOOK_ELIGIBILITY_DAYS,
       resendWindowDays: REBOOK_RESEND_WINDOW_DAYS,
-      eligibleCount: eligible.length,
+      eligibleCount: allEligible.length,
+      sampleSize: eligible.length,
       eligible: eligible.map(q => ({
         id: q.id,
         customerName: maskName(q.customerName),
