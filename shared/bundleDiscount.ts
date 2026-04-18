@@ -1,15 +1,14 @@
 // Shared bundle-discount engine.
 //
-// Customers earn 10% off the current quote when they bundle a service —
-// either by ticking another service in the same form (intent) or by having
-// booked another JC service in the last 90 days (cross-service repeat).
-//
-// Flat 10%, no dollar cap. The eligibility check (server-side, queries
-// multiple tables) lives in server/services/bundleDiscount.ts. This file
-// only owns the deterministic math so the same numbers can be computed
-// from either the client or the server.
+// Customers earn 10% off the current quote (capped at $50) when they bundle
+// a service — either by ticking another service in the same form (intent) or
+// by having booked another JC service in the last 90 days (cross-service
+// repeat). The eligibility check (server-side, queries multiple tables) lives
+// in server/services/bundleDiscount.ts. This file only owns the deterministic
+// math so the same numbers can be computed from either the client or server.
 
 export const BUNDLE_DISCOUNT_PERCENT = 10;
+export const BUNDLE_DISCOUNT_MAX_DOLLARS = 50;
 
 export type BundleDiscountReason = "bundle_intent" | "cross_service_history";
 
@@ -30,7 +29,9 @@ export function calculateBundleDiscount(
   if (!eligible || safeSubtotal <= 0) {
     return { applied: false, percent: 0, amount: 0, finalTotal: safeSubtotal, reason: null };
   }
-  const amount = Math.round(safeSubtotal * (BUNDLE_DISCOUNT_PERCENT / 100) * 100) / 100;
+  const rawAmount = safeSubtotal * (BUNDLE_DISCOUNT_PERCENT / 100);
+  const cappedAmount = Math.min(rawAmount, BUNDLE_DISCOUNT_MAX_DOLLARS);
+  const amount = Math.round(cappedAmount * 100) / 100;
   return {
     applied: true,
     percent: BUNDLE_DISCOUNT_PERCENT,

@@ -3673,8 +3673,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const leadData = insertLeadSchema.parse(req.body);
       const bundleAddons: string[] = Array.isArray(req.body.bundleAddons) ? req.body.bundleAddons : [];
+
+      // Bundle discount (Task #114): evaluate BEFORE the row is written so we
+      // can persist the discounted totalPrice directly. Covers snow, junk,
+      // painting, flooring, roofing, handyman, and any other lead-table
+      // service that uses this endpoint.
+      const { evaluateBundleDiscount, logBundleDiscountApplication } = await import("./services/bundleDiscount");
+      const bdSubtotal = parseFloat(String(leadData.totalPrice || "0")) || 0;
+      const bundleDiscount = await evaluateBundleDiscount({
+        currentService: leadData.serviceType || "moving",
+        phone: leadData.phone,
+        email: leadData.email,
+        bundleAddons,
+        subtotal: bdSubtotal,
+      });
+
       // Always start as "new" so crew job board can see it immediately
-      const lead = await storage.createLead({ ...leadData, status: "new" });
+      const lead = await storage.createLead({
+        ...leadData,
+        status: "new" as any,
+        ...(bundleDiscount.applied ? {
+          totalPrice: String(bundleDiscount.finalTotal),
+          bundleDiscountAmount: bundleDiscount.amount.toFixed(2),
+          bundleDiscountReason: bundleDiscount.reason,
+        } : {}),
+      });
+
+      if (bundleDiscount.applied) {
+        logBundleDiscountApplication({
+          referenceTable: "leads",
+          referenceId: lead.id,
+          serviceType: leadData.serviceType || "moving",
+          customerEmail: leadData.email || null,
+          customerPhone: leadData.phone || null,
+          subtotalBefore: bdSubtotal,
+          result: bundleDiscount,
+        });
+      }
       
       // Send email notification (non-blocking — a failed email must never reject the booking)
       const emailContent = generateLeadNotificationEmail(lead);
@@ -3829,9 +3864,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             bundleDiscountAmount: mktBundleDiscount.amount.toFixed(2),
             bundleDiscountReason: mktBundleDiscount.reason,
           }).where(eq(leads.id, lead.id));
-          (lead as any).totalPrice = String(mktBundleDiscount.finalTotal);
-          (lead as any).bundleDiscountAmount = mktBundleDiscount.amount.toFixed(2);
-          (lead as any).bundleDiscountReason = mktBundleDiscount.reason;
         } catch (e) {
           console.warn("[marketplace] bundle discount persist failed:", (e as Error).message);
         }
@@ -3852,9 +3884,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (histErr) {
         console.error('[lead_history] Marketplace auto-advance history failed:', histErr);
       }
-      const updatedLead = await storage.getLead(lead.id);
+      // Re-fetch the typed lead so downstream email/notifications see the
+      // discounted totalPrice + bundle discount fields (avoids any-casts).
+      const updatedLead = (await storage.getLead(lead.id)) ?? lead;
 
-      const emailContent = generateLeadNotificationEmail(lead);
+      const emailContent = generateLeadNotificationEmail(updatedLead);
       const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
       await sendEmail({
         to: companyEmail,
@@ -19232,6 +19266,23 @@ Thank you for your business!
 
       const userId = (req.session as any)?.userId || null;
 
+      // Bundle discount (Task #114): chatbot collects bundleAddons via answers
+      // (when present) and the cross-service history check fires for repeat
+      // customers automatically.
+      const chatbotBundleAddons: string[] = Array.isArray(a.bundleAddons)
+        ? a.bundleAddons
+        : (Array.isArray(req.body.bundleAddons) ? req.body.bundleAddons : []);
+      const chatbotSubtotalRaw = (selectedPackage && typeof selectedPackage === "object" ? selectedPackage.maxPrice : null) ?? quote.maxPrice ?? 0;
+      const chatbotSubtotal = parseFloat(String(chatbotSubtotalRaw)) || 0;
+      const { evaluateBundleDiscount: evalBundle, logBundleDiscountApplication: logBundleApp } = await import("./services/bundleDiscount");
+      const chatbotBundleDiscount = await evalBundle({
+        currentService: serviceType,
+        phone,
+        email,
+        bundleAddons: chatbotBundleAddons,
+        subtotal: chatbotSubtotal,
+      });
+
       const [lead] = await db.insert(leads).values({
         id: crypto.randomUUID(),
         firstName: first,
@@ -19247,7 +19298,15 @@ Thank you for your business!
         status: (serverDepositRequired ? "deposit_pending" : "chatbot_pending") as any,
         crewSize: (selectedPackage && typeof selectedPackage === "object" ? selectedPackage.crew : null) ?? quote.crew ?? 2,
         basePrice: String((selectedPackage && typeof selectedPackage === "object" ? selectedPackage.minPrice : null) ?? quote.minPrice ?? 0),
-        totalPrice: String((selectedPackage && typeof selectedPackage === "object" ? selectedPackage.maxPrice : null) ?? quote.maxPrice ?? 0),
+        totalPrice: chatbotBundleDiscount.applied
+          ? String(chatbotBundleDiscount.finalTotal)
+          : String(chatbotSubtotalRaw),
+        bundleDiscountAmount: chatbotBundleDiscount.applied
+          ? chatbotBundleDiscount.amount.toFixed(2)
+          : "0",
+        bundleDiscountReason: chatbotBundleDiscount.applied
+          ? chatbotBundleDiscount.reason
+          : null,
         smsConsent: false,
         createdByUserId: userId,
         selectedPackageId: (selectedPackage && typeof selectedPackage === "object" ? selectedPackage.id : selectedPackage) || null,
@@ -19257,6 +19316,18 @@ Thank you for your business!
         isQuoteOnly: serverIsQuoteOnly,
         createdAt: new Date(),
       }).returning();
+
+      if (chatbotBundleDiscount.applied) {
+        logBundleApp({
+          referenceTable: "leads",
+          referenceId: lead.id,
+          serviceType,
+          customerEmail: email,
+          customerPhone: phone,
+          subtotalBefore: chatbotSubtotal,
+          result: chatbotBundleDiscount,
+        });
+      }
 
       // Auto-create deposit invoice via Square (non-blocking — doesn't fail the request)
       let depositInvoiceSent = false;
