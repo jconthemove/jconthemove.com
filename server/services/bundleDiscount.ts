@@ -1,10 +1,17 @@
 // Server-side bundle-discount service.
 //
-// Single entry point: `applyBundleDiscount` — takes the customer's
-// identifying info + service + raw subtotal, decides whether the discount
-// is owed, writes an audit row when applied, and returns the result.
+// Two exported entrypoints:
+//   • evaluateBundleDiscount(input) — takes the customer's identifying
+//     info + service + raw subtotal, decides whether the discount is
+//     owed, and returns the deterministic result. Pure decision; does
+//     not mutate any rows.
+//   • logBundleDiscountApplication(args) — fire-and-forget audit-log
+//     write to the `bundle_discount_applications` table; called by the
+//     route only when the discount was actually persisted on the
+//     downstream lead/quote/subscription row.
+//
 // Endpoints persist the result on their own row so the Square invoice
-// generator + admin emails can apply the same number deterministically.
+// generator + admin emails can read the same number deterministically.
 
 import { db } from "../db";
 import { sql, and, or, gte, eq, ne } from "drizzle-orm";
