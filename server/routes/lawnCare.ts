@@ -18,6 +18,7 @@ import {
   findEligibleRebookReminders,
   runRebookReminderSweep,
   buildRebookReminderEmail,
+  getLastSweepInfo,
   REBOOK_ELIGIBILITY_DAYS,
   REBOOK_RESEND_WINDOW_DAYS,
 } from "../services/lawnCareRebookReminder";
@@ -733,7 +734,7 @@ router.post("/activate-plan/:id", requireAuth, requireAdminRole, async (req: Req
 
 // GET /api/lawn-care/rebook-reminders/preview — admin only
 // Lists customers eligible for a re-book email, plus a render of the first email.
-router.get("/rebook-reminders/preview", requireAuth, requireAdminRole, async (_req: Request, res: Response) => {
+async function rebookReminderPreviewHandler(_req: Request, res: Response) {
   try {
     const eligible = await findEligibleRebookReminders(50);
     const sample = eligible[0]
@@ -742,6 +743,7 @@ router.get("/rebook-reminders/preview", requireAuth, requireAdminRole, async (_r
           phone: eligible[0].phone,
           serviceCategory: eligible[0].serviceCategory,
           totalQuoted: eligible[0].totalQuoted,
+          lastServiceAt: eligible[0].updatedAt,
         })
       : null;
     return res.json({
@@ -758,23 +760,31 @@ router.get("/rebook-reminders/preview", requireAuth, requireAdminRole, async (_r
         lastUpdated: q.updatedAt,
       })),
       sampleEmail: sample,
+      lastRun: getLastSweepInfo(),
     });
   } catch (err) {
     console.error("Re-book reminder preview error:", err);
     return res.status(500).json({ error: "Failed to load preview" });
   }
-});
+}
 
-// POST /api/lawn-care/rebook-reminders/send — admin only. Manual sweep trigger.
-router.post("/rebook-reminders/send", requireAuth, requireAdminRole, async (_req: Request, res: Response) => {
+async function rebookReminderSendHandler(_req: Request, res: Response) {
   try {
-    const result = await runRebookReminderSweep();
-    return res.json({ success: true, ...result });
+    const result = await runRebookReminderSweep(undefined, "manual");
+    return res.json({ success: true, ...result, lastRun: getLastSweepInfo() });
   } catch (err) {
     console.error("Re-book reminder send error:", err);
     return res.status(500).json({ error: "Failed to send reminders" });
   }
-});
+}
+
+// Canonical admin paths (per task spec) — singular "rebook-reminder".
+router.get("/admin/rebook-reminder/preview", requireAuth, requireAdminRole, rebookReminderPreviewHandler);
+router.post("/admin/rebook-reminder/send", requireAuth, requireAdminRole, rebookReminderSendHandler);
+
+// Back-compat aliases — earlier versions of the admin UI used these.
+router.get("/rebook-reminders/preview", requireAuth, requireAdminRole, rebookReminderPreviewHandler);
+router.post("/rebook-reminders/send", requireAuth, requireAdminRole, rebookReminderSendHandler);
 
 // GET /api/lawn-care/plans — admin only
 router.get("/plans", requireAuth, requireAdminRole, async (_req: Request, res: Response) => {

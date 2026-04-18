@@ -58,27 +58,57 @@ export default function AdminLawnCare() {
   const activatePlanMutation = useAction("activate-plan");
 
   // ── Re-book Reminder card ──────────────────────────────────────────────
+  type LastRunInfo = {
+    ranAt: string;
+    attempted: number;
+    sent: number;
+    failed: number;
+    skipped: boolean;
+    trigger: "scheduler" | "manual";
+  } | null;
   type RebookPreview = {
     eligibilityDays: number;
     resendWindowDays: number;
     eligibleCount: number;
     eligible: { id: number; customerName: string; email: string | null; phone: string; serviceCategory: string; totalQuoted: string | null; lastUpdated: string }[];
     sampleEmail: { html: string; text: string; subject: string } | null;
+    lastRun: LastRunInfo;
   };
   const [previewOpen, setPreviewOpen] = useState(false);
   const previewQ = useQuery<RebookPreview>({
-    queryKey: ["/api/lawn-care/rebook-reminders/preview"],
+    queryKey: ["/api/lawn-care/admin/rebook-reminder/preview"],
     enabled: previewOpen,
   });
   const sendRemindersMutation = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/lawn-care/rebook-reminders/send", {}),
+    mutationFn: () => apiRequest("POST", "/api/lawn-care/admin/rebook-reminder/send", {}),
     onSuccess: async (res) => {
       const data = await res.json();
       toast({ title: `Sent ${data.sent} reminder${data.sent === 1 ? "" : "s"}`, description: data.failed ? `${data.failed} failed — see server logs` : `${data.attempted} attempted` });
-      queryClient.invalidateQueries({ queryKey: ["/api/lawn-care/rebook-reminders/preview"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/lawn-care/admin/rebook-reminder/preview"] });
     },
     onError: () => toast({ title: "Failed to send reminders", variant: "destructive" }),
   });
+
+  function handleSendRemindersClick() {
+    const eligibleCount = previewQ.data?.eligibleCount;
+    const countPart = typeof eligibleCount === "number"
+      ? `${eligibleCount} customer${eligibleCount === 1 ? "" : "s"}`
+      : "every eligible customer";
+    const ok = window.confirm(
+      `Send re-book reminder emails to ${countPart} now?\n\nEach email is dispatched immediately. Customers won't be re-emailed for at least 60 days.`
+    );
+    if (!ok) return;
+    sendRemindersMutation.mutate();
+  }
+
+  function fmtLastRun(info: LastRunInfo): string {
+    if (!info) return "Never run in this server process.";
+    const when = new Date(info.ranAt).toLocaleString();
+    const status = info.skipped
+      ? "skipped (another sweep was in progress)"
+      : `${info.sent} sent · ${info.failed} failed · ${info.attempted} attempted`;
+    return `Last run: ${when} (${info.trigger}) — ${status}`;
+  }
 
   return (
     <div className="min-h-screen bg-slate-900 text-white p-4 md:p-6">
@@ -120,7 +150,7 @@ export default function AdminLawnCare() {
               <Button size="sm" variant="outline" className="border-slate-600 text-slate-200 text-xs" onClick={() => setPreviewOpen(o => !o)} data-testid="button-preview-rebook">
                 <Eye className="h-3 w-3 mr-1" /> {previewOpen ? "Hide" : "Preview"}
               </Button>
-              <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-slate-900 text-xs font-semibold" onClick={() => sendRemindersMutation.mutate()} disabled={sendRemindersMutation.isPending} data-testid="button-send-rebook">
+              <Button size="sm" className="bg-lime-500 hover:bg-lime-600 text-slate-900 text-xs font-semibold" onClick={handleSendRemindersClick} disabled={sendRemindersMutation.isPending} data-testid="button-send-rebook">
                 {sendRemindersMutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Send className="h-3 w-3 mr-1" />} Send Now
               </Button>
             </div>
@@ -136,6 +166,9 @@ export default function AdminLawnCare() {
                     <span className="text-lime-400 font-semibold">{previewQ.data.eligibleCount}</span> customer{previewQ.data.eligibleCount === 1 ? "" : "s"} eligible
                     {" · "}
                     Window: {previewQ.data.eligibilityDays}d eligible / {previewQ.data.resendWindowDays}d re-send
+                  </div>
+                  <div className="text-[11px] text-slate-500 mb-3" data-testid="rebook-reminder-last-run">
+                    {fmtLastRun(previewQ.data.lastRun)}
                   </div>
                   {previewQ.data.eligible.length > 0 ? (
                     <div className="space-y-1 max-h-48 overflow-y-auto">
