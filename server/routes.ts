@@ -3501,7 +3501,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      const quote = calculateWindowCleaningQuote({
+      // Bundle discount eligibility: customer ticked another service in this
+      // form (intent) OR has a recent paid record in another service. We pass
+      // `addonSelected: false` to the legacy pricing engine so the existing
+      // ADDON_DISCOUNT_PERCENT branch doesn't double-apply on top of our
+      // shared bundle engine. The shared engine wins.
+      const { evaluateBundleDiscount, logBundleDiscountApplication } = await import("./services/bundleDiscount");
+      const intentAddons: string[] = addonSelected ? (addons.length > 0 ? addons : ["other_service"]) : addons;
+
+      const baseQuote = calculateWindowCleaningQuote({
         standardWindows,
         largeWindows,
         ladderWindows,
@@ -3509,8 +3517,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         includeOutside,
         seasonMode,
         promoCode: validatedPromoCode,
-        addonSelected,
+        addonSelected: false,
       }, isApril);
+
+      const bundleDiscount = await evaluateBundleDiscount({
+        currentService: "window_cleaning",
+        phone,
+        email,
+        bundleAddons: intentAddons,
+        subtotal: baseQuote.total,
+      });
+
+      // Re-shape the legacy `quote` object so downstream code (response,
+      // details JSON, admin email) keeps working unchanged.
+      const quote = {
+        ...baseQuote,
+        addonDiscountAmount: bundleDiscount.amount,
+        addonDiscountApplied: bundleDiscount.applied,
+        discountAmount: baseQuote.discountAmount + bundleDiscount.amount,
+        discountPercent: baseQuote.discountPercent + (bundleDiscount.applied ? bundleDiscount.percent : 0),
+        total: bundleDiscount.applied ? bundleDiscount.finalTotal : baseQuote.total,
+      };
 
       const serverTravelFee = distanceMiles > 5 ? 50 : travelFee;
       const adjustedTotal = quote.total + serverTravelFee;
@@ -3548,8 +3575,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalPrice: String(adjustedTotal),
         details,
         promoCode: promoCode.toUpperCase() || null,
+        bundleDiscountAmount: bundleDiscount.amount.toFixed(2),
+        bundleDiscountReason: bundleDiscount.reason,
         createdByUserId: (req.session as any)?.userId || req.user?.id || null,
       }).returning();
+
+      if (bundleDiscount.applied) {
+        logBundleDiscountApplication({
+          referenceTable: "leads",
+          referenceId: lead.id,
+          serviceType: "window_cleaning",
+          customerEmail: customerEmail || null,
+          customerPhone: customerPhone || null,
+          subtotalBefore: baseQuote.total,
+          result: bundleDiscount,
+        });
+      }
 
       const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
       const customerName = `${firstName} ${lastName}`.trim();
@@ -3763,7 +3804,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid lead data", details: parseResult.error.errors });
       }
       const leadData = parseResult.data;
+
+      // Bundle discount: marketplace posts can also be bundled. We compute
+      // BEFORE insert and pass the discount fields through, then update the
+      // lead's totalPrice in-place so downstream code (Square invoice, admin
+      // emails) see the discounted total.
+      const { evaluateBundleDiscount, logBundleDiscountApplication } = await import("./services/bundleDiscount");
+      const mktBundleAddons: string[] = Array.isArray((req.body as any).bundleAddons) ? (req.body as any).bundleAddons : [];
+      const mktSubtotal = parseFloat(String(leadData.totalPrice || "0")) || 0;
+      const mktBundleDiscount = await evaluateBundleDiscount({
+        currentService: leadData.serviceType || "moving",
+        phone: leadData.phone,
+        email: leadData.email,
+        bundleAddons: mktBundleAddons,
+        subtotal: mktSubtotal,
+      });
+
       const lead = await storage.createLead(leadData);
+
+      if (mktBundleDiscount.applied) {
+        try {
+          await db.update(leads).set({
+            totalPrice: String(mktBundleDiscount.finalTotal),
+            bundleDiscountAmount: mktBundleDiscount.amount.toFixed(2),
+            bundleDiscountReason: mktBundleDiscount.reason,
+          }).where(eq(leads.id, lead.id));
+          (lead as any).totalPrice = String(mktBundleDiscount.finalTotal);
+          (lead as any).bundleDiscountAmount = mktBundleDiscount.amount.toFixed(2);
+          (lead as any).bundleDiscountReason = mktBundleDiscount.reason;
+        } catch (e) {
+          console.warn("[marketplace] bundle discount persist failed:", (e as Error).message);
+        }
+        logBundleDiscountApplication({
+          referenceTable: "leads",
+          referenceId: lead.id,
+          serviceType: leadData.serviceType || "moving",
+          customerEmail: leadData.email || null,
+          customerPhone: leadData.phone || null,
+          subtotalBefore: mktSubtotal,
+          result: mktBundleDiscount,
+        });
+      }
 
       await storage.updateLeadStatus(lead.id, "available");
       try {
@@ -20163,7 +20244,21 @@ Thank you for your business!
       });
 
       const seniorDiscountAmount = seniorDiscount === true ? 5 : 0;
-      const effectiveMonthlyPrice = Math.max(0, quote.finalMonthlyPrice - promoDiscount - seniorDiscountAmount);
+      const preBundleMonthly = Math.max(0, quote.finalMonthlyPrice - promoDiscount - seniorDiscountAmount);
+
+      // Auto-applied 10% bundle discount: customer ticked another service in
+      // this same form OR has a paid/active record in another service in the
+      // last 90 days.
+      const { evaluateBundleDiscount, logBundleDiscountApplication } = await import("./services/bundleDiscount");
+      const bundleDiscount = await evaluateBundleDiscount({
+        currentService: "trash_valet",
+        phone,
+        email,
+        bundleAddons,
+        subtotal: preBundleMonthly,
+      });
+      const effectiveMonthlyPrice = bundleDiscount.applied ? bundleDiscount.finalTotal : preBundleMonthly;
+
       const today = new Date().toISOString().split("T")[0];
       const [sub] = await db.insert(trashSubscriptions).values({
         customerName: customerName.trim(),
@@ -20189,10 +20284,24 @@ Thank you for your business!
         projectedMonthlyPrice: String(quote.projectedMonthlyPrice),
         monthlyMinimumApplied: quote.monthlyMinimumApplied,
         finalMonthlyPrice: String(effectiveMonthlyPrice),
+        bundleDiscountAmount: bundleDiscount.amount.toFixed(2),
+        bundleDiscountReason: bundleDiscount.reason,
         billingStatus: "active",
         status: "active",
         nextBillingDate: today,
       }).returning();
+
+      if (bundleDiscount.applied) {
+        logBundleDiscountApplication({
+          referenceTable: "trash_subscriptions",
+          referenceId: sub.id,
+          serviceType: "trash_valet",
+          customerEmail: email || null,
+          customerPhone: phone || null,
+          subtotalBefore: preBundleMonthly,
+          result: bundleDiscount,
+        });
+      }
 
       // First job: schedule for the next upcoming service day (always in the future)
       const { isRecyclingWeek: checkRecycling } = await import("../shared/trashValetPricing");
@@ -20243,9 +20352,9 @@ Thank you for your business!
       try {
         await sendEmail({
           to: companyEmail, from: companyEmail,
-          subject: `New Trash Valet Subscription — ${customerName}${seniorDiscountAmount > 0 ? " [SENIOR DISCOUNT]" : ""}${bundleAddons.length > 0 ? " [+ Bundle Interest]" : ""}`,
-          text: `New trash valet subscription.\n\nCustomer: ${customerName}\nPhone: ${phone}\nEmail: ${email}\nAddress: ${address}, ${city}, ${state} ${zip}\nCans: ${cans}, Bags: ${bagCount}\nRecycling: ${recyclingEnabled ? "Yes" : "No"}\nService Day: ${dayNames[Number(serviceDayOfWeek)] || serviceDayOfWeek}\nMonthly Price: $${effectiveMonthlyPrice}${promoCodeUsed ? ` (promo: ${promoCodeUsed})` : ""}${seniorDiscountAmount > 0 ? " [includes $5 senior discount — already applied]" : ""}\nPlan: ${planType}${seniorDiscountAmount > 0 ? "\n\n🏅 SENIOR DISCOUNT APPLIED: $5/month has already been deducted from the monthly price. The $" + effectiveMonthlyPrice + "/mo rate is the correct discounted amount — use this when invoicing." : ""}${bundleAddons.length > 0 ? `\n\n⚡ BUNDLE DISCOUNT: ${bundleAddons.join(", ")} — apply 10% off + up to $50 off on the add-on(s) when invoicing.` : ""}\n\nView in admin panel at /admin-trash-valet`,
-          html: `<h2>New Trash Valet Subscription</h2>${seniorDiscountAmount > 0 ? `<div style="background:#1e3a5f;border:2px solid #3b82f6;padding:12px 16px;border-radius:8px;margin-bottom:12px"><b style="color:#93c5fd;font-size:15px">🏅 SENIOR DISCOUNT APPLIED</b><br><span style="color:#bfdbfe">$5/month has already been deducted. Invoice at <b>$${effectiveMonthlyPrice}/mo</b> — do NOT use the pre-discount rate.</span></div>` : ""}<p><b>Customer:</b> ${customerName}<br><b>Phone:</b> ${phone}<br><b>Email:</b> ${email}<br><b>Address:</b> ${address}, ${city}, ${state} ${zip}<br><b>Cans:</b> ${cans} | <b>Bags:</b> ${bagCount}<br><b>Recycling:</b> ${recyclingEnabled ? "Yes" : "No"}<br><b>Service Day:</b> ${dayNames[Number(serviceDayOfWeek)] || serviceDayOfWeek}<br><b>Monthly Price:</b> $${effectiveMonthlyPrice}${promoCodeUsed ? ` (promo: ${promoCodeUsed})` : ""}${seniorDiscountAmount > 0 ? " <span style='color:#93c5fd'>(senior discount included)</span>" : ""}<br><b>Plan:</b> ${planType}${bundleAddons.length > 0 ? `<br><br><b style="color:green">⚡ Bundle Add-On (10% off + up to $50 off):</b> ${bundleAddons.join(", ")} — apply discount when invoicing.` : ""}</p>`,
+          subject: `New Trash Valet Subscription — ${customerName}${seniorDiscountAmount > 0 ? " [SENIOR]" : ""}${bundleDiscount.applied ? (bundleDiscount.reason === "cross_service_history" ? " [REPEAT BUNDLE -10%]" : " [BUNDLE -10%]") : ""}`,
+          text: `New trash valet subscription.\n\nCustomer: ${customerName}\nPhone: ${phone}\nEmail: ${email}\nAddress: ${address}, ${city}, ${state} ${zip}\nCans: ${cans}, Bags: ${bagCount}\nRecycling: ${recyclingEnabled ? "Yes" : "No"}\nService Day: ${dayNames[Number(serviceDayOfWeek)] || serviceDayOfWeek}\nMonthly Price: $${effectiveMonthlyPrice.toFixed(2)}${promoCodeUsed ? ` (promo: ${promoCodeUsed})` : ""}${seniorDiscountAmount > 0 ? " [includes $5 senior discount — already applied]" : ""}\nPlan: ${planType}${seniorDiscountAmount > 0 ? "\n\n🏅 SENIOR DISCOUNT APPLIED: $5/month has already been deducted. Use the $" + effectiveMonthlyPrice.toFixed(2) + "/mo rate when invoicing." : ""}${bundleDiscount.applied ? `\n\n⚡ BUNDLE DISCOUNT APPLIED: 10% off ($${bundleDiscount.amount.toFixed(2)}/mo) — already baked into the $${effectiveMonthlyPrice.toFixed(2)}/mo rate. Reason: ${bundleDiscount.reason === "cross_service_history" ? `recent ${bundleDiscount.triggeringServices.join(", ")} customer` : `bundling with ${bundleDiscount.triggeringServices.join(", ")}`}.` : ""}\n\nView in admin panel at /admin-trash-valet`,
+          html: `<h2>New Trash Valet Subscription</h2>${seniorDiscountAmount > 0 ? `<div style="background:#1e3a5f;border:2px solid #3b82f6;padding:12px 16px;border-radius:8px;margin-bottom:12px"><b style="color:#93c5fd;font-size:15px">🏅 SENIOR DISCOUNT APPLIED</b><br><span style="color:#bfdbfe">$5/month has already been deducted. Invoice at <b>$${effectiveMonthlyPrice.toFixed(2)}/mo</b>.</span></div>` : ""}${bundleDiscount.applied ? `<div style="background:#dcfce7;border:2px solid #22c55e;padding:12px 16px;border-radius:8px;margin-bottom:12px"><b style="color:#15803d;font-size:15px">⚡ BUNDLE DISCOUNT APPLIED: −$${bundleDiscount.amount.toFixed(2)}/mo (10%)</b><br><span style="color:#166534">Already baked into the <b>$${effectiveMonthlyPrice.toFixed(2)}/mo</b> rate. Reason: ${bundleDiscount.reason === "cross_service_history" ? `recent ${bundleDiscount.triggeringServices.join(", ")} customer` : `bundling with ${bundleDiscount.triggeringServices.join(", ")}`}.</span></div>` : ""}<p><b>Customer:</b> ${customerName}<br><b>Phone:</b> ${phone}<br><b>Email:</b> ${email}<br><b>Address:</b> ${address}, ${city}, ${state} ${zip}<br><b>Cans:</b> ${cans} | <b>Bags:</b> ${bagCount}<br><b>Recycling:</b> ${recyclingEnabled ? "Yes" : "No"}<br><b>Service Day:</b> ${dayNames[Number(serviceDayOfWeek)] || serviceDayOfWeek}<br><b>Monthly Price:</b> $${effectiveMonthlyPrice.toFixed(2)}${promoCodeUsed ? ` (promo: ${promoCodeUsed})` : ""}<br><b>Plan:</b> ${planType}</p>`,
         });
       } catch (emailErr) { console.error("Admin email failed:", emailErr); }
       try {
@@ -20274,7 +20383,7 @@ Thank you for your business!
         })();
       }
 
-      res.json({ subscriptionId: sub.id, jobId: job.id, quote: { ...quote, finalMonthlyPrice: effectiveMonthlyPrice }, promoApplied: promoCodeUsed });
+      res.json({ subscriptionId: sub.id, jobId: job.id, quote: { ...quote, finalMonthlyPrice: effectiveMonthlyPrice }, promoApplied: promoCodeUsed, bundleDiscount });
     } catch (err) {
       console.error("Error creating trash valet subscription:", err);
       res.status(500).json({ error: "Failed to create subscription" });

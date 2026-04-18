@@ -64,16 +64,16 @@ export default function ServiceBundleAddon({
             <Plus className="h-3 w-3" /> Bundle & Save
           </p>
           <p className="text-[11px] text-zinc-400 mt-0.5">
-            Add any service — get <span className="text-green-400 font-bold">10% off + up to $50 off</span> your bundled add-on.
+            Add any service — get <span className="text-green-400 font-bold">10% off today's quote</span>, applied automatically.
           </p>
         </div>
         {hasSelected ? (
           <span className="shrink-0 bg-green-500/20 text-green-300 text-[10px] font-bold px-2 py-1 rounded-full border border-green-500/30 whitespace-nowrap flex items-center gap-1">
-            <Tag className="h-2.5 w-2.5" /> Up to $50 off
+            <Tag className="h-2.5 w-2.5" /> 10% off applied
           </span>
         ) : (
           <span className="shrink-0 bg-orange-500/10 text-orange-400 text-[10px] font-bold px-2 py-1 rounded-full border border-orange-500/20 whitespace-nowrap">
-            Save up to $50
+            Save 10%
           </span>
         )}
       </div>
@@ -106,15 +106,15 @@ export default function ServiceBundleAddon({
       {hasSelected ? (
         <div className="rounded-xl bg-green-900/30 border border-green-500/20 px-3 py-2 space-y-1">
           <p className="text-[11px] text-green-300 font-semibold">
-            🎉 10% off + up to $50 off {selectedNames} — applied when we send your invoice.
+            🎉 10% off applied to today's quote — bundling with {selectedNames}.
           </p>
           <p className="text-[10px] text-zinc-500">
-            No action needed. We'll apply the bundle discount automatically when quoting your add-on{selected.length > 1 ? "s" : ""}.
+            No code needed. We'll follow up to schedule your add-on{selected.length > 1 ? "s" : ""}.
           </p>
         </div>
       ) : (
         <p className="text-[10px] text-zinc-600 text-center">
-          Tap any service above — bundle & save 10% + up to $50 off.
+          Tap any service above — bundle &amp; save 10% off today.
         </p>
       )}
     </div>

@@ -122,6 +122,12 @@ export const leads = pgTable("leads", {
   bundleFollowupSentAt: timestamp("bundle_followup_sent_at"), // When 10% follow-up email was sent
   bundle5SentAt: timestamp("bundle5_sent_at"),               // When 5% reminder email was sent
 
+  // Auto-applied bundle discount (Task #114). Captured at quote time so the
+  // Square invoice + admin email can apply it deterministically without
+  // recomputing eligibility later. Set to 0 / null when no discount applied.
+  bundleDiscountAmount: decimal("bundle_discount_amount", { precision: 10, scale: 2 }).default("0"),
+  bundleDiscountReason: text("bundle_discount_reason"), // 'bundle_intent' | 'cross_service_history'
+
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
 
@@ -2087,6 +2093,10 @@ export const trashSubscriptions = pgTable("trash_subscriptions", {
   projectedMonthlyPrice: decimal("projected_monthly_price", { precision: 8, scale: 2 }).notNull(),
   monthlyMinimumApplied: boolean("monthly_minimum_applied").notNull().default(false),
   finalMonthlyPrice: decimal("final_monthly_price", { precision: 8, scale: 2 }).notNull(),
+  // Auto-applied bundle discount (Task #114) — already baked into
+  // finalMonthlyPrice; stored separately for invoice line-item display.
+  bundleDiscountAmount: decimal("bundle_discount_amount", { precision: 8, scale: 2 }).notNull().default("0"),
+  bundleDiscountReason: text("bundle_discount_reason"),
   billingStatus: text("billing_status").notNull().default("active"),
   nextBillingDate: date("next_billing_date"),
   status: text("status").notNull().default("active"),
@@ -2180,6 +2190,11 @@ export const lawnCareQuotes = pgTable("lawn_care_quotes", {
   addOnTotal: decimal("add_on_total", { precision: 10, scale: 2 }).default("0"),
   travelFee: decimal("travel_fee", { precision: 10, scale: 2 }).default("0"),
   totalQuoted: decimal("total_quoted", { precision: 10, scale: 2 }).default("0"),
+
+  // Auto-applied bundle discount (Task #114) — already baked into totalQuoted;
+  // stored separately so the customer-facing pricing card can show the line.
+  bundleDiscountAmount: decimal("bundle_discount_amount", { precision: 10, scale: 2 }).notNull().default("0"),
+  bundleDiscountReason: text("bundle_discount_reason"),
 
   isCustomEstimate: boolean("is_custom_estimate").default(false),
 
@@ -2354,6 +2369,35 @@ export const insertJobTradeRequestSchema = createInsertSchema(jobTradeRequests).
 });
 export type JobTradeRequest = typeof jobTradeRequests.$inferSelect;
 export type InsertJobTradeRequest = z.infer<typeof insertJobTradeRequestSchema>;
+
+// ── Bundle Discount Audit (Task #114) ────────────────────────────────────────
+// One row per discount application across any service. Lets us answer
+// "how much did the bundle discount cost us this month" and "which discount
+// reasons drive the most repeat business" without joining the per-service
+// tables. Free-form referenceTable + referenceId because applications
+// happen across leads / lawn_care_quotes / trash_subscriptions.
+export const bundleDiscountApplications = pgTable("bundle_discount_applications", {
+  id: serial("id").primaryKey(),
+  referenceTable: text("reference_table").notNull(), // 'leads' | 'lawn_care_quotes' | 'trash_subscriptions'
+  referenceId: text("reference_id").notNull(),
+  serviceType: text("service_type").notNull(), // 'lawn_care' | 'trash_valet' | 'window_cleaning' | etc
+  customerEmail: text("customer_email"),
+  customerPhone: text("customer_phone"),
+  subtotalBefore: decimal("subtotal_before", { precision: 10, scale: 2 }).notNull(),
+  discountAmount: decimal("discount_amount", { precision: 10, scale: 2 }).notNull(),
+  discountPercent: integer("discount_percent").notNull().default(10),
+  reason: text("reason").notNull(), // 'bundle_intent' | 'cross_service_history'
+  triggeringServices: text("triggering_services").array().default(sql`ARRAY[]::text[]`),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_bundle_disc_ref").on(table.referenceTable, table.referenceId),
+  index("idx_bundle_disc_phone").on(table.customerPhone),
+  index("idx_bundle_disc_email").on(table.customerEmail),
+  index("idx_bundle_disc_created").on(table.createdAt),
+]);
+export type BundleDiscountApplication = typeof bundleDiscountApplications.$inferSelect;
+export const insertBundleDiscountApplicationSchema = createInsertSchema(bundleDiscountApplications).omit({ id: true, createdAt: true });
+export type InsertBundleDiscountApplication = z.infer<typeof insertBundleDiscountApplicationSchema>;
 
 // ── Site Traffic Analytics ───────────────────────────────────────────────────
 export const pageViews = pgTable("page_views", {

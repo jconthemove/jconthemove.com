@@ -176,6 +176,19 @@ router.post("/quote", async (req: Request, res: Response) => {
       distanceMiles: data.distanceMiles,
     });
 
+    // Auto-apply 10% bundle discount when the customer is bundling another
+    // service (intent) or has a paid/active record in another service in the
+    // last 90 days (cross-service repeat).
+    const { evaluateBundleDiscount, logBundleDiscountApplication } = await import("../services/bundleDiscount");
+    const bundleDiscount = await evaluateBundleDiscount({
+      currentService: "lawn_care",
+      phone: data.phone,
+      email: data.email || null,
+      bundleAddons,
+      subtotal: pricing.totalQuoted,
+    });
+    const finalTotalQuoted = bundleDiscount.applied ? bundleDiscount.finalTotal : pricing.totalQuoted;
+
     const [quote] = await db.insert(lawnCareQuotes).values({
       customerName: data.customerName,
       phone: data.phone,
@@ -203,12 +216,26 @@ router.post("/quote", async (req: Request, res: Response) => {
       frequencyMultiplier: String(pricing.frequencyMultiplier),
       addOnTotal: String(pricing.addOnTotal),
       travelFee: String(pricing.travelFee),
-      totalQuoted: String(pricing.totalQuoted),
+      totalQuoted: String(finalTotalQuoted),
+      bundleDiscountAmount: bundleDiscount.amount.toFixed(2),
+      bundleDiscountReason: bundleDiscount.reason,
       isCustomEstimate: pricing.isCustomEstimate,
       requestedStartDate: data.requestedStartDate,
       requestedTimeWindow: data.requestedTimeWindow,
       status: "quote_requested",
     }).returning();
+
+    if (bundleDiscount.applied) {
+      logBundleDiscountApplication({
+        referenceTable: "lawn_care_quotes",
+        referenceId: quote.id,
+        serviceType: "lawn_care",
+        customerEmail: data.email || null,
+        customerPhone: data.phone,
+        subtotalBefore: pricing.totalQuoted,
+        result: bundleDiscount,
+      });
+    }
 
     if (data.email) {
       disburseServiceTokens({
@@ -220,11 +247,14 @@ router.post("/quote", async (req: Request, res: Response) => {
     }
 
     const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
-    const bundleNote = bundleAddons.length > 0
-      ? `\n\n⚡ BUNDLE DISCOUNT: ${bundleAddons.join(", ")} — apply 10% off + up to $50 off on the add-on(s) when invoicing.`
+    const bundleSubjectTag = bundleDiscount.applied
+      ? (bundleDiscount.reason === "cross_service_history" ? " [REPEAT BUNDLE -10%]" : " [BUNDLE -10%]")
       : "";
-    const bundleHtml = bundleAddons.length > 0
-      ? `<br><br><b style="color:green">⚡ Bundle Add-On (10% off + up to $50 off):</b> ${bundleAddons.join(", ")} — apply discount when invoicing.`
+    const bundleNote = bundleDiscount.applied
+      ? `\n\n⚡ BUNDLE DISCOUNT APPLIED: 10% off ($${bundleDiscount.amount.toFixed(2)}) — already baked into the $${finalTotalQuoted.toFixed(2)} total. Reason: ${bundleDiscount.reason === "cross_service_history" ? `recent customer in ${bundleDiscount.triggeringServices.join(", ")}` : `bundling with ${bundleDiscount.triggeringServices.join(", ")}`}. Use this discounted total when invoicing.`
+      : "";
+    const bundleHtml = bundleDiscount.applied
+      ? `<div style="background:#dcfce7;border:2px solid #22c55e;padding:10px 14px;border-radius:8px;margin-top:10px"><b style="color:#15803d">⚡ Bundle Discount Applied: −$${bundleDiscount.amount.toFixed(2)} (10%)</b><br><span style="color:#166534;font-size:13px">Already baked into the <b>$${finalTotalQuoted.toFixed(2)}</b> total — invoice at this rate. Reason: ${bundleDiscount.reason === "cross_service_history" ? `recent ${bundleDiscount.triggeringServices.join(", ")} customer` : `bundling with ${bundleDiscount.triggeringServices.join(", ")}`}.</span></div>`
       : "";
     const briefHtml = buildJobBriefHtml(quote, pricing);
     const briefText = buildJobBriefText(quote, pricing);
@@ -232,15 +262,15 @@ router.post("/quote", async (req: Request, res: Response) => {
       await sendEmail({
         to: companyEmail,
         from: companyEmail,
-        subject: `New Lawn Care Quote — ${data.customerName}${bundleAddons.length > 0 ? " [+ Bundle Interest]" : ""}`,
-        text: `New lawn care quote request.\n\nCustomer: ${data.customerName}\nPhone: ${data.phone}\nEmail: ${data.email || "N/A"}\nAddress: ${data.address}\nService: ${data.serviceCategory} — ${data.serviceFrequency}\nTotal: $${pricing.totalQuoted}${pricing.isCustomEstimate ? " (custom estimate)" : ""}\nNotes: ${data.notes || "—"}${bundleNote}\n\n${briefText}`,
-        html: `<h2>New Lawn Care Quote</h2><p><b>Customer:</b> ${data.customerName}<br><b>Phone:</b> ${data.phone}<br><b>Email:</b> ${data.email || "N/A"}<br><b>Address:</b> ${data.address}<br><b>Service:</b> ${data.serviceCategory} — ${data.serviceFrequency}<br><b>Total:</b> $${pricing.totalQuoted}${pricing.isCustomEstimate ? " <em>(custom estimate)</em>" : ""}</p>${bundleHtml}${briefHtml}`,
+        subject: `New Lawn Care Quote — ${data.customerName}${bundleSubjectTag}`,
+        text: `New lawn care quote request.\n\nCustomer: ${data.customerName}\nPhone: ${data.phone}\nEmail: ${data.email || "N/A"}\nAddress: ${data.address}\nService: ${data.serviceCategory} — ${data.serviceFrequency}\nSubtotal: $${pricing.totalQuoted.toFixed(2)}\nTotal: $${finalTotalQuoted.toFixed(2)}${pricing.isCustomEstimate ? " (custom estimate)" : ""}\nNotes: ${data.notes || "—"}${bundleNote}\n\n${briefText}`,
+        html: `<h2>New Lawn Care Quote</h2><p><b>Customer:</b> ${data.customerName}<br><b>Phone:</b> ${data.phone}<br><b>Email:</b> ${data.email || "N/A"}<br><b>Address:</b> ${data.address}<br><b>Service:</b> ${data.serviceCategory} — ${data.serviceFrequency}<br><b>Subtotal:</b> $${pricing.totalQuoted.toFixed(2)}<br><b>Total:</b> $${finalTotalQuoted.toFixed(2)}${pricing.isCustomEstimate ? " <em>(custom estimate)</em>" : ""}</p>${bundleHtml}${briefHtml}`,
       });
     } catch (emailErr) {
       console.error("Lawn care admin email failed:", emailErr);
     }
 
-    return res.json({ success: true, quote, pricing });
+    return res.json({ success: true, quote, pricing, bundleDiscount });
   } catch (err: any) {
     console.error("Lawn care quote error:", err);
     if (err?.name === "ZodError") return res.status(400).json({ error: "Invalid request", details: err.errors });

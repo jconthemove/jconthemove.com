@@ -359,6 +359,12 @@ export class SquareInvoiceService {
       };
     });
 
+    // Bundle discount note (Task #114): the discount is *already baked into*
+    // each lineItem.total upstream (admin-edited line items reflect the final
+    // discounted lead.totalPrice). We deliberately do NOT push a Square
+    // order-level discount here — doing so would double-discount, since the
+    // line items are already net. The discount is surfaced to the customer
+    // via the booking confirmation, the admin email, and the audit log.
     const totalAmount = lineItems.reduce((s, li) => s + li.total, 0);
 
     const orderResponse = await client.orders.create({
