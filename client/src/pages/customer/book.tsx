@@ -32,6 +32,21 @@ export default function CustomerBookPage() {
     setStarted(true);
   }, []);
 
+  // Back from /book always lands on the homepage — never on the picker or
+  // a previous tile — for both browser/device back and the in-app arrow.
+  // We push a synthetic history entry on mount so that even direct deep
+  // links (no prior SPA history) have a back-press that we can intercept.
+  useEffect(() => {
+    window.history.pushState({ bookBack: true }, "");
+    function handlePop() {
+      setLocation("/", { replace: true });
+    }
+    window.addEventListener("popstate", handlePop);
+    return () => window.removeEventListener("popstate", handlePop);
+  }, [setLocation]);
+
+  const goHome = () => setLocation("/", { replace: true });
+
   function pickService(slug: string) {
     setInitialService(slug);
     setStarted(true);
@@ -43,21 +58,20 @@ export default function CustomerBookPage() {
   }
 
   return (
-    <div className="h-screen bg-background flex flex-col overflow-hidden">
-      <div className="px-4 pt-5 pb-3 border-b border-border flex-shrink-0">
+    <div className="h-[100dvh] bg-background flex flex-col overflow-hidden">
+      <div className="px-4 pt-2 pb-1.5 sm:pt-5 sm:pb-3 border-b border-border flex-shrink-0">
         <div className="max-w-2xl mx-auto flex items-start justify-between">
           <div className="flex items-center gap-2">
-            {started && (
-              <button
-                onClick={() => { setStarted(false); setInitialService(undefined); }}
-                className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </button>
-            )}
+            <button
+              onClick={goHome}
+              className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              aria-label="Back to home"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
             <div>
-              <h1 className="text-xl font-bold">{started ? "Book a Service" : "What do you need?"}</h1>
-              <p className="text-sm text-muted-foreground mt-0.5">
+              <h1 className="text-base sm:text-xl font-bold leading-tight">{started ? "Book a Service" : "What do you need?"}</h1>
+              <p className="hidden sm:block text-sm text-muted-foreground mt-0.5">
                 {started ? "Answer a few quick questions and get an instant estimate" : "Choose a service to get started"}
               </p>
             </div>
@@ -105,8 +119,8 @@ export default function CustomerBookPage() {
         </div>
       ) : (
         <div
-          className="flex-1 overflow-hidden max-w-2xl mx-auto w-full px-4 pt-4 pb-2 flex flex-col"
-          style={{ minHeight: 0, paddingBottom: "calc(64px + 0.5rem)" }}
+          className="flex-1 overflow-hidden max-w-2xl mx-auto w-full px-3 sm:px-4 pt-2 sm:pt-4 flex flex-col"
+          style={{ minHeight: 0, paddingBottom: "calc(64px + 0.25rem)" }}
         >
           <BookingChatbot
             embedded

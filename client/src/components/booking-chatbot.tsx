@@ -2989,14 +2989,14 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
   const phase = submitted ? "submitted" : (quoteVisible && pendingQuote ? (isEmployee ? "employee_submit" : "deposit") : null);
 
   return (
-    <div className={`flex flex-col h-full min-h-[500px]${className ? " " + className : ""}`}>
+    <div className={`flex flex-col h-full min-h-0 sm:min-h-[500px]${className ? " " + className : ""}`}>
       {/* Progress bar */}
-      <div className="px-1 pb-2 shrink-0">
-        <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+      <div className="px-1 pb-1 sm:pb-2 shrink-0">
+        <div className="flex items-center justify-between text-[10px] sm:text-xs text-slate-400 mb-0.5 sm:mb-1">
           <span>{isDone ? "✅ All done!" : "Takes about 60 seconds"}</span>
           <span>{progress}%</span>
         </div>
-        <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+        <div className="h-1 sm:h-1.5 bg-slate-800 rounded-full overflow-hidden">
           <div
             className="h-full bg-gradient-to-r from-teal-500 to-blue-500 rounded-full transition-all duration-500"
             style={{ width: `${progress}%` }}
@@ -3005,14 +3005,14 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
       </div>
 
       {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-3 py-2 pr-1">
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto space-y-2 sm:space-y-3 py-1.5 sm:py-2 pr-1">
         {messages.map((m, i) => (
           <div key={i} className={`flex ${m.from === "bot" ? "justify-start" : "justify-end"}`}>
             {m.from === "bot" && (
               <div className="w-7 h-7 rounded-full bg-gradient-to-br from-teal-500 to-blue-600 flex items-center justify-center text-xs font-bold text-white shrink-0 mr-2 mt-0.5">JC</div>
             )}
             <div
-              className={`max-w-[82%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-line ${
+              className={`max-w-[82%] rounded-2xl px-3.5 sm:px-4 py-2 sm:py-2.5 text-sm leading-snug sm:leading-relaxed whitespace-pre-line ${
                 m.from === "bot"
                   ? "bg-slate-800 text-slate-100 rounded-tl-sm"
                   : "bg-teal-600 text-white rounded-tr-sm"
@@ -3408,7 +3408,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
 
       {/* Input area */}
       {!isDone && currentStep && (
-        <div className="shrink-0 pt-2 border-t border-slate-800/60">
+        <div className="shrink-0 pt-1.5 sm:pt-2 border-t border-slate-800/60">
           {stepIdx > 0 && (isFlooringService(answers) || isPaintingService(answers) || isRoofingService(answers)) && (
             <p className="text-[10px] text-slate-500 px-1 pb-1.5">50% deposit required at job start · remainder due on completion.</p>
           )}
