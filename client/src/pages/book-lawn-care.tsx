@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -8,47 +8,23 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Link } from "wouter";
 import {
-  Leaf, Phone, ChevronRight, ChevronLeft, CheckCircle2, Loader2, Calendar, Home,
+  Leaf, Phone, ChevronRight, ChevronLeft, CheckCircle2, Loader2, Sparkles,
+  Truck, Clock, MessageCircle, Mail,
 } from "lucide-react";
 import BookingConfirmedTiles from "@/components/BookingConfirmedTiles";
 import { cn } from "@/lib/utils";
 import { DatePicker } from "@/components/ui/date-picker";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
 import ServiceBundleAddon from "@/components/ServiceBundleAddon";
-
-const SERVICE_CATEGORIES = [
-  { id: "mowing", label: "Mowing", icon: "🌿", desc: "Grass cutting & cleanup" },
-  { id: "trimming", label: "Trimming & Edging", icon: "✂️", desc: "Precision edging along walks" },
-  { id: "cleanup", label: "Yard Cleanup", icon: "🍂", desc: "Leaf removal & general tidy" },
-  { id: "full_service", label: "Full Service", icon: "🏡", desc: "Mowing + trim + blow + edge" },
-  { id: "custom", label: "Custom / Estimate", icon: "📋", desc: "Darrell will reach out" },
-];
-
-const FREQUENCIES = [
-  { id: "one_time", label: "One-Time", desc: "Just once" },
-  { id: "weekly", label: "Weekly", desc: "Recurring — best rate" },
-  { id: "bi_weekly", label: "Bi-Weekly", desc: "Every two weeks" },
-  { id: "monthly", label: "Monthly", desc: "Once a month" },
-];
-
-const PROPERTY_SIZES = [
-  { id: "small", label: "Small", desc: "Under 5,000 sq ft" },
-  { id: "medium", label: "Medium", desc: "5,000–10,000 sq ft" },
-  { id: "large", label: "Large", desc: "10,000–20,000 sq ft" },
-  { id: "xlarge", label: "X-Large", desc: "20,000+ sq ft" },
-  { id: "custom", label: "Not Sure", desc: "I'll describe it" },
-];
-
-const CONDITIONS = [
-  { id: "well_maintained", label: "Well Maintained", desc: "Regular upkeep, neat", color: "text-green-400 border-green-600/40" },
-  { id: "slightly_overgrown", label: "Slightly Overgrown", desc: "A bit long, minor growth", color: "text-yellow-400 border-yellow-600/40" },
-  { id: "overgrown", label: "Overgrown", desc: "Several weeks no service", color: "text-orange-400 border-orange-600/40" },
-  { id: "heavily_overgrown", label: "Heavily Overgrown", desc: "Tall grass, weeds, brush", color: "text-red-400 border-red-600/40" },
-];
+import LawnYardCardTile from "@/components/LawnYardCard";
+import WhatThisMeans from "@/components/WhatThisMeans";
+import LawnPriceBreakdown, { type LawnPricing } from "@/components/LawnPriceBreakdown";
+import {
+  SIZE_CARDS, CONDITION_CARDS, SERVICE_CARDS, FREQUENCY_CARDS, EXPLAINERS,
+} from "@/lib/lawnYardData";
 
 const ADD_ONS = [
   { id: "edging", label: "Edging", price: 15 },
@@ -86,7 +62,7 @@ interface QuoteResult {
     serviceCategory: string;
     serviceFrequency: string;
   };
-  pricing: {
+  pricing: LawnPricing & {
     basePrice: number;
     addOnTotal: number;
     totalQuoted: number;
@@ -111,15 +87,21 @@ export default function BookLawnCare() {
   const [needsHaulAway, setNeedsHaulAway] = useState(false);
   const [quoteResult, setQuoteResult] = useState<QuoteResult | null>(null);
   const [distanceMiles, setDistanceMiles] = useState(0);
+  const [autoDetect, setAutoDetect] = useState<{
+    sqFt: number; tier: string; label: string;
+  } | null>(null);
+  const lastDetectedAddress = useRef<string>("");
 
   const form = useForm<ContactForm>({
     resolver: zodResolver(contactSchema),
     defaultValues: { customerName: "", phone: "", email: "", address: "", city: "", state: "", zip: "", requestedStartDate: "", notes: "" },
   });
 
-  // Fetch drive distance when service address changes
+  const watchedAddress = form.watch("address");
+
+  // Drive distance estimate
   useEffect(() => {
-    const addr = (form.watch("address") || "").trim();
+    const addr = (watchedAddress || "").trim();
     if (addr.length >= 8) {
       fetch(`/api/utility/estimate-drive-miles?address=${encodeURIComponent(addr)}`)
         .then(r => r.json())
@@ -128,8 +110,26 @@ export default function BookLawnCare() {
     } else {
       setDistanceMiles(0);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.watch("address")]);
+  }, [watchedAddress]);
+
+  // Lot-size auto-detect after place selected
+  async function tryDetectLotSize(addr: string) {
+    if (!addr || addr === lastDetectedAddress.current) return;
+    lastDetectedAddress.current = addr;
+    try {
+      const r = await fetch(`/api/lawn-care/lot-size?address=${encodeURIComponent(addr)}`);
+      if (!r.ok) return;
+      const data = await r.json();
+      if (data?.found && data?.sizeTier) {
+        setAutoDetect({ sqFt: data.squareFootage, tier: data.sizeTier, label: data.sizeLabel });
+        if (!propertySize || propertySize === "custom") {
+          setPropertySize(data.sizeTier);
+        }
+      }
+    } catch {
+      // silent fail per spec
+    }
+  }
 
   const quoteMutation = useMutation({
     mutationFn: (data: object) => apiRequest("POST", "/api/lawn-care/quote", data),
@@ -156,6 +156,7 @@ export default function BookLawnCare() {
       serviceCategory,
       serviceFrequency: frequency,
       propertySize,
+      squareFootage: autoDetect?.sqFt,
       propertyCondition,
       addOns: selectedAddOns,
       bundleAddons,
@@ -171,20 +172,18 @@ export default function BookLawnCare() {
 
   return (
     <div className="min-h-screen bg-slate-900 text-white">
-      {/* Header */}
       <div className="border-b border-slate-800 px-4 py-4">
         <div className="max-w-xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Leaf className="h-5 w-5 text-lime-400" />
             <span className="font-bold text-white">Lawn Care Booking</span>
           </div>
-          <a href="tel:+12312341234" className="flex items-center gap-1 text-xs text-slate-400 hover:text-white transition-colors">
+          <a href="tel:+19062859312" className="flex items-center gap-1 text-xs text-slate-400 hover:text-white transition-colors">
             <Phone className="h-3.5 w-3.5" /> Call us
           </a>
         </div>
       </div>
 
-      {/* Progress bar */}
       {step <= TOTAL_STEPS && (
         <div className="bg-slate-800 h-1">
           <div className="bg-lime-400 h-1 transition-all duration-300" style={{ width: `${progressPct}%` }} />
@@ -195,26 +194,20 @@ export default function BookLawnCare() {
 
         {/* Step 1 — Service Category */}
         {step === 1 && (
-          <StepWrap title="What service do you need?" onBack={undefined} onNext={() => { if (serviceCategory) next(); else toast({ title: "Select a service type" }); }}>
+          <StepWrap
+            title="What service do you need?"
+            subtitle="Pick the closest match — we'll fine-tune at the property."
+            onBack={undefined}
+            onNext={() => { if (serviceCategory) next(); else toast({ title: "Select a service type" }); }}
+          >
             <div className="grid grid-cols-1 gap-3">
-              {SERVICE_CATEGORIES.map((cat) => (
-                <button
-                  key={cat.id}
-                  onClick={() => setServiceCategory(cat.id)}
-                  className={cn(
-                    "flex items-center gap-3 border rounded-xl p-4 text-left transition-all",
-                    serviceCategory === cat.id
-                      ? "border-lime-500 bg-lime-500/10"
-                      : "border-slate-700 bg-slate-800/60 hover:border-slate-600"
-                  )}
-                >
-                  <span className="text-2xl">{cat.icon}</span>
-                  <div>
-                    <p className="font-semibold text-white text-sm">{cat.label}</p>
-                    <p className="text-slate-400 text-xs">{cat.desc}</p>
-                  </div>
-                  {serviceCategory === cat.id && <CheckCircle2 className="h-4 w-4 text-lime-400 ml-auto flex-shrink-0" />}
-                </button>
+              {SERVICE_CARDS.map((card) => (
+                <LawnYardCardTile
+                  key={card.id}
+                  card={card}
+                  selected={serviceCategory === card.id}
+                  onClick={() => setServiceCategory(card.id)}
+                />
               ))}
             </div>
           </StepWrap>
@@ -222,80 +215,114 @@ export default function BookLawnCare() {
 
         {/* Step 2 — Frequency */}
         {step === 2 && (
-          <StepWrap title="How often do you need service?" onBack={back} onNext={() => { if (frequency) next(); else toast({ title: "Select a frequency" }); }}>
-            <div className="grid grid-cols-2 gap-3">
-              {FREQUENCIES.map((f) => (
-                <button
-                  key={f.id}
-                  onClick={() => setFrequency(f.id)}
-                  className={cn(
-                    "border rounded-xl p-4 text-left transition-all",
-                    frequency === f.id
-                      ? "border-lime-500 bg-lime-500/10"
-                      : "border-slate-700 bg-slate-800/60 hover:border-slate-600"
-                  )}
-                >
-                  <p className="font-semibold text-white text-sm">{f.label}</p>
-                  <p className="text-slate-400 text-xs">{f.desc}</p>
-                  {frequency === f.id && <CheckCircle2 className="h-4 w-4 text-lime-400 mt-2" />}
-                </button>
+          <StepWrap
+            title="How often do you need service?"
+            subtitle="Recurring plans get a discount and first dibs on slots."
+            onBack={back}
+            onNext={() => { if (frequency) next(); else toast({ title: "Select a frequency" }); }}
+          >
+            <div className="grid grid-cols-1 gap-2.5 mb-4">
+              {FREQUENCY_CARDS.map((card) => (
+                <LawnYardCardTile
+                  key={card.id}
+                  card={card}
+                  size="sm"
+                  selected={frequency === card.id}
+                  onClick={() => setFrequency(card.id)}
+                  badge={card.id === "weekly" ? "Best deal" : card.id === "bi_weekly" ? "Most popular" : undefined}
+                />
               ))}
             </div>
+            <WhatThisMeans title="How frequency pricing works">
+              {EXPLAINERS.frequency}
+            </WhatThisMeans>
           </StepWrap>
         )}
 
-        {/* Step 3 — Property Size & Condition */}
+        {/* Step 3 — Property Size & Condition (with optional address auto-detect) */}
         {step === 3 && (
-          <StepWrap title="Tell us about your property" onBack={back} onNext={() => { if (propertySize && propertyCondition) next(); else toast({ title: "Select size and condition" }); }}>
-            <p className="text-slate-400 text-sm mb-3">Property size</p>
-            <div className="grid grid-cols-2 gap-2 mb-5">
-              {PROPERTY_SIZES.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => setPropertySize(s.id)}
-                  className={cn(
-                    "border rounded-xl p-3 text-left transition-all",
-                    propertySize === s.id
-                      ? "border-lime-500 bg-lime-500/10"
-                      : "border-slate-700 bg-slate-800/60 hover:border-slate-600"
-                  )}
-                >
-                  <p className="font-semibold text-white text-sm">{s.label}</p>
-                  <p className="text-slate-400 text-xs">{s.desc}</p>
-                </button>
+          <StepWrap
+            title="Tell us about your property"
+            subtitle="Pick what looks closest — we'll adjust if needed."
+            onBack={back}
+            onNext={() => { if (propertySize && propertyCondition) next(); else toast({ title: "Select size and condition" }); }}
+          >
+            {/* Address auto-detect helper */}
+            <div className="rounded-xl border border-teal-500/30 bg-teal-500/5 p-3 mb-5">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-teal-300 mb-1.5 flex items-center gap-1.5">
+                <Sparkles className="h-3 w-3" /> Want us to measure your lot?
+              </p>
+              <PlacesAutocomplete
+                value={watchedAddress}
+                onChange={(v) => form.setValue("address", v, { shouldValidate: false })}
+                onPlaceSelect={(place) => {
+                  form.setValue("address", place.fullAddress, { shouldValidate: false });
+                  if (place.city) form.setValue("city", place.city);
+                  if (place.state) form.setValue("state", place.state);
+                  if (place.zip) form.setValue("zip", place.zip);
+                  tryDetectLotSize(place.fullAddress);
+                }}
+                placeholder="Type your address (optional)"
+              />
+              {autoDetect && (
+                <div className="mt-2 flex items-start gap-2 rounded-lg bg-lime-500/10 border border-lime-500/30 px-2.5 py-2">
+                  <CheckCircle2 className="h-4 w-4 text-lime-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-lime-200 leading-snug">
+                    We measured your lot at <b>~{autoDetect.sqFt.toLocaleString()} sq ft</b> — pre-selected <b>{autoDetect.label}</b>. Change if needed.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <p className="text-slate-400 text-sm mb-2 font-medium">Yard size</p>
+            <div className="grid grid-cols-1 gap-2.5 mb-3">
+              {SIZE_CARDS.map((card) => (
+                <LawnYardCardTile
+                  key={card.id}
+                  card={card}
+                  size="sm"
+                  selected={propertySize === card.id}
+                  onClick={() => setPropertySize(card.id)}
+                  badge={autoDetect?.tier === card.id ? "Detected" : undefined}
+                />
               ))}
             </div>
-            <p className="text-slate-400 text-sm mb-3">Current condition</p>
-            <div className="grid grid-cols-1 gap-2">
-              {CONDITIONS.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => setPropertyCondition(c.id)}
-                  className={cn(
-                    "border rounded-xl p-3 text-left transition-all",
-                    propertyCondition === c.id
-                      ? `border-opacity-100 bg-slate-800 ${c.color.split(" ")[1]}`
-                      : "border-slate-700 bg-slate-800/60 hover:border-slate-600"
-                  )}
-                >
-                  <span className={cn("font-semibold text-sm", propertyCondition === c.id ? c.color.split(" ")[0] : "text-white")}>
-                    {c.label}
-                  </span>
-                  <p className="text-slate-400 text-xs">{c.desc}</p>
-                </button>
+            <WhatThisMeans title="How yard size affects price">
+              {EXPLAINERS.size}
+            </WhatThisMeans>
+
+            <p className="text-slate-400 text-sm mb-2 mt-5 font-medium">Current condition</p>
+            <div className="grid grid-cols-1 gap-2.5 mb-3">
+              {CONDITION_CARDS.map((card) => (
+                <LawnYardCardTile
+                  key={card.id}
+                  card={card}
+                  size="sm"
+                  selected={propertyCondition === card.id}
+                  onClick={() => setPropertyCondition(card.id)}
+                />
               ))}
             </div>
+            <WhatThisMeans title="What 'overgrown' actually means">
+              {EXPLAINERS.condition}
+            </WhatThisMeans>
           </StepWrap>
         )}
 
         {/* Step 4 — Add-ons & Flags */}
         {step === 4 && (
-          <StepWrap title="Extras & property details" onBack={back} onNext={next}>
-            <p className="text-slate-400 text-sm mb-3">Add-on services (optional)</p>
-            <div className="grid grid-cols-2 gap-2 mb-6">
+          <StepWrap
+            title="Extras & property details"
+            subtitle="Optional — add only what you want."
+            onBack={back}
+            onNext={next}
+          >
+            <p className="text-slate-400 text-sm mb-3 font-medium">Add-on services</p>
+            <div className="grid grid-cols-2 gap-2 mb-3">
               {ADD_ONS.map((a) => (
                 <button
                   key={a.id}
+                  type="button"
                   onClick={() => toggleAddOn(a.id)}
                   className={cn(
                     "border rounded-xl p-3 text-left transition-all",
@@ -309,13 +336,17 @@ export default function BookLawnCare() {
                 </button>
               ))}
             </div>
-            <p className="text-slate-400 text-sm mb-3">Property details</p>
+            <WhatThisMeans title="How add-ons work">
+              {EXPLAINERS.addOns}
+            </WhatThisMeans>
+
+            <p className="text-slate-400 text-sm mb-3 mt-5 font-medium">Property details</p>
             <div className="space-y-3 mb-5">
               {[
-                { state: hasFence, set: setHasFence, label: "Fenced yard", desc: "Gate access needed" },
-                { state: hasPets, set: setHasPets, label: "Pets on property", desc: "We'll take extra care" },
-                { state: hasSteepSlope, set: setHasSteepSlope, label: "Steep slope / hill", desc: "Adds complexity (15%)" },
-                { state: needsHaulAway, set: setNeedsHaulAway, label: "Haul away debris", desc: "+$45 flat fee" },
+                { state: hasFence, set: setHasFence, label: "Fenced yard", desc: "Gate access needed (+$10)" },
+                { state: hasPets, set: setHasPets, label: "Pets on property", desc: "We'll take extra care with gates" },
+                { state: hasSteepSlope, set: setHasSteepSlope, label: "Steep slope / hill", desc: "Adds 15% — extra care on hills" },
+                { state: needsHaulAway, set: setNeedsHaulAway, label: "Haul away debris", desc: "+$45 — we take it with us" },
               ].map(({ state, set, label, desc }) => (
                 <label key={label} className="flex items-center gap-3 border border-slate-700 rounded-xl p-3 cursor-pointer hover:border-slate-600 transition-all">
                   <Checkbox checked={state} onCheckedChange={(v) => set(Boolean(v))} className="border-slate-500" />
@@ -337,7 +368,7 @@ export default function BookLawnCare() {
 
         {/* Step 5 — Preferred Date */}
         {step === 5 && (
-          <StepWrap title="When would you like to start?" onBack={back} onNext={next}>
+          <StepWrap title="When would you like to start?" subtitle="We'll confirm a firm time after you submit." onBack={back} onNext={next}>
             <div className="space-y-4">
               <div>
                 <label className="text-slate-400 text-sm mb-2 block">Preferred start date (optional)</label>
@@ -364,6 +395,7 @@ export default function BookLawnCare() {
         {step === 6 && (
           <StepWrap
             title="Your contact info"
+            subtitle="Darrell will reach out to confirm everything."
             onBack={back}
             onNext={form.handleSubmit(handleContactSubmit)}
             nextLabel={quoteMutation.isPending ? undefined : "Get My Quote"}
@@ -395,6 +427,7 @@ export default function BookLawnCare() {
                     if (place.city) form.setValue("city", place.city);
                     if (place.state) form.setValue("state", place.state);
                     if (place.zip) form.setValue("zip", place.zip);
+                    tryDetectLotSize(place.fullAddress);
                   }}
                   placeholder="123 Main St, Ironwood, MI"
                   inputClassName="w-full rounded-md border border-slate-700 bg-slate-800 text-white placeholder:text-slate-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500/60 transition-all"
@@ -415,88 +448,9 @@ export default function BookLawnCare() {
           </StepWrap>
         )}
 
-        {/* Step 7 — Quote Result */}
+        {/* Step 7 — Confirmation */}
         {step === 7 && quoteResult && (
-          <div className="rounded-2xl border border-green-500/30 bg-gradient-to-br from-green-900/20 via-slate-900/80 to-slate-900 overflow-hidden">
-
-            {/* Hero bar */}
-            <div className="bg-green-500/10 border-b border-green-500/20 px-4 py-4 flex items-center gap-3">
-              <div className="w-11 h-11 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
-                <CheckCircle2 className="h-6 w-6 text-green-400" />
-              </div>
-              <div>
-                <p className="font-extrabold text-white text-base leading-tight">Request Confirmed!</p>
-                <p className="text-xs text-green-300 mt-0.5">
-                  {quoteResult.pricing.isCustomEstimate
-                    ? "We'll reach out shortly to discuss your custom estimate."
-                    : "Darrell will confirm your appointment shortly."}
-                </p>
-              </div>
-            </div>
-
-            <div className="px-4 py-4 space-y-3">
-
-              {/* Price block */}
-              <div className="rounded-xl bg-slate-800/60 border border-slate-700/50 px-4 py-3 text-center">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">
-                  {quoteResult.pricing.isCustomEstimate ? "Custom Estimate" : "Your Quote"}
-                </p>
-                {quoteResult.pricing.isCustomEstimate ? (
-                  <p className="text-sm text-slate-300">Darrell will review your property and provide a personalized price.</p>
-                ) : (
-                  <>
-                    <p className="text-2xl font-extrabold text-lime-400">
-                      ${quoteResult.pricing.totalQuoted}
-                      {quoteResult.quote.serviceFrequency !== "one_time" && <span className="text-base font-normal text-slate-400"> / visit</span>}
-                    </p>
-                    <div className="mt-2 space-y-1 text-left">
-                      <div className="flex justify-between text-xs">
-                        <span className="text-slate-400">Base price</span>
-                        <span className="text-white">${quoteResult.pricing.basePrice}</span>
-                      </div>
-                      {quoteResult.pricing.addOnTotal > 0 && (
-                        <div className="flex justify-between text-xs">
-                          <span className="text-slate-400">Add-ons</span>
-                          <span className="text-white">+${quoteResult.pricing.addOnTotal}</span>
-                        </div>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* What happens next */}
-              <div className="rounded-xl bg-slate-800/40 border border-slate-700/40 px-4 py-3">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2.5">What Happens Next</p>
-                <div className="space-y-2">
-                  {[
-                    quoteResult.pricing.isCustomEstimate
-                      ? "Darrell visits or calls to assess your property and confirm pricing"
-                      : "Darrell confirms your first service date",
-                    "You receive a Square invoice — pay to lock in your schedule",
-                    "We arrive on your service day and keep your lawn looking great ✅",
-                  ].map((step, i) => (
-                    <div key={i} className="flex items-start gap-2.5">
-                      <span className="w-5 h-5 rounded-full bg-teal-500/20 text-teal-400 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
-                      <p className="text-xs text-slate-300 leading-snug">{step}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <p className="text-[11px] text-slate-500 text-center">
-                Questions? Call <a href="tel:+19062859312" className="text-slate-300 underline">(906) 285-9312</a>
-              </p>
-
-              <Link href="/">
-                <Button variant="outline" className="w-full border-slate-700 text-white hover:bg-slate-800">
-                  Back to Home
-                </Button>
-              </Link>
-
-              <BookingConfirmedTiles />
-            </div>
-          </div>
+          <ConfirmationPanel result={quoteResult} frequency={frequency} />
         )}
 
       </div>
@@ -505,9 +459,10 @@ export default function BookLawnCare() {
 }
 
 function StepWrap({
-  title, children, onBack, onNext, nextLabel = "Continue", nextDisabled = false, nextIcon,
+  title, subtitle, children, onBack, onNext, nextLabel = "Continue", nextDisabled = false, nextIcon,
 }: {
   title: string;
+  subtitle?: string;
   children: React.ReactNode;
   onBack?: () => void;
   onNext: (() => void) | undefined;
@@ -517,7 +472,8 @@ function StepWrap({
 }) {
   return (
     <div>
-      <h2 className="text-lg font-bold mb-4 text-white">{title}</h2>
+      <h2 className="text-lg font-bold mb-1 text-white">{title}</h2>
+      {subtitle && <p className="text-slate-400 text-sm mb-4">{subtitle}</p>}
       <div className="mb-6">{children}</div>
       <div className="flex gap-3">
         {onBack && (
@@ -530,6 +486,101 @@ function StepWrap({
             {nextLabel} {nextIcon ?? <ChevronRight className="h-4 w-4 ml-1" />}
           </Button>
         )}
+      </div>
+    </div>
+  );
+}
+
+function ConfirmationPanel({ result, frequency }: { result: QuoteResult; frequency: string }) {
+  const isCustom = result.pricing.isCustomEstimate;
+  const timeline = isCustom
+    ? [
+        { title: "Darrell reviews your request", desc: "He'll either call or stop by within 24 hours.", icon: MessageCircle },
+        { title: "You get a personalized quote", desc: "By text or email — clear line items, no surprises.", icon: Mail },
+        { title: "Crew scheduled & invoice sent", desc: "Pay the Square invoice to lock your slot.", icon: CheckCircle2 },
+        { title: "Service day", desc: "Crew arrives in the window we agreed on.", icon: Truck },
+      ]
+    : [
+        { title: "Darrell confirms your service date", desc: "Within 24 hours by text/email.", icon: MessageCircle },
+        { title: "You receive a Square invoice", desc: "Pay to lock in your spot on the calendar.", icon: Mail },
+        { title: "Crew arrives in your window", desc: "Typically a 2-hour arrival window.", icon: Truck },
+        { title: "Service complete", desc: "Photos sent + receipt — easy, every visit.", icon: CheckCircle2 },
+      ];
+
+  return (
+    <div className="rounded-2xl border border-green-500/30 bg-gradient-to-br from-green-900/20 via-slate-900/80 to-slate-900 overflow-hidden">
+      <div className="bg-green-500/10 border-b border-green-500/20 px-4 py-4 flex items-center gap-3">
+        <div className="w-11 h-11 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
+          <CheckCircle2 className="h-6 w-6 text-green-400" />
+        </div>
+        <div>
+          <p className="font-extrabold text-white text-base leading-tight">Request Confirmed!</p>
+          <p className="text-xs text-green-300 mt-0.5">
+            {isCustom
+              ? "We'll reach out shortly to discuss your custom estimate."
+              : "Darrell will confirm your appointment shortly."}
+          </p>
+        </div>
+      </div>
+
+      <div className="px-4 py-4 space-y-3">
+
+        <LawnPriceBreakdown pricing={result.pricing} serviceFrequency={frequency} variant="customer" />
+
+        {/* What happens next — 4-step timeline */}
+        <div className="rounded-xl bg-slate-800/40 border border-slate-700/40 px-4 py-3">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-3">What Happens Next</p>
+          <div className="space-y-3">
+            {timeline.map((item, i) => (
+              <div key={i} className="flex items-start gap-3">
+                <div className="flex flex-col items-center">
+                  <span className="w-6 h-6 rounded-full bg-teal-500/20 text-teal-400 text-[11px] font-bold flex items-center justify-center shrink-0">
+                    {i + 1}
+                  </span>
+                  {i < timeline.length - 1 && <span className="w-px flex-1 bg-slate-700 my-1" />}
+                </div>
+                <div className="pb-1">
+                  <p className="text-sm text-white font-medium leading-tight flex items-center gap-1.5">
+                    <item.icon className="h-3.5 w-3.5 text-teal-400" /> {item.title}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-0.5 leading-snug">{item.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* What the crew brings */}
+        {!isCustom && (
+          <div className="rounded-xl bg-slate-800/40 border border-slate-700/40 px-4 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">What the Crew Brings</p>
+            <ul className="grid grid-cols-2 gap-1.5 text-xs text-slate-300">
+              <li>🚜 Mowers & trimmers</li>
+              <li>🍃 Blowers</li>
+              <li>✂️ Edgers</li>
+              <li>🛻 Truck for hauling</li>
+              <li>⛽ All fuel & supplies</li>
+              <li>🧤 PPE + safety gear</li>
+            </ul>
+            <p className="text-[11px] text-slate-500 mt-2">
+              Expected arrival: <span className="text-slate-300">we'll send a 2-hour window the day before</span>.
+            </p>
+          </div>
+        )}
+
+        {/* Contact */}
+        <div className="rounded-xl bg-slate-800/40 border border-slate-700/40 px-4 py-3 text-center">
+          <p className="text-xs text-slate-400 mb-1">Questions? Call Darrell:</p>
+          <a href="tel:+19062859312" className="text-lime-400 font-bold text-base">(906) 285-9312</a>
+        </div>
+
+        <Link href="/">
+          <Button variant="outline" className="w-full border-slate-700 text-white hover:bg-slate-800">
+            Back to Home
+          </Button>
+        </Link>
+
+        <BookingConfirmedTiles />
       </div>
     </div>
   );

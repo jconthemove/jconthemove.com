@@ -1,8 +1,16 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { db } from "../db";
-import { lawnCareQuotes, lawnCarePlans } from "@shared/schema";
-import { calculateLawnCareQuote } from "../lib/lawnCarePricing";
-import { eq, desc } from "drizzle-orm";
+import { lawnCareQuotes, lawnCarePlans, type LawnCareQuote } from "@shared/schema";
+import {
+  calculateLawnCareQuote,
+  sizeTierFromSqFt,
+  SIZE_TIER_RANGES,
+  ADD_ON_LABELS,
+  CONDITION_LABELS,
+  FREQUENCY_LABELS,
+  type LawnCarePriceBreakdown,
+} from "../lib/lawnCarePricing";
+import { eq, desc, sql } from "drizzle-orm";
 import { z } from "zod";
 import { sendEmail } from "../services/email";
 import { disburseServiceTokens } from "../services/disburse-service-tokens";
@@ -22,6 +30,17 @@ function requireAdminRole(req: Request, res: Response, next: NextFunction) {
   const role = user?.role || user?.userType;
   if (!role || !["admin", "business_owner"].includes(role)) {
     return res.status(403).json({ error: "Admin access required" });
+  }
+  return next();
+}
+
+function requireCrewOrAdminRole(req: Request, res: Response, next: NextFunction) {
+  const userId = (req as any).user?.id || (req.session as any)?.userId;
+  if (!userId) return res.status(401).json({ error: "Authentication required" });
+  const user = (req as any).user;
+  const role = user?.role || user?.userType;
+  if (!role || !["admin", "business_owner", "employee"].includes(role)) {
+    return res.status(403).json({ error: "Crew or admin access required" });
   }
   return next();
 }
@@ -49,6 +68,74 @@ const quoteRequestSchema = z.object({
   requestedTimeWindow: z.string().optional(),
   notes: z.string().optional(),
 });
+
+type JobBriefQuote = Pick<
+  LawnCareQuote,
+  "propertySize" | "propertyCondition" | "serviceFrequency" | "hasFence" | "hasPets" | "hasSteepSlope" | "needsHaulAway"
+>;
+
+function buildJobBriefHtml(quote: JobBriefQuote, pricing: LawnCarePriceBreakdown): string {
+  const sizeLabel = SIZE_TIER_RANGES[pricing.sizeTier]?.label || quote.propertySize;
+  const condLabel = CONDITION_LABELS[quote.propertyCondition] || quote.propertyCondition;
+  const freqLabel = FREQUENCY_LABELS[quote.serviceFrequency] || quote.serviceFrequency;
+  const flags: string[] = [];
+  if (quote.hasFence) flags.push("Fenced yard — gate access needed");
+  if (quote.hasPets) flags.push("Pets on property — be careful with gates");
+  if (quote.hasSteepSlope) flags.push("Steep slope / hill (+15%)");
+  if (quote.needsHaulAway) flags.push("Haul away debris (+$45)");
+  const addOnsList = (pricing.addOnDetails || [])
+    .map((a) => `<li>${a.label} <span style="color:#64748b">(+$${a.amount})</span></li>`)
+    .join("") || "<li><em>None</em></li>";
+  const adjList = (pricing.propertyAdjustments || [])
+    .map((a) => `<li>${a.label} — ${a.explain || ""} <span style="color:#64748b">(+$${a.amount})</span></li>`)
+    .join("") || "<li><em>None</em></li>";
+
+  return `
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;margin-top:12px;font-family:system-ui,sans-serif;color:#0f172a">
+      <h3 style="margin:0 0 8px;font-size:15px;color:#0f172a">📋 Job Brief</h3>
+      <p style="margin:2px 0;font-size:13px"><b>Yard size:</b> ${sizeLabel}</p>
+      <p style="margin:2px 0;font-size:13px"><b>Condition:</b> ${condLabel} <span style="color:#64748b">(${pricing.conditionMultiplier}× — ${pricing.explanations?.condition || ""})</span></p>
+      <p style="margin:2px 0;font-size:13px"><b>Frequency:</b> ${freqLabel} <span style="color:#64748b">(${pricing.explanations?.frequency || ""})</span></p>
+      <p style="margin:2px 0;font-size:13px"><b>Recommended crew:</b> ${pricing.recommendedCrewSize}-person ${pricing.recommendedCrewType}</p>
+      <p style="margin:2px 0;font-size:13px"><b>Time estimate:</b> ${pricing.estimatedMinutesMin}–${pricing.estimatedMinutesMax} min on-site</p>
+      <p style="margin:8px 0 2px;font-size:13px"><b>Add-ons:</b></p>
+      <ul style="margin:0 0 6px;padding-left:18px;font-size:13px">${addOnsList}</ul>
+      <p style="margin:6px 0 2px;font-size:13px"><b>Property flags:</b></p>
+      <ul style="margin:0 0 6px;padding-left:18px;font-size:13px">${flags.map(f => `<li>${f}</li>`).join("") || "<li><em>None</em></li>"}</ul>
+      <p style="margin:6px 0 2px;font-size:13px"><b>Adjustments:</b></p>
+      <ul style="margin:0;padding-left:18px;font-size:13px">${adjList}</ul>
+    </div>
+  `;
+}
+
+function buildJobBriefText(quote: JobBriefQuote, pricing: LawnCarePriceBreakdown): string {
+  const sizeLabel = SIZE_TIER_RANGES[pricing.sizeTier]?.label || quote.propertySize;
+  const condLabel = CONDITION_LABELS[quote.propertyCondition] || quote.propertyCondition;
+  const freqLabel = FREQUENCY_LABELS[quote.serviceFrequency] || quote.serviceFrequency;
+  const flags: string[] = [];
+  if (quote.hasFence) flags.push("Fenced yard — gate access needed");
+  if (quote.hasPets) flags.push("Pets on property");
+  if (quote.hasSteepSlope) flags.push("Steep slope / hill (+15%)");
+  if (quote.needsHaulAway) flags.push("Haul away debris (+$45)");
+  const addOnsList = (pricing.addOnDetails || [])
+    .map((a) => ` • ${a.label} (+$${a.amount})`)
+    .join("\n") || " • None";
+  return `
+JOB BRIEF
+---------
+Yard size: ${sizeLabel}
+Condition: ${condLabel} (${pricing.conditionMultiplier}×)
+Frequency: ${freqLabel}
+Recommended crew: ${pricing.recommendedCrewSize}-person ${pricing.recommendedCrewType}
+Time estimate: ${pricing.estimatedMinutesMin}–${pricing.estimatedMinutesMax} min on-site
+
+Add-ons:
+${addOnsList}
+
+Property flags:
+${flags.length ? flags.map(f => ` • ${f}`).join("\n") : " • None"}
+`.trim();
+}
 
 // POST /api/lawn-care/quote — public (no auth required to submit a quote request)
 router.post("/quote", async (req: Request, res: Response) => {
@@ -105,7 +192,6 @@ router.post("/quote", async (req: Request, res: Response) => {
       status: "quote_requested",
     }).returning();
 
-    // Award JCMOVES tokens (non-blocking, idempotent)
     if (data.email) {
       disburseServiceTokens({
         serviceType: "lawn_care",
@@ -115,7 +201,6 @@ router.post("/quote", async (req: Request, res: Response) => {
       }).catch(err => console.error("Lawn care token disburse error:", err));
     }
 
-    // Notify admin (non-blocking)
     const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
     const bundleNote = bundleAddons.length > 0
       ? `\n\n⚡ BUNDLE DISCOUNT: ${bundleAddons.join(", ")} — apply 10% off + up to $50 off on the add-on(s) when invoicing.`
@@ -123,13 +208,15 @@ router.post("/quote", async (req: Request, res: Response) => {
     const bundleHtml = bundleAddons.length > 0
       ? `<br><br><b style="color:green">⚡ Bundle Add-On (10% off + up to $50 off):</b> ${bundleAddons.join(", ")} — apply discount when invoicing.`
       : "";
+    const briefHtml = buildJobBriefHtml(quote, pricing);
+    const briefText = buildJobBriefText(quote, pricing);
     try {
       await sendEmail({
         to: companyEmail,
         from: companyEmail,
         subject: `New Lawn Care Quote — ${data.customerName}${bundleAddons.length > 0 ? " [+ Bundle Interest]" : ""}`,
-        text: `New lawn care quote request.\n\nCustomer: ${data.customerName}\nPhone: ${data.phone}\nEmail: ${data.email || "N/A"}\nAddress: ${data.address}\nService: ${data.serviceCategory} — ${data.serviceFrequency}\nProperty size: ${data.propertySize}\nCondition: ${data.propertyCondition}\nTotal: $${pricing.totalQuoted}${pricing.isCustomEstimate ? " (custom estimate)" : ""}\nAdd-ons: ${(data.addOns || []).join(", ") || "none"}\nNotes: ${data.notes || "—"}${bundleNote}`,
-        html: `<h2>New Lawn Care Quote</h2><p><b>Customer:</b> ${data.customerName}<br><b>Phone:</b> ${data.phone}<br><b>Email:</b> ${data.email || "N/A"}<br><b>Address:</b> ${data.address}<br><b>Service:</b> ${data.serviceCategory} — ${data.serviceFrequency}<br><b>Property:</b> ${data.propertySize} / ${data.propertyCondition}<br><b>Total:</b> $${pricing.totalQuoted}${pricing.isCustomEstimate ? " <em>(custom estimate)</em>" : ""}<br><b>Add-ons:</b> ${(data.addOns || []).join(", ") || "none"}</p>${bundleHtml}`,
+        text: `New lawn care quote request.\n\nCustomer: ${data.customerName}\nPhone: ${data.phone}\nEmail: ${data.email || "N/A"}\nAddress: ${data.address}\nService: ${data.serviceCategory} — ${data.serviceFrequency}\nTotal: $${pricing.totalQuoted}${pricing.isCustomEstimate ? " (custom estimate)" : ""}\nNotes: ${data.notes || "—"}${bundleNote}\n\n${briefText}`,
+        html: `<h2>New Lawn Care Quote</h2><p><b>Customer:</b> ${data.customerName}<br><b>Phone:</b> ${data.phone}<br><b>Email:</b> ${data.email || "N/A"}<br><b>Address:</b> ${data.address}<br><b>Service:</b> ${data.serviceCategory} — ${data.serviceFrequency}<br><b>Total:</b> $${pricing.totalQuoted}${pricing.isCustomEstimate ? " <em>(custom estimate)</em>" : ""}</p>${bundleHtml}${briefHtml}`,
       });
     } catch (emailErr) {
       console.error("Lawn care admin email failed:", emailErr);
@@ -140,6 +227,121 @@ router.post("/quote", async (req: Request, res: Response) => {
     console.error("Lawn care quote error:", err);
     if (err?.name === "ZodError") return res.status(400).json({ error: "Invalid request", details: err.errors });
     return res.status(500).json({ error: "Failed to create quote" });
+  }
+});
+
+// GET /api/lawn-care/lot-size?address=... — public; best-effort lot size detection
+// Uses Google Geocoding (already configured) and optionally Regrid (if REGRID_API_KEY).
+// Fails silently with { found: false } when no data available.
+router.get("/lot-size", async (req: Request, res: Response) => {
+  const address = String(req.query.address || "").trim();
+  if (address.length < 6) return res.json({ found: false });
+
+  const googleKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!googleKey) return res.json({ found: false });
+
+  try {
+    // Step 1: Geocode the address to lat/lng
+    const geoUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${googleKey}`;
+    const geoRes = await fetch(geoUrl);
+    if (!geoRes.ok) return res.json({ found: false });
+    const geoData: any = await geoRes.json();
+    const result = geoData?.results?.[0];
+    if (!result?.geometry?.location) return res.json({ found: false });
+    const { lat, lng } = result.geometry.location;
+
+    // Step 2: Try Regrid if key is present
+    const regridKey = process.env.REGRID_API_KEY;
+    if (regridKey) {
+      try {
+        const parcelUrl = `https://app.regrid.com/api/v2/parcels/point?lat=${lat}&lon=${lng}&token=${regridKey}`;
+        const parcelRes = await fetch(parcelUrl);
+        if (parcelRes.ok) {
+          const parcelData: any = await parcelRes.json();
+          const feature = parcelData?.parcels?.features?.[0];
+          const props = feature?.properties?.fields;
+          const ll_gisacre = props?.ll_gisacre;
+          const ll_gissqft = props?.ll_gissqft;
+          let sqFt: number | null = null;
+          if (typeof ll_gissqft === "number" && ll_gissqft > 0) sqFt = Math.round(ll_gissqft);
+          else if (typeof ll_gisacre === "number" && ll_gisacre > 0) sqFt = Math.round(ll_gisacre * 43560);
+          if (sqFt && sqFt > 200) {
+            return res.json({
+              found: true,
+              source: "regrid",
+              squareFootage: sqFt,
+              sizeTier: sizeTierFromSqFt(sqFt),
+              sizeLabel: SIZE_TIER_RANGES[sizeTierFromSqFt(sqFt)].label,
+              lat, lng,
+            });
+          }
+        }
+      } catch (e) {
+        console.warn("Regrid lookup failed (silent):", (e as Error).message);
+      }
+    }
+
+    // Step 3: No reliable Google-only lot-size source; return location only
+    return res.json({ found: false, lat, lng });
+  } catch (err) {
+    console.warn("lot-size error (silent):", (err as Error).message);
+    return res.json({ found: false });
+  }
+});
+
+// GET /api/lawn-care/by-phone?phone=... — crew or admin only.
+// Returns the minimum fields required to render the on-job crew brief
+// for the most recent matching lawn care quote.
+router.get("/by-phone", requireAuth, requireCrewOrAdminRole, async (req: Request, res: Response) => {
+  const phoneRaw = String(req.query.phone || "");
+  const digits = phoneRaw.replace(/\D/g, "");
+  if (digits.length < 7) return res.status(400).json({ error: "Invalid phone" });
+
+  try {
+    const rows = await db
+      .select()
+      .from(lawnCareQuotes)
+      .where(sql`regexp_replace(${lawnCareQuotes.phone}, '\\D', '', 'g') = ${digits}`)
+      .orderBy(desc(lawnCareQuotes.createdAt))
+      .limit(1);
+
+    if (rows.length === 0) return res.json({ found: false });
+    const quote = rows[0];
+
+    // Recompute pricing breakdown for shared rendering
+    const pricing = calculateLawnCareQuote({
+      serviceCategory: quote.serviceCategory,
+      serviceFrequency: quote.serviceFrequency,
+      propertySize: quote.propertySize,
+      squareFootage: quote.squareFootage ?? undefined,
+      propertyCondition: quote.propertyCondition,
+      addOns: (quote.addOns as string[]) || [],
+      hasFence: !!quote.hasFence,
+      hasPets: !!quote.hasPets,
+      hasSteepSlope: !!quote.hasSteepSlope,
+      needsHaulAway: !!quote.needsHaulAway,
+      zip: quote.zip || undefined,
+    });
+
+    // Least-privilege payload: only fields the crew brief renders.
+    const safeQuote = {
+      id: quote.id,
+      serviceCategory: quote.serviceCategory,
+      serviceFrequency: quote.serviceFrequency,
+      propertySize: quote.propertySize,
+      propertyCondition: quote.propertyCondition,
+      addOns: (quote.addOns as string[]) || [],
+      hasFence: !!quote.hasFence,
+      hasPets: !!quote.hasPets,
+      hasSteepSlope: !!quote.hasSteepSlope,
+      needsHaulAway: !!quote.needsHaulAway,
+      notes: quote.notes ?? null,
+    };
+
+    return res.json({ found: true, quote: safeQuote, pricing });
+  } catch (err) {
+    console.error("by-phone lookup error:", err);
+    return res.status(500).json({ error: "Lookup failed" });
   }
 });
 
@@ -191,7 +393,6 @@ router.post("/activate-plan/:id", requireAuth, requireAdminRole, async (req: Req
     const [quote] = await db.select().from(lawnCareQuotes).where(eq(lawnCareQuotes.id, id));
     if (!quote) return res.status(404).json({ error: "Quote not found" });
 
-    // Idempotency: return existing plan if already activated
     const existing = await db.select().from(lawnCarePlans).where(eq(lawnCarePlans.quoteId, id));
     if (existing.length > 0) {
       return res.json({ success: true, plan: existing[0], alreadyActive: true });

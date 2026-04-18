@@ -16,18 +16,23 @@ import {
 } from "lucide-react";
 import { useLocation } from "wouter";
 import type { User } from "@shared/schema";
+import LawnJobBrief from "@/components/LawnJobBrief";
 
 const SERVICE_ICONS: Record<string, string> = {
   residential: "🚛", commercial: "🏢", junk: "🗑️", snow: "❄️",
   cleaning: "✨", handyman: "🔧", demolition: "⚒️", flooring: "🪵",
   painting: "🎨", moving: "🚛", labor: "💪",
+  lawn_care: "🌿", lawn: "🌿",
 };
 
 const SERVICE_LABELS: Record<string, string> = {
   residential: "Residential Move", commercial: "Commercial Move", junk: "Junk Removal",
   snow: "Snow Removal", cleaning: "Cleaning", handyman: "Handyman", demolition: "Demolition",
   flooring: "Flooring", painting: "Painting", moving: "Moving", labor: "Labor",
+  lawn_care: "Lawn Care", lawn: "Lawn Care",
 };
+
+const LAWN_SERVICE_TYPES = new Set(["lawn_care", "lawn"]);
 
 function extractCity(address: string | null): string {
   if (!address) return "";
@@ -111,6 +116,7 @@ type EnrichedLead = {
   firstName: string;
   lastName: string;
   dispatchNotes: string | null;
+  phone?: string | null;
 };
 
 type TradeRequestStatus = {
@@ -539,6 +545,11 @@ function JobDetailSheet({
               <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Dispatch Notes</p>
               <p className="text-sm text-slate-300">{lead.dispatchNotes}</p>
             </div>
+          )}
+
+          {/* Lawn-care job brief (only for lawn-related service types) */}
+          {LAWN_SERVICE_TYPES.has(lead.serviceType) && "phone" in lead && (
+            <LawnJobBrief phone={lead.phone ?? null} />
           )}
 
           {/* Trade Request Section */}
