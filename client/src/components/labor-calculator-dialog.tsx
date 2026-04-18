@@ -505,7 +505,20 @@ export function LaborCalculatorEmbedded() {
   const [showBreakdown, setShowBreakdown] = useState(false);
 
   const effectiveMinutes = useCustom ? (parseInt(customMinutes) || 15) : minutes;
-  const quote = useMemo(() => calcQuote(movers, effectiveMinutes), [movers, effectiveMinutes]);
+
+  // Fetch the user's tier so we can show + enforce the personal coverage cap.
+  const { data: tierData } = useQuery<{ tier: LoyaltyTierKey }>({
+    queryKey: ["/api/user/tier"],
+  });
+  const userTier: LoyaltyTierKey = tierData?.tier ?? 'bronze';
+  const tierCfg = LOYALTY_TIERS[userTier];
+
+  const baseQuote = useMemo(() => calcQuote(movers, effectiveMinutes), [movers, effectiveMinutes]);
+  const quote = useMemo(() => {
+    const tierTokenCap = maxRedeemableForSubtotal(baseQuote.cashPrice, userTier);
+    // Server enforces the tier cap (no longer the duration cap), so mirror that here.
+    return { ...baseQuote, tokenCap: tierTokenCap, tierTokenCap };
+  }, [baseQuote, userTier]);
   const canAffordAll = walletBalance >= quote.tokenPrice;
 
   const effectiveTokenApplied = useMemo(() => {
@@ -644,6 +657,17 @@ export function LaborCalculatorEmbedded() {
             <p className="text-[10px] text-muted-foreground">USD</p>
           </div>
         </div>
+      </div>
+
+      {/* Tier coverage cap banner */}
+      <div className={`flex items-start gap-2 text-xs rounded-md px-2.5 py-2 border ${tierCfg.border} ${tierCfg.bg}`}>
+        <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+        <span>
+          <span className={`font-semibold ${tierCfg.color}`}>{tierCfg.emoji} {tierCfg.label}</span>{' '}
+          tier — your tokens can cover up to{' '}
+          <span className="font-semibold">{Math.round(tierCfg.coveragePct * 100)}%</span>{' '}
+          of this job ({fmt(quote.tierTokenCap)} JCMOVES = ${(tierCfg.coveragePct * quote.cashPrice).toFixed(2)}).
+        </span>
       </div>
 
       {/* Payment Mode */}
