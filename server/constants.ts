@@ -73,15 +73,10 @@ export const REWARD_TYPES = {
 } as const;
 
 // ── Official JCMOVES Token Conversion Rates ────────────────────────────────
-// These two rates define the entire token economy and must never conflict.
-//
-//   EARN rate: 1 USD spent on a job = 50 JCMOVES (Bronze tier, 10% back)
+//   EARN rate: 1 USD spent on a job = 15 JCMOVES (Bronze tier base)
 //   SPEND rate: 1 mover-minute of labor = 500 JCMOVES
-//
-// This means customers need to spend $10 worth of jobs to earn enough tokens
-// for 1 mover-minute of free labor — a sustainable 10:1 ratio.
 export const TOKEN_ECONOMY = {
-  TOKENS_PER_USD_EARNED: 50,         // Base Bronze earn rate (50 JCMOVES per $1 spent)
+  TOKENS_PER_USD_EARNED: 15,         // Base Bronze earn rate (15 JCMOVES per $1 spent)
   TOKENS_PER_MOVER_MINUTE: 500,      // Cost of 1 mover-minute in JCMOVES (labor spend rate)
   CASH_PER_MOVER_HOUR: 62.50,        // Cash price of 1 mover-hour
   MIN_LABOR_CASH: 50,                // Minimum cash portion of any labor job
@@ -92,10 +87,10 @@ export const TOKEN_ECONOMY = {
 // Activity-based progression: earn points through daily engagement,
 // job activity, scripture, mining, referrals — not just spending.
 export const LOYALTY_TIERS = {
-  bronze:   { rate: 0.10, tokensPerDollar: 50,  minPoints: 0,    maxPoints: 499,    label: 'Bronze',   emoji: '🥉', color: 'text-amber-600',  bg: 'bg-amber-600/20'  },
-  silver:   { rate: 0.12, tokensPerDollar: 60,  minPoints: 500,  maxPoints: 1999,   label: 'Silver',   emoji: '🥈', color: 'text-slate-300',  bg: 'bg-slate-400/20'  },
-  gold:     { rate: 0.15, tokensPerDollar: 75,  minPoints: 2000, maxPoints: 5999,   label: 'Gold',     emoji: '🥇', color: 'text-yellow-400', bg: 'bg-yellow-500/20' },
-  vip:      { rate: 0.20, tokensPerDollar: 100, minPoints: 6000, maxPoints: Infinity, label: 'Platinum VIP', emoji: '👑', color: 'text-purple-400', bg: 'bg-purple-500/20' },
+  bronze:   { rate: 0.10, tokensPerDollar: 15, minPoints: 0,    maxPoints: 499,      label: 'Bronze',       emoji: '🥉', color: 'text-amber-600',  bg: 'bg-amber-600/20'  },
+  silver:   { rate: 0.12, tokensPerDollar: 18, minPoints: 500,  maxPoints: 1999,     label: 'Silver',       emoji: '🥈', color: 'text-slate-300',  bg: 'bg-slate-400/20'  },
+  gold:     { rate: 0.15, tokensPerDollar: 22, minPoints: 2000, maxPoints: 5999,     label: 'Gold',         emoji: '🥇', color: 'text-yellow-400', bg: 'bg-yellow-500/20' },
+  vip:      { rate: 0.20, tokensPerDollar: 30, minPoints: 6000, maxPoints: Infinity, label: 'Platinum VIP', emoji: '👑', color: 'text-purple-400', bg: 'bg-purple-500/20' },
 } as const;
 
 // Points awarded per activity (updates loyaltyTier automatically)

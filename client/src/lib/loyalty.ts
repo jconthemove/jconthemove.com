@@ -1,18 +1,18 @@
 // Official JCMOVES token economy rates
-// EARN: 1 USD spent on a job = 50 JCMOVES (Bronze base, higher tiers earn more)
+// EARN: 1 USD spent on a job = 15 JCMOVES (Bronze base, higher tiers earn more)
 // SPEND: 1 mover-minute of labor = 500 JCMOVES
 export const TOKEN_ECONOMY = {
-  TOKENS_PER_USD_EARNED: 50,
+  TOKENS_PER_USD_EARNED: 15,
   TOKENS_PER_MOVER_MINUTE: 500,
   CASH_PER_MOVER_HOUR: 62.50,
 } as const;
 
 // Activity-based loyalty tiers — progressed through engagement, not just spending
 export const LOYALTY_TIERS = {
-  bronze: { rate: 0.10, tokensPerDollar: 50,  minPoints: 0,    maxPoints: 499,    label: 'Bronze',      emoji: '🥉', color: 'text-amber-600',  border: 'border-amber-600/40', bg: 'bg-amber-600/10' },
-  silver: { rate: 0.12, tokensPerDollar: 60,  minPoints: 500,  maxPoints: 1999,   label: 'Silver',      emoji: '🥈', color: 'text-slate-300',   border: 'border-slate-400/40', bg: 'bg-slate-400/10' },
-  gold:   { rate: 0.15, tokensPerDollar: 75,  minPoints: 2000, maxPoints: 5999,   label: 'Gold',        emoji: '🥇', color: 'text-yellow-400',  border: 'border-yellow-500/40', bg: 'bg-yellow-500/10' },
-  vip:    { rate: 0.20, tokensPerDollar: 100, minPoints: 6000, maxPoints: Infinity, label: 'Platinum VIP', emoji: '👑', color: 'text-purple-400',  border: 'border-purple-500/40', bg: 'bg-purple-500/10' },
+  bronze: { rate: 0.10, tokensPerDollar: 15, minPoints: 0,    maxPoints: 499,      label: 'Bronze',       emoji: '🥉', color: 'text-amber-600',  border: 'border-amber-600/40', bg: 'bg-amber-600/10' },
+  silver: { rate: 0.12, tokensPerDollar: 18, minPoints: 500,  maxPoints: 1999,     label: 'Silver',       emoji: '🥈', color: 'text-slate-300',  border: 'border-slate-400/40', bg: 'bg-slate-400/10' },
+  gold:   { rate: 0.15, tokensPerDollar: 22, minPoints: 2000, maxPoints: 5999,     label: 'Gold',         emoji: '🥇', color: 'text-yellow-400', border: 'border-yellow-500/40', bg: 'bg-yellow-500/10' },
+  vip:    { rate: 0.20, tokensPerDollar: 30, minPoints: 6000, maxPoints: Infinity, label: 'Platinum VIP', emoji: '👑', color: 'text-purple-400', border: 'border-purple-500/40', bg: 'bg-purple-500/10' },
 } as const;
 
 // How to earn tier points
