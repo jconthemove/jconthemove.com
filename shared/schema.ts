@@ -2236,6 +2236,24 @@ export const serviceRebookReminders = pgTable("service_rebook_reminders", {
 ]);
 export type ServiceRebookReminder = typeof serviceRebookReminders.$inferSelect;
 
+// ── Lawn Care Re-book Opt-outs ────────────────────────────────────────────────
+// Recipients who clicked the unsubscribe link in a re-book reminder email.
+// The eligibility query joins/filters against this table so opted-out
+// customers never receive another reminder. Either email or phone (or both)
+// is recorded — whichever the unsubscribe link carried — and the eligibility
+// filter checks both keys.
+export const lawnCareRebookOptouts = pgTable("lawn_care_rebook_optouts", {
+  id: serial("id").primaryKey(),
+  email: text("email"),
+  phone: text("phone"),
+  source: text("source").notNull().default("email_link"), // 'email_link' | 'admin' | 'reply'
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  uniqueIndex("uq_rebook_optout_email").on(table.email).where(sql`${table.email} IS NOT NULL`),
+  uniqueIndex("uq_rebook_optout_phone").on(table.phone).where(sql`${table.phone} IS NOT NULL`),
+]);
+export type LawnCareRebookOptout = typeof lawnCareRebookOptouts.$inferSelect;
+
 // ── Lawn Care Recurring Plans ─────────────────────────────────────────────────
 export const lawnCarePlans = pgTable("lawn_care_plans", {
   id: serial("id").primaryKey(),

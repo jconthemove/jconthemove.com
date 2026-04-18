@@ -22,6 +22,8 @@ import {
   REBOOK_ELIGIBILITY_DAYS,
   REBOOK_RESEND_WINDOW_DAYS,
   REBOOK_EMAIL_SOURCE,
+  verifyUnsubscribeToken,
+  recordOptout,
 } from "../services/lawnCareRebookReminder";
 import {
   checkSlidingWindow,
@@ -498,6 +500,54 @@ router.get("/last-quote-summary", async (req: Request, res: Response) => {
 // arbitrary user-supplied utm strings can't pollute the dashboard.
 const ALLOWED_REBOOK_SOURCES = new Set([REBOOK_EMAIL_SOURCE]);
 
+// GET /api/lawn-care/rebook-unsubscribe?email=...&phone=...&token=... — PUBLIC.
+// One-click unsubscribe from re-book reminder emails. The token is an HMAC
+// over (normalized email + phone), so we don't need to store a per-link
+// secret — verifying the token is enough to know the click came from a
+// legitimate email we sent. Idempotent: clicking twice still succeeds.
+router.get("/rebook-unsubscribe", async (req: Request, res: Response) => {
+  const email = typeof req.query.email === "string" ? req.query.email : "";
+  const phone = typeof req.query.phone === "string" ? req.query.phone : "";
+  const token = typeof req.query.token === "string" ? req.query.token : "";
+
+  const renderPage = (title: string, body: string, status = 200) => {
+    res.status(status).type("html").send(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>${title}</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+</head>
+<body style="margin:0;background:#0f172a;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#e2e8f0;">
+  <div style="max-width:520px;margin:60px auto;padding:32px 28px;background:#1e293b;border-radius:14px;text-align:center;">
+    <div style="font-size:13px;font-weight:700;color:#84cc16;letter-spacing:2px;margin-bottom:10px;">JC ON THE MOVE</div>
+    <h1 style="margin:0 0 12px;font-size:22px;color:#fff;">${title}</h1>
+    <div style="font-size:14px;color:#94a3b8;line-height:1.6;">${body}</div>
+  </div>
+</body></html>`);
+  };
+
+  if ((!email && !phone) || !token) {
+    return renderPage("Invalid unsubscribe link", "This unsubscribe link is missing required information. If you keep getting reminders, just reply to one of our emails and we'll remove you manually.", 400);
+  }
+  if (!verifyUnsubscribeToken(token, email, phone)) {
+    return renderPage("Invalid unsubscribe link", "We couldn't verify this unsubscribe link. If you keep getting reminders, just reply to one of our emails and we'll remove you manually.", 400);
+  }
+
+  try {
+    await recordOptout(email, phone, "email_link");
+    return renderPage(
+      "You're unsubscribed",
+      "You won't receive any more re-book reminder emails from us. If this was a mistake, just reply to one of our past emails and we'll add you back.",
+    );
+  } catch (err) {
+    console.error("Re-book unsubscribe error:", err);
+    return renderPage(
+      "Something went wrong",
+      "We couldn't process your unsubscribe right now. Please try again in a moment, or reply to one of our emails and we'll remove you manually.",
+      500,
+    );
+  }
+});
+
 // POST /api/lawn-care/rebook — PUBLIC. Body: { phone, source? }.
 // Re-creates a fresh lawn-care quote from the customer's most recent
 // matching quote, recomputing pricing with today's engine. Sends the
@@ -821,6 +871,7 @@ async function rebookReminderPreviewHandler(_req: Request, res: Response) {
       ? buildRebookReminderEmail({
           customerName: eligible[0].customerName,
           phone: eligible[0].phone,
+          email: eligible[0].email,
           serviceCategory: eligible[0].serviceCategory,
           totalQuoted: eligible[0].totalQuoted,
           lastServiceAt: eligible[0].updatedAt,
