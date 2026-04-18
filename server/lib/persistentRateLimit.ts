@@ -1,6 +1,17 @@
+import type { Request, Response, NextFunction, RequestHandler } from "express";
 import { db } from "../db";
 import { rateLimitBuckets } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
+
+export function getClientIp(req: Request): string {
+  // Prefer Express's req.ip, which already honors the app's
+  // `trust proxy` setting (server/index.ts sets it to 1). This avoids
+  // trusting raw X-Forwarded-For from the public internet, which would
+  // let an attacker spoof the header to evade per-IP throttling.
+  // Fall back to the raw socket address if for some reason req.ip is
+  // unavailable, then to a fixed sentinel so the bucket key is stable.
+  return req.ip || req.socket?.remoteAddress || "unknown";
+}
 
 // Persistent rate-limit primitives backed by Postgres so throttle state
 // survives process restarts and is shared across processes. If the DB
@@ -107,6 +118,43 @@ export async function markCooldown(scope: string, identifier: string): Promise<v
  * while so the table doesn't accumulate dead rows from one-off IPs.
  * Safe to call opportunistically; tolerates DB errors.
  */
+/**
+ * Express middleware factory that enforces a persistent sliding-window
+ * rate limit on a route. Identifier defaults to the client IP, but a
+ * caller can supply a function to compose composite keys (e.g. ip+phone).
+ *
+ * On limit hit, responds with 429, a friendly JSON body, and a
+ * Retry-After header so well-behaved clients back off automatically.
+ */
+export interface IpRateLimitOptions {
+  scope: string;
+  windowMs: number;
+  maxHits: number;
+  message?: string;
+  identifier?: (req: Request) => string;
+}
+
+export function ipRateLimit(opts: IpRateLimitOptions): RequestHandler {
+  const retryAfterSec = Math.max(1, Math.ceil(opts.windowMs / 1000));
+  const message = opts.message ?? "Too many requests. Please try again in a moment.";
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const id = (opts.identifier ? opts.identifier(req) : getClientIp(req)) || "unknown";
+      const allowed = await checkSlidingWindow(opts.scope, id, opts.windowMs, opts.maxHits);
+      if (!allowed) {
+        res.setHeader("Retry-After", retryAfterSec.toString());
+        return res.status(429).json({ error: message, retryAfterSec });
+      }
+      return next();
+    } catch (err) {
+      // Fail-open on any unexpected middleware error so a rate-limit
+      // bug never takes down the booking funnel.
+      console.error("[rate-limit] middleware error, failing open:", (err as Error).message);
+      return next();
+    }
+  };
+}
+
 export async function pruneStaleBuckets(maxAgeMs: number = 24 * 60 * 60 * 1000): Promise<void> {
   try {
     await db.execute(

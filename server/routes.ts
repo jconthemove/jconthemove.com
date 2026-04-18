@@ -6,6 +6,7 @@ import { storage } from "./storage";
 import { insertLeadSchema, insertContactSchema, insertCashoutRequestSchema, insertShopItemSchema, insertReviewSchema } from "@shared/schema";
 import { sendEmail, generateLeadNotificationEmail, generateContactNotificationEmail, notifyAdminNewQuote, notifyAdminNewLead, notifyAdminJobCompleted, notifyEmployeeJobAvailable, sendNotificationEmail, sendBundleFollowupEmail } from "./services/email";
 import { setupAuth, isAuthenticated, isAuthenticatedAllowPending, signJwt, signRefreshToken, verifyRefreshToken } from "./auth";
+import { ipRateLimit, getClientIp } from "./lib/persistentRateLimit";
 import bcrypt from "bcrypt";
 // REMOVED: Daily check-in service replaced by unified mining system with streaks
 // import { dailyCheckinService } from "./services/daily-checkin";
@@ -3444,7 +3445,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     distanceMiles:   z.coerce.number().min(0).default(0),
   });
 
-  app.post("/api/window-cleaning/quote", async (req: any, res) => {
+  app.post(
+    "/api/window-cleaning/quote",
+    // Strict per-IP cap stops a single scraper rotating phone numbers
+    // from blowing past the per-IP+phone tuple limit below.
+    ipRateLimit({
+      scope: "window_quote_ip_only",
+      windowMs: 15 * 60_000,
+      maxHits: 30,
+      message: "Too many quote submissions from this network. Please wait a few minutes before trying again.",
+    }),
+    ipRateLimit({
+      scope: "window_quote_ip",
+      windowMs: 10 * 60_000,
+      maxHits: 5,
+      message: "Too many quote submissions for this phone number. Please wait a few minutes before trying again.",
+      identifier: (req) => {
+        const phone = String((req.body || {}).phone || "").replace(/\D/g, "");
+        return phone ? `${getClientIp(req)}|${phone}` : getClientIp(req);
+      },
+    }),
+    async (req: any, res) => {
     try {
       const parseResult = windowCleaningBookingSchema.safeParse(req.body);
       if (!parseResult.success) {
@@ -3588,7 +3609,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Submit quote request
-  app.post("/api/leads", async (req, res) => {
+  app.post(
+    "/api/leads",
+    ipRateLimit({
+      scope: "leads_submit_ip_only",
+      windowMs: 15 * 60_000,
+      maxHits: 40,
+      message: "Too many quote submissions from this network. Please wait a few minutes before trying again.",
+    }),
+    ipRateLimit({
+      scope: "leads_submit_ip",
+      windowMs: 10 * 60_000,
+      maxHits: 10,
+      message: "Too many quote submissions for this phone number. Please wait a few minutes before trying again.",
+      identifier: (req) => {
+        const phone = String((req.body || {}).phone || "").replace(/\D/g, "");
+        return phone ? `${getClientIp(req)}|${phone}` : getClientIp(req);
+      },
+    }),
+    async (req, res) => {
     try {
       const leadData = insertLeadSchema.parse(req.body);
       const bundleAddons: string[] = Array.isArray(req.body.bundleAddons) ? req.body.bundleAddons : [];
@@ -6763,7 +6802,12 @@ Thank you for your business!
   });
 
   // Submit contact form
-  app.post("/api/contacts", async (req, res) => {
+  app.post("/api/contacts", ipRateLimit({
+    scope: "contacts_ip",
+    windowMs: 10 * 60_000,
+    maxHits: 5,
+    message: "Too many contact submissions. Please wait a few minutes before trying again.",
+  }), async (req, res) => {
     try {
       const contactData = insertContactSchema.parse(req.body);
       const contact = await storage.createContact(contactData);
@@ -14740,7 +14784,12 @@ Thank you for your business!
   });
 
   // Custom order request (public)
-  app.post("/api/jewelry/custom-order", async (req: any, res) => {
+  app.post("/api/jewelry/custom-order", ipRateLimit({
+    scope: "jewelry_custom_order_ip",
+    windowMs: 10 * 60_000,
+    maxHits: 5,
+    message: "Too many custom order requests. Please wait a few minutes before trying again.",
+  }), async (req: any, res) => {
     try {
       const { name, description, materials, budget, contact, referenceItem } = req.body;
       if (!name || !description || !contact) {
@@ -18082,7 +18131,12 @@ Thank you for your business!
   // Calculates total one-way drive miles for a job:
   //   Moving: base→pickup + pickup→dropoff (we return pickup→dropoff + base→pickup)
   //   Load-only/Junk: base→pickup only (round trip handled by driveLineItem × 2)
-  app.get("/api/utility/estimate-drive-miles", async (req, res) => {
+  app.get("/api/utility/estimate-drive-miles", ipRateLimit({
+    scope: "estimate_drive_miles_ip",
+    windowMs: 5 * 60_000,
+    maxHits: 60,
+    message: "Too many distance lookups. Try again in a few minutes.",
+  }), async (req, res) => {
     const pickupAddr = req.query.pickup as string || req.query.address as string;
     const dropoffAddr = req.query.dropoff as string;
     if (!pickupAddr || pickupAddr.trim().length < 4) {
@@ -19003,7 +19057,25 @@ Thank you for your business!
   });
 
   // ── Chatbot Quote Submission ──────────────────────────────────────────────
-  app.post("/api/chatbot-quote", async (req: any, res) => {
+  app.post(
+    "/api/chatbot-quote",
+    ipRateLimit({
+      scope: "chatbot_quote_ip_only",
+      windowMs: 15 * 60_000,
+      maxHits: 40,
+      message: "Too many quote submissions from this network. Please wait a few minutes before trying again.",
+    }),
+    ipRateLimit({
+      scope: "chatbot_quote_ip",
+      windowMs: 10 * 60_000,
+      maxHits: 10,
+      message: "Too many quote submissions for this phone number. Please wait a few minutes before trying again.",
+      identifier: (req) => {
+        const phone = String((req.body?.answers || {}).contactPhone || "").replace(/\D/g, "");
+        return phone ? `${getClientIp(req)}|${phone}` : getClientIp(req);
+      },
+    }),
+    async (req: any, res) => {
     try {
       const { answers, quote, selectedPackage, depositRequired, depositAmount, serviceLabel, isQuoteOnly, customerZip, depositPaid, photos: submittedPhotos } = req.body;
       if (!answers || !quote) return res.status(400).json({ error: "Missing answers or quote" });
@@ -19975,7 +20047,12 @@ Thank you for your business!
   }
 
   // POST /api/trash/quote — calculate pricing breakdown (public)
-  app.post("/api/trash/quote", async (req, res) => {
+  app.post("/api/trash/quote", ipRateLimit({
+    scope: "trash_quote_ip",
+    windowMs: 60_000,
+    maxHits: 30,
+    message: "Too many quote requests. Please wait a moment.",
+  }), async (req, res) => {
     try {
       const { calculateTrashValetQuote } = await import("../shared/trashValetPricing");
       const { cans, bagCount, recyclingEnabled, recyclingAnchorDate, lat, lng, planType, targetWeekOf } = req.body;
@@ -19997,7 +20074,25 @@ Thank you for your business!
   });
 
   // POST /api/trash/subscribe — create subscription + first job (public, no auth required)
-  app.post("/api/trash/subscribe", async (req, res) => {
+  app.post(
+    "/api/trash/subscribe",
+    ipRateLimit({
+      scope: "trash_subscribe_ip_only",
+      windowMs: 15 * 60_000,
+      maxHits: 20,
+      message: "Too many subscription attempts from this network. Please wait a few minutes before trying again.",
+    }),
+    ipRateLimit({
+      scope: "trash_subscribe_ip",
+      windowMs: 10 * 60_000,
+      maxHits: 5,
+      message: "Too many subscription attempts for this phone number. Please wait a few minutes before trying again.",
+      identifier: (req) => {
+        const phone = String((req.body || {}).phone || "").replace(/\D/g, "");
+        return phone ? `${getClientIp(req)}|${phone}` : getClientIp(req);
+      },
+    }),
+    async (req, res) => {
     try {
       const { calculateTrashValetQuote } = await import("../shared/trashValetPricing");
       const { trashSubscriptions, trashJobs } = await import("@shared/schema");
@@ -20186,7 +20281,25 @@ Thank you for your business!
   });
 
   // ── Gift Subscribe — creates two subscriptions both with 10% off ────────────
-  app.post("/api/trash/gift-subscribe", async (req, res) => {
+  app.post(
+    "/api/trash/gift-subscribe",
+    ipRateLimit({
+      scope: "trash_gift_subscribe_ip_only",
+      windowMs: 15 * 60_000,
+      maxHits: 20,
+      message: "Too many gift subscription attempts from this network. Please wait a few minutes before trying again.",
+    }),
+    ipRateLimit({
+      scope: "trash_gift_subscribe_ip",
+      windowMs: 10 * 60_000,
+      maxHits: 5,
+      message: "Too many gift subscription attempts for this phone number. Please wait a few minutes before trying again.",
+      identifier: (req) => {
+        const phone = String((req.body?.contact || {}).phone || "").replace(/\D/g, "");
+        return phone ? `${getClientIp(req)}|${phone}` : getClientIp(req);
+      },
+    }),
+    async (req, res) => {
     try {
       const { calculateTrashValetQuote } = await import("../shared/trashValetPricing");
       const { trashSubscriptions, trashJobs } = await import("@shared/schema");

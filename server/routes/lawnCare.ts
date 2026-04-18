@@ -28,6 +28,7 @@ import {
   checkCooldown,
   markCooldown,
   pruneStaleBuckets,
+  ipRateLimit,
 } from "../lib/persistentRateLimit";
 
 const router = Router();
@@ -250,7 +251,20 @@ router.post("/quote", async (req: Request, res: Response) => {
 // falls back to geocoding viewport math (low confidence, rough estimate).
 // Returns { source, confidence, sourceLabel } so the UI can show how trustworthy
 // the auto-detected lot size is.
-router.get("/lot-size", async (req: Request, res: Response) => {
+//
+// Throttled per-IP because every uncached lookup costs us a Google geocode
+// (and possibly a Regrid hit). 30 lookups / 5 min covers a normal user
+// experimenting with addresses but blocks scrapers.
+router.get(
+  "/lot-size",
+  ipRateLimit({
+    scope: "lawn_lot_size_ip",
+    windowMs: 5 * 60_000,
+    maxHits: 30,
+    message: "Too many lot-size lookups. Try again in a few minutes.",
+  }),
+  async (req: Request, res: Response) => {
+    maybePruneBuckets();
   const address = String(req.query.address || "").trim();
   if (address.length < 6) return res.json({ found: false });
 
