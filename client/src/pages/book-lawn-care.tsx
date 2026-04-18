@@ -104,6 +104,7 @@ export default function BookLawnCare() {
   const [distanceMiles, setDistanceMiles] = useState(0);
   const [autoDetect, setAutoDetect] = useState<{
     sqFt: number; tier: string; label: string;
+    source: "parcel" | "viewport"; sourceLabel: string; confidence: number;
   } | null>(null);
   const lastDetectedAddress = useRef<string>("");
   const [rebookPhone, setRebookPhone] = useState("");
@@ -140,7 +141,18 @@ export default function BookLawnCare() {
       if (!r.ok) return;
       const data = await r.json();
       if (data?.found && data?.sizeTier) {
-        setAutoDetect({ sqFt: data.squareFootage, tier: data.sizeTier, label: data.sizeLabel });
+        setAutoDetect({
+          sqFt: data.squareFootage,
+          tier: data.sizeTier,
+          label: data.sizeLabel,
+          source: data.source === "parcel" ? "parcel" : "viewport",
+          sourceLabel:
+            data.sourceLabel ??
+            (data.source === "parcel"
+              ? "Measured from public parcel data"
+              : "Rough estimate from map area"),
+          confidence: typeof data.confidence === "number" ? data.confidence : 0.4,
+        });
         if (!propertySize || propertySize === "custom") {
           setPropertySize(data.sizeTier);
         }
@@ -362,11 +374,30 @@ export default function BookLawnCare() {
                 placeholder="Type your address (optional)"
               />
               {autoDetect && (
-                <div className="mt-2 flex items-start gap-2 rounded-lg bg-lime-500/10 border border-lime-500/30 px-2.5 py-2">
-                  <CheckCircle2 className="h-4 w-4 text-lime-400 mt-0.5 flex-shrink-0" />
-                  <p className="text-xs text-lime-200 leading-snug">
-                    We measured your lot at <b>~{autoDetect.sqFt.toLocaleString()} sq ft</b> — pre-selected <b>{autoDetect.label}</b>. Change if needed.
-                  </p>
+                <div
+                  className={cn(
+                    "mt-2 flex items-start gap-2 rounded-lg px-2.5 py-2 border",
+                    autoDetect.source === "parcel"
+                      ? "bg-lime-500/10 border-lime-500/30"
+                      : "bg-amber-500/10 border-amber-500/30"
+                  )}
+                >
+                  <CheckCircle2
+                    className={cn(
+                      "h-4 w-4 mt-0.5 flex-shrink-0",
+                      autoDetect.source === "parcel" ? "text-lime-400" : "text-amber-400"
+                    )}
+                  />
+                  <div className="text-xs leading-snug">
+                    <p className={autoDetect.source === "parcel" ? "text-lime-200" : "text-amber-200"}>
+                      {autoDetect.source === "parcel" ? "We measured" : "We estimated"} your lot at{" "}
+                      <b>~{autoDetect.sqFt.toLocaleString()} sq ft</b> — pre-selected <b>{autoDetect.label}</b>. Change if needed.
+                    </p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      {autoDetect.sourceLabel}
+                      {autoDetect.source === "viewport" && " — please verify"}
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
@@ -380,7 +411,13 @@ export default function BookLawnCare() {
                   size="sm"
                   selected={propertySize === card.id}
                   onClick={() => setPropertySize(card.id)}
-                  badge={autoDetect?.tier === card.id ? "Detected" : undefined}
+                  badge={
+                    autoDetect?.tier === card.id
+                      ? autoDetect.source === "parcel"
+                        ? "Detected"
+                        : "Estimated"
+                      : undefined
+                  }
                 />
               ))}
             </div>

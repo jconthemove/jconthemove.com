@@ -231,8 +231,10 @@ router.post("/quote", async (req: Request, res: Response) => {
 });
 
 // GET /api/lawn-care/lot-size?address=... — public; best-effort lot size detection
-// Uses Google Geocoding (already configured) and optionally Regrid (if REGRID_API_KEY).
-// Fails silently with { found: false } when no data available.
+// Tries Regrid parcel data first (high confidence, real parcel boundary), then
+// falls back to geocoding viewport math (low confidence, rough estimate).
+// Returns { source, confidence, sourceLabel } so the UI can show how trustworthy
+// the auto-detected lot size is.
 router.get("/lot-size", async (req: Request, res: Response) => {
   const address = String(req.query.address || "").trim();
   if (address.length < 6) return res.json({ found: false });
@@ -241,7 +243,7 @@ router.get("/lot-size", async (req: Request, res: Response) => {
   if (!googleKey) return res.json({ found: false });
 
   try {
-    // Step 1: Geocode the address to lat/lng
+    // Step 1: Geocode the address to lat/lng (and capture bounds for fallback math)
     const geoUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${googleKey}`;
     const geoRes = await fetch(geoUrl);
     if (!geoRes.ok) return res.json({ found: false });
@@ -249,8 +251,10 @@ router.get("/lot-size", async (req: Request, res: Response) => {
     const result = geoData?.results?.[0];
     if (!result?.geometry?.location) return res.json({ found: false });
     const { lat, lng } = result.geometry.location;
+    const locationType: string | undefined = result.geometry.location_type;
+    const bounds = result.geometry.bounds || result.geometry.viewport;
 
-    // Step 2: Try Regrid if key is present
+    // Step 2: Try Regrid (real parcel polygon — highest confidence)
     const regridKey = process.env.REGRID_API_KEY;
     if (regridKey) {
       try {
@@ -266,12 +270,15 @@ router.get("/lot-size", async (req: Request, res: Response) => {
           if (typeof ll_gissqft === "number" && ll_gissqft > 0) sqFt = Math.round(ll_gissqft);
           else if (typeof ll_gisacre === "number" && ll_gisacre > 0) sqFt = Math.round(ll_gisacre * 43560);
           if (sqFt && sqFt > 200) {
+            const tier = sizeTierFromSqFt(sqFt);
             return res.json({
               found: true,
-              source: "regrid",
+              source: "parcel",
+              sourceLabel: "Measured from public parcel data",
+              confidence: 0.95,
               squareFootage: sqFt,
-              sizeTier: sizeTierFromSqFt(sqFt),
-              sizeLabel: SIZE_TIER_RANGES[sizeTierFromSqFt(sqFt)].label,
+              sizeTier: tier,
+              sizeLabel: SIZE_TIER_RANGES[tier].label,
               lat, lng,
             });
           }
@@ -281,7 +288,39 @@ router.get("/lot-size", async (req: Request, res: Response) => {
       }
     }
 
-    // Step 3: No reliable Google-only lot-size source; return location only
+    // Step 3: Viewport-bounds fallback — estimate area from the geocoder's
+    // bounding box. Only meaningful for ROOFTOP / RANGE_INTERPOLATED hits;
+    // otherwise the box is a whole street or city block and useless.
+    if (
+      bounds?.northeast && bounds?.southwest &&
+      (locationType === "ROOFTOP" || locationType === "RANGE_INTERPOLATED")
+    ) {
+      const ne = bounds.northeast;
+      const sw = bounds.southwest;
+      const latDeg = ne.lat - sw.lat;
+      const lngDeg = ne.lng - sw.lng;
+      const centerLatRad = ((ne.lat + sw.lat) / 2) * (Math.PI / 180);
+      const heightM = latDeg * 111_320;
+      const widthM = lngDeg * 111_320 * Math.cos(centerLatRad);
+      const areaM2 = Math.abs(heightM * widthM);
+      const sqFt = Math.round(areaM2 * 10.7639);
+      // Sanity: only return if result is in a plausible residential range
+      // (1,000 sq ft up to ~3 acres). Anything bigger = block-level box.
+      if (sqFt >= 1000 && sqFt <= 130_680) {
+        const tier = sizeTierFromSqFt(sqFt);
+        return res.json({
+          found: true,
+          source: "viewport",
+          sourceLabel: "Rough estimate from map area",
+          confidence: locationType === "ROOFTOP" ? 0.45 : 0.3,
+          squareFootage: sqFt,
+          sizeTier: tier,
+          sizeLabel: SIZE_TIER_RANGES[tier].label,
+          lat, lng,
+        });
+      }
+    }
+
     return res.json({ found: false, lat, lng });
   } catch (err) {
     console.warn("lot-size error (silent):", (err as Error).message);
