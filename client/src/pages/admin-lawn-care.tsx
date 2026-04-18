@@ -66,6 +66,12 @@ export default function AdminLawnCare() {
     skipped: boolean;
     trigger: "scheduler" | "manual";
   } | null;
+  type AttributionStats = {
+    windowDays: number;
+    rebooks: number;
+    reminders: number;
+    conversionRate: number | null;
+  } | null;
   type RebookPreview = {
     eligibilityDays: number;
     resendWindowDays: number;
@@ -73,7 +79,13 @@ export default function AdminLawnCare() {
     eligible: { id: number; customerName: string; email: string | null; phone: string; serviceCategory: string; totalQuoted: string | null; lastUpdated: string }[];
     sampleEmail: { html: string; text: string; subject: string } | null;
     lastRun: LastRunInfo;
+    attribution: AttributionStats;
   };
+  // Always-visible attribution stat (does not require opening the preview).
+  const attributionQ = useQuery<NonNullable<AttributionStats>>({
+    queryKey: ["/api/admin/lawn-care/rebook-reminder/attribution"],
+    refetchInterval: 60_000,
+  });
   const [previewOpen, setPreviewOpen] = useState(false);
   const previewQ = useQuery<RebookPreview>({
     queryKey: ["/api/admin/lawn-care/rebook-reminder/preview"],
@@ -85,6 +97,7 @@ export default function AdminLawnCare() {
       const data = await res.json();
       toast({ title: `Sent ${data.sent} reminder${data.sent === 1 ? "" : "s"}`, description: data.failed ? `${data.failed} failed — see server logs` : `${data.attempted} attempted` });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/lawn-care/rebook-reminder/preview"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/lawn-care/rebook-reminder/attribution"] });
     },
     onError: () => toast({ title: "Failed to send reminders", variant: "destructive" }),
   });
@@ -144,6 +157,17 @@ export default function AdminLawnCare() {
                 <p className="text-slate-400 text-xs mt-0.5">
                   Nudges paid customers 30+ days out, max once every 60 days. Disabled by default — set <code className="text-lime-400">ENABLE_REBOOK_REMINDER_EMAILS=true</code> for the daily sweep.
                 </p>
+                {attributionQ.data && (
+                  <p className="text-xs mt-1.5 text-slate-300" data-testid="rebook-attribution-stat">
+                    <span className="text-lime-400 font-semibold">{attributionQ.data.rebooks}</span>
+                    {" re-book"}{attributionQ.data.rebooks === 1 ? "" : "s"} from{" "}
+                    <span className="text-lime-400 font-semibold">{attributionQ.data.reminders}</span>
+                    {" reminder"}{attributionQ.data.reminders === 1 ? "" : "s"} sent in last {attributionQ.data.windowDays} days
+                    {attributionQ.data.conversionRate !== null && (
+                      <span className="text-slate-500"> · {(attributionQ.data.conversionRate * 100).toFixed(1)}% conversion</span>
+                    )}
+                  </p>
+                )}
               </div>
             </div>
             <div className="flex gap-2 shrink-0">

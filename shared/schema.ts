@@ -2188,6 +2188,11 @@ export const lawnCareQuotes = pgTable("lawn_care_quotes", {
 
   status: text("status").notNull().default("quote_requested"),
 
+  // Attribution marker for re-book funnel (e.g. "rebook_email"). Populated when
+  // a quote/lead is created via the re-book flow with a known utm_source so the
+  // admin dashboard can report how many re-books a campaign produced.
+  rebookSource: text("rebook_source"),
+
   createdAt: timestamp("created_at").default(sql`now()`),
   updatedAt: timestamp("updated_at").default(sql`now()`),
 });

@@ -585,6 +585,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         created_at TIMESTAMP DEFAULT now(),
         updated_at TIMESTAMP DEFAULT now()
       );
+      ALTER TABLE lawn_care_quotes ADD COLUMN IF NOT EXISTS rebook_source TEXT;
       CREATE TABLE IF NOT EXISTS lawn_care_plans (
         id SERIAL PRIMARY KEY,
         quote_id INTEGER NOT NULL,

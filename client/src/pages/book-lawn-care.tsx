@@ -111,6 +111,9 @@ export default function BookLawnCare() {
   const [rebookSummary, setRebookSummary] = useState<RebookSummary | null>(null);
   const [rebookLooked, setRebookLooked] = useState(false);
   const [rebookOpen, setRebookOpen] = useState(false);
+  // Captured from ?utm_source=... on the deep link so the booking endpoint
+  // can attribute this re-book to its source campaign (e.g. "rebook_email").
+  const [rebookSource, setRebookSource] = useState<string | null>(null);
 
   const form = useForm<ContactForm>({
     resolver: zodResolver(contactSchema),
@@ -126,6 +129,8 @@ export default function BookLawnCare() {
     const params = new URLSearchParams(window.location.search);
     if (params.get("rebook") !== "1") return;
     const phoneParam = (params.get("phone") || "").trim();
+    const utm = (params.get("utm_source") || "").trim().toLowerCase();
+    if (utm) setRebookSource(utm);
     setRebookOpen(true);
     if (phoneParam) {
       setRebookPhone(phoneParam);
@@ -203,7 +208,8 @@ export default function BookLawnCare() {
   });
 
   const rebookMutation = useMutation({
-    mutationFn: (phone: string) => apiRequest("POST", "/api/lawn-care/rebook", { phone }),
+    mutationFn: (phone: string) =>
+      apiRequest("POST", "/api/lawn-care/rebook", { phone, source: rebookSource ?? undefined }),
     onSuccess: async (res) => {
       const data = (await res.json()) as Partial<QuoteResult> & { rebooked?: boolean };
       if (data?.quote && data?.pricing) {

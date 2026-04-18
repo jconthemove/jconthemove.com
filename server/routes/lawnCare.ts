@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { db } from "../db";
-import { lawnCareQuotes, lawnCarePlans, type LawnCareQuote } from "@shared/schema";
+import { lawnCareQuotes, lawnCarePlans, lawnCareRebookReminders, type LawnCareQuote } from "@shared/schema";
 import {
   calculateLawnCareQuote,
   sizeTierFromSqFt,
@@ -21,6 +21,7 @@ import {
   getLastSweepInfo,
   REBOOK_ELIGIBILITY_DAYS,
   REBOOK_RESEND_WINDOW_DAYS,
+  REBOOK_EMAIL_SOURCE,
 } from "../services/lawnCareRebookReminder";
 import {
   checkSlidingWindow,
@@ -479,7 +480,11 @@ router.get("/last-quote-summary", async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/lawn-care/rebook — PUBLIC. Body: { phone }.
+// Attribution allow-list. Anything outside this set is silently dropped so
+// arbitrary user-supplied utm strings can't pollute the dashboard.
+const ALLOWED_REBOOK_SOURCES = new Set([REBOOK_EMAIL_SOURCE]);
+
+// POST /api/lawn-care/rebook — PUBLIC. Body: { phone, source? }.
 // Re-creates a fresh lawn-care quote from the customer's most recent
 // matching quote, recomputing pricing with today's engine. Sends the
 // same admin email as a brand-new quote.
@@ -487,6 +492,12 @@ router.post("/rebook", async (req: Request, res: Response) => {
   const phoneRaw = String((req.body || {}).phone || "");
   const digits = phoneRaw.replace(/\D/g, "");
   if (digits.length < 7) return res.status(400).json({ error: "Invalid phone" });
+
+  // Accept attribution from the body (forwarded by the client from the
+  // utm_source query param it received via the deep link). Drop anything
+  // not on the allow-list so we never store junk.
+  const sourceRaw = String((req.body || {}).source || "").trim().toLowerCase();
+  const rebookSource = ALLOWED_REBOOK_SOURCES.has(sourceRaw) ? sourceRaw : null;
 
   // Composite throttle: per-phone AND per-IP+phone, both 30s. Stops
   // accidental double-taps and stops a single client from cycling phones.
@@ -573,6 +584,7 @@ router.post("/rebook", async (req: Request, res: Response) => {
       totalQuoted: String(pricing.totalQuoted),
       isCustomEstimate: pricing.isCustomEstimate,
       status: "quote_requested",
+      rebookSource,
     }).returning();
 
     if (prev.email) {
@@ -587,11 +599,12 @@ router.post("/rebook", async (req: Request, res: Response) => {
     const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
     const briefHtml = buildJobBriefHtml(quote, pricing);
     const briefText = buildJobBriefText(quote, pricing);
+    const sourceTag = rebookSource ? ` [via ${rebookSource}]` : "";
     try {
       await sendEmail({
         to: companyEmail,
         from: companyEmail,
-        subject: `Lawn Care Re-Book — ${prev.customerName}`,
+        subject: `Lawn Care Re-Book — ${prev.customerName}${sourceTag}`,
         text: `Returning customer re-booked their last service.\n\nCustomer: ${prev.customerName}\nPhone: ${prev.phone}\nEmail: ${prev.email || "N/A"}\nAddress: ${prev.address}\nService: ${prev.serviceCategory} — ${prev.serviceFrequency}\nTotal: $${pricing.totalQuoted}${pricing.isCustomEstimate ? " (custom estimate)" : ""}\n\n${briefText}`,
         html: `<h2>🔁 Lawn Care Re-Book</h2><p>Returning customer tapped re-book.</p><p><b>Customer:</b> ${prev.customerName}<br><b>Phone:</b> ${prev.phone}<br><b>Email:</b> ${prev.email || "N/A"}<br><b>Address:</b> ${prev.address}<br><b>Service:</b> ${prev.serviceCategory} — ${prev.serviceFrequency}<br><b>Total:</b> $${pricing.totalQuoted}${pricing.isCustomEstimate ? " <em>(custom estimate)</em>" : ""}</p>${briefHtml}`,
       });
@@ -749,6 +762,39 @@ router.post("/activate-plan/:id", requireAuth, requireAdminRole, async (req: Req
   }
 });
 
+// Attribution stat: how many re-books with the rebook_email marker landed
+// in the last `windowDays` and how many reminder emails were sent in that
+// same window. Both numbers are computed from existing tables (no new
+// counters), so they reflect ground truth even after backfills/edits.
+const REBOOK_ATTRIBUTION_WINDOW_DAYS = 60;
+async function getRebookAttributionStats(windowDays: number = REBOOK_ATTRIBUTION_WINDOW_DAYS) {
+  const cutoff = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
+  const [rebRow] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(lawnCareQuotes)
+    .where(sql`${lawnCareQuotes.rebookSource} = ${REBOOK_EMAIL_SOURCE} AND ${lawnCareQuotes.createdAt} >= ${cutoff}`);
+  // Reminders dispatched (status='sent') in the window.
+  const [remRow] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(lawnCareRebookReminders)
+    .where(sql`${lawnCareRebookReminders.status} = 'sent' AND ${lawnCareRebookReminders.sentAt} >= ${cutoff}`);
+  const rebooks = Number(rebRow?.n || 0);
+  const reminders = Number(remRow?.n || 0);
+  const conversionRate = reminders > 0 ? rebooks / reminders : null;
+  return { windowDays, rebooks, reminders, conversionRate };
+}
+
+// GET /api/lawn-care/rebook-reminders/attribution — admin only
+async function rebookAttributionHandler(_req: Request, res: Response) {
+  try {
+    const stats = await getRebookAttributionStats();
+    return res.json(stats);
+  } catch (err) {
+    console.error("Re-book attribution error:", err);
+    return res.status(500).json({ error: "Failed to compute attribution" });
+  }
+}
+
 // GET /api/lawn-care/rebook-reminders/preview — admin only
 // Lists customers eligible for a re-book email, plus a render of the first email.
 async function rebookReminderPreviewHandler(_req: Request, res: Response) {
@@ -782,6 +828,7 @@ async function rebookReminderPreviewHandler(_req: Request, res: Response) {
       })),
       sampleEmail: sample,
       lastRun: getLastSweepInfo(),
+      attribution: await getRebookAttributionStats().catch(() => null),
     });
   } catch (err) {
     console.error("Re-book reminder preview error:", err);
@@ -805,10 +852,12 @@ async function rebookReminderSendHandler(_req: Request, res: Response) {
 // as well as a lawn-care-prefixed twin. Both still require admin auth.
 router.get("/rebook-reminder/preview", requireAuth, requireAdminRole, rebookReminderPreviewHandler);
 router.post("/rebook-reminder/send", requireAuth, requireAdminRole, rebookReminderSendHandler);
+router.get("/rebook-reminder/attribution", requireAuth, requireAdminRole, rebookAttributionHandler);
 
 // Back-compat aliases — earlier versions of the admin UI used these.
 router.get("/rebook-reminders/preview", requireAuth, requireAdminRole, rebookReminderPreviewHandler);
 router.post("/rebook-reminders/send", requireAuth, requireAdminRole, rebookReminderSendHandler);
+router.get("/rebook-reminders/attribution", requireAuth, requireAdminRole, rebookAttributionHandler);
 
 // GET /api/lawn-care/plans — admin only
 router.get("/plans", requireAuth, requireAdminRole, async (_req: Request, res: Response) => {

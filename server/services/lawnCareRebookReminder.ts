@@ -50,6 +50,10 @@ function escHtml(v: string | null | undefined): string {
 
 export const REBOOK_ELIGIBILITY_DAYS = 30;
 export const REBOOK_RESEND_WINDOW_DAYS = 60;
+// Canonical attribution marker for the reminder-email campaign. Used in the
+// deep link's utm_source, in the rebook endpoint's allow-list, and in the
+// admin attribution stat query — keep these three call sites aligned.
+export const REBOOK_EMAIL_SOURCE = "rebook_email";
 // Safety cap on a single sweep run. Set high enough that normal traffic
 // will never hit it, but bounded so a runaway eligibility query can't
 // dispatch unbounded mail in one tick.
@@ -130,7 +134,8 @@ export function buildRebookReminderEmail(opts: {
   const firstNameRaw = (opts.customerName || "there").split(/\s+/)[0];
   const firstName = escHtml(firstNameRaw);
   const phoneDigits = (opts.phone || "").replace(/\D/g, "");
-  const deepLink = `${APP_URL}/book-lawn-care?rebook=1&phone=${encodeURIComponent(phoneDigits)}`;
+  // Attribution marker the booking endpoint looks for. See REBOOK_EMAIL_SOURCE.
+  const deepLink = `${APP_URL}/book-lawn-care?rebook=1&phone=${encodeURIComponent(phoneDigits)}&utm_source=${REBOOK_EMAIL_SOURCE}`;
   const lastTotal = opts.totalQuoted ? `$${parseFloat(opts.totalQuoted).toFixed(2)}` : null;
   const svcLabel = escHtml((opts.serviceCategory || "lawn service").replace(/_/g, " "));
   const svcLabelRaw = (opts.serviceCategory || "lawn service").replace(/_/g, " ");
