@@ -12,7 +12,11 @@ import {
   getLastSweepInfo,
   REBOOK_ELIGIBILITY_DAYS,
   REBOOK_RESEND_WINDOW_DAYS,
+  ORGANIC_REBOOK_SOURCE,
 } from "../services/serviceRebookReminder";
+import { db } from "../db";
+import { leads, serviceRebookReminders } from "@shared/schema";
+import { and, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
 
 const router = Router();
 
@@ -127,6 +131,112 @@ router.post(
     } catch (err) {
       console.error(`Re-book send error (${cfg.key}):`, err);
       return res.status(500).json({ error: "Failed to send reminders" });
+    }
+  },
+);
+
+// GET /api/admin/service-rebook/:key/attribution
+// Per-service re-book attribution. Mirrors the lawn-care attribution shape:
+// counts of new bookings since the first reminder of this service was sent,
+// grouped by source (rebook_email_<svc> vs organic), with paid revenue and a
+// rough conversion rate (paid_from_email / reminders_sent).
+router.get(
+  "/:key/attribution",
+  requireAuth,
+  requireAdminRole,
+  async (req: Request, res: Response) => {
+    const cfg = resolveConfig(req, res);
+    if (!cfg) return;
+    try {
+      // Anchor the lookback window at the first SENT reminder for this
+      // service so brand-new services don't surface decade-old "organic"
+      // bookings as fake re-book email wins. If no reminder has ever been
+      // sent, return an empty payload — there's nothing to attribute yet.
+      const [firstReminderRow] = await db
+        .select({ at: sql<Date>`min(${serviceRebookReminders.sentAt})` })
+        .from(serviceRebookReminders)
+        .where(and(
+          eq(serviceRebookReminders.serviceKey, cfg.key),
+          eq(serviceRebookReminders.status, "sent"),
+        ));
+      if (!firstReminderRow?.at) {
+        return res.json({
+          serviceKey: cfg.key,
+          label: cfg.label,
+          windowStart: null,
+          remindersSent: 0,
+          bySource: [
+            { source: cfg.utmSource, label: "Re-book Email", totalLeads: 0, paidBookings: 0, paidRevenue: 0 },
+            { source: ORGANIC_REBOOK_SOURCE, label: "Organic Returner", totalLeads: 0, paidBookings: 0, paidRevenue: 0 },
+          ],
+          emailConversionRatePct: 0,
+        });
+      }
+      const since: Date = new Date(firstReminderRow.at);
+
+      // Count only successfully-sent reminders (matches lawn-care semantics).
+      // Failed dispatch rows stay in the table for dedupe but must not inflate
+      // the conversion denominator.
+      const [remindersRow] = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(serviceRebookReminders)
+        .where(and(
+          eq(serviceRebookReminders.serviceKey, cfg.key),
+          eq(serviceRebookReminders.status, "sent"),
+        ));
+      const remindersSent = Number(remindersRow?.n ?? 0);
+
+      // Pull leads matching this service's leadServiceTypes since the anchor.
+      const rows = await db
+        .select({
+          id: leads.id,
+          rebookSource: leads.rebookSource,
+          status: leads.status,
+          totalPrice: leads.totalPrice,
+          basePrice: leads.basePrice,
+          createdAt: leads.createdAt,
+        })
+        .from(leads)
+        .where(and(
+          inArray(leads.serviceType, cfg.leadServiceTypes),
+          isNotNull(leads.rebookSource),
+          gte(leads.createdAt, since),
+        ));
+
+      const PAID_STATUSES = new Set(["paid", "completed", "scheduled", "confirmed", "in_progress"]);
+      const sources = [cfg.utmSource, ORGANIC_REBOOK_SOURCE];
+      const bySource = sources.map((src) => {
+        const subset = rows.filter((r) => r.rebookSource === src);
+        const paid = subset.filter((r) => PAID_STATUSES.has(String(r.status || "")));
+        const paidRevenue = paid.reduce((sum, r) => {
+          const v = parseFloat(String(r.totalPrice ?? r.basePrice ?? "0"));
+          return sum + (Number.isFinite(v) ? v : 0);
+        }, 0);
+        return {
+          source: src,
+          label: src === cfg.utmSource ? "Re-book Email" : "Organic Returner",
+          totalLeads: subset.length,
+          paidBookings: paid.length,
+          paidRevenue: Number(paidRevenue.toFixed(2)),
+        };
+      });
+
+      const emailRow = bySource.find((s) => s.source === cfg.utmSource)!;
+      const conversionRate = remindersSent > 0
+        ? Number(((emailRow.paidBookings / remindersSent) * 100).toFixed(2))
+        : 0;
+
+      return res.json({
+        serviceKey: cfg.key,
+        label: cfg.label,
+        windowStart: since.toISOString(),
+        remindersSent,
+        bySource,
+        emailConversionRatePct: conversionRate,
+      });
+    } catch (err) {
+      console.error(`Re-book attribution error (${cfg.key}):`, err);
+      return res.status(500).json({ error: "Failed to load attribution" });
     }
   },
 );

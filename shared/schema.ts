@@ -128,6 +128,13 @@ export const leads = pgTable("leads", {
   bundleDiscountAmount: decimal("bundle_discount_amount", { precision: 10, scale: 2 }).default("0"),
   bundleDiscountReason: text("bundle_discount_reason"), // 'bundle_intent' | 'cross_service_history'
 
+  // Re-book email attribution (Task #108). Set when a customer arrives at a
+  // booking page from a re-book reminder email and is tagged with the
+  // service-specific utm_source (e.g. 'rebook_email_snow'). Stays NULL for
+  // brand-new leads and 'organic' for returning customers who came back on
+  // their own. Mirrors lawnCareQuotes.rebookSource.
+  rebookSource: text("rebook_source"),
+
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
 

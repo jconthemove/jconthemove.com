@@ -77,6 +77,21 @@ export const SERVICE_CONFIGS: Record<ServiceKey, ServiceConfig> = {
   },
 };
 
+// Re-book attribution source allow-list (Task #108). Mirrors the lawn-care
+// pattern: leads.rebookSource is set to one of these strings only. Anything
+// else is coerced to "organic" so we never persist user-controlled junk.
+export const ORGANIC_REBOOK_SOURCE = "organic";
+export const ALLOWED_LEAD_REBOOK_SOURCES: ReadonlySet<string> = new Set<string>([
+  ORGANIC_REBOOK_SOURCE,
+  ...Object.values(SERVICE_CONFIGS).map((c) => c.utmSource),
+]);
+export function normalizeLeadRebookSource(raw: unknown): string | null {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (s.length === 0) return null;
+  return ALLOWED_LEAD_REBOOK_SOURCES.has(s) ? s : ORGANIC_REBOOK_SOURCE;
+}
+
 export const REBOOK_ELIGIBILITY_DAYS = 30;
 export const REBOOK_RESEND_WINDOW_DAYS = 60;
 export const REBOOK_SWEEP_HARD_CAP = 1000;

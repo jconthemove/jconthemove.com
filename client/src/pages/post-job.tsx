@@ -470,6 +470,15 @@ export default function PostJobPage() {
     });
   };
 
+  // Re-book email attribution (Task #108): capture utm_source on first render
+  // so the marketplace POST can persist it on the lead. Snow & junk re-book
+  // emails point at /post-job?rebook=1&utm_source=rebook_email_{snow,junk}.
+  const rebookSourceRef = useRef<string | null>(
+    typeof window !== "undefined"
+      ? (new URLSearchParams(window.location.search).get("utm_source") || null)
+      : null,
+  );
+
   const submitMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/leads/marketplace", {
@@ -489,6 +498,7 @@ export default function PostJobPage() {
         crewSize: pkgId ? crewSize : undefined,
         basePrice: estimatedTotal > 0 ? estimatedTotal.toFixed(2) : undefined,
         promoCode: promoResult?.valid && promoResult.code ? promoResult.code : undefined,
+        rebookSource: rebookSourceRef.current || undefined,
       });
       return res.json();
     },
