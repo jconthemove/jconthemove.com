@@ -14037,6 +14037,34 @@ Thank you for your business!
             console.warn(`[Square webhook] No local invoice found for Square ID: ${squareInvoiceId}`);
           }
         }
+      } else if (eventType === "payment.created" || eventType === "payment.updated") {
+        // Detect Prepaid Credit Top-Up payments by matching Square order_id against
+        // our prepaid_credit_intents table. We only credit on COMPLETED payments.
+        try {
+          const payment = (data?.payment as Record<string, unknown> | undefined);
+          const status = typeof payment?.status === "string" ? payment.status : undefined;
+          const orderId = typeof payment?.order_id === "string" ? payment.order_id : undefined;
+          const paymentId = typeof payment?.id === "string" ? payment.id : undefined;
+          if (status === "COMPLETED" && orderId && paymentId) {
+            const { rows } = await pool.query(
+              `SELECT id, user_id, amount_usd, status FROM prepaid_credit_intents WHERE square_order_id = $1 LIMIT 1`,
+              [orderId]
+            );
+            if (rows.length && rows[0].status !== 'paid') {
+              const intent = rows[0];
+              await creditJcMovesUsdFromPrepaid(intent.user_id, parseFloat(intent.amount_usd), paymentId);
+              await pool.query(
+                `UPDATE prepaid_credit_intents
+                 SET status='paid', square_payment_id=$1, paid_at=NOW()
+                 WHERE id=$2`,
+                [paymentId, intent.id]
+              );
+              console.log(`[Square webhook] Prepaid credit minted for intent ${intent.id} ($${intent.amount_usd})`);
+            }
+          }
+        } catch (prepaidErr) {
+          console.error("[Square webhook] Prepaid credit handling failed:", prepaidErr);
+        }
       } else if (eventType === "invoice.updated") {
         const invoice = (data?.invoice as Record<string, unknown> | undefined);
         const squareInvoiceId = typeof invoice?.id === "string" ? invoice.id : undefined;
@@ -16406,7 +16434,10 @@ Thank you for your business!
       const userId = req.user?.id || req.session?.userId;
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
       const wallet = await storage.getWalletAccount(userId);
-      res.json({ tokenBalance: wallet?.tokenBalance || "0.00000000" });
+      res.json({
+        tokenBalance: wallet?.tokenBalance || "0.00000000",
+        cashBalance:  wallet?.cashBalance  || "0.00",
+      });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -18828,15 +18859,20 @@ Thank you for your business!
       const subtotalUsd = cashPriceCents / 100;
       let finalTokenApplied = 0;
       if (tApplied > 0) {
-        const rCheck = validateRedemption(tApplied, subtotalUsd);
+        // Load user's loyalty tier for the per-tier coverage cap
+        const tierRow = await pool.query<{ loyalty_tier: string | null }>(
+          `SELECT loyalty_tier FROM users WHERE id = $1 LIMIT 1`,
+          [userId]
+        );
+        const userTier = tierRow.rows[0]?.loyalty_tier || 'bronze';
+        const rCheck = validateRedemption(tApplied, subtotalUsd, userTier);
         if (!rCheck.valid) return res.status(400).json({ error: rCheck.message });
-        // Intersect with duration-based tokenCap from calcLaborQuote, then re-normalize
-        // to 500-increment because tokenCap may not itself be a multiple of 500
-        const cappedByDuration = Math.min(rCheck.effectiveTokens, tokenCap);
-        finalTokenApplied = roundToIncrement(cappedByDuration);
-        // After normalization the amount may fall below MIN — reject gracefully
+        // Tier-based subtotal coverage now drives the cap. The legacy
+        // duration-based `tokenCap` is no longer applied so VIP customers
+        // can reach the full 100% coverage their tier permits.
+        finalTokenApplied = rCheck.effectiveTokens;
         if (finalTokenApplied < MIN_REDEMPTION_TOKENS) {
-          return res.status(400).json({ error: `Token amount (${cappedByDuration}) rounds to less than the minimum ${MIN_REDEMPTION_TOKENS} JCMOVES after the duration cap is applied` });
+          return res.status(400).json({ error: `Token amount must be at least ${MIN_REDEMPTION_TOKENS} JCMOVES` });
         }
       }
       if (finalTokenApplied < 0) return res.status(400).json({ error: "Invalid token amount" });
@@ -19320,6 +19356,170 @@ Thank you for your business!
   // ── Treasury Revenue Split Tracking ──────────────────────────────────────────
   await ensureRevenueAllocationsTable();
   console.log('💰 Revenue allocations table ready');
+
+  // ── JCMOVES Prepaid Credit Top-Up ─────────────────────────────────────────────
+  await ensurePrepaidIntentsTable();
+  console.log('💵 Prepaid credit intents table ready');
+
+  // Backfill activity-based tiers (background, non-blocking)
+  setTimeout(() => {
+    import('./services/recompute-tier').then(({ backfillTiers }) => backfillTiers()).catch(() => {});
+  }, 5_000);
+
+  app.post("/api/jcmoves-usd/prepaid-checkout", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+
+      const amountUsd = parseFloat(req.body?.amountUsd ?? "0");
+      if (!Number.isFinite(amountUsd) || amountUsd < 5) {
+        return res.status(400).json({ error: "Minimum top-up is $5" });
+      }
+      if (amountUsd > 10000) {
+        return res.status(400).json({ error: "Maximum top-up is $10,000" });
+      }
+
+      const squareToken = process.env.SQUARE_ACCESS_TOKEN;
+      if (!squareToken) {
+        return res.status(500).json({ error: "Square is not configured" });
+      }
+
+      const { SquareClient, SquareEnvironment } = await import("square");
+      const { randomUUID } = await import("crypto");
+      const client = new SquareClient({
+        token: squareToken,
+        environment: SquareEnvironment.Production,
+      });
+
+      const locationsResponse = await client.locations.list();
+      const locations = locationsResponse.locations;
+      if (!locations || locations.length === 0) {
+        return res.status(500).json({ error: "No Square locations found" });
+      }
+      const locationId = locations[0].id!;
+      const amountCents = BigInt(Math.round(amountUsd * 100));
+
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+      const host = req.headers['x-forwarded-host'] || req.headers.host;
+      const baseUrl = `${protocol}://${host}`;
+
+      // Insert intent first so we have an id
+      const { rows: intentRows } = await pool.query(
+        `INSERT INTO prepaid_credit_intents (user_id, amount_usd, status)
+         VALUES ($1, $2, 'pending') RETURNING id`,
+        [userId, amountUsd.toFixed(2)]
+      );
+      const intentId = intentRows[0].id as number;
+
+      const linkResp = await client.checkout.paymentLinks.create({
+        idempotencyKey: randomUUID(),
+        quickPay: {
+          name: `JCMOVES USD Credit Top-Up ($${amountUsd.toFixed(2)})`,
+          priceMoney: { amount: amountCents, currency: "USD" },
+          locationId,
+        },
+        checkoutOptions: {
+          redirectUrl: `${baseUrl}/wallet?prepaid=success&intent=${intentId}`,
+          allowTipping: false,
+          merchantSupportEmail: "upmichiganstatemovers@gmail.com",
+        },
+        paymentNote: `Prepaid JCMOVES USD credit (intent ${intentId}, user ${userId})`,
+      });
+
+      const paymentLink = (linkResp as any).result?.paymentLink || (linkResp as any).paymentLink;
+      if (!paymentLink?.url) {
+        await pool.query(`UPDATE prepaid_credit_intents SET status='failed' WHERE id=$1`, [intentId]);
+        return res.status(500).json({ error: "Failed to create checkout link" });
+      }
+
+      await pool.query(
+        `UPDATE prepaid_credit_intents
+         SET square_order_id = $1, square_payment_link_id = $2
+         WHERE id = $3`,
+        [paymentLink.orderId ?? null, paymentLink.id ?? null, intentId]
+      );
+
+      res.json({
+        success: true,
+        intentId,
+        checkoutUrl: paymentLink.url,
+      });
+    } catch (err: any) {
+      console.error("[prepaid-checkout] error:", err);
+      const msg = err?.errors?.[0]?.detail || err?.message || "Failed to start checkout";
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  // Manual reconcile endpoint — called by /wallet?prepaid=success page as a fallback
+  // in case the Square webhook hasn't fired yet. Idempotent.
+  app.post("/api/jcmoves-usd/prepaid-reconcile", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const intentId = parseInt(req.body?.intentId ?? "0", 10);
+      if (!intentId) return res.status(400).json({ error: "Missing intentId" });
+
+      const { rows } = await pool.query(
+        `SELECT * FROM prepaid_credit_intents WHERE id = $1 AND user_id = $2 LIMIT 1`,
+        [intentId, userId]
+      );
+      if (!rows.length) return res.status(404).json({ error: "Intent not found" });
+      const intent = rows[0];
+      if (intent.status === 'paid') {
+        return res.json({ success: true, alreadyMinted: true });
+      }
+      // Look up Square payments matching the order id
+      if (!intent.square_order_id) {
+        return res.json({ success: false, pending: true });
+      }
+      const squareToken = process.env.SQUARE_ACCESS_TOKEN;
+      if (!squareToken) return res.status(500).json({ error: "Square not configured" });
+      const { SquareClient, SquareEnvironment } = await import("square");
+      const client = new SquareClient({ token: squareToken, environment: SquareEnvironment.Production });
+      const orderResp: any = await (client as any).orders.get({ orderId: intent.square_order_id }).catch(() => null);
+      const order = orderResp?.result?.order || orderResp?.order;
+      const tenders: any[] = order?.tenders ?? [];
+      const completedTender = tenders.find(t => t.payment_id || t.paymentId);
+      if (!completedTender) {
+        return res.json({ success: false, pending: true });
+      }
+      const paymentId = completedTender.payment_id || completedTender.paymentId;
+      await creditJcMovesUsdFromPrepaid(userId, parseFloat(intent.amount_usd), paymentId);
+      await pool.query(
+        `UPDATE prepaid_credit_intents
+         SET status='paid', square_payment_id=$1, paid_at=NOW()
+         WHERE id=$2`,
+        [paymentId, intentId]
+      );
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("[prepaid-reconcile] error:", err);
+      res.status(500).json({ error: err?.message || "Reconcile failed" });
+    }
+  });
+
+  // Admin treasury — total prepaid credit minted to date
+  app.get("/api/admin/treasury/prepaid-credit", isAuthenticated, requireBusinessOwner, async (_req, res) => {
+    try {
+      const { rows } = await pool.query<{ total_usd: string; count: string }>(
+        `SELECT COALESCE(SUM(amount_usd), 0)::text AS total_usd, COUNT(*)::text AS count
+         FROM prepaid_credit_intents WHERE status = 'paid'`
+      );
+      const totalRedeemedRows = await pool.query<{ total: string }>(
+        `SELECT COALESCE(SUM((metadata->>'creditApplied')::numeric), 0)::text AS total
+         FROM wallet_transactions
+         WHERE transaction_type = 'jcmoves_usd_redeem'`
+      );
+      res.json({
+        totalMintedUsd: parseFloat(rows[0]?.total_usd ?? '0'),
+        totalIntents: parseInt(rows[0]?.count ?? '0', 10),
+        totalRedeemedUsd: parseFloat(totalRedeemedRows.rows[0]?.total ?? '0'),
+      });
+    } catch (err: any) {
+      console.error("[admin treasury prepaid] error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
 
   // ── JCMOVES Lottery System ────────────────────────────────────────────────────
   await ensureLotteryTables();
@@ -20510,6 +20710,91 @@ async function creditJcMovesUsd(
   } catch (err) {
     console.error(`⚠️ creditJcMovesUsd failed (non-fatal):`, err);
   }
+}
+
+// ── JCMOVES USD: Mint service credit from a Prepaid Top-Up ───────────────────
+// Used when a customer purchases JCMOVES USD credit directly (not tied to a job).
+// Idempotent on the Square payment ID (one mint per payment).
+async function creditJcMovesUsdFromPrepaid(
+  userId: string,
+  amountUsd: number,
+  squarePaymentId: string,
+): Promise<void> {
+  if (amountUsd <= 0) return;
+  const refId = `prepaid:${squarePaymentId}`;
+
+  // Race-safe: rely on the partial UNIQUE INDEX uq_rewards_type_reference.
+  // We INSERT the mint row FIRST inside a transaction. If another concurrent
+  // webhook/reconcile already inserted the same (reward_type, reference_id),
+  // ON CONFLICT DO NOTHING returns 0 rows and we skip the credit entirely.
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO wallet_accounts (user_id, token_balance, cash_balance)
+       VALUES ($1, '0', '0.00')
+       ON CONFLICT (user_id) DO NOTHING`,
+      [userId]
+    );
+    const ins = await client.query(
+      `INSERT INTO rewards (user_id, reward_type, token_amount, cash_value, status, reference_id, metadata)
+       VALUES ($1, 'jcmoves_usd_mint', '0', $2, 'confirmed', $3, $4)
+       ON CONFLICT (reference_id) WHERE reward_type = 'jcmoves_usd_mint' AND reference_id IS NOT NULL DO NOTHING
+       RETURNING id`,
+      [userId, amountUsd.toFixed(2), refId, JSON.stringify({ source: 'prepaid', squarePaymentId })]
+    );
+    if (ins.rowCount === 0) {
+      await client.query('ROLLBACK');
+      console.log(`[JCMOVES USD prepaid] Already minted for payment ${squarePaymentId} (idempotent skip)`);
+      return;
+    }
+    const { rows: updatedRows } = await client.query(
+      `UPDATE wallet_accounts SET cash_balance = cash_balance + $1 WHERE user_id = $2
+       RETURNING cash_balance`,
+      [amountUsd.toFixed(2), userId]
+    );
+    const balanceAfter = updatedRows[0]?.cash_balance ?? amountUsd.toFixed(2);
+    await client.query(
+      `INSERT INTO wallet_transactions (transaction_type, amount, balance_after, status, metadata)
+       VALUES ('jcmoves_usd_mint', $1, $2, 'confirmed', $3::jsonb)`,
+      [amountUsd.toFixed(2), balanceAfter, JSON.stringify({ userId, squarePaymentId, source: 'prepaid', currency: 'JCMOVES_USD' })]
+    );
+    await client.query('COMMIT');
+    console.log(`[JCMOVES USD prepaid] Minted $${amountUsd.toFixed(2)} credit for user ${userId} (payment ${squarePaymentId})`);
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    console.error(`⚠️ creditJcMovesUsdFromPrepaid failed:`, err);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+async function ensurePrepaidIntentsTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS prepaid_credit_intents (
+      id            SERIAL PRIMARY KEY,
+      user_id       VARCHAR NOT NULL,
+      amount_usd    NUMERIC(10,2) NOT NULL,
+      square_order_id    TEXT,
+      square_payment_link_id TEXT,
+      status        TEXT NOT NULL DEFAULT 'pending',
+      square_payment_id  TEXT,
+      created_at    TIMESTAMP NOT NULL DEFAULT NOW(),
+      paid_at       TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_prepaid_intents_order ON prepaid_credit_intents(square_order_id);
+    CREATE INDEX IF NOT EXISTS idx_prepaid_intents_user  ON prepaid_credit_intents(user_id);
+    -- Race-safe idempotency: at most one intent per Square payment id.
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_prepaid_intents_payment_id
+      ON prepaid_credit_intents(square_payment_id)
+      WHERE square_payment_id IS NOT NULL;
+    -- Race-safe idempotency: at most one JCMOVES USD mint per reference_id.
+    -- Scoped to reward_type='jcmoves_usd_mint' so other reward types are unaffected.
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_rewards_jcmoves_usd_mint_ref
+      ON rewards(reference_id)
+      WHERE reward_type = 'jcmoves_usd_mint' AND reference_id IS NOT NULL;
+  `);
 }
 
 // ── Lottery helpers (module-level) ────────────────────────────────────────────

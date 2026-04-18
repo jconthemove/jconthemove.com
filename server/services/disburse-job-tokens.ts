@@ -328,12 +328,18 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
             if (!earnExists) {
               const prevSpend = parseFloat(customer.total_completed_spend || "0");
               const newSpend  = prevSpend + jobPrice;
-              const newTier   = getTierFromSpend(newSpend);
-
+              // Update lifetime spend for analytics; tier is now activity-based
+              // and recomputed below from completed-job count + referral count.
               await db
                 .update(users)
-                .set({ loyaltyTier: newTier, totalCompletedSpend: newSpend.toFixed(2) })
+                .set({ totalCompletedSpend: newSpend.toFixed(2) })
                 .where(eq(users.id, customer.id));
+              try {
+                const { recomputeUserTier } = await import("./recompute-tier");
+                await recomputeUserTier(customer.id);
+              } catch (tierErr) {
+                console.error("[recomputeUserTier] failed:", tierErr);
+              }
 
               await db.insert(rewards).values({
                 userId: customer.id,
@@ -407,6 +413,17 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
                   metadata: { referredUserId: customer.id, jobId: leadId },
                 });
                 await storage.creditWalletTokens(customer.referred_by_user_id, referralBonus);
+                // Increment referral_count and recompute referrer's tier
+                await pool.query(
+                  `UPDATE users SET referral_count = COALESCE(referral_count, 0) + 1 WHERE id = $1`,
+                  [customer.referred_by_user_id]
+                );
+                try {
+                  const { recomputeUserTier } = await import("./recompute-tier");
+                  await recomputeUserTier(customer.referred_by_user_id);
+                } catch (tErr) {
+                  console.error("[recomputeUserTier referrer] failed:", tErr);
+                }
                 console.log(`🎉 Referral ${referralBonus} JCMOVES → ${customer.referred_by_user_id}`);
               }
             }

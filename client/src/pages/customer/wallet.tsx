@@ -1,15 +1,20 @@
-import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { useEffect } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Link, useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Coins, TrendingUp, Lock, ArrowRight, Zap, Gift, ShoppingBag, History } from "lucide-react";
+import { Coins, TrendingUp, Lock, ArrowRight, Zap, Gift, ShoppingBag, History, DollarSign, Plus, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface WalletData {
   balance: string;
   stakedAmount: string;
   pendingRewards: string;
   totalEarned: string;
+  tokenBalance?: string;
+  cashBalance?: string;
 }
 
 interface RewardHistory {
@@ -22,6 +27,8 @@ interface RewardHistory {
 
 export default function CustomerWalletPage() {
   const { user } = useAuth();
+  const { toast } = useToast();
+  const [location] = useLocation();
 
   const { data: wallet, isLoading } = useQuery<WalletData>({
     queryKey: ["/api/wallet/balance"],
@@ -31,10 +38,38 @@ export default function CustomerWalletPage() {
     queryKey: ["/api/rewards/history"],
   });
 
-  const balance = parseFloat(wallet?.balance ?? "0");
+  const balance = parseFloat(wallet?.tokenBalance ?? wallet?.balance ?? "0");
+  const cashBalance = parseFloat(wallet?.cashBalance ?? "0");
   const staked = parseFloat(wallet?.stakedAmount ?? "0");
   const pending = parseFloat(wallet?.pendingRewards ?? "0");
   const history: RewardHistory[] = Array.isArray(historyData) ? historyData.slice(0, 10) : [];
+
+  // Reconcile prepaid top-up on Square redirect (?prepaid=success&intent=...)
+  const reconcile = useMutation({
+    mutationFn: async (intentId: number) => {
+      const r = await apiRequest("POST", "/api/jcmoves-usd/prepaid-reconcile", { intentId });
+      return r.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet/balance"] });
+      if (data?.success) {
+        toast({ title: "Credit added", description: "Your JCMOVES USD balance has been updated." });
+      } else if (data?.pending) {
+        toast({ title: "Payment pending", description: "We'll credit your wallet as soon as Square confirms." });
+      }
+    },
+  });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("prepaid") === "success") {
+      const intentId = parseInt(params.get("intent") ?? "0", 10);
+      if (intentId) reconcile.mutate(intentId);
+      // Clean the URL so we don't re-trigger
+      window.history.replaceState({}, "", "/wallet");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location]);
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -42,24 +77,60 @@ export default function CustomerWalletPage() {
         {/* Header */}
         <div className="mb-2">
           <h1 className="text-2xl font-bold">Your Wallet</h1>
-          <p className="text-sm text-muted-foreground">JCMOVES token balance & staking</p>
+          <p className="text-sm text-muted-foreground">JCMOVES USD credit & JCMOVES tokens</p>
         </div>
 
-        {/* Main Balance Card */}
-        <Card className="bg-gradient-to-br from-primary/20 to-primary/5 border-primary/30">
-          <CardContent className="pt-6 pb-4 text-center">
-            <div className="flex items-center justify-center gap-2 mb-1">
-              <Coins className="h-6 w-6 text-primary" />
-              <span className="text-sm text-muted-foreground font-medium">Available Balance</span>
-            </div>
-            {isLoading ? (
-              <div className="h-12 w-40 bg-muted animate-pulse rounded mx-auto my-2" />
-            ) : (
-              <p className="text-4xl font-black text-primary">{balance.toLocaleString()}</p>
-            )}
-            <p className="text-sm text-muted-foreground mt-1">JCMOVES tokens</p>
-          </CardContent>
-        </Card>
+        {/* Dual-currency Balance Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* JCMOVES USD — service credit */}
+          <Card className="bg-gradient-to-br from-emerald-500/15 to-emerald-500/5 border-emerald-500/30">
+            <CardContent className="pt-6 pb-4 text-center">
+              <div className="flex items-center justify-center gap-2 mb-1">
+                <DollarSign className="h-6 w-6 text-emerald-500" />
+                <span className="text-sm text-muted-foreground font-medium">JCMOVES USD</span>
+              </div>
+              {isLoading ? (
+                <div className="h-10 w-32 bg-muted animate-pulse rounded mx-auto my-2" />
+              ) : (
+                <p className="text-3xl font-black text-emerald-600 dark:text-emerald-400" data-testid="text-cash-balance">
+                  ${cashBalance.toFixed(2)}
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground mt-1">Service credit · $1 = $1 off</p>
+              <Link href="/wallet/add-credit">
+                <button
+                  className="mt-3 w-full inline-flex items-center justify-center gap-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-lg py-2 transition-colors"
+                  data-testid="button-add-credit"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Add Credit
+                </button>
+              </Link>
+            </CardContent>
+          </Card>
+
+          {/* JCMOVES — engagement token */}
+          <Card className="bg-gradient-to-br from-primary/20 to-primary/5 border-primary/30">
+            <CardContent className="pt-6 pb-4 text-center">
+              <div className="flex items-center justify-center gap-2 mb-1">
+                <Coins className="h-6 w-6 text-primary" />
+                <span className="text-sm text-muted-foreground font-medium">JCMOVES</span>
+              </div>
+              {isLoading ? (
+                <div className="h-10 w-32 bg-muted animate-pulse rounded mx-auto my-2" />
+              ) : (
+                <p className="text-3xl font-black text-primary" data-testid="text-token-balance">
+                  {balance.toLocaleString()}
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground mt-1">Engagement tokens · earn & redeem</p>
+              <Link href="/earn">
+                <button className="mt-3 w-full inline-flex items-center justify-center gap-1 text-xs font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-lg py-2 transition-colors">
+                  <Zap className="h-3.5 w-3.5" /> Earn More
+                </button>
+              </Link>
+            </CardContent>
+          </Card>
+        </div>
 
         {/* Stats row */}
         <div className="grid grid-cols-2 gap-3">
@@ -205,6 +276,24 @@ export default function CustomerWalletPage() {
                 </div>
               </div>
             ))}
+          </CardContent>
+        </Card>
+
+        {/* Compliance disclosure */}
+        <Card className="bg-muted/20 border-muted">
+          <CardContent className="pt-4 pb-4 text-xs text-muted-foreground space-y-2">
+            <p className="flex items-start gap-2">
+              <ShieldCheck className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
+              <span>
+                <strong>JCMOVES USD</strong> is a service credit (not money or an investment). It can only be used to
+                pay JC ON THE MOVE LLC invoices and cannot be withdrawn for cash or transferred to other users.
+              </span>
+            </p>
+            <p>
+              <strong>JCMOVES tokens</strong> are an engagement reward that may be applied as a discount on services
+              up to your loyalty tier's coverage cap. Tokens have no cash value, do not earn yield, and cannot be
+              traded peer-to-peer.
+            </p>
           </CardContent>
         </Card>
       </div>

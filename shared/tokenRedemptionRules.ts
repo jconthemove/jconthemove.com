@@ -20,8 +20,26 @@ export const MIN_REDEMPTION_TOKENS = 500;
 /** All redemption amounts must be multiples of this value. */
 export const REDEMPTION_INCREMENT = 500;
 
-/** Maximum fraction of a job subtotal that can be offset with tokens per booking. */
+/** Legacy flat cap — kept for back-compat. New code should use TIER_COVERAGE_PCT. */
 export const MAX_SUBTOTAL_PCT = 0.20;
+
+/**
+ * Per-tier max fraction of a job subtotal that can be offset with JCMOVES tokens.
+ * Bronze 50% · Silver 60% · Gold 75% · VIP 100%.
+ */
+export const TIER_COVERAGE_PCT = {
+  bronze: 0.50,
+  silver: 0.60,
+  gold:   0.75,
+  vip:    1.00,
+} as const;
+
+export type TierKey = keyof typeof TIER_COVERAGE_PCT;
+
+export function coveragePctForTier(tier: string | null | undefined): number {
+  const t = (tier ?? 'bronze') as TierKey;
+  return TIER_COVERAGE_PCT[t] ?? TIER_COVERAGE_PCT.bronze;
+}
 
 /**
  * Round `tokens` DOWN to the nearest REDEMPTION_INCREMENT.
@@ -33,10 +51,12 @@ export function roundToIncrement(tokens: number): number {
 
 /**
  * Maximum tokens that may be applied as a service discount for a given subtotal.
- * The result is already rounded to the nearest increment.
+ * If `tier` is provided, uses that tier's coverage percentage; otherwise falls back
+ * to the legacy flat 20% cap. Result is rounded down to REDEMPTION_INCREMENT.
  */
-export function maxTokensForSubtotal(subtotalUsd: number): number {
-  const raw = subtotalUsd * MAX_SUBTOTAL_PCT * PLATFORM_REDEEM_RATE;
+export function maxTokensForSubtotal(subtotalUsd: number, tier?: string | null): number {
+  const pct = tier ? coveragePctForTier(tier) : MAX_SUBTOTAL_PCT;
+  const raw = subtotalUsd * pct * PLATFORM_REDEEM_RATE;
   return roundToIncrement(raw);
 }
 
@@ -71,6 +91,7 @@ export interface RedemptionValidationResult {
 export function validateRedemption(
   requestedTokens: number,
   subtotalUsd?: number,
+  tier?: string | null,
 ): RedemptionValidationResult {
   if (requestedTokens < MIN_REDEMPTION_TOKENS) {
     return {
@@ -84,8 +105,17 @@ export function validateRedemption(
   let effective = roundToIncrement(requestedTokens);
 
   if (subtotalUsd !== undefined && subtotalUsd > 0) {
-    const cap = maxTokensForSubtotal(subtotalUsd);
-    if (effective > cap) effective = cap;
+    const cap = maxTokensForSubtotal(subtotalUsd, tier);
+    if (effective > cap) {
+      return {
+        valid: false,
+        effectiveTokens: cap,
+        effectiveUsd: tokensToDollars(cap),
+        message: tier
+          ? `Your ${tier.toUpperCase()} tier covers up to ${Math.round(coveragePctForTier(tier) * 100)}% of this job ($${tokensToDollars(cap).toFixed(2)} max). Apply ${cap.toLocaleString()} JCMOVES or upgrade your tier.`
+          : `Maximum tokens for this subtotal is ${cap.toLocaleString()} JCMOVES.`,
+      };
+    }
   }
 
   if (effective < MIN_REDEMPTION_TOKENS) {

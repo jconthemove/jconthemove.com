@@ -2079,6 +2079,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async creditWalletTokens(userId: string, tokenAmount: number): Promise<void> {
+    if (!Number.isFinite(tokenAmount) || tokenAmount < 0) {
+      throw new Error(`creditWalletTokens: amount must be non-negative finite, got ${tokenAmount}`);
+    }
+    if (tokenAmount === 0) return;
     let wallet = await this.getWalletAccount(userId);
     if (!wallet) {
       wallet = await this.createWalletAccount({ userId });
@@ -2142,6 +2146,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async debitWalletTokens(userId: string, tokenAmount: number): Promise<void> {
+    if (!Number.isFinite(tokenAmount) || tokenAmount < 0) {
+      throw new Error(`debitWalletTokens: amount must be non-negative finite, got ${tokenAmount}`);
+    }
+    if (tokenAmount === 0) return;
     const wallet = await this.getWalletAccount(userId);
     if (!wallet) throw new Error("Wallet not found");
     const currentBalance = parseFloat(wallet.tokenBalance || "0");

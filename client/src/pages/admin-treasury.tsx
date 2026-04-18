@@ -474,6 +474,11 @@ export default function AdminTreasuryPage() {
     staleTime: 60000,
   });
 
+  const { data: prepaidCreditStats } = useQuery<{ totalMintedUsd: number; totalIntents: number; totalRedeemedUsd: number }>({
+    queryKey: ["/api/admin/treasury/prepaid-credit"],
+    staleTime: 60000,
+  });
+
   const [yieldSources, setYieldSources] = useState<Array<{ id: string; label: string; icon: string; monthlyUsd: number; enabled: boolean }>>([]);
   const [yieldBonusPct, setYieldBonusPct] = useState("0");
   const [yieldSourcesLoaded, setYieldSourcesLoaded] = useState(false);
@@ -3008,6 +3013,16 @@ export default function AdminTreasuryPage() {
                           </p>
                           <p className="text-[10px] text-slate-500">
                             {jcMovesUsdCirculation?.walletCount ?? 0} wallet{(jcMovesUsdCirculation?.walletCount ?? 0) !== 1 ? "s" : ""}
+                          </p>
+                        </div>
+                        <div className="p-3 rounded-xl border border-teal-500/20 bg-teal-950/20 text-center">
+                          <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Prepaid Credit (Liability)</p>
+                          <p className="text-xl font-black text-teal-300" data-testid="text-prepaid-credit-total">
+                            ${(prepaidCreditStats?.totalMintedUsd ?? 0).toFixed(2)}
+                          </p>
+                          <p className="text-[10px] text-slate-500">
+                            {prepaidCreditStats?.totalIntents ?? 0} top-up{(prepaidCreditStats?.totalIntents ?? 0) !== 1 ? "s" : ""}
+                            {(prepaidCreditStats?.totalRedeemedUsd ?? 0) > 0 && ` · $${(prepaidCreditStats?.totalRedeemedUsd ?? 0).toFixed(2)} redeemed`}
                           </p>
                         </div>
                       </div>

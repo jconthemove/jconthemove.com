@@ -9,11 +9,18 @@ export const TOKEN_ECONOMY = {
 
 // Activity-based loyalty tiers — progressed through engagement, not just spending
 export const LOYALTY_TIERS = {
-  bronze: { rate: 0.10, tokensPerDollar: 15, minPoints: 0,    maxPoints: 499,      label: 'Bronze',       emoji: '🥉', color: 'text-amber-600',  border: 'border-amber-600/40', bg: 'bg-amber-600/10' },
-  silver: { rate: 0.12, tokensPerDollar: 18, minPoints: 500,  maxPoints: 1999,     label: 'Silver',       emoji: '🥈', color: 'text-slate-300',  border: 'border-slate-400/40', bg: 'bg-slate-400/10' },
-  gold:   { rate: 0.15, tokensPerDollar: 22, minPoints: 2000, maxPoints: 5999,     label: 'Gold',         emoji: '🥇', color: 'text-yellow-400', border: 'border-yellow-500/40', bg: 'bg-yellow-500/10' },
-  vip:    { rate: 0.20, tokensPerDollar: 30, minPoints: 6000, maxPoints: Infinity, label: 'Platinum VIP', emoji: '👑', color: 'text-purple-400', border: 'border-purple-500/40', bg: 'bg-purple-500/10' },
+  bronze: { rate: 0.10, tokensPerDollar: 15, coveragePct: 0.50, minPoints: 0,    maxPoints: 499,      label: 'Bronze',       emoji: '🥉', color: 'text-amber-600',  border: 'border-amber-600/40', bg: 'bg-amber-600/10' },
+  silver: { rate: 0.12, tokensPerDollar: 18, coveragePct: 0.60, minPoints: 500,  maxPoints: 1999,     label: 'Silver',       emoji: '🥈', color: 'text-slate-300',  border: 'border-slate-400/40', bg: 'bg-slate-400/10' },
+  gold:   { rate: 0.15, tokensPerDollar: 22, coveragePct: 0.75, minPoints: 2000, maxPoints: 5999,     label: 'Gold',         emoji: '🥇', color: 'text-yellow-400', border: 'border-yellow-500/40', bg: 'bg-yellow-500/10' },
+  vip:    { rate: 0.20, tokensPerDollar: 30, coveragePct: 1.00, minPoints: 6000, maxPoints: Infinity, label: 'Platinum VIP', emoji: '👑', color: 'text-purple-400', border: 'border-purple-500/40', bg: 'bg-purple-500/10' },
 } as const;
+
+/** Max JCMOVES tokens redeemable for a given subtotal at a given tier (rounded to 500 increment). */
+export function maxRedeemableForSubtotal(subtotalUsd: number, tier: LoyaltyTierKey = 'bronze'): number {
+  const cfg = LOYALTY_TIERS[tier] ?? LOYALTY_TIERS.bronze;
+  const rawTokens = subtotalUsd * cfg.coveragePct * 500; // 500 JCMOVES = $1
+  return Math.floor(rawTokens / 500) * 500;
+}
 
 // How to earn tier points
 export const TIER_POINT_WAYS = [

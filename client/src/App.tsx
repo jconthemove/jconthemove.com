@@ -32,6 +32,7 @@ const MyJobsPage = lazy(() => import("@/pages/my-jobs"));
 const PostJobPage = lazy(() => import("@/pages/post-job"));
 const CustomerBookPage = lazy(() => import("@/pages/customer/book"));
 const CustomerWalletPage = lazy(() => import("@/pages/customer/wallet"));
+const WalletAddCreditPage = lazy(() => import("@/pages/wallet-add-credit"));
 const CustomerEarnPage = lazy(() => import("@/pages/customer/earn"));
 const ServicePackagesPage = lazy(() => import("@/pages/service-packages"));
 const CrewJobsPage = lazy(() => import("@/pages/crew-jobs"));
@@ -340,6 +341,9 @@ function CustomerApp() {
           </Route>
           <Route path="/wallet">
             <CustomerWalletPage />
+          </Route>
+          <Route path="/wallet/add-credit">
+            <WalletAddCreditPage />
           </Route>
           <Route path="/earn">
             <CustomerEarnPage />

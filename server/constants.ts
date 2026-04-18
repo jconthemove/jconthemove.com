@@ -87,10 +87,10 @@ export const TOKEN_ECONOMY = {
 // Activity-based progression: earn points through daily engagement,
 // job activity, scripture, mining, referrals — not just spending.
 export const LOYALTY_TIERS = {
-  bronze:   { rate: 0.10, tokensPerDollar: 15, minPoints: 0,    maxPoints: 499,      label: 'Bronze',       emoji: '🥉', color: 'text-amber-600',  bg: 'bg-amber-600/20'  },
-  silver:   { rate: 0.12, tokensPerDollar: 18, minPoints: 500,  maxPoints: 1999,     label: 'Silver',       emoji: '🥈', color: 'text-slate-300',  bg: 'bg-slate-400/20'  },
-  gold:     { rate: 0.15, tokensPerDollar: 22, minPoints: 2000, maxPoints: 5999,     label: 'Gold',         emoji: '🥇', color: 'text-yellow-400', bg: 'bg-yellow-500/20' },
-  vip:      { rate: 0.20, tokensPerDollar: 30, minPoints: 6000, maxPoints: Infinity, label: 'Platinum VIP', emoji: '👑', color: 'text-purple-400', bg: 'bg-purple-500/20' },
+  bronze:   { rate: 0.10, tokensPerDollar: 15, coveragePct: 0.50, minPoints: 0,    maxPoints: 499,      label: 'Bronze',       emoji: '🥉', color: 'text-amber-600',  bg: 'bg-amber-600/20'  },
+  silver:   { rate: 0.12, tokensPerDollar: 18, coveragePct: 0.60, minPoints: 500,  maxPoints: 1999,     label: 'Silver',       emoji: '🥈', color: 'text-slate-300',  bg: 'bg-slate-400/20'  },
+  gold:     { rate: 0.15, tokensPerDollar: 22, coveragePct: 0.75, minPoints: 2000, maxPoints: 5999,     label: 'Gold',         emoji: '🥇', color: 'text-yellow-400', bg: 'bg-yellow-500/20' },
+  vip:      { rate: 0.20, tokensPerDollar: 30, coveragePct: 1.00, minPoints: 6000, maxPoints: Infinity, label: 'Platinum VIP', emoji: '👑', color: 'text-purple-400', bg: 'bg-purple-500/20' },
 } as const;
 
 // Points awarded per activity (updates loyaltyTier automatically)
