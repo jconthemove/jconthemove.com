@@ -79,21 +79,20 @@ export async function findEligibleRebookReminders(limit = REBOOK_BATCH_LIMIT): P
   const blockedPhones = new Set(recentRows.map(r => (r.phone || "").replace(/\D/g, "")).filter(Boolean));
 
   // Eligibility = the customer's MOST RECENT paid/completed one-time job
-  // is 30+ days old. Lawn-care quotes don't have a "completed" status today
-  // (paid is the terminal state for one-time jobs), but we accept both so
-  // this keeps working if a "completed" status is added later.
+  // is 30+ days old AND has a valid email on file. Lawn-care quotes don't
+  // have a "completed" status today (paid is the terminal state for
+  // one-time jobs), but we accept both so this keeps working if a
+  // "completed" status is added later.
   //
-  // Critical correctness rule: dedupe to the latest quote per phone FIRST,
-  // then apply the 30-day cutoff. Filtering before deduping would let a
-  // customer with both an old (40d) and a recent (10d) completed quote
-  // get a reminder, because the recent quote would be excluded from view.
+  // Critical correctness rule: dedupe to the latest quote per phone FIRST
+  // (without filtering on email), THEN apply the 30-day cutoff and email
+  // checks. Pre-filtering on email would let a customer with both a recent
+  // no-email quote and an older with-email quote get a reminder from the
+  // older quote — violating "latest quote wins".
   const allCompleted = await db
     .select()
     .from(lawnCareQuotes)
-    .where(and(
-      inArray(lawnCareQuotes.status, ["paid", "completed"]),
-      sql`${lawnCareQuotes.email} IS NOT NULL AND ${lawnCareQuotes.email} <> ''`,
-    ))
+    .where(inArray(lawnCareQuotes.status, ["paid", "completed"]))
     .orderBy(desc(lawnCareQuotes.updatedAt));
 
   const latestPerPhone = new Map<string, LawnCareQuote>();
@@ -103,10 +102,14 @@ export async function findEligibleRebookReminders(limit = REBOOK_BATCH_LIMIT): P
     if (!latestPerPhone.has(phoneKey)) latestPerPhone.set(phoneKey, q);
   }
 
+  const isValidEmail = (e: string | null | undefined): boolean =>
+    !!e && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
+
   const out: EligibleQuote[] = [];
   for (const [phoneKey, q] of latestPerPhone) {
     if (blockedPhones.has(phoneKey)) continue;
     if (!q.updatedAt || q.updatedAt >= eligibilityCutoff) continue;
+    if (!isValidEmail(q.email)) continue;
     out.push(q);
     if (out.length >= limit) break;
   }
