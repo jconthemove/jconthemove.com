@@ -5,8 +5,9 @@ import {
   Search, ChevronRight, Star, MessageSquare, CheckCircle2,
   Clock, UserCheck, Clipboard, Send, RefreshCw, Filter,
   ArrowLeft, Phone, Mail, Calendar, DollarSign, ExternalLink,
-  AlertCircle, Truck, Copy, Check, Play
+  AlertCircle, Truck, Copy, Check, Play, Eye, Loader2
 } from "lucide-react";
+import { queryClient } from "@/lib/queryClient";
 import { getStatusColors } from "@/lib/job-status";
 import { SERVICE_LABELS, getServiceBadgeColor } from "@/components/JobCard";
 import { Button } from "@/components/ui/button";
@@ -375,6 +376,13 @@ export default function AdminPipelinePage() {
 
       <div className="max-w-6xl mx-auto px-4 py-6 space-y-4">
 
+        {/* ── Re-book Reminder Cards (snow / junk / window cleaning) ── */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <RebookReminderCard serviceKey="snow_removal" label="Snow Removal" emoji="❄️" envFlag="ENABLE_REBOOK_REMINDER_EMAILS_SNOW" accent="sky" />
+          <RebookReminderCard serviceKey="junk_removal" label="Junk Removal" emoji="🗑️" envFlag="ENABLE_REBOOK_REMINDER_EMAILS_JUNK" accent="amber" />
+          <RebookReminderCard serviceKey="window_cleaning" label="Window Cleaning" emoji="🪟" envFlag="ENABLE_REBOOK_REMINDER_EMAILS_WINDOW" accent="cyan" />
+        </div>
+
         {/* ── Summary Cards ── */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           {[
@@ -438,6 +446,144 @@ export default function AdminPipelinePage() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Re-book Reminder Card ────────────────────────────────────────────────────
+// One card per non-lawn-care service (snow / junk / window cleaning). Same
+// Preview + Send Now contract as the lawn-care card on /admin/lawn-care.
+type AccentColor = "sky" | "amber" | "cyan";
+const ACCENT_CLASSES: Record<AccentColor, { text: string; bg: string; border: string; btn: string; btnText: string }> = {
+  sky:   { text: "text-sky-400",   bg: "bg-sky-500/10",   border: "border-sky-500/20",   btn: "bg-sky-500 hover:bg-sky-600",     btnText: "text-slate-900" },
+  amber: { text: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20", btn: "bg-amber-500 hover:bg-amber-600", btnText: "text-slate-900" },
+  cyan:  { text: "text-cyan-400",  bg: "bg-cyan-500/10",  border: "border-cyan-500/20",  btn: "bg-cyan-500 hover:bg-cyan-600",   btnText: "text-slate-900" },
+};
+
+type RebookPreview = {
+  serviceKey: string;
+  label: string;
+  eligibilityDays: number;
+  resendWindowDays: number;
+  eligibleCount: number;
+  eligible: { id: string; customerName: string; email: string | null; phone: string; serviceCategory: string; totalQuoted: string | null; lastUpdated: string }[];
+  sampleEmail: { html: string; text: string; subject: string } | null;
+  lastRun: { ranAt: string; attempted: number; sent: number; failed: number; skipped: boolean; trigger: "scheduler" | "manual" } | null;
+};
+
+function RebookReminderCard({ serviceKey, label, emoji, envFlag, accent }: {
+  serviceKey: string; label: string; emoji: string; envFlag: string; accent: AccentColor;
+}) {
+  const { toast } = useToast();
+  const a = ACCENT_CLASSES[accent];
+  const [open, setOpen] = useState(false);
+
+  const previewQ = useQuery<RebookPreview>({
+    queryKey: ["/api/admin/service-rebook", serviceKey, "preview"],
+    enabled: open,
+  });
+
+  const sendMutation = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/admin/service-rebook/${serviceKey}/send`, {}),
+    onSuccess: async (res) => {
+      const data = await res.json();
+      toast({
+        title: `Sent ${data.sent} reminder${data.sent === 1 ? "" : "s"}`,
+        description: data.failed
+          ? `${data.failed} failed — see server logs`
+          : `${data.attempted} attempted`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/service-rebook", serviceKey, "preview"] });
+    },
+    onError: () => toast({ title: "Failed to send reminders", variant: "destructive" }),
+  });
+
+  const handleSendClick = () => {
+    const eligibleCount = previewQ.data?.eligibleCount;
+    const countPart = typeof eligibleCount === "number"
+      ? `${eligibleCount} customer${eligibleCount === 1 ? "" : "s"}`
+      : "every eligible customer";
+    if (!window.confirm(
+      `Send ${label} re-book reminder emails to ${countPart} now?\n\nEach email is dispatched immediately. Customers won't be re-emailed for at least 60 days.`
+    )) return;
+    sendMutation.mutate();
+  };
+
+  const fmtLastRun = (info: RebookPreview["lastRun"]): string => {
+    if (!info) return "Never run in this server process.";
+    const when = new Date(info.ranAt).toLocaleString();
+    const status = info.skipped
+      ? "skipped (another sweep was in progress)"
+      : `${info.sent} sent · ${info.failed} failed · ${info.attempted} attempted`;
+    return `Last run: ${when} (${info.trigger}) — ${status}`;
+  };
+
+  return (
+    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3" data-testid={`rebook-card-${serviceKey}`}>
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="flex items-start gap-2 min-w-0">
+          <div className={`${a.bg} border ${a.border} rounded-lg p-1.5 shrink-0`}>
+            <Mail className={`h-3.5 w-3.5 ${a.text}`} />
+          </div>
+          <div className="min-w-0">
+            <h3 className="font-semibold text-white text-sm truncate">{emoji} {label} Re-book</h3>
+            <p className="text-slate-500 text-[11px] mt-0.5 leading-snug">
+              30+ day nudge, max once / 60d. Set <code className={a.text}>{envFlag}=true</code> for daily.
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className="flex gap-1.5">
+        <Button size="sm" variant="outline" className="border-slate-700 text-slate-200 text-xs flex-1" onClick={() => setOpen(o => !o)} data-testid={`button-preview-${serviceKey}`}>
+          <Eye className="h-3 w-3 mr-1" /> {open ? "Hide" : "Preview"}
+        </Button>
+        <Button size="sm" className={`${a.btn} ${a.btnText} text-xs font-semibold flex-1`} onClick={handleSendClick} disabled={sendMutation.isPending} data-testid={`button-send-${serviceKey}`}>
+          {sendMutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Send className="h-3 w-3 mr-1" />} Send Now
+        </Button>
+      </div>
+
+      {open && (
+        <div className="mt-3 pt-3 border-t border-slate-800">
+          {previewQ.isLoading ? (
+            <div className="flex items-center justify-center py-3"><Loader2 className={`h-4 w-4 animate-spin ${a.text}`} /></div>
+          ) : previewQ.data ? (
+            <>
+              <div className="text-xs text-slate-400 mb-1.5">
+                <span className={`${a.text} font-semibold`}>{previewQ.data.eligibleCount}</span> eligible · {previewQ.data.eligibilityDays}d / {previewQ.data.resendWindowDays}d window
+              </div>
+              <div className="text-[10px] text-slate-500 mb-2" data-testid={`last-run-${serviceKey}`}>
+                {fmtLastRun(previewQ.data.lastRun)}
+              </div>
+              {previewQ.data.eligible.length > 0 ? (
+                <div className="space-y-1 max-h-40 overflow-y-auto">
+                  {previewQ.data.eligible.map(e => (
+                    <div key={e.id} className="bg-slate-800/40 rounded p-1.5 text-[11px]" data-testid={`eligible-${serviceKey}-${e.id}`}>
+                      <div className="text-white font-medium truncate">{e.customerName}</div>
+                      <div className="text-slate-500 truncate">{e.email} · {e.serviceCategory}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-slate-500 text-xs italic">No customers currently eligible.</p>
+              )}
+              {previewQ.data.sampleEmail && (
+                <details className="mt-2">
+                  <summary className={`text-[11px] ${a.text} cursor-pointer`}>View sample email</summary>
+                  <iframe
+                    title={`${label} re-book reminder preview`}
+                    sandbox=""
+                    srcDoc={previewQ.data.sampleEmail.html}
+                    className="mt-1.5 w-full h-72 bg-white rounded border border-slate-700"
+                    data-testid={`preview-iframe-${serviceKey}`}
+                  />
+                </details>
+              )}
+            </>
+          ) : (
+            <p className="text-red-400 text-xs">Failed to load preview.</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

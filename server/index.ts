@@ -301,6 +301,30 @@ app.use((req, res, next) => {
       }
     })();
 
+    // ── Generic service re-book reminders table (snow/junk/window) ──────────
+    // Created at boot to mirror the other lightweight infra tables in this
+    // file. Kept in code (not just drizzle migrations) so a fresh deploy
+    // always has it.
+    (async () => {
+      try {
+        const { pool: dbPool } = await import('./db');
+        await dbPool.query(`
+          CREATE TABLE IF NOT EXISTS service_rebook_reminders (
+            id          SERIAL PRIMARY KEY,
+            service_key TEXT NOT NULL,
+            lead_id     VARCHAR NOT NULL REFERENCES leads(id),
+            sent_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            status      TEXT NOT NULL DEFAULT 'sent'
+          );
+          CREATE INDEX IF NOT EXISTS idx_svc_rebook_service_sent
+            ON service_rebook_reminders(service_key, sent_at);
+          CREATE INDEX IF NOT EXISTS idx_svc_rebook_lead
+            ON service_rebook_reminders(lead_id);
+        `);
+        console.log('✅ service_rebook_reminders table ready');
+      } catch (e) { console.error('service_rebook_reminders table init error:', e); }
+    })();
+
     // ── Daily Lawn Care Re-book Reminder Sweep ──────────────────────────────
     // Off by default. Set ENABLE_REBOOK_REMINDER_EMAILS=true to enable.
     if (process.env.ENABLE_REBOOK_REMINDER_EMAILS === "true") {
@@ -323,6 +347,40 @@ app.use((req, res, next) => {
       console.log("✅ Lawn care re-book reminder sweep scheduled (daily)");
     } else {
       console.log("ℹ️  Lawn care re-book reminder sweep disabled (set ENABLE_REBOOK_REMINDER_EMAILS=true to enable)");
+    }
+
+    // ── Daily Re-book Reminder Sweeps for Snow / Junk / Window Cleaning ─────
+    // Each service has its own env flag so they can be staged independently
+    // (e.g. enable snow first, watch results, enable the others). All share
+    // the generic engine and a per-service Postgres advisory lock, so a
+    // manual admin "Send Now" can never collide with the daily tick.
+    {
+      const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+      const { SERVICE_CONFIGS, runRebookSweep } = await import("./services/serviceRebookReminder");
+      // Stagger the per-service first runs by 30s so logs are easier to
+      // read and we don't open three pool connections at the same instant.
+      let offset = 90_000;
+      for (const cfg of Object.values(SERVICE_CONFIGS)) {
+        if (process.env[cfg.schedulerEnvFlag] !== "true") {
+          console.log(`ℹ️  ${cfg.label} re-book reminder sweep disabled (set ${cfg.schedulerEnvFlag}=true to enable)`);
+          continue;
+        }
+        const tick = async () => {
+          try {
+            const result = await runRebookSweep(cfg, undefined, "scheduler");
+            console.log(`[rebook-reminder:${cfg.key}] sweep complete — attempted=${result.attempted} sent=${result.sent} failed=${result.failed}`);
+            if (result.failures.length) {
+              console.warn(`[rebook-reminder:${cfg.key}] failures:`, result.failures);
+            }
+          } catch (err) {
+            console.error(`[rebook-reminder:${cfg.key}] sweep error:`, err);
+          }
+        };
+        setTimeout(tick, offset);
+        setInterval(tick, ONE_DAY_MS);
+        console.log(`✅ ${cfg.label} re-book reminder sweep scheduled (daily)`);
+        offset += 30_000;
+      }
     }
 
     // Serve static files from attached_assets directory with proper video support

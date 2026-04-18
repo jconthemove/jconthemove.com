@@ -40,6 +40,7 @@ import { grantLotteryTicketsForActivity } from "./services/disburse-job-tokens";
 import { getDepositInfo, extractZip } from "@shared/depositRules";
 import { MIN_REDEMPTION_TOKENS, REDEMPTION_INCREMENT, roundToIncrement, validateRedemption, tokensToDollars } from "@shared/tokenRedemptionRules";
 import lawnCareRouter from "./routes/lawnCare";
+import serviceRebookRouter from "./routes/serviceRebookReminders";
 
 const STAKING_TREASURY_USER_ID = "staking-treasury-system";
 
@@ -20730,6 +20731,10 @@ Thank you for your business!
   // Admin re-book reminder endpoints — also mounted under /api/admin/lawn-care
   // per the task contract. The same router file owns these handlers.
   app.use("/api/admin/lawn-care", lawnCareRouter);
+
+  // Generic re-book reminder admin endpoints (snow/junk/window-cleaning).
+  // Lawn care has its own routes above for historical reasons.
+  app.use("/api/admin/service-rebook", serviceRebookRouter);
 
   const httpServer = createServer(app);
   return httpServer;

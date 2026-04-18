@@ -2218,6 +2218,24 @@ export const lawnCareRebookReminders = pgTable("lawn_care_rebook_reminders", {
 });
 export type LawnCareRebookReminder = typeof lawnCareRebookReminders.$inferSelect;
 
+// ── Generic Service Re-book Reminder Sends ───────────────────────────────────
+// Used by the shared serviceRebookReminder service for non-lawn-care services
+// (snow_removal, junk_removal, window_cleaning). One row per (serviceKey,
+// leadId, sentAt). Same write-before-dispatch dedupe guarantee as
+// lawn_care_rebook_reminders. Lawn-care keeps using its own table for
+// historical continuity.
+export const serviceRebookReminders = pgTable("service_rebook_reminders", {
+  id: serial("id").primaryKey(),
+  serviceKey: text("service_key").notNull(), // 'snow_removal' | 'junk_removal' | 'window_cleaning'
+  leadId: varchar("lead_id").notNull().references(() => leads.id),
+  sentAt: timestamp("sent_at").notNull().default(sql`now()`),
+  status: text("status").notNull().default("sent"), // 'sent' | 'failed'
+}, (table) => [
+  index("idx_svc_rebook_service_sent").on(table.serviceKey, table.sentAt),
+  index("idx_svc_rebook_lead").on(table.leadId),
+]);
+export type ServiceRebookReminder = typeof serviceRebookReminders.$inferSelect;
+
 // ── Lawn Care Recurring Plans ─────────────────────────────────────────────────
 export const lawnCarePlans = pgTable("lawn_care_plans", {
   id: serial("id").primaryKey(),
