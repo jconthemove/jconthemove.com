@@ -474,7 +474,13 @@ export default function AdminTreasuryPage() {
     staleTime: 60000,
   });
 
-  const { data: prepaidCreditStats } = useQuery<{ totalMintedUsd: number; totalIntents: number; totalRedeemedUsd: number }>({
+  const { data: prepaidCreditStats } = useQuery<{
+    totalPurchasedUsd: number;
+    totalMintedUsd: number;
+    totalIntents: number;
+    totalRedeemedUsd: number;
+    outstandingLiabilityUsd: number;
+  }>({
     queryKey: ["/api/admin/treasury/prepaid-credit"],
     staleTime: 60000,
   });
@@ -3015,15 +3021,28 @@ export default function AdminTreasuryPage() {
                             {jcMovesUsdCirculation?.walletCount ?? 0} wallet{(jcMovesUsdCirculation?.walletCount ?? 0) !== 1 ? "s" : ""}
                           </p>
                         </div>
-                        <div className="p-3 rounded-xl border border-teal-500/20 bg-teal-950/20 text-center">
-                          <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Prepaid Credit (Liability)</p>
-                          <p className="text-xl font-black text-teal-300" data-testid="text-prepaid-credit-total">
-                            ${(prepaidCreditStats?.totalMintedUsd ?? 0).toFixed(2)}
+                        <div className="p-3 rounded-xl border border-cyan-500/20 bg-cyan-950/20 text-center">
+                          <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Prepaid Purchased</p>
+                          <p className="text-xl font-black text-cyan-300" data-testid="text-prepaid-purchased">
+                            ${(prepaidCreditStats?.totalPurchasedUsd ?? prepaidCreditStats?.totalMintedUsd ?? 0).toFixed(2)}
                           </p>
                           <p className="text-[10px] text-slate-500">
                             {prepaidCreditStats?.totalIntents ?? 0} top-up{(prepaidCreditStats?.totalIntents ?? 0) !== 1 ? "s" : ""}
-                            {(prepaidCreditStats?.totalRedeemedUsd ?? 0) > 0 && ` · $${(prepaidCreditStats?.totalRedeemedUsd ?? 0).toFixed(2)} redeemed`}
                           </p>
+                        </div>
+                        <div className="p-3 rounded-xl border border-rose-500/20 bg-rose-950/20 text-center">
+                          <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Prepaid Redeemed</p>
+                          <p className="text-xl font-black text-rose-300" data-testid="text-prepaid-redeemed">
+                            ${(prepaidCreditStats?.totalRedeemedUsd ?? 0).toFixed(2)}
+                          </p>
+                          <p className="text-[10px] text-slate-500">applied to invoices</p>
+                        </div>
+                        <div className="p-3 rounded-xl border-2 border-teal-500/40 bg-teal-950/40 text-center">
+                          <p className="text-[10px] text-teal-300 uppercase tracking-wider mb-1 font-bold">Outstanding Liability</p>
+                          <p className="text-2xl font-black text-teal-200" data-testid="text-prepaid-outstanding-liability">
+                            ${(prepaidCreditStats?.outstandingLiabilityUsd ?? 0).toFixed(2)}
+                          </p>
+                          <p className="text-[10px] text-slate-400">purchased − redeemed = owed to customers</p>
                         </div>
                       </div>
 

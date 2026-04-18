@@ -19554,6 +19554,20 @@ Thank you for your business!
       reason: "Neither JCMOVES tokens nor JCMOVES USD credit can be transferred between user accounts.",
     });
 
+  // Lightweight tier lookup used by the booking UI to display the user's cap.
+  app.get("/api/user/tier", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId || req.user?.id;
+      const r = await pool.query<{ loyalty_tier: string | null }>(
+        `SELECT loyalty_tier FROM users WHERE id = $1 LIMIT 1`,
+        [userId]
+      );
+      res.json({ tier: r.rows[0]?.loyalty_tier || 'bronze' });
+    } catch {
+      res.json({ tier: 'bronze' });
+    }
+  });
+
   app.post("/api/wallet/withdraw",        isAuthenticated, refuseWithdrawal);
   app.post("/api/wallet/cashout",         isAuthenticated, refuseWithdrawal);
   app.post("/api/jcmoves-usd/withdraw",   isAuthenticated, refuseWithdrawal);
@@ -20684,7 +20698,12 @@ async function creditJcMovesUsd(
   source: string = 'payment'
 ): Promise<void> {
   try {
-    if (amountUsd <= 0) return;
+    // Guardrail: refuse non-finite, NaN, negative, or zero amounts. JCMOVES USD
+    // is service credit — credits must always be a positive USD value.
+    if (!Number.isFinite(amountUsd) || amountUsd <= 0) {
+      console.warn(`[JCMOVES USD] Refused invalid mint amount=${amountUsd} for lead ${leadId} (source: ${source})`);
+      return;
+    }
 
     // Idempotency: one mint per lead
     const existing = await pool.query(
@@ -20762,7 +20781,17 @@ async function creditJcMovesUsdFromPrepaid(
   amountUsd: number,
   squarePaymentId: string,
 ): Promise<void> {
-  if (amountUsd <= 0) return;
+  // Guardrail: refuse non-finite, NaN, negative, or zero USD amounts.
+  if (!Number.isFinite(amountUsd) || amountUsd <= 0) {
+    console.warn(`[JCMOVES USD prepaid] Refused invalid mint amount=${amountUsd} (user ${userId}, payment ${squarePaymentId})`);
+    return;
+  }
+  // Guardrail: userId and squarePaymentId must be non-empty strings — prevents
+  // accidental mass-mint on null/undefined identifiers.
+  if (!userId || typeof userId !== 'string' || !squarePaymentId || typeof squarePaymentId !== 'string') {
+    console.warn(`[JCMOVES USD prepaid] Refused mint with invalid identifiers user=${userId} payment=${squarePaymentId}`);
+    return;
+  }
   const refId = `prepaid:${squarePaymentId}`;
 
   // Race-safe: rely on the partial UNIQUE INDEX uq_rewards_type_reference.

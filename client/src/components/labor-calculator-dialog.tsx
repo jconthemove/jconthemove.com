@@ -13,6 +13,7 @@ import {
   CalendarDays, ArrowRight, ChevronDown, ChevronUp, Info, Zap
 } from "lucide-react";
 import { DatePicker } from "@/components/ui/date-picker";
+import { LOYALTY_TIERS, maxRedeemableForSubtotal, type LoyaltyTierKey } from "@/lib/loyalty";
 
 const TOKENS_PER_MOVER_MINUTE = 500;
 const CASH_PER_MOVER_HOUR = 62.5;
@@ -85,7 +86,23 @@ export function LaborCalculatorDialog({ open, onClose, walletBalance }: Props) {
     ? (parseInt(customMinutes) || 15)
     : minutes;
 
-  const quote = useMemo(() => calcQuote(movers, effectiveMinutes), [movers, effectiveMinutes]);
+  // Fetch the user's current loyalty tier so we can show the personal cap.
+  const { data: tierData } = useQuery<{ tier: LoyaltyTierKey }>({
+    queryKey: ["/api/user/tier"],
+    enabled: open,
+  });
+  const userTier: LoyaltyTierKey = tierData?.tier ?? 'bronze';
+  const tierCfg = LOYALTY_TIERS[userTier];
+
+  const baseQuote = useMemo(() => calcQuote(movers, effectiveMinutes), [movers, effectiveMinutes]);
+
+  // Apply tier coverage cap to the duration-based cap (server enforces tier cap;
+  // we mirror it here so the displayed cap matches what the server will accept).
+  const quote = useMemo(() => {
+    const tierTokenCap = maxRedeemableForSubtotal(baseQuote.cashPrice, userTier);
+    const effectiveCap = Math.min(baseQuote.tokenCap, tierTokenCap);
+    return { ...baseQuote, tokenCap: effectiveCap, tierTokenCap };
+  }, [baseQuote, userTier]);
 
   const canAffordAll = walletBalance >= quote.tokenPrice;
   const canAffordCap = walletBalance >= quote.tokenCap;
@@ -298,12 +315,19 @@ export function LaborCalculatorDialog({ open, onClose, walletBalance }: Props) {
                 </div>
               </div>
 
-              {quote.tokenCoverageRatio < 1 && (
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Info className="h-3 w-3 shrink-0" />
-                  <span>Longer jobs: max token coverage is {Math.round(quote.tokenCoverageRatio * 100)}% ({fmt(quote.tokenCap)} JCMOVES cap)</span>
-                </div>
-              )}
+              <div className={`flex items-start gap-2 text-xs rounded-md px-2.5 py-2 border ${tierCfg.border} ${tierCfg.bg}`}>
+                <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                <span>
+                  <span className={`font-semibold ${tierCfg.color}`}>{tierCfg.emoji} {tierCfg.label}</span>{' '}
+                  tier — your tokens can cover up to{' '}
+                  <span className="font-semibold">{Math.round(tierCfg.coveragePct * 100)}%</span>{' '}
+                  of this job ({fmt(quote.tierTokenCap)} JCMOVES =${' '}
+                  {(tierCfg.coveragePct * quote.cashPrice).toFixed(2)}).
+                  {quote.tokenCoverageRatio < 1 && quote.tokenCap < quote.tierTokenCap && (
+                    <> Longer-job rule reduces this to {fmt(quote.tokenCap)} JCMOVES for this duration.</>
+                  )}
+                </span>
+              </div>
 
               <button
                 onClick={() => setShowBreakdown(!showBreakdown)}
