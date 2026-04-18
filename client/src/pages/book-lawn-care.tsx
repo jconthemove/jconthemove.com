@@ -23,7 +23,7 @@ import LawnYardCardTile from "@/components/LawnYardCard";
 import WhatThisMeans from "@/components/WhatThisMeans";
 import LawnPriceBreakdown, { type LawnPricing } from "@/components/LawnPriceBreakdown";
 import {
-  SIZE_CARDS, CONDITION_CARDS, SERVICE_CARDS, FREQUENCY_CARDS, EXPLAINERS,
+  SIZE_CARDS, CONDITION_CARDS, SERVICE_CARDS, FREQUENCY_CARDS, EXPLAINERS, ADD_ON_LABELS,
 } from "@/lib/lawnYardData";
 
 const ADD_ONS = [
@@ -450,7 +450,13 @@ export default function BookLawnCare() {
 
         {/* Step 7 — Confirmation */}
         {step === 7 && quoteResult && (
-          <ConfirmationPanel result={quoteResult} frequency={frequency} />
+          <ConfirmationPanel
+            result={quoteResult}
+            frequency={frequency}
+            propertySize={propertySize}
+            propertyCondition={propertyCondition}
+            selectedAddOns={selectedAddOns}
+          />
         )}
 
       </div>
@@ -491,8 +497,22 @@ function StepWrap({
   );
 }
 
-function ConfirmationPanel({ result, frequency }: { result: QuoteResult; frequency: string }) {
+function ConfirmationPanel({
+  result,
+  frequency,
+  propertySize,
+  propertyCondition,
+  selectedAddOns,
+}: {
+  result: QuoteResult;
+  frequency: string;
+  propertySize: string;
+  propertyCondition: string;
+  selectedAddOns: string[];
+}) {
   const isCustom = result.pricing.isCustomEstimate;
+  const sizeCard = SIZE_CARDS.find((c) => c.id === propertySize);
+  const conditionCard = CONDITION_CARDS.find((c) => c.id === propertyCondition);
   const timeline = isCustom
     ? [
         { title: "Darrell reviews your request", desc: "He'll either call or stop by within 24 hours.", icon: MessageCircle },
@@ -524,6 +544,61 @@ function ConfirmationPanel({ result, frequency }: { result: QuoteResult; frequen
       </div>
 
       <div className="px-4 py-4 space-y-3">
+
+        {(sizeCard || conditionCard) && (
+          <div className="rounded-xl bg-slate-800/40 border border-slate-700/40 px-4 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-3">Your Yard Details</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {sizeCard && (
+                <div
+                  data-testid={`confirm-size-${sizeCard.id}`}
+                  className={cn("border rounded-2xl p-3", sizeCard.accent || "border-lime-500/60 bg-lime-500/10")}
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="text-2xl flex-shrink-0">{sizeCard.illustration}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Yard size</p>
+                      <p className="font-semibold text-white text-sm">{sizeCard.label}</p>
+                      <p className="text-[11px] text-slate-400 leading-snug mt-0.5">{sizeCard.hint}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {conditionCard && (
+                <div
+                  data-testid={`confirm-condition-${conditionCard.id}`}
+                  className={cn("border rounded-2xl p-3", conditionCard.accent || "border-green-500/60 bg-green-500/10")}
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="text-2xl flex-shrink-0">{conditionCard.illustration}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Condition</p>
+                      <p className="font-semibold text-white text-sm">{conditionCard.label}</p>
+                      <p className="text-[11px] text-slate-400 leading-snug mt-0.5">{conditionCard.hint}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            {selectedAddOns.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-slate-700/40">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Add-ons</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedAddOns.map((id) => (
+                    <span
+                      key={id}
+                      data-testid={`confirm-addon-${id}`}
+                      className="inline-flex items-center gap-1 text-xs bg-teal-500/10 border border-teal-500/30 text-teal-200 rounded-full px-2.5 py-1"
+                    >
+                      <CheckCircle2 className="h-3 w-3" />
+                      {ADD_ON_LABELS[id] ?? id}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <LawnPriceBreakdown pricing={result.pricing} serviceFrequency={frequency} variant="customer" />
 
