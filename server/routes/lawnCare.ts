@@ -22,6 +22,12 @@ import {
   REBOOK_ELIGIBILITY_DAYS,
   REBOOK_RESEND_WINDOW_DAYS,
 } from "../services/lawnCareRebookReminder";
+import {
+  checkSlidingWindow,
+  checkCooldown,
+  markCooldown,
+  pruneStaleBuckets,
+} from "../lib/persistentRateLimit";
 
 const router = Router();
 
@@ -336,27 +342,22 @@ router.get("/lot-size", async (req: Request, res: Response) => {
   }
 });
 
-// In-memory anti-abuse throttle for the public rebook endpoints.
-// Map<normalizedPhone, lastTimestampMs>. Lives only in this process; that
-// is enough to stop accidental double-taps and casual scripted abuse.
-const rebookThrottle = new Map<string, number>();
+// Persistent anti-abuse throttles for the public rebook + summary endpoints.
+// State is stored in Postgres (rate_limit_buckets), so it survives process
+// restarts — a determined scraper can no longer wait for the next deploy
+// to reset the counter — and is shared across processes.
 const REBOOK_THROTTLE_MS = 30_000;
-
-// Per-IP throttle for the public summary endpoint to deter phone-number
-// enumeration. Modest: 20 lookups per minute per IP.
-const summaryHits = new Map<string, number[]>();
 const SUMMARY_WINDOW_MS = 60_000;
 const SUMMARY_MAX_HITS = 20;
-function summaryRateLimit(ip: string): boolean {
+
+// Opportunistic housekeeping so the table doesn't accumulate forever.
+// Fires at most once every 15 min per process and is fire-and-forget.
+let lastPruneAt = 0;
+function maybePruneBuckets() {
   const now = Date.now();
-  const arr = (summaryHits.get(ip) || []).filter(t => now - t < SUMMARY_WINDOW_MS);
-  if (arr.length >= SUMMARY_MAX_HITS) {
-    summaryHits.set(ip, arr);
-    return false;
-  }
-  arr.push(now);
-  summaryHits.set(ip, arr);
-  return true;
+  if (now - lastPruneAt < 15 * 60_000) return;
+  lastPruneAt = now;
+  pruneStaleBuckets().catch(() => {});
 }
 
 // Geocode + haversine helper. Mirrors the logic in
@@ -431,7 +432,9 @@ function maskName(name: string | null | undefined): string {
 // recognize the prior service.
 router.get("/last-quote-summary", async (req: Request, res: Response) => {
   const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "unknown";
-  if (!summaryRateLimit(ip)) {
+  maybePruneBuckets();
+  const allowed = await checkSlidingWindow("lawn_summary_ip", ip, SUMMARY_WINDOW_MS, SUMMARY_MAX_HITS);
+  if (!allowed) {
     return res.status(429).json({ found: false, error: "Too many lookups. Try again in a minute." });
   }
   const phoneRaw = String(req.query.phone || "");
@@ -489,13 +492,12 @@ router.post("/rebook", async (req: Request, res: Response) => {
   // accidental double-taps and stops a single client from cycling phones.
   const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "unknown";
   const compositeKey = `${ip}|${digits}`;
-  const now = Date.now();
-  const lastByPhone = rebookThrottle.get(digits) || 0;
-  const lastByComposite = rebookThrottle.get(compositeKey) || 0;
-  const waitMs = Math.max(
-    REBOOK_THROTTLE_MS - (now - lastByPhone),
-    REBOOK_THROTTLE_MS - (now - lastByComposite),
-  );
+  maybePruneBuckets();
+  const [waitPhone, waitComposite] = await Promise.all([
+    checkCooldown("lawn_rebook_phone", digits, REBOOK_THROTTLE_MS),
+    checkCooldown("lawn_rebook_ip_phone", compositeKey, REBOOK_THROTTLE_MS),
+  ]);
+  const waitMs = Math.max(waitPhone, waitComposite);
   if (waitMs > 0) {
     res.setHeader("Retry-After", Math.ceil(waitMs / 1000).toString());
     return res.status(429).json({
@@ -536,8 +538,10 @@ router.post("/rebook", async (req: Request, res: Response) => {
       distanceMiles,
     });
 
-    rebookThrottle.set(digits, now);
-    rebookThrottle.set(compositeKey, now);
+    await Promise.all([
+      markCooldown("lawn_rebook_phone", digits),
+      markCooldown("lawn_rebook_ip_phone", compositeKey),
+    ]);
 
     const [quote] = await db.insert(lawnCareQuotes).values({
       customerName: prev.customerName,

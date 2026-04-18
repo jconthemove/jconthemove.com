@@ -2255,6 +2255,22 @@ export const insertLawnCarePlanSchema = createInsertSchema(lawnCarePlans).omit({
 export type LawnCarePlan = typeof lawnCarePlans.$inferSelect;
 export type InsertLawnCarePlan = z.infer<typeof insertLawnCarePlanSchema>;
 
+// ── Rate Limit Buckets ───────────────────────────────────────────────────────
+// Persistent throttle state for public endpoints. Survives process restarts
+// (so abusers can't reset by waiting for a deploy) and is shared across
+// processes if the app ever scales horizontally.
+//   - For sliding-window limits (e.g. per-IP lookup): `hits` holds an array
+//     of recent timestamps (ms epoch) within the window.
+//   - For cooldown limits (e.g. per-phone rebook): `lastAt` holds the most
+//     recent action timestamp (ms epoch).
+export const rateLimitBuckets = pgTable("rate_limit_buckets", {
+  key: text("key").primaryKey(), // "<scope>:<identifier>"
+  hits: jsonb("hits").$type<number[]>().notNull().default(sql`'[]'::jsonb`),
+  lastAt: bigint("last_at", { mode: "number" }),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+export type RateLimitBucket = typeof rateLimitBuckets.$inferSelect;
+
 // ── Idempotency Keys ─────────────────────────────────────────────────────────
 export const idempotencyKeys = pgTable("idempotency_keys", {
   id: serial("id").primaryKey(),
