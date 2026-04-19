@@ -12,6 +12,32 @@ import {
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { LucideIcon } from "lucide-react";
 
+// Task #130: shape returned by GET /api/customer/bookings — parent bookings
+// from the new multi-service `bookings` table with their child service items.
+interface BookingItem {
+  id: string;
+  serviceCode: string;
+  serviceLabel: string;
+  status: string;
+  notes?: string | null;
+  scheduledAt?: string | null;
+  completedAt?: string | null;
+}
+interface CustomerBooking {
+  id: string;
+  customerName: string;
+  serviceAddress?: string | null;
+  notes?: string | null;
+  subtotal: string;
+  discountTotal: string;
+  finalTotal: string;
+  bundleAppliedCode?: string | null;
+  status: string;
+  rolledUpStatus: string;
+  createdAt: string;
+  items: BookingItem[];
+}
+
 interface CustomerJob {
   id: string;
   fullName: string;
@@ -602,6 +628,16 @@ export default function MyJobsPage() {
     retry: 1,
   });
 
+  // Task #130: parent bookings (with children) from the new bookings table.
+  // Rendered above legacy lead cards as "Bundle · N services" tiles, with
+  // one chip per child service showing its individual status.
+  const { data: bookingResp } = useQuery<{ bookings: CustomerBooking[] }>({
+    queryKey: ["/api/customer/bookings"],
+    retry: 1,
+  });
+  const customerBookings = bookingResp?.bookings ?? [];
+  const [openBooking, setOpenBooking] = useState<CustomerBooking | null>(null);
+
   // Past statuses are folded into the History accordion (Task #116). The
   // top grid only shows currently in-flight jobs (regardless of the All/
   // Active/Done pill); the History accordion below holds completed/paid/
@@ -756,7 +792,7 @@ export default function MyJobsPage() {
             <p className="text-red-400 font-semibold mb-2">Couldn't load your jobs</p>
             <button onClick={() => refetch()} className="text-sm text-orange-400 font-semibold">Try Again</button>
           </div>
-        ) : filtered.length === 0 ? (
+        ) : filtered.length === 0 && customerBookings.length === 0 ? (
           <div className="text-center py-16">
             <div className="w-16 h-16 rounded-2xl bg-orange-500/10 flex items-center justify-center mx-auto mb-4">
               <Truck className="h-8 w-8 text-orange-400" />
@@ -776,6 +812,86 @@ export default function MyJobsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3">
+            {/* Task #130: parent-bookings rendered first, full-width, with
+                one chip per child service so the customer sees their bundle
+                as a single unit alongside their existing legacy lead cards. */}
+            {customerBookings.map(b => {
+              const st = getStatus(b.rolledUpStatus || b.status);
+              const final = parseFloat(b.finalTotal || "0");
+              const discount = parseFloat(b.discountTotal || "0");
+              const bookedDate = new Date(b.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+              return (
+                <button
+                  key={`booking-${b.id}`}
+                  data-testid={`booking-card-${b.id}`}
+                  onClick={() => setOpenBooking(b)}
+                  className="bg-zinc-900 border border-teal-500/40 rounded-2xl p-4 col-span-2 text-left hover:border-teal-500/60 active:scale-[0.99] transition-all"
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-teal-500/15">
+                        <Package className="h-5 w-5 text-teal-400" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-white text-sm leading-tight">
+                          Bundle · {b.items.length} service{b.items.length !== 1 ? "s" : ""}
+                        </p>
+                        <p className="text-[10px] text-teal-400 uppercase tracking-wider font-bold mt-0.5">
+                          {b.bundleAppliedCode ? `Bundle: ${b.bundleAppliedCode}` : "Booked together"}
+                        </p>
+                      </div>
+                    </div>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-lg ${st.cls}`}>{st.label}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {b.items.map(it => {
+                      const cfg = getSvcConfig(it.serviceCode);
+                      const Ico = cfg.icon;
+                      const itemSt = getStatus(it.status);
+                      // Per spec: chip shows label + scheduled date + status.
+                      // Prefer the per-child scheduledAt (admin-set); fall back
+                      // to completion date if already done, else show "TBD".
+                      const dateLabel = it.scheduledAt
+                        ? new Date(it.scheduledAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                        : it.completedAt
+                          ? `done ${new Date(it.completedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                          : "TBD";
+                      return (
+                        <span
+                          key={it.id}
+                          data-testid={`booking-chip-${it.serviceCode}`}
+                          className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-full ${cfg.bg} ${cfg.color}`}
+                        >
+                          <Ico className="h-3 w-3" />
+                          {it.serviceLabel || cfg.label}
+                          <span className="text-[9px] opacity-75">· {dateLabel}</span>
+                          <span className={`ml-1 text-[9px] font-bold px-1 py-0.5 rounded ${itemSt.cls}`}>
+                            {itemSt.label}
+                          </span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                  {final > 0 && (
+                    <p className="text-xs text-emerald-400 font-semibold mt-2">
+                      ${final.toFixed(0)} total
+                      {discount > 0 && (
+                        <span className="text-zinc-500 font-normal"> · ${discount.toFixed(0)} bundle discount</span>
+                      )}
+                    </p>
+                  )}
+                  {b.serviceAddress && (
+                    <p className="text-[11px] text-zinc-500 mt-1 truncate flex items-center gap-1">
+                      <MapPin className="h-3 w-3" /> {b.serviceAddress}
+                    </p>
+                  )}
+                  <div className="mt-2 flex items-center gap-1 text-zinc-500">
+                    <ChevronRight className="h-3.5 w-3.5" />
+                    <span className="text-[10px]">View bundle details</span>
+                  </div>
+                </button>
+              );
+            })}
             {cards.map(card => {
               if (card.kind === "bundle") {
                 // Render the primary lead's tile but stack mini chips for the
@@ -956,6 +1072,88 @@ export default function MyJobsPage() {
           onNewJob={() => { setSelectedJob(null); setLocation("/post-job"); }}
         />
       )}
+
+      {/* Task #130: bundle detail sheet — opens when a parent booking card is
+          tapped; lists each child service with its individual status, label,
+          notes, and completion timestamp so the customer sees the full
+          contents of their bundle. */}
+      <Sheet open={!!openBooking} onOpenChange={(o) => { if (!o) setOpenBooking(null); }}>
+        <SheetContent side="bottom" className="bg-zinc-950 border-zinc-800 text-white max-h-[85vh] overflow-y-auto">
+          {openBooking && (
+            <>
+              <SheetHeader>
+                <SheetTitle className="text-white flex items-center gap-2">
+                  <Package className="h-5 w-5 text-teal-400" />
+                  Bundle · {openBooking.items.length} service{openBooking.items.length !== 1 ? "s" : ""}
+                </SheetTitle>
+              </SheetHeader>
+              <div className="mt-4 space-y-3">
+                <div className="flex flex-wrap gap-3 text-xs text-zinc-400">
+                  <span>
+                    Total: <span className="text-emerald-400 font-bold">${parseFloat(openBooking.finalTotal).toFixed(2)}</span>
+                  </span>
+                  {parseFloat(openBooking.discountTotal) > 0 && (
+                    <span>
+                      Bundle discount: <span className="text-teal-400 font-bold">-${parseFloat(openBooking.discountTotal).toFixed(2)}</span>
+                    </span>
+                  )}
+                  {openBooking.bundleAppliedCode && (
+                    <span>Bundle: <span className="text-teal-400 font-mono">{openBooking.bundleAppliedCode}</span></span>
+                  )}
+                </div>
+                {openBooking.serviceAddress && (
+                  <p className="text-xs text-zinc-500 flex items-center gap-1">
+                    <MapPin className="h-3 w-3" /> {openBooking.serviceAddress}
+                  </p>
+                )}
+                <div className="space-y-2 mt-2">
+                  {openBooking.items.map(it => {
+                    const cfg = getSvcConfig(it.serviceCode);
+                    const Ico = cfg.icon;
+                    const itemSt = getStatus(it.status);
+                    return (
+                      <div
+                        key={it.id}
+                        data-testid={`booking-detail-item-${it.id}`}
+                        className="bg-zinc-900 border border-zinc-800 rounded-xl p-3"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${cfg.bg}`}>
+                              <Ico className={`h-4 w-4 ${cfg.color}`} />
+                            </div>
+                            <div>
+                              <p className="font-bold text-white text-sm">{it.serviceLabel || cfg.label}</p>
+                              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">{it.serviceCode}</p>
+                            </div>
+                          </div>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-lg ${itemSt.cls}`}>
+                            {itemSt.label}
+                          </span>
+                        </div>
+                        {it.scheduledAt && (
+                          <p className="text-[11px] text-teal-400 mt-2 flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            Scheduled {new Date(it.scheduledAt).toLocaleString()}
+                          </p>
+                        )}
+                        {it.notes && (
+                          <p className="text-[11px] text-zinc-400 mt-2">{it.notes}</p>
+                        )}
+                        {it.completedAt && (
+                          <p className="text-[10px] text-green-400 mt-1">
+                            Completed {new Date(it.completedAt).toLocaleString()}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

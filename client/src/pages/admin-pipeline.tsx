@@ -15,6 +15,11 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -285,6 +290,347 @@ function JobRow({ job, expanded, onToggle, onRefresh }: { job: any; expanded: bo
   );
 }
 
+// ─── Task #130: Parent-child Bookings section ────────────────────────────────
+// Renders the new multi-service `bookings` rows above the legacy leads list.
+// Each parent row is expandable into a per-child grid with status / crew /
+// notes editors, and a bundle-discount override button.
+
+interface BookingChild {
+  id: string;
+  serviceCode: string;
+  serviceLabel: string;
+  status: string;
+  notes?: string | null;
+  assignedToUserId?: string | null;
+  crewMembers?: string[] | null;
+  scheduledAt?: string | null;
+  completedAt?: string | null;
+}
+interface AdminBooking {
+  id: string;
+  customerName: string;
+  customerEmail?: string | null;
+  customerPhone: string;
+  serviceAddress?: string | null;
+  subtotal: string;
+  discountTotal: string;
+  finalTotal: string;
+  bundleAppliedCode?: string | null;
+  status: string;
+  rolledUpStatus: string;
+  createdAt: string;
+  items: BookingChild[];
+}
+
+const CHILD_STATUSES = ["pending", "scheduled", "in_progress", "completed", "cancelled"] as const;
+
+function ChildRow({ bookingId, item }: { bookingId: string; item: BookingChild }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [notes, setNotes] = useState(item.notes ?? "");
+  const [crew, setCrew] = useState((item.crewMembers ?? []).join(", "));
+  // <input type="datetime-local"> wants `YYYY-MM-DDTHH:mm` (no seconds, no Z).
+  const scheduledLocal = item.scheduledAt
+    ? new Date(item.scheduledAt).toISOString().slice(0, 16)
+    : "";
+  const [scheduled, setScheduled] = useState(scheduledLocal);
+
+  const update = useMutation({
+    mutationFn: (body: any) =>
+      apiRequest("PATCH", `/api/admin/bookings/items/${item.id}`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/bookings"] });
+      toast({ title: "Updated", description: `${item.serviceLabel} updated` });
+    },
+    onError: () => toast({ title: "Failed", variant: "destructive" }),
+  });
+
+  return (
+    <div
+      data-testid={`booking-child-${item.id}`}
+      className="rounded-lg border border-slate-700/60 bg-slate-900/60 p-3 space-y-2"
+    >
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold text-white">{item.serviceLabel}</p>
+          <p className="text-[10px] uppercase tracking-wider text-slate-500">{item.serviceCode}</p>
+        </div>
+        <Select
+          value={item.status}
+          onValueChange={(v) => update.mutate({ status: v })}
+        >
+          <SelectTrigger className="w-32 h-7 text-xs bg-slate-950 border-slate-700">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="bg-slate-900 border-slate-700">
+            {CHILD_STATUSES.map((s) => (
+              <SelectItem key={s} value={s}>{s.replace("_", " ")}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <Input
+        type="datetime-local"
+        value={scheduled}
+        onChange={(e) => setScheduled(e.target.value)}
+        onBlur={() => {
+          const iso = scheduled ? new Date(scheduled).toISOString() : null;
+          update.mutate({ scheduledAt: iso });
+        }}
+        data-testid={`input-scheduled-${item.id}`}
+        className="h-7 text-xs bg-slate-950 border-slate-700 text-slate-200"
+      />
+      <Input
+        placeholder="Crew (comma-separated user ids)"
+        value={crew}
+        onChange={(e) => setCrew(e.target.value)}
+        onBlur={() => {
+          const list = crew.split(",").map((s) => s.trim()).filter(Boolean);
+          update.mutate({ crewMembers: list });
+        }}
+        className="h-7 text-xs bg-slate-950 border-slate-700 text-slate-200"
+      />
+      <Input
+        placeholder="Notes for this service"
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        onBlur={() => update.mutate({ notes })}
+        className="h-7 text-xs bg-slate-950 border-slate-700 text-slate-200"
+      />
+      {item.completedAt && (
+        <p className="text-[10px] text-green-400">
+          Completed {new Date(item.completedAt).toLocaleString()}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function DiscountOverrideButton({ booking }: { booking: AdminBooking }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const current = parseFloat(booking.discountTotal || "0");
+  const subtotal = parseFloat(booking.subtotal || "0");
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState(current.toFixed(2));
+  const [reason, setReason] = useState("");
+
+  const mutate = useMutation({
+    mutationFn: (body: { newDiscount: number; reason?: string }) =>
+      apiRequest("POST", `/api/admin/bookings/${booking.id}/discount-override`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/bookings"] });
+      toast({ title: "Discount updated", description: "New discount applied" });
+      setOpen(false);
+      setReason("");
+    },
+    onError: () => toast({ title: "Override failed", variant: "destructive" }),
+  });
+
+  const submit = () => {
+    const num = parseFloat(amount);
+    if (Number.isNaN(num) || num < 0) {
+      toast({ title: "Enter a valid amount (>= 0)", variant: "destructive" });
+      return;
+    }
+    if (num > subtotal) {
+      toast({ title: `Discount cannot exceed subtotal ($${subtotal.toFixed(2)})`, variant: "destructive" });
+      return;
+    }
+    if (!reason.trim()) {
+      toast({ title: "Reason is required for the audit log", variant: "destructive" });
+      return;
+    }
+    mutate.mutate({ newDiscount: num, reason: reason.trim() });
+  };
+
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={(e) => { e.stopPropagation(); setAmount(current.toFixed(2)); setOpen(true); }}
+        disabled={mutate.isPending}
+        data-testid={`button-override-discount-${booking.id}`}
+        className="h-7 text-xs px-2 border-amber-500/40 text-amber-400 hover:bg-amber-950/40"
+      >
+        <DollarSign className="h-3 w-3 mr-1" /> Override Discount
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="bg-slate-950 border-slate-800 text-white sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Override bundle discount</DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Subtotal ${subtotal.toFixed(2)} · current discount ${current.toFixed(2)}.
+              The change is recorded in the audit log.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor={`override-amount-${booking.id}`} className="text-xs text-slate-300">
+                New discount (USD)
+              </Label>
+              <Input
+                id={`override-amount-${booking.id}`}
+                type="number"
+                min={0}
+                step="0.01"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                data-testid={`input-override-amount-${booking.id}`}
+                className="bg-slate-900 border-slate-700 text-white"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor={`override-reason-${booking.id}`} className="text-xs text-slate-300">
+                Reason (required)
+              </Label>
+              <Textarea
+                id={`override-reason-${booking.id}`}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={3}
+                placeholder="e.g. customer loyalty credit"
+                data-testid={`input-override-reason-${booking.id}`}
+                className="bg-slate-900 border-slate-700 text-white"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)} className="border-slate-700 text-slate-300">
+              Cancel
+            </Button>
+            <Button
+              onClick={submit}
+              disabled={mutate.isPending}
+              data-testid={`button-confirm-override-${booking.id}`}
+              className="bg-amber-600 hover:bg-amber-500 text-white"
+            >
+              {mutate.isPending ? "Saving…" : "Apply override"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function BookingRow({ booking }: { booking: AdminBooking }) {
+  const [open, setOpen] = useState(false);
+  const sc = getStatusColors(booking.rolledUpStatus || booking.status);
+  return (
+    <div
+      data-testid={`booking-row-${booking.id}`}
+      className={`rounded-xl border-l-4 ${sc.border} border-t border-r border-b border-teal-700/40 bg-slate-900/80`}
+    >
+      <div
+        className="flex items-center gap-3 px-4 py-3 cursor-pointer"
+        onClick={() => setOpen((o) => !o)}
+      >
+        <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${sc.dot} shadow-md`} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-white text-sm">{booking.customerName}</span>
+            <Badge variant="outline" className="text-xs border-teal-600/50 text-teal-400 py-0">
+              Bundle · {booking.items.length}
+            </Badge>
+            <Badge className={`text-xs py-0 ${sc.badgeBg}`}>{sc.label}</Badge>
+            {booking.bundleAppliedCode && (
+              <Badge variant="outline" className="text-xs border-amber-600/50 text-amber-400 py-0">
+                {booking.bundleAppliedCode}
+              </Badge>
+            )}
+          </div>
+          <div className="flex items-center gap-3 mt-1 flex-wrap">
+            <span className="text-xs text-slate-400">${parseFloat(booking.finalTotal).toFixed(2)} total</span>
+            {parseFloat(booking.discountTotal) > 0 && (
+              <span className="text-xs text-emerald-400">−${parseFloat(booking.discountTotal).toFixed(2)} discount</span>
+            )}
+            <span className="text-xs text-slate-500">
+              {new Date(booking.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}
+            </span>
+          </div>
+        </div>
+        <ChevronRight className={`h-4 w-4 text-slate-500 transition-transform ${open ? "rotate-90" : ""}`} />
+      </div>
+      {open && (
+        <div className="border-t border-slate-700/50 px-4 py-4 space-y-3" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="text-xs text-slate-400 space-y-0.5">
+              <div className="flex items-center gap-2">
+                <Phone className="h-3 w-3" />
+                <a href={`tel:${booking.customerPhone}`} className="hover:text-white">{booking.customerPhone}</a>
+              </div>
+              {booking.customerEmail && (
+                <div className="flex items-center gap-2">
+                  <Mail className="h-3 w-3" />
+                  <a href={`mailto:${booking.customerEmail}`} className="hover:text-white">{booking.customerEmail}</a>
+                </div>
+              )}
+              {booking.serviceAddress && (
+                <div className="flex items-center gap-2">
+                  <Clipboard className="h-3 w-3" /> {booking.serviceAddress}
+                </div>
+              )}
+            </div>
+            <DiscountOverrideButton booking={booking} />
+          </div>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-2">
+            {booking.items.map((it) => (
+              <ChildRow key={it.id} bookingId={booking.id} item={it} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Bookings live in their own status namespace (quote/booked/scheduled/
+// in_progress/completed/cancelled). Legacy lead pipeline filters use
+// different values (quote_requested/available/...) — only forward statuses
+// the bookings API understands; otherwise show all booking rows so an
+// admin filtering by a legacy-only status doesn't accidentally hide the
+// new bundle bookings entirely.
+const BOOKING_STATUSES = new Set([
+  "quote", "booked", "scheduled", "in_progress", "completed", "cancelled",
+]);
+
+function BookingsSection({ search, status }: { search: string; status: string }) {
+  const { data, isLoading } = useQuery<{ bookings: AdminBooking[]; total: number }>({
+    queryKey: ["/api/admin/bookings", search, status],
+    queryFn: async () => {
+      const params = new URLSearchParams({ limit: "100", offset: "0" });
+      if (search) params.set("search", search);
+      if (status && status !== "all" && BOOKING_STATUSES.has(status)) {
+        params.set("status", status);
+      }
+      const res = await fetch(`/api/admin/bookings?${params}`);
+      if (!res.ok) throw new Error("Failed to load bookings");
+      return res.json();
+    },
+  });
+  const bookings = data?.bookings ?? [];
+  if (isLoading) {
+    return (
+      <div className="text-xs text-slate-500 px-1">Loading bundle bookings…</div>
+    );
+  }
+  if (bookings.length === 0) return null;
+  return (
+    <div className="space-y-2" data-testid="section-admin-bookings">
+      <div className="flex items-center gap-2">
+        <Truck className="h-4 w-4 text-teal-400" />
+        <h2 className="text-sm font-bold text-teal-300">Bundle Bookings ({bookings.length})</h2>
+      </div>
+      <div className="space-y-2">
+        {bookings.map((b) => <BookingRow key={b.id} booking={b} />)}
+      </div>
+      <div className="h-px bg-slate-800 my-2" />
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function AdminPipelinePage() {
   const [search, setSearch] = useState("");
@@ -434,7 +780,14 @@ export default function AdminPipelinePage() {
               </Button>
             )}
           </div>
-        ) : (
+        ) : null}
+
+        {/* Task #130: parent-child bundle bookings always render first,
+            independently of the legacy leads list, so admins can see and
+            drive new multi-service bookings even if no legacy leads exist. */}
+        <BookingsSection search={debouncedSearch} status={statusFilter} />
+
+        {!isLoading && jobs.length === 0 ? null : !isLoading && (
           <div className="space-y-2">
             <p className="text-xs text-slate-500">{jobs.length} job{jobs.length !== 1 ? "s" : ""} shown</p>
             {jobs.map((job) => (

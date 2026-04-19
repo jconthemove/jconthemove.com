@@ -2484,10 +2484,34 @@ export const bookingServiceItems = pgTable("booking_service_items", {
   lineSubtotal: decimal("line_subtotal", { precision: 10, scale: 2 }).notNull(),
   priceMode: text("price_mode").notNull().default("fixed"), // 'fixed' | 'hourly' | 'per_unit' | 'quote'
   details: jsonb("details").default("{}"), // free-form per-service detail (e.g. movers, hours)
+  // Task #130: per-child lifecycle so the admin pipeline can drive each
+  // service in a bundle independently. Parent `bookings.status` is rolled
+  // up from the children (see rollupBookingStatus in routes/bookings.ts).
+  status: text("status").notNull().default("pending"), // 'pending' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
+  assignedToUserId: varchar("assigned_to_user_id"), // primary crew lead
+  crewMembers: text("crew_members").array().default(sql`ARRAY[]::text[]`),
+  notes: text("notes"), // admin-visible per-child notes
+  scheduledAt: timestamp("scheduled_at"), // Task #130: per-child scheduled date (admin sets, customer sees on chip)
+  completedAt: timestamp("completed_at"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 }, (table) => [
   index("idx_booking_items_booking").on(table.bookingId),
   index("idx_booking_items_service").on(table.serviceCode),
+]);
+
+// Task #130: admin override of an auto-applied bundle discount, with an audit
+// trail. Admin can change `bookings.discountTotal`; we snapshot the original
+// value once on the booking row and append an audit row per change.
+export const bookingDiscountAuditLog = pgTable("booking_discount_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  bookingId: varchar("booking_id").notNull().references(() => bookings.id, { onDelete: "cascade" }),
+  adminUserId: varchar("admin_user_id"), // null only for system overrides
+  previousDiscount: decimal("previous_discount", { precision: 10, scale: 2 }).notNull(),
+  newDiscount: decimal("new_discount", { precision: 10, scale: 2 }).notNull(),
+  reason: text("reason"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_booking_discount_audit_booking").on(table.bookingId),
 ]);
 
 export const serviceCatalog = pgTable("service_catalog", {
@@ -2548,6 +2572,7 @@ export const crewRequirements = pgTable("crew_requirements", {
 
 export type Booking = typeof bookings.$inferSelect;
 export type BookingServiceItem = typeof bookingServiceItems.$inferSelect;
+export type BookingDiscountAuditEntry = typeof bookingDiscountAuditLog.$inferSelect;
 export type ServiceCatalogEntry = typeof serviceCatalog.$inferSelect;
 export type BundleDefinition = typeof bundleDefinitions.$inferSelect;
 export type CrewRequirement = typeof crewRequirements.$inferSelect;
