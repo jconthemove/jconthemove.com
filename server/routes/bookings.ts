@@ -9,7 +9,9 @@
 // upcoming frontend can import the same types.
 
 import { Router, Request, Response } from "express";
-import { eq, and, asc, desc, or, inArray, ilike } from "drizzle-orm";
+import { eq, and, asc, desc, or, inArray, ilike, gte, lte, sql } from "drizzle-orm";
+import { disburseBookingTokens, loadBookingRewardSettings } from "../services/disburseBookingTokens";
+import { computeBookingReward } from "../services/bookingPricing";
 import { ZodError, z } from "zod";
 import { db } from "../db";
 import { storage } from "../storage";
@@ -28,6 +30,7 @@ import {
   bookingServiceItems,
   bookingDiscountAuditLog,
   bundleDefinitions,
+  bundleSettingsAuditLog,
   serviceCatalog,
   bookingQuoteRequestSchema,
   bookingCreateRequestSchema,
@@ -61,6 +64,7 @@ function toBundleLike(row: BundleDefinition): BundleDefinitionLike {
     priority: row.priority,
     isActive: row.isActive,
     merchandisingSlot: row.merchandisingSlot ?? null,
+    bonusMultiplier: row.bonusMultiplier != null ? parseFloat(row.bonusMultiplier) : 1,
   };
 }
 
@@ -146,7 +150,16 @@ router.post("/bookings/quote", async (req: Request, res: Response) => {
     const catalog = await loadCatalog();
     const { pricingInputs } = resolveItems(body.items, catalog);
     const bundles = await loadBundles();
-    const result = computeBookingQuote(pricingInputs, { bundleDefinitions: bundles });
+    // Pull live reward-engine settings so the displayed estimate uses the
+    // exact same flatBonus/earnRate the issuer (disburseBookingTokens) will
+    // use at confirmation time. Booking creation snapshots these onto the
+    // booking row to lock in parity even if settings change later.
+    const settings = await loadBookingRewardSettings();
+    const result = computeBookingQuote(pricingInputs, {
+      bundleDefinitions: bundles,
+      flatBookingBonus: settings.flatBonus,
+      earnRatePerDollar: settings.earnRate,
+    });
     return res.json({ success: true, quote: result });
   } catch (err) {
     if (err instanceof ZodError) {
@@ -167,9 +180,18 @@ router.post("/bookings", async (req: Request, res: Response) => {
     const catalog = await loadCatalog();
     const { pricingInputs, persistInputs } = resolveItems(body.items, catalog);
     const bundles = await loadBundles();
+    // Snapshot of the active reward-engine settings at quote/creation time.
+    // Persisting these on the booking row guarantees the customer-facing
+    // tokenEstimate equals what disburseBookingTokens credits at confirm —
+    // even if an admin tunes rewardSettings or a bundle's bonusMultiplier
+    // in the intervening window.
+    const settings = await loadBookingRewardSettings();
     const quote: BookingPricingResult = computeBookingQuote(pricingInputs, {
       bundleDefinitions: bundles,
+      flatBookingBonus: settings.flatBonus,
+      earnRatePerDollar: settings.earnRate,
     });
+    const appliedMultiplier = quote.bundleApplied?.bonusMultiplier ?? 1;
 
     // Wrap parent + children in a transaction so a child-insert failure
     // never leaves an orphan `bookings` row pointing at no line items.
@@ -187,6 +209,9 @@ router.post("/bookings", async (req: Request, res: Response) => {
           finalTotal: quote.finalTotal.toFixed(2),
           bundleAppliedCode: quote.bundleApplied?.code ?? null,
           tokenEstimate: quote.tokenEstimate,
+          rewardFlatBonusSnapshot: Math.round(settings.flatBonus),
+          rewardEarnRateSnapshot: settings.earnRate.toFixed(4),
+          rewardBonusMultiplierSnapshot: appliedMultiplier.toFixed(2),
           status: "quote",
           source: body.source || "api",
         })
@@ -210,6 +235,10 @@ router.post("/bookings", async (req: Request, res: Response) => {
       return created;
     });
 
+    // Task #131 — reward disbursement intentionally NOT fired here. Newly
+    // created bookings start in `status: "quote"`; rewards must only be
+    // issued once the customer (or an admin) confirms the booking via
+    // POST /api/admin/bookings/:id/confirm.
     return res.status(201).json({ success: true, booking, quote });
   } catch (err) {
     if (err instanceof ZodError) {
@@ -505,6 +534,42 @@ router.patch(
   },
 );
 
+// ── POST /api/admin/bookings/:id/confirm ──────────────────────────────────
+// Transition a quoted booking into the confirmed/`booked` lifecycle stage
+// and trigger reward disbursement. Idempotent: re-confirming a booking is
+// safe (the issuer dedupes on referenceId+rewardType per user) and leaves
+// the status as `booked` if it already advanced past `quote`.
+router.post(
+  "/admin/bookings/:id/confirm",
+  isAuthenticated,
+  async (req: any, res: Response) => {
+    if (!(await requireAdmin(req, res))) return;
+    try {
+      const [parent] = await db
+        .select()
+        .from(bookings)
+        .where(eq(bookings.id, req.params.id))
+        .limit(1);
+      if (!parent) return res.status(404).json({ error: "Booking not found" });
+
+      if (parent.status === "quote") {
+        await db
+          .update(bookings)
+          .set({ status: "booked" })
+          .where(eq(bookings.id, parent.id));
+      }
+
+      // Issue customer JCMOVES reward (flat bonus + per-dollar earn × bundle
+      // bonus multiplier). Idempotent — safe to re-call.
+      const summary = await disburseBookingTokens(parent.id);
+      return res.json({ success: true, status: "booked", reward: summary });
+    } catch (err) {
+      console.error("[admin/bookings/confirm] error:", err);
+      return res.status(500).json({ error: "Failed to confirm booking" });
+    }
+  },
+);
+
 // ── POST /api/admin/bookings/:id/discount-override ────────────────────────
 // Admin override of the auto-applied bundle discount. Writes an audit row
 // for every change so we can answer "who changed this and why" later.
@@ -535,11 +600,37 @@ router.post(
         const subtotal = parseFloat(parent.subtotal);
         const newFinal = Math.max(0, subtotal - newDiscount);
 
+        // Recompute the customer's tokenEstimate using the override flag so
+        // the stored estimate stays in sync with what disburseBookingTokens
+        // will actually issue at confirmation. Use the SAME precedence as
+        // the issuer: prefer the booking's snapshotted reward inputs, fall
+        // back to live rewardSettings only for legacy rows that predate the
+        // snapshot columns. This guarantees parity even if defaults drift
+        // between booking creation and the override.
+        let flatBonus: number;
+        let earnRate: number;
+        if (parent.rewardFlatBonusSnapshot != null && parent.rewardEarnRateSnapshot != null) {
+          flatBonus = parent.rewardFlatBonusSnapshot;
+          earnRate  = parseFloat(parent.rewardEarnRateSnapshot);
+        } else {
+          const live = await loadBookingRewardSettings();
+          flatBonus = live.flatBonus;
+          earnRate  = live.earnRate;
+        }
+        const reward = computeBookingReward({
+          finalTotal: newFinal,
+          flatBonus,
+          earnRate,
+          bonusMultiplier: 1, // override drops the bundle multiplier
+          hasOverride: true,
+        });
+
         await tx
           .update(bookings)
           .set({
             discountTotal: newDiscount.toFixed(2),
             finalTotal: newFinal.toFixed(2),
+            tokenEstimate: reward.totalAward,
           })
           .where(eq(bookings.id, parent.id));
 
@@ -553,7 +644,7 @@ router.post(
             reason: body.reason ?? null,
           })
           .returning();
-        return { previousDiscount, newDiscount, newFinal, audit };
+        return { previousDiscount, newDiscount, newFinal, audit, tokenEstimate: reward.totalAward };
       });
       return res.json({ success: true, ...result });
     } catch (err) {
@@ -568,5 +659,239 @@ router.post(
     }
   },
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Task #131 — Admin: Featured Bundle settings (inline edit) + audit log
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── GET /api/admin/bundle-definitions ─────────────────────────────────────
+// Returns every bundle (active + inactive) for the admin "Featured Bundles"
+// settings card. Active-only is exposed via /api/bundles/featured already.
+router.get("/admin/bundle-definitions", isAuthenticated, async (req: any, res: Response) => {
+  if (!(await requireAdmin(req, res))) return;
+  try {
+    const rows = await db
+      .select()
+      .from(bundleDefinitions)
+      .orderBy(asc(bundleDefinitions.priority), asc(bundleDefinitions.code));
+    return res.json({ bundles: rows });
+  } catch (err) {
+    console.error("[admin/bundle-definitions] error:", err);
+    return res.status(500).json({ error: "Failed to load bundle definitions" });
+  }
+});
+
+// ── PATCH /api/admin/bundle-definitions/:code ─────────────────────────────
+// Inline-edit endpoint for the settings card. Only the fields admins can
+// reasonably change at runtime are exposed; combo/discountType edits stay
+// in the seed file to keep accounting predictable.
+const bundleSettingsPatchSchema = z.object({
+  discountValue: z.number().nonnegative().optional(),
+  maxDiscount:   z.number().nonnegative().nullable().optional(),
+  bonusMultiplier: z.number().min(1).max(5).optional(),
+  isFeatured:    z.boolean().optional(),
+  isActive:      z.boolean().optional(),
+  merchandisingSlot: z.string().nullable().optional(),
+});
+
+router.patch(
+  "/admin/bundle-definitions/:code",
+  isAuthenticated,
+  async (req: any, res: Response) => {
+    if (!(await requireAdmin(req, res))) return;
+    try {
+      const body = bundleSettingsPatchSchema.parse(req.body);
+      const adminUserId = req.user?.id || (req.session as any)?.userId;
+
+      const [existing] = await db
+        .select()
+        .from(bundleDefinitions)
+        .where(eq(bundleDefinitions.code, req.params.code))
+        .limit(1);
+      if (!existing) return res.status(404).json({ error: "Bundle not found" });
+
+      const update: Partial<typeof bundleDefinitions.$inferInsert> = {};
+      if (body.discountValue !== undefined) update.discountValue = body.discountValue.toFixed(2);
+      if (body.maxDiscount !== undefined) {
+        update.maxDiscount = body.maxDiscount === null ? null : body.maxDiscount.toFixed(2);
+      }
+      if (body.bonusMultiplier !== undefined) update.bonusMultiplier = body.bonusMultiplier.toFixed(2);
+      if (body.isFeatured !== undefined) update.isFeatured = body.isFeatured;
+      if (body.isActive !== undefined)   update.isActive = body.isActive;
+      if (body.merchandisingSlot !== undefined) update.merchandisingSlot = body.merchandisingSlot;
+
+      const [updated] = await db
+        .update(bundleDefinitions)
+        .set(update)
+        .where(eq(bundleDefinitions.code, req.params.code))
+        .returning();
+
+      // Durable audit row — mirrors booking_discount_audit_log so admins can
+      // query bundle history (who changed what, when) instead of grepping
+      // ephemeral process logs.
+      const beforeSnapshot = {
+        discountValue: existing.discountValue,
+        maxDiscount: existing.maxDiscount,
+        bonusMultiplier: existing.bonusMultiplier,
+        isFeatured: existing.isFeatured,
+        isActive: existing.isActive,
+        merchandisingSlot: existing.merchandisingSlot,
+      };
+      try {
+        await db.insert(bundleSettingsAuditLog).values({
+          bundleCode: existing.code,
+          adminUserId: adminUserId ?? null,
+          adminEmail: req.user?.email ?? null,
+          before: beforeSnapshot,
+          after: update,
+        });
+      } catch (auditErr) {
+        console.error("[admin/bundle-definitions] audit insert failed:", auditErr);
+      }
+
+      return res.json({ success: true, bundle: updated });
+    } catch (err) {
+      if (err instanceof ZodError) {
+        return res.status(400).json({ error: "Invalid bundle update", details: err.errors });
+      }
+      console.error("[admin/bundle-definitions] patch error:", err);
+      return res.status(500).json({ error: "Failed to update bundle" });
+    }
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Task #131 — Admin: Booking analytics
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/admin/booking-analytics?from=YYYY-MM-DD&to=YYYY-MM-DD
+//   - single  = bookings with exactly 1 child item
+//   - bundle  = bookings with 2+ children OR bundleAppliedCode set
+//   - aov     = average finalTotal per group
+//   - attachRatePerPrimary = primary serviceCode → bundle_count / total_count
+//   - topCombinations = top-5 combos (sorted child serviceCode tuples)
+//
+// All aggregation is done in-memory: booking volume is small enough that
+// this is significantly simpler than five overlapping SQL queries.
+router.get("/admin/booking-analytics", isAuthenticated, async (req: any, res: Response) => {
+  if (!(await requireAdmin(req, res))) return;
+  try {
+    const conditions: any[] = [];
+    if (req.query.from) {
+      const from = new Date(String(req.query.from));
+      if (!isNaN(from.getTime())) conditions.push(gte(bookings.createdAt, from));
+    }
+    if (req.query.to) {
+      // Inclusive end date: bump a date-only `to` (e.g. "2026-04-19") to
+      // start-of-next-day so the whole day is included; then use `<`
+      // (strict less-than) to avoid double-counting any record that
+      // happens to land exactly on midnight of the next day.
+      const raw = String(req.query.to);
+      const to = new Date(raw);
+      if (!isNaN(to.getTime())) {
+        const endExclusive = new Date(to.getTime());
+        const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(raw);
+        if (dateOnly) endExclusive.setUTCDate(endExclusive.getUTCDate() + 1);
+        conditions.push(sql`${bookings.createdAt} < ${endExclusive}`);
+      }
+    }
+
+    const parents = await db
+      .select()
+      .from(bookings)
+      .where(conditions.length ? and(...conditions) : undefined);
+    const ids = parents.map((p) => p.id);
+
+    const items = ids.length
+      ? await db
+          .select()
+          .from(bookingServiceItems)
+          .where(inArray(bookingServiceItems.bookingId, ids))
+      : [];
+    const itemsByBooking = new Map<string, BookingServiceItem[]>();
+    for (const it of items) {
+      const arr = itemsByBooking.get(it.bookingId) ?? [];
+      arr.push(it);
+      itemsByBooking.set(it.bookingId, arr);
+    }
+
+    let singleCount = 0;
+    let bundleCount = 0;
+    let singleTotal = 0;
+    let bundleTotal = 0;
+
+    // attach rate per primary service: keyed by the *first* child serviceCode
+    // (the customer's anchor service). primary → { total, withBundle }.
+    const attach = new Map<string, { total: number; withBundle: number }>();
+
+    // top combinations: keyed by sorted-tuple of child serviceCodes.
+    const combos = new Map<string, { combo: string[]; count: number; revenue: number }>();
+
+    for (const p of parents) {
+      const children = itemsByBooking.get(p.id) ?? [];
+      if (children.length === 0) continue;
+      const final = parseFloat(p.finalTotal);
+      const isBundle = children.length > 1 || !!p.bundleAppliedCode;
+
+      if (isBundle) {
+        bundleCount += 1;
+        bundleTotal += final;
+      } else {
+        singleCount += 1;
+        singleTotal += final;
+      }
+
+      const primary = children[0].serviceCode;
+      const slot = attach.get(primary) ?? { total: 0, withBundle: 0 };
+      slot.total += 1;
+      if (isBundle) slot.withBundle += 1;
+      attach.set(primary, slot);
+
+      if (isBundle) {
+        const combo = Array.from(new Set(children.map((c) => c.serviceCode))).sort();
+        const key = combo.join("|");
+        const slot2 = combos.get(key) ?? { combo, count: 0, revenue: 0 };
+        slot2.count += 1;
+        slot2.revenue += final;
+        combos.set(key, slot2);
+      }
+    }
+
+    const attachRatePerPrimary = Array.from(attach.entries())
+      .map(([serviceCode, v]) => ({
+        serviceCode,
+        totalBookings: v.total,
+        bundleBookings: v.withBundle,
+        attachRate: v.total > 0 ? +(v.withBundle / v.total).toFixed(4) : 0,
+      }))
+      .sort((a, b) => b.totalBookings - a.totalBookings);
+
+    const topCombinations = Array.from(combos.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5)
+      .map((c) => ({ ...c, revenue: +c.revenue.toFixed(2) }));
+
+    return res.json({
+      range: {
+        from: req.query.from || null,
+        to: req.query.to || null,
+      },
+      single: {
+        count: singleCount,
+        revenue: +singleTotal.toFixed(2),
+        aov: singleCount > 0 ? +(singleTotal / singleCount).toFixed(2) : 0,
+      },
+      bundle: {
+        count: bundleCount,
+        revenue: +bundleTotal.toFixed(2),
+        aov: bundleCount > 0 ? +(bundleTotal / bundleCount).toFixed(2) : 0,
+      },
+      attachRatePerPrimary,
+      topCombinations,
+    });
+  } catch (err) {
+    console.error("[admin/booking-analytics] error:", err);
+    return res.status(500).json({ error: "Failed to load booking analytics" });
+  }
+});
 
 export default router;

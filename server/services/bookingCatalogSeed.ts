@@ -95,6 +95,31 @@ async function ensureBookingTables(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_bundle_def_active ON bundle_definitions(is_active, priority);
     CREATE INDEX IF NOT EXISTS idx_bundle_def_slot   ON bundle_definitions(merchandising_slot);
 
+    -- Task #131 — bonus JCMOVES multiplier per featured bundle
+    ALTER TABLE bundle_definitions
+      ADD COLUMN IF NOT EXISTS bonus_multiplier numeric(4,2) NOT NULL DEFAULT 1.00;
+
+    -- Task #131 — reward inputs snapshot on parent booking row, captured at
+    -- creation so the customer's displayed estimate matches the final award
+    -- even if reward_settings or bundle multipliers change before confirm.
+    ALTER TABLE bookings
+      ADD COLUMN IF NOT EXISTS reward_flat_bonus_snapshot integer,
+      ADD COLUMN IF NOT EXISTS reward_earn_rate_snapshot numeric(10,4),
+      ADD COLUMN IF NOT EXISTS reward_bonus_multiplier_snapshot numeric(4,2);
+
+    -- Task #131 — durable audit trail for admin edits to bundle_definitions.
+    CREATE TABLE IF NOT EXISTS bundle_settings_audit_log (
+      id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      bundle_code text NOT NULL,
+      admin_user_id varchar,
+      admin_email text,
+      before jsonb NOT NULL,
+      after jsonb NOT NULL,
+      created_at timestamp NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_bundle_audit_code    ON bundle_settings_audit_log(bundle_code);
+    CREATE INDEX IF NOT EXISTS idx_bundle_audit_created ON bundle_settings_audit_log(created_at);
+
     CREATE TABLE IF NOT EXISTS crew_requirements (
       id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
       service_code text NOT NULL UNIQUE,

@@ -35,6 +35,59 @@ export interface BookingPricingItemInput {
   details?: Record<string, unknown>;
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Task #131 — shared customer-reward calculator. Lives in the pricing
+// engine so the quote endpoint (estimate) and the disbursement service
+// (final award) compute the exact same number with identical rounding.
+// ─────────────────────────────────────────────────────────────────────────
+export interface BookingRewardInput {
+  /** Post-discount, post-override total the customer will actually pay. */
+  finalTotal: number;
+  /** Flat customer-quote-accepted bonus (default 250). */
+  flatBonus: number;
+  /** Per-dollar loyalty earn rate (default EARN_RATE_PER_DOLLAR). */
+  earnRate: number;
+  /** Bundle bonus multiplier when a bundle wins (≥ 1, default 1). */
+  bonusMultiplier: number;
+  /** True iff a discount-override audit row exists for the booking. */
+  hasOverride: boolean;
+}
+
+export interface BookingRewardResult {
+  flatAward: number;
+  earnAward: number;
+  totalAward: number;
+  /** The multiplier actually applied (1 when override / no bundle). */
+  appliedMultiplier: number;
+}
+
+export function computeBookingReward(input: BookingRewardInput): BookingRewardResult {
+  const { finalTotal, flatBonus, earnRate, bonusMultiplier, hasOverride } = input;
+  const baseFlat = Math.round(flatBonus);
+  // Step 6 guardrail — narrow form: only fully-zeroed bookings (finalTotal ≤ 0)
+  // collapse to flat-only. A partial admin override still pays the per-dollar
+  // earn against the new (lower) total — only the bundle bonus multiplier is
+  // suppressed. This keeps benign discount adjustments from punishing the
+  // customer's earn while still blocking runaway bonus economics on
+  // overrides and zero-priced bookings.
+  if (finalTotal <= 0) {
+    return { flatAward: baseFlat, earnAward: 0, totalAward: baseFlat, appliedMultiplier: 1 };
+  }
+  const m = hasOverride
+    ? 1
+    : Number.isFinite(bonusMultiplier) && bonusMultiplier > 1
+      ? bonusMultiplier
+      : 1;
+  const baseEarn = Math.round(finalTotal * earnRate);
+  // Apply the multiplier once, on the combined base, then round once.
+  const totalAward = Math.round((baseFlat + baseEarn) * m);
+  // Split the total proportionally so the issuer can credit two reward
+  // rows (flat vs earn) that still sum to the unified total.
+  const flatAward = Math.min(totalAward, Math.round(baseFlat * m));
+  const earnAward = Math.max(0, totalAward - flatAward);
+  return { flatAward, earnAward, totalAward, appliedMultiplier: m };
+}
+
 export interface BundleDefinitionLike {
   code: string;
   name: string;
@@ -47,6 +100,9 @@ export interface BundleDefinitionLike {
   priority?: number;
   isActive?: boolean;
   merchandisingSlot?: string | null;
+  /** Task #131 — bonus JCMOVES multiplier applied to the customer reward
+   *  when this bundle wins. Default 1 (no bonus). */
+  bonusMultiplier?: number;
 }
 
 export interface AppliedBundle {
@@ -60,6 +116,10 @@ export interface AppliedBundle {
   /** Whether the global 25% guardrail clamped the discount. */
   guardrailClamped: boolean;
   merchandisingSlot?: string | null;
+  /** Task #131 — multiplier the booking will receive on its base JCMOVES
+   *  award (1.0 when no bonus). Surfaced so the booking summary can show
+   *  the customer "Earn 1.25× JCMOVES on this bundle". */
+  bonusMultiplier: number;
 }
 
 export interface BookingPricingItemResult extends BookingPricingItemInput {
@@ -171,6 +231,9 @@ export function computeBookingQuote(
     const guardrailCap = round2(subtotal * (maxDiscountPct / 100));
     const clamped = Math.min(best.rawDiscount, guardrailCap);
     discountTotal = round2(clamped);
+    const bonusMultiplier = Math.max(1, Number.isFinite(best.bundle.bonusMultiplier) && best.bundle.bonusMultiplier != null
+      ? best.bundle.bonusMultiplier
+      : 1);
     bundleApplied = {
       code: best.bundle.code,
       name: best.bundle.name,
@@ -180,15 +243,21 @@ export function computeBookingQuote(
       rawDiscount: best.rawDiscount,
       guardrailClamped: clamped < best.rawDiscount,
       merchandisingSlot: best.bundle.merchandisingSlot ?? null,
+      bonusMultiplier,
     };
   }
 
   const finalTotal = round2(Math.max(0, subtotal - discountTotal));
-  // tokenEstimate: per-dollar loyalty earn on the post-discount total + flat
-  // booking bonus the customer would receive once the booking is confirmed.
-  // Mirrors disburseServiceTokens so the upcoming summary UI shows a number
-  // the customer will actually receive.
-  const tokenEstimate = Math.round(finalTotal * earnRate) + Math.round(flatBonus);
+  // Use the shared reward calculator so the estimate the customer sees here
+  // and the final award issued by disburseBookingTokens stay byte-identical.
+  const reward = computeBookingReward({
+    finalTotal,
+    flatBonus,
+    earnRate,
+    bonusMultiplier: bundleApplied?.bonusMultiplier ?? 1,
+    hasOverride: false,
+  });
+  const tokenEstimate = reward.totalAward;
 
   return {
     subtotal,

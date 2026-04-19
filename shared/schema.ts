@@ -2465,6 +2465,13 @@ export const bookings = pgTable("bookings", {
   finalTotal: decimal("final_total", { precision: 10, scale: 2 }).notNull().default("0"),
   bundleAppliedCode: text("bundle_applied_code"), // bundle_definitions.code (nullable)
   tokenEstimate: integer("token_estimate").notNull().default(0), // JCMOVES estimate
+  // Task #131 — reward inputs snapshot. Captured at booking creation so the
+  // estimate the customer sees is byte-identical to what disburseBookingTokens
+  // credits at confirmation, even if rewardSettings or bundle multipliers are
+  // edited in between. Nullable for legacy rows; issuer falls back to live.
+  rewardFlatBonusSnapshot: integer("reward_flat_bonus_snapshot"),
+  rewardEarnRateSnapshot: decimal("reward_earn_rate_snapshot", { precision: 10, scale: 4 }),
+  rewardBonusMultiplierSnapshot: decimal("reward_bonus_multiplier_snapshot", { precision: 4, scale: 2 }),
   status: text("status").notNull().default("quote"), // 'quote' | 'booked' | 'in_progress' | 'completed' | 'cancelled'
   source: text("source"), // e.g. 'web_multi_book' — for analytics later
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
@@ -2545,6 +2552,10 @@ export const bundleDefinitions = pgTable("bundle_definitions", {
   discountType: text("discount_type").notNull(), // 'percent' | 'fixed'
   discountValue: decimal("discount_value", { precision: 10, scale: 2 }).notNull(),
   maxDiscount: decimal("max_discount", { precision: 10, scale: 2 }), // dollar cap (nullable)
+  // Task #131 — bonus JCMOVES multiplier applied to the customer reward when
+  // this bundle wins. Default 1.00 = no bonus. Stored as decimal so admins
+  // can set fractional multipliers (e.g. 1.25 = +25%).
+  bonusMultiplier: decimal("bonus_multiplier", { precision: 4, scale: 2 }).notNull().default("1.00"),
   isFeatured: boolean("is_featured").notNull().default(false),
   // Merchandising slot used by the upcoming /book bundle strip:
   // 'most_popular' | 'best_value' | 'fast_addon' | null
@@ -2555,6 +2566,22 @@ export const bundleDefinitions = pgTable("bundle_definitions", {
 }, (table) => [
   index("idx_bundle_def_active").on(table.isActive, table.priority),
   index("idx_bundle_def_slot").on(table.merchandisingSlot),
+]);
+
+// Task #131 — durable audit trail of admin edits to bundle_definitions
+// (discount values, multipliers, featured/active toggles). Mirrors the
+// existing booking_discount_audit_log so admins have a queryable history.
+export const bundleSettingsAuditLog = pgTable("bundle_settings_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  bundleCode: text("bundle_code").notNull(),
+  adminUserId: varchar("admin_user_id"),
+  adminEmail: text("admin_email"),
+  before: jsonb("before").notNull(),
+  after: jsonb("after").notNull(),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_bundle_audit_code").on(table.bundleCode),
+  index("idx_bundle_audit_created").on(table.createdAt),
 ]);
 
 export const crewRequirements = pgTable("crew_requirements", {

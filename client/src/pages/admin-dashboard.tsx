@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { FeaturedBundlesCard } from "@/components/admin/FeaturedBundlesCard";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
   Shield, 
@@ -187,10 +188,11 @@ export default function AdminDashboard() {
         </div>
 
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
             <TabsTrigger value="configuration" data-testid="tab-configuration">Configuration</TabsTrigger>
             <TabsTrigger value="health" data-testid="tab-health">System Health</TabsTrigger>
+            <TabsTrigger value="bundles" data-testid="tab-bundles">Featured Bundles</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
@@ -493,6 +495,10 @@ export default function AdminDashboard() {
                 </Card>
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="bundles" className="space-y-6">
+            <FeaturedBundlesCard />
           </TabsContent>
         </Tabs>
 
