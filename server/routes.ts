@@ -16635,6 +16635,32 @@ Thank you for your business!
         expiresAt,
       }).returning();
 
+      // Task #155: Extend the jewelry pending_balance hold so it can't expire
+      // while the customer's BTC tx is broadcasting / awaiting confirmation /
+      // awaiting auto- or admin-verification. We push the hold out to the BTC
+      // payment expiry plus a generous buffer (matches POST_EXPIRY_GRACE_MS in
+      // the auto-verify sweeper). The hold can still be released early by
+      // explicit cancel; this only prevents the silent "1-hour timer ran out
+      // before admin clicked Verify" failure mode.
+      if (referenceType === "jewelry" && referenceId && effectiveOriginalUsd !== null) {
+        try {
+          const HOLD_GRACE_MS = 24 * 60 * 60 * 1000;
+          const newHoldUntil = new Date(expiresAt.getTime() + HOLD_GRACE_MS);
+          await db.update(jewelryItems)
+            .set({ pendingExpiresAt: newHoldUntil })
+            .where(and(
+              eq(jewelryItems.id, String(referenceId)),
+              eq(jewelryItems.status, "pending_balance"),
+              sessionUserId ? eq(jewelryItems.pendingCreditUserId, sessionUserId) : sql`true`,
+              // Only extend forward — never shorten an already-longer hold.
+              sql`(${jewelryItems.pendingExpiresAt} IS NULL OR ${jewelryItems.pendingExpiresAt} < ${newHoldUntil})`,
+            ));
+          console.log(`💎 [BTC create-payment] Extended jewelry hold ${referenceId} to ${newHoldUntil.toISOString()} for BTC payment ${payment.id}`);
+        } catch (extendErr) {
+          console.warn("[BTC create-payment] Failed to extend jewelry hold (non-fatal):", extendErr);
+        }
+      }
+
       try {
         const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
         await sendEmail({
@@ -16714,250 +16740,21 @@ Thank you for your business!
       const [payment] = await db.select().from(bitcoinPayments).where(eq(bitcoinPayments.id, id));
       if (!payment) return res.status(404).json({ error: "Payment not found" });
 
-      const [updated] = await db.update(bitcoinPayments)
-        .set({
-          status,
-          verifiedByUserId: req.session?.userId,
-          verifiedAt: status === "verified" ? new Date() : null,
-          jcmovesCredited: status === "verified" && payment.jcmovesAmount && parseFloat(payment.jcmovesAmount) > 0 ? 1 : (payment.jcmovesCredited ?? 0),
-        })
-        .where(eq(bitcoinPayments.id, id))
-        .returning();
-
-      // Credit JCMOVES tokens to the buyer on verification
-      if (
-        status === "verified" &&
-        payment.userId &&
-        payment.jcmovesAmount &&
-        parseFloat(payment.jcmovesAmount) > 0 &&
-        !payment.jcmovesCredited
-      ) {
-        const tokensToCredit = parseFloat(payment.jcmovesAmount);
-        await storage.creditWalletTokens(payment.userId, tokensToCredit);
-        // Log as a reward record for full audit trail
-        await db.insert(rewards).values({
-          userId: payment.userId,
-          rewardType: "btc_token_purchase",
-          tokenAmount: tokensToCredit.toFixed(8),
-          cashValue: payment.usdAmount,
-          status: "confirmed",
-          earnedDate: new Date(),
-          metadata: {
-            paymentId: payment.id,
-            btcAmount: payment.btcAmount,
-            btcPrice: payment.btcPrice,
-            usdAmount: payment.usdAmount,
-            verifiedBy: req.session?.userId,
-            description: "JCMOVES tokens purchased via Bitcoin payment",
-          },
-        });
-        console.log(`[BTC Verify] Credited ${tokensToCredit} JCMOVES to user ${payment.userId} for payment ${id}`);
+      // Delegate to the shared verifier (Task #155). The same code path is
+      // also driven by the periodic blockchain auto-verify sweep; both are
+      // idempotent and race-safe via the conditional UPDATE inside.
+      if (payment.status !== "pending") {
+        return res.json(payment);
       }
-
-      // Finalize a held jewelry pending_balance reservation when the BTC
-      // payment is verified. Mirrors the Square /api/jewelry/payment-complete
-      // path: marks the item sold, confirms the wallet redemption row, and
-      // clears pending fields. Idempotent — only acts on rows still held by
-      // the same buyer.
-      if (
-        status === "verified" &&
-        payment.referenceType === "jewelry" &&
-        payment.referenceId &&
-        payment.userId
-      ) {
-        try {
-          const jItem = await storage.getJewelryItem(payment.referenceId);
-          if (
-            jItem &&
-            jItem.status === "pending_balance" &&
-            jItem.pendingCreditUserId === payment.userId
-          ) {
-            const finalized = await db.transaction(async (tx) => {
-              // Conditional update — only transitions if the row is still
-              // held by this same buyer at the moment of the write. This
-              // protects against races with the expiry sweeper / manual
-              // cancel between our read above and the write here.
-              const updatedRows = await tx.update(jewelryItems)
-                .set({
-                  status: "sold",
-                  inStock: false,
-                  soldAt: new Date(),
-                  pendingCreditUserId: null,
-                  pendingCreditCents: null,
-                  pendingExpiresAt: null,
-                  pendingSquareOrderId: null,
-                })
-                .where(and(
-                  eq(jewelryItems.id, payment.referenceId!),
-                  eq(jewelryItems.status, "pending_balance"),
-                  eq(jewelryItems.pendingCreditUserId, payment.userId!),
-                ))
-                .returning({ id: jewelryItems.id });
-              if (updatedRows.length === 0) {
-                // Lost the race — do NOT confirm the reward, since the
-                // credit may have already been refunded by the release path.
-                return false;
-              }
-              await tx.update(rewards)
-                .set({ status: "confirmed" })
-                .where(and(
-                  eq(rewards.userId, payment.userId!),
-                  eq(rewards.rewardType, "wallet_balance_redemption"),
-                  eq(rewards.referenceId, payment.referenceId!),
-                  eq(rewards.status, "pending"),
-                ));
-              return true;
-            });
-            if (finalized) {
-              console.log(`💎 [BTC Verify] Finalized pending_balance jewelry item ${payment.referenceId} for user ${payment.userId} via BTC payment ${id}`);
-            } else {
-              console.warn(`[BTC Verify] Jewelry item ${payment.referenceId} no longer in pending_balance at write time — skipping reward confirmation (likely auto-released).`);
-            }
-          } else if (jItem && jItem.status !== "sold") {
-            console.warn(`[BTC Verify] Jewelry item ${payment.referenceId} not in pending_balance for user ${payment.userId} — skipping finalization (item status=${jItem?.status}).`);
-          }
-        } catch (jErr) {
-          console.error("[BTC Verify] Jewelry finalization failed (non-fatal, BTC payment still marked verified):", jErr);
-        }
-
-        // Award JCMOVES rewards for the jewelry purchase, mirroring the Square
-        // /api/jewelry/payment-complete path. Runs outside the finalize branch
-        // so a re-verify attempt can recover from a transient failure (credit
-        // / insert error) on a previously-finalized item. Authorization that
-        // *this* user was the actual buyer is enforced by requiring an
-        // existing `wallet_balance_redemption` reward row for this user+item
-        // (those rows are written at checkout time and confirmed only when
-        // the same user's payment finalizes the item). Idempotent on item id
-        // + rewardType + userId so it cannot double-credit.
-        try {
-          const jItem2 = await storage.getJewelryItem(payment.referenceId!);
-          if (jItem2 && jItem2.status === "sold") {
-            const purchasePrice = parseFloat(jItem2.price || "0");
-            if (purchasePrice > 0) {
-              const buyerProof = await db.select({ id: rewards.id })
-                .from(rewards)
-                .where(and(
-                  eq(rewards.userId, payment.userId!),
-                  eq(rewards.rewardType, "wallet_balance_redemption"),
-                  eq(rewards.referenceId, payment.referenceId!),
-                  eq(rewards.status, "confirmed"),
-                ))
-                .limit(1);
-
-              if (buyerProof.length > 0) {
-                const alreadyRewarded = await db.select({ id: rewards.id })
-                  .from(rewards)
-                  .where(and(
-                    eq(rewards.userId, payment.userId!),
-                    eq(rewards.rewardType, 'jewelry_purchase'),
-                    eq(rewards.referenceId, payment.referenceId!),
-                  ))
-                  .limit(1);
-
-                if (alreadyRewarded.length === 0) {
-                  const rateSetting = await db.select().from(rewardSettings)
-                    .where(eq(rewardSettings.settingKey, 'earn_rate_per_dollar'))
-                    .limit(1);
-                  const earnRate = rateSetting.length > 0 ? parseFloat(rateSetting[0].tokenAmount) : 50;
-                  const tokensEarned = Math.round(purchasePrice * earnRate);
-
-                  if (tokensEarned > 0) {
-                    await storage.creditWalletTokens(payment.userId!, tokensEarned);
-                    await db.insert(rewards).values({
-                      userId: payment.userId!,
-                      rewardType: 'jewelry_purchase',
-                      tokenAmount: tokensEarned.toFixed(8),
-                      cashValue: (purchasePrice * 0.01).toFixed(2),
-                      status: "confirmed",
-                      referenceId: payment.referenceId!,
-                      metadata: {
-                        source: "jewelry_shop",
-                        paymentMethod: "bitcoin",
-                        itemId: payment.referenceId,
-                        itemTitle: jItem2.title,
-                        purchasePrice,
-                        earnRate,
-                        tokensPerDollar: earnRate,
-                        btcPaymentId: payment.id,
-                      },
-                    });
-
-                    try {
-                      await treasuryService.distributeTokens(
-                        tokensEarned,
-                        `Jewelry purchase reward (BTC): ${tokensEarned} JCMOVES for "${jItem2.title}" ($${purchasePrice.toFixed(2)}) — source: jewelry_shop`,
-                        "jewelry_shop",
-                        payment.referenceId!,
-                      );
-                    } catch (treasuryErr) {
-                      console.warn("[BTC Verify] Treasury distribution failed (non-fatal):", treasuryErr);
-                    }
-
-                    console.log(`💎 [BTC Verify] Jewelry purchase reward: ${tokensEarned} JCMOVES to user ${payment.userId} for item "${jItem2.title}" ($${purchasePrice})`);
-                  }
-                }
-              } else {
-                console.warn(`[BTC Verify] No confirmed wallet_balance_redemption for user ${payment.userId} on item ${payment.referenceId} — skipping JCMOVES award (this user was not the finalizing buyer).`);
-              }
-            }
-          }
-        } catch (rewardErr) {
-          console.error("[BTC Verify] Failed to award jewelry purchase JCMOVES (non-fatal):", rewardErr);
-        }
-      }
-
-      // Send confirmation email + SMS to customer when payment is verified
-      if (status === "verified") {
-        const paymentContext = payment.referenceType === "job_payment"
-          ? (payment.notes || "your moving/junk removal job")
-          : payment.notes || "your purchase";
-
-        const emailBody = `
-          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#0f172a;color:#f1f5f9;padding:32px;border-radius:12px;">
-            <div style="text-align:center;margin-bottom:24px;">
-              <h1 style="color:#f97316;font-size:28px;margin:0;">JC ON THE MOVE</h1>
-              <p style="color:#94a3b8;margin-top:4px;">Bitcoin Payment Confirmed</p>
-            </div>
-            <div style="background:#1e293b;border-radius:8px;padding:24px;margin-bottom:20px;border:1px solid #f97316/30;">
-              <h2 style="color:#4ade80;margin:0 0 16px;">✅ Payment Received!</h2>
-              <p style="color:#cbd5e1;margin:0 0 12px;">Hello ${payment.customerName},</p>
-              <p style="color:#cbd5e1;margin:0 0 12px;">Your Bitcoin payment for <strong style="color:#f97316;">${paymentContext}</strong> has been confirmed and received by our team.</p>
-              <div style="background:#0f172a;border-radius:6px;padding:16px;margin-top:16px;">
-                <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
-                  <span style="color:#94a3b8;">Payment ID</span>
-                  <span style="color:#f1f5f9;font-family:monospace;">${payment.id.slice(0, 8)}...</span>
-                </div>
-                <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
-                  <span style="color:#94a3b8;">Amount Paid</span>
-                  <span style="color:#4ade80;font-weight:bold;">$${parseFloat(payment.usdAmount).toFixed(2)} (10% BTC Discount Applied)</span>
-                </div>
-                <div style="display:flex;justify-content:space-between;">
-                  <span style="color:#94a3b8;">BTC Amount</span>
-                  <span style="color:#f97316;">${parseFloat(payment.btcAmount).toFixed(8)} BTC</span>
-                </div>
-              </div>
-            </div>
-            <p style="color:#94a3b8;text-align:center;font-size:14px;margin:0;">Questions? Call us at <a href="tel:9062859312" style="color:#f97316;">(906) 285-9312</a></p>
-          </div>`;
-
-        try {
-          await sendEmail({
-            to: payment.customerEmail,
-            subject: "✅ Bitcoin Payment Confirmed — JC ON THE MOVE",
-            html: emailBody,
-            text: `Hello ${payment.customerName}, your Bitcoin payment of $${parseFloat(payment.usdAmount).toFixed(2)} for ${paymentContext} has been confirmed. Payment ID: ${payment.id.slice(0,8)}. Questions? Call (906) 285-9312.`,
-          });
-          console.log(`[BTC Verify] Confirmation email sent to ${payment.customerEmail}`);
-        } catch (emailErr) {
-          console.error(`[BTC Verify] Email notification failed:`, emailErr);
-        }
-
-        // Customer already notified via email above (SMS replaced)
-      }
-
-      res.json(updated);
+      const { verifyBitcoinPayment } = await import("./services/bitcoinPaymentVerifier");
+      const result = await verifyBitcoinPayment(id, {
+        status: status as "verified" | "expired" | "cancelled",
+        verifiedByUserId: req.session?.userId ?? null,
+        autoVerified: false,
+      });
+      return res.json(result ?? payment);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      return res.status(500).json({ error: error.message });
     }
   });
 

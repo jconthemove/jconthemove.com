@@ -435,6 +435,39 @@ app.use((req, res, next) => {
       console.log("✅ Jewelry reservation expiry sweep scheduled (every 10 min)");
     }
 
+    // ── Bitcoin Payment Auto-Verify Sweeper (Task #155) ─────────────────────
+    // Polls mempool.space for incoming sends to BTC_WALLET_ADDRESS and
+    // auto-verifies any pending bitcoin_payment whose btcAmount matches an
+    // on-chain deposit with >= MIN_CONFIRMATIONS confirmations. This finalizes
+    // jewelry pending_balance holds and credits rewards without admin action,
+    // so customers stop losing their hold while waiting on slow verification.
+    if (process.env.BTC_WALLET_ADDRESS) {
+      const BTC_SWEEP_INTERVAL_MS = 2 * 60 * 1000; // every 2 minutes
+      const tick = async () => {
+        try {
+          const { runBitcoinPaymentSweep } = await import("./services/bitcoinPaymentVerifier");
+          const result = await runBitcoinPaymentSweep();
+          if (!result) {
+            console.log("[btc-auto-verify] skipped — previous run still in progress");
+            return;
+          }
+          if (result.scanned > 0 || result.verified > 0) {
+            console.log(`[btc-auto-verify] scanned=${result.scanned} verified=${result.verified}`);
+          }
+          if (result.failures.length) {
+            console.warn(`[btc-auto-verify] failures:`, result.failures);
+          }
+        } catch (err) {
+          console.error("[btc-auto-verify] error:", err);
+        }
+      };
+      setTimeout(tick, 90_000);
+      setInterval(tick, BTC_SWEEP_INTERVAL_MS);
+      console.log("✅ Bitcoin payment auto-verify sweep scheduled (every 2 min)");
+    } else {
+      console.log("ℹ️  BTC_WALLET_ADDRESS not set — Bitcoin auto-verify sweep disabled");
+    }
+
     // Serve static files from attached_assets directory with proper video support
     app.use('/attached_assets', express.static(path.resolve(process.cwd(), 'attached_assets'), {
       setHeaders: (res, filePath) => {

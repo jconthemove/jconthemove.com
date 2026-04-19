@@ -1644,6 +1644,8 @@ export const bitcoinPayments = pgTable("bitcoin_payments", {
   notes: text("notes"),
   verifiedByUserId: varchar("verified_by_user_id"),
   verifiedAt: timestamp("verified_at"),
+  autoVerified: boolean("auto_verified").notNull().default(false),
+  autoVerifiedTxid: text("auto_verified_txid"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   expiresAt: timestamp("expires_at"),
 });
