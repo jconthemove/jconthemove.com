@@ -402,6 +402,35 @@ app.use((req, res, next) => {
       }
     }
 
+    // ── Jewelry Reservation Expiry Sweeper (Task #151) ─────────────────────
+    // Releases jewelry items whose pending_balance hold has elapsed (set by
+    // /api/wallet/redeem-balance partial credit + Square checkout in
+    // Task #147). Refunds the held JCMOVES USD back to the customer's
+    // wallet so abandoned carts don't strand inventory or credit.
+    {
+      const SWEEP_INTERVAL_MS = 10 * 60 * 1000; // every 10 minutes
+      const tick = async () => {
+        try {
+          const { runJewelryReservationSweep } = await import("./services/jewelryReservationSweeper");
+          const result = await runJewelryReservationSweep();
+          if (result.scanned > 0 || result.released > 0) {
+            console.log(
+              `[jewelry-expiry-sweep] scanned=${result.scanned} released=${result.released} refundedUsd=$${result.refundedUsdTotal.toFixed(2)}`,
+            );
+          }
+          if (result.failures.length) {
+            console.warn(`[jewelry-expiry-sweep] failures:`, result.failures);
+          }
+        } catch (err) {
+          console.error("[jewelry-expiry-sweep] error:", err);
+        }
+      };
+      // First run 2 min after boot, then every 10 minutes.
+      setTimeout(tick, 120_000);
+      setInterval(tick, SWEEP_INTERVAL_MS);
+      console.log("✅ Jewelry reservation expiry sweep scheduled (every 10 min)");
+    }
+
     // Serve static files from attached_assets directory with proper video support
     app.use('/attached_assets', express.static(path.resolve(process.cwd(), 'attached_assets'), {
       setHeaders: (res, filePath) => {

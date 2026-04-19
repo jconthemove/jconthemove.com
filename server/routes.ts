@@ -15364,8 +15364,14 @@ Thank you for your business!
             pending: true,
           });
         }
-        await db.transaction(async (tx) => {
-          await tx.update(jewelryItems)
+        // Atomic finalize — must observe exactly one row transitioning
+        // out of `pending_balance`. If the periodic expiry sweeper
+        // (Task #151) released the reservation between verifySquare and
+        // here, the conditional update affects 0 rows; we abort cleanly
+        // instead of marking the item sold or awarding tokens, and the
+        // refunded customer can re-purchase it.
+        const finalizedOk = await db.transaction(async (tx) => {
+          const flipped = await tx.update(jewelryItems)
             .set({
               status: "sold",
               inStock: false,
@@ -15378,7 +15384,9 @@ Thank you for your business!
             .where(and(
               eq(jewelryItems.id, itemId),
               eq(jewelryItems.status, "pending_balance"),
-            ));
+            ))
+            .returning({ id: jewelryItems.id });
+          if (flipped.length === 0) return false;
           await tx.update(rewards)
             .set({ status: "confirmed" })
             .where(and(
@@ -15387,7 +15395,13 @@ Thank you for your business!
               eq(rewards.referenceId, itemId),
               eq(rewards.status, "pending"),
             ));
+          return true;
         });
+        if (!finalizedOk) {
+          return res.status(409).json({
+            error: "Reservation expired before payment confirmed. Your shop credit has been refunded — please rebook the item.",
+          });
+        }
         console.log(`💎 Finalized pending_balance jewelry item ${itemId} for user ${userId} (Square paid ${verified.paidCents}¢, expected ${expectedDueCents}¢)`);
       }
 
@@ -16874,67 +16888,10 @@ Thank you for your business!
   // refund the credit, and reactivate the listing. Idempotent — only acts
   // on rows still in the pending_balance state. Safe to call from the
   // expiry sweeper, the manual cancel endpoint, or inline release paths.
-  async function releasePendingJewelryReservation(
-    itemId: string,
-    reason: string,
-  ): Promise<{ refundedUsd: number; userId: string } | null> {
-    return await db.transaction(async (tx) => {
-      const [item] = await tx.select().from(jewelryItems)
-        .where(and(
-          eq(jewelryItems.id, itemId),
-          eq(jewelryItems.status, "pending_balance"),
-        ))
-        .limit(1);
-      if (!item || !item.pendingCreditUserId) return null;
-      const refundCents = parseFloat(item.pendingCreditCents || "0");
-      const refundUserId = item.pendingCreditUserId;
-
-      await tx.update(jewelryItems)
-        .set({
-          status: "active",
-          inStock: true,
-          pendingCreditUserId: null,
-          pendingCreditCents: null,
-          pendingExpiresAt: null,
-          pendingSquareOrderId: null,
-        })
-        .where(eq(jewelryItems.id, itemId));
-
-      if (refundCents > 0) {
-        await tx.update(walletAccounts)
-          .set({
-            cashBalance: sql`(${walletAccounts.cashBalance})::numeric + ${refundCents.toFixed(2)}::numeric`,
-            lastActivity: new Date(),
-          })
-          .where(eq(walletAccounts.userId, refundUserId));
-
-        await tx.update(rewards)
-          .set({ status: "cancelled" })
-          .where(and(
-            eq(rewards.userId, refundUserId),
-            eq(rewards.rewardType, "wallet_balance_redemption"),
-            eq(rewards.referenceId, itemId),
-            eq(rewards.status, "pending"),
-          ));
-        await tx.insert(rewards).values({
-          userId: refundUserId,
-          rewardType: "wallet_balance_redemption_refund",
-          tokenAmount: "0",
-          cashValue: refundCents.toFixed(6),
-          status: "confirmed",
-          referenceId: itemId,
-          metadata: {
-            referenceType: "jewelry",
-            referenceId: itemId,
-            refundUsd: refundCents.toFixed(2),
-            reason,
-          },
-        });
-      }
-
-      return { refundedUsd: refundCents, userId: refundUserId };
-    });
-  }
+  // Delegated to ./services/jewelryReservationSweeper so the periodic
+  // expiry sweep (Task #151) and the manual cancel endpoint share a
+  // single source of truth.
+  const { releasePendingJewelryReservation } = await import("./services/jewelryReservationSweeper");
 
   // Internal helper: confirm via Square that a given orderId actually paid
   // at least `expectedDueCents` for the held jewelry item. Returns the
