@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import {
   MapPin, Calendar, Loader2, Truck, Trash2, Snowflake, Wrench,
   Plus, CheckCircle, Clock, AlertCircle, Users, DollarSign, X,
   Package, ChevronRight, RefreshCw, Coins, HelpCircle, Phone,
   FileText, Star, ArrowRight, Info, ExternalLink, Zap,
-  Sprout, Sparkles, Recycle, Hammer
+  Sprout, Sparkles, Recycle, Hammer, CalendarClock, ChevronDown,
+  Pause, SkipForward, RotateCw
 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { LucideIcon } from "lucide-react";
@@ -567,23 +568,58 @@ function JobSheet({ job, open, onClose, onNewJob }: {
 }
 
 // ── MyJobsPage ────────────────────────────────────────────────────────────────
+
+// Task #116: Active Recurring Plans payload from /api/customer/recurring-plans
+interface RecurringPlan {
+  id: string;
+  serviceKey: string;
+  serviceLabel: string;
+  frequency: string;
+  address: string;
+  nextVisitDate: string | null;
+  rebookHref: string;
+}
+
+function formatNextVisit(iso: string | null): string {
+  if (!iso) return "Not scheduled";
+  const d = new Date(iso + "T12:00:00");
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+}
+
 export default function MyJobsPage() {
   const [, setLocation] = useLocation();
   const [selectedJob, setSelectedJob] = useState<CustomerJob | null>(null);
-  const [filter, setFilter] = useState<"all" | "active" | "done">("all");
+  const [filter, setFilter] = useState<"all" | "active">("all");
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const { data: jobs = [], isLoading, isError, refetch } = useQuery<CustomerJob[]>({
     queryKey: ["/api/customer/my-leads"],
     retry: 2,
   });
 
-  const filtered = jobs
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .filter(j => {
-      if (filter === "active") return !["completed", "cancelled", "paid"].includes(j.status);
-      if (filter === "done")   return ["completed", "paid"].includes(j.status);
-      return true;
-    });
+  const { data: recurringPlans = [] } = useQuery<RecurringPlan[]>({
+    queryKey: ["/api/customer/recurring-plans"],
+    retry: 1,
+  });
+
+  // Past statuses are folded into the History accordion (Task #116). The
+  // top grid only shows currently in-flight jobs (regardless of the All/
+  // Active/Done pill); the History accordion below holds completed/paid/
+  // cancelled jobs so /my-jobs doesn't get noisy as the customer accrues
+  // history.
+  const sortedJobs = jobs.slice().sort((a, b) =>
+    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+  const isPast = (j: CustomerJob) => ["completed", "paid", "cancelled"].includes(j.status);
+  const activeJobs = sortedJobs.filter(j => !isPast(j));
+  const pastJobs = sortedJobs.filter(isPast);
+
+  // Past jobs always live in the History accordion below — Active/All only
+  // ever shows currently-active jobs to keep the main grid focused (Task #116).
+  const filtered = activeJobs.filter(j => {
+    if (filter === "active") return !["completed", "cancelled", "paid"].includes(j.status);
+    return true;
+  });
 
   // Task #115: collapse companion bundle leads into one card per group. We
   // render a single tile per bundleGroupId with all sibling services listed
@@ -619,12 +655,83 @@ export default function MyJobsPage() {
           </button>
         </div>
 
+        {/* Task #116: Active Recurring Plans — surface lawn + trash subscriptions */}
+        {recurringPlans.length > 0 && (
+          <div className="mb-5" data-testid="section-recurring-plans">
+            <h2 className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-2">
+              Active Recurring Plans
+            </h2>
+            <div className="space-y-2">
+              {recurringPlans.map(plan => {
+                const cfg = getSvcConfig(plan.serviceKey);
+                const Icon = cfg.icon;
+                return (
+                  <div
+                    key={plan.id}
+                    data-testid={`recurring-plan-${plan.id}`}
+                    className="bg-zinc-900 border border-emerald-500/30 rounded-2xl p-4"
+                  >
+                    <div className="flex items-start gap-3 mb-3">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${cfg.bg}`}>
+                        <Icon className={`h-5 w-5 ${cfg.color}`} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <p className="font-bold text-white text-sm leading-tight truncate">{plan.serviceLabel}</p>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-400 capitalize">
+                            {plan.frequency || "Recurring"}
+                          </span>
+                        </div>
+                        {plan.address && (
+                          <p className="text-[11px] text-zinc-500 truncate flex items-center gap-1">
+                            <MapPin className="h-3 w-3" /> {plan.address}
+                          </p>
+                        )}
+                        <p className="text-xs text-emerald-300 font-semibold mt-1 flex items-center gap-1">
+                          <CalendarClock className="h-3.5 w-3.5" />
+                          Next visit: {formatNextVisit(plan.nextVisitDate)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <a
+                        href="tel:+19062859312"
+                        data-testid={`button-skip-${plan.id}`}
+                        className="flex items-center justify-center gap-1 h-9 rounded-xl border border-zinc-700 text-zinc-300 text-[11px] font-semibold hover:bg-zinc-800 active:scale-[0.97] transition-all"
+                      >
+                        <SkipForward className="h-3.5 w-3.5" /> Skip
+                      </a>
+                      <a
+                        href="tel:+19062859312"
+                        data-testid={`button-pause-${plan.id}`}
+                        className="flex items-center justify-center gap-1 h-9 rounded-xl border border-zinc-700 text-zinc-300 text-[11px] font-semibold hover:bg-zinc-800 active:scale-[0.97] transition-all"
+                      >
+                        <Pause className="h-3.5 w-3.5" /> Pause
+                      </a>
+                      <Link href={plan.rebookHref}>
+                        <a
+                          data-testid={`button-rebook-${plan.id}`}
+                          className="flex items-center justify-center gap-1 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-[11px] font-semibold hover:bg-emerald-500/25 active:scale-[0.97] transition-all"
+                        >
+                          <RotateCw className="h-3.5 w-3.5" /> Re-book
+                        </a>
+                      </Link>
+                    </div>
+                    <p className="text-[10px] text-zinc-600 mt-2 text-center">
+                      Skip / Pause routes through Darrell at (906) 285-9312 — confirmed within 1 business day.
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Filter pills */}
         <div className="flex gap-2 mb-5">
           {([
             { value: "all",    label: "All"    },
             { value: "active", label: "Active" },
-            { value: "done",   label: "Done"   },
           ] as const).map(f => (
             <button
               key={f.value}
@@ -780,6 +887,63 @@ export default function MyJobsPage() {
                 </button>
               );
             })}
+          </div>
+        )}
+
+        {/* Task #116: History accordion — collapse completed/paid/cancelled jobs */}
+        {pastJobs.length > 0 && (
+          <div className="mt-6" data-testid="section-history">
+            <button
+              onClick={() => setHistoryOpen(o => !o)}
+              data-testid="button-toggle-history"
+              className="w-full flex items-center justify-between bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 hover:border-zinc-700 transition-all"
+            >
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-zinc-400" />
+                <p className="text-sm font-bold text-white">History</p>
+                <span className="text-xs text-zinc-500">({pastJobs.length})</span>
+              </div>
+              <ChevronDown
+                className={`h-4 w-4 text-zinc-400 transition-transform ${historyOpen ? "rotate-180" : ""}`}
+              />
+            </button>
+            {historyOpen && (
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                {pastJobs.map(job => {
+                  const svc = getSvcConfig(job.serviceType);
+                  const Icon = svc.icon;
+                  const st = getStatus(job.status);
+                  const price = parseFloat(job.estimatedTotal || "0");
+                  return (
+                    <button
+                      key={job.id}
+                      onClick={() => setSelectedJob(job)}
+                      data-testid={`history-card-${job.id}`}
+                      className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4 text-left hover:border-zinc-700 active:scale-[0.97] transition-all"
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${svc.bg} opacity-70`}>
+                          <Icon className={`h-5 w-5 ${svc.color}`} />
+                        </div>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-lg ${st.cls}`}>
+                          {st.label}
+                        </span>
+                      </div>
+                      <p className="font-bold text-zinc-300 text-sm leading-tight mb-1">{svc.label}</p>
+                      {job.moveDate && (
+                        <p className="text-xs text-zinc-500 flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          {new Date(job.moveDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                        </p>
+                      )}
+                      {price > 0 && (
+                        <p className="text-xs font-semibold mt-1 text-zinc-400">${price.toFixed(0)}</p>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>

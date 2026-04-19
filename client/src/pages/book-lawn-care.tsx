@@ -721,6 +721,7 @@ export default function BookLawnCare() {
             propertySize={propertySize}
             propertyCondition={propertyCondition}
             selectedAddOns={selectedAddOns}
+            customerEmail={form.getValues("email") || ""}
           />
         )}
 
@@ -912,12 +913,14 @@ function ConfirmationPanel({
   propertySize,
   propertyCondition,
   selectedAddOns,
+  customerEmail,
 }: {
   result: QuoteResult;
   frequency: string;
   propertySize: string;
   propertyCondition: string;
   selectedAddOns: string[];
+  customerEmail?: string;
 }) {
   const isCustom = result.pricing.isCustomEstimate;
   const sizeCard = SIZE_CARDS.find((c) => c.id === propertySize);
@@ -1091,7 +1094,7 @@ function ConfirmationPanel({
           </Button>
         </Link>
 
-        <BookingConfirmedTiles serviceType="lawn_care" />
+        <BookingConfirmedTiles serviceType="lawn_care" customerEmail={customerEmail} />
       </div>
     </div>
   );

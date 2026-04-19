@@ -38,11 +38,17 @@ const RECURRING_DESTINATIONS: Record<string, { href: string; label: string; hint
 interface BookingConfirmedTilesProps {
   // Optional service id to surface a "make this recurring" CTA tailored to it
   serviceType?: string;
+  // Email used on the booking — pre-fills /customer-login so the just-
+  // submitted quote auto-links to the new account by email (Task #116).
+  customerEmail?: string;
 }
 
-export default function BookingConfirmedTiles({ serviceType }: BookingConfirmedTilesProps = {}) {
+export default function BookingConfirmedTiles({ serviceType, customerEmail }: BookingConfirmedTilesProps = {}) {
   const { isAuthenticated } = useAuth();
   const recurring = serviceType ? RECURRING_DESTINATIONS[serviceType] : undefined;
+  const trackHref = customerEmail
+    ? `/customer-login?intent=track&email=${encodeURIComponent(customerEmail)}`
+    : `/customer-login?intent=track`;
 
   return (
     <div className="mt-4 space-y-2">
@@ -69,9 +75,9 @@ export default function BookingConfirmedTiles({ serviceType }: BookingConfirmedT
         </Link>
       )}
 
-      {/* Create an account (Task #116) — only show to anonymous users */}
+      {/* Track this job — create an account (Task #116) — anonymous only */}
       {!isAuthenticated && (
-        <Link href="/onboarding">
+        <Link href={trackHref}>
           <a
             className="flex items-center gap-3 rounded-2xl border border-sky-500/25 bg-gradient-to-r from-sky-900/25 to-indigo-900/15 px-4 py-3 hover:border-sky-500/50 transition-all active:scale-[0.98]"
             data-testid="link-create-account"
@@ -80,9 +86,11 @@ export default function BookingConfirmedTiles({ serviceType }: BookingConfirmedT
               <UserPlus className="h-5 w-5 text-sky-400" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-white leading-tight">Create a free account</p>
+              <p className="text-sm font-bold text-white leading-tight">Track this job — create an account</p>
               <p className="text-xs text-sky-300/80 mt-0.5">
-                Track this booking, see invoices, and earn JCMOVES rewards
+                {customerEmail
+                  ? `We'll link it to ${customerEmail} so you can pause, skip, or re-book anytime`
+                  : "Pause, skip, or re-book anytime — and earn JCMOVES rewards"}
               </p>
             </div>
             <ChevronRight className="h-4 w-4 text-sky-400/60 shrink-0" />

@@ -26,7 +26,7 @@ interface BookingResponse {
 
 interface WindowCleaningBookingProps {
   user?: AuthUser;
-  onBooked?: (jobId: string, total: number) => void;
+  onBooked?: (jobId: string, total: number, email: string) => void;
 }
 
 const ADDON_SERVICES = [
@@ -144,7 +144,7 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
     },
     onSuccess: (data: BookingResponse) => {
       toast({ title: "Booking submitted!", description: `We'll reach out shortly. Total: $${data.total}` });
-      onBooked?.(data.jobId, data.total);
+      onBooked?.(data.jobId, data.total, email.trim());
     },
     onError: (err: Error) => {
       toast({ title: "Booking failed", description: err.message || "Please try again.", variant: "destructive" });

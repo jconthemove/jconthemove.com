@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -21,11 +21,21 @@ function roleDestination(role: string, status: string): string {
 export default function LoginPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const [mode, setMode] = useState<"login" | "register">("login");
+  // Task #116: read ?email=&intent= so post-booking deep links from
+  // BookingConfirmedTiles pre-fill the email and tailor the header copy.
+  const { prefillEmail, intent } = useMemo(() => {
+    if (typeof window === "undefined") return { prefillEmail: "", intent: "" };
+    const params = new URLSearchParams(window.location.search);
+    return {
+      prefillEmail: params.get("email") || "",
+      intent: params.get("intent") || "",
+    };
+  }, []);
+  const [mode, setMode] = useState<"login" | "register">(prefillEmail ? "register" : "login");
   const [showWelcome, setShowWelcome] = useState(false);
   const [welcomeFirstName, setWelcomeFirstName] = useState("");
   const [form, setForm] = useState({
-    email: "",
+    email: prefillEmail,
     password: "",
     firstName: "",
     lastName: "",
@@ -153,13 +163,17 @@ export default function LoginPage() {
 
           <Card className="bg-slate-900 border-slate-700 shadow-2xl">
             <CardHeader className="text-center pb-2">
-              <CardTitle className="text-xl text-white">
-                {mode === "login" ? "Sign In" : "Create Account"}
+              <CardTitle className="text-xl text-white" data-testid="text-login-title">
+                {intent === "track"
+                  ? (mode === "login" ? "Sign in to track your booking" : "Track your booking")
+                  : (mode === "login" ? "Sign In" : "Create Account")}
               </CardTitle>
               <CardDescription className="text-slate-400">
-                {mode === "login"
-                  ? "Customers, crew & admins — one place to sign in"
-                  : "New customers — create your free account"}
+                {intent === "track"
+                  ? "We'll link your new account to the email you just used so you can pause, skip, or re-book anytime."
+                  : mode === "login"
+                    ? "Customers, crew & admins — one place to sign in"
+                    : "New customers — create your free account"}
               </CardDescription>
             </CardHeader>
 

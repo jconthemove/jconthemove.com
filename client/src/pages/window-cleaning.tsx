@@ -8,7 +8,7 @@ import BookingConfirmedTiles from "@/components/BookingConfirmedTiles";
 export default function WindowCleaningPage() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
-  const [booked, setBooked] = useState<{ jobId: string; total: number } | null>(null);
+  const [booked, setBooked] = useState<{ jobId: string; total: number; email: string } | null>(null);
   const isApril = new Date().getMonth() === 3;
 
   return (
@@ -93,13 +93,13 @@ export default function WindowCleaningPage() {
               >
                 Book Another
               </button>
-              <BookingConfirmedTiles serviceType="window_cleaning" />
+              <BookingConfirmedTiles serviceType="window_cleaning" customerEmail={booked.email || user?.email || undefined} />
             </div>
           </div>
         ) : (
           <WindowCleaningBooking
             user={user}
-            onBooked={(jobId, total) => setBooked({ jobId, total })}
+            onBooked={(jobId, total, email) => setBooked({ jobId, total, email })}
           />
         )}
       </div>

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
-import { Coins, Phone, MessageSquare, ChevronRight, Loader2, Search, Sparkles, MessageCircle, Zap, DollarSign } from "lucide-react";
+import { Coins, Phone, MessageSquare, ChevronRight, Loader2, Search, Sparkles, MessageCircle, Zap, DollarSign, CalendarClock } from "lucide-react";
 import ServiceCard from "@/components/ServiceCard";
 import { getService } from "@/lib/services";
 import { JunkFlow, MovingFlow } from "@/components/ServiceSelector";
@@ -164,6 +164,27 @@ export default function CustomerHomePage() {
     retry: 1,
   });
 
+  // Task #116: one-line "Next visit" summary across all active recurring plans
+  const { data: recurringPlans = [] } = useQuery<Array<{
+    id: string;
+    serviceKey: string;
+    serviceLabel: string;
+    frequency: string;
+    address: string;
+    nextVisitDate: string | null;
+    rebookHref: string;
+  }>>({
+    queryKey: ["/api/customer/recurring-plans"],
+    retry: 1,
+  });
+  const upcomingPlan = recurringPlans
+    .filter(p => p.nextVisitDate)
+    .sort((a, b) => (a.nextVisitDate! < b.nextVisitDate! ? -1 : 1))[0];
+  const formatNextDate = (iso: string) => {
+    const d = new Date(iso + "T12:00:00");
+    return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  };
+
   const tokenBalance = parseFloat(wallet?.tokenBalance || "0");
   const cashBalance = parseFloat(wallet?.cashBalance || "0");
   const isApril = new Date().getMonth() === 3;
@@ -253,6 +274,27 @@ export default function CustomerHomePage() {
             <span className="text-zinc-300 font-semibold text-xs">Text a Mover</span>
           </button>
         </div>
+
+        {/* Task #116: Next visit summary across active recurring plans */}
+        {upcomingPlan && (
+          <button
+            onClick={() => setLocation("/my-jobs")}
+            data-testid="link-next-visit"
+            className="w-full flex items-center gap-3 bg-emerald-950/40 border border-emerald-500/30 hover:border-emerald-500/60 rounded-2xl px-4 py-3 active:scale-[0.98] transition-all text-left"
+          >
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center shrink-0">
+              <CalendarClock className="h-5 w-5 text-emerald-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-400/80">Next visit</p>
+              <p className="text-sm font-bold text-white leading-tight truncate">
+                {upcomingPlan.serviceLabel} · {formatNextDate(upcomingPlan.nextVisitDate!)}{upcomingPlan.frequency ? ` · ${upcomingPlan.frequency}` : ""}
+                {recurringPlans.length > 1 ? ` · +${recurringPlans.length - 1} more plan${recurringPlans.length > 2 ? "s" : ""}` : ""}
+              </p>
+            </div>
+            <ChevronRight className="h-4 w-4 text-emerald-400/60 shrink-0" />
+          </button>
+        )}
 
         {/* Live crew beacon */}
         <LiveCrewBeacon />

@@ -251,7 +251,7 @@ function BookingSuccessScreen({ selectedServiceLabel, selectedServiceKey, pkgId,
 
         {/* Task #116: post-booking account prompt + recurring upsell */}
         {!isCrewMember && (
-          <BookingConfirmedTiles serviceType={selectedServiceKey} />
+          <BookingConfirmedTiles serviceType={selectedServiceKey} customerEmail={user?.email || undefined} />
         )}
       </div>
     </div>

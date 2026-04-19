@@ -233,7 +233,7 @@ export default function TrashValetBookPage() {
               Back to Home
             </Button>
 
-            <BookingConfirmedTiles serviceType="trash_valet" />
+            <BookingConfirmedTiles serviceType="trash_valet" customerEmail={form.email} />
           </div>
         </div>
       </div>

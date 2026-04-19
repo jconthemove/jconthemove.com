@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,12 +14,23 @@ import { WelcomeModal } from "@/components/welcome-modal";
 export default function CustomerLogin() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  // Read query params (?email=&intent=) so post-booking deep links from the
+  // BookingConfirmedTiles "Track this job" CTA can pre-fill the email and
+  // tailor the header copy (Task #116).
+  const { prefillEmail, intent } = useMemo(() => {
+    if (typeof window === "undefined") return { prefillEmail: "", intent: "" };
+    const params = new URLSearchParams(window.location.search);
+    return {
+      prefillEmail: params.get("email") || "",
+      intent: params.get("intent") || "",
+    };
+  }, []);
+  const [mode, setMode] = useState<'login' | 'register'>(prefillEmail ? 'register' : 'login');
   const [showWelcome, setShowWelcome] = useState(false);
   const [welcomeFirstName, setWelcomeFirstName] = useState("");
   const [pendingUser, setPendingUser] = useState<any>(null);
   const [formData, setFormData] = useState({
-    email: "",
+    email: prefillEmail,
     password: "",
     firstName: "",
     lastName: "",
@@ -123,14 +134,17 @@ export default function CustomerLogin() {
               <User className="h-8 w-8 text-white" />
             </div>
           </div>
-          <CardTitle className="text-2xl text-white">
-            {mode === 'login' ? 'Customer Sign In' : 'Create Account'}
+          <CardTitle className="text-2xl text-white" data-testid="text-login-title">
+            {intent === 'track'
+              ? (mode === 'login' ? 'Sign in to track your booking' : 'Track your booking')
+              : (mode === 'login' ? 'Customer Sign In' : 'Create Account')}
           </CardTitle>
           <CardDescription className="text-slate-400">
-            {mode === 'login' 
-              ? 'Sign in to track your quotes and earn rewards'
-              : 'Create your account to start earning JCMOVES tokens'
-            }
+            {intent === 'track'
+              ? "We'll link your new account to the email you just used so you can pause, skip, or re-book anytime."
+              : mode === 'login'
+                ? 'Sign in to track your quotes and earn rewards'
+                : 'Create your account to start earning JCMOVES tokens'}
           </CardDescription>
         </CardHeader>
         <CardContent>

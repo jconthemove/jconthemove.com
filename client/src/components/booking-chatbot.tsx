@@ -3398,7 +3398,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
                   </a>
                 )}
 
-                <BookingConfirmedTiles />
+                <BookingConfirmedTiles customerEmail={contactEmail || user?.email || undefined} />
               </div>
             </div>
           </div>

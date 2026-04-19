@@ -21123,6 +21123,74 @@ Thank you for your business!
     }
   });
 
+  // ── Customer Recurring Plans (Task #116) ─────────────────────────────────────
+  // Returns a normalized list of the logged-in customer's active recurring
+  // services (currently lawn care + trash valet) so /my-jobs and the customer
+  // home can render an "Active Recurring Plans" section without scrolling
+  // through every past lead.
+  app.get("/api/customer/recurring-plans", isAuthenticated, async (req: any, res) => {
+    try {
+      const { trashSubscriptions, lawnCarePlans } = await import("@shared/schema");
+      const userId = req.user?.id || (req.session as any)?.userId;
+      const user = await storage.getUser(userId);
+      if (!user?.email) return res.json([]);
+      const emailLower = user.email.toLowerCase();
+
+      const [trashSubs, lawnPlans] = await Promise.all([
+        db.select().from(trashSubscriptions).where(and(
+          sql`LOWER(${trashSubscriptions.email}) = ${emailLower}`,
+          eq(trashSubscriptions.status, "active"),
+        )).orderBy(desc(trashSubscriptions.createdAt)),
+        db.select().from(lawnCarePlans).where(and(
+          sql`LOWER(${lawnCarePlans.email}) = ${emailLower}`,
+          eq(lawnCarePlans.isActive, true),
+        )).orderBy(desc(lawnCarePlans.createdAt)),
+      ]);
+
+      const nextDateForDow = (dow: number): string => {
+        const now = new Date();
+        const today = now.getDay();
+        let delta = dow - today;
+        if (delta <= 0) delta += 7;
+        const d = new Date(now);
+        d.setDate(now.getDate() + delta);
+        return d.toISOString().slice(0, 10);
+      };
+
+      const plans = [
+        ...trashSubs.map((s) => ({
+          id: `trash:${s.id}`,
+          serviceKey: "trash_valet",
+          serviceLabel: "Trash Valet",
+          frequency: s.recyclingEnabled ? "Weekly + biweekly recycling" : "Weekly",
+          address: s.address,
+          nextVisitDate: nextDateForDow(s.serviceDayOfWeek),
+          rebookHref: "/trash-valet",
+        })),
+        ...lawnPlans.map((p) => ({
+          id: `lawn:${p.id}`,
+          serviceKey: "lawn_care",
+          serviceLabel: p.serviceCategory
+            ? p.serviceCategory.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())
+            : "Lawn Care",
+          frequency: (p.frequency || "").replace(/_/g, " "),
+          address: p.address,
+          nextVisitDate: p.nextServiceDate || p.startDate || null,
+          rebookHref: "/book-lawn-care",
+        })),
+      ].sort((a, b) => {
+        if (!a.nextVisitDate) return 1;
+        if (!b.nextVisitDate) return -1;
+        return a.nextVisitDate.localeCompare(b.nextVisitDate);
+      });
+
+      res.json(plans);
+    } catch (err) {
+      console.error("Error fetching recurring plans:", err);
+      res.status(500).json({ error: "Failed to fetch recurring plans" });
+    }
+  });
+
   // ── Lawn Care Module ──────────────────────────────────────────────────────────
   app.use("/api/lawn-care", lawnCareRouter);
 
