@@ -16813,11 +16813,96 @@ Thank you for your business!
             } else {
               console.warn(`[BTC Verify] Jewelry item ${payment.referenceId} no longer in pending_balance at write time — skipping reward confirmation (likely auto-released).`);
             }
-          } else {
+          } else if (jItem && jItem.status !== "sold") {
             console.warn(`[BTC Verify] Jewelry item ${payment.referenceId} not in pending_balance for user ${payment.userId} — skipping finalization (item status=${jItem?.status}).`);
           }
         } catch (jErr) {
           console.error("[BTC Verify] Jewelry finalization failed (non-fatal, BTC payment still marked verified):", jErr);
+        }
+
+        // Award JCMOVES rewards for the jewelry purchase, mirroring the Square
+        // /api/jewelry/payment-complete path. Runs outside the finalize branch
+        // so a re-verify attempt can recover from a transient failure (credit
+        // / insert error) on a previously-finalized item. Authorization that
+        // *this* user was the actual buyer is enforced by requiring an
+        // existing `wallet_balance_redemption` reward row for this user+item
+        // (those rows are written at checkout time and confirmed only when
+        // the same user's payment finalizes the item). Idempotent on item id
+        // + rewardType + userId so it cannot double-credit.
+        try {
+          const jItem2 = await storage.getJewelryItem(payment.referenceId!);
+          if (jItem2 && jItem2.status === "sold") {
+            const purchasePrice = parseFloat(jItem2.price || "0");
+            if (purchasePrice > 0) {
+              const buyerProof = await db.select({ id: rewards.id })
+                .from(rewards)
+                .where(and(
+                  eq(rewards.userId, payment.userId!),
+                  eq(rewards.rewardType, "wallet_balance_redemption"),
+                  eq(rewards.referenceId, payment.referenceId!),
+                  eq(rewards.status, "confirmed"),
+                ))
+                .limit(1);
+
+              if (buyerProof.length > 0) {
+                const alreadyRewarded = await db.select({ id: rewards.id })
+                  .from(rewards)
+                  .where(and(
+                    eq(rewards.userId, payment.userId!),
+                    eq(rewards.rewardType, 'jewelry_purchase'),
+                    eq(rewards.referenceId, payment.referenceId!),
+                  ))
+                  .limit(1);
+
+                if (alreadyRewarded.length === 0) {
+                  const rateSetting = await db.select().from(rewardSettings)
+                    .where(eq(rewardSettings.settingKey, 'earn_rate_per_dollar'))
+                    .limit(1);
+                  const earnRate = rateSetting.length > 0 ? parseFloat(rateSetting[0].tokenAmount) : 50;
+                  const tokensEarned = Math.round(purchasePrice * earnRate);
+
+                  if (tokensEarned > 0) {
+                    await storage.creditWalletTokens(payment.userId!, tokensEarned);
+                    await db.insert(rewards).values({
+                      userId: payment.userId!,
+                      rewardType: 'jewelry_purchase',
+                      tokenAmount: tokensEarned.toFixed(8),
+                      cashValue: (purchasePrice * 0.01).toFixed(2),
+                      status: "confirmed",
+                      referenceId: payment.referenceId!,
+                      metadata: {
+                        source: "jewelry_shop",
+                        paymentMethod: "bitcoin",
+                        itemId: payment.referenceId,
+                        itemTitle: jItem2.title,
+                        purchasePrice,
+                        earnRate,
+                        tokensPerDollar: earnRate,
+                        btcPaymentId: payment.id,
+                      },
+                    });
+
+                    try {
+                      await treasuryService.distributeTokens(
+                        tokensEarned,
+                        `Jewelry purchase reward (BTC): ${tokensEarned} JCMOVES for "${jItem2.title}" ($${purchasePrice.toFixed(2)}) — source: jewelry_shop`,
+                        "jewelry_shop",
+                        payment.referenceId!,
+                      );
+                    } catch (treasuryErr) {
+                      console.warn("[BTC Verify] Treasury distribution failed (non-fatal):", treasuryErr);
+                    }
+
+                    console.log(`💎 [BTC Verify] Jewelry purchase reward: ${tokensEarned} JCMOVES to user ${payment.userId} for item "${jItem2.title}" ($${purchasePrice})`);
+                  }
+                }
+              } else {
+                console.warn(`[BTC Verify] No confirmed wallet_balance_redemption for user ${payment.userId} on item ${payment.referenceId} — skipping JCMOVES award (this user was not the finalizing buyer).`);
+              }
+            }
+          }
+        } catch (rewardErr) {
+          console.error("[BTC Verify] Failed to award jewelry purchase JCMOVES (non-fatal):", rewardErr);
         }
       }
 
