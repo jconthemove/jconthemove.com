@@ -77,6 +77,7 @@ function WalletUsdRedeemPanel({ item }: { item: JewelryItem }) {
   const itemPrice = item.price ? parseFloat(item.price) : 0;
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [btcSubmitting, setBtcSubmitting] = useState(false);
 
   // If THIS user already has a partial credit reservation on this item,
   // show a "finish remaining balance" / "cancel & refund" surface.
@@ -88,6 +89,7 @@ function WalletUsdRedeemPanel({ item }: { item: JewelryItem }) {
   if (userHasPending) {
     const credit = parseFloat(item.pendingCreditCents || "0");
     const remaining = Math.max(0, itemPrice - credit);
+    const remainingAfterBtcDiscount = Math.round(remaining * 0.9 * 100) / 100;
 
     const continueToSquare = async () => {
       setSubmitting(true);
@@ -103,6 +105,33 @@ function WalletUsdRedeemPanel({ item }: { item: JewelryItem }) {
         toast({ title: "Couldn't start checkout", description: err?.message || "Try again", variant: "destructive" });
       } finally {
         setSubmitting(false);
+      }
+    };
+
+    const continueToBtc = async () => {
+      setBtcSubmitting(true);
+      try {
+        const res = await apiRequest("POST", "/api/btc/create-payment", {
+          customerName: user?.email || "Customer",
+          customerEmail: user?.email || "",
+          // Server detects pending_balance and overrides this with the
+          // remaining due. We send full price for transparency / fallback.
+          usdAmount: remaining,
+          referenceType: "jewelry",
+          referenceId: item.id,
+          items: [{ id: item.id, name: item.title, price: remaining }],
+          notes: `Remaining balance for ${item.title} (after $${credit.toFixed(2)} JCMOVES USD credit)`,
+        });
+        const data = await res.json();
+        if (data?.payment?.id) {
+          navigate(`/bitcoin-payment?id=${data.payment.id}`);
+        } else {
+          throw new Error(data?.error || "Could not start Bitcoin payment");
+        }
+      } catch (err: any) {
+        toast({ title: "Couldn't start Bitcoin payment", description: err?.message || "Try again", variant: "destructive" });
+      } finally {
+        setBtcSubmitting(false);
       }
     };
 
@@ -144,7 +173,7 @@ function WalletUsdRedeemPanel({ item }: { item: JewelryItem }) {
         </div>
         <Button
           size="sm"
-          disabled={submitting}
+          disabled={submitting || btcSubmitting}
           className="w-full bg-amber-600 hover:bg-amber-700 text-white text-xs"
           onClick={continueToSquare}
         >
@@ -152,6 +181,22 @@ function WalletUsdRedeemPanel({ item }: { item: JewelryItem }) {
             <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Redirecting…</>
           ) : (
             <>Pay ${remaining.toFixed(2)} with card</>
+          )}
+        </Button>
+        <Button
+          size="sm"
+          disabled={btcSubmitting || submitting}
+          className="w-full bg-orange-500 hover:bg-orange-600 text-white text-xs"
+          onClick={continueToBtc}
+        >
+          {btcSubmitting ? (
+            <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Creating BTC payment…</>
+          ) : (
+            <>
+              <Bitcoin className="h-3.5 w-3.5 mr-1.5" />
+              Pay ${remainingAfterBtcDiscount.toFixed(2)} with Bitcoin
+              <span className="ml-1.5 inline-flex items-center bg-white/20 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">Save 10%</span>
+            </>
           )}
         </Button>
         <Button

@@ -16523,7 +16523,7 @@ Thank you for your business!
   app.post("/api/btc/create-payment", async (req: any, res) => {
     try {
       const { customerName, customerEmail, customerPhone, usdAmount, jcmovesAmount, items, referenceType, referenceId, notes } = req.body;
-      const sessionUserId: string | undefined = req.session?.userId;
+      const sessionUserId: string | undefined = req.session?.userId || req.user?.id;
 
       if (!customerName || !customerEmail || !usdAmount || !referenceType) {
         return res.status(400).json({ error: "Missing required fields" });
@@ -16532,6 +16532,42 @@ Thank you for your business!
       const btcAddress = process.env.BTC_WALLET_ADDRESS;
       if (!btcAddress) {
         return res.status(500).json({ error: "Bitcoin payments not configured. Please call (906) 285-9312." });
+      }
+
+      // Branch: jewelry pending_balance reservation. The same flow as Square:
+      // the customer who applied a partial JCMOVES USD credit owes only the
+      // remaining balance. Anyone else is locked out until expiry.
+      let effectiveOriginalUsd: number | null = null;
+      if (referenceType === "jewelry" && referenceId) {
+        const dbItem = await storage.getJewelryItem(String(referenceId));
+        if (dbItem && dbItem.status === "pending_balance") {
+          const expired = dbItem.pendingExpiresAt
+            && new Date(dbItem.pendingExpiresAt).getTime() < Date.now();
+          if (expired) {
+            await releasePendingJewelryReservation(String(referenceId), "expired_at_btc_checkout");
+            // After release, re-check availability before continuing.
+            const refreshed = await storage.getJewelryItem(String(referenceId));
+            if (!refreshed || !refreshed.inStock || refreshed.status !== "active") {
+              return res.status(400).json({ error: "This item is no longer available" });
+            }
+            // fall through with the caller-supplied usdAmount (full price)
+          } else {
+            if (!sessionUserId || sessionUserId !== dbItem.pendingCreditUserId) {
+              return res.status(409).json({
+                error: "This item is being held for another customer who applied shop credit. Please try again later.",
+              });
+            }
+            const fullPrice = parseFloat(dbItem.price || "0");
+            const creditCents = parseFloat(dbItem.pendingCreditCents || "0");
+            const remaining = Math.max(0, fullPrice - creditCents);
+            if (remaining <= 0) {
+              return res.status(400).json({ error: "No remaining balance — your credit already covers this item." });
+            }
+            // Charge only the remaining balance. The 10% BTC discount still
+            // applies to the customer's portion below.
+            effectiveOriginalUsd = remaining;
+          }
+        }
       }
 
       const priceRes = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd");
@@ -16549,7 +16585,7 @@ Thank you for your business!
         return res.status(500).json({ error: "Unable to get BTC price" });
       }
 
-      const originalUsd = parseFloat(usdAmount);
+      const originalUsd = effectiveOriginalUsd !== null ? effectiveOriginalUsd : parseFloat(usdAmount);
       if (isNaN(originalUsd) || originalUsd <= 0) {
         return res.status(400).json({ error: "Invalid amount" });
       }
@@ -16716,6 +16752,73 @@ Thank you for your business!
           },
         });
         console.log(`[BTC Verify] Credited ${tokensToCredit} JCMOVES to user ${payment.userId} for payment ${id}`);
+      }
+
+      // Finalize a held jewelry pending_balance reservation when the BTC
+      // payment is verified. Mirrors the Square /api/jewelry/payment-complete
+      // path: marks the item sold, confirms the wallet redemption row, and
+      // clears pending fields. Idempotent — only acts on rows still held by
+      // the same buyer.
+      if (
+        status === "verified" &&
+        payment.referenceType === "jewelry" &&
+        payment.referenceId &&
+        payment.userId
+      ) {
+        try {
+          const jItem = await storage.getJewelryItem(payment.referenceId);
+          if (
+            jItem &&
+            jItem.status === "pending_balance" &&
+            jItem.pendingCreditUserId === payment.userId
+          ) {
+            const finalized = await db.transaction(async (tx) => {
+              // Conditional update — only transitions if the row is still
+              // held by this same buyer at the moment of the write. This
+              // protects against races with the expiry sweeper / manual
+              // cancel between our read above and the write here.
+              const updatedRows = await tx.update(jewelryItems)
+                .set({
+                  status: "sold",
+                  inStock: false,
+                  soldAt: new Date(),
+                  pendingCreditUserId: null,
+                  pendingCreditCents: null,
+                  pendingExpiresAt: null,
+                  pendingSquareOrderId: null,
+                })
+                .where(and(
+                  eq(jewelryItems.id, payment.referenceId!),
+                  eq(jewelryItems.status, "pending_balance"),
+                  eq(jewelryItems.pendingCreditUserId, payment.userId!),
+                ))
+                .returning({ id: jewelryItems.id });
+              if (updatedRows.length === 0) {
+                // Lost the race — do NOT confirm the reward, since the
+                // credit may have already been refunded by the release path.
+                return false;
+              }
+              await tx.update(rewards)
+                .set({ status: "confirmed" })
+                .where(and(
+                  eq(rewards.userId, payment.userId!),
+                  eq(rewards.rewardType, "wallet_balance_redemption"),
+                  eq(rewards.referenceId, payment.referenceId!),
+                  eq(rewards.status, "pending"),
+                ));
+              return true;
+            });
+            if (finalized) {
+              console.log(`💎 [BTC Verify] Finalized pending_balance jewelry item ${payment.referenceId} for user ${payment.userId} via BTC payment ${id}`);
+            } else {
+              console.warn(`[BTC Verify] Jewelry item ${payment.referenceId} no longer in pending_balance at write time — skipping reward confirmation (likely auto-released).`);
+            }
+          } else {
+            console.warn(`[BTC Verify] Jewelry item ${payment.referenceId} not in pending_balance for user ${payment.userId} — skipping finalization (item status=${jItem?.status}).`);
+          }
+        } catch (jErr) {
+          console.error("[BTC Verify] Jewelry finalization failed (non-fatal, BTC payment still marked verified):", jErr);
+        }
       }
 
       // Send confirmation email + SMS to customer when payment is verified
