@@ -33,21 +33,26 @@ const truncTxid = (txid: string) => `${txid.slice(0, 8)}…${txid.slice(-6)}`;
 
 export function BtcAutoConfirmStatus({
   paymentId,
+  payment: payloadOverride,
   variant = "dark",
   className = "",
 }: {
-  paymentId: string;
+  paymentId?: string;
+  // When provided, the component renders from this snapshot and does not
+  // issue its own poll. Used by surfaces (e.g. customer profile) that
+  // already poll a list endpoint and want to avoid duplicate fetches.
+  payment?: BtcPaymentStatusPayload | null;
   variant?: "dark" | "light";
   className?: string;
 }) {
-  const { data: payment } = useQuery<BtcPaymentStatusPayload>({
+  const { data: fetched } = useQuery<BtcPaymentStatusPayload>({
     queryKey: ["/api/btc/payment", paymentId],
     queryFn: async () => {
       const res = await fetch(`/api/btc/payment/${paymentId}`);
       if (!res.ok) throw new Error("Payment not found");
       return res.json();
     },
-    enabled: !!paymentId,
+    enabled: !!paymentId && !payloadOverride,
     // Poll quickly while pending so customers see the auto-confirm transition
     // without refreshing. Slow down once we are in a terminal state.
     refetchInterval: (q) => {
@@ -57,6 +62,7 @@ export function BtcAutoConfirmStatus({
     },
   });
 
+  const payment = payloadOverride ?? fetched;
   if (!payment) return null;
 
   const chain = payment.blockchainStatus;

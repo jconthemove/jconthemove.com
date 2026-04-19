@@ -4,10 +4,11 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
   User, Coins, Copy, LogOut, ChevronRight, Shield, Gem,
-  FileText, History, RefreshCw, DollarSign, Gift, CheckCircle2
+  FileText, History, RefreshCw, DollarSign, Gift, CheckCircle2, Bitcoin
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, clearTokens, queryClient } from "@/lib/queryClient";
+import { BtcAutoConfirmStatus, type BlockchainStatus } from "@/components/btc-auto-confirm-status";
 
 type ProfileTab = "profile" | "history";
 
@@ -102,6 +103,25 @@ export default function CustomerProfilePage() {
     id: string; code: string; valueUsd: string; isRedeemed?: boolean;
     redeemedAt?: string | null; createdAt: string; paymentMethod: string;
   }>>({ queryKey: ["/api/gift-cards/mine"] });
+  const { data: btcPayments = [] } = useQuery<Array<{
+    id: string;
+    status: string;
+    usdAmount: string;
+    btcAmount: string;
+    referenceType: string;
+    referenceId: string | null;
+    autoVerified: boolean;
+    autoVerifiedTxid: string | null;
+    verifiedAt: string | null;
+    createdAt: string;
+    expiresAt: string | null;
+    blockchainStatus: BlockchainStatus | null;
+  }>>({
+    queryKey: ["/api/btc/my-payments"],
+    // Refresh every 15s so a pending row flips to auto-confirmed without a
+    // manual reload while the customer is on this page.
+    refetchInterval: 15_000,
+  });
   const { data: referralData } = useQuery<{ referralCode: string }>({ queryKey: ["/api/referrals/my-code"] });
   const { data: referralStats } = useQuery<{ referralCount: number; totalEarned: number }>({ queryKey: ["/api/referrals/stats"] });
 
@@ -307,6 +327,69 @@ export default function CustomerProfilePage() {
                 <p className="text-[10px] text-zinc-400 mt-2 text-center">
                   Pending cards are credited to your USD balance once your trash invoice is paid.
                 </p>
+              </div>
+            )}
+
+            {/* Bitcoin payments — pending + recently auto-confirmed.
+                Reuses the live status component from the dedicated payment
+                page so customers see chain detection / auto-confirm timing
+                without leaving their profile. */}
+            {btcPayments.length > 0 && (
+              <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 p-4 mb-4 shadow-sm">
+                <div className="flex items-center gap-2 mb-3">
+                  <Bitcoin className="h-4 w-4 text-amber-500" />
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 font-semibold uppercase tracking-wider">
+                    Bitcoin Payments ({btcPayments.length})
+                  </p>
+                </div>
+                <div className="space-y-3">
+                  {btcPayments.slice(0, 5).map((p) => {
+                    const isTerminal = p.status === "expired" || p.status === "cancelled";
+                    const refLabel = p.referenceType === "jewelry" ? "Ashley's Shop"
+                      : p.referenceType === "subscription" ? "Subscription"
+                      : p.referenceType === "shop" ? "Shop"
+                      : p.referenceType;
+                    return (
+                      <div
+                        key={p.id}
+                        className="rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50/60 dark:bg-zinc-900/60 p-3"
+                        data-testid={`btc-payment-row-${p.id}`}
+                      >
+                        <div className="flex items-baseline justify-between gap-3 mb-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-zinc-800 dark:text-zinc-100 truncate">
+                              ${parseFloat(p.usdAmount).toFixed(2)} · {refLabel}
+                            </p>
+                            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                              {parseFloat(p.btcAmount).toFixed(8)} BTC · {timeAgo(p.createdAt)}
+                            </p>
+                          </div>
+                          {isTerminal && (
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">
+                              {p.status}
+                            </span>
+                          )}
+                        </div>
+                        {!isTerminal && (
+                          <BtcAutoConfirmStatus payment={p} variant="light" />
+                        )}
+                        {p.status === "pending" && p.referenceType === "jewelry" && (
+                          <button
+                            onClick={() => setLocation(`/bitcoin-payment?id=${p.id}`)}
+                            className="mt-2 w-full text-xs font-semibold text-amber-700 dark:text-amber-300 bg-white dark:bg-zinc-800 border border-amber-200 dark:border-amber-800/40 rounded-lg py-2 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
+                          >
+                            Open payment page →
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {btcPayments.length > 5 && (
+                  <p className="text-[10px] text-zinc-400 mt-2 text-center">
+                    Showing 5 most recent of {btcPayments.length}.
+                  </p>
+                )}
               </div>
             )}
 

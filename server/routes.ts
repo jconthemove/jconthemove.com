@@ -16709,7 +16709,7 @@ Thank you for your business!
     }
   });
 
-  app.get("/api/btc/payment/:id", async (req, res) => {
+  app.get("/api/btc/payment/:id", async (req: any, res) => {
     try {
       const { id } = req.params;
       const [payment] = await db.select().from(bitcoinPayments).where(eq(bitcoinPayments.id, id));
@@ -16724,7 +16724,21 @@ Thank you for your business!
       } catch (_e) {
         blockchainStatus = null;
       }
-      res.json({ ...payment, blockchainStatus });
+      // Authz: the dedicated bitcoin-payment.tsx page polls this without
+      // requiring auth (paymentId is in the URL after checkout).  To avoid
+      // leaking PII to anyone holding the URL, redact customer contact
+      // fields unless the requester is the payment owner.
+      const requesterId = req.session?.userId || req.user?.id || null;
+      const isOwner = requesterId && payment.userId && requesterId === payment.userId;
+      const safe = isOwner ? payment : {
+        ...payment,
+        customerName: "",
+        customerEmail: "",
+        customerPhone: null,
+        notes: null,
+        items: null,
+      };
+      res.json({ ...safe, blockchainStatus });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -16756,6 +16770,36 @@ Thank you for your business!
         blockchainStatus = null;
       }
       res.json({ payment: { ...payment, blockchainStatus } });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Task #160 — Customer-scoped list of recent BTC payments. Powers the
+  // "Bitcoin payments" section in the customer profile so customers can
+  // find their pending or recently auto-confirmed BTC payments without
+  // returning to the dedicated payment page.
+  app.get("/api/btc/my-payments", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session?.userId || req.user?.id;
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const rows = await db.select().from(bitcoinPayments)
+        .where(eq(bitcoinPayments.userId, userId))
+        .orderBy(sql`created_at DESC`)
+        .limit(20);
+      // Surface live blockchain status for any still-pending row so the
+      // existing BtcAutoConfirmStatus component can render the same
+      // "detected / auto-confirmed" UI inline. Failures are non-fatal.
+      const { getBlockchainStatus } = await import("./services/bitcoinPaymentVerifier");
+      const enriched = await Promise.all(rows.map(async (p) => {
+        if (p.status !== "pending" && !(p.status === "verified" && p.autoVerified)) {
+          return { ...p, blockchainStatus: null as BlockchainStatus | null };
+        }
+        let blockchainStatus: BlockchainStatus | null = null;
+        try { blockchainStatus = await getBlockchainStatus(p); } catch { /* non-fatal */ }
+        return { ...p, blockchainStatus };
+      }));
+      res.json(enriched);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
