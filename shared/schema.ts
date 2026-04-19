@@ -2262,6 +2262,24 @@ export const serviceRebookReminders = pgTable("service_rebook_reminders", {
 ]);
 export type ServiceRebookReminder = typeof serviceRebookReminders.$inferSelect;
 
+// ── Service Re-book Opt-outs (snow / junk / window cleaning) ─────────────────
+// Mirrors lawnCareRebookOptouts but for the generic re-book reminder engine.
+// Either email or phone (or both) is recorded — whichever the unsubscribe
+// link carried — and the eligibility filter checks both keys. Opting out is
+// global across snow/junk/window so customers don't have to click three
+// separate links to silence all re-book reminders.
+export const serviceRebookOptouts = pgTable("service_rebook_optouts", {
+  id: serial("id").primaryKey(),
+  email: text("email"),
+  phone: text("phone"),
+  source: text("source").notNull().default("email_link"), // 'email_link' | 'admin' | 'reply'
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  uniqueIndex("uq_svc_rebook_optout_email").on(table.email).where(sql`${table.email} IS NOT NULL`),
+  uniqueIndex("uq_svc_rebook_optout_phone").on(table.phone).where(sql`${table.phone} IS NOT NULL`),
+]);
+export type ServiceRebookOptout = typeof serviceRebookOptouts.$inferSelect;
+
 // ── Lawn Care Re-book Opt-outs ────────────────────────────────────────────────
 // Recipients who clicked the unsubscribe link in a re-book reminder email.
 // The eligibility query joins/filters against this table so opted-out

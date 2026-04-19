@@ -10,10 +10,12 @@
 // service-specific dedupe table; sharing the same code path would have
 // required a destabilizing refactor for marginal benefit.
 
+import crypto from "crypto";
 import { db, pool } from "../db";
 import {
   leads,
   serviceRebookReminders,
+  serviceRebookOptouts,
   type Lead,
 } from "@shared/schema";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
@@ -119,6 +121,67 @@ const FROM_EMAIL = process.env.FROM_EMAIL || "michigankid906@gmail.com";
 const COMPANY_PHONE = process.env.COMPANY_PHONE || "(906) 285-9312";
 const APP_URL = process.env.APP_URL || "https://jconthemove.com";
 
+// ── One-click unsubscribe (Task #109) ────────────────────────────────────────
+// HMAC-signed token over the (normalized email + phone) pair so the public
+// unsubscribe endpoint can verify the click came from a legitimate email
+// without keeping per-link state. Mirrors the lawn-care helper exactly.
+const normEmail = (e: string | null | undefined) => (e || "").trim().toLowerCase();
+const normPhone = (p: string | null | undefined) => (p || "").replace(/\D/g, "");
+function unsubscribeSecret(): string {
+  return process.env.REBOOK_UNSUBSCRIBE_SECRET
+    || process.env.SESSION_SECRET
+    || "jcmoves-rebook-unsub-fallback";
+}
+export function buildUnsubscribeToken(email: string | null | undefined, phone: string | null | undefined): string {
+  const payload = `${normEmail(email)}|${normPhone(phone)}`;
+  return crypto.createHmac("sha256", unsubscribeSecret()).update(payload).digest("base64url");
+}
+export function verifyUnsubscribeToken(
+  token: string,
+  email: string | null | undefined,
+  phone: string | null | undefined,
+): boolean {
+  const expected = buildUnsubscribeToken(email, phone);
+  const a = Buffer.from(expected);
+  const b = Buffer.from(String(token || ""));
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+export function buildUnsubscribeUrl(email: string | null | undefined, phone: string | null | undefined): string {
+  const token = buildUnsubscribeToken(email, phone);
+  const params = new URLSearchParams();
+  if (email) params.set("email", normEmail(email));
+  if (phone) params.set("phone", normPhone(phone));
+  params.set("token", token);
+  return `${APP_URL}/api/service-rebook/unsubscribe?${params.toString()}`;
+}
+export async function isOptedOut(email: string | null | undefined, phone: string | null | undefined): Promise<boolean> {
+  const e = normEmail(email);
+  const p = normPhone(phone);
+  if (!e && !p) return false;
+  const rows = await db
+    .select({ id: serviceRebookOptouts.id })
+    .from(serviceRebookOptouts)
+    .where(sql`(${serviceRebookOptouts.email} IS NOT NULL AND lower(${serviceRebookOptouts.email}) = ${e})
+      OR (${serviceRebookOptouts.phone} IS NOT NULL AND regexp_replace(${serviceRebookOptouts.phone}, '\\D', '', 'g') = ${p})`)
+    .limit(1);
+  return rows.length > 0;
+}
+export async function recordOptout(
+  email: string | null | undefined,
+  phone: string | null | undefined,
+  source: string = "email_link",
+): Promise<void> {
+  const e = normEmail(email);
+  const p = normPhone(phone);
+  if (!e && !p) return;
+  await db.execute(sql`
+    INSERT INTO service_rebook_optouts (email, phone, source)
+    VALUES (${e || null}, ${p || null}, ${source})
+    ON CONFLICT DO NOTHING
+  `);
+}
+
 function escHtml(v: string | null | undefined): string {
   return String(v ?? "")
     .replace(/&/g, "&amp;")
@@ -191,6 +254,20 @@ export async function findEligibleRebooks(
     recentRows.map((r) => (r.phone || "").replace(/\D/g, "")).filter(Boolean),
   );
 
+  // Opt-outs (Task #109): also exclude any customer who clicked the
+  // unsubscribe link in a past reminder. Both email and phone keys are
+  // checked because a customer might unsubscribe via a link that only
+  // carried one of the two values.
+  const optoutRows = await db
+    .select({ email: serviceRebookOptouts.email, phone: serviceRebookOptouts.phone })
+    .from(serviceRebookOptouts);
+  const optedOutEmails = new Set(
+    optoutRows.map((r) => (r.email || "").trim().toLowerCase()).filter(Boolean),
+  );
+  const optedOutPhones = new Set(
+    optoutRows.map((r) => (r.phone || "").replace(/\D/g, "")).filter(Boolean),
+  );
+
   // Pull all completed leads for this service. Order so the latest per
   // phone wins (mirrors lawn-care "latest quote per phone" rule).
   const allCompleted = await db
@@ -214,6 +291,9 @@ export async function findEligibleRebooks(
   const out: EligibleLead[] = [];
   for (const [phoneKey, l] of Array.from(latestPerPhone.entries())) {
     if (blockedPhones.has(phoneKey)) continue;
+    if (optedOutPhones.has(phoneKey)) continue;
+    const emailKey = (l.email || "").trim().toLowerCase();
+    if (emailKey && optedOutEmails.has(emailKey)) continue;
     // Use the most reliable completion timestamp we can find. Falls back to
     // createdAt so legacy completed leads without a token-disburse stamp
     // can still be picked up.
@@ -233,10 +313,12 @@ export function buildReminderEmail(
   opts: {
     customerName: string;
     phone: string;
+    email?: string | null;
     totalQuoted: string | null;
     lastServiceAt?: Date | string | null;
   },
 ): { html: string; text: string; subject: string } {
+  const unsubscribeUrl = buildUnsubscribeUrl(opts.email ?? null, opts.phone);
   const firstNameRaw = (opts.customerName || "there").split(/\s+/)[0];
   const firstName = escHtml(firstNameRaw);
   const phoneDigits = (opts.phone || "").replace(/\D/g, "");
@@ -316,7 +398,8 @@ export function buildReminderEmail(
         <tr><td style="padding:24px 28px 24px;text-align:center;color:#475569;font-size:11px;line-height:1.6;">
           JC ON THE MOVE LLC · Northwoods &amp; Upper Peninsula of Michigan<br>
           You received this because you booked a ${escHtml(config.label.toLowerCase())} job with us.<br>
-          Don't want another reminder? Just ignore this email and we won't nudge you again for at least ${REBOOK_RESEND_WINDOW_DAYS} days.
+          Don't want another reminder? <a href="${unsubscribeUrl}" style="color:#94a3b8;text-decoration:underline;">Unsubscribe in one click</a>
+          — or just ignore this email and we won't nudge you again for at least ${REBOOK_RESEND_WINDOW_DAYS} days.
         </td></tr>
       </table>
     </td></tr>
@@ -330,6 +413,8 @@ It's been about a month since your last ${config.label.toLowerCase()} with us. O
 Re-book here: ${deepLink}
 
 ${lastTotal ? `Last visit total: ${lastTotal}\n` : ""}Questions? Call ${COMPANY_PHONE} or reply to this email.
+
+Don't want these reminders? Unsubscribe: ${unsubscribeUrl}
 
 — JC ON THE MOVE LLC, Northwoods & UP of Michigan`;
 
@@ -353,6 +438,7 @@ export async function sendReminderForLead(
     const { html, text, subject } = buildReminderEmail(config, {
       customerName,
       phone: lead.phone,
+      email: lead.email,
       totalQuoted: lead.totalPrice ?? lead.basePrice ?? null,
       lastServiceAt: lead.lastServiceAt,
     });

@@ -41,6 +41,7 @@ import { getDepositInfo, extractZip } from "@shared/depositRules";
 import { MIN_REDEMPTION_TOKENS, REDEMPTION_INCREMENT, roundToIncrement, validateRedemption, tokensToDollars } from "@shared/tokenRedemptionRules";
 import lawnCareRouter from "./routes/lawnCare";
 import serviceRebookRouter from "./routes/serviceRebookReminders";
+import serviceRebookPublicRouter from "./routes/serviceRebookPublic";
 
 const STAKING_TREASURY_USER_ID = "staking-treasury-system";
 
@@ -769,6 +770,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       -- Task #108: per-send re-book email attribution
       ALTER TABLE leads ADD COLUMN IF NOT EXISTS rebook_source TEXT;
       ALTER TABLE leads ADD COLUMN IF NOT EXISTS rebook_sent_at TIMESTAMP;
+      -- Task #109: one-click unsubscribe from re-book reminder emails
+      CREATE TABLE IF NOT EXISTS service_rebook_optouts (
+        id SERIAL PRIMARY KEY,
+        email TEXT,
+        phone TEXT,
+        source TEXT NOT NULL DEFAULT 'email_link',
+        created_at TIMESTAMP NOT NULL DEFAULT now()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_svc_rebook_optout_email
+        ON service_rebook_optouts (email) WHERE email IS NOT NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_svc_rebook_optout_phone
+        ON service_rebook_optouts (phone) WHERE phone IS NOT NULL;
     `);
     console.log('✅ Leads deposit_required/deposit_paid/is_quote_only columns ready');
   } catch (migErr) {
@@ -21049,6 +21062,7 @@ Thank you for your business!
   // Generic re-book reminder admin endpoints (snow/junk/window-cleaning).
   // Lawn care has its own routes above for historical reasons.
   app.use("/api/admin/service-rebook", serviceRebookRouter);
+  app.use("/api/service-rebook", serviceRebookPublicRouter);
 
   const httpServer = createServer(app);
   return httpServer;
