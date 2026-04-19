@@ -173,6 +173,170 @@ router.post("/bookings/quote", async (req: Request, res: Response) => {
   }
 });
 
+// Task #146 — When a multi-service booking includes a `trash_valet` line
+// item, auto-provision the trash subscription + first job from the captured
+// details so the admin pipeline doesn't have to phone the customer for
+// cans/bag-count/service-day/plan-type. Best-effort: failures are logged
+// but do NOT roll back the parent booking — the admin can still pick it up
+// from the booking detail view.
+async function autoProvisionTrashSubscriptionFromBooking(args: {
+  bookingId: string;
+  customerName: string;
+  customerPhone: string;
+  customerEmail: string | null;
+  serviceAddress: string | null;
+  trashItem: ResolvedItems["persistInputs"][number];
+}): Promise<void> {
+  try {
+    const { trashItem, customerName, customerPhone, customerEmail, serviceAddress, bookingId } = args;
+    if (!serviceAddress) {
+      console.warn(`[bookings] trash_valet auto-provision skipped (booking=${bookingId}): missing service address`);
+      return;
+    }
+    const details = (trashItem.details || {}) as Record<string, unknown>;
+    // Server-side bounds: clamp to the same maxima the UI advertises so the
+    // helper is deterministic regardless of what the client sends.
+    const cans = Math.max(1, Math.min(10, Number(details.cans) || 1));
+    const bagCount = Math.max(0, Math.min(50, Number(details.bagCount) || 0));
+    const recyclingEnabled = !!details.recyclingEnabled;
+    const recyclingAnchorDate = (details.recyclingAnchorDate as string | undefined) || null;
+    const serviceDayOfWeek = Math.max(1, Math.min(6, Number(details.serviceDayOfWeek) || 1));
+    const recyclingDayOfWeek = details.recyclingDayOfWeek != null
+      ? Math.max(1, Math.min(6, Number(details.recyclingDayOfWeek)))
+      : null;
+    const planType = details.planType === "yearly" ? "yearly" : "monthly";
+    const serviceNotes = typeof details.notes === "string" ? details.notes.trim() || null : null;
+
+    const { trashSubscriptions, trashJobs } = await import("@shared/schema");
+    const { calculateTrashValetQuote, isRecyclingWeek: checkRecycling } = await import("../../shared/trashValetPricing");
+
+    // Skip if an active subscription already exists for this address
+    // (matches the duplicate guard in /api/trash/subscribe).
+    const normalizedAddr = serviceAddress.trim().toLowerCase();
+    const existing = await db
+      .select({ id: trashSubscriptions.id })
+      .from(trashSubscriptions)
+      .where(and(
+        sql`LOWER(TRIM(${trashSubscriptions.address})) = ${normalizedAddr}`,
+        sql`${trashSubscriptions.status} = 'active'`,
+      ));
+    if (existing.length > 0) {
+      console.info(`[bookings] trash_valet auto-provision skipped (booking=${bookingId}): active sub already exists for ${normalizedAddr}`);
+      return;
+    }
+
+    // Geocode the service address for travel-surcharge parity with the
+    // canonical /api/trash/subscribe path. Failures are non-fatal — quote
+    // falls back to local-area pricing the same way that route does.
+    let resolvedLat: number | null = null;
+    let resolvedLng: number | null = null;
+    try {
+      const geoUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(serviceAddress)}&format=json&limit=1&countrycodes=us`;
+      const geoResp = await fetch(geoUrl, { headers: { "User-Agent": "JCOnTheMove/1.0 contact@jcontmove.com" } });
+      if (geoResp.ok) {
+        const geoData = await geoResp.json() as Array<{ lat: string; lon: string }>;
+        if (geoData.length > 0) {
+          resolvedLat = parseFloat(geoData[0].lat);
+          resolvedLng = parseFloat(geoData[0].lon);
+        }
+      }
+    } catch { /* geocode failure is non-fatal — surcharge defaults to 0 */ }
+
+    const quote = calculateTrashValetQuote({
+      cans,
+      bagCount,
+      recyclingEnabled,
+      recyclingAnchorDate: recyclingAnchorDate || null,
+      lat: resolvedLat,
+      lng: resolvedLng,
+      planType,
+    });
+
+    const today = new Date().toISOString().split("T")[0];
+
+    // Compute first-job week before the transaction so both inserts share
+    // a consistent serviceWeekOf.
+    const serviceDate = new Date();
+    let dayDiff = serviceDayOfWeek - serviceDate.getDay();
+    if (dayDiff <= 0) dayDiff += 7;
+    serviceDate.setDate(serviceDate.getDate() + dayDiff);
+    const weekSunday = new Date(serviceDate);
+    weekSunday.setDate(serviceDate.getDate() - serviceDate.getDay());
+    const weekOfStr = weekSunday.toISOString().split("T")[0];
+
+    const recyclingThisWeek = recyclingEnabled && recyclingAnchorDate
+      ? checkRecycling(recyclingAnchorDate, serviceDate)
+      : false;
+    const weekQuote = calculateTrashValetQuote({
+      cans,
+      bagCount,
+      recyclingEnabled,
+      recyclingAnchorDate: recyclingAnchorDate || null,
+      lat: resolvedLat,
+      lng: resolvedLng,
+      planType,
+      targetWeekOf: weekOfStr,
+    });
+
+    // Subscription + first job are created in a single transaction so we
+    // never end up with an active subscription that has no scheduled job
+    // (or vice versa).
+    const subId = await db.transaction(async (tx) => {
+      const [sub] = await tx.insert(trashSubscriptions).values({
+        customerName: customerName.trim(),
+        phone: customerPhone.trim(),
+        email: (customerEmail || "").trim(),
+        address: serviceAddress.trim(),
+        city: "",
+        state: "MI",
+        zip: "",
+        lat: resolvedLat != null ? String(resolvedLat) : null,
+        lng: resolvedLng != null ? String(resolvedLng) : null,
+        distanceMiles: quote.distanceMiles != null ? String(quote.distanceMiles) : null,
+        travelSurchargeMonthly: String(quote.travelSurchargeMonthly),
+        cans,
+        bagCount,
+        recyclingEnabled,
+        recyclingAnchorDate: recyclingAnchorDate || null,
+        serviceDayOfWeek,
+        recyclingDayOfWeek,
+        serviceNotes,
+        planType,
+        weeklyBasePrice: String(quote.weeklyBasePrice),
+        projectedMonthlyPrice: String(quote.projectedMonthlyPrice),
+        monthlyMinimumApplied: quote.monthlyMinimumApplied,
+        finalMonthlyPrice: String(quote.finalMonthlyPrice),
+        billingStatus: "active",
+        status: "active",
+        nextBillingDate: today,
+      }).returning();
+
+      await tx.insert(trashJobs).values({
+        subscriptionId: sub.id,
+        serviceWeekOf: weekOfStr,
+        serviceType: "trash_valet",
+        cans,
+        bagCount,
+        isRecyclingWeek: weekQuote.isRecyclingWeek || recyclingThisWeek,
+        weeklyBasePrice: String(weekQuote.weeklyBasePrice),
+        recyclingCharge: String(weekQuote.recyclingCharge),
+        travelChargePortion: String(weekQuote.travelChargePortion),
+        jobValue: String(weekQuote.jobValue),
+        status: "scheduled",
+      });
+
+      return sub.id;
+    });
+
+    console.info(`[bookings] trash_valet auto-provisioned subscription=${subId} from booking=${bookingId}`);
+  } catch (err) {
+    // Never let trash auto-provisioning break the booking response — the
+    // admin can still create the subscription manually from the booking
+    // detail view.
+    console.error("[bookings] trash_valet auto-provision failed:", err);
+  }
+}
+
 // ── POST /api/bookings ─────────────────────────────────────────────────────
 router.post("/bookings", async (req: Request, res: Response) => {
   try {
@@ -239,6 +403,20 @@ router.post("/bookings", async (req: Request, res: Response) => {
     // created bookings start in `status: "quote"`; rewards must only be
     // issued once the customer (or an admin) confirms the booking via
     // POST /api/admin/bookings/:id/confirm.
+
+    // Task #146 — auto-provision a Trash Valet subscription when bundled.
+    const trashItem = persistInputs.find((p) => p.serviceCode === "trash_valet");
+    if (trashItem) {
+      await autoProvisionTrashSubscriptionFromBooking({
+        bookingId: booking.id,
+        customerName: body.customerName,
+        customerPhone: body.customerPhone,
+        customerEmail: body.customerEmail || null,
+        serviceAddress: body.serviceAddress || null,
+        trashItem,
+      });
+    }
+
     return res.status(201).json({ success: true, booking, quote });
   } catch (err) {
     if (err instanceof ZodError) {

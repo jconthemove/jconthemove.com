@@ -84,6 +84,15 @@ export interface SelectedItem {
     // Task #144 — Trash Valet add-on flag captured from the bundled-cart UI
     // so the admin can see the customer wants the recycling can rolled too.
     recyclingEnabled?: boolean;
+    // Task #146 — Trash Valet subscription details captured from the bundled
+    // cart so the admin pipeline can auto-provision the subscription without
+    // a follow-up phone call.
+    cans?: number;
+    bagCount?: number;
+    serviceDayOfWeek?: number;
+    recyclingDayOfWeek?: number;
+    recyclingAnchorDate?: string;
+    planType?: "monthly" | "yearly";
   };
 }
 
@@ -845,26 +854,174 @@ export function InlineItemConfigure({
         </>
       ))}
 
-      {/* Task #144 — Trash Valet: always ask about the recycling can so we
-          never quietly skip recycling pickup on a bundled trash booking. */}
+      {/* Task #144 + #146 — Trash Valet: capture cans, bags, service day,
+          plan type and the recycling upsell so the admin pipeline can
+          auto-provision the subscription without a follow-up phone call. */}
       {item.serviceCode === "trash_valet" && (
-        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-2.5">
-          <div className="flex items-center gap-2">
-            <input
-              id={`recycling-${item.serviceCode}`}
-              type="checkbox"
-              checked={!!item.details.recyclingEnabled}
-              onChange={(e) => onChange({ ...item, details: { ...item.details, recyclingEnabled: e.target.checked } })}
-              className="h-4 w-4"
-              data-testid={`inline-recycling-${item.serviceCode}`}
-            />
-            <Label htmlFor={`recycling-${item.serviceCode}`} className="text-xs cursor-pointer flex items-center gap-1.5">
-              ♻️ Add bi-weekly recycling-can pickup
-            </Label>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="text-xs">Number of cans</Label>
+              <Input
+                type="number"
+                min={1}
+                max={10}
+                value={item.details.cans ?? 1}
+                onChange={(e) => onChange({
+                  ...item,
+                  details: { ...item.details, cans: Math.max(1, Number(e.target.value) || 1) },
+                })}
+                data-testid={`inline-cans-${item.serviceCode}`}
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Extra bags</Label>
+              <Input
+                type="number"
+                min={0}
+                max={50}
+                value={item.details.bagCount ?? 0}
+                onChange={(e) => onChange({
+                  ...item,
+                  details: { ...item.details, bagCount: Math.max(0, Number(e.target.value) || 0) },
+                })}
+                data-testid={`inline-bags-${item.serviceCode}`}
+              />
+            </div>
           </div>
-          <p className="text-[10px] text-muted-foreground mt-1 ml-6">
-            We'll roll your recycling can to the curb every other week alongside your trash service.
-          </p>
+
+          <div>
+            <Label className="text-xs">Trash pickup day</Label>
+            <div className="flex flex-wrap gap-1.5 mt-1" data-testid={`inline-day-${item.serviceCode}`}>
+              {[
+                { value: 1, label: "Mon" },
+                { value: 2, label: "Tue" },
+                { value: 3, label: "Wed" },
+                { value: 4, label: "Thu" },
+                { value: 5, label: "Fri" },
+                { value: 6, label: "Sat" },
+              ].map(opt => {
+                const active = (item.details.serviceDayOfWeek ?? 1) === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => onChange({ ...item, details: { ...item.details, serviceDayOfWeek: opt.value } })}
+                    className={cn(
+                      "text-[11px] px-2.5 py-1 rounded-full border transition-all",
+                      active
+                        ? "border-emerald-400 bg-emerald-500/20 text-emerald-300"
+                        : "border-border bg-card hover:border-foreground/30",
+                    )}
+                    data-testid={`inline-day-${item.serviceCode}-${opt.value}`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-xs">Billing plan</Label>
+            <div className="flex flex-wrap gap-1.5 mt-1" data-testid={`inline-plan-${item.serviceCode}`}>
+              {[
+                { value: "monthly", label: "Monthly" },
+                { value: "yearly", label: "Yearly (11 months charged · 12 served)" },
+              ].map(opt => {
+                const active = (item.details.planType ?? "monthly") === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => onChange({
+                      ...item,
+                      details: { ...item.details, planType: opt.value as "monthly" | "yearly" },
+                    })}
+                    className={cn(
+                      "text-[11px] px-2.5 py-1 rounded-full border transition-all",
+                      active
+                        ? "border-emerald-400 bg-emerald-500/20 text-emerald-300"
+                        : "border-border bg-card hover:border-foreground/30",
+                    )}
+                    data-testid={`inline-plan-${item.serviceCode}-${opt.value}`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-2.5">
+            <div className="flex items-center gap-2">
+              <input
+                id={`recycling-${item.serviceCode}`}
+                type="checkbox"
+                checked={!!item.details.recyclingEnabled}
+                onChange={(e) => onChange({ ...item, details: { ...item.details, recyclingEnabled: e.target.checked } })}
+                className="h-4 w-4"
+                data-testid={`inline-recycling-${item.serviceCode}`}
+              />
+              <Label htmlFor={`recycling-${item.serviceCode}`} className="text-xs cursor-pointer flex items-center gap-1.5">
+                ♻️ Add bi-weekly recycling-can pickup
+              </Label>
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1 ml-6">
+              We'll roll your recycling can to the curb every other week alongside your trash service.
+            </p>
+
+            {item.details.recyclingEnabled && (
+              <div className="mt-2.5 ml-6 space-y-2">
+                <div>
+                  <Label className="text-xs">Recycling pickup day</Label>
+                  <div className="flex flex-wrap gap-1.5 mt-1" data-testid={`inline-recycling-day-${item.serviceCode}`}>
+                    {[
+                      { value: 1, label: "Mon" },
+                      { value: 2, label: "Tue" },
+                      { value: 3, label: "Wed" },
+                      { value: 4, label: "Thu" },
+                      { value: 5, label: "Fri" },
+                      { value: 6, label: "Sat" },
+                    ].map(opt => {
+                      const active = (item.details.recyclingDayOfWeek ?? item.details.serviceDayOfWeek ?? 1) === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => onChange({
+                            ...item,
+                            details: { ...item.details, recyclingDayOfWeek: opt.value },
+                          })}
+                          className={cn(
+                            "text-[11px] px-2.5 py-1 rounded-full border transition-all",
+                            active
+                              ? "border-emerald-400 bg-emerald-500/20 text-emerald-300"
+                              : "border-border bg-card hover:border-foreground/30",
+                          )}
+                          data-testid={`inline-recycling-day-${item.serviceCode}-${opt.value}`}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-xs">First recycling week starts</Label>
+                  <DatePicker
+                    value={item.details.recyclingAnchorDate}
+                    onChange={(v) => onChange({
+                      ...item,
+                      details: { ...item.details, recyclingAnchorDate: v || undefined },
+                    })}
+                    placeholder="Pick the anchor date"
+                    testId={`inline-recycling-anchor-${item.serviceCode}`}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

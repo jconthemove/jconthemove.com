@@ -51,6 +51,16 @@ function makeItem(svc: CatalogService): SelectedItem {
   // hours package picker. Initialise them as a quote (no flat unit price)
   // until the user picks a specific package in the configure step.
   const isPicker = svc.code === "moving" || svc.code === "junk_removal";
+  // Task #146 — pre-populate sensible Trash Valet defaults so the customer
+  // can submit without touching every field, but the admin still gets a
+  // complete subscription payload.
+  if (svc.code === "trash_valet") {
+    details.cans = 1;
+    details.bagCount = 0;
+    details.serviceDayOfWeek = 1;
+    details.planType = "monthly";
+    details.recyclingEnabled = false;
+  }
   return {
     serviceCode: svc.code,
     label: svc.name,
@@ -94,6 +104,17 @@ function itemNeedsAttention(item: SelectedItem): string | null {
     if (!item.details.jobSize)   return "Pick a job size";
     if (!item.details.packageId) return "Pick a crew package";
     if (!item.details.requestedDate) return "Date required";
+    return null;
+  }
+  // Task #146 — Trash Valet runs as a recurring subscription, not a single
+  // dated job. Validate the subscription fields the admin pipeline needs to
+  // auto-provision instead of asking for a single requestedDate.
+  if (item.serviceCode === "trash_valet") {
+    if (!item.details.cans || item.details.cans < 1) return "Pick how many cans";
+    if (!item.details.serviceDayOfWeek) return "Pick a trash pickup day";
+    if (item.details.recyclingEnabled && !item.details.recyclingAnchorDate) {
+      return "Pick the first recycling week date";
+    }
     return null;
   }
   const mode = schedulingModeFor(item.serviceCode);
