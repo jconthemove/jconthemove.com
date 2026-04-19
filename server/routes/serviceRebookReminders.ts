@@ -15,8 +15,8 @@ import {
   ORGANIC_REBOOK_SOURCE,
 } from "../services/serviceRebookReminder";
 import { db } from "../db";
-import { leads, serviceRebookReminders } from "@shared/schema";
-import { and, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
+import { leads, serviceRebookReminders, serviceRebookOptouts } from "@shared/schema";
+import { and, desc, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
 
 const router = Router();
 
@@ -252,6 +252,56 @@ router.get(
     } catch (err) {
       console.error(`Re-book attribution error (${cfg.key}):`, err);
       return res.status(500).json({ error: "Failed to load attribution" });
+    }
+  },
+);
+
+// ── Opt-out management (Task #122) ───────────────────────────────────────────
+// Admins can review who unsubscribed from re-book reminder emails and remove
+// an entry to re-enable reminders for a customer (e.g. at customer request
+// after they accidentally clicked unsubscribe).
+
+// GET /api/admin/service-rebook/optouts
+router.get(
+  "/optouts",
+  requireAuth,
+  requireAdminRole,
+  async (_req: Request, res: Response) => {
+    try {
+      const rows = await db
+        .select()
+        .from(serviceRebookOptouts)
+        .orderBy(desc(serviceRebookOptouts.createdAt));
+      return res.json({ optouts: rows });
+    } catch (err) {
+      console.error("Re-book opt-out list error:", err);
+      return res.status(500).json({ error: "Failed to load opt-outs" });
+    }
+  },
+);
+
+// DELETE /api/admin/service-rebook/optouts/:id — re-enable reminders.
+router.delete(
+  "/optouts/:id",
+  requireAuth,
+  requireAdminRole,
+  async (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      return res.status(400).json({ error: "Invalid id" });
+    }
+    try {
+      const removed = await db
+        .delete(serviceRebookOptouts)
+        .where(eq(serviceRebookOptouts.id, id))
+        .returning();
+      if (removed.length === 0) {
+        return res.status(404).json({ error: "Opt-out entry not found" });
+      }
+      return res.json({ success: true, removed: removed[0] });
+    } catch (err) {
+      console.error("Re-book opt-out delete error:", err);
+      return res.status(500).json({ error: "Failed to remove opt-out" });
     }
   },
 );

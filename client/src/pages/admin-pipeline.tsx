@@ -383,6 +383,9 @@ export default function AdminPipelinePage() {
           <RebookReminderCard serviceKey="window_cleaning" label="Window Cleaning" emoji="🪟" envFlag="ENABLE_REBOOK_REMINDER_EMAILS_WINDOW" accent="cyan" />
         </div>
 
+        {/* ── Re-book Reminder Opt-outs (Task #122) ── */}
+        <RebookOptoutsCard />
+
         {/* ── Summary Cards ── */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           {[
@@ -630,5 +633,101 @@ function RebookReminderCard({ serviceKey, label, emoji, envFlag, accent }: {
         </div>
       )}
     </div>
+  );
+}
+
+// ─── Re-book Reminder Opt-outs Card (Task #122) ───────────────────────────────
+// Lists every customer who clicked the unsubscribe link in a re-book reminder
+// email. Admin can remove an entry to re-enable reminders (e.g. when a
+// customer calls in saying they unsubscribed by accident).
+type RebookOptout = {
+  id: number;
+  email: string | null;
+  phone: string | null;
+  source: string;
+  createdAt: string;
+};
+
+function RebookOptoutsCard() {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+
+  const optoutsQ = useQuery<{ optouts: RebookOptout[] }>({
+    queryKey: ["/api/admin/service-rebook/optouts"],
+    enabled: open,
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: (id: number) =>
+      apiRequest("DELETE", `/api/admin/service-rebook/optouts/${id}`, undefined),
+    onSuccess: () => {
+      toast({ title: "Re-enabled", description: "Customer will receive re-book reminders again." });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/service-rebook/optouts"] });
+    },
+    onError: () => toast({ title: "Failed to remove", variant: "destructive" }),
+  });
+
+  const handleRemove = (row: RebookOptout) => {
+    const who = row.email || row.phone || `entry #${row.id}`;
+    if (!window.confirm(`Re-enable re-book reminders for ${who}?\n\nThey'll start receiving reminder emails again on the next sweep.`)) return;
+    removeMutation.mutate(row.id);
+  };
+
+  const optouts = optoutsQ.data?.optouts ?? [];
+
+  return (
+    <Card className="bg-slate-900 border-slate-800">
+      <CardContent className="pt-3 pb-3">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="w-full flex items-center justify-between gap-3 text-left"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-base">🚫</span>
+            <div>
+              <p className="text-sm font-bold text-slate-200">Re-book Reminder Opt-outs</p>
+              <p className="text-[11px] text-slate-500">Customers who unsubscribed from snow / junk / window reminder emails</p>
+            </div>
+          </div>
+          <span className="text-xs text-slate-500">{open ? "Hide" : "View"}</span>
+        </button>
+
+        {open && (
+          <div className="mt-3 pt-3 border-t border-slate-800">
+            {optoutsQ.isLoading ? (
+              <p className="text-xs text-slate-500 py-2">Loading…</p>
+            ) : optouts.length === 0 ? (
+              <p className="text-xs text-slate-500 py-2">No one has unsubscribed yet.</p>
+            ) : (
+              <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                {optouts.map((row) => (
+                  <div key={row.id} className="flex items-center justify-between gap-3 px-3 py-2 rounded bg-slate-950 border border-slate-800">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs text-slate-200 truncate">
+                        {row.email || <span className="text-slate-500">no email</span>}
+                        {row.phone ? <span className="text-slate-500"> · {row.phone}</span> : null}
+                      </p>
+                      <p className="text-[10px] text-slate-500">
+                        {new Date(row.createdAt).toLocaleDateString()} · via {row.source}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-[11px] h-7 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
+                      onClick={() => handleRemove(row)}
+                      disabled={removeMutation.isPending}
+                    >
+                      Re-enable
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
