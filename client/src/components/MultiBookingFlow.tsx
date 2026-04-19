@@ -10,6 +10,9 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -543,13 +546,15 @@ export function AddOnDrawer({
 
 // ── BookingSummarySticky ───────────────────────────────────────────────────
 export function BookingSummarySticky({
-  items, quote, isQuoting, onCheckout, canCheckout,
+  items, quote, isQuoting, onCheckout, canCheckout, bottomSlot,
 }: {
   items: SelectedItem[];
   quote: QuoteResult | null;
   isQuoting: boolean;
   onCheckout: () => void;
   canCheckout: boolean;
+  /** Optional replacement for the default checkout CTA (e.g. wizard Back/Continue). */
+  bottomSlot?: React.ReactNode;
 }) {
   const [collapsed, setCollapsed] = useState(true);
   const subtotal = quote?.subtotal ?? items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
@@ -601,15 +606,17 @@ export function BookingSummarySticky({
               <span className="flex items-center gap-1"><Users className="h-3 w-3" /> Crew of {crew} recommended</span>
               <span className="flex items-center gap-1 text-orange-400"><Coins className="h-3 w-3" /> +{tokens} JCMOVES</span>
             </div>
-            <Button
-              type="button"
-              className="w-full"
-              onClick={onCheckout}
-              disabled={!canCheckout || isQuoting}
-              data-testid="summary-checkout-desktop"
-            >
-              {isQuoting ? "Updating…" : "Continue to checkout"}
-            </Button>
+            {bottomSlot ?? (
+              <Button
+                type="button"
+                className="w-full"
+                onClick={onCheckout}
+                disabled={!canCheckout || isQuoting}
+                data-testid="summary-checkout-desktop"
+              >
+                {isQuoting ? "Updating…" : "Continue to checkout"}
+              </Button>
+            )}
           </>
         )}
       </div>
@@ -661,20 +668,119 @@ export function BookingSummarySticky({
         </div>
       )}
       <div className="px-4 pb-3">
-        <Button
-          type="button"
-          className="w-full"
-          onClick={onCheckout}
-          disabled={!canCheckout || isQuoting}
-          data-testid="summary-checkout-mobile"
-        >
-          {isQuoting ? "Updating…" : items.length === 0 ? "Add a service" : "Continue to checkout"}
-        </Button>
+        {bottomSlot ?? (
+          <Button
+            type="button"
+            className="w-full"
+            onClick={onCheckout}
+            disabled={!canCheckout || isQuoting}
+            data-testid="summary-checkout-mobile"
+          >
+            {isQuoting ? "Updating…" : items.length === 0 ? "Add a service" : "Continue to checkout"}
+          </Button>
+        )}
       </div>
     </div>
   );
 
   return <>{desktopPanel}{mobileBar}</>;
+}
+
+// ── BundleSuggestionDialog ────────────────────────────────────────────────
+// Smart popup that watches the cart and pops once at meaningful moments:
+//  - "auto_applied": cart already qualifies for a featured bundle (savings
+//    were applied automatically). Single OK button — purely informational.
+//  - "one_away": no bundle is currently applied AND every selected service
+//    belongs to one bundle that is missing exactly one service. Offers Add /
+//    No thanks. Recommends the bundle with the highest expected discount.
+// The page is responsible for tracking shown signatures so the same popup
+// doesn't re-fire on the same cart shape.
+export type BundleSuggestion =
+  | { mode: "auto_applied"; bundle: FeaturedBundle; savings: number }
+  | { mode: "one_away"; bundle: FeaturedBundle; missing: CatalogService };
+
+export function BundleSuggestionDialog({
+  suggestion, services, onAccept, onClose,
+}: {
+  suggestion: BundleSuggestion | null;
+  services: CatalogService[];
+  /** Called when user clicks the primary action.
+   *  - auto_applied: just dismisses (acts like Close)
+   *  - one_away: parent should add `suggestion.missing` to the cart */
+  onAccept: () => void;
+  onClose: () => void;
+}) {
+  const open = !!suggestion;
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent data-testid="bundle-suggestion-dialog" className="sm:max-w-md">
+        {suggestion?.mode === "auto_applied" && (
+          <>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-emerald-400" />
+                You unlocked the {suggestion.bundle.name}!
+              </DialogTitle>
+              <DialogDescription>
+                Saving you <span className="font-bold text-emerald-500">${suggestion.savings.toFixed(0)}</span> automatically — no code or coupon needed.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="rounded-xl bg-card border border-border p-3">
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5">Includes</p>
+              <div className="flex flex-wrap gap-1.5">
+                {suggestion.bundle.serviceComboJson.map((code) => {
+                  const svc = services.find((s) => s.code === code);
+                  return (
+                    <span key={code} className="text-xs bg-muted px-2 py-0.5 rounded-full">
+                      {emojiFor(code)} {svc?.name || code}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button onClick={onAccept} className="w-full" data-testid="bundle-dialog-ok">
+                Sweet, got it
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+        {suggestion?.mode === "one_away" && (
+          <>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-orange-400" />
+                Add {suggestion.missing.name} to save{" "}
+                {suggestion.bundle.discountType === "percent"
+                  ? `${suggestion.bundle.discountValue}%`
+                  : `$${parseFloat(suggestion.bundle.discountValue).toFixed(0)}`}
+              </DialogTitle>
+              <DialogDescription>
+                You're one service away from the <span className="font-semibold">{suggestion.bundle.name}</span> bundle.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="rounded-xl bg-card border border-border p-3 flex items-center gap-3">
+              <span className="text-3xl">{emojiFor(suggestion.missing.code)}</span>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-sm">{suggestion.missing.name}</p>
+                {suggestion.missing.description && (
+                  <p className="text-[11px] text-muted-foreground line-clamp-2">{suggestion.missing.description}</p>
+                )}
+              </div>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={onClose} className="flex-1" data-testid="bundle-dialog-decline">
+                No thanks
+              </Button>
+              <Button onClick={onAccept} className="flex-1" data-testid="bundle-dialog-add">
+                Add &amp; save
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 // ── Validation banner ─────────────────────────────────────────────────────
