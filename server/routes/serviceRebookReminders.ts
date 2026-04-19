@@ -10,6 +10,7 @@ import {
   buildReminderEmail,
   runRebookSweep,
   getLastSweepInfo,
+  recordOptout,
   REBOOK_ELIGIBILITY_DAYS,
   REBOOK_RESEND_WINDOW_DAYS,
   ORGANIC_REBOOK_SOURCE,
@@ -280,12 +281,40 @@ router.get(
   },
 );
 
+// POST /api/admin/service-rebook/optouts — admin manually adds an opt-out
+// (e.g. customer phoned in asking to be removed). Source is recorded as
+// 'admin' so we can distinguish from one-click email unsubscribes.
+router.post(
+  "/optouts",
+  requireAuth,
+  requireAdminRole,
+  async (req: Request, res: Response) => {
+    const adminId = (req as any).user?.id || (req.session as any)?.userId;
+    const email = typeof req.body?.email === "string" ? req.body.email.trim() : "";
+    const phone = typeof req.body?.phone === "string" ? req.body.phone.trim() : "";
+    if (!email && !phone) {
+      return res.status(400).json({ error: "Provide an email or phone number" });
+    }
+    try {
+      await recordOptout(email || null, phone || null, "admin");
+      console.log(
+        `[rebook-optout][audit] admin=${adminId} action=add email=${email || "-"} phone=${phone || "-"} source=admin`,
+      );
+      return res.json({ success: true });
+    } catch (err) {
+      console.error("Re-book opt-out add error:", err);
+      return res.status(500).json({ error: "Failed to add opt-out" });
+    }
+  },
+);
+
 // DELETE /api/admin/service-rebook/optouts/:id — re-enable reminders.
 router.delete(
   "/optouts/:id",
   requireAuth,
   requireAdminRole,
   async (req: Request, res: Response) => {
+    const adminId = (req as any).user?.id || (req.session as any)?.userId;
     const id = Number(req.params.id);
     if (!Number.isFinite(id) || id <= 0) {
       return res.status(400).json({ error: "Invalid id" });
@@ -298,6 +327,9 @@ router.delete(
       if (removed.length === 0) {
         return res.status(404).json({ error: "Opt-out entry not found" });
       }
+      console.log(
+        `[rebook-optout][audit] admin=${adminId} action=remove id=${id} email=${removed[0].email || "-"} phone=${removed[0].phone || "-"} prior_source=${removed[0].source}`,
+      );
       return res.json({ success: true, removed: removed[0] });
     } catch (err) {
       console.error("Re-book opt-out delete error:", err);
