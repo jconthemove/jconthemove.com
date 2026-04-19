@@ -19,7 +19,7 @@ import { PlacesAutocomplete } from "@/components/places-autocomplete";
 import BookingConfirmedTiles from "@/components/BookingConfirmedTiles";
 import type { User } from "@shared/schema";
 import {
-  ServiceSelector, AddOnDrawer, ServiceItemEditor, BookingSummarySticky,
+  ServiceSelector, InlineItemConfigure, BookingSummarySticky,
   BundleSuggestionDialog, type BundleSuggestion,
   type CatalogService, type FeaturedBundle, type SelectedItem, type QuoteResult,
   emojiFor, recommendedCrewSize, schedulingModeFor,
@@ -43,10 +43,10 @@ function defaultPriceMode(svc: CatalogService): SelectedItem["priceMode"] {
 
 function makeItem(svc: CatalogService): SelectedItem {
   // Pre-populate `callToSchedule` for call_only services so they're not stuck
-  // in a "needs attention" state without the user opening the drawer.
+  // in a "needs attention" state until the user opens an editor.
   const mode = schedulingModeFor(svc.code);
-  const details: Record<string, any> = {};
-  if (mode === "call_only") details.callToSchedule = true;
+  const details: SelectedItem["details"] =
+    mode === "call_only" ? { callToSchedule: true } : {};
   return {
     serviceCode: svc.code,
     label: svc.name,
@@ -108,7 +108,6 @@ export default function MultiServiceBookPage() {
     customerPhone: user?.phoneNumber || "",
     notes: "",
   });
-  const [drawerCode, setDrawerCode] = useState<string | null>(null);
   const [quote, setQuote] = useState<QuoteResult | null>(null);
   const [confirmation, setConfirmation] = useState<
     CreateBookingResponse["booking"] & { items: SelectedItem[]; quote: QuoteResult } | null
@@ -513,31 +512,23 @@ export default function MultiServiceBookPage() {
             </section>
           )}
 
-          {/* Step 3 — Configure each item */}
+          {/* Step 3 — Configure each item (inline cards, no drawer) */}
           {step === "configure" && (
             <section data-testid="step-configure">
               <header className="mb-3">
                 <h2 className="text-xl font-black">Configure each service</h2>
                 <p className="text-sm text-muted-foreground">Pick a date, frequency, and scope for every item before continuing.</p>
               </header>
-              <div className="space-y-2">
-                {items.map(item => {
-                  const warning = itemNeedsAttention(item);
-                  return (
-                    <div key={item.serviceCode} className="relative">
-                      <ServiceItemEditor
-                        item={item}
-                        onChange={updateItem}
-                        onRemove={() => removeService(item.serviceCode)}
-                        onOpenDrawer={() => setDrawerCode(item.serviceCode)}
-                        warning={warning}
-                      />
-                      {!warning && (
-                        <CheckCircle2 className="absolute top-3 right-3 h-4 w-4 text-emerald-500" data-testid={`item-ok-${item.serviceCode}`} />
-                      )}
-                    </div>
-                  );
-                })}
+              <div className="space-y-3">
+                {items.map(item => (
+                  <InlineItemConfigure
+                    key={item.serviceCode}
+                    item={item}
+                    onChange={updateItem}
+                    onRemove={() => removeService(item.serviceCode)}
+                    warning={itemNeedsAttention(item)}
+                  />
+                ))}
               </div>
             </section>
           )}
@@ -664,13 +655,6 @@ export default function MultiServiceBookPage() {
           bottomSlot={wizardNav}
         />
       </div>
-
-      <AddOnDrawer
-        open={!!drawerCode}
-        item={items.find(i => i.serviceCode === drawerCode) || null}
-        onClose={() => setDrawerCode(null)}
-        onSave={(next) => { updateItem(next); setDrawerCode(null); }}
-      />
 
       <BundleSuggestionDialog
         suggestion={suggestion}

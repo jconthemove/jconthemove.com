@@ -380,6 +380,162 @@ export function ServiceItemEditor({
   );
 }
 
+// ── InlineItemConfigure ────────────────────────────────────────────────────
+// Renders the full per-item editor (qty, scheduling, scope, notes) inline
+// inside the service card. Used by the wizard's "configure" step so users
+// can edit every field without opening a modal/drawer.
+export function InlineItemConfigure({
+  item, onChange, onRemove, warning,
+}: {
+  item: SelectedItem;
+  onChange: (next: SelectedItem) => void;
+  onRemove: () => void;
+  warning?: string | null;
+}) {
+  const mode = schedulingModeFor(item.serviceCode);
+  const showQty = item.priceMode === "hourly" || item.priceMode === "per_unit";
+  const lineSubtotal = item.quantity * item.unitPrice;
+  const freqOptions = BUNDLE_FREQUENCY_OPTIONS[item.serviceCode] || [];
+
+  return (
+    <div
+      className={cn(
+        "rounded-xl border bg-card p-4 space-y-3",
+        warning ? "border-amber-500/60 ring-1 ring-amber-500/20" : "border-border",
+      )}
+      data-testid={`inline-item-${item.serviceCode}`}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <span className="text-2xl">{emojiFor(item.serviceCode)}</span>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-sm truncate">{item.label}</p>
+          <p className="text-[11px] text-muted-foreground">
+            {item.priceMode === "quote"
+              ? "Custom quote — confirmed after we review"
+              : `${priceModeLabel(item.priceMode, item.unitPrice)}${showQty ? ` × ${item.quantity}` : ""}`}
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-sm font-bold">
+            {item.priceMode === "quote" ? "TBD" : `$${lineSubtotal.toFixed(0)}`}
+          </p>
+        </div>
+      </div>
+
+      {/* Qty (hourly / per_unit only) */}
+      {showQty && (
+        <div>
+          <Label className="text-xs">{item.priceMode === "hourly" ? "Hours" : "Quantity"}</Label>
+          <div className="flex items-center gap-2 mt-1">
+            <button
+              type="button"
+              onClick={() => onChange({ ...item, quantity: Math.max(1, item.quantity - 1) })}
+              className="w-8 h-8 rounded-md border border-border flex items-center justify-center hover:bg-muted"
+              data-testid={`inline-qty-minus-${item.serviceCode}`}
+            ><Minus className="h-3 w-3" /></button>
+            <span className="text-sm font-bold w-8 text-center">{item.quantity}</span>
+            <button
+              type="button"
+              onClick={() => onChange({ ...item, quantity: item.quantity + 1 })}
+              className="w-8 h-8 rounded-md border border-border flex items-center justify-center hover:bg-muted"
+              data-testid={`inline-qty-plus-${item.serviceCode}`}
+            ><Plus className="h-3 w-3" /></button>
+          </div>
+        </div>
+      )}
+
+      {/* Scheduling */}
+      {mode === "call_only" ? (
+        <div className="rounded-lg border border-sky-500/30 bg-sky-500/5 p-2.5 flex items-start gap-2" data-testid={`inline-call-only-${item.serviceCode}`}>
+          <PhoneCall className="h-4 w-4 text-sky-400 mt-0.5 shrink-0" />
+          <p className="text-xs text-muted-foreground leading-snug">
+            Quick chat needed — we'll call within 24 hours after submission to lock in the schedule.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div>
+            <Label className="text-xs">Preferred start date</Label>
+            <DatePicker
+              value={item.details.requestedDate}
+              onChange={(v) => onChange({ ...item, details: { ...item.details, requestedDate: v || undefined } })}
+              placeholder="Pick a date"
+            />
+          </div>
+          {mode === "date_freq" && freqOptions.length > 0 && (
+            <div>
+              <Label className="text-xs">Frequency</Label>
+              <div className="flex flex-wrap gap-1.5 mt-1" data-testid={`inline-freq-${item.serviceCode}`}>
+                {freqOptions.map(opt => {
+                  const active = item.details.frequency === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => onChange({ ...item, details: { ...item.details, frequency: opt.value } })}
+                      className={cn(
+                        "text-[11px] px-2.5 py-1 rounded-full border transition-all",
+                        active
+                          ? "border-emerald-400 bg-emerald-500/20 text-emerald-300"
+                          : "border-border bg-card hover:border-foreground/30",
+                      )}
+                      data-testid={`inline-freq-${item.serviceCode}-${opt.value}`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      <div>
+        <Label className="text-xs">Scope (what should we focus on?)</Label>
+        <Input
+          value={item.details.scope || ""}
+          onChange={(e) => onChange({ ...item, details: { ...item.details, scope: e.target.value } })}
+          placeholder="e.g. front yard only, 1 truckload"
+          data-testid={`inline-scope-${item.serviceCode}`}
+        />
+      </div>
+
+      <div>
+        <Label className="text-xs">Notes / special instructions (optional)</Label>
+        <Textarea
+          value={item.details.notes || ""}
+          onChange={(e) => onChange({ ...item, details: { ...item.details, notes: e.target.value } })}
+          placeholder="Gate code, parking notes, anything we should know"
+          rows={2}
+          data-testid={`inline-notes-${item.serviceCode}`}
+        />
+      </div>
+
+      <div className="flex items-center justify-between pt-1">
+        {warning ? (
+          <p className="text-[11px] text-amber-500 flex items-center gap-1" data-testid={`inline-warning-${item.serviceCode}`}>
+            <AlertCircle className="h-3 w-3" /> {warning}
+          </p>
+        ) : (
+          <p className="text-[11px] text-emerald-500 flex items-center gap-1" data-testid={`inline-ok-${item.serviceCode}`}>
+            <Sparkles className="h-3 w-3" /> Looks good
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={onRemove}
+          className="px-2.5 py-1 rounded-md border border-destructive/40 text-destructive text-[11px] hover:bg-destructive/10 flex items-center gap-1"
+          data-testid={`inline-remove-${item.serviceCode}`}
+        >
+          <Trash2 className="h-3 w-3" /> Remove
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── AddOnDrawer (inline drawer using Sheet) ────────────────────────────────
 // Reuses the same scheduling pattern as BundleServiceScheduler:
 // per service code, the drawer renders one of three layouts:
