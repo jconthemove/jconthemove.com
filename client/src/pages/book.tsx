@@ -310,7 +310,7 @@ export default function MultiServiceBookPage() {
     if (step === "configure") {
       for (const item of items) {
         const w = itemNeedsAttention(item);
-        if (w) return `${item.label}: ${w.toLowerCase()} — open Details`;
+        if (w) return `${item.label}: ${w.toLowerCase()}`;
       }
     }
     if (step === "contact") {

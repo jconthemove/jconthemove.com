@@ -520,7 +520,7 @@ export function InlineItemConfigure({
           </p>
         ) : (
           <p className="text-[11px] text-emerald-500 flex items-center gap-1" data-testid={`inline-ok-${item.serviceCode}`}>
-            <Sparkles className="h-3 w-3" /> Looks good
+            <CheckCircle2 className="h-3 w-3" /> Ready
           </p>
         )}
         <button
