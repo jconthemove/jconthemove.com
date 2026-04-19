@@ -413,6 +413,10 @@ app.use((req, res, next) => {
         try {
           const { runJewelryReservationSweep } = await import("./services/jewelryReservationSweeper");
           const result = await runJewelryReservationSweep();
+          if (!result) {
+            console.log("[jewelry-expiry-sweep] skipped — previous run still in progress");
+            return;
+          }
           if (result.scanned > 0 || result.released > 0) {
             console.log(
               `[jewelry-expiry-sweep] scanned=${result.scanned} released=${result.released} refundedUsd=$${result.refundedUsdTotal.toFixed(2)}`,
