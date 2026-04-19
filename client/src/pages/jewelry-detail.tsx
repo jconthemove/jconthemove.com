@@ -16,6 +16,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { ArrowLeft, Gem, ChevronLeft, ChevronRight, Pencil, Trash2, Video, Loader2, Tag, RotateCcw, ShoppingCart, Check, Bitcoin, Heart, Share2, Sparkles, Star, Coins, DollarSign } from "lucide-react";
 import { useCart } from "@/hooks/useCart";
 import { FloatingCartButton } from "@/components/cart-button";
+import { BtcAutoConfirmStatus } from "@/components/btc-auto-confirm-status";
 
 const EARN_RATE = 15; // JCMOVES per $1 spent
 const TOKEN_PRICE_USD = 0.000005034116; // Fallback token price
@@ -85,6 +86,29 @@ function WalletUsdRedeemPanel({ item }: { item: JewelryItem }) {
     !!user &&
     item.status === "pending_balance" &&
     item.pendingCreditUserId === user.id;
+
+  // While the customer holds this item, surface live status of any
+  // Bitcoin payment they've already started so they can see "Detected on
+  // blockchain — finalizing your hold…" or the auto-confirmed badge
+  // without leaving the jewelry detail page.
+  interface BtcLookupResponse {
+    payment: { id: string; status: string } | null;
+  }
+  const { data: btcLookup } = useQuery<BtcLookupResponse>({
+    queryKey: ["/api/btc/payment-for-jewelry", item.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/btc/payment-for-jewelry/${item.id}`, { credentials: "include" });
+      if (!res.ok) return { payment: null };
+      return res.json();
+    },
+    enabled: !!user && (item.status === "pending_balance" || item.status === "sold"),
+    refetchInterval: (q) => {
+      const data = q.state.data;
+      if (data?.payment?.status === "pending") return 8000;
+      return 60_000;
+    },
+  });
+  const btcPaymentId = btcLookup?.payment?.id || null;
 
   if (userHasPending) {
     const credit = parseFloat(item.pendingCreditCents || "0");
@@ -163,6 +187,9 @@ function WalletUsdRedeemPanel({ item }: { item: JewelryItem }) {
           <DollarSign className="h-4 w-4 text-amber-600" />
           <span className="text-sm font-bold text-amber-800">Finish your purchase</span>
         </div>
+        {btcPaymentId && (
+          <BtcAutoConfirmStatus paymentId={btcPaymentId} variant="light" />
+        )}
         <div className="bg-white/70 rounded-lg p-2 text-xs text-amber-900 space-y-0.5">
           <div className="flex justify-between"><span>Item price:</span><span>${itemPrice.toFixed(2)}</span></div>
           <div className="flex justify-between"><span>JCMOVES USD applied:</span><span className="font-bold">−${credit.toFixed(2)}</span></div>
@@ -217,6 +244,13 @@ function WalletUsdRedeemPanel({ item }: { item: JewelryItem }) {
         </p>
       </div>
     );
+  }
+
+  // Item already sold — if it was *this user's* BTC payment that finalized
+  // it (pending_balance → sold via auto-verify), show the auto-confirmed
+  // badge so they don't land on a blank page after the row flips.
+  if (item.status === "sold" && btcPaymentId) {
+    return <BtcAutoConfirmStatus paymentId={btcPaymentId} variant="light" />;
   }
 
   if (!user || !item.price || item.inStock === false || cashBalance <= 0) return null;

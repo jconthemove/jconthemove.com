@@ -285,6 +285,135 @@ export async function verifyBitcoinPayment(
   return updated;
 }
 
+// ─── Per-payment blockchain status (for the customer-facing live status) ──
+//
+// Used by GET /api/btc/payment/:id so the payment status page can show
+// "Detected on blockchain — finalizing your hold…" before the row is
+// flipped, and "auto-confirmed at HH:MM" with the txid once it is.
+//
+// We cache the lookup per-payment for a few seconds so that aggressive
+// polling from the customer doesn't hammer mempool.space.
+export interface BlockchainStatus {
+  detected: boolean;
+  txid: string | null;
+  confirmations: number;
+  requiredConfirmations: number;
+  mempoolUrl: string | null;
+  /** UNIX seconds the tx was first observed on chain or in mempool. */
+  seenAt: number | null;
+  /** True once the row is verified+autoVerified — caller can stop polling. */
+  finalized: boolean;
+}
+
+const STATUS_CACHE_MS = 8_000;
+const statusCache = new Map<string, { ts: number; status: BlockchainStatus }>();
+
+function emptyStatus(finalized = false): BlockchainStatus {
+  return {
+    detected: false,
+    txid: null,
+    confirmations: 0,
+    requiredConfirmations: MIN_CONFIRMATIONS,
+    mempoolUrl: null,
+    seenAt: null,
+    finalized,
+  };
+}
+
+export async function getBlockchainStatus(payment: BitcoinPayment): Promise<BlockchainStatus> {
+  // Persisted: once we auto-verified, we already know the txid and the row
+  // is final — no need to re-query mempool.space.
+  if (payment.status === "verified" && payment.autoVerified && payment.autoVerifiedTxid) {
+    const verifiedAt = payment.verifiedAt ? Math.floor(new Date(payment.verifiedAt).getTime() / 1000) : null;
+    return {
+      detected: true,
+      txid: payment.autoVerifiedTxid,
+      confirmations: MIN_CONFIRMATIONS,
+      requiredConfirmations: MIN_CONFIRMATIONS,
+      mempoolUrl: `https://mempool.space/tx/${payment.autoVerifiedTxid}`,
+      seenAt: verifiedAt,
+      finalized: true,
+    };
+  }
+
+  // Manual verify or non-pending non-auto rows: nothing to look up.
+  if (payment.status !== "pending") {
+    return emptyStatus(payment.status === "verified");
+  }
+
+  const cached = statusCache.get(payment.id);
+  if (cached && Date.now() - cached.ts < STATUS_CACHE_MS) return cached.status;
+
+  const btcAddress = process.env.BTC_WALLET_ADDRESS;
+  if (!btcAddress) return emptyStatus();
+
+  try {
+    const sats = Math.round(parseFloat(payment.btcAmount) * 1e8);
+    if (!Number.isFinite(sats) || sats <= 0) return emptyStatus();
+    const paymentCreatedAt = Math.floor(new Date(payment.createdAt).getTime() / 1000);
+    const SKEW_TOLERANCE_S = 5 * 60;
+
+    const [confirmedRes, mempoolRes, tipRes] = await Promise.all([
+      fetch(`https://mempool.space/api/address/${btcAddress}/txs/chain`),
+      fetch(`https://mempool.space/api/address/${btcAddress}/txs/mempool`),
+      fetch("https://mempool.space/api/blocks/tip/height"),
+    ]);
+    const confirmed = confirmedRes.ok ? await confirmedRes.json() : [];
+    const unconfirmed = mempoolRes.ok ? await mempoolRes.json() : [];
+    const tipHeight = tipRes.ok ? parseInt(await tipRes.text(), 10) || 0 : 0;
+    const txs = [
+      ...(Array.isArray(confirmed) ? confirmed : []),
+      ...(Array.isArray(unconfirmed) ? unconfirmed : []),
+    ];
+
+    // Don't surface txids that already settled a different payment.
+    const priorTxidRows = await db.select({ txid: bitcoinPayments.autoVerifiedTxid })
+      .from(bitcoinPayments)
+      .where(isNotNull(bitcoinPayments.autoVerifiedTxid));
+    const consumed = new Set<string>();
+    for (const row of priorTxidRows) {
+      if (row.txid) consumed.add(row.txid);
+    }
+
+    let best: BlockchainStatus | null = null;
+    for (const tx of txs) {
+      if (!tx?.txid || consumed.has(tx.txid)) continue;
+      let outSats = 0;
+      for (const out of (tx.vout || [])) {
+        if (out?.scriptpubkey_address === btcAddress && typeof out.value === "number") {
+          outSats += out.value;
+        }
+      }
+      if (outSats !== sats) continue;
+      const confirmedFlag = tx?.status?.confirmed === true;
+      const blockHeight = typeof tx?.status?.block_height === "number" ? tx.status.block_height : 0;
+      const confs = confirmedFlag && tipHeight && blockHeight
+        ? Math.max(0, tipHeight - blockHeight + 1)
+        : 0;
+      const blockTime = typeof tx?.status?.block_time === "number" ? tx.status.block_time : 0;
+      const firstSeen = typeof tx?.firstSeen === "number" ? tx.firstSeen : 0;
+      const seenAt = blockTime || firstSeen || Math.floor(Date.now() / 1000);
+      if (seenAt < paymentCreatedAt - SKEW_TOLERANCE_S) continue;
+      const candidate: BlockchainStatus = {
+        detected: true,
+        txid: tx.txid,
+        confirmations: confs,
+        requiredConfirmations: MIN_CONFIRMATIONS,
+        mempoolUrl: `https://mempool.space/tx/${tx.txid}`,
+        seenAt,
+        finalized: false,
+      };
+      if (!best || candidate.confirmations > best.confirmations) best = candidate;
+    }
+
+    const status = best ?? emptyStatus();
+    statusCache.set(payment.id, { ts: Date.now(), status });
+    return status;
+  } catch (_err) {
+    return emptyStatus();
+  }
+}
+
 // ─── Blockchain poller ────────────────────────────────────────────────────────
 //
 // Polls mempool.space for the configured BTC_WALLET_ADDRESS and matches
@@ -301,7 +430,7 @@ export async function verifyBitcoinPayment(
 // happen to share the same satoshi amount (degenerate case), we skip both
 // for that tick rather than risk crediting the wrong customer.
 
-const MIN_CONFIRMATIONS = 1;
+export const MIN_CONFIRMATIONS = 1;
 // Look back this far past createdAt — sometimes a tx broadcasts late or
 // the admin is slow to flip the row from pending; we still want to
 // auto-verify rather than leave a paid customer stranded. Sized to

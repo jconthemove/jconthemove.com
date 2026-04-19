@@ -5,6 +5,7 @@ import { Link } from "wouter";
 import { CheckCircle, ShoppingBag, ArrowLeft, Truck, Coins, Gem, Star } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
+import { BtcAutoConfirmStatus } from "@/components/btc-auto-confirm-status";
 
 export default function PaymentSuccessPage() {
   const params = new URLSearchParams(window.location.search);
@@ -14,6 +15,7 @@ export default function PaymentSuccessPage() {
   const shopItemIds = shopItemsParam ? shopItemsParam.split(",").filter(Boolean) : [];
   const jewelryItemId = params.get("itemId");
   const isJewelryPurchase = !!jewelryItemId && shopItemIds.length === 0;
+  const btcPaymentId = params.get("btcPaymentId");
 
   const { user } = useAuth();
 
@@ -122,6 +124,10 @@ export default function PaymentSuccessPage() {
                 : "Thank you for your purchase from Hand-Crafted Made With Love By Ashley. You'll receive a confirmation from Square shortly."}
             </p>
           </div>
+
+          {btcPaymentId && (
+            <BtcAutoConfirmStatus paymentId={btcPaymentId} variant="light" />
+          )}
 
           {shopItemIds.length > 0 && shopRewardTotal > 0 && (
             <div className="bg-gradient-to-r from-yellow-50 to-amber-50 border border-yellow-300 rounded-lg p-4 flex items-center gap-3">

@@ -29,6 +29,7 @@ import { FAUCET_CONFIG, calculateJCMovesReward, getTierFromSpend, getTierFromPoi
 import { fetchZipLocation, calculateMovingPrice } from "@shared/pricing";
 import { walletService } from "./services/wallet";
 import { solanaMonitor } from "./services/solana-monitor";
+import type { BlockchainStatus } from "./services/bitcoinPaymentVerifier";
 import { crewSuggestionService } from "./services/crew-suggestions";
 import { ObjectStorageService } from "./objectStorage";
 import { solanaTransferService } from "./services/solana-transfer";
@@ -16713,7 +16714,48 @@ Thank you for your business!
       const { id } = req.params;
       const [payment] = await db.select().from(bitcoinPayments).where(eq(bitcoinPayments.id, id));
       if (!payment) return res.status(404).json({ error: "Payment not found" });
-      res.json(payment);
+      // Live blockchain status powers the customer-facing "Detected on
+      // blockchain — finalizing your hold…" / "auto-confirmed" UI.
+      // Failure is non-fatal — we still return the payment row.
+      const { getBlockchainStatus } = await import("./services/bitcoinPaymentVerifier");
+      let blockchainStatus: BlockchainStatus | null = null;
+      try {
+        blockchainStatus = await getBlockchainStatus(payment);
+      } catch (_e) {
+        blockchainStatus = null;
+      }
+      res.json({ ...payment, blockchainStatus });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Latest BTC payment for a given jewelry item, scoped to the requesting
+  // user. Used by the jewelry detail page to show live auto-confirm status
+  // for the user's own pending balance payment.
+  app.get("/api/btc/payment-for-jewelry/:itemId", isAuthenticated, async (req: any, res) => {
+    try {
+      const { itemId } = req.params;
+      const userId = req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const rows = await db.select().from(bitcoinPayments)
+        .where(and(
+          eq(bitcoinPayments.referenceType, "jewelry"),
+          eq(bitcoinPayments.referenceId, itemId),
+          eq(bitcoinPayments.userId, userId),
+        ))
+        .orderBy(sql`created_at DESC`)
+        .limit(1);
+      if (rows.length === 0) return res.json({ payment: null });
+      const payment = rows[0];
+      const { getBlockchainStatus } = await import("./services/bitcoinPaymentVerifier");
+      let blockchainStatus: BlockchainStatus | null = null;
+      try {
+        blockchainStatus = await getBlockchainStatus(payment);
+      } catch (_e) {
+        blockchainStatus = null;
+      }
+      res.json({ payment: { ...payment, blockchainStatus } });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

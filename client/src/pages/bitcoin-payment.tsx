@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Copy, Check, Clock, Loader2, AlertCircle, Bitcoin, Percent, Shield, ExternalLink } from "lucide-react";
 import { Link } from "wouter";
+import { BtcAutoConfirmStatus } from "@/components/btc-auto-confirm-status";
 
 interface BtcPaymentData {
   id: string;
@@ -40,7 +41,22 @@ export default function BitcoinPaymentPage() {
   const params = new URLSearchParams(window.location.search);
   const paymentId = params.get("id");
 
-  const { data: payment, isLoading, error } = useQuery<any>({
+  interface BtcPaymentRow {
+    id: string;
+    btcAddress: string;
+    btcAmount: string;
+    usdAmount: string;
+    originalUsdAmount: string;
+    btcPrice: string;
+    expiresAt?: string | null;
+    referenceType?: string | null;
+    referenceId?: string | null;
+    notes?: string | null;
+    customerName?: string | null;
+    status: string;
+  }
+
+  const { data: payment, isLoading, error } = useQuery<BtcPaymentRow>({
     queryKey: ["/api/btc/payment", paymentId],
     queryFn: async () => {
       if (!paymentId) throw new Error("No payment ID");
@@ -49,8 +65,33 @@ export default function BitcoinPaymentPage() {
       return res.json();
     },
     enabled: !!paymentId,
-    refetchInterval: 30000,
+    // Poll fast while we're still pending so the customer sees the
+    // "Detected on blockchain — finalizing your hold…" → "auto-confirmed"
+    // transition without refreshing. Slow once finalized.
+    refetchInterval: (q) => {
+      const data = q.state.data;
+      if (!data) return 8000;
+      return data.status === "pending" ? 8000 : 60_000;
+    },
   });
+
+  // When a *jewelry* BTC payment flips to verified, hand off to the
+  // shared payment-success surface so the customer lands on the same
+  // jewelry receipt + auto-confirm badge that card buyers see. We only
+  // redirect for jewelry because /payment-success default copy is
+  // jewelry-oriented; non-jewelry BTC payments stay on this page where
+  // the verified card already shows the auto-confirm badge.
+  useEffect(() => {
+    if (payment?.status !== "verified") return;
+    if (payment.referenceType !== "jewelry" || !payment.referenceId) return;
+    const qs = new URLSearchParams();
+    qs.set("btcPaymentId", payment.id);
+    qs.set("itemId", payment.referenceId);
+    const target = `/payment-success?${qs.toString()}`;
+    if (window.location.pathname + window.location.search === target) return;
+    const t = setTimeout(() => navigate(target), 1500);
+    return () => clearTimeout(t);
+  }, [payment?.status, payment?.id, payment?.referenceType, payment?.referenceId, navigate]);
 
   useEffect(() => {
     if (!payment?.expiresAt) return;
@@ -134,6 +175,7 @@ export default function BitcoinPaymentPage() {
             </div>
             <h2 className="text-xl font-bold text-white">Payment Verified!</h2>
             <p className="text-slate-400">Your Bitcoin payment has been confirmed. Thank you!</p>
+            <BtcAutoConfirmStatus paymentId={payment.id} variant="dark" className="text-left" />
             <Link href="/">
               <Button className="mt-4 bg-emerald-600 hover:bg-emerald-700">Back to Home</Button>
             </Link>
@@ -202,6 +244,10 @@ export default function BitcoinPaymentPage() {
             </CardContent>
           </Card>
         )}
+
+        <div className="mb-4">
+          <BtcAutoConfirmStatus paymentId={payment.id} variant="dark" />
+        </div>
 
         <Card className="bg-slate-800/80 border-orange-500/30 mb-4">
           <CardHeader className="pb-3">
