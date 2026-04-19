@@ -2439,6 +2439,171 @@ export type BundleDiscountApplication = typeof bundleDiscountApplications.$infer
 export const insertBundleDiscountApplicationSchema = createInsertSchema(bundleDiscountApplications).omit({ id: true, createdAt: true });
 export type InsertBundleDiscountApplication = z.infer<typeof insertBundleDiscountApplicationSchema>;
 
+// ── Multi-Service Booking Foundation (Task #128) ─────────────────────────────
+// Parent `bookings` row + N `booking_service_items` children. Lets a single
+// checkout carry every service the customer wants and apply one combined
+// discount via `bundle_definitions`. Live alongside the legacy single-service
+// tables — nothing in `leads` / `lawn_care_quotes` / `trash_subscriptions`
+// changes yet. The pricing engine in `server/services/bookingPricing.ts` is
+// the single source of truth for subtotal / discount / final / token estimate.
+//
+// IDs are varchar UUIDs for new tables (matches the existing convention used
+// by `leads`, `bundleDiscountApplications` etc.) so we never need to migrate
+// id types later.
+
+export const bookings = pgTable("bookings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  customerName: text("customer_name").notNull(),
+  customerEmail: text("customer_email"),
+  customerPhone: text("customer_phone").notNull(),
+  serviceAddress: text("service_address"),
+  notes: text("notes"),
+  // Pricing snapshot — written by the engine when the booking is persisted
+  // so admin views & invoices read deterministic numbers without recomputing.
+  subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull().default("0"),
+  discountTotal: decimal("discount_total", { precision: 10, scale: 2 }).notNull().default("0"),
+  finalTotal: decimal("final_total", { precision: 10, scale: 2 }).notNull().default("0"),
+  bundleAppliedCode: text("bundle_applied_code"), // bundle_definitions.code (nullable)
+  tokenEstimate: integer("token_estimate").notNull().default(0), // JCMOVES estimate
+  status: text("status").notNull().default("quote"), // 'quote' | 'booked' | 'in_progress' | 'completed' | 'cancelled'
+  source: text("source"), // e.g. 'web_multi_book' — for analytics later
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_bookings_phone").on(table.customerPhone),
+  index("idx_bookings_email").on(table.customerEmail),
+  index("idx_bookings_created").on(table.createdAt),
+]);
+
+export const bookingServiceItems = pgTable("booking_service_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  bookingId: varchar("booking_id").notNull().references(() => bookings.id, { onDelete: "cascade" }),
+  serviceCode: text("service_code").notNull(), // FK-by-code into service_catalog.code
+  serviceLabel: text("service_label").notNull(), // snapshot for admin/email rendering
+  quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull().default("1"),
+  unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
+  lineSubtotal: decimal("line_subtotal", { precision: 10, scale: 2 }).notNull(),
+  priceMode: text("price_mode").notNull().default("fixed"), // 'fixed' | 'hourly' | 'per_unit' | 'quote'
+  details: jsonb("details").default("{}"), // free-form per-service detail (e.g. movers, hours)
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_booking_items_booking").on(table.bookingId),
+  index("idx_booking_items_service").on(table.serviceCode),
+]);
+
+export const serviceCatalog = pgTable("service_catalog", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: text("code").notNull().unique(), // e.g. 'moving', 'junk_removal', 'junk_reset'
+  name: text("name").notNull(),
+  category: text("category").notNull(), // 'core' | 'addon'
+  defaultPriceMode: text("default_price_mode").notNull().default("fixed"), // 'fixed' | 'hourly' | 'per_unit' | 'quote'
+  defaultPrice: decimal("default_price", { precision: 10, scale: 2 }), // base/unit price (nullable for 'quote')
+  suggestedMin: decimal("suggested_min", { precision: 10, scale: 2 }), // small-job range low
+  suggestedMax: decimal("suggested_max", { precision: 10, scale: 2 }), // small-job range high
+  discountEligible: boolean("discount_eligible").notNull().default(true),
+  isAddon: boolean("is_addon").notNull().default(false),
+  isActive: boolean("is_active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(100),
+  description: text("description"),
+  metadata: jsonb("metadata").default("{}"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_service_catalog_active").on(table.isActive, table.sortOrder),
+]);
+
+export const bundleDefinitions = pgTable("bundle_definitions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: text("code").notNull().unique(), // e.g. 'move_junk_reset'
+  name: text("name").notNull(),
+  description: text("description"),
+  // Required service codes that must all be present in the booking for this
+  // bundle to apply. Matched by exact code from service_catalog.code.
+  serviceComboJson: jsonb("service_combo_json").$type<string[]>().notNull(),
+  discountType: text("discount_type").notNull(), // 'percent' | 'fixed'
+  discountValue: decimal("discount_value", { precision: 10, scale: 2 }).notNull(),
+  maxDiscount: decimal("max_discount", { precision: 10, scale: 2 }), // dollar cap (nullable)
+  isFeatured: boolean("is_featured").notNull().default(false),
+  // Merchandising slot used by the upcoming /book bundle strip:
+  // 'most_popular' | 'best_value' | 'fast_addon' | null
+  merchandisingSlot: text("merchandising_slot"),
+  priority: integer("priority").notNull().default(100), // tiebreak when multiple match
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_bundle_def_active").on(table.isActive, table.priority),
+  index("idx_bundle_def_slot").on(table.merchandisingSlot),
+]);
+
+export const crewRequirements = pgTable("crew_requirements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  serviceCode: text("service_code").notNull().unique(), // FK-by-code into service_catalog.code
+  minCrew: integer("min_crew").notNull().default(1),
+  defaultCrew: integer("default_crew").notNull().default(2),
+  requiresTruck: boolean("requires_truck").notNull().default(false),
+  capabilities: text("capabilities").array().default(sql`ARRAY[]::text[]`),
+  estimatedMinutesMin: integer("estimated_minutes_min"),
+  estimatedMinutesMax: integer("estimated_minutes_max"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export type Booking = typeof bookings.$inferSelect;
+export type BookingServiceItem = typeof bookingServiceItems.$inferSelect;
+export type ServiceCatalogEntry = typeof serviceCatalog.$inferSelect;
+export type BundleDefinition = typeof bundleDefinitions.$inferSelect;
+export type CrewRequirement = typeof crewRequirements.$inferSelect;
+
+export const insertBookingSchema = createInsertSchema(bookings).omit({
+  id: true,
+  subtotal: true,
+  discountTotal: true,
+  finalTotal: true,
+  bundleAppliedCode: true,
+  tokenEstimate: true,
+  createdAt: true,
+});
+export const insertBookingServiceItemSchema = createInsertSchema(bookingServiceItems).omit({
+  id: true,
+  createdAt: true,
+  lineSubtotal: true,
+});
+export const insertServiceCatalogSchema = createInsertSchema(serviceCatalog).omit({ id: true, createdAt: true });
+export const insertBundleDefinitionSchema = createInsertSchema(bundleDefinitions).omit({ id: true, createdAt: true });
+export const insertCrewRequirementSchema = createInsertSchema(crewRequirements).omit({ id: true, createdAt: true });
+
+export type InsertBooking = z.infer<typeof insertBookingSchema>;
+export type InsertBookingServiceItem = z.infer<typeof insertBookingServiceItemSchema>;
+export type InsertServiceCatalogEntry = z.infer<typeof insertServiceCatalogSchema>;
+export type InsertBundleDefinition = z.infer<typeof insertBundleDefinitionSchema>;
+export type InsertCrewRequirement = z.infer<typeof insertCrewRequirementSchema>;
+
+// Quote/persist request shapes used by /api/bookings/quote and /api/bookings.
+// Declared in shared/ so the upcoming frontend can import the same types and
+// the route handlers don't need any `any` casts.
+export const bookingQuoteItemInputSchema = z.object({
+  serviceCode: z.string().min(1),
+  quantity: z.number().positive().default(1),
+  unitPrice: z.number().nonnegative().optional(), // overrides catalog default
+  priceMode: z.enum(["fixed", "hourly", "per_unit", "quote"]).optional(),
+  label: z.string().optional(), // overrides catalog name (used when caller wants custom display)
+  details: z.record(z.any()).optional(),
+});
+export type BookingQuoteItemInput = z.infer<typeof bookingQuoteItemInputSchema>;
+
+export const bookingQuoteRequestSchema = z.object({
+  items: z.array(bookingQuoteItemInputSchema).min(1),
+  source: z.string().optional(),
+});
+export type BookingQuoteRequest = z.infer<typeof bookingQuoteRequestSchema>;
+
+export const bookingCreateRequestSchema = bookingQuoteRequestSchema.extend({
+  customerName: z.string().min(1),
+  customerEmail: z.string().email().optional().or(z.literal("")),
+  customerPhone: z.string().min(7),
+  serviceAddress: z.string().optional(),
+  notes: z.string().optional(),
+});
+export type BookingCreateRequest = z.infer<typeof bookingCreateRequestSchema>;
+
 // ── Site Traffic Analytics ───────────────────────────────────────────────────
 export const pageViews = pgTable("page_views", {
   id: serial("id").primaryKey(),

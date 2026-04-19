@@ -42,6 +42,8 @@ import { MIN_REDEMPTION_TOKENS, REDEMPTION_INCREMENT, roundToIncrement, validate
 import lawnCareRouter from "./routes/lawnCare";
 import serviceRebookRouter from "./routes/serviceRebookReminders";
 import serviceRebookPublicRouter from "./routes/serviceRebookPublic";
+import bookingsRouter from "./routes/bookings";
+import { ensureBookingCatalogSeeded } from "./services/bookingCatalogSeed";
 
 const STAKING_TREASURY_USER_ID = "staking-treasury-system";
 
@@ -21202,6 +21204,15 @@ Thank you for your business!
   // Lawn care has its own routes above for historical reasons.
   app.use("/api/admin/service-rebook", serviceRebookRouter);
   app.use("/api/service-rebook", serviceRebookPublicRouter);
+
+  // Multi-Service Booking Foundation (Task #128) — parent bookings table,
+  // pricing engine, and the catalog/bundle merchandising endpoints used by
+  // the upcoming /book page. Mounted at root so paths read /api/bookings,
+  // /api/bookings/quote, /api/bundles/featured, /api/service-catalog.
+  app.use("/api", bookingsRouter);
+  ensureBookingCatalogSeeded().catch((e) =>
+    console.error("[bootstrap] ensureBookingCatalogSeeded failed:", e),
+  );
 
   const httpServer = createServer(app);
   return httpServer;

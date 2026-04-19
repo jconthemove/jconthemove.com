@@ -1,0 +1,422 @@
+// Seed `service_catalog` and `bundle_definitions` with the platform's
+// services, small-job add-ons, and the 5 featured bundles from the spec.
+//
+// Idempotent — uses `code` as the natural key so re-running on an existing DB
+// only inserts missing rows. Existing rows are NOT mutated, so admins can
+// safely tweak prices/labels in the DB without having them clobbered on the
+// next deploy.
+
+import { db, pool } from "../db";
+import {
+  serviceCatalog,
+  bundleDefinitions,
+  type InsertServiceCatalogEntry,
+  type InsertBundleDefinition,
+} from "@shared/schema";
+import { eq } from "drizzle-orm";
+
+// Safe DDL — idempotent CREATE TABLE IF NOT EXISTS for the new
+// multi-service booking tables. We do this at boot instead of via
+// `drizzle-kit push` because the existing project has many DB-only tables
+// drizzle-kit doesn't know about, which makes interactive `push` runs
+// unsafe (it offers to rename them into ours). Pattern mirrors
+// `ensureRevenueAllocationsTable` already used in server/routes.ts.
+async function ensureBookingTables(): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS bookings (
+      id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      customer_name text NOT NULL,
+      customer_email text,
+      customer_phone text NOT NULL,
+      service_address text,
+      notes text,
+      subtotal numeric(10,2) NOT NULL DEFAULT 0,
+      discount_total numeric(10,2) NOT NULL DEFAULT 0,
+      final_total numeric(10,2) NOT NULL DEFAULT 0,
+      bundle_applied_code text,
+      token_estimate integer NOT NULL DEFAULT 0,
+      status text NOT NULL DEFAULT 'quote',
+      source text,
+      created_at timestamp NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_bookings_phone   ON bookings(customer_phone);
+    CREATE INDEX IF NOT EXISTS idx_bookings_email   ON bookings(customer_email);
+    CREATE INDEX IF NOT EXISTS idx_bookings_created ON bookings(created_at);
+
+    CREATE TABLE IF NOT EXISTS booking_service_items (
+      id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      booking_id varchar NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+      service_code text NOT NULL,
+      service_label text NOT NULL,
+      quantity numeric(10,2) NOT NULL DEFAULT 1,
+      unit_price numeric(10,2) NOT NULL,
+      line_subtotal numeric(10,2) NOT NULL,
+      price_mode text NOT NULL DEFAULT 'fixed',
+      details jsonb DEFAULT '{}'::jsonb,
+      created_at timestamp NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_booking_items_booking ON booking_service_items(booking_id);
+    CREATE INDEX IF NOT EXISTS idx_booking_items_service ON booking_service_items(service_code);
+
+    CREATE TABLE IF NOT EXISTS service_catalog (
+      id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      code text NOT NULL UNIQUE,
+      name text NOT NULL,
+      category text NOT NULL,
+      default_price_mode text NOT NULL DEFAULT 'fixed',
+      default_price numeric(10,2),
+      suggested_min numeric(10,2),
+      suggested_max numeric(10,2),
+      discount_eligible boolean NOT NULL DEFAULT true,
+      is_addon boolean NOT NULL DEFAULT false,
+      is_active boolean NOT NULL DEFAULT true,
+      sort_order integer NOT NULL DEFAULT 100,
+      description text,
+      metadata jsonb DEFAULT '{}'::jsonb,
+      created_at timestamp NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_service_catalog_active ON service_catalog(is_active, sort_order);
+
+    CREATE TABLE IF NOT EXISTS bundle_definitions (
+      id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      code text NOT NULL UNIQUE,
+      name text NOT NULL,
+      description text,
+      service_combo_json jsonb NOT NULL,
+      discount_type text NOT NULL,
+      discount_value numeric(10,2) NOT NULL,
+      max_discount numeric(10,2),
+      is_featured boolean NOT NULL DEFAULT false,
+      merchandising_slot text,
+      priority integer NOT NULL DEFAULT 100,
+      is_active boolean NOT NULL DEFAULT true,
+      created_at timestamp NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_bundle_def_active ON bundle_definitions(is_active, priority);
+    CREATE INDEX IF NOT EXISTS idx_bundle_def_slot   ON bundle_definitions(merchandising_slot);
+
+    CREATE TABLE IF NOT EXISTS crew_requirements (
+      id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      service_code text NOT NULL UNIQUE,
+      min_crew integer NOT NULL DEFAULT 1,
+      default_crew integer NOT NULL DEFAULT 2,
+      requires_truck boolean NOT NULL DEFAULT false,
+      capabilities text[] DEFAULT ARRAY[]::text[],
+      estimated_minutes_min integer,
+      estimated_minutes_max integer,
+      notes text,
+      created_at timestamp NOT NULL DEFAULT now()
+    );
+  `);
+}
+
+const CATALOG_SEED: InsertServiceCatalogEntry[] = [
+  // ── Core services (every service the platform offers today) ─────────────
+  {
+    code: "moving",
+    name: "Moving",
+    category: "core",
+    defaultPriceMode: "quote",
+    defaultPrice: null,
+    suggestedMin: "300",
+    suggestedMax: "2500",
+    discountEligible: true,
+    isAddon: false,
+    sortOrder: 10,
+    description: "Local & long-distance residential moves.",
+  },
+  {
+    code: "junk_removal",
+    name: "Junk Removal",
+    category: "core",
+    defaultPriceMode: "quote",
+    defaultPrice: null,
+    suggestedMin: "100",
+    suggestedMax: "600",
+    discountEligible: true,
+    isAddon: false,
+    sortOrder: 20,
+    description: "Single-item pickups through full truckload hauls.",
+  },
+  {
+    code: "lawn_care",
+    name: "Lawn Care",
+    category: "core",
+    defaultPriceMode: "quote",
+    defaultPrice: null,
+    suggestedMin: "45",
+    suggestedMax: "250",
+    discountEligible: true,
+    isAddon: false,
+    sortOrder: 30,
+    description: "Mowing, trimming, cleanup, and full-service yard work.",
+  },
+  {
+    code: "trash_valet",
+    name: "Trash Valet",
+    category: "core",
+    defaultPriceMode: "fixed",
+    defaultPrice: "30",
+    suggestedMin: "30",
+    suggestedMax: "129",
+    discountEligible: true,
+    isAddon: false,
+    sortOrder: 40,
+    description: "Curbside trash + recycling subscription.",
+  },
+  {
+    code: "window_cleaning",
+    name: "Window Cleaning",
+    category: "core",
+    defaultPriceMode: "quote",
+    defaultPrice: null,
+    suggestedMin: "75",
+    suggestedMax: "500",
+    discountEligible: true,
+    isAddon: false,
+    sortOrder: 50,
+    description: "Inside + outside window cleaning by pane count.",
+  },
+  {
+    code: "snow_removal",
+    name: "Snow Removal",
+    category: "core",
+    defaultPriceMode: "quote",
+    defaultPrice: null,
+    suggestedMin: "50",
+    suggestedMax: "400",
+    discountEligible: true,
+    isAddon: false,
+    sortOrder: 60,
+    description: "Per-event or seasonal snow removal.",
+  },
+  {
+    code: "cleaning",
+    name: "Cleaning",
+    category: "core",
+    defaultPriceMode: "quote",
+    defaultPrice: null,
+    suggestedMin: "150",
+    suggestedMax: "600",
+    discountEligible: true,
+    isAddon: false,
+    sortOrder: 70,
+    description: "Standard, deep, and turnover residential cleaning.",
+  },
+  {
+    code: "handyman",
+    name: "Handyman",
+    category: "core",
+    defaultPriceMode: "hourly",
+    defaultPrice: "75",
+    suggestedMin: "150",
+    suggestedMax: "750",
+    discountEligible: true,
+    isAddon: false,
+    sortOrder: 80,
+    description: "Small repairs and installations by the hour.",
+  },
+  {
+    code: "labor",
+    name: "Labor (movers/helpers)",
+    category: "core",
+    defaultPriceMode: "hourly",
+    defaultPrice: "85",
+    suggestedMin: "170",
+    suggestedMax: "1000",
+    discountEligible: true,
+    isAddon: false,
+    sortOrder: 90,
+    description: "General labor — load/unload, garage cleanup, etc.",
+  },
+  {
+    code: "delivery",
+    name: "Delivery",
+    category: "core",
+    defaultPriceMode: "fixed",
+    defaultPrice: "150",
+    suggestedMin: "100",
+    suggestedMax: "400",
+    discountEligible: true,
+    isAddon: false,
+    sortOrder: 100,
+    description: "Local truck delivery for store pickups & furniture.",
+  },
+  // ── Small-job add-ons ($200–$400 ranges per spec) ───────────────────────
+  {
+    code: "junk_reset",
+    name: "Junk Reset",
+    category: "addon",
+    defaultPriceMode: "fixed",
+    defaultPrice: "250",
+    suggestedMin: "200",
+    suggestedMax: "300",
+    discountEligible: true,
+    isAddon: true,
+    sortOrder: 200,
+    description: "Quick post-move junk pickup — get your space clean fast.",
+  },
+  {
+    code: "assembly_finish",
+    name: "Assembly Finish",
+    category: "addon",
+    defaultPriceMode: "fixed",
+    defaultPrice: "275",
+    suggestedMin: "200",
+    suggestedMax: "400",
+    discountEligible: true,
+    isAddon: true,
+    sortOrder: 210,
+    description: "On-the-spot furniture & gear assembly add-on.",
+  },
+  {
+    code: "deep_clean_turnover",
+    name: "Deep Clean Turnover",
+    category: "addon",
+    defaultPriceMode: "fixed",
+    defaultPrice: "350",
+    suggestedMin: "250",
+    suggestedMax: "400",
+    discountEligible: true,
+    isAddon: true,
+    sortOrder: 220,
+    description: "Move-in/move-out deep clean turnover package.",
+  },
+  {
+    code: "walkway_priority",
+    name: "Walkway Priority",
+    category: "addon",
+    defaultPriceMode: "fixed",
+    defaultPrice: "200",
+    suggestedMin: "200",
+    suggestedMax: "300",
+    discountEligible: true,
+    isAddon: true,
+    sortOrder: 230,
+    description: "Priority walkway clearing during snow events.",
+  },
+  {
+    code: "assembly",
+    name: "Assembly (standalone)",
+    category: "addon",
+    defaultPriceMode: "fixed",
+    defaultPrice: "225",
+    suggestedMin: "200",
+    suggestedMax: "400",
+    discountEligible: true,
+    isAddon: true,
+    sortOrder: 240,
+    description: "Standalone furniture/gear assembly visit.",
+  },
+];
+
+const BUNDLE_SEED: InsertBundleDefinition[] = [
+  {
+    code: "move_junk_reset",
+    name: "Move + Junk Reset",
+    description: "Move out, junk gone — one combined visit, 10% off.",
+    serviceComboJson: ["moving", "junk_reset"],
+    discountType: "percent",
+    discountValue: "10",
+    maxDiscount: "200",
+    isFeatured: true,
+    merchandisingSlot: "most_popular",
+    priority: 10,
+  },
+  {
+    code: "move_assembly_finish",
+    name: "Move + Assembly Finish",
+    description: "Move-day + same-crew assembly, $150 off.",
+    serviceComboJson: ["moving", "assembly_finish"],
+    discountType: "fixed",
+    discountValue: "150",
+    maxDiscount: null,
+    isFeatured: true,
+    merchandisingSlot: "best_value",
+    priority: 20,
+  },
+  {
+    code: "junk_deep_clean_turnover",
+    name: "Junk + Deep Clean Turnover",
+    description: "Clear it out + deep clean — perfect turnover, 12% off.",
+    serviceComboJson: ["junk_removal", "deep_clean_turnover"],
+    discountType: "percent",
+    discountValue: "12",
+    maxDiscount: "200",
+    isFeatured: true,
+    merchandisingSlot: "most_popular",
+    priority: 30,
+  },
+  {
+    code: "labor_delivery_assembly",
+    name: "Labor + Delivery + Assembly",
+    description: "We pick it up, drop it off, and put it together — $200 off.",
+    serviceComboJson: ["labor", "delivery", "assembly"],
+    discountType: "fixed",
+    discountValue: "200",
+    maxDiscount: null,
+    isFeatured: true,
+    merchandisingSlot: "best_value",
+    priority: 40,
+  },
+  {
+    code: "snow_walkway_priority",
+    name: "Snow + Walkway Priority",
+    description: "Driveway + walkway, priority slot during storms — 10% off.",
+    serviceComboJson: ["snow_removal", "walkway_priority"],
+    discountType: "percent",
+    discountValue: "10",
+    maxDiscount: "100",
+    isFeatured: true,
+    merchandisingSlot: "fast_addon",
+    priority: 50,
+  },
+];
+
+export async function ensureBookingCatalogSeeded(): Promise<void> {
+  try {
+    await ensureBookingTables();
+  } catch (err) {
+    console.error("[bookingCatalogSeed] table create failed:", (err as Error).message);
+    return; // can't seed if tables don't exist
+  }
+  try {
+    let inserted = 0;
+    for (const row of CATALOG_SEED) {
+      const existing = await db
+        .select({ id: serviceCatalog.id })
+        .from(serviceCatalog)
+        .where(eq(serviceCatalog.code, row.code))
+        .limit(1);
+      if (existing.length === 0) {
+        await db.insert(serviceCatalog).values(row);
+        inserted++;
+      }
+    }
+    if (inserted > 0) {
+      console.log(`✅ service_catalog seeded — ${inserted} new entr${inserted === 1 ? "y" : "ies"}`);
+    }
+  } catch (err) {
+    console.error("[bookingCatalogSeed] service_catalog seed failed:", (err as Error).message);
+  }
+
+  try {
+    let inserted = 0;
+    for (const row of BUNDLE_SEED) {
+      const existing = await db
+        .select({ id: bundleDefinitions.id })
+        .from(bundleDefinitions)
+        .where(eq(bundleDefinitions.code, row.code))
+        .limit(1);
+      if (existing.length === 0) {
+        await db.insert(bundleDefinitions).values(row);
+        inserted++;
+      }
+    }
+    if (inserted > 0) {
+      console.log(`✅ bundle_definitions seeded — ${inserted} new bundle${inserted === 1 ? "" : "s"}`);
+    }
+  } catch (err) {
+    console.error("[bookingCatalogSeed] bundle_definitions seed failed:", (err as Error).message);
+  }
+}
