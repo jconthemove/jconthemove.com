@@ -124,6 +124,25 @@ function CartButtons({ item }: { item: JewelryItem }) {
   );
 }
 
+function WalletUsdBalanceBanner() {
+  const { data } = useQuery<{ cashBalance?: string }>({ queryKey: ["/api/wallet/balance"] });
+  const balance = parseFloat(data?.cashBalance || "0");
+  if (balance <= 0) return null;
+  return (
+    <div className="mb-3 bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-300 rounded-xl px-4 py-3 flex items-center gap-3">
+      <span className="text-xl">💵</span>
+      <div className="flex-1">
+        <p className="text-sm font-bold text-emerald-800">
+          You have ${balance.toFixed(2)} in JCMOVES USD shop credit
+        </p>
+        <p className="text-xs text-emerald-700">
+          Tap any piece you can afford to pay in full with your balance — no card needed.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function WishlistHeart({ item, wishlist, onToggle }: { item: JewelryItem; wishlist: Set<string>; onToggle: (id: string) => void }) {
   const isWishlisted = wishlist.has(item.id);
   return (
@@ -954,13 +973,16 @@ export default function AshleyShop() {
             </div>
           </div>
         ) : (
-          <div className="mb-4 bg-gradient-to-r from-purple-50 to-violet-50 border border-purple-200 rounded-xl px-4 py-3 flex items-center gap-3">
-            <span className="text-xl">💎</span>
-            <div className="flex-1">
-              <p className="text-sm font-bold text-purple-800">Earn JCMOVES on Every Purchase</p>
-              <p className="text-xs text-purple-600">Tap any item to see your balance and apply a discount at checkout.</p>
+          <>
+            <WalletUsdBalanceBanner />
+            <div className="mb-4 bg-gradient-to-r from-purple-50 to-violet-50 border border-purple-200 rounded-xl px-4 py-3 flex items-center gap-3">
+              <span className="text-xl">💎</span>
+              <div className="flex-1">
+                <p className="text-sm font-bold text-purple-800">Earn JCMOVES on Every Purchase</p>
+                <p className="text-xs text-purple-600">Tap any item to see your balance and apply a discount at checkout.</p>
+              </div>
             </div>
-          </div>
+          </>
         )}
 
 

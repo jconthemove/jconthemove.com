@@ -16763,6 +16763,157 @@ Thank you for your business!
     }
   });
 
+  // Task #145 — Redeem JCMOVES USD wallet balance against a jewelry / shop
+  // order. To keep order/payment state simple and avoid the failure mode
+  // where wallet credit is debited without a settlement on a remaining-
+  // balance Square/BTC checkout (filed as follow-up #147), this endpoint
+  // requires *full* payment: the customer's balance must cover the entire
+  // item price.
+  //
+  // Concurrency model: the entire flow runs inside a single DB transaction
+  // and uses conditional UPDATE-RETURNING for both the item reservation
+  // and the wallet debit. Either step claiming zero rows aborts the
+  // transaction so the other side is never written. This guarantees:
+  //   * Two simultaneous buyers cannot both claim the same item (the
+  //     conditional `WHERE id=? AND status='active' AND in_stock=true`
+  //     update only succeeds for the first transaction to commit).
+  //   * No wallet is debited unless the matching item-sold update
+  //     succeeded in the same transaction.
+  app.post("/api/wallet/redeem-balance", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id || req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+
+      const { amount, referenceType, referenceId, itemTitle } = req.body || {};
+      const amt = Number(amount);
+      if (!isFinite(amt) || amt <= 0) {
+        return res.status(400).json({ error: "Amount must be greater than $0" });
+      }
+      if (!referenceType || !referenceId) {
+        return res.status(400).json({ error: "referenceType and referenceId are required" });
+      }
+      if (referenceType !== "jewelry" && referenceType !== "shop") {
+        return res.status(400).json({ error: "Unsupported referenceType" });
+      }
+      const cents = Math.round(amt * 100) / 100;
+
+      // Sentinel error type so we can distinguish expected business-rule
+      // failures (4xx) from unexpected DB errors (5xx) after the rollback.
+      class RedeemError extends Error {
+        status: number;
+        constructor(msg: string, status = 400) { super(msg); this.status = status; }
+      }
+
+      let result: { newBalance: string; amountRedeemed: string; itemTitle: string | null };
+      try {
+        result = await db.transaction(async (tx) => {
+          // Step 1: atomically reserve the item by flipping it to "sold"
+          // ONLY if it is still active + in stock. RETURNING gives us the
+          // authoritative price/title from the row we actually claimed.
+          let claimedPrice: number | null = null;
+          let claimedTitle: string | null = itemTitle ?? null;
+
+          if (referenceType === "jewelry") {
+            const claimed = await tx.update(jewelryItems)
+              .set({ inStock: false, status: "sold", soldAt: new Date() })
+              .where(sql`${jewelryItems.id} = ${referenceId} AND ${jewelryItems.status} = 'active' AND ${jewelryItems.inStock} = true`)
+              .returning();
+            if (claimed.length !== 1) {
+              throw new RedeemError("Item is no longer available", 409);
+            }
+            claimedPrice = claimed[0].price ? parseFloat(claimed[0].price) : null;
+            claimedTitle = claimed[0].title;
+          } else {
+            const claimed = await tx.update(shopItems)
+              .set({ status: "sold", soldAt: new Date() })
+              .where(sql`${shopItems.id} = ${referenceId} AND ${shopItems.status} = 'active'`)
+              .returning();
+            if (claimed.length !== 1) {
+              throw new RedeemError("Item is no longer available", 409);
+            }
+            claimedPrice = claimed[0].price ? parseFloat(claimed[0].price) : null;
+            claimedTitle = claimed[0].title;
+          }
+
+          if (claimedPrice == null) {
+            throw new RedeemError("This item is not priced for purchase", 400);
+          }
+          // Full-payment requirement.
+          if (cents + 0.005 < claimedPrice) {
+            throw new RedeemError(
+              `Wallet redemption requires covering the full $${claimedPrice.toFixed(2)} price. Partial wallet credit on Square / BTC checkout is coming soon.`,
+              400,
+            );
+          }
+          if (cents > claimedPrice + 0.005) {
+            throw new RedeemError(`Cannot apply more than the item price ($${claimedPrice.toFixed(2)})`, 400);
+          }
+
+          // Step 2: atomic wallet debit, only succeeds if balance covers it.
+          const debited = await tx.update(walletAccounts)
+            .set({
+              cashBalance: sql`(${walletAccounts.cashBalance})::numeric - ${cents.toFixed(2)}::numeric`,
+              lastActivity: new Date(),
+            })
+            .where(sql`${walletAccounts.userId} = ${userId} AND (${walletAccounts.cashBalance})::numeric >= ${cents.toFixed(2)}::numeric`)
+            .returning();
+
+          if (debited.length === 0) {
+            // Read current balance for a friendly error; the throw will
+            // roll back the item-sold update from step 1.
+            const [w] = await tx.select().from(walletAccounts).where(eq(walletAccounts.userId, userId)).limit(1);
+            const have = parseFloat(w?.cashBalance || "0");
+            throw new RedeemError(
+              `Insufficient JCMOVES USD balance. You have $${have.toFixed(2)}, tried to redeem $${cents.toFixed(2)}.`,
+              400,
+            );
+          }
+
+          // Step 3: record the order payment in `rewards`. If this insert
+          // fails, the transaction rolls back both the item reservation
+          // and the wallet debit.
+          await tx.insert(rewards).values({
+            userId,
+            rewardType: "wallet_balance_redemption",
+            tokenAmount: "0",
+            cashValue: (-cents).toFixed(6),
+            status: "confirmed",
+            referenceId: String(referenceId),
+            metadata: {
+              referenceType,
+              referenceId,
+              itemTitle: claimedTitle,
+              amountUsd: cents.toFixed(2),
+              paidInFull: true,
+            },
+          });
+
+          return {
+            newBalance: parseFloat(debited[0].cashBalance || "0").toFixed(2),
+            amountRedeemed: cents.toFixed(2),
+            itemTitle: claimedTitle,
+          };
+        });
+      } catch (txErr: any) {
+        if (txErr instanceof RedeemError) {
+          return res.status(txErr.status).json({ error: txErr.message });
+        }
+        throw txErr;
+      }
+
+      console.log(`💵 User ${userId} redeemed $${result.amountRedeemed} JCMOVES USD against ${referenceType}:${referenceId}`);
+      res.json({
+        success: true,
+        amountRedeemed: result.amountRedeemed,
+        newBalance: result.newBalance,
+        paidInFull: true,
+      });
+    } catch (error: any) {
+      console.error("Error redeeming wallet balance:", error);
+      res.status(500).json({ error: error.message || "Failed to redeem balance" });
+    }
+  });
+
   // ==================== STAKING TREASURY ROUTES ====================
 
   app.get("/api/staking/tiers", (_req, res) => {

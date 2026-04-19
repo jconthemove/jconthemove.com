@@ -13,7 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
-import { ArrowLeft, Gem, ChevronLeft, ChevronRight, Pencil, Trash2, Video, Loader2, Tag, RotateCcw, ShoppingCart, Check, Bitcoin, Heart, Share2, Sparkles, Star, Coins } from "lucide-react";
+import { ArrowLeft, Gem, ChevronLeft, ChevronRight, Pencil, Trash2, Video, Loader2, Tag, RotateCcw, ShoppingCart, Check, Bitcoin, Heart, Share2, Sparkles, Star, Coins, DollarSign } from "lucide-react";
 import { useCart } from "@/hooks/useCart";
 import { FloatingCartButton } from "@/components/cart-button";
 
@@ -56,6 +56,97 @@ interface JewelryItem {
 
 interface WalletBalance {
   tokenBalance: string;
+  cashBalance?: string;
+}
+
+function WalletUsdRedeemPanel({ item }: { item: JewelryItem }) {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [, navigate] = useLocation();
+
+  const { data: walletData } = useQuery<WalletBalance>({
+    queryKey: ["/api/wallet/balance"],
+    enabled: !!user,
+  });
+
+  const cashBalance = parseFloat(walletData?.cashBalance || "0");
+  const itemPrice = item.price ? parseFloat(item.price) : 0;
+  const [submitting, setSubmitting] = useState(false);
+
+  if (!user || !item.price || item.inStock === false || cashBalance <= 0) return null;
+
+  const canCoverFull = cashBalance + 0.005 >= itemPrice;
+  const shortBy = Math.max(0, itemPrice - cashBalance);
+
+  const handleRedeem = async () => {
+    setSubmitting(true);
+    try {
+      const res = await apiRequest("POST", "/api/wallet/redeem-balance", {
+        amount: itemPrice,
+        referenceType: "jewelry",
+        referenceId: item.id,
+        itemTitle: item.title,
+      });
+      const data = await res.json();
+      qc.invalidateQueries({ queryKey: ["/api/wallet/balance"] });
+      qc.invalidateQueries({ queryKey: ["/api/jewelry"] });
+      qc.invalidateQueries({ queryKey: ["/api/jewelry", item.id] });
+      qc.invalidateQueries({ queryKey: ["/api/gift-cards/mine"] });
+      toast({
+        title: "Order paid in full!",
+        description: `$${data.amountRedeemed} applied — Ashley will reach out about delivery.`,
+      });
+      navigate("/customer-profile");
+    } catch (err: any) {
+      const msg = err?.message || "Failed to apply balance";
+      toast({ title: "Could not apply credit", description: msg, variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-300 rounded-xl p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <DollarSign className="h-4 w-4 text-emerald-600" />
+          <span className="text-sm font-bold text-emerald-800">JCMOVES USD Balance</span>
+        </div>
+        <span className="text-sm font-bold text-emerald-700">${cashBalance.toFixed(2)}</span>
+      </div>
+
+      {canCoverFull ? (
+        <>
+          <div className="bg-white/70 rounded-lg p-2 text-xs text-emerald-800 space-y-0.5">
+            <div className="flex justify-between"><span>Item price:</span><span>${itemPrice.toFixed(2)}</span></div>
+            <div className="flex justify-between"><span>Paid with balance:</span><span className="font-bold">−${itemPrice.toFixed(2)}</span></div>
+            <div className="flex justify-between border-t border-emerald-200 pt-0.5">
+              <span>You owe:</span>
+              <span className="font-bold">$0.00</span>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            disabled={submitting}
+            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+            onClick={handleRedeem}
+          >
+            {submitting ? (
+              <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Applying…</>
+            ) : (
+              <>Pay ${itemPrice.toFixed(2)} with my balance</>
+            )}
+          </Button>
+        </>
+      ) : (
+        <p className="text-xs text-emerald-700">
+          You're <span className="font-bold">${shortBy.toFixed(2)}</span> short of covering this piece with your shop credit.
+          Pay the remainder with card or Bitcoin below — partial wallet credit on Square checkout is coming soon.
+        </p>
+      )}
+    </div>
+  );
 }
 
 function JCMOVESPanel({ item, onCheckoutWithDiscount }: { item: JewelryItem; onCheckoutWithDiscount: (useTokens: boolean, tokenAmount: number) => void }) {
@@ -222,6 +313,8 @@ function DetailCartButtons({ item, onBtcCheckout, btcLoading, onCheckoutWithDisc
           <p className="text-orange-600 text-xs">Added! Pay with Bitcoin at checkout to <span className="font-bold">save 10%</span></p>
         </div>
       )}
+
+      <WalletUsdRedeemPanel item={item} />
 
       <JCMOVESPanel item={item} onCheckoutWithDiscount={onCheckoutWithDiscount} />
     </div>
