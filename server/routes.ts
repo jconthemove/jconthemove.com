@@ -15192,16 +15192,50 @@ Thank you for your business!
       if (!dbItem) {
         return res.status(404).json({ error: "Item not found" });
       }
-      if (!dbItem.inStock) {
-        return res.status(400).json({ error: "This item is no longer available" });
-      }
       if (!dbItem.price) {
         return res.status(400).json({ error: "This item does not have a price set" });
       }
 
-      const parsedAmount = parseFloat(dbItem.price);
-      if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      const fullPrice = parseFloat(dbItem.price);
+      if (isNaN(fullPrice) || fullPrice <= 0) {
         return res.status(400).json({ error: "Invalid price amount" });
+      }
+
+      // Branch: pending_balance reservation from a partial JCMOVES USD credit.
+      // The customer who applied the credit must be logged in and only owes
+      // the remaining balance. Anyone else is locked out until expiry.
+      // Expired holds are auto-released (refund + reactivate) so they don't
+      // strand inventory for other shoppers.
+      const sessionUserId = req.user?.id || req.session?.userId || null;
+      let parsedAmount = fullPrice;
+      let appliedCreditCents = 0;
+      let isPendingBalanceFlow = false;
+      if (dbItem.status === "pending_balance") {
+        const expired = dbItem.pendingExpiresAt
+          && new Date(dbItem.pendingExpiresAt).getTime() < Date.now();
+        if (expired) {
+          await releasePendingJewelryReservation(itemId, "expired_at_checkout");
+          // Refresh and treat as freshly active.
+          const refreshed = await storage.getJewelryItem(itemId);
+          if (!refreshed || !refreshed.inStock || refreshed.status !== "active") {
+            return res.status(400).json({ error: "This item is no longer available" });
+          }
+          // fall through with full price
+        } else {
+          if (!sessionUserId || sessionUserId !== dbItem.pendingCreditUserId) {
+            return res.status(409).json({
+              error: "This item is being held for another customer who applied shop credit. Please try again later.",
+            });
+          }
+          appliedCreditCents = parseFloat(dbItem.pendingCreditCents || "0");
+          parsedAmount = Math.max(0, fullPrice - appliedCreditCents);
+          if (parsedAmount <= 0) {
+            return res.status(400).json({ error: "No remaining balance — your credit already covers this item." });
+          }
+          isPendingBalanceFlow = true;
+        }
+      } else if (!dbItem.inStock || dbItem.status !== "active") {
+        return res.status(400).json({ error: "This item is no longer available" });
       }
 
       const squareToken = process.env.SQUARE_ACCESS_TOKEN;
@@ -15230,10 +15264,16 @@ Thank you for your business!
       const host = req.headers['x-forwarded-host'] || req.headers.host;
       const baseUrl = `${protocol}://${host}`;
 
+      const creditNote = appliedCreditCents > 0
+        ? ` (after $${appliedCreditCents.toFixed(2)} JCMOVES USD credit on $${fullPrice.toFixed(2)})`
+        : "";
+
       const paymentLinkResponse = await client.checkout.paymentLinks.create({
         idempotencyKey: randomUUID(),
         quickPay: {
-          name: `Nature Made Jewls - ${dbItem.title}`,
+          name: appliedCreditCents > 0
+            ? `Nature Made Jewls - ${dbItem.title} (remaining balance)`
+            : `Nature Made Jewls - ${dbItem.title}`,
           priceMoney: {
             amount: amountCents,
             currency: "USD",
@@ -15245,7 +15285,7 @@ Thank you for your business!
           allowTipping: false,
           merchantSupportEmail: "upmichiganstatemovers@gmail.com",
         },
-        paymentNote: `Jewelry purchase: ${dbItem.title} (ID: ${itemId})`,
+        paymentNote: `Jewelry purchase: ${dbItem.title} (ID: ${itemId})${creditNote}`,
       });
 
       const paymentLink = paymentLinkResponse.result?.paymentLink || paymentLinkResponse.paymentLink;
@@ -15253,7 +15293,15 @@ Thank you for your business!
         return res.status(500).json({ error: "Failed to create payment link" });
       }
 
-      console.log(`Square checkout link created for ${dbItem.title} ($${dbItem.price}) - ${paymentLink.url}`);
+      // Persist the Square order ID on the held item so payment-complete can
+      // verify the right order paid the right remaining balance.
+      if (isPendingBalanceFlow && paymentLink.orderId) {
+        await db.update(jewelryItems)
+          .set({ pendingSquareOrderId: paymentLink.orderId })
+          .where(eq(jewelryItems.id, itemId));
+      }
+
+      console.log(`Square checkout link created for ${dbItem.title} ($${parsedAmount.toFixed(2)} of $${fullPrice.toFixed(2)}) - ${paymentLink.url}`);
 
       res.json({
         success: true,
@@ -15283,6 +15331,58 @@ Thank you for your business!
 
       const purchasePrice = parseFloat(dbItem.price || "0");
       if (purchasePrice <= 0) return res.status(400).json({ error: "Invalid item price" });
+
+      // Finalize a pending_balance reservation only after the customer has
+      // actually paid the remaining balance through Square. We require an
+      // orderId and verify it matches the orderId we stored at checkout
+      // time AND that Square reports a tender covering the remaining due.
+      if (dbItem.status === "pending_balance") {
+        if (dbItem.pendingCreditUserId !== userId) {
+          return res.status(403).json({ error: "This item is held for a different customer." });
+        }
+        const requestOrderId: string | undefined = req.body?.orderId || req.query?.orderId;
+        const storedOrderId = dbItem.pendingSquareOrderId;
+        if (!storedOrderId) {
+          return res.status(409).json({ error: "Reservation has no Square order on file. Please retry checkout." });
+        }
+        if (!requestOrderId || requestOrderId !== storedOrderId) {
+          return res.status(400).json({ error: "Missing or mismatched Square orderId — cannot confirm payment." });
+        }
+        const creditCents = parseFloat(dbItem.pendingCreditCents || "0");
+        const expectedDueCents = Math.round((purchasePrice - creditCents) * 100);
+        const verified = await verifySquareJewelryPayment(storedOrderId, expectedDueCents);
+        if (!verified) {
+          return res.status(402).json({
+            error: "Square has not confirmed the remaining-balance payment yet. Please try again in a moment.",
+            pending: true,
+          });
+        }
+        await db.transaction(async (tx) => {
+          await tx.update(jewelryItems)
+            .set({
+              status: "sold",
+              inStock: false,
+              soldAt: new Date(),
+              pendingCreditUserId: null,
+              pendingCreditCents: null,
+              pendingExpiresAt: null,
+              pendingSquareOrderId: null,
+            })
+            .where(and(
+              eq(jewelryItems.id, itemId),
+              eq(jewelryItems.status, "pending_balance"),
+            ));
+          await tx.update(rewards)
+            .set({ status: "confirmed" })
+            .where(and(
+              eq(rewards.userId, userId),
+              eq(rewards.rewardType, "wallet_balance_redemption"),
+              eq(rewards.referenceId, itemId),
+              eq(rewards.status, "pending"),
+            ));
+        });
+        console.log(`💎 Finalized pending_balance jewelry item ${itemId} for user ${userId} (Square paid ${verified.paidCents}¢, expected ${expectedDueCents}¢)`);
+      }
 
       // Idempotency: skip if already rewarded for this item
       const alreadyRewarded = await db.select({ id: rewards.id })
@@ -16763,6 +16863,103 @@ Thank you for your business!
     }
   });
 
+  // Internal helper: release a held jewelry pending_balance reservation,
+  // refund the credit, and reactivate the listing. Idempotent — only acts
+  // on rows still in the pending_balance state. Safe to call from the
+  // expiry sweeper, the manual cancel endpoint, or inline release paths.
+  async function releasePendingJewelryReservation(
+    itemId: string,
+    reason: string,
+  ): Promise<{ refundedUsd: number; userId: string } | null> {
+    return await db.transaction(async (tx) => {
+      const [item] = await tx.select().from(jewelryItems)
+        .where(and(
+          eq(jewelryItems.id, itemId),
+          eq(jewelryItems.status, "pending_balance"),
+        ))
+        .limit(1);
+      if (!item || !item.pendingCreditUserId) return null;
+      const refundCents = parseFloat(item.pendingCreditCents || "0");
+      const refundUserId = item.pendingCreditUserId;
+
+      await tx.update(jewelryItems)
+        .set({
+          status: "active",
+          inStock: true,
+          pendingCreditUserId: null,
+          pendingCreditCents: null,
+          pendingExpiresAt: null,
+          pendingSquareOrderId: null,
+        })
+        .where(eq(jewelryItems.id, itemId));
+
+      if (refundCents > 0) {
+        await tx.update(walletAccounts)
+          .set({
+            cashBalance: sql`(${walletAccounts.cashBalance})::numeric + ${refundCents.toFixed(2)}::numeric`,
+            lastActivity: new Date(),
+          })
+          .where(eq(walletAccounts.userId, refundUserId));
+
+        await tx.update(rewards)
+          .set({ status: "cancelled" })
+          .where(and(
+            eq(rewards.userId, refundUserId),
+            eq(rewards.rewardType, "wallet_balance_redemption"),
+            eq(rewards.referenceId, itemId),
+            eq(rewards.status, "pending"),
+          ));
+        await tx.insert(rewards).values({
+          userId: refundUserId,
+          rewardType: "wallet_balance_redemption_refund",
+          tokenAmount: "0",
+          cashValue: refundCents.toFixed(6),
+          status: "confirmed",
+          referenceId: itemId,
+          metadata: {
+            referenceType: "jewelry",
+            referenceId: itemId,
+            refundUsd: refundCents.toFixed(2),
+            reason,
+          },
+        });
+      }
+
+      return { refundedUsd: refundCents, userId: refundUserId };
+    });
+  }
+
+  // Internal helper: confirm via Square that a given orderId actually paid
+  // at least `expectedDueCents` for the held jewelry item. Returns the
+  // matching tender's payment amount in cents, or null if not yet paid.
+  async function verifySquareJewelryPayment(
+    orderId: string,
+    expectedDueCents: number,
+  ): Promise<{ paidCents: number } | null> {
+    const squareToken = process.env.SQUARE_ACCESS_TOKEN;
+    if (!squareToken) return null;
+    const { SquareClient, SquareEnvironment } = await import("square");
+    const client = new SquareClient({ token: squareToken, environment: SquareEnvironment.Production });
+    type SquareTender = { amountMoney?: { amount?: bigint | number }; amount_money?: { amount?: bigint | number } };
+    type SquareOrder = { state?: string; tenders?: SquareTender[] };
+    type SquareOrderResponse = { result?: { order?: SquareOrder }; order?: SquareOrder };
+    const ordersApi = (client as unknown as {
+      orders: { get: (args: { orderId: string }) => Promise<SquareOrderResponse> }
+    }).orders;
+    const resp = await ordersApi.get({ orderId }).catch(() => null);
+    const order = resp?.result?.order ?? resp?.order;
+    if (!order) return null;
+    const tenders = order.tenders ?? [];
+    if (tenders.length === 0) return null;
+    let paidCents = 0;
+    for (const t of tenders) {
+      const a = t.amountMoney?.amount ?? t.amount_money?.amount ?? 0;
+      paidCents += Number(a);
+    }
+    if (paidCents + 1 < expectedDueCents) return null; // 1¢ slack for rounding
+    return { paidCents };
+  }
+
   // Task #145 — Redeem JCMOVES USD wallet balance against a jewelry / shop
   // order. To keep order/payment state simple and avoid the failure mode
   // where wallet credit is debited without a settlement on a remaining-
@@ -16838,15 +17035,33 @@ Thank you for your business!
           if (claimedPrice == null) {
             throw new RedeemError("This item is not priced for purchase", 400);
           }
-          // Full-payment requirement.
-          if (cents + 0.005 < claimedPrice) {
+          if (cents > claimedPrice + 0.005) {
+            throw new RedeemError(`Cannot apply more than the item price ($${claimedPrice.toFixed(2)})`, 400);
+          }
+          const isFullPayment = cents + 0.005 >= claimedPrice;
+          // Partial credit on plain shop items isn't wired into a follow-on
+          // Square checkout yet — keep the old "full only" rule there.
+          if (!isFullPayment && referenceType === "shop") {
             throw new RedeemError(
-              `Wallet redemption requires covering the full $${claimedPrice.toFixed(2)} price. Partial wallet credit on Square / BTC checkout is coming soon.`,
+              `Partial wallet credit on shop items isn't supported yet — apply the full $${claimedPrice.toFixed(2)} or pay another way.`,
               400,
             );
           }
-          if (cents > claimedPrice + 0.005) {
-            throw new RedeemError(`Cannot apply more than the item price ($${claimedPrice.toFixed(2)})`, 400);
+
+          // For partial jewelry redemption, hold the item as `pending_balance`
+          // (instead of fully sold) so it's reserved for this customer until
+          // they finish the Square / BTC payment for the remainder.
+          if (!isFullPayment && referenceType === "jewelry") {
+            const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour reservation
+            await tx.update(jewelryItems)
+              .set({
+                status: "pending_balance",
+                soldAt: null,
+                pendingCreditUserId: userId,
+                pendingCreditCents: cents.toFixed(2),
+                pendingExpiresAt: expiresAt,
+              })
+              .where(eq(jewelryItems.id, String(referenceId)));
           }
 
           // Step 2: atomic wallet debit, only succeeds if balance covers it.
@@ -16872,19 +17087,22 @@ Thank you for your business!
           // Step 3: record the order payment in `rewards`. If this insert
           // fails, the transaction rolls back both the item reservation
           // and the wallet debit.
+          const remainingCents = Math.max(0, claimedPrice - cents);
           await tx.insert(rewards).values({
             userId,
             rewardType: "wallet_balance_redemption",
             tokenAmount: "0",
             cashValue: (-cents).toFixed(6),
-            status: "confirmed",
+            status: isFullPayment ? "confirmed" : "pending",
             referenceId: String(referenceId),
             metadata: {
               referenceType,
               referenceId,
               itemTitle: claimedTitle,
               amountUsd: cents.toFixed(2),
-              paidInFull: true,
+              paidInFull: isFullPayment,
+              remainingDueUsd: remainingCents.toFixed(2),
+              itemPriceUsd: claimedPrice.toFixed(2),
             },
           });
 
@@ -16892,6 +17110,9 @@ Thank you for your business!
             newBalance: parseFloat(debited[0].cashBalance || "0").toFixed(2),
             amountRedeemed: cents.toFixed(2),
             itemTitle: claimedTitle,
+            paidInFull: isFullPayment,
+            remainingDueUsd: remainingCents.toFixed(2),
+            itemPriceUsd: claimedPrice.toFixed(2),
           };
         });
       } catch (txErr: any) {
@@ -16901,16 +17122,58 @@ Thank you for your business!
         throw txErr;
       }
 
-      console.log(`💵 User ${userId} redeemed $${result.amountRedeemed} JCMOVES USD against ${referenceType}:${referenceId}`);
+      console.log(`💵 User ${userId} redeemed $${result.amountRedeemed} JCMOVES USD against ${referenceType}:${referenceId} (paidInFull=${result.paidInFull})`);
       res.json({
         success: true,
         amountRedeemed: result.amountRedeemed,
         newBalance: result.newBalance,
-        paidInFull: true,
+        paidInFull: result.paidInFull,
+        remainingDueUsd: result.remainingDueUsd,
+        itemPriceUsd: result.itemPriceUsd,
+        itemTitle: result.itemTitle,
       });
     } catch (error: any) {
       console.error("Error redeeming wallet balance:", error);
       res.status(500).json({ error: error.message || "Failed to redeem balance" });
+    }
+  });
+
+  // POST /api/wallet/cancel-pending-redemption
+  // Refund a pending partial JCMOVES USD credit back to the customer's
+  // walletAccounts.cashBalance and release the held jewelry item.
+  // Used when the customer abandons / fails the Square checkout for the
+  // remaining balance, or hits the manual "cancel" button.
+  app.post("/api/wallet/cancel-pending-redemption", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id || req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const { itemId, referenceType } = req.body || {};
+      if (!itemId || referenceType !== "jewelry") {
+        return res.status(400).json({ error: "itemId and referenceType=jewelry are required" });
+      }
+
+      // Make sure the caller actually owns this hold before releasing.
+      const existing = await storage.getJewelryItem(String(itemId));
+      if (
+        !existing ||
+        existing.status !== "pending_balance" ||
+        existing.pendingCreditUserId !== userId
+      ) {
+        return res.status(404).json({ error: "No pending credit to refund for this item." });
+      }
+
+      const released = await releasePendingJewelryReservation(
+        String(itemId),
+        "checkout_cancelled_or_failed",
+      );
+      if (!released) {
+        return res.status(404).json({ error: "No pending credit to refund for this item." });
+      }
+      console.log(`↩️ Refunded $${released.refundedUsd.toFixed(2)} JCMOVES USD to user ${userId} for cancelled jewelry:${itemId}`);
+      res.json({ success: true, refundedUsd: released.refundedUsd.toFixed(2) });
+    } catch (error: any) {
+      console.error("Error cancelling pending redemption:", error);
+      res.status(500).json({ error: error.message || "Failed to cancel pending redemption" });
     }
   });
 

@@ -636,6 +636,10 @@ export const jewelryItems = pgTable("jewelry_items", {
   featured: boolean("featured").default(false),
   status: text("status").notNull().default("active"),
   soldAt: timestamp("sold_at"),
+  pendingCreditUserId: varchar("pending_credit_user_id").references(() => users.id),
+  pendingCreditCents: decimal("pending_credit_cents", { precision: 10, scale: 2 }),
+  pendingExpiresAt: timestamp("pending_expires_at"),
+  pendingSquareOrderId: text("pending_square_order_id"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
 

@@ -52,6 +52,9 @@ interface JewelryItem {
   featured?: boolean;
   status: string;
   createdAt: string;
+  pendingCreditUserId?: string | null;
+  pendingCreditCents?: string | null;
+  pendingExpiresAt?: string | null;
 }
 
 interface WalletBalance {
@@ -73,17 +76,115 @@ function WalletUsdRedeemPanel({ item }: { item: JewelryItem }) {
   const cashBalance = parseFloat(walletData?.cashBalance || "0");
   const itemPrice = item.price ? parseFloat(item.price) : 0;
   const [submitting, setSubmitting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+
+  // If THIS user already has a partial credit reservation on this item,
+  // show a "finish remaining balance" / "cancel & refund" surface.
+  const userHasPending =
+    !!user &&
+    item.status === "pending_balance" &&
+    item.pendingCreditUserId === user.id;
+
+  if (userHasPending) {
+    const credit = parseFloat(item.pendingCreditCents || "0");
+    const remaining = Math.max(0, itemPrice - credit);
+
+    const continueToSquare = async () => {
+      setSubmitting(true);
+      try {
+        const res = await apiRequest("POST", "/api/square/create-checkout", { itemId: item.id });
+        const data = await res.json();
+        if (data.checkoutUrl) {
+          window.location.href = data.checkoutUrl;
+        } else {
+          throw new Error(data.error || "Could not start checkout");
+        }
+      } catch (err: any) {
+        toast({ title: "Couldn't start checkout", description: err?.message || "Try again", variant: "destructive" });
+      } finally {
+        setSubmitting(false);
+      }
+    };
+
+    const cancelAndRefund = async () => {
+      setCancelling(true);
+      try {
+        const res = await apiRequest("POST", "/api/wallet/cancel-pending-redemption", {
+          itemId: item.id,
+          referenceType: "jewelry",
+        });
+        const data = await res.json();
+        qc.invalidateQueries({ queryKey: ["/api/wallet/balance"] });
+        qc.invalidateQueries({ queryKey: ["/api/jewelry", item.id] });
+        qc.invalidateQueries({ queryKey: ["/api/jewelry"] });
+        toast({
+          title: "Credit refunded",
+          description: `$${data.refundedUsd} returned to your JCMOVES USD balance.`,
+        });
+      } catch (err: any) {
+        toast({ title: "Couldn't cancel", description: err?.message || "Try again", variant: "destructive" });
+      } finally {
+        setCancelling(false);
+      }
+    };
+
+    return (
+      <div className="bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-300 rounded-xl p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <DollarSign className="h-4 w-4 text-amber-600" />
+          <span className="text-sm font-bold text-amber-800">Finish your purchase</span>
+        </div>
+        <div className="bg-white/70 rounded-lg p-2 text-xs text-amber-900 space-y-0.5">
+          <div className="flex justify-between"><span>Item price:</span><span>${itemPrice.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span>JCMOVES USD applied:</span><span className="font-bold">−${credit.toFixed(2)}</span></div>
+          <div className="flex justify-between border-t border-amber-200 pt-0.5">
+            <span>Remaining due:</span>
+            <span className="font-bold">${remaining.toFixed(2)}</span>
+          </div>
+        </div>
+        <Button
+          size="sm"
+          disabled={submitting}
+          className="w-full bg-amber-600 hover:bg-amber-700 text-white text-xs"
+          onClick={continueToSquare}
+        >
+          {submitting ? (
+            <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Redirecting…</>
+          ) : (
+            <>Pay ${remaining.toFixed(2)} with card</>
+          )}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={cancelling}
+          className="w-full text-xs border-amber-300 text-amber-800 hover:bg-amber-100"
+          onClick={cancelAndRefund}
+        >
+          {cancelling ? (
+            <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Refunding…</>
+          ) : (
+            <>Cancel & refund ${credit.toFixed(2)} to my balance</>
+          )}
+        </Button>
+        <p className="text-[11px] text-amber-700">
+          We're holding this piece for you for 1 hour. If you don't finish payment your credit will need to be refunded.
+        </p>
+      </div>
+    );
+  }
 
   if (!user || !item.price || item.inStock === false || cashBalance <= 0) return null;
 
   const canCoverFull = cashBalance + 0.005 >= itemPrice;
-  const shortBy = Math.max(0, itemPrice - cashBalance);
+  const applyAmount = canCoverFull ? itemPrice : Math.min(cashBalance, itemPrice);
+  const remainingAfter = Math.max(0, itemPrice - applyAmount);
 
   const handleRedeem = async () => {
     setSubmitting(true);
     try {
       const res = await apiRequest("POST", "/api/wallet/redeem-balance", {
-        amount: itemPrice,
+        amount: applyAmount,
         referenceType: "jewelry",
         referenceId: item.id,
         itemTitle: item.title,
@@ -93,11 +194,38 @@ function WalletUsdRedeemPanel({ item }: { item: JewelryItem }) {
       qc.invalidateQueries({ queryKey: ["/api/jewelry"] });
       qc.invalidateQueries({ queryKey: ["/api/jewelry", item.id] });
       qc.invalidateQueries({ queryKey: ["/api/gift-cards/mine"] });
+
+      if (data.paidInFull) {
+        toast({
+          title: "Order paid in full!",
+          description: `$${data.amountRedeemed} applied — Ashley will reach out about delivery.`,
+        });
+        navigate("/customer-profile");
+        return;
+      }
+
+      // Partial credit applied — start Square checkout for the remainder.
       toast({
-        title: "Order paid in full!",
-        description: `$${data.amountRedeemed} applied — Ashley will reach out about delivery.`,
+        title: `$${data.amountRedeemed} credit applied`,
+        description: `Sending you to checkout for the remaining $${data.remainingDueUsd}…`,
       });
-      navigate("/customer-profile");
+      try {
+        const coRes = await apiRequest("POST", "/api/square/create-checkout", { itemId: item.id });
+        const coData = await coRes.json();
+        if (coData.checkoutUrl) {
+          window.location.href = coData.checkoutUrl;
+        } else {
+          throw new Error(coData.error || "Could not start checkout");
+        }
+      } catch (coErr: any) {
+        toast({
+          title: "Credit applied, but checkout failed",
+          description:
+            (coErr?.message || "Please retry checkout below.") +
+            " Your credit is being held — you can finish or cancel/refund from this page.",
+          variant: "destructive",
+        });
+      }
     } catch (err: any) {
       const msg = err?.message || "Failed to apply balance";
       toast({ title: "Could not apply credit", description: msg, variant: "destructive" });
@@ -116,33 +244,36 @@ function WalletUsdRedeemPanel({ item }: { item: JewelryItem }) {
         <span className="text-sm font-bold text-emerald-700">${cashBalance.toFixed(2)}</span>
       </div>
 
-      {canCoverFull ? (
-        <>
-          <div className="bg-white/70 rounded-lg p-2 text-xs text-emerald-800 space-y-0.5">
-            <div className="flex justify-between"><span>Item price:</span><span>${itemPrice.toFixed(2)}</span></div>
-            <div className="flex justify-between"><span>Paid with balance:</span><span className="font-bold">−${itemPrice.toFixed(2)}</span></div>
-            <div className="flex justify-between border-t border-emerald-200 pt-0.5">
-              <span>You owe:</span>
-              <span className="font-bold">$0.00</span>
-            </div>
-          </div>
-          <Button
-            size="sm"
-            disabled={submitting}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
-            onClick={handleRedeem}
-          >
-            {submitting ? (
-              <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Applying…</>
-            ) : (
-              <>Pay ${itemPrice.toFixed(2)} with my balance</>
-            )}
-          </Button>
-        </>
-      ) : (
-        <p className="text-xs text-emerald-700">
-          You're <span className="font-bold">${shortBy.toFixed(2)}</span> short of covering this piece with your shop credit.
-          Pay the remainder with card or Bitcoin below — partial wallet credit on Square checkout is coming soon.
+      <div className="bg-white/70 rounded-lg p-2 text-xs text-emerald-800 space-y-0.5">
+        <div className="flex justify-between"><span>Item price:</span><span>${itemPrice.toFixed(2)}</span></div>
+        <div className="flex justify-between">
+          <span>Paid with balance:</span>
+          <span className="font-bold">−${applyAmount.toFixed(2)}</span>
+        </div>
+        <div className="flex justify-between border-t border-emerald-200 pt-0.5">
+          <span>{remainingAfter > 0 ? "Remaining (card)" : "You owe"}:</span>
+          <span className="font-bold">${remainingAfter.toFixed(2)}</span>
+        </div>
+      </div>
+
+      <Button
+        size="sm"
+        disabled={submitting}
+        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+        onClick={handleRedeem}
+      >
+        {submitting ? (
+          <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> {canCoverFull ? "Applying…" : "Reserving & redirecting…"}</>
+        ) : canCoverFull ? (
+          <>Pay ${itemPrice.toFixed(2)} with my balance</>
+        ) : (
+          <>Apply ${applyAmount.toFixed(2)} & pay ${remainingAfter.toFixed(2)} with card</>
+        )}
+      </Button>
+
+      {!canCoverFull && (
+        <p className="text-[11px] text-emerald-700">
+          We'll hold this piece for 1 hour while you finish the card payment. If you back out, your credit refunds automatically.
         </p>
       )}
     </div>

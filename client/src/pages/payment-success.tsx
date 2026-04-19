@@ -42,7 +42,12 @@ export default function PaymentSuccessPage() {
   useEffect(() => {
     if (isJewelryPurchase && jewelryItemId && user && !rewardCalled.current) {
       rewardCalled.current = true;
-      apiRequest("POST", "/api/jewelry/payment-complete", { itemId: jewelryItemId })
+      // Square's hosted checkout appends `orderId` (and `transactionId`,
+      // `checkoutLinkId`) to the redirect URL. We forward orderId so the
+      // server can verify the remaining-balance payment for any jewelry
+      // item that was held in `pending_balance`.
+      const orderId = params.get("orderId") || undefined;
+      apiRequest("POST", "/api/jewelry/payment-complete", { itemId: jewelryItemId, orderId })
         .then((res) => res.json())
         .then((data: any) => {
           if (data?.tokensEarned > 0) {
