@@ -427,7 +427,7 @@ export default function TrashValetGiftPage() {
               Back to Home
             </Button>
 
-            <BookingConfirmedTiles />
+            <BookingConfirmedTiles serviceType="trash_valet" />
           </div>
         </div>
       </div>

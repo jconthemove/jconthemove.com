@@ -93,7 +93,7 @@ export default function WindowCleaningPage() {
               >
                 Book Another
               </button>
-              <BookingConfirmedTiles />
+              <BookingConfirmedTiles serviceType="window_cleaning" />
             </div>
           </div>
         ) : (

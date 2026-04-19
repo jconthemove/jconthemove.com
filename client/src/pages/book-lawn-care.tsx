@@ -1013,7 +1013,7 @@ function ConfirmationPanel({
           </Button>
         </Link>
 
-        <BookingConfirmedTiles />
+        <BookingConfirmedTiles serviceType="lawn_care" />
       </div>
     </div>
   );

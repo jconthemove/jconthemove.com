@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
+import BookingConfirmedTiles from "@/components/BookingConfirmedTiles";
 
 const POST_JOB_SERVICE_KEYS = [
   "residential", "junk", "snow", "handyman", "flooring", "painting",
@@ -103,8 +104,9 @@ function getWeeklyFeatured(items: JewelryItem[]): JewelryItem | null {
   return items[weekIndex % items.length];
 }
 
-function BookingSuccessScreen({ selectedServiceLabel, pkgId, jewelryCouponCode }: {
+function BookingSuccessScreen({ selectedServiceLabel, selectedServiceKey, pkgId, jewelryCouponCode }: {
   selectedServiceLabel?: string;
+  selectedServiceKey?: string;
   pkgId: string | null;
   jewelryCouponCode?: string | null;
 }) {
@@ -246,6 +248,11 @@ function BookingSuccessScreen({ selectedServiceLabel, pkgId, jewelryCouponCode }
         >
           {isCrewMember ? "Back to Job Board" : "Back to Home"}
         </button>
+
+        {/* Task #116: post-booking account prompt + recurring upsell */}
+        {!isCrewMember && (
+          <BookingConfirmedTiles serviceType={selectedServiceKey} />
+        )}
       </div>
     </div>
   );
@@ -582,7 +589,7 @@ export default function PostJobPage() {
   }
 
   if (step === 5) {
-    return <BookingSuccessScreen selectedServiceLabel={selectedService?.label} pkgId={pkgId} jewelryCouponCode={jewelryCouponCode} />;
+    return <BookingSuccessScreen selectedServiceLabel={selectedService?.label} selectedServiceKey={selectedService?.key} pkgId={pkgId} jewelryCouponCode={jewelryCouponCode} />;
   }
 
   const bars = getProgressBars();

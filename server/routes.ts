@@ -4009,6 +4009,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // discounted totalPrice + bundle discount fields (avoids any-casts).
       const updatedLead = (await storage.getLead(lead.id)) ?? lead;
 
+      // Task #115: When the marketplace lead came in with bundle add-ons,
+      // spawn a stub lead per add-on so each shows up in the pipeline as a
+      // schedulable job, not just an intent flag on the parent.
+      if (mktBundleAddons.length > 0) {
+        try {
+          const { createBundleChildLeads } = await import("./services/bundleScheduling");
+          await createBundleChildLeads({
+            parentRef: `marketplace lead #${updatedLead.orderNumber ?? updatedLead.id}`,
+            parentServiceType: updatedLead.serviceType || leadData.serviceType || "moving",
+            addons: mktBundleAddons,
+            contact: {
+              firstName: updatedLead.firstName || leadData.firstName || "Bundle",
+              lastName: updatedLead.lastName || leadData.lastName || "Customer",
+              email: updatedLead.email || leadData.email || null,
+              phone: updatedLead.phone || leadData.phone,
+              address: updatedLead.fromAddress || leadData.fromAddress || "",
+            },
+          });
+        } catch (childErr) {
+          console.error("[marketplace] bundle child lead creation failed:", (childErr as Error).message);
+        }
+      }
+
       const emailContent = generateLeadNotificationEmail(updatedLead);
       const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
       await sendEmail({
@@ -20578,6 +20601,30 @@ Thank you for your business!
       try {
         await notifyAdminNewQuote({ customerName, serviceType: "trash_valet", phone: phone || undefined, email: email || undefined });
       } catch (e) { console.error('Admin notification email failed:', e); }
+
+      // Task #115: Schedule add-on services from the bundle by creating a
+      // stub lead per add-on so the admin pipeline shows real, schedulable
+      // jobs instead of just an "intent" tag on the trash subscription.
+      if (bundleAddons.length > 0) {
+        try {
+          const { createBundleChildLeads, splitCustomerName } = await import("./services/bundleScheduling");
+          const { firstName, lastName } = splitCustomerName(customerName);
+          await createBundleChildLeads({
+            parentRef: `trash valet subscription #${sub.id}`,
+            parentServiceType: "trash_valet",
+            addons: bundleAddons,
+            contact: {
+              firstName,
+              lastName,
+              email: email || null,
+              phone,
+              address: [address, city, state, zip].filter(Boolean).join(", "),
+            },
+          });
+        } catch (childErr) {
+          console.error("[trash-valet] bundle child lead creation failed:", (childErr as Error).message);
+        }
+      }
 
       // Award JCMOVES tokens for trash valet subscription (non-blocking, idempotent)
       if (email) {

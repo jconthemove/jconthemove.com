@@ -246,6 +246,29 @@ router.post("/quote", async (req: Request, res: Response) => {
       }).catch(err => console.error("Lawn care token disburse error:", err));
     }
 
+    // Task #115: Create a stub lead per bundle add-on so each one shows up in
+    // the admin pipeline as a real, schedulable job (not just an intent tag).
+    if (bundleAddons.length > 0) {
+      try {
+        const { createBundleChildLeads, splitCustomerName } = await import("../services/bundleScheduling");
+        const { firstName, lastName } = splitCustomerName(data.customerName);
+        await createBundleChildLeads({
+          parentRef: `lawn care quote #${quote.id}`,
+          parentServiceType: "lawn_care",
+          addons: bundleAddons,
+          contact: {
+            firstName,
+            lastName,
+            email: data.email || null,
+            phone: data.phone,
+            address: [data.address, data.city, data.state, data.zip].filter(Boolean).join(", "),
+          },
+        });
+      } catch (childErr) {
+        console.error("[lawn-care] bundle child lead creation failed:", (childErr as Error).message);
+      }
+    }
+
     const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
     const bundleSubjectTag = bundleDiscount.applied
       ? (bundleDiscount.reason === "cross_service_history" ? " [REPEAT BUNDLE -10%]" : " [BUNDLE -10%]")
