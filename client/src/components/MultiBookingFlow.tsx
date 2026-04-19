@@ -1,0 +1,691 @@
+// Components for the multi-service /book flow (Task #129).
+// All five components live in one file to keep the new flow focused and easy
+// to evolve as a unit. Page (`/book`) composes them.
+
+import { useEffect, useState } from "react";
+import {
+  CheckCircle2, Plus, Minus, Tag, Coins, Users, ChevronUp, ChevronDown,
+  Sparkles, Trash2, Pencil, AlertCircle, PhoneCall,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { DatePicker } from "@/components/ui/date-picker";
+import {
+  BUNDLE_SCHEDULING_MODE,
+  BUNDLE_FREQUENCY_OPTIONS,
+  type BundleSchedulingMode,
+} from "@/components/BundleServiceScheduler";
+
+export interface CatalogService {
+  id: string;
+  code: string;
+  name: string;
+  category: "core" | "addon" | string;
+  defaultPriceMode: "fixed" | "hourly" | "per_unit" | "quote" | string;
+  defaultPrice: string | null;
+  suggestedMin: string | null;
+  suggestedMax: string | null;
+  discountEligible: boolean;
+  isAddon: boolean;
+  description: string | null;
+}
+
+export interface FeaturedBundle {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  serviceComboJson: string[];
+  discountType: "percent" | "fixed" | string;
+  discountValue: string;
+  maxDiscount: string | null;
+  merchandisingSlot: string | null;
+}
+
+export interface SelectedItem {
+  serviceCode: string;
+  label: string;
+  quantity: number;
+  unitPrice: number;
+  priceMode: "fixed" | "hourly" | "per_unit" | "quote";
+  details: {
+    requestedDate?: string;
+    frequency?: string;
+    callToSchedule?: boolean;
+    notes?: string;
+    scope?: string;
+  };
+}
+
+/** Resolve the per-service scheduling pattern, mirroring BundleServiceScheduler.
+ *  Services not in the explicit map default to date-only (most jobs are
+ *  per-event scheduling). */
+export function schedulingModeFor(code: string): BundleSchedulingMode {
+  return BUNDLE_SCHEDULING_MODE[code] ?? "date_only";
+}
+
+export interface QuoteResult {
+  subtotal: number;
+  discountTotal: number;
+  finalTotal: number;
+  tokenEstimate: number;
+  bundleApplied: { code: string; name: string; rawDiscount: number } | null;
+  items: Array<{ serviceCode: string; lineSubtotal: number }>;
+}
+
+const SERVICE_EMOJI: Record<string, string> = {
+  moving: "📦",
+  junk_removal: "🗑️",
+  lawn_care: "🌿",
+  trash_valet: "♻️",
+  window_cleaning: "🪟",
+  snow_removal: "❄️",
+  cleaning: "🧼",
+  handyman: "🔧",
+  labor: "💪",
+  delivery: "🚚",
+  junk_reset: "♻️",
+  assembly_finish: "🛠️",
+  deep_clean_turnover: "✨",
+  walkway_priority: "🥾",
+  assembly: "🔩",
+};
+
+const CREW_HINT: Record<string, number> = {
+  moving: 3,
+  junk_removal: 2,
+  cleaning: 2,
+  deep_clean_turnover: 2,
+  snow_removal: 2,
+  lawn_care: 2,
+  window_cleaning: 2,
+  trash_valet: 1,
+  handyman: 1,
+  labor: 2,
+  delivery: 2,
+  junk_reset: 2,
+  assembly_finish: 2,
+  assembly: 1,
+  walkway_priority: 1,
+};
+
+export function emojiFor(code: string): string {
+  return SERVICE_EMOJI[code] || "🧰";
+}
+
+export function recommendedCrewSize(items: SelectedItem[]): number {
+  if (items.length === 0) return 0;
+  return Math.max(...items.map(i => CREW_HINT[i.serviceCode] ?? 2));
+}
+
+export function priceModeLabel(mode: string, unit: number): string {
+  switch (mode) {
+    case "hourly": return `$${unit}/hr`;
+    case "per_unit": return `$${unit}/unit`;
+    case "quote": return "Custom quote";
+    default: return `$${unit}`;
+  }
+}
+
+// ── ServiceSelector ────────────────────────────────────────────────────────
+export function ServiceSelector({
+  services, selectedCodes, onAdd, onRemove,
+}: {
+  services: CatalogService[];
+  selectedCodes: Set<string>;
+  onAdd: (svc: CatalogService) => void;
+  onRemove: (code: string) => void;
+}) {
+  const core = services.filter(s => !s.isAddon);
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3" data-testid="service-selector">
+      {core.map(svc => {
+        const active = selectedCodes.has(svc.code);
+        return (
+          <button
+            key={svc.code}
+            type="button"
+            onClick={() => active ? onRemove(svc.code) : onAdd(svc)}
+            data-testid={`service-card-${svc.code}`}
+            className={cn(
+              "relative text-left rounded-2xl border p-4 transition-all active:scale-[0.97]",
+              active
+                ? "border-emerald-500 bg-emerald-500/10 shadow-md shadow-emerald-500/10"
+                : "border-border bg-card hover:border-orange-500/40"
+            )}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <span className="text-3xl">{emojiFor(svc.code)}</span>
+              {active && <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />}
+            </div>
+            <p className="font-bold text-sm mt-2 leading-tight">{svc.name}</p>
+            {svc.description && (
+              <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2">{svc.description}</p>
+            )}
+            <p className="text-[10px] text-muted-foreground mt-1.5">
+              {svc.suggestedMin && svc.suggestedMax
+                ? `from $${svc.suggestedMin}`
+                : svc.defaultPrice
+                  ? priceModeLabel(svc.defaultPriceMode, parseFloat(svc.defaultPrice))
+                  : "Custom quote"}
+            </p>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── BundleBadge + BundleOfferStrip ─────────────────────────────────────────
+const SLOT_META: Record<string, { label: string; cls: string }> = {
+  most_popular: { label: "Most Popular", cls: "bg-orange-500/15 text-orange-400 border-orange-500/30" },
+  best_value:   { label: "Best Value",   cls: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" },
+  fast_addon:   { label: "Fast Add-On",  cls: "bg-sky-500/15 text-sky-400 border-sky-500/30" },
+};
+
+function BundleBadge({ slot }: { slot: string }) {
+  const meta = SLOT_META[slot] || { label: slot, cls: "bg-muted text-foreground border-border" };
+  return (
+    <span className={cn("inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border", meta.cls)}>
+      <Sparkles className="h-2.5 w-2.5" /> {meta.label}
+    </span>
+  );
+}
+
+export function BundleOfferStrip({
+  slots, services, selectedCodes, onApplyBundle, isLoading,
+}: {
+  slots: { most_popular: FeaturedBundle[]; best_value: FeaturedBundle[]; fast_addon: FeaturedBundle[] };
+  services: CatalogService[];
+  selectedCodes: Set<string>;
+  onApplyBundle: (bundle: FeaturedBundle) => void;
+  isLoading: boolean;
+}) {
+  const slotOrder: Array<keyof typeof slots> = ["most_popular", "best_value", "fast_addon"];
+  const empty = slotOrder.every(k => (slots[k] || []).length === 0);
+
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {[1, 2, 3].map(i => (
+          <div key={i} className="h-36 rounded-2xl border border-border bg-card animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+  if (empty) {
+    return (
+      <div className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground" data-testid="bundles-empty">
+        No featured bundles available right now — you can still add any combination of services manually.
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" data-testid="bundle-offer-strip">
+      {slotOrder.map(slot => {
+        const bundles = slots[slot] || [];
+        const bundle = bundles[0]; // first for the slot
+        if (!bundle) {
+          return (
+            <div key={slot} className="rounded-2xl border border-dashed border-border bg-card/50 p-4 flex items-center justify-center text-xs text-muted-foreground">
+              <BundleBadge slot={slot} />
+            </div>
+          );
+        }
+        const allInCart = bundle.serviceComboJson.every(c => selectedCodes.has(c));
+        const discountLine = bundle.discountType === "percent"
+          ? `${bundle.discountValue}% off`
+          : `$${parseFloat(bundle.discountValue).toFixed(0)} off`;
+        return (
+          <div
+            key={bundle.code}
+            className={cn(
+              "rounded-2xl border p-4 flex flex-col gap-2 bg-card transition-all",
+              allInCart ? "border-emerald-500/60 ring-1 ring-emerald-500/30" : "border-border hover:border-orange-500/40"
+            )}
+            data-testid={`bundle-card-${bundle.code}`}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <BundleBadge slot={slot} />
+              <span className="text-[10px] font-bold text-emerald-500">{discountLine}</span>
+            </div>
+            <p className="font-bold text-sm leading-tight mt-1">{bundle.name}</p>
+            <div className="flex flex-wrap gap-1">
+              {bundle.serviceComboJson.map(code => {
+                const svc = services.find(s => s.code === code);
+                return (
+                  <span key={code} className="text-[10px] bg-muted px-1.5 py-0.5 rounded">
+                    {emojiFor(code)} {svc?.name || code}
+                  </span>
+                );
+              })}
+            </div>
+            {bundle.description && (
+              <p className="text-[11px] text-muted-foreground line-clamp-2">{bundle.description}</p>
+            )}
+            <Button
+              type="button"
+              size="sm"
+              variant={allInCart ? "secondary" : "default"}
+              onClick={() => onApplyBundle(bundle)}
+              disabled={allInCart}
+              className="mt-auto"
+              data-testid={`apply-bundle-${bundle.code}`}
+            >
+              {allInCart ? "Added to cart" : "Add bundle"}
+            </Button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── ServiceItemEditor (inline row) ─────────────────────────────────────────
+export function ServiceItemEditor({
+  item, onChange, onRemove, onOpenDrawer, warning,
+}: {
+  item: SelectedItem;
+  onChange: (next: SelectedItem) => void;
+  onRemove: () => void;
+  onOpenDrawer: () => void;
+  /** Optional inline message shown when a required per-item field is missing. */
+  warning?: string | null;
+}) {
+  const showQty = item.priceMode === "hourly" || item.priceMode === "per_unit";
+  const lineSubtotal = item.quantity * item.unitPrice;
+  return (
+    <div
+      className={cn(
+        "rounded-xl border bg-card p-3",
+        warning ? "border-amber-500/60 ring-1 ring-amber-500/20" : "border-border",
+      )}
+      data-testid={`item-editor-${item.serviceCode}`}
+    >
+      <div className="flex items-center gap-3">
+        <span className="text-2xl">{emojiFor(item.serviceCode)}</span>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-sm truncate">{item.label}</p>
+          <p className="text-[11px] text-muted-foreground">
+            {item.priceMode === "quote"
+              ? "Custom quote — confirmed after we review"
+              : `${priceModeLabel(item.priceMode, item.unitPrice)}${showQty ? ` × ${item.quantity}` : ""}`}
+            {item.details.requestedDate ? ` • ${item.details.requestedDate}` : ""}
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-sm font-bold">
+            {item.priceMode === "quote" ? "TBD" : `$${lineSubtotal.toFixed(0)}`}
+          </p>
+        </div>
+      </div>
+      <div className="flex items-center justify-between gap-2 mt-2">
+        {showQty ? (
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => onChange({ ...item, quantity: Math.max(1, item.quantity - 1) })}
+              className="w-7 h-7 rounded-md border border-border flex items-center justify-center hover:bg-muted"
+              data-testid={`item-qty-minus-${item.serviceCode}`}
+            >
+              <Minus className="h-3 w-3" />
+            </button>
+            <span className="text-xs font-bold w-6 text-center">{item.quantity}</span>
+            <button
+              type="button"
+              onClick={() => onChange({ ...item, quantity: item.quantity + 1 })}
+              className="w-7 h-7 rounded-md border border-border flex items-center justify-center hover:bg-muted"
+              data-testid={`item-qty-plus-${item.serviceCode}`}
+            >
+              <Plus className="h-3 w-3" />
+            </button>
+          </div>
+        ) : <span />}
+        <div className="flex gap-1.5">
+          <button
+            type="button"
+            onClick={onOpenDrawer}
+            className="px-2.5 py-1 rounded-md border border-border text-[11px] hover:bg-muted flex items-center gap-1"
+            data-testid={`item-edit-${item.serviceCode}`}
+          >
+            <Pencil className="h-3 w-3" /> Details
+          </button>
+          <button
+            type="button"
+            onClick={onRemove}
+            className="px-2.5 py-1 rounded-md border border-destructive/40 text-destructive text-[11px] hover:bg-destructive/10 flex items-center gap-1"
+            data-testid={`item-remove-${item.serviceCode}`}
+          >
+            <Trash2 className="h-3 w-3" /> Remove
+          </button>
+        </div>
+      </div>
+      {warning && (
+        <p
+          className="mt-2 text-[11px] text-amber-500 flex items-center gap-1"
+          data-testid={`item-warning-${item.serviceCode}`}
+        >
+          <AlertCircle className="h-3 w-3" /> {warning} — open Details to fix.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ── AddOnDrawer (inline drawer using Sheet) ────────────────────────────────
+// Reuses the same scheduling pattern as BundleServiceScheduler:
+// per service code, the drawer renders one of three layouts:
+//   - call_only:  no date input, "we'll call you" message + flag set
+//   - date_only:  preferred date picker
+//   - date_freq:  date + frequency chips (weekly/biweekly etc.)
+export function AddOnDrawer({
+  open, item, onClose, onSave,
+}: {
+  open: boolean;
+  item: SelectedItem | null;
+  onClose: () => void;
+  onSave: (next: SelectedItem) => void;
+}) {
+  const [draft, setDraft] = useState<SelectedItem | null>(null);
+
+  // Reset draft when the targeted item changes (or drawer reopens for a new item).
+  useEffect(() => {
+    if (item) {
+      setDraft({
+        ...item,
+        details: {
+          ...item.details,
+          // Default call_only services to "callToSchedule = true" so the
+          // submitted booking carries the right flag without user input.
+          callToSchedule:
+            item.details.callToSchedule ??
+            (schedulingModeFor(item.serviceCode) === "call_only" ? true : undefined),
+        },
+      });
+    } else {
+      setDraft(null);
+    }
+  }, [item]);
+
+  if (!open || !item || !draft) return null;
+
+  const mode = schedulingModeFor(draft.serviceCode);
+  const showQty = draft.priceMode === "hourly" || draft.priceMode === "per_unit";
+  const freqOptions = BUNDLE_FREQUENCY_OPTIONS[draft.serviceCode] || [];
+
+  return (
+    <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <SheetContent side="bottom" className="rounded-t-2xl max-h-[85vh] overflow-y-auto" data-testid="addon-drawer">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">
+            <span className="text-2xl">{emojiFor(draft.serviceCode)}</span>
+            {draft.label}
+          </SheetTitle>
+        </SheetHeader>
+        <div className="space-y-4 mt-4">
+          {showQty && (
+            <div>
+              <Label className="text-xs">{draft.priceMode === "hourly" ? "Hours" : "Quantity"}</Label>
+              <div className="flex items-center gap-2 mt-1">
+                <button
+                  type="button"
+                  onClick={() => setDraft({ ...draft, quantity: Math.max(1, draft.quantity - 1) })}
+                  className="w-9 h-9 rounded-md border border-border flex items-center justify-center"
+                ><Minus className="h-4 w-4" /></button>
+                <Input
+                  type="number"
+                  min={1}
+                  value={draft.quantity}
+                  onChange={(e) => setDraft({ ...draft, quantity: Math.max(1, parseInt(e.target.value) || 1) })}
+                  className="w-20 text-center"
+                  data-testid="drawer-quantity"
+                />
+                <button
+                  type="button"
+                  onClick={() => setDraft({ ...draft, quantity: draft.quantity + 1 })}
+                  className="w-9 h-9 rounded-md border border-border flex items-center justify-center"
+                ><Plus className="h-4 w-4" /></button>
+                <span className="text-xs text-muted-foreground ml-2">
+                  {priceModeLabel(draft.priceMode, draft.unitPrice)}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {mode === "call_only" ? (
+            <div className="rounded-xl border border-sky-500/30 bg-sky-500/5 p-3 flex items-start gap-2" data-testid="drawer-call-only">
+              <PhoneCall className="h-4 w-4 text-sky-400 mt-0.5 shrink-0" />
+              <p className="text-xs text-muted-foreground leading-snug">
+                Quick chat needed for {draft.label.toLowerCase()} — we'll call you within 24 hours after submission to lock in details.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div>
+                <Label className="text-xs">Preferred start date</Label>
+                <DatePicker
+                  value={draft.details.requestedDate}
+                  onChange={(v) => setDraft({ ...draft, details: { ...draft.details, requestedDate: v || undefined } })}
+                  placeholder="Pick a date"
+                />
+              </div>
+              {mode === "date_freq" && freqOptions.length > 0 && (
+                <div>
+                  <Label className="text-xs">Frequency</Label>
+                  <div className="flex flex-wrap gap-1.5 mt-1" data-testid="drawer-frequency">
+                    {freqOptions.map(opt => {
+                      const active = draft.details.frequency === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setDraft({ ...draft, details: { ...draft.details, frequency: opt.value } })}
+                          className={cn(
+                            "text-[11px] px-2.5 py-1 rounded-full border transition-all",
+                            active
+                              ? "border-emerald-400 bg-emerald-500/20 text-emerald-300"
+                              : "border-border bg-card hover:border-foreground/30",
+                          )}
+                          data-testid={`drawer-freq-${opt.value}`}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          <div>
+            <Label className="text-xs">Scope (what should we focus on?)</Label>
+            <Input
+              value={draft.details.scope || ""}
+              onChange={(e) => setDraft({ ...draft, details: { ...draft.details, scope: e.target.value } })}
+              placeholder="e.g. front yard only, 1 truckload"
+              data-testid="drawer-scope"
+            />
+          </div>
+          <div>
+            <Label className="text-xs">Notes / special instructions</Label>
+            <Textarea
+              value={draft.details.notes || ""}
+              onChange={(e) => setDraft({ ...draft, details: { ...draft.details, notes: e.target.value } })}
+              placeholder="Gate code, parking notes, anything we should know"
+              rows={3}
+              data-testid="drawer-notes"
+            />
+          </div>
+          <div className="flex gap-2 pt-2">
+            <Button type="button" variant="outline" className="flex-1" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="flex-1"
+              onClick={() => onSave(draft)}
+              data-testid="drawer-save"
+            >
+              Save
+            </Button>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+// ── BookingSummarySticky ───────────────────────────────────────────────────
+export function BookingSummarySticky({
+  items, quote, isQuoting, onCheckout, canCheckout,
+}: {
+  items: SelectedItem[];
+  quote: QuoteResult | null;
+  isQuoting: boolean;
+  onCheckout: () => void;
+  canCheckout: boolean;
+}) {
+  const [collapsed, setCollapsed] = useState(true);
+  const subtotal = quote?.subtotal ?? items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+  const discount = quote?.discountTotal ?? 0;
+  const finalTotal = quote?.finalTotal ?? subtotal - discount;
+  const tokens = quote?.tokenEstimate ?? 0;
+  const crew = recommendedCrewSize(items);
+  const hasQuoteItems = items.some(i => i.priceMode !== "quote");
+
+  // Desktop sticky right panel
+  const desktopPanel = (
+    <aside className="hidden lg:block sticky top-4 self-start w-[320px] shrink-0">
+      <div className="rounded-2xl border border-border bg-card p-4 space-y-3" data-testid="summary-desktop">
+        <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Your booking</p>
+        {items.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Add a service to see your live quote.</p>
+        ) : (
+          <>
+            <div className="space-y-1.5">
+              {items.map(i => (
+                <div key={i.serviceCode} className="flex justify-between text-xs">
+                  <span className="truncate">{emojiFor(i.serviceCode)} {i.label}</span>
+                  <span className="font-semibold">
+                    {i.priceMode === "quote" ? "TBD" : `$${(i.quantity * i.unitPrice).toFixed(0)}`}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="border-t border-border pt-3 space-y-1">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Subtotal</span>
+                <span>${subtotal.toFixed(2)}</span>
+              </div>
+              {discount > 0 && quote?.bundleApplied && (
+                <div className="flex justify-between text-sm text-emerald-500">
+                  <span className="flex items-center gap-1"><Tag className="h-3 w-3" /> {quote.bundleApplied.name}</span>
+                  <span>−${discount.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-base font-bold pt-1">
+                <span>Total</span>
+                <span>{hasQuoteItems && finalTotal === 0 ? "Custom" : `$${finalTotal.toFixed(2)}`}</span>
+              </div>
+              {!hasQuoteItems && finalTotal === 0 && items.length > 0 && (
+                <p className="text-[10px] text-muted-foreground">Final total confirmed after review</p>
+              )}
+            </div>
+            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+              <span className="flex items-center gap-1"><Users className="h-3 w-3" /> Crew of {crew} recommended</span>
+              <span className="flex items-center gap-1 text-orange-400"><Coins className="h-3 w-3" /> +{tokens} JCMOVES</span>
+            </div>
+            <Button
+              type="button"
+              className="w-full"
+              onClick={onCheckout}
+              disabled={!canCheckout || isQuoting}
+              data-testid="summary-checkout-desktop"
+            >
+              {isQuoting ? "Updating…" : "Continue to checkout"}
+            </Button>
+          </>
+        )}
+      </div>
+    </aside>
+  );
+
+  // Mobile docked bar
+  const mobileBar = (
+    <div className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-border bg-background/95 backdrop-blur-sm" data-testid="summary-mobile">
+      <button
+        type="button"
+        onClick={() => setCollapsed(c => !c)}
+        className="w-full flex items-center justify-between px-4 py-2 text-left"
+        data-testid="summary-mobile-toggle"
+      >
+        <div className="flex flex-col">
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground">Your booking</span>
+          <span className="text-sm font-bold">
+            {items.length === 0 ? "No items yet" : `${items.length} item${items.length === 1 ? "" : "s"} • $${finalTotal.toFixed(0)}`}
+            {discount > 0 && <span className="text-emerald-500 text-xs ml-1">(−${discount.toFixed(0)})</span>}
+          </span>
+        </div>
+        {collapsed ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+      </button>
+      {!collapsed && items.length > 0 && (
+        <div className="px-4 pb-2 space-y-1.5 max-h-48 overflow-y-auto">
+          {items.map(i => (
+            <div key={i.serviceCode} className="flex justify-between text-xs">
+              <span className="truncate">{emojiFor(i.serviceCode)} {i.label}</span>
+              <span className="font-semibold">
+                {i.priceMode === "quote" ? "TBD" : `$${(i.quantity * i.unitPrice).toFixed(0)}`}
+              </span>
+            </div>
+          ))}
+          <div className="flex justify-between text-xs pt-1 border-t border-border">
+            <span className="text-muted-foreground">Subtotal</span>
+            <span>${subtotal.toFixed(2)}</span>
+          </div>
+          {discount > 0 && quote?.bundleApplied && (
+            <div className="flex justify-between text-xs text-emerald-500">
+              <span>{quote.bundleApplied.name}</span>
+              <span>−${discount.toFixed(2)}</span>
+            </div>
+          )}
+          <div className="flex justify-between text-[11px] text-muted-foreground">
+            <span><Users className="inline h-3 w-3" /> Crew of {crew}</span>
+            <span className="text-orange-400"><Coins className="inline h-3 w-3" /> +{tokens} JCMOVES</span>
+          </div>
+        </div>
+      )}
+      <div className="px-4 pb-3">
+        <Button
+          type="button"
+          className="w-full"
+          onClick={onCheckout}
+          disabled={!canCheckout || isQuoting}
+          data-testid="summary-checkout-mobile"
+        >
+          {isQuoting ? "Updating…" : items.length === 0 ? "Add a service" : "Continue to checkout"}
+        </Button>
+      </div>
+    </div>
+  );
+
+  return <>{desktopPanel}{mobileBar}</>;
+}
+
+// ── Validation banner ─────────────────────────────────────────────────────
+export function ValidationBanner({ messages }: { messages: string[] }) {
+  if (messages.length === 0) return null;
+  return (
+    <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 flex gap-2" data-testid="validation-banner">
+      <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+      <ul className="text-xs text-destructive space-y-0.5">
+        {messages.map((m, i) => <li key={i}>{m}</li>)}
+      </ul>
+    </div>
+  );
+}

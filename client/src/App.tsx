@@ -31,6 +31,7 @@ const CustomerHomePage = lazy(() => import("@/pages/customer-home"));
 const MyJobsPage = lazy(() => import("@/pages/my-jobs"));
 const PostJobPage = lazy(() => import("@/pages/post-job"));
 const CustomerBookPage = lazy(() => import("@/pages/customer/book"));
+const MultiServiceBookPage = lazy(() => import("@/pages/book"));
 const CustomerWalletPage = lazy(() => import("@/pages/customer/wallet"));
 const WalletAddCreditPage = lazy(() => import("@/pages/wallet-add-credit"));
 const CustomerEarnPage = lazy(() => import("@/pages/customer/earn"));
@@ -337,6 +338,9 @@ function CustomerApp() {
             <MyJobsPage />
           </Route>
           <Route path="/book">
+            <MultiServiceBookPage />
+          </Route>
+          <Route path="/book/chat">
             <CustomerBookPage />
           </Route>
           <Route path="/wallet">
@@ -739,7 +743,8 @@ function Router() {
       <Route path="/quote" component={QuotePage} />
       
       {/* Book page - accessible to all users, authenticated or not */}
-      <Route path="/book" component={CustomerBookPage} />
+      <Route path="/book" component={MultiServiceBookPage} />
+      <Route path="/book/chat" component={CustomerBookPage} />
 
       {/* Trash Valet pages - accessible to all */}
       <Route path="/trash-valet/book" component={TrashValetBookPage} />
