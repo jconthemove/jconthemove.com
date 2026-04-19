@@ -8911,12 +8911,19 @@ Thank you for your business!
       const offset = parseInt(req.query.offset as string) || 0;
 
       // Main rewards table (booking, completion, referral, sign-up, etc.)
+      // Includes wallet_balance_redemption (USD shop-credit spends) and
+      // wallet_balance_redemption_refund rows — both surfaced via cash_value.
       const { rows: rewardsRows } = await pool.query(
         `SELECT
            id::text,
            reward_type AS "rewardType",
            token_amount::text AS "tokenAmount",
-           'earn' AS "direction",
+           cash_value::text AS "cashValue",
+           CASE
+             WHEN reward_type = 'wallet_balance_redemption' THEN 'usd_spend'
+             WHEN reward_type = 'wallet_balance_redemption_refund' THEN 'usd_refund'
+             ELSE 'earn'
+           END AS "direction",
            status,
            earned_date AS "earnedDate",
            metadata

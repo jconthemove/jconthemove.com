@@ -36,7 +36,28 @@ interface SpendHistoryItem {
   metadata: RedemptionMetadata;
 }
 
-type RewardHistoryItem = EarnHistoryItem | SpendHistoryItem;
+interface UsdHistoryItem {
+  id: string;
+  rewardType: 'wallet_balance_redemption' | 'wallet_balance_redemption_refund';
+  tokenAmount: string;
+  cashValue: string;
+  direction: 'usd_spend' | 'usd_refund';
+  status: string;
+  earnedDate: string;
+  metadata?: {
+    referenceType?: string;
+    referenceId?: string;
+    itemTitle?: string;
+    amountUsd?: string;
+    refundUsd?: string;
+    paidInFull?: boolean;
+    remainingDueUsd?: string;
+    itemPriceUsd?: string;
+    reason?: string;
+  };
+}
+
+type RewardHistoryItem = EarnHistoryItem | SpendHistoryItem | UsdHistoryItem;
 
 const REWARD_LABELS: Record<string, { label: string; icon: string }> = {
   booking_request:              { label: "Job Booked",           icon: "📋" },
@@ -389,39 +410,94 @@ export default function CustomerProfilePage() {
             {!historyLoading && historyData && historyData.rewards.length > 0 && (
               <div className="space-y-2">
                 {historyData.rewards.map((item) => {
-                  const isSpend = item.direction === 'spend';
-                  const displayLabel = isSpend
-                    ? (item as SpendHistoryItem).metadata.itemName || "Reward Redeemed"
-                    : (REWARD_LABELS[item.rewardType]?.label ?? item.rewardType.replace(/_/g, " "));
-                  const displayIcon = isSpend
-                    ? "🎁"
-                    : (REWARD_LABELS[item.rewardType]?.icon ?? "💫");
-                  const amount = Math.round(parseFloat(item.tokenAmount || "0"));
+                  const isTokenSpend = item.direction === 'spend';
+                  const isUsdSpend = item.direction === 'usd_spend';
+                  const isUsdRefund = item.direction === 'usd_refund';
+                  const isUsd = isUsdSpend || isUsdRefund;
+
+                  let displayLabel: string;
+                  let displayIcon: string;
+                  let amountNode: React.ReactNode;
+                  let containerClasses: string;
+                  let iconBgClasses: string;
+                  let amountClasses: string;
+
+                  if (isUsd) {
+                    const usdItem = item as UsdHistoryItem;
+                    const itemTitle = usdItem.metadata?.itemTitle || "Shop item";
+                    const rawCash = parseFloat(usdItem.cashValue || "0");
+                    const usdAmount = isUsdRefund
+                      ? Math.abs(parseFloat(usdItem.metadata?.refundUsd || String(rawCash)) || 0)
+                      : Math.abs(parseFloat(usdItem.metadata?.amountUsd || String(rawCash)) || 0);
+                    const usdFormatted = usdAmount.toFixed(2);
+
+                    if (isUsdRefund) {
+                      displayIcon = "↩️";
+                      displayLabel = `Refund $${usdFormatted}${
+                        usdItem.metadata?.itemTitle ? ` — ${itemTitle}` : ""
+                      }`;
+                      containerClasses = "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900/30";
+                      iconBgClasses = "bg-emerald-100 dark:bg-emerald-900/30";
+                      amountClasses = "text-emerald-600 dark:text-emerald-400";
+                    } else {
+                      displayIcon = "💵";
+                      displayLabel = `Spent $${usdFormatted} on ${itemTitle}`;
+                      containerClasses = "bg-red-50 dark:bg-red-950/20 border-red-100 dark:border-red-900/30";
+                      iconBgClasses = "bg-red-100 dark:bg-red-900/30";
+                      amountClasses = "text-red-500 dark:text-red-400";
+                    }
+
+                    amountNode = (
+                      <>
+                        <div className={`text-sm font-black ${amountClasses}`}>
+                          {isUsdRefund ? "+" : "−"}${usdFormatted}
+                        </div>
+                        <div className="text-[9px] text-zinc-400 font-medium">USD</div>
+                      </>
+                    );
+                  } else {
+                    displayLabel = isTokenSpend
+                      ? (item as SpendHistoryItem).metadata.itemName || "Reward Redeemed"
+                      : (REWARD_LABELS[item.rewardType]?.label ?? item.rewardType.replace(/_/g, " "));
+                    displayIcon = isTokenSpend
+                      ? "🎁"
+                      : (REWARD_LABELS[item.rewardType]?.icon ?? "💫");
+                    const tokens = Math.round(parseFloat(item.tokenAmount || "0"));
+                    containerClasses = isTokenSpend
+                      ? "bg-red-50 dark:bg-red-950/20 border-red-100 dark:border-red-900/30"
+                      : "bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800";
+                    iconBgClasses = isTokenSpend
+                      ? "bg-red-100 dark:bg-red-900/30"
+                      : "bg-jc-orange/10";
+                    amountClasses = isTokenSpend
+                      ? "text-red-500 dark:text-red-400"
+                      : "text-jc-orange";
+                    amountNode = (
+                      <>
+                        <div className={`text-sm font-black ${amountClasses}`}>
+                          {isTokenSpend ? "−" : "+"}{tokens.toLocaleString()}
+                        </div>
+                        <div className="text-[9px] text-zinc-400 font-medium">JCMOVES</div>
+                      </>
+                    );
+                  }
+
                   return (
                     <div
                       key={`${item.rewardType}-${item.id}`}
-                      className={`rounded-xl border px-4 py-3 flex items-center gap-3 shadow-sm ${
-                        isSpend
-                          ? "bg-red-50 dark:bg-red-950/20 border-red-100 dark:border-red-900/30"
-                          : "bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800"
-                      }`}
+                      className={`rounded-xl border px-4 py-3 flex items-center gap-3 shadow-sm ${containerClasses}`}
                     >
-                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0 ${
-                        isSpend ? "bg-red-100 dark:bg-red-900/30" : "bg-jc-orange/10"
-                      }`}>
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0 ${iconBgClasses}`}>
                         {displayIcon}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100 capitalize">
+                        <p className={`text-sm font-semibold text-zinc-800 dark:text-zinc-100 ${isUsd ? "" : "capitalize"}`}>
                           {displayLabel}
                         </p>
                         <p className="text-[11px] text-zinc-400">{timeAgo(item.earnedDate)}</p>
                       </div>
                       <div className="text-right shrink-0">
-                        <div className={`text-sm font-black ${isSpend ? "text-red-500 dark:text-red-400" : "text-jc-orange"}`}>
-                          {isSpend ? "−" : "+"}{amount.toLocaleString()}
-                        </div>
-                        <div className="text-[9px] text-zinc-400 font-medium">JCMOVES</div>
+                        {amountNode}
                       </div>
                     </div>
                   );
