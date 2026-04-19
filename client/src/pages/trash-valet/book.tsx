@@ -15,6 +15,7 @@ import BookingConfirmedTiles from "@/components/BookingConfirmedTiles";
 import { DatePicker } from "@/components/ui/date-picker";
 import { calculateTrashValetQuote, TRASH_VALET_OUT_OF_AREA_MINIMUM, type TrashValetQuote } from "@shared/trashValetPricing";
 import ServiceBundleAddon from "@/components/ServiceBundleAddon";
+import { PlacesAutocomplete } from "@/components/places-autocomplete";
 
 const DAY_OPTIONS = [
   { value: "1", label: "Monday" },
@@ -268,40 +269,28 @@ export default function TrashValetBookPage() {
             </CardContent>
           </Card>
 
-          {/* Address */}
+          {/* Address — single-field autocomplete fills city/state/zip behind the scenes */}
           <Card className="bg-zinc-900 border-zinc-800">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm text-zinc-300">Service Address *</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <Input
+            <CardContent className="space-y-2">
+              <PlacesAutocomplete
                 value={form.address}
-                onChange={(e) => setField("address", e.target.value)}
-                placeholder="123 Main St"
-                className="bg-zinc-800 border-zinc-700 text-white"
-                required
+                onChange={(v) => setField("address", v)}
+                onPlaceSelect={(p) => {
+                  setForm((f) => ({
+                    ...f,
+                    address: p.fullAddress,
+                    city: p.city || f.city,
+                    state: p.state || f.state,
+                    zip: p.zip || f.zip,
+                  }));
+                }}
+                placeholder="Start typing your address…"
+                inputClassName="w-full bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-500 text-sm rounded-md pl-8 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500/40 focus:border-orange-500/60"
               />
-              <div className="grid grid-cols-2 gap-2">
-                <Input
-                  value={form.city}
-                  onChange={(e) => setField("city", e.target.value)}
-                  placeholder="City"
-                  className="bg-zinc-800 border-zinc-700 text-white"
-                />
-                <Input
-                  value={form.zip}
-                  onChange={(e) => setField("zip", e.target.value)}
-                  placeholder="ZIP"
-                  className="bg-zinc-800 border-zinc-700 text-white"
-                  maxLength={5}
-                />
-              </div>
-              <Input
-                value={form.state}
-                onChange={(e) => setField("state", e.target.value)}
-                placeholder="State"
-                className="bg-zinc-800 border-zinc-700 text-white"
-              />
+              <p className="text-[10px] text-zinc-600">Pick from the suggestions — we'll fill in the city, state, and ZIP automatically.</p>
             </CardContent>
           </Card>
 

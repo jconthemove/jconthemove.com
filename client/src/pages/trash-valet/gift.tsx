@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, CheckCircle2, Gift, Recycle, Trash2, Tag } from "lucide-react";
 import BookingConfirmedTiles from "@/components/BookingConfirmedTiles";
 import { calculateTrashValetQuote, TRASH_VALET_OUT_OF_AREA_MINIMUM } from "@shared/trashValetPricing";
+import { PlacesAutocomplete } from "@/components/places-autocomplete";
 
 const DAY_OPTIONS = [
   { value: "1", label: "Monday" },
@@ -88,6 +89,7 @@ function ServiceBlock({
   icon,
   service,
   onChange,
+  onPlaceSelect,
   distanceMiles,
   accentColor,
 }: {
@@ -95,6 +97,7 @@ function ServiceBlock({
   icon: React.ReactNode;
   service: ReturnType<typeof emptyService>;
   onChange: (key: string, val: string | number | boolean) => void;
+  onPlaceSelect: (p: { fullAddress: string; city: string; state: string; zip: string }) => void;
   distanceMiles: number;
   accentColor: string;
 }) {
@@ -110,29 +113,16 @@ function ServiceBlock({
       </CardHeader>
       <CardContent className="space-y-3">
         <div>
-          <Label className="text-xs text-zinc-500">Street Address *</Label>
-          <Input
+          <Label className="text-xs text-zinc-500">Service Address *</Label>
+          <PlacesAutocomplete
             value={service.address}
-            onChange={e => onChange("address", e.target.value)}
-            placeholder="123 Main St"
-            className="bg-zinc-800 border-zinc-700 text-white mt-1"
-            required
+            onChange={v => onChange("address", v)}
+            onPlaceSelect={onPlaceSelect}
+            placeholder="Start typing the address…"
+            className="mt-1"
+            inputClassName="w-full bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-500 text-sm rounded-md pl-8 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500/40 focus:border-orange-500/60"
           />
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <Input
-            value={service.city}
-            onChange={e => onChange("city", e.target.value)}
-            placeholder="City"
-            className="bg-zinc-800 border-zinc-700 text-white"
-          />
-          <Input
-            value={service.zip}
-            onChange={e => onChange("zip", e.target.value)}
-            placeholder="ZIP"
-            className="bg-zinc-800 border-zinc-700 text-white"
-            maxLength={5}
-          />
+          <p className="text-[10px] text-zinc-600 mt-1">Pick a suggestion — city, state, and ZIP fill in automatically.</p>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -494,6 +484,13 @@ export default function TrashValetGiftPage() {
             icon={<Trash2 className="h-4 w-4" />}
             service={yourService}
             onChange={(k, v) => setYourService(s => ({ ...s, [k]: v }))}
+            onPlaceSelect={(p) => setYourService(s => ({
+              ...s,
+              address: p.fullAddress,
+              city: p.city || s.city,
+              state: p.state || s.state,
+              zip: p.zip || s.zip,
+            }))}
             distanceMiles={yourMiles}
             accentColor="text-orange-400"
           />
@@ -518,6 +515,13 @@ export default function TrashValetGiftPage() {
             icon={<Gift className="h-4 w-4" />}
             service={giftService}
             onChange={(k, v) => setGiftService(s => ({ ...s, [k]: v }))}
+            onPlaceSelect={(p) => setGiftService(s => ({
+              ...s,
+              address: p.fullAddress,
+              city: p.city || s.city,
+              state: p.state || s.state,
+              zip: p.zip || s.zip,
+            }))}
             distanceMiles={giftMiles}
             accentColor="text-yellow-400"
           />
