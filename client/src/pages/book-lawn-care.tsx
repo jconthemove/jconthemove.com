@@ -20,6 +20,11 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
 import AddressSummaryPill from "@/components/AddressSummaryPill";
 import ServiceBundleAddon from "@/components/ServiceBundleAddon";
+import BundleServiceScheduler, {
+  BUNDLE_SCHEDULING_MODE,
+  buildBundleSchedulesPayload,
+  type BundleScheduleEntry,
+} from "@/components/BundleServiceScheduler";
 import LawnYardCardTile from "@/components/LawnYardCard";
 import WhatThisMeans from "@/components/WhatThisMeans";
 import LawnPriceBreakdown, { type LawnPricing } from "@/components/LawnPriceBreakdown";
@@ -86,8 +91,20 @@ interface QuoteResult {
     totalQuoted: number;
     isCustomEstimate: boolean;
   };
+  bundleGroupId?: string | null;
+  companionLeads?: Array<{
+    service: string;
+    label: string;
+    serviceType: string;
+    startDate: string | null;
+  }>;
 }
 
+// Per-add-on scheduling capture (Task #115). Drives the micro-step rendered
+// between bundle selection (step 4) and confirmation (step 7). The fields a
+// service exposes depend on its kind — recurring services need a frequency,
+// schedulable one-offs need a date, and complex services like moving simply
+// flag "call me to schedule".
 const TOTAL_STEPS = 6;
 
 export default function BookLawnCare() {
@@ -99,6 +116,7 @@ export default function BookLawnCare() {
   const [propertyCondition, setPropertyCondition] = useState("");
   const [selectedAddOns, setSelectedAddOns] = useState<string[]>([]);
   const [bundleAddons, setBundleAddons] = useState<string[]>([]);
+  const [bundleSchedules, setBundleSchedules] = useState<Record<string, BundleScheduleEntry>>({});
   const [hasFence, setHasFence] = useState(false);
   const [hasPets, setHasPets] = useState(false);
   const [hasSteepSlope, setHasSteepSlope] = useState(false);
@@ -284,7 +302,35 @@ export default function BookLawnCare() {
     setSelectedAddOns((prev) => prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]);
   };
 
+  // Build a payload of per-add-on scheduling info from the local state. Only
+  // include add-ons we actually know how to schedule and that the customer
+  // still has selected — keeps the backend from creating a stale companion
+  // lead if the customer toggled an add-on off after editing it.
+  const bundleSchedulesPayload = buildBundleSchedulesPayload(bundleAddons, bundleSchedules);
+
+  // Task #115 — gate submission on per-add-on minimum scheduling info: any
+  // schedulable bundle add-on (date_only / date_freq) must have its date
+  // (and frequency where required) before we'll create companion leads.
+  // Otherwise the customer would silently end up with companion leads that
+  // have no preferred date, defeating the whole point of this step.
+  const validateBundleSchedules = (): string | null => {
+    for (const id of bundleAddons) {
+      const mode = BUNDLE_SCHEDULING_MODE[id];
+      if (!mode || mode === "call_only") continue;
+      const entry = bundleSchedules[id] || {};
+      if (!entry.date) return `Pick a preferred start date for "${id.replace(/_/g, " ")}".`;
+      if (mode === "date_freq" && !entry.frequency) return `Pick a frequency for "${id.replace(/_/g, " ")}".`;
+    }
+    return null;
+  };
+
   const handleContactSubmit = (data: ContactForm) => {
+    const scheduleErr = validateBundleSchedules();
+    if (scheduleErr) {
+      toast({ title: "Bundle scheduling needed", description: scheduleErr, variant: "destructive" });
+      setStep(5);
+      return;
+    }
     quoteMutation.mutate({
       ...data,
       serviceCategory,
@@ -294,6 +340,7 @@ export default function BookLawnCare() {
       propertyCondition,
       addOns: selectedAddOns,
       bundleAddons,
+      bundleSchedules: bundleSchedulesPayload,
       distanceMiles,
       hasFence,
       hasPets,
@@ -550,18 +597,30 @@ export default function BookLawnCare() {
           </StepWrap>
         )}
 
-        {/* Step 5 — Preferred Date */}
+        {/* Step 5 — Preferred Date (+ per-add-on scheduling for bundled services) */}
         {step === 5 && (
           <StepWrap title="When would you like to start?" subtitle="We'll confirm a firm time after you submit." onBack={back} onNext={next}>
             <div className="space-y-4">
               <div>
-                <label className="text-slate-400 text-sm mb-2 block">Preferred start date (optional)</label>
+                <label className="text-slate-400 text-sm mb-2 block">Lawn care preferred start date (optional)</label>
                 <DatePicker
                   value={form.watch("requestedStartDate") ?? undefined}
                   onChange={(v) => form.setValue("requestedStartDate", v || undefined)}
                   placeholder="Pick a start date"
                 />
               </div>
+
+              {/* Bundle add-on scheduling — one mini block per selected add-on
+                  so the customer schedules each service up front instead of
+                  via a follow-up call. Hidden entirely when no bundle add-ons
+                  are selected. */}
+              <BundleServiceScheduler
+                bundleAddons={bundleAddons}
+                schedules={bundleSchedules}
+                onChange={setBundleSchedules}
+                testIdPrefix="lawn-bundle"
+              />
+
               <div>
                 <label className="text-slate-400 text-sm mb-2 block">Additional notes (optional)</label>
                 <Textarea
@@ -947,6 +1006,25 @@ function ConfirmationPanel({
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Bundled services scheduled in this booking — confirms to the
+            customer that the add-ons they selected actually got captured
+            with their preferred dates. */}
+        {result.companionLeads && result.companionLeads.length > 0 && (
+          <div data-testid="confirm-bundled-services" className="rounded-xl bg-teal-500/5 border border-teal-500/30 px-4 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-teal-300 mb-2">Bundled services scheduled</p>
+            <ul className="space-y-1.5">
+              {result.companionLeads.map(l => (
+                <li key={l.service} data-testid={`confirm-bundle-${l.service}`} className="flex items-start gap-2 text-xs text-slate-200">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-teal-400 mt-0.5 shrink-0" />
+                  <span>
+                    <b>{l.label}</b>{l.startDate ? ` — start ${l.startDate}` : " — we'll call to schedule"}
+                  </span>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 

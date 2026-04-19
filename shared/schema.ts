@@ -128,6 +128,12 @@ export const leads = pgTable("leads", {
   bundleDiscountAmount: decimal("bundle_discount_amount", { precision: 10, scale: 2 }).default("0"),
   bundleDiscountReason: text("bundle_discount_reason"), // 'bundle_intent' | 'cross_service_history'
 
+  // Bundle grouping (Task #115). When a customer schedules multiple services
+  // in one booking flow, every resulting record (primary quote + companion
+  // leads) shares this UUID so we can render them as a single grouped card
+  // in /my-jobs and present the bundle as one unit in admin views.
+  bundleGroupId: text("bundle_group_id"),
+
   // Re-book email attribution (Task #108). Set when a customer arrives at a
   // booking page from a re-book reminder email and is tagged with the
   // service-specific utm_source (e.g. 'rebook_email_snow'). Stays NULL for
@@ -2218,6 +2224,11 @@ export const lawnCareQuotes = pgTable("lawn_care_quotes", {
   // a quote/lead is created via the re-book flow with a known utm_source so the
   // admin dashboard can report how many re-books a campaign produced.
   rebookSource: text("rebook_source"),
+
+  // Bundle grouping (Task #115). Mirrors leads.bundleGroupId — set on the
+  // primary lawn-care quote when the customer also booked add-on services in
+  // the same submission. Companion leads in the leads table carry the same id.
+  bundleGroupId: text("bundle_group_id"),
 
   createdAt: timestamp("created_at").default(sql`now()`),
   updatedAt: timestamp("updated_at").default(sql`now()`),

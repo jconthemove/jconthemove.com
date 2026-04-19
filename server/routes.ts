@@ -589,6 +589,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updated_at TIMESTAMP DEFAULT now()
       );
       ALTER TABLE lawn_care_quotes ADD COLUMN IF NOT EXISTS rebook_source TEXT;
+      -- Task #115: bundle grouping shared across primary quote + companion leads
+      ALTER TABLE lawn_care_quotes ADD COLUMN IF NOT EXISTS bundle_group_id TEXT;
       CREATE TABLE IF NOT EXISTS lawn_care_plans (
         id SERIAL PRIMARY KEY,
         quote_id INTEGER NOT NULL,
@@ -770,6 +772,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       -- Task #108: per-send re-book email attribution
       ALTER TABLE leads ADD COLUMN IF NOT EXISTS rebook_source TEXT;
       ALTER TABLE leads ADD COLUMN IF NOT EXISTS rebook_sent_at TIMESTAMP;
+      -- Task #115: shared id linking companion bundle leads to their primary record
+      ALTER TABLE leads ADD COLUMN IF NOT EXISTS bundle_group_id TEXT;
+      CREATE INDEX IF NOT EXISTS idx_leads_bundle_group ON leads(bundle_group_id) WHERE bundle_group_id IS NOT NULL;
       -- Task #109: one-click unsubscribe from re-book reminder emails
       CREATE TABLE IF NOT EXISTS service_rebook_optouts (
         id SERIAL PRIMARY KEY,
@@ -5547,6 +5552,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         depositAmount: lead.depositAmount ? parseFloat(lead.depositAmount) : null,
         depositPaid: lead.depositPaid || false,
         isQuoteOnly: lead.isQuoteOnly || false,
+        // Task #115: shared id linking all services booked together so the
+        // /my-jobs UI can fold companion leads into a single grouped card.
+        bundleGroupId: lead.bundleGroupId || null,
       }));
       res.json(transformedLeads);
     } catch (error) {
@@ -20424,9 +20432,19 @@ Thank you for your business!
         cans, bagCount, recyclingEnabled, recyclingAnchorDate,
         serviceDayOfWeek, recyclingDayOfWeek, serviceNotes, planType, promoCode,
         bundleAddons: rawBundleAddons,
+        bundleSchedules: rawBundleSchedules,
         seniorDiscount,
       } = req.body;
-      const bundleAddons: string[] = Array.isArray(rawBundleAddons) ? rawBundleAddons : [];
+      // Task #115 — both bundle fields are validated against the same Zod
+      // schema used by the lawn care quote endpoint so the data shape is
+      // consistent and we don't sneak `any`-typed values into the DB.
+      const { trashBundleSubscribeSchema } = await import("./services/bundleScheduling");
+      const parsed = trashBundleSubscribeSchema.safeParse({
+        bundleAddons: rawBundleAddons,
+        bundleSchedules: rawBundleSchedules,
+      });
+      const bundleAddons = parsed.success ? parsed.data.bundleAddons : [];
+      const bundleSchedules = parsed.success ? parsed.data.bundleSchedules : [];
 
       if (!customerName || !phone || !address) {
         return res.status(400).json({ error: "Name, phone, and address are required" });
@@ -20605,9 +20623,13 @@ Thank you for your business!
       // Task #115: Schedule add-on services from the bundle by creating a
       // stub lead per add-on so the admin pipeline shows real, schedulable
       // jobs instead of just an "intent" tag on the trash subscription.
+      // Task #115 — share a bundleGroupId across all companion leads (and
+      // pass per-add-on schedules) so /my-jobs and the admin pipeline can
+      // fold the bundle into a single unit with concrete preferred dates.
       if (bundleAddons.length > 0) {
         try {
           const { createBundleChildLeads, splitCustomerName } = await import("./services/bundleScheduling");
+          const { randomUUID } = await import("crypto");
           const { firstName, lastName } = splitCustomerName(customerName);
           await createBundleChildLeads({
             parentRef: `trash valet subscription #${sub.id}`,
@@ -20620,6 +20642,8 @@ Thank you for your business!
               phone,
               address: [address, city, state, zip].filter(Boolean).join(", "),
             },
+            schedules: bundleSchedules,
+            bundleGroupId: randomUUID(),
           });
         } catch (childErr) {
           console.error("[trash-valet] bundle child lead creation failed:", (childErr as Error).message);

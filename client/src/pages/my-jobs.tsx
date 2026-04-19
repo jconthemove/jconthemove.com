@@ -5,7 +5,8 @@ import {
   MapPin, Calendar, Loader2, Truck, Trash2, Snowflake, Wrench,
   Plus, CheckCircle, Clock, AlertCircle, Users, DollarSign, X,
   Package, ChevronRight, RefreshCw, Coins, HelpCircle, Phone,
-  FileText, Star, ArrowRight, Info, ExternalLink, Zap
+  FileText, Star, ArrowRight, Info, ExternalLink, Zap,
+  Sprout, Sparkles, Recycle, Hammer
 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { LucideIcon } from "lucide-react";
@@ -30,6 +31,9 @@ interface CustomerJob {
   depositRequired?: boolean;
   depositAmount?: number;
   depositPaid?: boolean;
+  // Task #115: shared id grouping all leads booked in the same multi-service
+  // submission. Leads with the same bundleGroupId render as one card on /my-jobs.
+  bundleGroupId?: string | null;
 }
 
 // ── Status Tracker ────────────────────────────────────────────────────────────
@@ -85,15 +89,21 @@ function StatusTracker({ status }: { status: string }) {
 
 // ── Service config — covers all serviceType values ────────────────────────────
 const SERVICE_CONFIG: Record<string, { icon: LucideIcon; color: string; bg: string; label: string }> = {
-  moving:      { icon: Truck,      color: "text-blue-400",   bg: "bg-blue-500/15",   label: "Moving"       },
-  residential: { icon: Truck,      color: "text-blue-400",   bg: "bg-blue-500/15",   label: "Moving"       },
-  labor:       { icon: Wrench,     color: "text-amber-400",  bg: "bg-amber-500/15",  label: "Labor Only"   },
-  handyman:    { icon: Wrench,     color: "text-amber-400",  bg: "bg-amber-500/15",  label: "Labor Only"   },
-  junk:        { icon: Trash2,     color: "text-orange-400", bg: "bg-orange-500/15", label: "Junk Removal" },
-  snow:        { icon: Snowflake,  color: "text-cyan-400",   bg: "bg-cyan-500/15",   label: "Snow Removal" },
-  cleaning:    { icon: Package,    color: "text-green-400",  bg: "bg-green-500/15",  label: "Cleaning"     },
-  demolition:  { icon: Truck,      color: "text-red-400",    bg: "bg-red-500/15",    label: "Demolition"   },
-  custom:      { icon: HelpCircle, color: "text-violet-400", bg: "bg-violet-500/15", label: "Custom Job"   },
+  moving:          { icon: Truck,      color: "text-blue-400",   bg: "bg-blue-500/15",   label: "Moving"          },
+  residential:     { icon: Truck,      color: "text-blue-400",   bg: "bg-blue-500/15",   label: "Moving"          },
+  labor:           { icon: Wrench,     color: "text-amber-400",  bg: "bg-amber-500/15",  label: "Labor Only"      },
+  handyman:        { icon: Wrench,     color: "text-amber-400",  bg: "bg-amber-500/15",  label: "Labor Only"      },
+  junk:            { icon: Trash2,     color: "text-orange-400", bg: "bg-orange-500/15", label: "Junk Removal"    },
+  snow:            { icon: Snowflake,  color: "text-cyan-400",   bg: "bg-cyan-500/15",   label: "Snow Removal"    },
+  cleaning:        { icon: Sparkles,   color: "text-green-400",  bg: "bg-green-500/15",  label: "Cleaning"        },
+  demolition:      { icon: Truck,      color: "text-red-400",    bg: "bg-red-500/15",    label: "Demolition"      },
+  custom:          { icon: HelpCircle, color: "text-violet-400", bg: "bg-violet-500/15", label: "Custom Job"      },
+  // Task #115: bundle add-on service types so the grouped /my-jobs card
+  // labels each chip with its real service name + icon (no "Moving" fallback).
+  lawn_care:       { icon: Sprout,     color: "text-lime-400",   bg: "bg-lime-500/15",   label: "Lawn Care"       },
+  trash_valet:     { icon: Recycle,    color: "text-emerald-400",bg: "bg-emerald-500/15",label: "Trash Valet"     },
+  window_cleaning: { icon: Sparkles,   color: "text-sky-400",    bg: "bg-sky-500/15",    label: "Window Cleaning" },
+  assembly:        { icon: Hammer,     color: "text-yellow-400", bg: "bg-yellow-500/15", label: "Assembly"        },
 };
 
 function getSvcConfig(type: string) {
@@ -575,6 +585,25 @@ export default function MyJobsPage() {
       return true;
     });
 
+  // Task #115: collapse companion bundle leads into one card per group. We
+  // render a single tile per bundleGroupId with all sibling services listed
+  // inside; ungrouped leads render as their existing one-card-per-job UI.
+  type Card =
+    | { kind: "single"; job: CustomerJob }
+    | { kind: "bundle"; groupId: string; jobs: CustomerJob[] };
+  const cards: Card[] = [];
+  const seenGroups = new Set<string>();
+  for (const j of filtered) {
+    if (j.bundleGroupId) {
+      if (seenGroups.has(j.bundleGroupId)) continue;
+      seenGroups.add(j.bundleGroupId);
+      const siblings = filtered.filter(x => x.bundleGroupId === j.bundleGroupId);
+      cards.push({ kind: "bundle", groupId: j.bundleGroupId, jobs: siblings });
+    } else {
+      cards.push({ kind: "single", job: j });
+    }
+  }
+
   return (
     <div className="min-h-screen bg-zinc-950 pb-28">
       <div className="max-w-[430px] mx-auto px-4 pt-6">
@@ -640,7 +669,60 @@ export default function MyJobsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3">
-            {filtered.map(job => {
+            {cards.map(card => {
+              if (card.kind === "bundle") {
+                // Render the primary lead's tile but stack mini chips for the
+                // other services in the same bundle so the customer sees the
+                // full scope at a glance. Tapping the card opens the primary
+                // lead's detail sheet (existing UX), keeping the change low
+                // risk while still surfacing the bundle.
+                const primary = card.jobs[0];
+                const st = getStatus(primary.status);
+                return (
+                  <button
+                    key={`bundle-${card.groupId}`}
+                    data-testid={`bundle-card-${card.groupId}`}
+                    onClick={() => setSelectedJob(primary)}
+                    className="bg-zinc-900 border border-teal-500/40 rounded-2xl p-4 text-left hover:border-teal-500/60 active:scale-[0.97] transition-all col-span-2"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-teal-500/15">
+                          <Package className="h-5 w-5 text-teal-400" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-white text-sm leading-tight">Bundle · {card.jobs.length} services</p>
+                          <p className="text-[10px] text-teal-400 uppercase tracking-wider font-bold mt-0.5">Booked together</p>
+                        </div>
+                      </div>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-lg ${st.cls}`}>{st.label}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {card.jobs.map(j => {
+                        const cfg = getSvcConfig(j.serviceType);
+                        const Ico = cfg.icon;
+                        return (
+                          <span
+                            key={j.id}
+                            data-testid={`bundle-chip-${j.serviceType}`}
+                            className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-full ${cfg.bg} ${cfg.color}`}
+                          >
+                            <Ico className="h-3 w-3" />
+                            {cfg.label}
+                            {j.moveDate ? ` · ${new Date(j.moveDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}
+                          </span>
+                        );
+                      })}
+                    </div>
+                    <div className="mt-2 flex items-center gap-1 text-zinc-500">
+                      <ChevronRight className="h-3.5 w-3.5" />
+                      <span className="text-[10px]">View bundle details</span>
+                    </div>
+                  </button>
+                );
+              }
+
+              const job = card.job;
               const svc = getSvcConfig(job.serviceType);
               const Icon = svc.icon;
               const st = getStatus(job.status);

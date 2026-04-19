@@ -15,6 +15,11 @@ import BookingConfirmedTiles from "@/components/BookingConfirmedTiles";
 import { DatePicker } from "@/components/ui/date-picker";
 import { calculateTrashValetQuote, TRASH_VALET_OUT_OF_AREA_MINIMUM, type TrashValetQuote } from "@shared/trashValetPricing";
 import ServiceBundleAddon from "@/components/ServiceBundleAddon";
+import BundleServiceScheduler, {
+  BUNDLE_SCHEDULING_MODE,
+  buildBundleSchedulesPayload,
+  type BundleScheduleEntry,
+} from "@/components/BundleServiceScheduler";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
 import AddressSummaryPill from "@/components/AddressSummaryPill";
 
@@ -47,6 +52,7 @@ export default function TrashValetBookPage() {
   const [serverMonthlyPrice, setServerMonthlyPrice] = useState<number | null>(null);
   const [distanceMiles, setDistanceMiles] = useState(0);
   const [bundleAddons, setBundleAddons] = useState<string[]>([]);
+  const [bundleSchedules, setBundleSchedules] = useState<Record<string, BundleScheduleEntry>>({});
 
   const TRAVEL_FEE_MONTHLY = 50;
   const TRAVEL_THRESHOLD = 2.5;
@@ -118,12 +124,33 @@ export default function TrashValetBookPage() {
     },
   });
 
+  // Task #115 — make sure each scheduled bundle add-on has the minimum info
+  // we need (date for date_only, date+frequency for date_freq) before we let
+  // the customer submit. Otherwise we'd silently create companion leads with
+  // no start date and end up calling them anyway.
+  const validateBundleSchedules = (): string | null => {
+    for (const id of bundleAddons) {
+      const mode = BUNDLE_SCHEDULING_MODE[id];
+      if (!mode || mode === "call_only") continue;
+      const entry = bundleSchedules[id] || {};
+      if (!entry.date) return `Pick a preferred start date for "${id.replace(/_/g, " ")}".`;
+      if (mode === "date_freq" && !entry.frequency) return `Pick a frequency for "${id.replace(/_/g, " ")}".`;
+    }
+    return null;
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.customerName.trim() || !form.phone.trim() || !form.address.trim()) {
       toast({ title: "Required fields missing", description: "Name, phone, and address are required.", variant: "destructive" });
       return;
     }
+    const scheduleErr = validateBundleSchedules();
+    if (scheduleErr) {
+      toast({ title: "Bundle scheduling needed", description: scheduleErr, variant: "destructive" });
+      return;
+    }
+    const bundleSchedulesPayload = buildBundleSchedulesPayload(bundleAddons, bundleSchedules);
     bookMutation.mutate({
       ...form,
       cans: Number(form.cans),
@@ -131,6 +158,7 @@ export default function TrashValetBookPage() {
       serviceDayOfWeek: Number(form.serviceDayOfWeek),
       recyclingDayOfWeek: form.recyclingEnabled ? Number(form.recyclingDayOfWeek) : null,
       bundleAddons: bundleAddons.length > 0 ? bundleAddons : undefined,
+      bundleSchedules: bundleSchedulesPayload.length > 0 ? bundleSchedulesPayload : undefined,
     });
   };
 
@@ -570,6 +598,15 @@ export default function TrashValetBookPage() {
             currentService="trash_valet"
             selected={bundleAddons}
             onChange={setBundleAddons}
+          />
+
+          {/* Per-add-on scheduling — only renders when at least one
+              schedulable bundle add-on is selected. */}
+          <BundleServiceScheduler
+            bundleAddons={bundleAddons}
+            schedules={bundleSchedules}
+            onChange={setBundleSchedules}
+            testIdPrefix="trash-bundle"
           />
 
           <Button

@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from "express";
+import { randomUUID } from "crypto";
 import { db } from "../db";
 import { lawnCareQuotes, lawnCarePlans, lawnCareRebookReminders, type LawnCareQuote } from "@shared/schema";
 import {
@@ -63,6 +64,19 @@ function requireCrewOrAdminRole(req: Request, res: Response, next: NextFunction)
   return next();
 }
 
+// Per-add-on scheduling info captured by the multi-service booking flow
+// (Task #115). Each entry corresponds to one bundle add-on the customer ticked
+// on the lawn care booking page. We persist a companion lead per entry so the
+// add-on service has a real start date / frequency rather than an after-the-
+// fact email back-and-forth.
+const bundleScheduleSchema = z.object({
+  service: z.string().min(1),
+  requestedStartDate: z.string().optional(),
+  frequency: z.string().optional(),       // weekly / biweekly / one_time / recurring
+  callToSchedule: z.boolean().optional(), // moving / assembly opt-out of date pick
+  notes: z.string().optional(),
+});
+
 const quoteRequestSchema = z.object({
   customerName: z.string().min(1),
   phone: z.string().min(7),
@@ -85,6 +99,11 @@ const quoteRequestSchema = z.object({
   requestedStartDate: z.string().optional(),
   requestedTimeWindow: z.string().optional(),
   notes: z.string().optional(),
+  // Task #115 — bundle add-on selection + per-service scheduling collected
+  // by the new Step 5 micro-UI. Both default to [] so solo lawn care
+  // submissions remain unaffected.
+  bundleAddons: z.array(z.string()).default([]),
+  bundleSchedules: z.array(bundleScheduleSchema).default([]),
 });
 
 type JobBriefQuote = Pick<
@@ -158,8 +177,9 @@ ${flags.length ? flags.map(f => ` • ${f}`).join("\n") : " • None"}
 // POST /api/lawn-care/quote — public (no auth required to submit a quote request)
 router.post("/quote", async (req: Request, res: Response) => {
   try {
-    const bundleAddons: string[] = Array.isArray((req.body as any).bundleAddons) ? (req.body as any).bundleAddons : [];
     const data = quoteRequestSchema.parse(req.body);
+    const bundleAddons = data.bundleAddons;
+    const bundleSchedules = data.bundleSchedules;
 
     const pricing = calculateLawnCareQuote({
       serviceCategory: data.serviceCategory,
@@ -188,6 +208,14 @@ router.post("/quote", async (req: Request, res: Response) => {
       subtotal: pricing.totalQuoted,
     });
     const finalTotalQuoted = bundleDiscount.applied ? bundleDiscount.finalTotal : pricing.totalQuoted;
+
+    // Generate a shared bundle group id whenever the customer selected at
+    // least one bundle add-on. Derived from `bundleAddons` (the source of
+    // truth for "is this a bundle?") rather than `bundleSchedules`, so a
+    // missing/partial schedule payload can never silently break the bundle
+    // linkage between the primary quote and its companion leads. Stays null
+    // for solo lawn care so we don't pollute the column.
+    const bundleGroupId = bundleAddons.length > 0 ? randomUUID() : null;
 
     const [quote] = await db.insert(lawnCareQuotes).values({
       customerName: data.customerName,
@@ -223,7 +251,37 @@ router.post("/quote", async (req: Request, res: Response) => {
       requestedStartDate: data.requestedStartDate,
       requestedTimeWindow: data.requestedTimeWindow,
       status: "quote_requested",
+      bundleGroupId,
     }).returning();
+
+    // Companion leads — one per add-on the customer included with this
+    // submission. The shared `bundleGroupId` lets /my-jobs and the admin
+    // dashboard render the bundle as a single unit, and per-service scheduling
+    // info (when the customer filled it in on the new micro-step) gives the
+    // crew a concrete start date instead of an after-the-fact hand-off.
+    let companionLeads: import("../services/bundleScheduling").CreatedBundleChild[] = [];
+    if (bundleAddons.length > 0) {
+      try {
+        const { createBundleChildLeads, splitCustomerName } = await import("../services/bundleScheduling");
+        const { firstName, lastName } = splitCustomerName(data.customerName);
+        companionLeads = await createBundleChildLeads({
+          parentRef: `lawn care quote #${quote.id}`,
+          parentServiceType: "lawn_care",
+          addons: bundleAddons,
+          contact: {
+            firstName,
+            lastName,
+            email: data.email || null,
+            phone: data.phone,
+            address: [data.address, data.city, data.state, data.zip].filter(Boolean).join(", "),
+          },
+          schedules: bundleSchedules,
+          bundleGroupId,
+        });
+      } catch (childErr) {
+        console.error("[lawn-care] bundle companion lead creation failed:", (childErr as Error).message);
+      }
+    }
 
     if (bundleDiscount.applied) {
       logBundleDiscountApplication({
@@ -246,28 +304,9 @@ router.post("/quote", async (req: Request, res: Response) => {
       }).catch(err => console.error("Lawn care token disburse error:", err));
     }
 
-    // Task #115: Create a stub lead per bundle add-on so each one shows up in
-    // the admin pipeline as a real, schedulable job (not just an intent tag).
-    if (bundleAddons.length > 0) {
-      try {
-        const { createBundleChildLeads, splitCustomerName } = await import("../services/bundleScheduling");
-        const { firstName, lastName } = splitCustomerName(data.customerName);
-        await createBundleChildLeads({
-          parentRef: `lawn care quote #${quote.id}`,
-          parentServiceType: "lawn_care",
-          addons: bundleAddons,
-          contact: {
-            firstName,
-            lastName,
-            email: data.email || null,
-            phone: data.phone,
-            address: [data.address, data.city, data.state, data.zip].filter(Boolean).join(", "),
-          },
-        });
-      } catch (childErr) {
-        console.error("[lawn-care] bundle child lead creation failed:", (childErr as Error).message);
-      }
-    }
+    // (Companion leads were already created above via the unified
+    // createBundleChildLeads helper, which now handles both the scheduled
+    // and unscheduled cases — see the block right after the quote insert.)
 
     const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
     const bundleSubjectTag = bundleDiscount.applied
@@ -281,22 +320,63 @@ router.post("/quote", async (req: Request, res: Response) => {
       : "";
     const briefHtml = buildJobBriefHtml(quote, pricing);
     const briefText = buildJobBriefText(quote, pricing);
+
+    // Companion services summary for the admin email so ops can see the full
+    // bundle scope (with each add-on's preferred date) in one message.
+    const bundleServicesText = companionLeads.length > 0
+      ? `\n\n=== BUNDLED SERVICES (group ${bundleGroupId}) ===\n` +
+        companionLeads.map(l => `• ${l.label} — ${l.startDate ? `start ${l.startDate}` : "call to schedule"}`).join("\n")
+      : "";
+    const bundleServicesHtml = companionLeads.length > 0
+      ? `<div style="background:#eff6ff;border:1px solid #3b82f6;padding:10px 14px;border-radius:8px;margin-top:10px"><b style="color:#1d4ed8">📦 Bundled Services (group ${bundleGroupId})</b><ul style="margin:6px 0 0 18px;padding:0;color:#1e3a8a">${companionLeads.map(l => `<li><b>${l.label}</b> — ${l.startDate ? `start ${l.startDate}` : "call to schedule"}</li>`).join("")}</ul></div>`
+      : "";
+
     try {
       await sendEmail({
         to: companyEmail,
         from: companyEmail,
-        subject: `New Lawn Care Quote — ${data.customerName}${bundleSubjectTag}`,
-        text: `New lawn care quote request.\n\nCustomer: ${data.customerName}\nPhone: ${data.phone}\nEmail: ${data.email || "N/A"}\nAddress: ${data.address}\nService: ${data.serviceCategory} — ${data.serviceFrequency}\nSubtotal: $${pricing.totalQuoted.toFixed(2)}\nTotal: $${finalTotalQuoted.toFixed(2)}${pricing.isCustomEstimate ? " (custom estimate)" : ""}\nNotes: ${data.notes || "—"}${bundleNote}\n\n${briefText}`,
-        html: `<h2>New Lawn Care Quote</h2><p><b>Customer:</b> ${data.customerName}<br><b>Phone:</b> ${data.phone}<br><b>Email:</b> ${data.email || "N/A"}<br><b>Address:</b> ${data.address}<br><b>Service:</b> ${data.serviceCategory} — ${data.serviceFrequency}<br><b>Subtotal:</b> $${pricing.totalQuoted.toFixed(2)}<br><b>Total:</b> $${finalTotalQuoted.toFixed(2)}${pricing.isCustomEstimate ? " <em>(custom estimate)</em>" : ""}</p>${bundleHtml}${briefHtml}`,
+        subject: `New Lawn Care Quote — ${data.customerName}${bundleSubjectTag}${companionLeads.length > 0 ? ` [+${companionLeads.length} bundled]` : ""}`,
+        text: `New lawn care quote request.\n\nCustomer: ${data.customerName}\nPhone: ${data.phone}\nEmail: ${data.email || "N/A"}\nAddress: ${data.address}\nService: ${data.serviceCategory} — ${data.serviceFrequency}\nSubtotal: $${pricing.totalQuoted.toFixed(2)}\nTotal: $${finalTotalQuoted.toFixed(2)}${pricing.isCustomEstimate ? " (custom estimate)" : ""}\nNotes: ${data.notes || "—"}${bundleNote}${bundleServicesText}\n\n${briefText}`,
+        html: `<h2>New Lawn Care Quote</h2><p><b>Customer:</b> ${data.customerName}<br><b>Phone:</b> ${data.phone}<br><b>Email:</b> ${data.email || "N/A"}<br><b>Address:</b> ${data.address}<br><b>Service:</b> ${data.serviceCategory} — ${data.serviceFrequency}<br><b>Subtotal:</b> $${pricing.totalQuoted.toFixed(2)}<br><b>Total:</b> $${finalTotalQuoted.toFixed(2)}${pricing.isCustomEstimate ? " <em>(custom estimate)</em>" : ""}</p>${bundleHtml}${bundleServicesHtml}${briefHtml}`,
       });
     } catch (emailErr) {
       console.error("Lawn care admin email failed:", emailErr);
     }
 
+    // Customer confirmation email — only when the customer also booked add-on
+    // services. Shows them everything we scheduled in one place so they don't
+    // wonder whether the bundled services "took". Solo lawn-care quotes
+    // continue to rely on the existing lawn-care-only flow.
+    if (data.email && companionLeads.length > 0) {
+      const customerLines = [
+        `Lawn Care — ${data.serviceCategory.replace(/_/g, " ")} (${data.serviceFrequency.replace(/_/g, " ")})${data.requestedStartDate ? ` — preferred start ${data.requestedStartDate}` : ""}`,
+        ...companionLeads.map(l => `${l.label}${l.startDate ? ` — preferred start ${l.startDate}` : " — we'll call to schedule"}`),
+      ];
+      // Surface the auto-applied bundle discount to the customer so they see
+      // exactly what they saved by booking multiple services together.
+      const discountLineText = bundleDiscount.applied
+        ? `\n\nBundle discount applied: −$${bundleDiscount.amount.toFixed(2)} (10% off) — already baked into your $${finalTotalQuoted.toFixed(2)} lawn care total.`
+        : "";
+      const discountLineHtml = bundleDiscount.applied
+        ? `<p style="background:#dcfce7;border:1px solid #22c55e;color:#166534;padding:10px 14px;border-radius:8px;margin:12px 0"><b>Bundle discount applied: −$${bundleDiscount.amount.toFixed(2)} (10% off)</b><br><span style="font-size:13px">Already baked into your <b>$${finalTotalQuoted.toFixed(2)}</b> lawn care total.</span></p>`
+        : "";
+      try {
+        await sendEmail({
+          to: data.email,
+          from: companyEmail,
+          subject: `We've got your bundle — ${customerLines.length} services scheduled${bundleDiscount.applied ? " (10% off applied)" : ""}`,
+          text: `Hi ${data.customerName.split(/\s+/)[0]},\n\nThanks for booking with us! Here's what we received:\n\n${customerLines.map(l => `• ${l}`).join("\n")}${discountLineText}\n\nWe'll be in touch shortly to confirm each service. Reply to this email if anything looks off.\n\n— The team`,
+          html: `<p>Hi ${data.customerName.split(/\s+/)[0]},</p><p>Thanks for booking with us! Here's what we received:</p><ul style="line-height:1.7">${customerLines.map(l => `<li>${l}</li>`).join("")}</ul>${discountLineHtml}<p>We'll be in touch shortly to confirm each service. Reply to this email if anything looks off.</p><p>— The team</p>`,
+        });
+      } catch (emailErr) {
+        console.error("Lawn care bundle customer email failed:", emailErr);
+      }
+    }
+
     const responsePricing = bundleDiscount.applied
       ? { ...pricing, totalQuoted: finalTotalQuoted }
       : pricing;
-    return res.json({ success: true, quote, pricing: responsePricing, bundleDiscount });
+    return res.json({ success: true, quote, pricing: responsePricing, bundleDiscount, bundleGroupId, companionLeads });
   } catch (err: any) {
     console.error("Lawn care quote error:", err);
     if (err?.name === "ZodError") return res.status(400).json({ error: "Invalid request", details: err.errors });
