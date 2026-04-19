@@ -81,6 +81,9 @@ export interface SelectedItem {
     hasStairs?: boolean;
     specialItems?: string[];
     promoCode?: string;
+    // Task #144 — Trash Valet add-on flag captured from the bundled-cart UI
+    // so the admin can see the customer wants the recycling can rolled too.
+    recyclingEnabled?: boolean;
   };
 }
 
@@ -841,6 +844,29 @@ export function InlineItemConfigure({
           )}
         </>
       ))}
+
+      {/* Task #144 — Trash Valet: always ask about the recycling can so we
+          never quietly skip recycling pickup on a bundled trash booking. */}
+      {item.serviceCode === "trash_valet" && (
+        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-2.5">
+          <div className="flex items-center gap-2">
+            <input
+              id={`recycling-${item.serviceCode}`}
+              type="checkbox"
+              checked={!!item.details.recyclingEnabled}
+              onChange={(e) => onChange({ ...item, details: { ...item.details, recyclingEnabled: e.target.checked } })}
+              className="h-4 w-4"
+              data-testid={`inline-recycling-${item.serviceCode}`}
+            />
+            <Label htmlFor={`recycling-${item.serviceCode}`} className="text-xs cursor-pointer flex items-center gap-1.5">
+              ♻️ Add bi-weekly recycling-can pickup
+            </Label>
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-1 ml-6">
+            We'll roll your recycling can to the curb every other week alongside your trash service.
+          </p>
+        </div>
+      )}
 
       {!usesPicker && (
         <>

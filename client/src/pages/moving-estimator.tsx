@@ -45,7 +45,7 @@ const DEFAULT_PRICING: Pricing = {
   shortJobFull: 300,
   jc222Price: 222,
   driveSpeedMph: 50,
-  junkSmallLow: 100,
+  junkSmallLow: 170,
   junkSmallHigh: 200,
   junkLargeLow: 200,
   junkLargeHigh: 600,

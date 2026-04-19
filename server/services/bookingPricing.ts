@@ -11,6 +11,15 @@
 
 import { EARN_RATE_PER_DOLLAR } from "../../shared/rewards";
 
+/** Per-service minimum line-subtotal floors (USD). The spec for Junk Removal
+ *  is a hard 2 mover-hour minimum at $85/hr → $170. The pricing engine clamps
+ *  any priced junk_removal line up to this floor so an under-priced quote
+ *  (typo, stale promo, or client-side draft) can never sneak below the floor
+ *  on the booking that actually gets persisted. */
+export const SERVICE_LINE_MINIMUMS: Record<string, number> = {
+  junk_removal: 170,
+};
+
 /** Maximum total discount as a fraction of the subtotal. The spec calls this
  *  the "discount-guardrail" — caps any single bundle at 25% of the cart even
  *  if the matching bundle definition would normally award more. Stops a
@@ -152,7 +161,16 @@ function round2(n: number): number {
 function computeLineSubtotal(item: BookingPricingItemInput): number {
   const qty = Math.max(0, Number.isFinite(item.quantity) ? item.quantity : 0);
   const unit = Math.max(0, Number.isFinite(item.unitPrice) ? item.unitPrice : 0);
-  return round2(qty * unit);
+  const raw = round2(qty * unit);
+  // Honor per-service minimums (e.g. junk_removal $170 floor). Skip when
+  // priceMode is "quote" AND raw is 0 — those are still pending pricing and
+  // are not yet a charge. Once a quoted line has any positive amount, we
+  // clamp it up to the floor.
+  const floor = SERVICE_LINE_MINIMUMS[item.serviceCode];
+  if (floor != null && raw > 0 && raw < floor) {
+    return round2(floor);
+  }
+  return raw;
 }
 
 /** True when every code in `combo` appears at least once in `presentCodes`. */

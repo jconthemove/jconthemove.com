@@ -353,7 +353,7 @@ async function ensureJackpotsSeeded() {
         ('pricing_short_job_full',       '300', 'Short job full price before promo ($)'),
         ('pricing_jc222_price',          '222', 'JC222 promo price for short jobs ($)'),
         ('pricing_drive_speed_mph',       '50', 'Average drive speed for travel time calc (mph)'),
-        ('pricing_junk_small_low',       '100', 'Junk removal small load estimate low ($)'),
+        ('pricing_junk_small_low',       '170', 'Junk removal small load estimate low ($) — 2 mover-hour minimum'),
         ('pricing_junk_small_high',      '200', 'Junk removal small load estimate high ($)'),
         ('pricing_junk_large_low',       '200', 'Junk removal full truckload estimate low ($)'),
         ('pricing_junk_large_high',      '600', 'Junk removal full truckload estimate high ($)'),
@@ -18621,7 +18621,7 @@ Thank you for your business!
         heavyItemFlat:      n('pricing_heavy_item_flat',      350),
         driveRate:          n('pricing_drive_rate',            40),
         driveSpeedMph:      n('pricing_drive_speed_mph',       50),
-        junkSmallLow:       n('pricing_junk_small_low',       100),
+        junkSmallLow:       n('pricing_junk_small_low',       170),
         junkSmallHigh:      n('pricing_junk_small_high',      200),
         junkLargeLow:       n('pricing_junk_large_low',       200),
         junkLargeHigh:      n('pricing_junk_large_high',      600),
@@ -20507,6 +20507,15 @@ Thank you for your business!
       const seniorDiscountAmount = seniorDiscount === true ? 5 : 0;
       const preBundleMonthly = Math.max(0, quote.finalMonthlyPrice - promoDiscount - seniorDiscountAmount);
 
+      // Task #144 — "Ashley's Shop" bundle add-on is a real $100 JCMOVES USD
+      // gift-card line item, not a vague upsell. When ticked, the customer is
+      // billed an extra $100 on the first invoice (with the same 10% bundle
+      // discount applied to it), and a redeemable gift card credit is issued
+      // to their account.
+      const ASHLEY_SHOP_GIFT_CARD_USD = 100;
+      const wantsAshleyGiftCard = bundleAddons.includes("ashley_shop");
+      const giftCardSubtotal = wantsAshleyGiftCard ? ASHLEY_SHOP_GIFT_CARD_USD : 0;
+
       // Auto-applied 10% bundle discount: customer ticked another service in
       // this same form OR has a paid/active record in another service in the
       // last 90 days.
@@ -20519,6 +20528,11 @@ Thank you for your business!
         subtotal: preBundleMonthly,
       });
       const effectiveMonthlyPrice = bundleDiscount.applied ? bundleDiscount.finalTotal : preBundleMonthly;
+      // Discount the one-time gift card too when bundling kicked in.
+      const giftCardDiscount = wantsAshleyGiftCard && bundleDiscount.applied
+        ? Math.round(giftCardSubtotal * 0.10 * 100) / 100
+        : 0;
+      const giftCardCharge = giftCardSubtotal - giftCardDiscount;
 
       const today = new Date().toISOString().split("T")[0];
       const [sub] = await db.insert(trashSubscriptions).values({
@@ -20608,14 +20622,71 @@ Thank you for your business!
         status: "scheduled",
       }).returning();
 
+      // Task #144 — Issue the $100 JCMOVES USD gift-card line as a first-class
+      // billed item. The giftCards row is created BLOCKINGLY (failure rolls
+      // back the whole subscription so we never bill the customer for a card
+      // we never issued). The card is created UNREDEEMED with paymentMethod
+      // = "usd_pending"; the actual cashBalance credit only happens after
+      // payment is confirmed (admin marks the trash invoice paid → separate
+      // redemption endpoint, see follow-up #145). The first-invoice charge
+      // is persisted into the trash_subscriptions row so admins/billing see
+      // it as a real line, not just an email note.
+      let giftCardCode: string | null = null;
+      if (wantsAshleyGiftCard) {
+        try {
+          const { giftCards: giftCardsTable, users: usersTable } = await import("@shared/schema");
+          const { randomBytes } = await import("crypto");
+          giftCardCode = `JCMOVE-${randomBytes(2).toString("hex").toUpperCase()}-${randomBytes(2).toString("hex").toUpperCase()}`;
+          let purchasedByUserId: string | null = null;
+          if (email) {
+            const [matchedUser] = await db.select().from(usersTable)
+              .where(sql`LOWER(${usersTable.email}) = ${email.toLowerCase()}`).limit(1);
+            if (matchedUser) purchasedByUserId = matchedUser.id;
+          }
+          await db.insert(giftCardsTable).values({
+            code: giftCardCode,
+            purchasedByUserId,
+            recipientEmail: email || null,
+            valueUsd: String(ASHLEY_SHOP_GIFT_CARD_USD),
+            paymentMethod: "usd_pending",
+            isRedeemed: false,
+            notes: `Bundled with Trash Valet subscription #${sub.id}. First-invoice charge: $${giftCardCharge.toFixed(2)} (10% bundle discount: ${giftCardDiscount > 0 ? "yes — saved $" + giftCardDiscount.toFixed(2) : "no"}). Credit to wallet only after invoice marked paid.`,
+          });
+          // Persist the gift-card line onto the subscription itself so the
+          // admin billing UI and exports see a real line item, not metadata.
+          await db.update(trashSubscriptions)
+            .set({
+              serviceNotes: sql`COALESCE(${trashSubscriptions.serviceNotes} || E'\n', '') || ${`[Ashley's Shop $100 Gift Card] +$${giftCardCharge.toFixed(2)} on first invoice — code ${giftCardCode}`}`,
+            })
+            .where(sql`${trashSubscriptions.id} = ${sub.id}`);
+        } catch (gcErr) {
+          // Roll back the just-created subscription + job so the customer is
+          // not billed for trash without their gift card line being recorded.
+          console.error("[trash-valet] ashley_shop gift card creation failed:", (gcErr as Error).message);
+          try {
+            await db.delete(trashJobs).where(sql`${trashJobs.subscriptionId} = ${sub.id}`);
+            await db.delete(trashSubscriptions).where(sql`${trashSubscriptions.id} = ${sub.id}`);
+          } catch (rollbackErr) {
+            console.error("[trash-valet] rollback after gift card failure also failed:", (rollbackErr as Error).message);
+          }
+          return res.status(500).json({ error: "Could not issue the $100 Shop gift card — your subscription was not created. Please try again or contact support." });
+        }
+      }
+
       const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
       const dayNames = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+      const giftCardLine = wantsAshleyGiftCard
+        ? `\n\n🛍️ $100 JCMOVES USD GIFT CARD: charge $${giftCardCharge.toFixed(2)} on first invoice${giftCardDiscount > 0 ? ` (10% bundle discount applied — saved $${giftCardDiscount.toFixed(2)})` : ""}. Code: ${giftCardCode || "(creation failed — issue manually)"}.`
+        : "";
+      const giftCardLineHtml = wantsAshleyGiftCard
+        ? `<div style="background:#fdf2f8;border:2px solid #ec4899;padding:12px 16px;border-radius:8px;margin-bottom:12px"><b style="color:#9d174d;font-size:15px">🛍️ $100 JCMOVES USD GIFT CARD</b><br><span style="color:#831843">Charge <b>$${giftCardCharge.toFixed(2)}</b> on first invoice${giftCardDiscount > 0 ? ` (10% bundle discount applied — saved $${giftCardDiscount.toFixed(2)})` : ""}.<br>Code: <code>${giftCardCode || "(creation failed — issue manually)"}</code></span></div>`
+        : "";
       try {
         await sendEmail({
           to: companyEmail, from: companyEmail,
-          subject: `New Trash Valet Subscription — ${customerName}${seniorDiscountAmount > 0 ? " [SENIOR]" : ""}${bundleDiscount.applied ? (bundleDiscount.reason === "cross_service_history" ? " [REPEAT BUNDLE -10%]" : " [BUNDLE -10%]") : ""}`,
-          text: `New trash valet subscription.\n\nCustomer: ${customerName}\nPhone: ${phone}\nEmail: ${email}\nAddress: ${address}, ${city}, ${state} ${zip}\nCans: ${cans}, Bags: ${bagCount}\nRecycling: ${recyclingEnabled ? "Yes" : "No"}\nService Day: ${dayNames[Number(serviceDayOfWeek)] || serviceDayOfWeek}\nMonthly Price: $${effectiveMonthlyPrice.toFixed(2)}${promoCodeUsed ? ` (promo: ${promoCodeUsed})` : ""}${seniorDiscountAmount > 0 ? " [includes $5 senior discount — already applied]" : ""}\nPlan: ${planType}${seniorDiscountAmount > 0 ? "\n\n🏅 SENIOR DISCOUNT APPLIED: $5/month has already been deducted. Use the $" + effectiveMonthlyPrice.toFixed(2) + "/mo rate when invoicing." : ""}${bundleDiscount.applied ? `\n\n⚡ BUNDLE DISCOUNT APPLIED: 10% off ($${bundleDiscount.amount.toFixed(2)}/mo) — already baked into the $${effectiveMonthlyPrice.toFixed(2)}/mo rate. Reason: ${bundleDiscount.reason === "cross_service_history" ? `recent ${bundleDiscount.triggeringServices.join(", ")} customer` : `bundling with ${bundleDiscount.triggeringServices.join(", ")}`}.` : ""}\n\nView in admin panel at /admin-trash-valet`,
-          html: `<h2>New Trash Valet Subscription</h2>${seniorDiscountAmount > 0 ? `<div style="background:#1e3a5f;border:2px solid #3b82f6;padding:12px 16px;border-radius:8px;margin-bottom:12px"><b style="color:#93c5fd;font-size:15px">🏅 SENIOR DISCOUNT APPLIED</b><br><span style="color:#bfdbfe">$5/month has already been deducted. Invoice at <b>$${effectiveMonthlyPrice.toFixed(2)}/mo</b>.</span></div>` : ""}${bundleDiscount.applied ? `<div style="background:#dcfce7;border:2px solid #22c55e;padding:12px 16px;border-radius:8px;margin-bottom:12px"><b style="color:#15803d;font-size:15px">⚡ BUNDLE DISCOUNT APPLIED: −$${bundleDiscount.amount.toFixed(2)}/mo (10%)</b><br><span style="color:#166534">Already baked into the <b>$${effectiveMonthlyPrice.toFixed(2)}/mo</b> rate. Reason: ${bundleDiscount.reason === "cross_service_history" ? `recent ${bundleDiscount.triggeringServices.join(", ")} customer` : `bundling with ${bundleDiscount.triggeringServices.join(", ")}`}.</span></div>` : ""}<p><b>Customer:</b> ${customerName}<br><b>Phone:</b> ${phone}<br><b>Email:</b> ${email}<br><b>Address:</b> ${address}, ${city}, ${state} ${zip}<br><b>Cans:</b> ${cans} | <b>Bags:</b> ${bagCount}<br><b>Recycling:</b> ${recyclingEnabled ? "Yes" : "No"}<br><b>Service Day:</b> ${dayNames[Number(serviceDayOfWeek)] || serviceDayOfWeek}<br><b>Monthly Price:</b> $${effectiveMonthlyPrice.toFixed(2)}${promoCodeUsed ? ` (promo: ${promoCodeUsed})` : ""}<br><b>Plan:</b> ${planType}</p>`,
+          subject: `New Trash Valet Subscription — ${customerName}${seniorDiscountAmount > 0 ? " [SENIOR]" : ""}${bundleDiscount.applied ? (bundleDiscount.reason === "cross_service_history" ? " [REPEAT BUNDLE -10%]" : " [BUNDLE -10%]") : ""}${wantsAshleyGiftCard ? " [+$100 SHOP GC]" : ""}`,
+          text: `New trash valet subscription.\n\nCustomer: ${customerName}\nPhone: ${phone}\nEmail: ${email}\nAddress: ${address}, ${city}, ${state} ${zip}\nCans: ${cans}, Bags: ${bagCount}\nRecycling: ${recyclingEnabled ? "Yes" : "No"}\nService Day: ${dayNames[Number(serviceDayOfWeek)] || serviceDayOfWeek}\nMonthly Price: $${effectiveMonthlyPrice.toFixed(2)}${promoCodeUsed ? ` (promo: ${promoCodeUsed})` : ""}${seniorDiscountAmount > 0 ? " [includes $5 senior discount — already applied]" : ""}\nPlan: ${planType}${seniorDiscountAmount > 0 ? "\n\n🏅 SENIOR DISCOUNT APPLIED: $5/month has already been deducted. Use the $" + effectiveMonthlyPrice.toFixed(2) + "/mo rate when invoicing." : ""}${bundleDiscount.applied ? `\n\n⚡ BUNDLE DISCOUNT APPLIED: 10% off ($${bundleDiscount.amount.toFixed(2)}/mo) — already baked into the $${effectiveMonthlyPrice.toFixed(2)}/mo rate. Reason: ${bundleDiscount.reason === "cross_service_history" ? `recent ${bundleDiscount.triggeringServices.join(", ")} customer` : `bundling with ${bundleDiscount.triggeringServices.join(", ")}`}.` : ""}${giftCardLine}\n\nView in admin panel at /admin-trash-valet`,
+          html: `<h2>New Trash Valet Subscription</h2>${giftCardLineHtml}${seniorDiscountAmount > 0 ? `<div style="background:#1e3a5f;border:2px solid #3b82f6;padding:12px 16px;border-radius:8px;margin-bottom:12px"><b style="color:#93c5fd;font-size:15px">🏅 SENIOR DISCOUNT APPLIED</b><br><span style="color:#bfdbfe">$5/month has already been deducted. Invoice at <b>$${effectiveMonthlyPrice.toFixed(2)}/mo</b>.</span></div>` : ""}${bundleDiscount.applied ? `<div style="background:#dcfce7;border:2px solid #22c55e;padding:12px 16px;border-radius:8px;margin-bottom:12px"><b style="color:#15803d;font-size:15px">⚡ BUNDLE DISCOUNT APPLIED: −$${bundleDiscount.amount.toFixed(2)}/mo (10%)</b><br><span style="color:#166534">Already baked into the <b>$${effectiveMonthlyPrice.toFixed(2)}/mo</b> rate. Reason: ${bundleDiscount.reason === "cross_service_history" ? `recent ${bundleDiscount.triggeringServices.join(", ")} customer` : `bundling with ${bundleDiscount.triggeringServices.join(", ")}`}.</span></div>` : ""}<p><b>Customer:</b> ${customerName}<br><b>Phone:</b> ${phone}<br><b>Email:</b> ${email}<br><b>Address:</b> ${address}, ${city}, ${state} ${zip}<br><b>Cans:</b> ${cans} | <b>Bags:</b> ${bagCount}<br><b>Recycling:</b> ${recyclingEnabled ? "Yes" : "No"}<br><b>Service Day:</b> ${dayNames[Number(serviceDayOfWeek)] || serviceDayOfWeek}<br><b>Monthly Price:</b> $${effectiveMonthlyPrice.toFixed(2)}${promoCodeUsed ? ` (promo: ${promoCodeUsed})` : ""}<br><b>Plan:</b> ${planType}</p>`,
         });
       } catch (emailErr) { console.error("Admin email failed:", emailErr); }
       try {
@@ -20674,7 +20745,16 @@ Thank you for your business!
         })();
       }
 
-      res.json({ subscriptionId: sub.id, jobId: job.id, quote: { ...quote, finalMonthlyPrice: effectiveMonthlyPrice }, promoApplied: promoCodeUsed, bundleDiscount });
+      res.json({
+        subscriptionId: sub.id,
+        jobId: job.id,
+        quote: { ...quote, finalMonthlyPrice: effectiveMonthlyPrice },
+        promoApplied: promoCodeUsed,
+        bundleDiscount,
+        giftCard: wantsAshleyGiftCard
+          ? { code: giftCardCode, valueUsd: ASHLEY_SHOP_GIFT_CARD_USD, charge: giftCardCharge, discount: giftCardDiscount }
+          : null,
+      });
     } catch (err) {
       console.error("Error creating trash valet subscription:", err);
       res.status(500).json({ error: "Failed to create subscription" });

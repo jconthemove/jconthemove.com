@@ -9,14 +9,14 @@ export interface BundleService {
 
 export const ALL_BUNDLE_SERVICES: BundleService[] = [
   { id: "moving",          label: "Moving",          emoji: "🚛", hint: "from $85/mover·hr" },
-  { id: "junk_removal",    label: "Junk Removal",    emoji: "🗑️", hint: "from $150" },
+  { id: "junk_removal",    label: "Junk Removal",    emoji: "🗑️", hint: "from $170" },
   { id: "cleaning",        label: "Cleaning",        emoji: "🧼", hint: "from $150" },
   { id: "window_cleaning", label: "Window Cleaning", emoji: "🪟", hint: "$5/pane" },
   { id: "lawn_care",       label: "Lawn Care",       emoji: "🌿", hint: "from $50/visit" },
   { id: "trash_valet",     label: "Trash Valet",     emoji: "♻️", hint: "from $25/mo" },
   { id: "snow_removal",    label: "Snow Removal",    emoji: "❄️", hint: "from $40/visit" },
   { id: "assembly",        label: "Assembly",        emoji: "🔧", hint: "$35/item" },
-  { id: "ashley_shop",     label: "Ashley's Shop",   emoji: "🛍️", hint: "earn JCMOVES" },
+  { id: "ashley_shop",     label: "$100 Shop Card",  emoji: "🛍️", hint: "$100 · 10% off" },
 ];
 
 interface ServiceBundleAddonProps {
@@ -108,8 +108,15 @@ export default function ServiceBundleAddon({
           <p className="text-[11px] text-green-300 font-semibold">
             🎉 10% off applied to today's quote — bundling with {selectedNames}.
           </p>
+          {selected.includes("ashley_shop") && (
+            <p className="text-[10px] text-pink-300">
+              🛍️ <span className="font-semibold">$100 Shop Card</span> added to your first invoice — billed alongside your service, redeemable as JCMOVES USD on Ashley's Shop.
+            </p>
+          )}
           <p className="text-[10px] text-zinc-500">
-            No code needed. We'll follow up to schedule your add-on{selected.length > 1 ? "s" : ""}.
+            No code needed. {selected.filter(s => s !== "ashley_shop").length > 0
+              ? "We'll follow up to schedule the add-on service" + (selected.filter(s => s !== "ashley_shop").length > 1 ? "s" : "") + "."
+              : "Your gift card is issued the moment your subscription is created."}
           </p>
         </div>
       ) : (

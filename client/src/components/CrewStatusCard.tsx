@@ -137,15 +137,15 @@ export default function CrewStatusCard() {
         {loading ? "Refreshing crew data…" : data.ctaHint}
       </p>
 
-      {/* JCMOVES incentive rows */}
+      {/* JCMOVES customer incentive rows */}
       <div className="mt-3 space-y-1.5">
         <div className="flex items-center gap-2">
           <Coins className="h-3 w-3 text-amber-400 flex-shrink-0" />
-          <span className="text-[10px] text-slate-400">Movers earn <span className="text-amber-400 font-semibold">100 JCMOVES/hr</span> when online</span>
+          <span className="text-[10px] text-slate-400">Earn <span className="text-amber-400 font-semibold">JCMOVES on every booking</span> — redeem on services &amp; shop credit</span>
         </div>
         <div className="flex items-center gap-2">
           <Star className="h-3 w-3 text-purple-400 flex-shrink-0" />
-          <span className="text-[10px] text-slate-400"><span className="text-purple-400 font-semibold">Active stakers</span> get priority booking slots</span>
+          <span className="text-[10px] text-slate-400"><span className="text-purple-400 font-semibold">Stake your JCMOVES</span> for priority booking slots &amp; bigger discounts</span>
         </div>
       </div>
 

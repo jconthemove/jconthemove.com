@@ -156,7 +156,7 @@ const CATALOG_SEED: InsertServiceCatalogEntry[] = [
     category: "core",
     defaultPriceMode: "quote",
     defaultPrice: null,
-    suggestedMin: "100",
+    suggestedMin: "170",
     suggestedMax: "600",
     discountEligible: true,
     isAddon: false,

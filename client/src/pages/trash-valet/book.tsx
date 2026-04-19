@@ -609,12 +609,24 @@ export default function TrashValetBookPage() {
             testIdPrefix="trash-bundle"
           />
 
+          {bundleAddons.includes("ashley_shop") && (
+            <div className="rounded-xl bg-pink-950/40 border border-pink-500/30 px-4 py-3">
+              <p className="text-sm font-bold text-pink-300 flex items-center gap-2">
+                <span>🛍️</span> $100 Shop Card on your first invoice
+              </p>
+              <div className="text-[11px] text-zinc-300 mt-1.5 space-y-0.5">
+                <p>Charged once: <span className="font-semibold text-pink-200">{bundleAddons.length > 1 ? "$90.00" : "$100.00"}</span> {bundleAddons.length > 1 && <span className="text-zinc-500">($100 − 10% bundle discount)</span>}</p>
+                <p className="text-zinc-500">Redeemable as JCMOVES USD on Ashley's Shop. Code is emailed to you and lives in your account.</p>
+              </div>
+            </div>
+          )}
+
           <Button
             type="submit"
             disabled={bookMutation.isPending}
             className="w-full bg-orange-500 hover:bg-orange-400 text-white font-black text-base py-6"
           >
-            {bookMutation.isPending ? "Booking…" : `Start Service — $${displayMonthly.toFixed(2)}/mo`}
+            {bookMutation.isPending ? "Booking…" : `Start Service — $${displayMonthly.toFixed(2)}/mo${bundleAddons.includes("ashley_shop") ? ` + ${bundleAddons.length > 1 ? "$90" : "$100"} Shop Card` : ""}`}
           </Button>
 
           <p className="text-center text-zinc-600 text-xs">

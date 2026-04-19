@@ -1857,8 +1857,11 @@ export function computeJunkQuote(a: Answers, ratePerMoverHour = 85, distanceMile
   const stakingPerkApplied = stakingDiscount > 0;
 
   const totalDiscount = jcmovesDiscount || stakingDiscount;
-  const minPrice = rawMin - totalDiscount + travelCharge;
-  const maxPrice = rawMax - totalDiscount + travelCharge;
+  // Task #144 — enforce $170 junk minimum globally. Apply discounts/travel
+  // first, then clamp the floor so promo paths can never quote below $170.
+  const JUNK_MIN_FLOOR = 170;
+  const minPrice = Math.max(JUNK_MIN_FLOOR, rawMin - totalDiscount + travelCharge);
+  const maxPrice = Math.max(minPrice, rawMax - totalDiscount + travelCharge);
   const tokensEstimate = Math.round(((minPrice + maxPrice) / 2) * 50);
 
   return {
@@ -1978,7 +1981,7 @@ export function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMove
         {
           id: "pkg_junk_tiny_solo",
           label: "1 Mover × 2 hrs",
-          desc: `Solo mover · 2-hr minimum · couch, appliance, mattress, or 1–2 items${travelNote}`,
+          desc: `Solo mover · 2-hr minimum · pickup-truck-sized load · items under ~50 lb (trash bags, small items, organize-bag-and-dump)${travelNote}`,
           minPrice: base,
           maxPrice: base,
           crew: 1,
@@ -1988,12 +1991,12 @@ export function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMove
         {
           id: "pkg_junk_tiny_duo",
           label: "2 Movers × 1 hr",
-          desc: `Two-person crew · faster in-and-out · same total cost${travelNote}`,
+          desc: `Two-person crew · for queen+ mattresses, couches/loveseats, anything over 70–100 lb · same total cost${travelNote}`,
           minPrice: base,
           maxPrice: base,
           crew: 2,
           hours: 1,
-          tag: "Quick",
+          tag: "Heavy items",
         },
       ];
     }
@@ -2039,22 +2042,32 @@ export function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMove
     return [
       {
         id: "pkg_junk_lg_a",
-        label: "2 Movers · ~5 hrs",
-        desc: `Budget option — plenty of time for a full house cleanout${travelNote}`,
-        minPrice: price(2, 4) + travel,
-        maxPrice: price(2, 5) + travel,
-        crew: 2,
-        hours: 5,
-      },
-      {
-        id: "pkg_junk_lg_b",
         label: "3 Movers · ~3.5 hrs",
-        desc: `Balanced crew — ideal for 4BR+ or commercial cleanouts${travelNote}`,
+        desc: `Standard large crew — full-house or 4BR cleanout${travelNote}`,
         minPrice: price(3, 3) + travel,
         maxPrice: price(3, 3.5) + travel,
         crew: 3,
         hours: 3.5,
+      },
+      {
+        id: "pkg_junk_lg_b",
+        label: "4 Movers · ~3 hrs",
+        desc: `Bigger crew — heavy items, multiple floors, or commercial cleanouts${travelNote}`,
+        minPrice: price(4, 2.5) + travel,
+        maxPrice: price(4, 3) + travel,
+        crew: 4,
+        hours: 3,
         tag: "Recommended",
+      },
+      {
+        id: "pkg_junk_xl",
+        label: "5 Movers · ~3 hrs (XL)",
+        desc: `Max crew — XL job, hoarder cleanout, multi-unit, or same-day rush${travelNote}`,
+        minPrice: price(5, 2.5) + travel,
+        maxPrice: price(5, 3) + travel,
+        crew: 5,
+        hours: 3,
+        tag: "XL",
       },
     ];
   }
