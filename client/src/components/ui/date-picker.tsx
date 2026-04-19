@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { CalendarIcon } from "lucide-react";
 import { format, isValid, parseISO, startOfToday } from "date-fns";
 
@@ -34,9 +35,10 @@ export function DatePicker({
   testId,
 }: DatePickerProps) {
   const selectedDate = parseDateValue(value);
+  const [open, setOpen] = useState(false);
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           type="button"
@@ -57,7 +59,10 @@ export function DatePicker({
         <Calendar
           mode="single"
           selected={selectedDate}
-          onSelect={(date) => onChange(date ? format(date, "yyyy-MM-dd") : "")}
+          onSelect={(date) => {
+            onChange(date ? format(date, "yyyy-MM-dd") : "");
+            if (date) setOpen(false);
+          }}
           disabled={disablePast ? { before: startOfToday() } : undefined}
           initialFocus
           className="text-white"

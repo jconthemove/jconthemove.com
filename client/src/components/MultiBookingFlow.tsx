@@ -2,10 +2,11 @@
 // All five components live in one file to keep the new flow focused and easy
 // to evolve as a unit. Page (`/book`) composes them.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   CheckCircle2, Plus, Minus, Tag, Coins, Users, ChevronUp, ChevronDown,
-  Sparkles, Trash2, Pencil, AlertCircle, PhoneCall,
+  Sparkles, Trash2, Pencil, AlertCircle, PhoneCall, Package,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,10 @@ import {
   BUNDLE_FREQUENCY_OPTIONS,
   type BundleSchedulingMode,
 } from "@/components/BundleServiceScheduler";
+import {
+  computeMovingQuote, computeJunkQuote, buildCrewPackages,
+  type Answers, type CrewPackage,
+} from "@/components/booking-chatbot";
 
 export interface CatalogService {
   id: string;
@@ -61,7 +66,28 @@ export interface SelectedItem {
     callToSchedule?: boolean;
     notes?: string;
     scope?: string;
+    // Task #141: Moving / Junk Removal package picker snapshot — mirrors the
+    // data the booking chatbot captures so the cart line carries the chosen
+    // crew size, hours, tier, and JC222 promo when applicable.
+    packageId?: string;
+    packageLabel?: string;
+    packageTier?: string;
+    crew?: number;
+    hours?: number;
+    minPrice?: number;
+    maxPrice?: number;
+    jobSize?: string;
+    loadType?: string;
+    hasStairs?: boolean;
+    specialItems?: string[];
+    promoCode?: string;
   };
+}
+
+/** Service codes that should drive their own package-picker UI in the
+ *  wizard (instead of the generic flat-price card). */
+export function usesPackagePicker(code: string): boolean {
+  return code === "moving" || code === "junk_removal";
 }
 
 /** Resolve the per-service scheduling pattern, mirroring BundleServiceScheduler.
@@ -380,6 +406,319 @@ export function ServiceItemEditor({
   );
 }
 
+// ── MovingJunkPackagePicker ────────────────────────────────────────────────
+// Mirrors the chatbot's package-picker for Moving and Junk Removal so the
+// wizard sells those services as crew-size × hours packages (with JC222
+// promo eligibility on small-tier moves) instead of a flat $300/$100 line.
+const PICKER_HOME_SIZES = [
+  "1–2 Items (Tiny Job)",
+  "Studio / Single Room",
+  "1 Bedroom Apartment",
+  "2 Bedroom Apartment",
+  "3 Bedroom Apartment",
+  "4+ Bedroom Apartment",
+  "1–2 Bedroom House",
+  "3 Bedroom House",
+  "4+ Bedroom House",
+  "Commercial / Office",
+];
+
+const PICKER_LOAD_TYPES = [
+  "📦 Load Only",
+  "📤 Unload Only",
+  "🔄 Both Load + Unload",
+];
+
+const PICKER_SPECIAL_ITEMS = [
+  "🎹 Grand Piano",
+  "🎹 Upright Piano",
+  "🎱 Pool Table",
+  "♨️ Hot Tub",
+  "🔒 Heavy Safe (300 lbs+)",
+  "🏋️ Large Appliance or Fitness Equipment (100 lbs+)",
+  "📦 Other Heavy Item (100 lbs+)",
+];
+
+export function MovingJunkPackagePicker({
+  item, onChange,
+}: {
+  item: SelectedItem;
+  onChange: (next: SelectedItem) => void;
+}) {
+  const isMoving = item.serviceCode === "moving";
+  const { data: pricingConfig } = useQuery<{ ratePerMoverHour: number; jc222Price: number }>({
+    queryKey: ["/api/pricing"],
+    staleTime: 5 * 60 * 1000,
+  });
+  const rate    = pricingConfig?.ratePerMoverHour ?? 85;
+  const jc222   = pricingConfig?.jc222Price       ?? 222;
+
+  // Build an Answers shape from the persisted details so the chatbot's
+  // pricing engine can compute the same packages it shows in chat.
+  const answers: Answers = useMemo(() => {
+    const a: Answers = {
+      serviceType: isMoving ? "📦 Moving (local or long-distance)" : "🗑️ Junk Removal",
+      homeSize: item.details.jobSize,
+      specialItems: item.details.specialItems || [],
+      promoCode: item.details.promoCode,
+    };
+    if (isMoving) {
+      a.loadType = item.details.loadType;
+      if (item.details.hasStairs) {
+        a.originFloor = "2nd Floor";
+        a.originElevator = "🪜 No elevator — stairs only";
+      }
+    }
+    return a;
+  }, [isMoving, item.details.jobSize, item.details.specialItems, item.details.promoCode,
+      item.details.loadType, item.details.hasStairs]);
+
+  const quote = useMemo(() => {
+    if (!item.details.jobSize) return null;
+    return isMoving
+      ? computeMovingQuote(answers, rate, jc222)
+      : computeJunkQuote(answers, rate);
+  }, [answers, isMoving, rate, jc222, item.details.jobSize]);
+
+  const packages: CrewPackage[] = useMemo(() => {
+    return quote ? buildCrewPackages(answers, quote, rate, jc222) : [];
+  }, [quote, answers, rate, jc222]);
+
+  // Keep the selected package in sync with the live package list. Two cases:
+  //  1. The selected id no longer exists (user changed job size, load type,
+  //     etc.) → drop the selection so they have to pick again.
+  //  2. The id still exists but its price band, crew or hours changed (e.g.
+  //     the user toggled a special item, JC222, or stairs after picking) →
+  //     reapply the same package so unitPrice / details stay accurate. Without
+  //     this the cart would submit stale pricing for the new inputs.
+  const packageSig = packages
+    .map(p => `${p.id}:${p.minPrice}-${p.maxPrice}:${p.crew ?? ""}x${p.hours ?? ""}`)
+    .join("|");
+  useEffect(() => {
+    if (!item.details.packageId) return;
+    const current = packages.find(p => p.id === item.details.packageId);
+    if (!current) {
+      onChange({
+        ...item,
+        unitPrice: 0,
+        details: {
+          ...item.details,
+          packageId: undefined, packageLabel: undefined, packageTier: undefined,
+          crew: undefined, hours: undefined, minPrice: undefined, maxPrice: undefined,
+        },
+      });
+      return;
+    }
+    const drifted =
+      current.minPrice !== item.details.minPrice ||
+      current.maxPrice !== item.details.maxPrice ||
+      current.crew     !== item.details.crew ||
+      current.hours    !== item.details.hours ||
+      current.label    !== item.details.packageLabel;
+    if (drifted) applyPackage(current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [packageSig]);
+
+  function applyPackage(pkg: CrewPackage) {
+    const mid = Math.round((pkg.minPrice + pkg.maxPrice) / 2);
+    onChange({
+      ...item,
+      quantity: 1,
+      unitPrice: mid,
+      priceMode: "fixed",
+      details: {
+        ...item.details,
+        packageId: pkg.id,
+        packageLabel: pkg.label,
+        packageTier: quote?.type === "moving" || quote?.type === "junk" ? quote.tier : undefined,
+        crew: pkg.crew,
+        hours: pkg.hours,
+        minPrice: pkg.minPrice,
+        maxPrice: pkg.maxPrice,
+      },
+    });
+  }
+
+  function patch(d: Partial<SelectedItem["details"]>) {
+    onChange({ ...item, details: { ...item.details, ...d } });
+  }
+
+  function toggleSpecial(label: string) {
+    const cur = item.details.specialItems || [];
+    const next = cur.includes(label) ? cur.filter(s => s !== label) : [...cur, label];
+    patch({ specialItems: next });
+  }
+
+  return (
+    <div className="space-y-3" data-testid={`pkg-picker-${item.serviceCode}`}>
+      <div>
+        <Label className="text-xs">{isMoving ? "How big is the move?" : "How much junk?"}</Label>
+        <select
+          value={item.details.jobSize || ""}
+          onChange={(e) => patch({ jobSize: e.target.value || undefined })}
+          className="mt-1 w-full h-9 rounded-md border border-border bg-background px-2 text-sm"
+          data-testid={`pkg-jobsize-${item.serviceCode}`}
+        >
+          <option value="">Pick a size…</option>
+          {PICKER_HOME_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </div>
+
+      {isMoving && (
+        <div>
+          <Label className="text-xs">Load type</Label>
+          <div className="grid grid-cols-3 gap-1.5 mt-1">
+            {PICKER_LOAD_TYPES.map(opt => {
+              const active = item.details.loadType === opt;
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => patch({ loadType: opt })}
+                  className={cn(
+                    "text-[11px] px-2 py-1.5 rounded-md border text-center leading-tight transition-all",
+                    active
+                      ? "border-emerald-400 bg-emerald-500/20 text-emerald-300"
+                      : "border-border bg-card hover:border-foreground/30",
+                  )}
+                  data-testid={`pkg-loadtype-${item.serviceCode}-${opt.slice(0, 4)}`}
+                >
+                  {opt}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2">
+        <input
+          id={`stairs-${item.serviceCode}`}
+          type="checkbox"
+          checked={!!item.details.hasStairs}
+          onChange={(e) => patch({ hasStairs: e.target.checked })}
+          className="h-4 w-4"
+          data-testid={`pkg-stairs-${item.serviceCode}`}
+        />
+        <Label htmlFor={`stairs-${item.serviceCode}`} className="text-xs cursor-pointer">
+          Stairs at the pickup or drop-off (no elevator)
+        </Label>
+      </div>
+
+      <div>
+        <Label className="text-xs">Special / heavy items (optional)</Label>
+        <div className="flex flex-wrap gap-1.5 mt-1">
+          {PICKER_SPECIAL_ITEMS.map(label => {
+            const active = (item.details.specialItems || []).includes(label);
+            return (
+              <button
+                key={label}
+                type="button"
+                onClick={() => toggleSpecial(label)}
+                className={cn(
+                  "text-[11px] px-2 py-1 rounded-full border transition-all",
+                  active
+                    ? "border-orange-400 bg-orange-500/20 text-orange-300"
+                    : "border-border bg-card hover:border-foreground/30",
+                )}
+                data-testid={`pkg-special-${item.serviceCode}-${label.slice(2, 6).trim()}`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {isMoving && (
+        <div>
+          <Label className="text-xs">Promo code (optional)</Label>
+          <Input
+            value={item.details.promoCode || ""}
+            onChange={(e) => patch({ promoCode: e.target.value.toUpperCase() || undefined })}
+            placeholder="e.g. JC222 for the small-move flat rate"
+            data-testid={`pkg-promo-${item.serviceCode}`}
+            className="uppercase"
+          />
+        </div>
+      )}
+
+      <div>
+        <Label className="text-xs flex items-center gap-1">
+          <Package className="h-3 w-3" /> Pick your package
+        </Label>
+        {!quote ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Pick a {isMoving ? "move size" : "load size"} to see crew options and pricing.
+          </p>
+        ) : packages.length === 0 ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            No standard packages available — we'll call to confirm pricing.
+          </p>
+        ) : (
+          <div className="mt-1.5 space-y-2">
+            {packages.map(pkg => {
+              const active = item.details.packageId === pkg.id;
+              const priceLabel = pkg.minPrice === pkg.maxPrice
+                ? `$${pkg.minPrice}`
+                : `$${pkg.minPrice}–$${pkg.maxPrice}`;
+              return (
+                <button
+                  key={pkg.id}
+                  type="button"
+                  onClick={() => applyPackage(pkg)}
+                  className={cn(
+                    "w-full text-left rounded-xl border p-3 transition-all",
+                    active
+                      ? "border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500/40"
+                      : "border-border bg-card hover:border-orange-500/40",
+                  )}
+                  data-testid={`pkg-option-${pkg.id}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold flex items-center gap-1.5">
+                        {pkg.label}
+                        {pkg.tag && (
+                          <span className="text-[10px] font-bold text-orange-400 bg-orange-500/15 px-1.5 py-0.5 rounded">
+                            {pkg.tag}
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{pkg.desc}</p>
+                    </div>
+                    <span className="text-sm font-bold whitespace-nowrap">{priceLabel}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <Label className="text-xs">Preferred date</Label>
+        <DatePicker
+          value={item.details.requestedDate}
+          onChange={(v) => patch({ requestedDate: v || undefined })}
+          placeholder="Pick a date"
+        />
+      </div>
+
+      <div>
+        <Label className="text-xs">Notes for the crew (optional)</Label>
+        <Textarea
+          value={item.details.notes || ""}
+          onChange={(e) => patch({ notes: e.target.value })}
+          placeholder="Gate code, parking notes, anything we should know"
+          rows={2}
+          data-testid={`pkg-notes-${item.serviceCode}`}
+        />
+      </div>
+    </div>
+  );
+}
+
 // ── InlineItemConfigure ────────────────────────────────────────────────────
 // Renders the full per-item editor (qty, scheduling, scope, notes) inline
 // inside the service card. Used by the wizard's "configure" step so users
@@ -392,6 +731,7 @@ export function InlineItemConfigure({
   onRemove: () => void;
   warning?: string | null;
 }) {
+  const usesPicker = usesPackagePicker(item.serviceCode);
   const mode = schedulingModeFor(item.serviceCode);
   const showQty = item.priceMode === "hourly" || item.priceMode === "per_unit";
   const lineSubtotal = item.quantity * item.unitPrice;
@@ -411,20 +751,29 @@ export function InlineItemConfigure({
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-sm truncate">{item.label}</p>
           <p className="text-[11px] text-muted-foreground">
-            {item.priceMode === "quote"
-              ? "Custom quote — confirmed after we review"
-              : `${priceModeLabel(item.priceMode, item.unitPrice)}${showQty ? ` × ${item.quantity}` : ""}`}
+            {usesPicker && item.details.packageLabel
+              ? item.details.packageLabel
+              : item.priceMode === "quote"
+                ? "Custom quote — confirmed after we review"
+                : `${priceModeLabel(item.priceMode, item.unitPrice)}${showQty ? ` × ${item.quantity}` : ""}`}
           </p>
         </div>
         <div className="text-right">
           <p className="text-sm font-bold">
-            {item.priceMode === "quote" ? "TBD" : `$${lineSubtotal.toFixed(0)}`}
+            {usesPicker
+              ? (item.details.packageId ? `$${lineSubtotal.toFixed(0)}` : "TBD")
+              : item.priceMode === "quote" ? "TBD" : `$${lineSubtotal.toFixed(0)}`}
           </p>
         </div>
       </div>
 
-      {/* Qty (hourly / per_unit only) */}
-      {showQty && (
+      {usesPicker && (
+        <MovingJunkPackagePicker item={item} onChange={onChange} />
+      )}
+
+      {/* Qty (hourly / per_unit only). Hidden when the package picker drives
+          this card (Moving / Junk Removal) so we don't show two pricing UIs. */}
+      {!usesPicker && showQty && (
         <div>
           <Label className="text-xs">{item.priceMode === "hourly" ? "Hours" : "Quantity"}</Label>
           <div className="flex items-center gap-2 mt-1">
@@ -445,8 +794,9 @@ export function InlineItemConfigure({
         </div>
       )}
 
-      {/* Scheduling */}
-      {mode === "call_only" ? (
+      {/* Scheduling — package picker handles its own date + notes for
+          Moving / Junk Removal, so skip the generic block when active. */}
+      {!usesPicker && (mode === "call_only" ? (
         <div className="rounded-lg border border-sky-500/30 bg-sky-500/5 p-2.5 flex items-start gap-2" data-testid={`inline-call-only-${item.serviceCode}`}>
           <PhoneCall className="h-4 w-4 text-sky-400 mt-0.5 shrink-0" />
           <p className="text-xs text-muted-foreground leading-snug">
@@ -490,28 +840,32 @@ export function InlineItemConfigure({
             </div>
           )}
         </>
+      ))}
+
+      {!usesPicker && (
+        <>
+          <div>
+            <Label className="text-xs">Scope (what should we focus on?)</Label>
+            <Input
+              value={item.details.scope || ""}
+              onChange={(e) => onChange({ ...item, details: { ...item.details, scope: e.target.value } })}
+              placeholder="e.g. front yard only, 1 truckload"
+              data-testid={`inline-scope-${item.serviceCode}`}
+            />
+          </div>
+
+          <div>
+            <Label className="text-xs">Notes / special instructions (optional)</Label>
+            <Textarea
+              value={item.details.notes || ""}
+              onChange={(e) => onChange({ ...item, details: { ...item.details, notes: e.target.value } })}
+              placeholder="Gate code, parking notes, anything we should know"
+              rows={2}
+              data-testid={`inline-notes-${item.serviceCode}`}
+            />
+          </div>
+        </>
       )}
-
-      <div>
-        <Label className="text-xs">Scope (what should we focus on?)</Label>
-        <Input
-          value={item.details.scope || ""}
-          onChange={(e) => onChange({ ...item, details: { ...item.details, scope: e.target.value } })}
-          placeholder="e.g. front yard only, 1 truckload"
-          data-testid={`inline-scope-${item.serviceCode}`}
-        />
-      </div>
-
-      <div>
-        <Label className="text-xs">Notes / special instructions (optional)</Label>
-        <Textarea
-          value={item.details.notes || ""}
-          onChange={(e) => onChange({ ...item, details: { ...item.details, notes: e.target.value } })}
-          placeholder="Gate code, parking notes, anything we should know"
-          rows={2}
-          data-testid={`inline-notes-${item.serviceCode}`}
-        />
-      </div>
 
       <div className="flex items-center justify-between pt-1">
         {warning ? (

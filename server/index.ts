@@ -141,6 +141,25 @@ app.use((req, res, next) => {
       } catch (e) { console.error('dispatch columns init error:', e); }
     })();
 
+    // Task #130/#141: per-child booking lifecycle columns. Production rows
+    // were missing these so booking inserts 500'd. Self-heal on boot so a
+    // fresh deploy doesn't require a manual migration.
+    (async () => {
+      try {
+        const { pool: dbPool } = await import('./db');
+        await dbPool.query(`
+          ALTER TABLE booking_service_items
+            ADD COLUMN IF NOT EXISTS status               TEXT NOT NULL DEFAULT 'pending',
+            ADD COLUMN IF NOT EXISTS assigned_to_user_id  VARCHAR,
+            ADD COLUMN IF NOT EXISTS crew_members         TEXT[] DEFAULT ARRAY[]::TEXT[],
+            ADD COLUMN IF NOT EXISTS notes                TEXT,
+            ADD COLUMN IF NOT EXISTS scheduled_at         TIMESTAMP,
+            ADD COLUMN IF NOT EXISTS completed_at         TIMESTAMP
+        `);
+        console.log('✅ booking_service_items lifecycle columns ready');
+      } catch (e) { console.error('booking_service_items columns init error:', e); }
+    })();
+
     // Seed the rewards marketplace catalog (idempotent)
     const { seedRewardShop } = await import('./seed-reward-shop');
     seedRewardShop().catch(e => console.error("Reward shop seed error:", e));

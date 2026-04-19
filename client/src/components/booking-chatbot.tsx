@@ -1793,7 +1793,7 @@ export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatP
 // ─────────────────────────────────────────────
 // Junk Removal Quote Engine
 // ─────────────────────────────────────────────
-function computeJunkQuote(a: Answers, ratePerMoverHour = 85, distanceMiles = 0, stakingPerkPct = 0): JunkQuote {
+export function computeJunkQuote(a: Answers, ratePerMoverHour = 85, distanceMiles = 0, stakingPerkPct = 0): JunkQuote {
   const RATE = ratePerMoverHour;
   const r5 = (n: number) => Math.ceil(n / 5) * 5;
 

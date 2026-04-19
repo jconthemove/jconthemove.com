@@ -47,12 +47,16 @@ function makeItem(svc: CatalogService): SelectedItem {
   const mode = schedulingModeFor(svc.code);
   const details: SelectedItem["details"] =
     mode === "call_only" ? { callToSchedule: true } : {};
+  // Task #141: Moving and Junk Removal are sold via the chatbot's crew-size ×
+  // hours package picker. Initialise them as a quote (no flat unit price)
+  // until the user picks a specific package in the configure step.
+  const isPicker = svc.code === "moving" || svc.code === "junk_removal";
   return {
     serviceCode: svc.code,
     label: svc.name,
     quantity: 1,
-    unitPrice: defaultUnitPrice(svc),
-    priceMode: defaultPriceMode(svc),
+    unitPrice: isPicker ? 0 : defaultUnitPrice(svc),
+    priceMode: isPicker ? "quote" : defaultPriceMode(svc),
     details,
   };
 }
@@ -83,6 +87,15 @@ const STEP_LABELS: Record<Step, string> = {
 };
 
 function itemNeedsAttention(item: SelectedItem): string | null {
+  // Task #141: Moving / Junk Removal must pass through the package picker so
+  // we capture crew, hours and tier (and any JC222 flat-rate eligibility)
+  // before the booking submits.
+  if (item.serviceCode === "moving" || item.serviceCode === "junk_removal") {
+    if (!item.details.jobSize)   return "Pick a job size";
+    if (!item.details.packageId) return "Pick a crew package";
+    if (!item.details.requestedDate) return "Date required";
+    return null;
+  }
   const mode = schedulingModeFor(item.serviceCode);
   if (mode === "date_only" && !item.details.requestedDate) return "Date required";
   if (mode === "date_freq") {
