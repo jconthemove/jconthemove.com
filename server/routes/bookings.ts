@@ -201,9 +201,12 @@ async function autoProvisionTrashSubscriptionFromBooking(args: {
     const recyclingEnabled = !!details.recyclingEnabled;
     const recyclingAnchorDate = (details.recyclingAnchorDate as string | undefined) || null;
     const serviceDayOfWeek = Math.max(1, Math.min(6, Number(details.serviceDayOfWeek) || 1));
+    // If recycling is enabled but no specific day was chosen, fall back to
+    // the trash service day so the subscription always has a complete
+    // schedule (matches the dedicated /trash-valet/book behavior).
     const recyclingDayOfWeek = details.recyclingDayOfWeek != null
       ? Math.max(1, Math.min(6, Number(details.recyclingDayOfWeek)))
-      : null;
+      : (recyclingEnabled ? serviceDayOfWeek : null);
     const planType = details.planType === "yearly" ? "yearly" : "monthly";
     const serviceNotes = typeof details.notes === "string" ? details.notes.trim() || null : null;
 
