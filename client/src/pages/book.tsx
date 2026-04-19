@@ -126,9 +126,16 @@ export default function MultiServiceBookPage() {
   const allBundles: FeaturedBundle[] = bundlesData?.bundles || [];
 
   // ── Live quote (debounced + latest-wins to prevent stale-response races)
+  // `quoteCartSig` records the cart signature the current `quote` represents.
+  // Anything that reads `quote.bundleApplied` for behavior (the bundle popup)
+  // must check `quoteCartSig === currentCartSig` first — otherwise we'd act
+  // on a quote computed for a different cart shape.
+  const cartSigOf = (xs: SelectedItem[]) =>
+    xs.map(i => i.serviceCode).slice().sort().join(",");
+  const [quoteCartSig, setQuoteCartSig] = useState<string>("");
   const quoteSeqRef = useRef(0);
   const quoteMutation = useMutation({
-    mutationFn: async (payload: { seq: number; payloadItems: SelectedItem[] }) => {
+    mutationFn: async (payload: { seq: number; sig: string; payloadItems: SelectedItem[] }) => {
       const res = await apiRequest("POST", "/api/bookings/quote", {
         items: payload.payloadItems.map(i => ({
           serviceCode: i.serviceCode,
@@ -141,21 +148,26 @@ export default function MultiServiceBookPage() {
         source: "web_multi_book",
       });
       const data = await res.json();
-      return { seq: payload.seq, data };
+      return { seq: payload.seq, sig: payload.sig, data };
     },
-    onSuccess: ({ seq, data }) => {
-      // Drop stale responses; otherwise an older request could overwrite a
-      // newer cart's quote and trip the bundle suggestion at the wrong moment.
+    onSuccess: ({ seq, sig, data }) => {
       if (seq !== quoteSeqRef.current) return;
-      if (data?.quote) setQuote(data.quote as QuoteResult);
+      if (data?.quote) {
+        setQuote(data.quote as QuoteResult);
+        setQuoteCartSig(sig);
+      }
     },
   });
 
   useEffect(() => {
-    if (items.length === 0) { setQuote(null); return; }
+    if (items.length === 0) { setQuote(null); setQuoteCartSig(""); return; }
     const t = setTimeout(() => {
       quoteSeqRef.current += 1;
-      quoteMutation.mutate({ seq: quoteSeqRef.current, payloadItems: items });
+      quoteMutation.mutate({
+        seq: quoteSeqRef.current,
+        sig: cartSigOf(items),
+        payloadItems: items,
+      });
     }, 350);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -183,8 +195,13 @@ export default function MultiServiceBookPage() {
   useEffect(() => {
     if (items.length === 0 || allBundles.length === 0) return;
     const cartCodes = new Set(items.map(i => i.serviceCode));
-    const appliedCode = quote?.bundleApplied?.code ?? null;
     const sortedCart = [...cartCodes].sort().join(",");
+    // Wait until the live quote has caught up to the current cart shape.
+    // Acting on a stale `quote.bundleApplied` would fire an auto_applied
+    // popup for a cart that may no longer qualify — and would suppress
+    // the correct one_away pitch for the new shape.
+    if (quoteCartSig !== sortedCart) return;
+    const appliedCode = quote?.bundleApplied?.code ?? null;
     const sig = `${sortedCart}|${appliedCode ?? ""}`;
     if (shownSigRef.current.has(sig)) return;
 
@@ -300,11 +317,9 @@ export default function MultiServiceBookPage() {
     if (step === "contact") {
       if (!contact.customerName.trim()) return "Enter your full name";
       if (contact.customerPhone.replace(/\D/g, "").length < 7) return "Enter a valid phone number";
-      // Email is optional server-side; only validate format when provided.
       const email = contact.customerEmail.trim();
-      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        return "Enter a valid email or leave it blank";
-      }
+      if (!email) return "Enter your email so we can confirm";
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "Enter a valid email address";
     }
     return null;
   }
