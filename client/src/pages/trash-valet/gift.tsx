@@ -14,6 +14,7 @@ import { ArrowLeft, CheckCircle2, Gift, Recycle, Trash2, Tag } from "lucide-reac
 import BookingConfirmedTiles from "@/components/BookingConfirmedTiles";
 import { calculateTrashValetQuote, TRASH_VALET_OUT_OF_AREA_MINIMUM } from "@shared/trashValetPricing";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
+import AddressSummaryPill from "@/components/AddressSummaryPill";
 
 const DAY_OPTIONS = [
   { value: "1", label: "Monday" },
@@ -97,11 +98,13 @@ function ServiceBlock({
   icon: React.ReactNode;
   service: ReturnType<typeof emptyService>;
   onChange: (key: string, val: string | number | boolean) => void;
-  onPlaceSelect: (p: { fullAddress: string; city: string; state: string; zip: string }) => void;
+  onPlaceSelect: (place: { fullAddress: string; city: string; state: string; zip: string }) => void;
   distanceMiles: number;
   accentColor: string;
 }) {
   const { baseMonthly, yearlyEffective, discounted, quote, travelFeeApplied, isYearly } = getAdjustedMonthly(service, distanceMiles);
+  const [showAddressDetails, setShowAddressDetails] = useState(false);
+  const [addressFromAutocomplete, setAddressFromAutocomplete] = useState(false);
 
   return (
     <Card className="bg-zinc-900 border-zinc-800">
@@ -116,14 +119,51 @@ function ServiceBlock({
           <Label className="text-xs text-zinc-500">Service Address *</Label>
           <PlacesAutocomplete
             value={service.address}
-            onChange={v => onChange("address", v)}
-            onPlaceSelect={onPlaceSelect}
-            placeholder="Start typing the address…"
+            onChange={(v) => {
+              onChange("address", v);
+              if (addressFromAutocomplete) {
+                setAddressFromAutocomplete(false);
+                setShowAddressDetails(true);
+              } else if (v.trim().length > 0 && !showAddressDetails) {
+                setShowAddressDetails(true);
+              }
+            }}
+            onPlaceSelect={(place) => {
+              onPlaceSelect(place);
+              setAddressFromAutocomplete(true);
+              setShowAddressDetails(false);
+            }}
+            placeholder="123 Main St, Ironwood, MI"
             className="mt-1"
-            inputClassName="w-full bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-500 text-sm rounded-md pl-8 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500/40 focus:border-orange-500/60"
+            inputClassName="w-full rounded-md border border-zinc-700 bg-zinc-800 text-white placeholder:text-zinc-500 px-3 py-2 text-sm mt-1 focus:outline-none focus:ring-2 focus:ring-orange-500/40 focus:border-orange-500/60 transition-all"
           />
           <p className="text-[10px] text-zinc-600 mt-1">Pick a suggestion — city, state, and ZIP fill in automatically.</p>
+          {addressFromAutocomplete && !showAddressDetails && (service.city || service.zip) && (
+            <AddressSummaryPill
+              city={service.city}
+              state={service.state}
+              zip={service.zip}
+              onEdit={() => setShowAddressDetails(true)}
+            />
+          )}
         </div>
+        {showAddressDetails && (
+          <div className="grid grid-cols-2 gap-2">
+            <Input
+              value={service.city}
+              onChange={e => onChange("city", e.target.value)}
+              placeholder="City"
+              className="bg-zinc-800 border-zinc-700 text-white"
+            />
+            <Input
+              value={service.zip}
+              onChange={e => onChange("zip", e.target.value)}
+              placeholder="ZIP"
+              className="bg-zinc-800 border-zinc-700 text-white"
+              maxLength={5}
+            />
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <div>

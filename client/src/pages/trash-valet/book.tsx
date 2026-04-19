@@ -16,6 +16,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { calculateTrashValetQuote, TRASH_VALET_OUT_OF_AREA_MINIMUM, type TrashValetQuote } from "@shared/trashValetPricing";
 import ServiceBundleAddon from "@/components/ServiceBundleAddon";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
+import AddressSummaryPill from "@/components/AddressSummaryPill";
 
 const DAY_OPTIONS = [
   { value: "1", label: "Monday" },
@@ -69,6 +70,8 @@ export default function TrashValetBookPage() {
     promoCode: "",
     seniorDiscount: false,
   });
+  const [showAddressDetails, setShowAddressDetails] = useState(false);
+  const [addressFromAutocomplete, setAddressFromAutocomplete] = useState(false);
 
   const setField = (key: string, value: string | number | boolean) =>
     setForm((f) => ({ ...f, [key]: value }));
@@ -274,23 +277,66 @@ export default function TrashValetBookPage() {
             <CardHeader className="pb-3">
               <CardTitle className="text-sm text-zinc-300">Service Address *</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className="space-y-3">
               <PlacesAutocomplete
                 value={form.address}
-                onChange={(v) => setField("address", v)}
-                onPlaceSelect={(p) => {
+                onChange={(v) => {
+                  setField("address", v);
+                  if (addressFromAutocomplete) {
+                    setAddressFromAutocomplete(false);
+                    setShowAddressDetails(true);
+                  } else if (v.trim().length > 0 && !showAddressDetails) {
+                    setShowAddressDetails(true);
+                  }
+                }}
+                onPlaceSelect={(place) => {
                   setForm((f) => ({
                     ...f,
-                    address: p.fullAddress,
-                    city: p.city || f.city,
-                    state: p.state || f.state,
-                    zip: p.zip || f.zip,
+                    address: place.fullAddress,
+                    city: place.city || f.city,
+                    state: place.state || f.state,
+                    zip: place.zip || f.zip,
                   }));
+                  setAddressFromAutocomplete(true);
+                  setShowAddressDetails(false);
                 }}
-                placeholder="Start typing your address…"
-                inputClassName="w-full bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-500 text-sm rounded-md pl-8 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500/40 focus:border-orange-500/60"
+                placeholder="123 Main St, Ironwood, MI"
+                inputClassName="w-full rounded-md border border-zinc-700 bg-zinc-800 text-white placeholder:text-zinc-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/40 focus:border-orange-500/60 transition-all"
               />
               <p className="text-[10px] text-zinc-600">Pick from the suggestions — we'll fill in the city, state, and ZIP automatically.</p>
+              {addressFromAutocomplete && !showAddressDetails && (form.city || form.zip) && (
+                <AddressSummaryPill
+                  city={form.city}
+                  state={form.state}
+                  zip={form.zip}
+                  onEdit={() => setShowAddressDetails(true)}
+                />
+              )}
+              {showAddressDetails && (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      value={form.city}
+                      onChange={(e) => setField("city", e.target.value)}
+                      placeholder="City"
+                      className="bg-zinc-800 border-zinc-700 text-white"
+                    />
+                    <Input
+                      value={form.zip}
+                      onChange={(e) => setField("zip", e.target.value)}
+                      placeholder="ZIP"
+                      className="bg-zinc-800 border-zinc-700 text-white"
+                      maxLength={5}
+                    />
+                  </div>
+                  <Input
+                    value={form.state}
+                    onChange={(e) => setField("state", e.target.value)}
+                    placeholder="State"
+                    className="bg-zinc-800 border-zinc-700 text-white"
+                  />
+                </>
+              )}
             </CardContent>
           </Card>
 

@@ -16,6 +16,7 @@ import ServiceCard from "@/components/ServiceCard";
 import { getService } from "@/lib/services";
 import { DatePicker } from "@/components/ui/date-picker";
 import ServiceBundleAddon from "@/components/ServiceBundleAddon";
+import { PlacesAutocomplete } from "@/components/places-autocomplete";
 
 interface QuotePhoto {
   id: string;
@@ -323,12 +324,12 @@ export default function QuoteForm({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="fromAddress" className={labelClasses}>Service Address *</Label>
-              <Input
-                id="fromAddress"
+              <PlacesAutocomplete
+                value={form.watch("fromAddress") || ""}
+                onChange={(v) => form.setValue("fromAddress", v, { shouldValidate: true })}
+                onPlaceSelect={(p) => form.setValue("fromAddress", p.fullAddress, { shouldValidate: true })}
                 placeholder="Where do you need service?"
-                className={inputClasses}
-                {...form.register("fromAddress")}
-                data-testid="input-from-address"
+                inputClassName={`w-full rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 ${inputClasses}`}
               />
               {form.formState.errors.fromAddress && (
                 <p className={errorClasses}>{form.formState.errors.fromAddress.message}</p>
@@ -336,12 +337,12 @@ export default function QuoteForm({
             </div>
             <div>
               <Label htmlFor="toAddress" className={labelClasses}>Destination (if moving)</Label>
-              <Input
-                id="toAddress"
+              <PlacesAutocomplete
+                value={form.watch("toAddress") || ""}
+                onChange={(v) => form.setValue("toAddress", v)}
+                onPlaceSelect={(p) => form.setValue("toAddress", p.fullAddress)}
                 placeholder="Destination address"
-                className={inputClasses}
-                {...form.register("toAddress")}
-                data-testid="input-to-address"
+                inputClassName={`w-full rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 ${inputClasses}`}
               />
             </div>
           </div>

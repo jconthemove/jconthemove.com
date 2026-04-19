@@ -18,6 +18,7 @@ import BookingConfirmedTiles from "@/components/BookingConfirmedTiles";
 import { cn } from "@/lib/utils";
 import { DatePicker } from "@/components/ui/date-picker";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
+import AddressSummaryPill from "@/components/AddressSummaryPill";
 import ServiceBundleAddon from "@/components/ServiceBundleAddon";
 import LawnYardCardTile from "@/components/LawnYardCard";
 import WhatThisMeans from "@/components/WhatThisMeans";
@@ -116,13 +117,34 @@ export default function BookLawnCare() {
   // Captured from ?utm_source=... on the deep link so the booking endpoint
   // can attribute this re-book to its source campaign (e.g. "rebook_email").
   const [rebookSource, setRebookSource] = useState<string | null>(null);
+  // Controls whether the city/zip inputs are revealed. They are hidden by
+  // default once an autocomplete suggestion has filled them in (we show a
+  // confirmation pill instead). They appear automatically if the user types
+  // a manual address without picking a suggestion, or clicks "Edit" on the pill.
+  const [showAddressDetails, setShowAddressDetails] = useState(false);
+  const [addressFromAutocomplete, setAddressFromAutocomplete] = useState(false);
 
   const form = useForm<ContactForm>({
     resolver: zodResolver(contactSchema),
     defaultValues: { customerName: "", phone: "", email: "", address: "", city: "", state: "", zip: "", requestedStartDate: "", notes: "" },
   });
 
+  // Safety net: if an address is present but city/zip are missing and we
+  // didn't get them from autocomplete, force-reveal the City/Zip inputs so
+  // the user can fill them in (and server validation still passes).
   const watchedAddress = form.watch("address");
+  const watchedCity = form.watch("city");
+  const watchedZip = form.watch("zip");
+  useEffect(() => {
+    if (
+      !addressFromAutocomplete &&
+      !showAddressDetails &&
+      (watchedAddress || "").trim().length > 0 &&
+      (!(watchedCity || "").trim() || !(watchedZip || "").trim())
+    ) {
+      setShowAddressDetails(true);
+    }
+  }, [watchedAddress, watchedCity, watchedZip, addressFromAutocomplete, showAddressDetails]);
 
   // Deep-link: ?rebook=1&phone=... — auto-open the returning-customer panel
   // and pre-fill the phone so a one-tap re-book is one button-press away.
@@ -583,29 +605,51 @@ export default function BookLawnCare() {
                 <label className="text-slate-400 text-sm mb-1 block">Service address *</label>
                 <PlacesAutocomplete
                   value={form.watch("address")}
-                  onChange={(v) => form.setValue("address", v, { shouldValidate: true })}
+                  onChange={(v) => {
+                    form.setValue("address", v, { shouldValidate: true });
+                    // User is typing manually — clear "from autocomplete" flag
+                    // and reveal the city/zip fields so we still capture them.
+                    if (addressFromAutocomplete) {
+                      setAddressFromAutocomplete(false);
+                      setShowAddressDetails(true);
+                    } else if (v.trim().length > 0 && !showAddressDetails) {
+                      setShowAddressDetails(true);
+                    }
+                  }}
                   onPlaceSelect={(place) => {
                     form.setValue("address", place.fullAddress, { shouldValidate: true });
                     if (place.city) form.setValue("city", place.city);
                     if (place.state) form.setValue("state", place.state);
                     if (place.zip) form.setValue("zip", place.zip);
+                    setAddressFromAutocomplete(true);
+                    setShowAddressDetails(false);
                     tryDetectLotSize(place.fullAddress);
                   }}
                   placeholder="123 Main St, Ironwood, MI"
                   inputClassName="w-full rounded-md border border-slate-700 bg-slate-800 text-white placeholder:text-slate-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500/60 transition-all"
                 />
                 {form.formState.errors.address && <p className="text-red-400 text-xs mt-1">{form.formState.errors.address.message}</p>}
+                {addressFromAutocomplete && !showAddressDetails && (form.watch("city") || form.watch("zip")) && (
+                  <AddressSummaryPill
+                    city={form.watch("city") || ""}
+                    state={form.watch("state") || ""}
+                    zip={form.watch("zip") || ""}
+                    onEdit={() => setShowAddressDetails(true)}
+                  />
+                )}
               </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="col-span-2">
-                  <label className="text-slate-400 text-sm mb-1 block">City</label>
-                  <Input {...form.register("city")} placeholder="Ironwood" className="bg-slate-800 border-slate-700 text-white" />
+              {showAddressDetails && (
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="col-span-2">
+                    <label className="text-slate-400 text-sm mb-1 block">City</label>
+                    <Input {...form.register("city")} placeholder="Ironwood" className="bg-slate-800 border-slate-700 text-white" />
+                  </div>
+                  <div>
+                    <label className="text-slate-400 text-sm mb-1 block">Zip</label>
+                    <Input {...form.register("zip")} placeholder="49938" className="bg-slate-800 border-slate-700 text-white" />
+                  </div>
                 </div>
-                <div>
-                  <label className="text-slate-400 text-sm mb-1 block">Zip</label>
-                  <Input {...form.register("zip")} placeholder="49938" className="bg-slate-800 border-slate-700 text-white" />
-                </div>
-              </div>
+              )}
             </div>
           </StepWrap>
         )}
