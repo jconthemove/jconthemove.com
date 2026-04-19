@@ -4,7 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Bitcoin, Check, X, Clock, ArrowLeft, ExternalLink, RefreshCw } from "lucide-react";
+import { Loader2, Bitcoin, Check, X, Clock, ArrowLeft, ExternalLink, RefreshCw, Zap, AlertTriangle } from "lucide-react";
 import { Link } from "wouter";
 
 interface BtcPayment {
@@ -27,9 +27,14 @@ interface BtcPayment {
   notes: string | null;
   verifiedByUserId: string | null;
   verifiedAt: string | null;
+  autoVerified: boolean;
+  autoVerifiedTxid: string | null;
   createdAt: string;
   expiresAt: string | null;
 }
+
+// Pending payments older than this without an auto-verify hit are flagged as stuck
+const STUCK_PENDING_MS = 60 * 60 * 1000; // 1 hour
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-yellow-500/20 text-yellow-300 border-yellow-500/30",
@@ -80,6 +85,14 @@ export default function AdminBtcPaymentsPage() {
   const pending = payments?.filter(p => p.status === "pending") ?? [];
   const others = payments?.filter(p => p.status !== "pending") ?? [];
 
+  const now = Date.now();
+  const day = 24 * 60 * 60 * 1000;
+  const verifiedRows = payments?.filter(p => p.status === "verified") ?? [];
+  const autoVerified24h = verifiedRows.filter(p => p.autoVerified && p.verifiedAt && now - new Date(p.verifiedAt).getTime() <= day).length;
+  const autoVerified7d = verifiedRows.filter(p => p.autoVerified && p.verifiedAt && now - new Date(p.verifiedAt).getTime() <= 7 * day).length;
+  const manualVerified7d = verifiedRows.filter(p => !p.autoVerified && p.verifiedAt && now - new Date(p.verifiedAt).getTime() <= 7 * day).length;
+  const stuckPending = pending.filter(p => now - new Date(p.createdAt).getTime() > STUCK_PENDING_MS).length;
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 pb-20">
       <div className="max-w-5xl mx-auto px-4 py-8">
@@ -121,6 +134,32 @@ export default function AdminBtcPaymentsPage() {
               ${payments?.filter(p => p.status === "verified").reduce((s, p) => s + parseFloat(p.usdAmount || "0"), 0).toFixed(2) ?? "0.00"}
             </div>
             <div className="text-xs text-slate-400 mt-1">Total Verified (USD)</div>
+          </div>
+        </div>
+
+        {/* Auto-verifier health */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+          <div className="bg-slate-800/60 border border-blue-500/20 rounded-xl p-4 text-center">
+            <div className="text-2xl font-black text-blue-300 flex items-center justify-center gap-1">
+              <Zap className="h-5 w-5" />{autoVerified24h}
+            </div>
+            <div className="text-xs text-slate-400 mt-1">Auto-verified (24h)</div>
+          </div>
+          <div className="bg-slate-800/60 border border-blue-500/20 rounded-xl p-4 text-center">
+            <div className="text-2xl font-black text-blue-300 flex items-center justify-center gap-1">
+              <Zap className="h-5 w-5" />{autoVerified7d}
+            </div>
+            <div className="text-xs text-slate-400 mt-1">Auto-verified (7d)</div>
+          </div>
+          <div className="bg-slate-800/60 border border-emerald-500/20 rounded-xl p-4 text-center">
+            <div className="text-2xl font-black text-emerald-300">{manualVerified7d}</div>
+            <div className="text-xs text-slate-400 mt-1">Manual (7d)</div>
+          </div>
+          <div className={`bg-slate-800/60 border rounded-xl p-4 text-center ${stuckPending > 0 ? "border-red-500/40" : "border-slate-600/30"}`}>
+            <div className={`text-2xl font-black flex items-center justify-center gap-1 ${stuckPending > 0 ? "text-red-300" : "text-slate-400"}`}>
+              {stuckPending > 0 && <AlertTriangle className="h-5 w-5" />}{stuckPending}
+            </div>
+            <div className="text-xs text-slate-400 mt-1">Stuck pending (&gt;1h)</div>
           </div>
         </div>
 
@@ -178,9 +217,11 @@ function PaymentCard({ payment, onAction, isPending }: {
 }) {
   const isExpired = payment.expiresAt && new Date(payment.expiresAt) < new Date() && payment.status === "pending";
   const refLabel = REFERENCE_TYPE_LABELS[payment.referenceType] || payment.referenceType;
+  const ageMs = Date.now() - new Date(payment.createdAt).getTime();
+  const isStuck = payment.status === "pending" && ageMs > STUCK_PENDING_MS;
 
   return (
-    <Card className="bg-slate-800/60 border-slate-700/50">
+    <Card className={`bg-slate-800/60 ${isStuck ? "border-red-500/50 ring-1 ring-red-500/30" : "border-slate-700/50"}`}>
       <CardContent className="p-5">
         <div className="flex flex-col sm:flex-row sm:items-start gap-4">
           <div className="flex-1 space-y-3">
@@ -194,6 +235,23 @@ function PaymentCard({ payment, onAction, isPending }: {
               </Badge>
               {isExpired && (
                 <span className="text-xs text-red-400 font-medium">⚠ Price Expired</span>
+              )}
+              {payment.status === "verified" && payment.autoVerified && (
+                <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full border bg-blue-500/20 text-blue-300 border-blue-500/30">
+                  <Zap className="h-3 w-3" />
+                  Auto-verified
+                </span>
+              )}
+              {payment.status === "verified" && !payment.autoVerified && (
+                <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full border bg-slate-600/30 text-slate-300 border-slate-500/30">
+                  Manual
+                </span>
+              )}
+              {isStuck && (
+                <span className="inline-flex items-center gap-1 text-xs text-red-300 font-medium">
+                  <AlertTriangle className="h-3 w-3" />
+                  Stuck — investigate
+                </span>
               )}
             </div>
 
@@ -281,11 +339,23 @@ function PaymentCard({ payment, onAction, isPending }: {
           )}
 
           {payment.status === "verified" && payment.verifiedAt && (
-            <div className="text-right text-xs text-slate-500">
+            <div className="text-right text-xs text-slate-500 sm:min-w-[160px]">
               <Check className="h-4 w-4 text-emerald-400 ml-auto mb-1" />
-              Verified
+              {payment.autoVerified ? "Auto-verified" : "Verified"}
               <br />
               {formatDate(payment.verifiedAt)}
+              {payment.autoVerified && payment.autoVerifiedTxid && (
+                <a
+                  href={`https://blockchair.com/bitcoin/transaction/${payment.autoVerifiedTxid}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 break-all"
+                  title={payment.autoVerifiedTxid}
+                >
+                  <ExternalLink className="h-3 w-3 shrink-0" />
+                  <span className="font-mono">{payment.autoVerifiedTxid.slice(0, 10)}…{payment.autoVerifiedTxid.slice(-6)}</span>
+                </a>
+              )}
             </div>
           )}
         </div>
