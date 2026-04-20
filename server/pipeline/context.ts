@@ -24,6 +24,9 @@ export interface PipelineInput {
   persist?: boolean;
   /** Task #175 — customer chose "Pay from JCMOVES wallet" on review. */
   payFromWallet?: boolean;
+  /** Task #174 — service coordinates for demand/surge zone resolution. */
+  serviceLat?: number;
+  serviceLng?: number;
 }
 
 export interface UpsellChip {

@@ -187,25 +187,34 @@ type PositioningResponse =
       detail: string;
     };
 
-function CrewPositioningCard() {
+function CrewPositioningCard({ hasAcceptedJobs }: { hasAcceptedJobs: boolean }) {
+  // Only surface suggestion when crew has no active assignments.
+  if (hasAcceptedJobs) return null;
   const { data } = useQuery<PositioningResponse>({
     queryKey: ["/api/crew/positioning"],
     refetchInterval: 45000,
   });
   if (!data || "muted" in data) return null;
   if (!data.best) return null;
+  // Only surface when the best zone is genuinely hot (score > 0.6).
+  if (data.best.score <= 0.6) return null;
   const isHot = data.shouldRelocate;
   const color = isHot
     ? "bg-amber-500/15 border-amber-500/40 text-amber-300"
     : "bg-emerald-500/10 border-emerald-500/30 text-emerald-300";
   return (
-    <div className={`flex items-center gap-3 rounded-xl border p-3 ${color}`}>
-      <span className="text-xl">{isHot ? "📍" : "✅"}</span>
-      <div className="flex-1 min-w-0">
-        <p className="text-xs font-bold">{data.headline}</p>
-        <p className="text-slate-300 text-[11px] truncate">{data.detail}</p>
+    <Link href="/crew/map">
+      <div className={`flex items-center gap-3 rounded-xl border p-3 cursor-pointer hover:opacity-90 transition-opacity ${color}`}>
+        <span className="text-xl">{isHot ? "📍" : "✅"}</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-bold">{data.headline}</p>
+          <p className="text-slate-300 text-[11px] truncate">
+            {data.detail} · bonus offers may arrive
+          </p>
+        </div>
+        <ChevronRight className="h-4 w-4 opacity-70" />
       </div>
-    </div>
+    </Link>
   );
 }
 
@@ -906,8 +915,8 @@ export default function CrewTodayPage() {
         </div>
       )}
 
-      {/* Task #174 — Crew positioning card (surfaces only while on duty) */}
-      {dutyStatus && <CrewPositioningCard />}
+      {/* Task #174 — Crew positioning card (only when on-duty, no accepted jobs, hot zone) */}
+      {dutyStatus && <CrewPositioningCard hasAcceptedJobs={myAssignments.length > 0} />}
 
       {/* Dynamic Earn More shortcut — context-aware fastest path */}
       {(() => {

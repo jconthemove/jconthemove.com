@@ -10,9 +10,8 @@ export async function demandStep(ctx: PipelineContext): Promise<PipelineContext>
   // pipeline runs. Cheap count query, fire-and-forget.
   void maybeAutoPromote();
 
-  const anyInput = ctx.input as unknown as { serviceLat?: number; serviceLng?: number };
-  const lat = anyInput.serviceLat;
-  const lng = anyInput.serviceLng;
+  const lat = ctx.input.serviceLat;
+  const lng = ctx.input.serviceLng;
 
   const { demand, zone } = await getDemandForCoords(lat, lng);
   if (!demand || !zone) {

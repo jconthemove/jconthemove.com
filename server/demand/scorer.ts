@@ -1,12 +1,12 @@
 // Task #174 — Demand scorer.
 //
-// Score formula (per zone):
+// Score formula (per zone), deterministic:
 //    raw = 0.4 * q15m + 0.3 * q60m + 0.1 * q24h + 0.2 * activeJobs
-//    normalized = raw / (raw + K)                         // squash to 0..1
-//    if onlineCrew <= 1 → multiply by 1.5 (scarcity boost, capped at 1)
-// K=5 so a zone with ~5 weighted signals sits at 0.5 ("warm"), ~15 at 0.75,
-// ~35 at 0.875. Calibrated against a quiet rural territory — tweak K via
-// setDemandCalibration() once we have live traffic data.
+//    if onlineCrew <= 1 → raw *= 1.5 (scarcity boost)
+//    score = clamp(raw, 0, 1.5)
+// So a zone with a single quote in the last 15m sits at 0.4 ("warm"),
+// two fresh quotes at 0.8 ("hot"), and anything at or above 1.5 saturates
+// at peak. Deterministic by design so operators can reason about pricing.
 
 import type { ZoneWindowCounts } from "./windows";
 
@@ -21,15 +21,12 @@ export interface ZoneDemand {
   reasons: string[];
 }
 
-const K = 5;
-
 export function scoreZone(c: ZoneWindowCounts): ZoneDemand {
-  const raw =
+  let raw =
     0.4 * c.quoteRequests15m +
     0.3 * c.quoteRequests60m +
     0.1 * c.quoteRequests24h +
     0.2 * c.activeJobs;
-  let score = raw / (raw + K);
   const reasons: string[] = [];
   if (c.quoteRequests15m > 0) reasons.push(`${c.quoteRequests15m} req last 15m (×0.4)`);
   if (c.quoteRequests60m > 0) reasons.push(`${c.quoteRequests60m} req last 60m (×0.3)`);
@@ -37,9 +34,11 @@ export function scoreZone(c: ZoneWindowCounts): ZoneDemand {
   if (c.activeJobs > 0) reasons.push(`${c.activeJobs} active job${c.activeJobs === 1 ? "" : "s"} (×0.2)`);
 
   if (c.onlineCrew <= 1) {
-    score = Math.min(1.5, score * 1.5);
+    raw *= 1.5;
     reasons.push(c.onlineCrew === 0 ? "no crew online (×1.5)" : "only 1 crew online (×1.5)");
   }
+
+  const score = Math.max(0, Math.min(1.5, raw));
 
   return {
     zoneCode: c.zone.code,

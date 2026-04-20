@@ -4,7 +4,7 @@
 //   no crew online            → 1.50
 //   score > 1.0 (hot+scarce)  → 1.30
 //   score > 0.7               → 1.15
-//   score < 0.2 AND idle≥3    → 0.90  (soft discount to attract demand)
+//   score < 0.2 AND idle≥4    → 0.90  (soft discount to attract demand)
 //   else                      → 1.00
 // Final multiplier is clamped to [0.85, 1.50].
 
@@ -37,10 +37,10 @@ export function decideSurge(demand: ZoneDemand): SurgeDecision {
     theoretical = 1.15;
     band = "elevated";
     reason = `elevated demand in ${demand.zoneName}`;
-  } else if (demand.score < 0.2 && demand.counts.onlineCrew >= 3) {
+  } else if (demand.score < 0.2 && (demand.counts.onlineCrew - demand.counts.activeJobs) >= 4) {
     theoretical = 0.9;
     band = "discount";
-    reason = `quiet hour in ${demand.zoneName} — discount to attract demand`;
+    reason = `quiet hour in ${demand.zoneName} — 4+ idle crew, discount to attract demand`;
   }
 
   theoretical = Math.max(0.85, Math.min(1.5, theoretical));

@@ -11256,7 +11256,34 @@ Thank you for your business!
     try {
       const { getDemandSnapshot } = await import("./demand");
       const snapshot = await getDemandSnapshot();
-      res.json(snapshot);
+      // Today's completed revenue per zone. Leads store city/state/zip
+      // but not lat/lng, so we attribute by matching the city string
+      // against each zone's name as a loose first-pass. Unmapped revenue
+      // is reported under the "_unmapped" bucket.
+      const { rows } = await pool.query(`
+        SELECT LOWER(COALESCE(city, '')) AS city,
+               CAST(COALESCE(total_price, '0') AS DECIMAL)::float AS revenue
+        FROM leads
+        WHERE status = 'completed'
+          AND archived_at IS NULL
+          AND updated_at >= date_trunc('day', now())
+      `).catch(() => ({ rows: [] as any[] }));
+      const revenueByZone: Record<string, number> = {};
+      let unmapped = 0;
+      for (const r of rows) {
+        const city = String(r.city || "");
+        const match = snapshot.zones.find(z => city && z.zoneName.toLowerCase().includes(city));
+        if (match) {
+          revenueByZone[match.zoneCode] = (revenueByZone[match.zoneCode] || 0) + (Number(r.revenue) || 0);
+        } else {
+          unmapped += Number(r.revenue) || 0;
+        }
+      }
+      const zones = snapshot.zones.map(z => ({
+        ...z,
+        revenue: Math.round((revenueByZone[z.zoneCode] || 0) * 100) / 100,
+      }));
+      res.json({ ...snapshot, zones, unmappedRevenue: Math.round(unmapped * 100) / 100 });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -11276,30 +11303,49 @@ Thank you for your business!
     }
   });
 
-  // Task #174 — Daily revenue projection = average of the trailing four
-  // same-weekday completed revenue totals. Cheap single SQL call, no
-  // need to cache.
+  // Task #174 — Revenue projection: today's running total + end-of-day
+  // projection using elapsed-day ratio. If we're only 6 hours in and
+  // we've done $600, we project $2400 by EOD (600 / (6/24)). Floors
+  // to today's actual when elapsed ratio is tiny so we don't over-extrapolate.
   app.get("/api/admin/revenue-projection", isAuthenticated, requireBusinessOwner, async (_req, res) => {
     try {
       const { rows } = await pool.query(`
-        SELECT
-          date_trunc('day', updated_at) AS day,
-          COALESCE(SUM(CAST(COALESCE(total_price, '0') AS DECIMAL)), 0) AS revenue
+        SELECT COALESCE(SUM(CAST(COALESCE(total_price, '0') AS DECIMAL)), 0)::float AS revenue
         FROM leads
         WHERE status = 'completed'
           AND archived_at IS NULL
-          AND updated_at >= now() - interval '35 days'
-          AND extract(dow from updated_at) = extract(dow from now())
-        GROUP BY 1
-        ORDER BY 1 DESC
-        LIMIT 4
+          AND updated_at >= date_trunc('day', now())
       `);
-      const samples = rows.map(r => Number(r.revenue) || 0);
-      const projected = samples.length ? samples.reduce((a, b) => a + b, 0) / samples.length : 0;
+      const todaySoFar = Number(rows[0]?.revenue) || 0;
+      const now = new Date();
+      const startOfDay = new Date(now);
+      startOfDay.setHours(0, 0, 0, 0);
+      const msElapsed = now.getTime() - startOfDay.getTime();
+      const elapsedRatio = Math.max(0, Math.min(1, msElapsed / (24 * 60 * 60 * 1000)));
+      // Under the first 2 hours of the day the projection is too noisy,
+      // so we fall back to trailing 4-same-weekday average.
+      let projectedEod = todaySoFar;
+      if (elapsedRatio >= 2 / 24) {
+        projectedEod = todaySoFar / elapsedRatio;
+      } else {
+        const { rows: avgRows } = await pool.query(`
+          SELECT COALESCE(SUM(CAST(COALESCE(total_price, '0') AS DECIMAL)), 0)::float AS revenue,
+                 date_trunc('day', updated_at) AS day
+          FROM leads
+          WHERE status = 'completed' AND archived_at IS NULL
+            AND updated_at >= now() - interval '35 days'
+            AND extract(dow from updated_at) = extract(dow from now())
+          GROUP BY 2 ORDER BY 2 DESC LIMIT 4
+        `);
+        const samples = avgRows.map(r => Number(r.revenue) || 0);
+        projectedEod = samples.length ? samples.reduce((a, b) => a + b, 0) / samples.length : 0;
+      }
       res.json({
-        projectedToday: Math.round(projected * 100) / 100,
-        sampleCount: samples.length,
-        samples,
+        todaySoFar: Math.round(todaySoFar * 100) / 100,
+        projectedEod: Math.round(projectedEod * 100) / 100,
+        elapsedRatio: Math.round(elapsedRatio * 1000) / 1000,
+        // Legacy field for existing callers (admin overview tile).
+        projectedToday: Math.round(projectedEod * 100) / 100,
       });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
