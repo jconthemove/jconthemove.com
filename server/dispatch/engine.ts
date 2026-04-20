@@ -9,7 +9,7 @@
 // they're not, we drop the territory gate (territory data is advisory
 // at that point) and rely on workload + capability alone.
 
-import { haversine, inAnyTerritory } from "./territories";
+import { inAnyTerritory } from "./territories";
 import { getEligibleCrew } from "./crew";
 import type { DispatchCandidate } from "./types";
 
@@ -32,20 +32,21 @@ export async function rankCandidates(
   const hasCoords = typeof job.lat === "number" && typeof job.lng === "number";
   const inTerritory = hasCoords ? inAnyTerritory(job.lat!, job.lng!) : true;
 
+  // Hard territory gate: when the job has coordinates AND falls outside
+  // all configured service territories, no offers are sent. This
+  // matches the Ironwood / Iron River / WI Border service-area policy
+  // — out-of-area jobs must be handled manually by an operator rather
+  // than auto-dispatched. Callers see an empty ranking and the offer
+  // loop persists dispatch_state='failed' with reason 'no eligible crew'.
+  if (hasCoords && !inTerritory) {
+    return [];
+  }
+
   const scored: DispatchCandidate[] = pool.map(c => {
-    // Worker position is not tracked yet; approximate distance as the
-    // nearest territory center when the job has coords. Crew GPS lands
-    // with Task #173 — the scoring formula stays identical then.
-    let distanceMi = 0;
-    if (hasCoords && inTerritory) {
-      // Use 10mi base penalty since we don't have worker coords; add
-      // territory-based adjustment (farther territories penalize more).
-      distanceMi = 10; // TODO: replace with real crew lat/lng
-    } else if (hasCoords && !inTerritory) {
-      // Out of service area — compute true distance as a soft signal.
-      const nearest = [46.454, -90.172]; // Ironwood center
-      distanceMi = haversine(job.lat!, job.lng!, nearest[0], nearest[1]);
-    }
+    // Worker position is not tracked yet; approximate distance as 10mi
+    // within the service territory. Crew GPS lands with Task #173 —
+    // the scoring formula stays identical then.
+    const distanceMi = hasCoords ? 10 : 0;
 
     const reasons: string[] = [];
     let score = 100 - distanceMi * 8 - c.jobsToday * 6;

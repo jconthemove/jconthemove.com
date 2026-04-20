@@ -266,10 +266,15 @@ export default function AdminDispatchPage() {
     onError: (e: Error) => toast({ title: "Dispatch failed", description: e.message, variant: "destructive" }),
   });
 
+  // Task #172 — Uses the audited /reassign endpoint so every manual
+  // override lands in dispatch_log with the admin's user id + reason.
+  // The legacy /assign endpoint still exists for bulk-crew edits from
+  // the quote panel but isn't used from the dispatch console.
   const reassignMutation = useMutation({
     mutationFn: async ({ leadId, crewId }: { leadId: string; crewId: string }) => {
-      const res = await apiRequest("POST", `/api/admin/jobs/${leadId}/assign`, {
+      const res = await apiRequest("POST", `/api/admin/jobs/${leadId}/reassign`, {
         crewId,
+        reason: "manual reassignment from live dispatch console",
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -280,6 +285,7 @@ export default function AdminDispatchPage() {
     onMutate: ({ leadId }) => setReassigningId(leadId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/dispatch/metrics"] });
       toast({ title: "Crew reassigned" });
     },
     onError: (e: Error) => toast({ title: "Reassign failed", description: e.message, variant: "destructive" }),
