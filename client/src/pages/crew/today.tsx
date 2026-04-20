@@ -188,15 +188,16 @@ type PositioningResponse =
     };
 
 function CrewPositioningCard({ hasAcceptedJobs }: { hasAcceptedJobs: boolean }) {
-  // Only surface suggestion when crew has no active assignments.
-  if (hasAcceptedJobs) return null;
   const { data } = useQuery<PositioningResponse>({
     queryKey: ["/api/crew/positioning"],
     refetchInterval: 45000,
+    enabled: !hasAcceptedJobs,
   });
+  // Only surface when crew is idle, suggestion present, not muted, and
+  // the best zone is genuinely hot (score > 0.6).
+  if (hasAcceptedJobs) return null;
   if (!data || "muted" in data) return null;
   if (!data.best) return null;
-  // Only surface when the best zone is genuinely hot (score > 0.6).
   if (data.best.score <= 0.6) return null;
   const isHot = data.shouldRelocate;
   const color = isHot
