@@ -41,10 +41,11 @@ import {
 } from "@shared/schema";
 import {
   computeBookingQuote,
+  quoteBundle,
   type BookingPricingItemInput,
   type BundleDefinitionLike,
   type BookingPricingResult,
-} from "../services/bookingPricing";
+} from "../services/pricingEngine";
 
 const router = Router();
 
@@ -149,14 +150,15 @@ router.post("/bookings/quote", async (req: Request, res: Response) => {
     const body = bookingQuoteRequestSchema.parse(req.body);
     const catalog = await loadCatalog();
     const { pricingInputs } = resolveItems(body.items, catalog);
-    const bundles = await loadBundles();
     // Pull live reward-engine settings so the displayed estimate uses the
     // exact same flatBonus/earnRate the issuer (disburseBookingTokens) will
     // use at confirmation time. Booking creation snapshots these onto the
     // booking row to lock in parity even if settings change later.
     const settings = await loadBookingRewardSettings();
-    const result = computeBookingQuote(pricingInputs, {
-      bundleDefinitions: bundles,
+    // Task #169 — route through the unified pricingEngine so /book, the
+    // chatbot, admin pricing-calibrate, and the orchestrator all hit the
+    // same module. quoteBundle loads active bundle definitions internally.
+    const result = await quoteBundle(pricingInputs, {
       flatBookingBonus: settings.flatBonus,
       earnRatePerDollar: settings.earnRate,
     });
@@ -353,7 +355,9 @@ router.post("/bookings", async (req: Request, res: Response) => {
     // even if an admin tunes rewardSettings or a bundle's bonusMultiplier
     // in the intervening window.
     const settings = await loadBookingRewardSettings();
-    const quote: BookingPricingResult = computeBookingQuote(pricingInputs, {
+    // Task #169 — same engine as /api/bookings/quote so the persisted
+    // booking can never disagree with the customer's just-shown estimate.
+    const quote: BookingPricingResult = await quoteBundle(pricingInputs, {
       bundleDefinitions: bundles,
       flatBookingBonus: settings.flatBonus,
       earnRatePerDollar: settings.earnRate,

@@ -353,9 +353,10 @@ function CustomerApp() {
           <Route path="/earn">
             <CustomerEarnPage />
           </Route>
-          {/* Task #169 — /post-job consolidated into /book?worker=1 */}
+          {/* Task #169 — /post-job consolidated into /book (worker mode is
+              opt-in via explicit ?worker=1 from worker UI buttons) */}
           <Route path="/post-job">
-            <Redirect to="/book?worker=1" />
+            <Redirect to="/book" />
           </Route>
           <Route path="/window-cleaning">
             <WindowCleaningPage />
@@ -474,7 +475,7 @@ function AuthenticatedApp() {
     );
   }
   if (location === "/post-job") {
-    return <Redirect to="/book?worker=1" />;
+    return <Redirect to="/book" />;
   }
 
   // === ADMIN PANEL (admin, business_owner) ===
