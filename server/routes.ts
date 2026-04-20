@@ -10885,10 +10885,18 @@ Thank you for your business!
       const requiredCrew = current.crewSize ?? ids.length;
       const fullyStaffed = ids.length >= requiredCrew;
 
+      // Only derive a new status when the job is in an early lifecycle state.
+      // Never kick in_progress, completed, or cancelled jobs back to "open"
+      // — that would be surprising operationally during a live reassignment.
+      const EARLY_STATES = new Set(["new", "open", "available", "assigned", "quote_requested", "chatbot_pending"]);
+      const nextStatus = EARLY_STATES.has(current.status)
+        ? (fullyStaffed ? "assigned" : "open")
+        : current.status;
+
       const [updated] = await db.update(leads)
         .set({
           crewMembers: ids,
-          status: fullyStaffed ? "assigned" : (current.status === "completed" ? current.status : "open"),
+          status: nextStatus,
         })
         .where(eq(leads.id, id))
         .returning();
