@@ -241,6 +241,12 @@ export async function verifyBitcoinPayment(
     const autoLine = opts.autoVerified
       ? '<p style="color:#94a3b8;text-align:center;font-size:12px;margin:12px 0 0;">Auto-confirmed on the Bitcoin blockchain.</p>'
       : "";
+    const baseUrl = process.env.APP_URL || "https://jconthemove.com";
+    const receiptUrl = `${baseUrl}/payment-success?btcPaymentId=${encodeURIComponent(payment.id)}`;
+    const receiptCta = `
+          <div style="text-align:center;margin-top:20px;">
+            <a href="${receiptUrl}" style="display:inline-block;padding:12px 28px;background:#f97316;color:#fff;font-size:14px;font-weight:700;border-radius:6px;text-decoration:none;">View Receipt${opts.autoVerified ? " & On-Chain Proof" : ""} →</a>
+          </div>`;
     const emailBody = `
       <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#0f172a;color:#f1f5f9;padding:32px;border-radius:12px;">
         <div style="text-align:center;margin-bottom:24px;">
@@ -266,6 +272,7 @@ export async function verifyBitcoinPayment(
             </div>
           </div>
           ${autoLine}
+          ${receiptCta}
         </div>
         <p style="color:#94a3b8;text-align:center;font-size:14px;margin:0;">Questions? Call us at <a href="tel:9062859312" style="color:#f97316;">(906) 285-9312</a></p>
       </div>`;
@@ -275,7 +282,7 @@ export async function verifyBitcoinPayment(
       from: fromAddr,
       subject: "✅ Bitcoin Payment Confirmed — JC ON THE MOVE",
       html: emailBody,
-      text: `Hello ${payment.customerName}, your Bitcoin payment of $${parseFloat(payment.usdAmount).toFixed(2)} for ${paymentContext} has been confirmed. Payment ID: ${payment.id.slice(0,8)}. Questions? Call (906) 285-9312.`,
+      text: `Hello ${payment.customerName}, your Bitcoin payment of $${parseFloat(payment.usdAmount).toFixed(2)} for ${paymentContext} has been confirmed. View your receipt: ${receiptUrl} — Payment ID: ${payment.id.slice(0,8)}. Questions? Call (906) 285-9312.`,
     });
     console.log(`${tag} Confirmation email sent to ${payment.customerEmail}`);
   } catch (emailErr) {
