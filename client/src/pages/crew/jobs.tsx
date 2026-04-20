@@ -17,6 +17,7 @@ import {
 import { useLocation } from "wouter";
 import type { User } from "@shared/schema";
 import LawnJobBrief from "@/components/LawnJobBrief";
+import { PaymentStatusPill } from "@/components/PaymentStatusPill";
 
 const SERVICE_ICONS: Record<string, string> = {
   residential: "🚛", commercial: "🏢", junk: "🗑️", snow: "❄️",
@@ -450,6 +451,11 @@ function MyJobCard({
               </div>
             )}
           </div>
+        </div>
+
+        {/* Task #175 — payment status at a glance for the crew */}
+        <div className="mt-2">
+          <PaymentStatusPill leadId={lead.id} />
         </div>
 
         {/* Step tracker — only when the viewer is genuinely on the crew

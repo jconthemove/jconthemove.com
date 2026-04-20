@@ -11,6 +11,7 @@ import { sendOffer } from "./notify";
 import { rankCandidates } from "./engine";
 import { logDispatchEvent, recheckKillSwitch, loadJob, persistState, tryStartOffer } from "./store";
 import { OFFER_TTL_MS, OFFER_LOCK_TTL_MS, NON_DISPATCHABLE_STATES, type DispatchCandidate } from "./types";
+import { isDispatchable } from "./isDispatchable";
 
 // In-memory timers + lock ownership keyed by jobId so a subsequent
 // dispatch call, an accept, a decline, or an admin override can cancel
@@ -42,6 +43,18 @@ export async function startOfferLoop(jobId: string): Promise<void> {
     await persistState(jobId, { dispatchState: "pending" });
   }
   if (["in_progress", "completed", "cancelled"].includes(job.status)) {
+    return;
+  }
+
+  // Task #175 — Deposit gate. Jobs flagged depositRequired stay in
+  // `pending` and are never offered to a crew until either the deposit
+  // is recorded paid OR an admin sets a dispatch override reason.
+  const gate = await isDispatchable(jobId);
+  if (!gate.ok) {
+    await logDispatchEvent(
+      jobId, "skipped", null, null, job.dispatchState, "pending",
+      `deposit gate held: ${gate.reason ?? "deposit not paid"}`,
+    );
     return;
   }
 

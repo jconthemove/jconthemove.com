@@ -2682,6 +2682,13 @@ export type BookingQuoteItemInput = z.infer<typeof bookingQuoteItemInputSchema>;
 export const bookingQuoteRequestSchema = z.object({
   items: z.array(bookingQuoteItemInputSchema).min(1),
   source: z.string().optional(),
+  // Task #175 — JCMOVES tokens the customer wants to redeem against this
+  // quote. Validated against the redemption rules (min 500 / increment
+  // 500 / tier cap) on the server; rejected amounts surface as a quote
+  // error rather than silently zeroing out.
+  applyTokens: z.number().int().nonnegative().optional(),
+  /** Customer JCMOVES tier — used to compute the redemption cap. */
+  customerTier: z.string().optional(),
 });
 export type BookingQuoteRequest = z.infer<typeof bookingQuoteRequestSchema>;
 
@@ -2691,6 +2698,10 @@ export const bookingCreateRequestSchema = bookingQuoteRequestSchema.extend({
   customerPhone: z.string().min(7),
   serviceAddress: z.string().optional(),
   notes: z.string().optional(),
+  // Task #175 — Customer chose "Pay from JCMOVES wallet" on the review
+  // step. Server attempts an atomic wallet debit; on insufficient
+  // balance we mark the booking pending-payment and fall back to Square.
+  payFromWallet: z.boolean().optional(),
 });
 export type BookingCreateRequest = z.infer<typeof bookingCreateRequestSchema>;
 

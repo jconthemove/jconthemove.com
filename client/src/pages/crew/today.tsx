@@ -21,6 +21,7 @@ import {
 import { Link } from "wouter";
 import type { Lead, User } from "@shared/schema";
 import { UserStatusBar } from "@/components/UserStatusBar";
+import { PaymentStatusPill } from "@/components/PaymentStatusPill";
 import { LevelBadge } from "@/components/LevelBadge";
 import { WorkerBadge } from "@/components/WorkerBadge";
 import { ConfettiBurst } from "@/components/ConfettiBurst";
@@ -1238,6 +1239,8 @@ export default function CrewTodayPage() {
                           <span className="text-slate-400 text-xs flex items-center gap-1">
                             <Calendar className="h-3 w-3" />{dateLabel}
                           </span>
+                          <PaymentStatusPill leadId={job.id} />
+
                           {job.fromAddress && (
                             <span className="text-slate-400 text-xs flex items-center gap-1">
                               <MapPin className="h-3 w-3" />

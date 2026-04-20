@@ -107,10 +107,36 @@ app.use((req, res, next) => {
 (async () => {
   let server;
   try {
+    // Task #175 — Refuse to boot when required payment env vars are missing.
+    const { assertPaymentEnvOrExit } = await import('./services/envValidation');
+    assertPaymentEnvOrExit();
+
+    // Task #175 — Self-healing payment columns on leads. Additive only;
+    // safe to run on every boot.
+    (async () => {
+      try {
+        const { pool: dbPool } = await import('./db');
+        await dbPool.query(`
+          ALTER TABLE leads
+            ADD COLUMN IF NOT EXISTS payment_plan             TEXT,
+            ADD COLUMN IF NOT EXISTS payment_paid_at          TIMESTAMPTZ,
+            ADD COLUMN IF NOT EXISTS dispatch_override_reason TEXT
+        `);
+        console.log('✅ Task #175 payment columns ready');
+      } catch (e) { console.error('payment columns init error:', e); }
+    })();
+
     // Initialize server with comprehensive error handling
     console.log('Initializing application server...');
     server = await registerRoutes(app);
     console.log('Application routes registered successfully');
+
+    // Task #175 — mount the consolidated payment + launch-checklist routes.
+    {
+      const { default: paymentsRouter } = await import('./routes/payments-task175');
+      app.use('/api', paymentsRouter);
+      console.log('✅ Task #175 payment routes mounted');
+    }
 
     // Task #169 — Deprecated booking entry points redirect to the unified
     // /book front door (server-side, before Vite's SPA catch-all). The

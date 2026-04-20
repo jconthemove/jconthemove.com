@@ -116,6 +116,10 @@ const AdminDispatchPage = lazy(() => import("@/pages/admin/dispatch"));
 const AdminSponsorsPage = lazy(() => import("@/pages/admin/sponsors"));
 const AdminAnalyticsPage = lazy(() => import("@/pages/admin/analytics"));
 const AdminBookingAnalyticsPage = lazy(() => import("@/pages/admin/booking-analytics"));
+const AdminPaymentsPage = lazy(() => import("@/pages/admin/AdminPaymentsPage"));
+const AdminWalletLedgerPage = lazy(() => import("@/pages/admin/AdminWalletLedgerPage"));
+const AdminCashoutsPage = lazy(() => import("@/pages/admin/AdminCashoutsPage"));
+const AdminLaunchChecklistPage = lazy(() => import("@/pages/admin/AdminLaunchChecklistPage"));
 const AdminSchedulePage = lazy(() => import("@/pages/admin/schedule"));
 const BookLawnCarePage = lazy(() => import("@/pages/book-lawn-care"));
 const AdminLawnCarePage = lazy(() => import("@/pages/admin-lawn-care"));
@@ -498,6 +502,10 @@ function AuthenticatedApp() {
               <Route path="/admin/sponsors"><AdminSponsorsPage /></Route>
               <Route path="/admin/analytics"><AdminAnalyticsPage /></Route>
               <Route path="/admin/booking-analytics"><AdminBookingAnalyticsPage /></Route>
+              <Route path="/admin/payments"><AdminPaymentsPage /></Route>
+              <Route path="/admin/wallet-ledger"><AdminWalletLedgerPage /></Route>
+              <Route path="/admin/cashouts"><AdminCashoutsPage /></Route>
+              <Route path="/admin/launch-checklist"><AdminLaunchChecklistPage /></Route>
               <Route path="/admin/schedule"><AdminSchedulePage /></Route>
               {/* Legacy admin URL redirects */}
               <Route path="/admin/calibrate"><Redirect to="/admin/pricing" /></Route>

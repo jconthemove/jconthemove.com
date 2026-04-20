@@ -6874,10 +6874,13 @@ Thank you for your business!
         
         // Distribute token rewards and notify when job is completed
         if (newStatus === 'completed') {
-          // Canonical disbursement: delegate entirely to disburseJobTokens (idempotent, advisory-locked)
+          // Task #175 — route through the instrumented pipeline completion
+          // step. Internally still calls disburseJobTokens (idempotent +
+          // advisory-locked) but adds the per-step timing log row used by
+          // the launch checklist + payment-status pipeline summarizer.
           try {
-            const { disburseJobTokens } = await import('./services/disburse-job-tokens');
-            await disburseJobTokens(id);
+            const { runCompletionStep } = await import('./pipeline/steps/completion.step');
+            await runCompletionStep(id);
           } catch (tokenError) {
             console.error("Error distributing tokens via quote endpoint:", tokenError);
             // Non-fatal: advisory lock ensures partial runs can be retried
@@ -8659,8 +8662,10 @@ Thank you for your business!
         if (!isNew) {
           console.log(`[idempotency] job completion tokens already disbursed for job ${id} — skipping disburseJobTokens`);
         } else {
-          const { disburseJobTokens } = await import('./services/disburse-job-tokens');
-          await disburseJobTokens(id);
+          // Task #175 — pipeline completion step (wraps disburseJobTokens
+          // with timing instrumentation used by the launch checklist).
+          const { runCompletionStep } = await import('./pipeline/steps/completion.step');
+          await runCompletionStep(id);
         }
       } catch (disbursementError) {
         console.error("Error disbursing job tokens:", disbursementError);

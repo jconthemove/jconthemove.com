@@ -19,6 +19,7 @@ import { incentivesStep } from "./steps/incentives.step";
 import { upsellStep } from "./steps/upsell.step";
 import { rewardsStep } from "./steps/rewards.step";
 import { persistStep } from "./steps/persist.step";
+import { paymentStep } from "./steps/payment.step";
 import { notifyStep } from "./steps/notify.step";
 
 type Step = {
@@ -40,6 +41,7 @@ const STEPS: Step[] = [
   { name: "upsell", run: upsellStep },
   { name: "rewards", run: rewardsStep },
   { name: "persist", run: persistStep },
+  { name: "payment", run: paymentStep }, // Task #175 — classify deposit/wallet/cash plan
   { name: "notify", run: notifyStep }, // SMS failure is logged only
 ];
 
@@ -142,6 +144,12 @@ function summarizeStep(name: string, ctx: PipelineContext): string | undefined {
       return `chips=${ctx.upsellChips?.length ?? 0}`;
     case "rewards":
       return `tokens=${ctx.rewards?.tokenEstimate}`;
+    case "payment": {
+      const p = ctx.payment;
+      if (!p) return undefined;
+      const sent = p.depositInvoiceSent ? " · invoice sent" : "";
+      return `plan=${p.kind} deposit=$${p.depositAmount.toFixed(2)}${sent}`;
+    }
     case "notify":
       return `sms=${ctx.notifications?.sms}`;
     default:

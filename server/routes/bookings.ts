@@ -158,10 +158,38 @@ router.post("/bookings/quote", async (req: Request, res: Response) => {
     // Task #169 — route through the unified pricingEngine so /book, the
     // chatbot, admin pricing-calibrate, and the orchestrator all hit the
     // same module. quoteBundle loads active bundle definitions internally.
-    const result = await quoteBundle(pricingInputs, {
+    const baseResult = await quoteBundle(pricingInputs, {
       flatBookingBonus: settings.flatBonus,
       earnRatePerDollar: settings.earnRate,
     });
+    // Task #175 — Apply JCMOVES tokens at quote time. Server-side
+    // validation against the canonical redemption rules so the rejected
+    // amount is surfaced (rather than silently zeroed) and the discounted
+    // line + new finalTotal flow into both the displayed quote AND the
+    // persisted booking when the customer hits "Confirm".
+    let result: BookingPricingResult & {
+      tokenRedemption?: { tokens: number; discountUsd: number };
+    } = baseResult;
+    if (body.applyTokens && body.applyTokens > 0) {
+      const { validateRedemption, tokensToDollars } = await import("@shared/tokenRedemptionRules");
+      const validation = validateRedemption(body.applyTokens, baseResult.finalTotal, body.customerTier ?? null);
+      if (!validation.valid) {
+        return res.status(400).json({
+          error: "Token redemption rejected",
+          message: validation.message,
+          maxTokens: validation.effectiveTokens,
+        });
+      }
+      const tokenDiscount = +tokensToDollars(validation.effectiveTokens).toFixed(2);
+      result = {
+        ...baseResult,
+        tokenRedemption: {
+          tokens: validation.effectiveTokens,
+          discountUsd: tokenDiscount,
+        },
+        finalTotal: +Math.max(0, baseResult.finalTotal - tokenDiscount).toFixed(2),
+      };
+    }
     // Task #170 — shadow mode. Fire-and-forget a parallel pipeline run
     // and log the parity comparison. Never awaited — response latency is
     // unchanged.
@@ -372,12 +400,99 @@ router.post("/bookings", async (req: Request, res: Response) => {
     const settings = await loadBookingRewardSettings();
     // Task #169 — same engine as /api/bookings/quote so the persisted
     // booking can never disagree with the customer's just-shown estimate.
-    const quote: BookingPricingResult = await quoteBundle(pricingInputs, {
+    const baseQuote: BookingPricingResult = await quoteBundle(pricingInputs, {
       bundleDefinitions: bundles,
       flatBookingBonus: settings.flatBonus,
       earnRatePerDollar: settings.earnRate,
     });
-    const appliedMultiplier = quote.bundleApplied?.bonusMultiplier ?? 1;
+    const appliedMultiplier = baseQuote.bundleApplied?.bonusMultiplier ?? 1;
+
+    // Task #175 — Pre-flight authentication & balance check BEFORE persist.
+    // applyTokens / payFromWallet require an authenticated user (otherwise an
+    // anonymous caller could persist a discounted booking they never paid
+    // for) and the customer's tier comes from `users.loyalty_tier` on the
+    // server — never from the request body — so the redemption cap can't
+    // be inflated by a tampered payload.
+    const authedUserId: string | undefined = (req as { user?: { id?: string } }).user?.id
+      || (req.session as { userId?: string } | undefined)?.userId;
+    const wantsTokens = !!body.applyTokens && body.applyTokens > 0;
+    const wantsWallet = body.payFromWallet === true;
+    let serverTier: string | null = null;
+    let preflightTokenRedemption: { tokens: number; discountUsd: number } | null = null;
+    if (wantsTokens || wantsWallet) {
+      if (!authedUserId) {
+        return res.status(401).json({
+          error: "Authentication required",
+          message: "Sign in to apply JCMOVES tokens or pay from your wallet.",
+        });
+      }
+      try {
+        const { rows } = await pool.query<{ loyalty_tier: string | null }>(
+          `SELECT loyalty_tier FROM users WHERE id = $1 LIMIT 1`,
+          [authedUserId],
+        );
+        serverTier = rows[0]?.loyalty_tier ?? "bronze";
+      } catch {
+        serverTier = "bronze";
+      }
+    }
+    let quote: BookingPricingResult & {
+      tokenRedemption?: { tokens: number; discountUsd: number };
+    } = baseQuote;
+    if (wantsTokens) {
+      const { validateRedemption, tokensToDollars } = await import("@shared/tokenRedemptionRules");
+      const validation = validateRedemption(body.applyTokens!, baseQuote.finalTotal, serverTier);
+      if (!validation.valid) {
+        return res.status(400).json({
+          error: "Token redemption rejected",
+          message: validation.message,
+          maxTokens: validation.effectiveTokens,
+        });
+      }
+      // Re-check the live token balance BEFORE persist so we can reject
+      // up-front instead of persisting a discounted booking and then
+      // having to roll it back when settle fails.
+      try {
+        const { rows: walletRows } = await pool.query<{ token_balance: string }>(
+          `SELECT token_balance FROM wallet_accounts WHERE user_id = $1 LIMIT 1`,
+          [authedUserId!],
+        );
+        const tokens = Number(walletRows[0]?.token_balance ?? 0);
+        if (tokens < validation.effectiveTokens) {
+          return res.status(400).json({
+            error: "Insufficient JCMOVES balance",
+            message: `You have ${tokens} JCMOVES — need ${validation.effectiveTokens}.`,
+          });
+        }
+      } catch {
+        return res.status(400).json({ error: "Wallet read failed" });
+      }
+      const tokenDiscount = +tokensToDollars(validation.effectiveTokens).toFixed(2);
+      preflightTokenRedemption = { tokens: validation.effectiveTokens, discountUsd: tokenDiscount };
+      quote = {
+        ...baseQuote,
+        finalTotal: +Math.max(0, baseQuote.finalTotal - tokenDiscount).toFixed(2),
+        tokenRedemption: preflightTokenRedemption,
+      };
+    }
+    // Same up-front check for wallet cash so we don't persist then refund.
+    if (wantsWallet) {
+      try {
+        const { rows: walletRows } = await pool.query<{ cash_balance: string }>(
+          `SELECT cash_balance FROM wallet_accounts WHERE user_id = $1 LIMIT 1`,
+          [authedUserId!],
+        );
+        const cash = Number(walletRows[0]?.cash_balance ?? 0);
+        if (cash < quote.finalTotal) {
+          return res.status(400).json({
+            error: "Insufficient wallet balance",
+            message: `Wallet has $${cash.toFixed(2)} — need $${quote.finalTotal.toFixed(2)}.`,
+          });
+        }
+      } catch {
+        return res.status(400).json({ error: "Wallet read failed" });
+      }
+    }
 
     // Task #163 — guarantee every numeric column persists as a finite
     // 2-decimal string. A non-finite quantity / unitPrice / lineSubtotal
@@ -451,7 +566,51 @@ router.post("/bookings", async (req: Request, res: Response) => {
       });
     }
 
-    return res.status(201).json({ success: true, booking, quote });
+    // Task #175 — Atomic wallet pay + token redemption.
+    // Pre-flight already validated auth + tier (server-derived) + balance
+    // BEFORE persist, so by the time we get here the only realistic
+    // failure modes are concurrent wallet drains. If settle fails AFTER
+    // persist we DELETE the just-created booking row so a discounted
+    // booking can never linger without the matching deduction.
+    let walletPay: {
+      ok: boolean;
+      walletCharged: number;
+      tokensRedeemed: number;
+      tokenDiscountUsd: number;
+      reason?: string;
+    } | null = null;
+    if (wantsWallet || wantsTokens) {
+      const { settleBookingPayment } = await import("../services/walletPay");
+      const r = await settleBookingPayment({
+        userId: authedUserId!,
+        bookingId: booking.id,
+        amountUsd: quote.finalTotal,
+        payFromWallet: wantsWallet,
+        applyTokens: body.applyTokens,
+        customerTier: serverTier,
+        preDiscountSubtotal: baseQuote.finalTotal,
+      });
+      walletPay = {
+        ok: r.ok,
+        walletCharged: r.walletCharged,
+        tokensRedeemed: r.tokensRedeemed,
+        tokenDiscountUsd: r.tokenDiscountUsd,
+        reason: r.reason,
+      };
+      if (!r.ok) {
+        try {
+          await db.delete(bookings).where(eq(bookings.id, booking.id));
+        } catch (delErr) {
+          console.error("[bookings] rollback delete failed for booking", booking.id, delErr);
+        }
+        return res.status(409).json({
+          error: "Payment settlement failed",
+          message: r.reason || "Wallet/token settlement failed — booking was rolled back.",
+        });
+      }
+    }
+
+    return res.status(201).json({ success: true, booking, quote, walletPay });
   } catch (err) {
     if (err instanceof ZodError) {
       return res.status(400).json({ error: "Invalid request", details: err.errors });

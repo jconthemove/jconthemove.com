@@ -5,6 +5,7 @@
 // removing a step is one-line.
 
 import type { BookingPricingItemInput, BookingPricingResult } from "../services/bookingPricing";
+import type { PaymentPlan } from "../services/paymentClassifier";
 
 export interface PipelineInputItem extends BookingPricingItemInput {}
 
@@ -21,6 +22,8 @@ export interface PipelineInput {
    *  false (default during shadow mode) the run is purely advisory and
    *  only records a pipeline_runs entry. */
   persist?: boolean;
+  /** Task #175 — customer chose "Pay from JCMOVES wallet" on review. */
+  payFromWallet?: boolean;
 }
 
 export interface UpsellChip {
@@ -84,6 +87,15 @@ export interface PipelineContext {
   // Filled by persist step
   persistedBookingId?: string;
   persistedLeadId?: string;
+
+  // Filled by payment step (Task #175)
+  payment?: PaymentPlan & {
+    /** True when the deposit Square invoice was successfully sent during
+     *  this pipeline run. Used by the admin payment panel + notify step
+     *  to avoid double-sending on a re-run. */
+    depositInvoiceSent?: boolean;
+    depositInvoiceUrl?: string;
+  };
 
   // Filled by notify step
   notifications?: { sms?: boolean; email?: boolean; error?: string };

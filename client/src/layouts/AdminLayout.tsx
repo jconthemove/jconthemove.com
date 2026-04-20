@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import {
   LayoutDashboard, Radio, Briefcase, Users, Wallet, Sliders, ChevronRight, LogOut,
   Menu, X, ShoppingBag, Settings, Handshake, BarChart2, CalendarDays,
-  Bitcoin, FileBarChart,
+  Bitcoin, FileBarChart, CreditCard, Coins, Banknote, Rocket,
 } from "lucide-react";
 import { apiRequest, clearTokens, queryClient } from "@/lib/queryClient";
 
@@ -28,6 +28,10 @@ const CLOSET = [
   { label: "Booking Analytics", icon: FileBarChart, path: "/admin/booking-analytics" },
   { label: "Schedule", icon: CalendarDays, path: "/admin/schedule" },
   { label: "BTC Payments", icon: Bitcoin, path: "/admin/btc-payments" },
+  { label: "Square Invoices", icon: CreditCard, path: "/admin/payments" },
+  { label: "Wallet Ledger", icon: Coins, path: "/admin/wallet-ledger" },
+  { label: "Cashouts", icon: Banknote, path: "/admin/cashouts" },
+  { label: "Launch Checklist", icon: Rocket, path: "/admin/launch-checklist" },
 ];
 
 function NavButton({ label, Icon, path, active, onClick }: {
