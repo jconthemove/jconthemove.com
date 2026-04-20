@@ -19880,13 +19880,63 @@ Thank you for your business!
 
       const userId = (req.session as any)?.userId || null;
 
+      // Task #169 — reconcile against the unified pricing engine so the
+      // persisted lead's price reflects pricingEngine math rather than only
+      // the chatbot's client-side computation. Engine wins for services it
+      // knows (moving via bedroom/stairs matrix, junk via tier table, jump
+      // start, window cleaning, trash valet); for unknown / quote-only
+      // services we keep the chatbot's range.
+      let engineReconciledQuote: number | null = null;
+      try {
+        const { quoteService } = await import("./services/pricingEngine");
+        const serviceCodeMap: Record<string, string> = {
+          residential: "moving",
+          junk: "junk_removal",
+          trash_valet: "trash_valet",
+          window_cleaning: "window_cleaning",
+          jump_start: "jump_start",
+        };
+        const engineCode = serviceCodeMap[serviceType];
+        if (engineCode) {
+          const engineDetails: Record<string, any> = {};
+          if (engineCode === "moving") {
+            const sizeMap: Record<string, string> = {
+              "Studio": "studio", "1 BR": "1br", "2 BR": "2br",
+              "3 BR": "3br", "4 BR": "4br", "5+ BR": "5br+",
+            };
+            engineDetails.bedrooms = sizeMap[String(a.homeSize || "")] || "1br";
+            engineDetails.stairs = parseInt(String(a.stairs || "0").replace(/\D/g, "")) || 0;
+            engineDetails.loadType = String(a.moveType || "").toLowerCase().includes("long") ? "long_distance" : "local";
+          } else if (engineCode === "junk_removal") {
+            const sizeRaw = String(a.junkSize || a.junkLoad || "").toLowerCase();
+            engineDetails.tier = sizeRaw.includes("xl") || sizeRaw.includes("x-large") ? "xlarge"
+              : sizeRaw.includes("large") ? "large"
+              : sizeRaw.includes("medium") || sizeRaw.includes("half") ? "medium"
+              : sizeRaw.includes("small") || sizeRaw.includes("quarter") ? "small"
+              : "tiny";
+          }
+          const engineQ = await quoteService(engineCode, { details: engineDetails });
+          if (engineQ && engineQ.amount > 0 && !engineQ.isQuoteOnly) {
+            engineReconciledQuote = engineQ.amount;
+          }
+        }
+      } catch (engineErr) {
+        console.warn("[chatbot-quote] pricingEngine reconcile failed (non-fatal):", engineErr);
+      }
+
       // Bundle discount (Task #114): chatbot collects bundleAddons via answers
       // (when present) and the cross-service history check fires for repeat
       // customers automatically.
       const chatbotBundleAddons: string[] = Array.isArray(a.bundleAddons)
         ? a.bundleAddons
         : (Array.isArray(req.body.bundleAddons) ? req.body.bundleAddons : []);
-      const chatbotSubtotalRaw = (selectedPackage && typeof selectedPackage === "object" ? selectedPackage.maxPrice : null) ?? quote.maxPrice ?? 0;
+      // If the unified engine returned a quote, use it as the authoritative
+      // subtotal so /book, /pricing, admin pricing-calibrate, and the
+      // chatbot lead all reflect the same dollar figure.
+      const chatbotSubtotalRaw = engineReconciledQuote
+        ?? (selectedPackage && typeof selectedPackage === "object" ? selectedPackage.maxPrice : null)
+        ?? quote.maxPrice
+        ?? 0;
       const chatbotSubtotal = parseFloat(String(chatbotSubtotalRaw)) || 0;
       const { evaluateBundleDiscount: evalBundle, logBundleDiscountApplication: logBundleApp } = await import("./services/bundleDiscount");
       const chatbotBundleDiscount = await evalBundle({
