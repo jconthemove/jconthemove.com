@@ -706,15 +706,23 @@ export default function CrewTodayPage() {
   // Picks the first assignment the user is on that is not yet completed
   // and is past the offering stage. Hidden on md+ where the inline row
   // is already visible on screen.
-  const primaryActiveJob = (() => {
+  type ActiveStep = "accepted" | "en_route" | "on_site";
+  const primaryActiveJob: { job: Lead; ds: ActiveStep } | null = (() => {
     const uid = user?.id ? String(user.id) : null;
     if (!uid) return null;
     for (const job of myAssignments) {
-      const ds = String((job as any).dispatchState || "").toLowerCase();
-      const members: string[] = Array.isArray((job as any).crewMembers) ? ((job as any).crewMembers as string[]) : [];
+      const rawDs = String(job.dispatchState ?? "").toLowerCase();
+      const members: string[] = Array.isArray(job.crewMembers) ? job.crewMembers : [];
       if (!members.includes(uid)) continue;
-      if (ds === "completed" || ds === "offering" || ds === "") continue;
-      return { job, ds } as { job: any; ds: string };
+      // Only surface sticky bar when state is an explicit actionable value.
+      // Avoid defaulting unknown / pending / offering / completed to actionable.
+      const ds: ActiveStep | null =
+        rawDs === "accepted" ? "accepted"
+        : rawDs === "en_route" ? "en_route"
+        : rawDs === "on_site" ? "on_site"
+        : null;
+      if (!ds) continue;
+      return { job, ds };
     }
     return null;
   })();
