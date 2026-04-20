@@ -418,26 +418,18 @@ router.post("/bookings", async (req: Request, res: Response) => {
     // POST /api/admin/bookings/:id/confirm.
 
     // Task #146 — auto-provision a Trash Valet subscription when bundled.
-    // Run OUTSIDE the booking transaction's try/catch path: the booking is
-    // already persisted, so a downstream provisioning failure must not
-    // turn a successful create into a 500 the customer sees.
+    // The helper already swallows its own errors so this call cannot turn a
+    // successful booking create into a 500 even if provisioning fails.
     const trashItem = persistInputs.find((p) => p.serviceCode === "trash_valet");
     if (trashItem) {
-      try {
-        await autoProvisionTrashSubscriptionFromBooking({
-          bookingId: booking.id,
-          customerName: body.customerName,
-          customerPhone: body.customerPhone,
-          customerEmail: body.customerEmail || null,
-          serviceAddress: body.serviceAddress || null,
-          trashItem,
-        });
-      } catch (provisionErr) {
-        console.error("[bookings] trash auto-provision failed:", {
-          bookingId: booking.id,
-          error: provisionErr instanceof Error ? provisionErr.message : String(provisionErr),
-        });
-      }
+      await autoProvisionTrashSubscriptionFromBooking({
+        bookingId: booking.id,
+        customerName: body.customerName,
+        customerPhone: body.customerPhone,
+        customerEmail: body.customerEmail || null,
+        serviceAddress: body.serviceAddress || null,
+        trashItem,
+      });
     }
 
     return res.status(201).json({ success: true, booking, quote });
