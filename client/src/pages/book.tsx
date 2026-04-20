@@ -159,6 +159,15 @@ export default function MultiServiceBookPage() {
     customerPhone: user?.phoneNumber || "",
     notes: "",
   });
+  // Task #169 — worker-mode-only fields. Captured here and folded into the
+  // notes payload + source field so they reach the lead/booking record
+  // without requiring a schema migration. The dispatch task (#172) will
+  // promote these into first-class columns.
+  const [workerFields, setWorkerFields] = useState({
+    assignedTo: "",       // crew member name to assign the job to
+    leadSource: "",       // door-knock, referral, repeat, walkup, other
+    internalNotes: "",    // crew-only notes invisible to the customer
+  });
   const [quote, setQuote] = useState<QuoteResult | null>(null);
   const [confirmation, setConfirmation] = useState<
     CreateBookingResponse["booking"] & { items: SelectedItem[]; quote: QuoteResult } | null
@@ -315,6 +324,15 @@ export default function MultiServiceBookPage() {
   // ── Submit (final step)
   const submitMutation = useMutation({
     mutationFn: async () => {
+      // Task #169 — worker mode appends the crew-only fields to the notes
+      // string and tags the source so admin/dispatch can filter on it.
+      const workerNoteParts: string[] = [];
+      if (isWorker && workerFields.assignedTo.trim()) workerNoteParts.push(`[CREW ASSIGN] ${workerFields.assignedTo.trim()}`);
+      if (isWorker && workerFields.leadSource.trim()) workerNoteParts.push(`[LEAD SOURCE] ${workerFields.leadSource.trim()}`);
+      if (isWorker && workerFields.internalNotes.trim()) workerNoteParts.push(`[INTERNAL] ${workerFields.internalNotes.trim()}`);
+      const customerNotes = contact.notes.trim();
+      const combinedNotes = [customerNotes, ...workerNoteParts].filter(Boolean).join("\n");
+
       const res = await apiRequest("POST", "/api/bookings", {
         items: items.map(i => ({
           serviceCode: i.serviceCode,
@@ -328,8 +346,8 @@ export default function MultiServiceBookPage() {
         customerEmail: contact.customerEmail.trim() || undefined,
         customerPhone: contact.customerPhone.trim(),
         serviceAddress: serviceAddress.trim() || undefined,
-        notes: contact.notes.trim() || undefined,
-        source: "web_multi_book",
+        notes: combinedNotes || undefined,
+        source: isWorker ? "crew_add_job" : "web_multi_book",
       });
       return res.json() as Promise<CreateBookingResponse>;
     },
@@ -654,6 +672,42 @@ export default function MultiServiceBookPage() {
                     data-testid="contact-notes"
                   />
                 </div>
+                {/* Task #169 — worker-mode-only fields */}
+                {isWorker && (
+                  <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-3 space-y-3" data-testid="worker-fields">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-blue-600 dark:text-blue-300">Crew-only details</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <Label className="text-xs">Assign to crew member</Label>
+                        <Input
+                          value={workerFields.assignedTo}
+                          onChange={(e) => setWorkerFields(w => ({ ...w, assignedTo: e.target.value }))}
+                          placeholder="e.g. Marcus, Tina"
+                          data-testid="worker-assigned-to"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Lead source</Label>
+                        <Input
+                          value={workerFields.leadSource}
+                          onChange={(e) => setWorkerFields(w => ({ ...w, leadSource: e.target.value }))}
+                          placeholder="door-knock · referral · repeat · walk-up"
+                          data-testid="worker-lead-source"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Internal notes (crew-only)</Label>
+                      <Textarea
+                        value={workerFields.internalNotes}
+                        onChange={(e) => setWorkerFields(w => ({ ...w, internalNotes: e.target.value }))}
+                        placeholder="Site hazards, customer mood, pricing rationale — invisible to customer"
+                        rows={2}
+                        data-testid="worker-internal-notes"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </section>
           )}

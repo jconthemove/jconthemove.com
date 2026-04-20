@@ -64,6 +64,47 @@ export type {
   AppliedBundle,
 };
 
+// ── Handwritten pricing matrices ─────────────────────────────────────────
+// The actual numbers live in `shared/pricingTables.ts` so /pricing, /book,
+// the chatbot, and admin pricing-calibrate (all client-side) can import
+// them too. This file re-exports them and provides server-side quote
+// helpers that wrap `quoteMovingFromTable` / `quoteJunkFromTable`.
+import {
+  MOVING_BASE_MATRIX,
+  MOVING_LOAD_TYPE_MULTIPLIER,
+  JUNK_TIERS,
+  type JunkTier,
+  quoteMovingFromTable,
+  quoteJunkFromTable,
+} from "../../shared/pricingTables";
+
+export {
+  MOVING_BASE_MATRIX,
+  MOVING_LOAD_TYPE_MULTIPLIER,
+  JUNK_TIERS,
+  quoteMovingFromTable,
+  quoteJunkFromTable,
+};
+export type { JunkTier };
+
+export function quoteMoving(opts: { bedrooms?: string; stairs?: number | string; loadType?: string }): { amount: number; breakdown: Record<string, unknown> } {
+  const r = quoteMovingFromTable(opts);
+  return {
+    amount: r.amount,
+    breakdown: {
+      bedrooms: opts.bedrooms ?? "1br",
+      stairs: String(opts.stairs ?? 0),
+      loadType: opts.loadType ?? "local",
+      base: r.base,
+      multiplier: r.multiplier,
+    },
+  };
+}
+
+export function quoteJunk(tierCode: string): { amount: number; tier: JunkTier | null } {
+  return quoteJunkFromTable(tierCode);
+}
+
 /** Pure per-service quote — used by the chatbot, /pricing, and the admin
  *  pricing-calibrate page. Knows about the per-service shared calculators
  *  (trash valet, windows, jump start) and falls back to the catalog
@@ -140,6 +181,30 @@ export async function quoteService(
       maxPrice: q.total,
       isQuoteOnly: false,
       breakdown: q,
+    };
+  }
+
+  if (serviceCode === "moving" && (d.bedrooms || d.stairs != null || d.loadType)) {
+    const q = quoteMoving({ bedrooms: d.bedrooms, stairs: d.stairs, loadType: d.loadType });
+    return {
+      serviceCode,
+      amount: q.amount,
+      minPrice: q.amount,
+      maxPrice: q.amount,
+      isQuoteOnly: false,
+      breakdown: q.breakdown,
+    };
+  }
+
+  if (serviceCode === "junk_removal" && d.tier) {
+    const q = quoteJunk(String(d.tier));
+    return {
+      serviceCode,
+      amount: q.amount,
+      minPrice: q.amount,
+      maxPrice: q.amount,
+      isQuoteOnly: !q.tier,
+      breakdown: q.tier ?? {},
     };
   }
 

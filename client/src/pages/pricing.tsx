@@ -32,12 +32,19 @@ const SERVICE_SECTIONS = [
   { id: "other",     label: "More Services",   icon: Wrench,      color: "text-yellow-400", bg: "bg-yellow-500/10", border: "border-yellow-500/30" },
 ];
 
-const JUNK_PACKAGES = [
-  { label: "Small Load",    desc: "1–3 items, single truck run",         low: 100, high: 200 },
-  { label: "Quarter Load",  desc: "Fits roughly ¼ of a truck",          low: 150, high: 275 },
-  { label: "Half Load",     desc: "Furniture, appliances, boxes",        low: 225, high: 375, popular: true },
-  { label: "Full Truck",    desc: "Garage cleanout, estate clear",       low: 375, high: 600 },
-];
+// Task #169 — JUNK_PACKAGES is now derived from the unified pricing engine's
+// JUNK_TIERS table (server/services/pricingEngine.ts) so a price change in
+// the engine flows to /pricing, /book, the chatbot, and admin
+// pricing-calibrate at once. We import the named export from a shared file
+// to keep the engine importable on both server and client.
+import { JUNK_TIERS } from "@shared/pricingTables";
+const JUNK_PACKAGES = JUNK_TIERS.map((t, i) => ({
+  label: t.label,
+  desc: `${t.loadFraction} · ${t.weightCap}`,
+  low: t.price,
+  high: t.price,
+  popular: i === 2, // Medium remains the highlighted option
+}));
 
 const WINDOW_TIERS = [
   { label: "4 Windows",   price: 20,  desc: "Minimum booking" },
