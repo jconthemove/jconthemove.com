@@ -330,8 +330,10 @@ function MyJobCard({
   myTradeRequest,
   myId,
   onStatus,
+  onAccept,
   onDecline,
   statusPending,
+  acceptPending,
   declinePending,
 }: {
   lead: EnrichedLead;
@@ -359,19 +361,27 @@ function MyJobCard({
 
   // Which step am I on?
   const ds = (lead.dispatchState || "").toLowerCase();
+  const crewList: string[] = Array.isArray(lead.crewMembers) ? lead.crewMembers : [];
+  const amCrewMember = !!myId && crewList.includes(myId);
+  // Only show state-machine progress when the dispatch state is one of
+  // the genuinely actionable states (assigned/accepted/en_route/on_site)
+  // AND the viewer is in the crewMembers list. Otherwise we render a
+  // plain status — no CTA that would 403 downstream.
+  const actionable =
+    amCrewMember && (ds === "assigned" || ds === "accepted" || ds === "en_route" || ds === "on_site" || ds === "completed");
   // Normalize: assigned = freshly pinned by admin; treat as "accepted"
   // so the crew can proceed to the En Route step immediately.
   const currentKey: typeof STATUS_STEPS[number]["key"] =
     ds === "completed" ? "completed"
     : ds === "on_site" ? "on_site"
     : ds === "en_route" ? "en_route"
-    : (ds === "accepted" || ds === "assigned") ? "accepted"
     : "accepted";
   const currentIdx = STATUS_STEPS.findIndex(s => s.key === currentKey);
 
   type LucideIcon = React.ComponentType<{ className?: string }>;
   const nextAction: { label: string; icon: LucideIcon; next: "en_route"|"on_site"|"completed" } | null =
-    currentKey === "accepted" ? { label: "Start — I'm En Route", icon: Play, next: "en_route" }
+    !actionable ? null
+    : currentKey === "accepted" ? { label: "Start — I'm En Route", icon: Play, next: "en_route" }
     : currentKey === "en_route" ? { label: "I've Arrived On Site", icon: Flag, next: "on_site" }
     : currentKey === "on_site" ? { label: "Mark Complete", icon: CheckCircle2, next: "completed" }
     : null;

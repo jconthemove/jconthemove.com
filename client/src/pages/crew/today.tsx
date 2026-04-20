@@ -16,7 +16,7 @@ import {
   Sun, Cloud, CloudSnow, CloudRain, Zap, Wind, BookOpen,
   Wifi, WifiOff, Coins, MapPin, Calendar, ChevronRight, Loader2, Trophy,
   XCircle, Plus, LogOut, Briefcase, Users, CheckCircle2,
-  ChevronDown, ChevronLeft, Ban, Settings2,
+  ChevronDown, ChevronLeft, Ban, Settings2, Navigation, Play, Flag,
 } from "lucide-react";
 import { Link } from "wouter";
 import type { Lead, User } from "@shared/schema";
@@ -395,6 +395,53 @@ export default function CrewTodayPage() {
     onError: (e: Error) => {
       setApplyingId(null);
       toast({ title: "Couldn't sign up", description: e.message, variant: "destructive" });
+    },
+  });
+
+  // Task #173 — state machine mutations for inline My Assignments actions.
+  const [statusPending, setStatusPending] = useState<string | null>(null);
+  const statusMutation = useMutation({
+    mutationFn: async ({ leadId, status }: { leadId: string; status: "en_route"|"on_site"|"completed" }) => {
+      const res = await apiRequest("POST", `/api/crew/jobs/${leadId}/status`, { status });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Couldn't update status" }));
+        throw new Error(err.error || "Couldn't update status");
+      }
+      return res.json();
+    },
+    onMutate: ({ leadId }) => setStatusPending(leadId),
+    onSuccess: (_d, { status }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads/my-jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      setStatusPending(null);
+      const labels: Record<string, string> = { en_route: "🚚 En route", on_site: "📍 On site", completed: "✅ Job complete!" };
+      toast({ title: labels[status] });
+    },
+    onError: (e: Error) => {
+      setStatusPending(null);
+      toast({ title: "Status update failed", description: e.message, variant: "destructive" });
+    },
+  });
+  const [acceptPending, setAcceptPending] = useState<string | null>(null);
+  const acceptOfferMutation = useMutation({
+    mutationFn: async (leadId: string) => {
+      const res = await apiRequest("POST", `/api/crew/jobs/${leadId}/accept`, {});
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Offer no longer yours" }));
+        throw new Error(err.error || "Offer no longer yours");
+      }
+      return res.json();
+    },
+    onMutate: (leadId) => setAcceptPending(leadId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads/my-jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      setAcceptPending(null);
+      toast({ title: "✅ Offer accepted", description: "Tap Start when en route." });
+    },
+    onError: (e: Error) => {
+      setAcceptPending(null);
+      toast({ title: "Couldn't accept", description: e.message, variant: "destructive" });
     },
   });
 
@@ -1341,29 +1388,90 @@ export default function CrewTodayPage() {
                 ? new Date(((job.confirmedDate || job.moveDate) as string).split("T")[0] + "T12:00:00")
                     .toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
                 : "Date TBD";
+              // Task #173 — state-machine aware action bar. Only the assigned
+              // crew sees advance-state buttons; admin-offering shows Accept/Decline.
+              const ds = String((job as any).dispatchState || "").toLowerCase();
+              const members: string[] = Array.isArray(job.crewMembers) ? (job.crewMembers as string[]) : [];
+              const amAssigned = !!user?.id && members.includes(String(user.id));
+              const amOffered = ds === "offering" && (job as any).dispatchOfferedTo === user?.id;
+              type Step = "accepted" | "en_route" | "on_site" | "completed";
+              const normalized: Step =
+                ds === "completed" ? "completed"
+                : ds === "on_site" ? "on_site"
+                : ds === "en_route" ? "en_route"
+                : "accepted";
+              type LucideIcon = React.ComponentType<{ className?: string }>;
+              const nextAction: { label: string; Icon: LucideIcon; next: "en_route"|"on_site"|"completed" } | null =
+                !amAssigned || normalized === "completed" ? null
+                : normalized === "accepted" ? { label: "Start — En Route", Icon: Play, next: "en_route" }
+                : normalized === "en_route" ? { label: "I've Arrived", Icon: Flag, next: "on_site" }
+                : { label: "Mark Complete", Icon: CheckCircle2, next: "completed" };
+              const mapsHref = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(job.fromAddress || "")}`;
+              const statusBusy = statusPending === job.id;
+              const acceptBusy = acceptPending === job.id;
               return (
-                <Link key={job.id} href={`/lead/${job.id}`}>
-                  <div className="flex items-center gap-3 bg-white/[0.03] rounded-xl p-3 border border-orange-500/10 cursor-pointer hover:bg-white/[0.06] transition-colors">
-                    <span className="text-2xl">{SERVICE_ICONS[job.serviceType] ?? "🚛"}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-white text-sm font-semibold truncate capitalize">
-                        {job.serviceType?.replace(/-/g, " ")} Job
-                      </p>
-                      <p className="text-slate-400 text-xs flex items-center gap-1">
-                        <Calendar className="h-3 w-3" />{dateLabel}
-                        {job.fromAddress && (
-                          <><MapPin className="h-3 w-3 ml-2" /><span className="truncate max-w-[100px]">{job.fromAddress}</span></>
-                        )}
-                      </p>
+                <div key={job.id} className="bg-white/[0.03] rounded-xl p-3 border border-orange-500/10">
+                  <Link href={`/lead/${job.id}`}>
+                    <div className="flex items-center gap-3 cursor-pointer">
+                      <span className="text-2xl">{SERVICE_ICONS[job.serviceType] ?? "🚛"}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white text-sm font-semibold truncate capitalize">
+                          {job.serviceType?.replace(/-/g, " ")} Job
+                        </p>
+                        <p className="text-slate-400 text-xs flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />{dateLabel}
+                          {job.fromAddress && (
+                            <><MapPin className="h-3 w-3 ml-2" /><span className="truncate max-w-[100px]">{job.fromAddress}</span></>
+                          )}
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <Badge className={`text-[10px] ${job.status === "in_progress" ? "bg-green-500/20 text-green-300 border-green-500/30" : "bg-orange-500/20 text-orange-300 border-orange-500/30"}`}>
+                          {job.status.replace(/_/g, " ")}
+                        </Badge>
+                        <ChevronRight className="h-4 w-4 text-slate-500 mt-1 ml-auto" />
+                      </div>
                     </div>
-                    <div className="text-right flex-shrink-0">
-                      <Badge className={`text-[10px] ${job.status === "in_progress" ? "bg-green-500/20 text-green-300 border-green-500/30" : "bg-orange-500/20 text-orange-300 border-orange-500/30"}`}>
-                        {job.status.replace(/_/g, " ")}
-                      </Badge>
-                      <ChevronRight className="h-4 w-4 text-slate-500 mt-1 ml-auto" />
+                  </Link>
+                  {(amAssigned || amOffered) && (
+                    <div className="mt-2 flex gap-2">
+                      <a
+                        href={mapsHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        className="flex-1 min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-600 text-slate-200 bg-slate-800/60 hover:bg-slate-700/60 text-xs font-semibold px-3"
+                        data-testid={`today-nav-${job.id}`}
+                      >
+                        <Navigation className="h-3.5 w-3.5" /> Navigate
+                      </a>
+                      {amOffered ? (
+                        <Button
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); acceptOfferMutation.mutate(job.id); }}
+                          disabled={acceptBusy}
+                          className="flex-1 min-h-[44px] bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs"
+                          data-testid={`today-accept-${job.id}`}
+                        >
+                          {acceptBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Accept</>}
+                        </Button>
+                      ) : nextAction ? (
+                        <Button
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); statusMutation.mutate({ leadId: job.id, status: nextAction.next }); }}
+                          disabled={statusBusy}
+                          className="flex-1 min-h-[44px] bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs"
+                          data-testid={`today-status-${job.id}-${nextAction.next}`}
+                        >
+                          {statusBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : (
+                            <>
+                              <nextAction.Icon className="h-3.5 w-3.5 mr-1" />
+                              {nextAction.label}
+                            </>
+                          )}
+                        </Button>
+                      ) : null}
                     </div>
-                  </div>
-                </Link>
+                  )}
+                </div>
               );
             })}
           </div>
