@@ -279,41 +279,9 @@ export default function CrewTodayPage() {
     return () => clearInterval(t);
   }, [dutyStatus, availableUntil]);
 
-  // Task #173 — GPS watcher. While the crew is on duty we stream the
-  // device position to /api/crew/location at most once every 30s so the
-  // admin dispatch map can render live positions. Stops immediately when
-  // duty flips off to respect battery + privacy. Location permission
-  // failures are swallowed silently — this is best-effort, not required.
-  useEffect(() => {
-    if (!dutyStatus) return;
-    if (typeof navigator === "undefined" || !navigator.geolocation) return;
-    const MIN_INTERVAL_MS = 30_000;
-    let lastSent = 0;
-    let watchId: number | null = null;
-    try {
-      watchId = navigator.geolocation.watchPosition(
-        (pos) => {
-          const now = Date.now();
-          if (now - lastSent < MIN_INTERVAL_MS) return;
-          lastSent = now;
-          apiRequest("POST", "/api/crew/location", {
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-            accuracy: pos.coords.accuracy,
-          }).catch(() => { /* silent — best-effort */ });
-        },
-        (_err) => { /* permission denied, etc. — silent */ },
-        { enableHighAccuracy: false, maximumAge: 20_000, timeout: 30_000 },
-      );
-    } catch {
-      /* ignore */
-    }
-    return () => {
-      if (watchId != null && navigator.geolocation) {
-        try { navigator.geolocation.clearWatch(watchId); } catch { /* noop */ }
-      }
-    };
-  }, [dutyStatus]);
+  // Task #173 — GPS beacon moved to CrewLayout (via useCrewGpsBeacon) so
+  // location continues streaming across /crew/jobs, /crew/schedule, and
+  // /crew/earnings while on duty instead of only while Today is mounted.
 
   // Heartbeat every 60 seconds while online
   useEffect(() => {
@@ -1472,7 +1440,7 @@ export default function CrewTodayPage() {
                   </Link>
                   {(amAssigned || amOffered) && (
                     <>
-                      {amOffered && bonus && bonus.total > 0 && (
+                      {amOffered && bonus && bonus.amount > 0 && (
                         <div className="mt-2 rounded-lg border border-emerald-500/30 bg-emerald-950/30 px-3 py-1.5 flex items-center justify-between">
                           <div>
                             <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-300">Crew Bonus</span>

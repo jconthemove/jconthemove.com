@@ -1,5 +1,7 @@
 import { useLocation } from "wouter";
 import { CalendarDays, Briefcase, Calendar, Coins } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { useCrewGpsBeacon } from "@/hooks/useCrewGpsBeacon";
 
 const tabs = [
   { label: "Today", icon: CalendarDays, path: "/crew" },
@@ -10,6 +12,17 @@ const tabs = [
 
 export default function CrewLayout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
+  const { user } = useAuth();
+  // Task #173 — GPS beacon at the app-shell layer so tracking continues
+  // across every /crew/* tab while the worker is on duty, not just on
+  // the Today page. Duty is derived from the user's isAvailable +
+  // availableUntil fields (same source that drives go-online / offline).
+  const isOnDuty = Boolean(
+    user?.isAvailable &&
+      user?.availableUntil &&
+      new Date(user.availableUntil).getTime() > Date.now(),
+  );
+  useCrewGpsBeacon({ enabled: isOnDuty });
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white pb-20">

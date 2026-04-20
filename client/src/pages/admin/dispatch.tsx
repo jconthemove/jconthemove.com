@@ -12,7 +12,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import {
   Radio, DollarSign, Briefcase, Coins, TrendingUp, Circle, Loader2,
-  Users, Calendar, ChevronRight, Power, Zap, Send,
+  Users, Calendar, ChevronRight, Power, Zap, Send, MapPin, Navigation,
 } from "lucide-react";
 import type { User } from "@shared/schema";
 
@@ -491,8 +491,107 @@ export default function AdminDispatchPage() {
               ))
             )}
           </div>
+
+          {/* Task #173 — Live crew positions pulled from the GPS beacon.
+              Polls every 15s so the admin sees movement as crews drive. */}
+          <LiveCrewPositions />
         </aside>
       </div>
+    </div>
+  );
+}
+
+type CrewPosition = {
+  userId: string;
+  lat: number;
+  lng: number;
+  accuracy: number | null;
+  updatedAt: string;
+  firstName: string | null;
+  lastName: string | null;
+  isAvailable: boolean | null;
+};
+
+function LiveCrewPositions() {
+  const { data: positions = [] } = useQuery<CrewPosition[]>({
+    queryKey: ["/api/admin/crew/locations"],
+    refetchInterval: 15_000,
+    staleTime: 10_000,
+  });
+  const { data: declineData = [] } = useQuery<{ userId: string; firstName: string | null; lastName: string | null; declineCount: number; lastDeclinedAt: string | null }[]>({
+    queryKey: ["/api/admin/crew/decline-counts"],
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+  function fmtAge(iso: string) {
+    const ms = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(ms / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    return `${Math.floor(mins / 60)}h ago`;
+  }
+  return (
+    <div className="mt-4">
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+          <MapPin className="h-4 w-4 text-green-400" /> Live Positions
+        </h2>
+        <span className="text-xs text-slate-500" data-testid="live-positions-count">{positions.length}</span>
+      </div>
+      <Card className="bg-slate-900/40 border-slate-800/60">
+        <CardContent className="p-3">
+          {positions.length === 0 ? (
+            <p className="text-center text-slate-500 text-xs py-3">No crew reporting GPS right now.</p>
+          ) : (
+            <ul className="space-y-1.5" data-testid="live-positions-list">
+              {positions.map(p => {
+                const name = [p.firstName, p.lastName].filter(Boolean).join(" ") || p.userId.slice(0, 6);
+                const mapUrl = `https://www.google.com/maps?q=${p.lat},${p.lng}`;
+                return (
+                  <li key={p.userId} className="flex items-center justify-between text-xs bg-slate-900/60 rounded px-2 py-1.5" data-testid={`position-${p.userId}`}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Circle className={`h-2 w-2 flex-shrink-0 ${p.isAvailable ? "fill-green-400 text-green-400" : "fill-slate-500 text-slate-500"}`} />
+                      <span className="text-slate-200 font-medium truncate">{name}</span>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-slate-500 text-[10px] tabular-nums">{fmtAge(p.updatedAt)}</span>
+                      <a href={mapUrl} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300">
+                        <Navigation className="h-3 w-3" />
+                      </a>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Task #173 — chronic decliner visibility. Sorted desc by count. */}
+      {declineData.length > 0 && (
+        <div className="mt-4">
+          <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-2">
+            Decline Counts
+          </h2>
+          <Card className="bg-slate-900/40 border-slate-800/60">
+            <CardContent className="p-3">
+              <ul className="space-y-1" data-testid="decline-counts-list">
+                {declineData.map(d => {
+                  const name = [d.firstName, d.lastName].filter(Boolean).join(" ") || d.userId.slice(0, 6);
+                  return (
+                    <li key={d.userId} className="flex items-center justify-between text-xs bg-slate-900/60 rounded px-2 py-1" data-testid={`decline-${d.userId}`}>
+                      <span className="text-slate-200 truncate">{name}</span>
+                      <span className={`font-bold tabular-nums ${d.declineCount >= 5 ? "text-red-400" : d.declineCount >= 3 ? "text-amber-400" : "text-slate-300"}`}>
+                        {d.declineCount}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
