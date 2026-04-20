@@ -35,6 +35,12 @@ export async function startOfferLoop(jobId: string): Promise<void> {
   if (NON_DISPATCHABLE_STATES.includes(job.dispatchState)) {
     return; // already has a crew (assigned/accepted/en_route/on_site/completed)
   }
+  // `failed` is recoverable — admin-triggered re-dispatch or the cron
+  // can retry once a new candidate appears. tryStartOffer's CAS allows
+  // the pending|failed → offering transition.
+  if (job.dispatchState === "failed") {
+    await persistState(jobId, { dispatchState: "pending" });
+  }
   if (["in_progress", "completed", "cancelled"].includes(job.status)) {
     return;
   }

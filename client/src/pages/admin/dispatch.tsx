@@ -87,12 +87,14 @@ function MetricCard({ icon: Icon, label, value, color }: {
 }
 
 function JobCard({
-  lead, employees, onReassign, isReassigning,
+  lead, employees, onReassign, onDispatchNow, isReassigning, isDispatching,
 }: {
   lead: Lead;
   employees: User[];
   onReassign: (leadId: string, crewId: string) => void;
+  onDispatchNow: (leadId: string) => void;
   isReassigning: boolean;
+  isDispatching: boolean;
 }) {
   const assigned = Array.isArray(lead.crewMembers) ? lead.crewMembers : [];
   const primary = assigned[0];
@@ -152,6 +154,18 @@ function JobCard({
           </div>
 
           <div className="ml-auto flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-2 text-xs border-blue-500/40 bg-blue-500/10 text-blue-300 hover:bg-blue-500/20"
+              onClick={() => onDispatchNow(lead.id)}
+              disabled={isDispatching}
+              title="Start Uber-style offer loop: the engine picks the best crew and sends them a 20s offer."
+              data-testid={`button-dispatch-now-${lead.id}`}
+            >
+              <Send className="h-3 w-3 mr-1" />
+              Dispatch
+            </Button>
             <Select
               value={primary || ""}
               onValueChange={(v) => onReassign(lead.id, v)}
@@ -441,7 +455,10 @@ export default function AdminDispatchPage() {
                   lead={l}
                   employees={activeEmployees}
                   onReassign={handleReassign}
+                  onDispatchNow={(id) => manualDispatchMutation.mutate(id)}
                   isReassigning={reassigningId === l.id}
+                  isDispatching={manualDispatchMutation.isPending &&
+                    manualDispatchMutation.variables === l.id}
                 />
               ))
             )}

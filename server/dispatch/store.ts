@@ -172,7 +172,10 @@ export async function tryStartOffer(
             dispatch_offer_expires_at = $3,
             dispatch_tried_ids = $4
       WHERE id = $1
-        AND COALESCE(dispatch_state, 'pending') = 'pending'
+        -- pending = brand-new lead; failed = exhausted earlier and
+        -- now being retried (admin clicked "Dispatch now" or the retry
+        -- cron re-picked it up with fresh eligible crew).
+        AND COALESCE(dispatch_state, 'pending') IN ('pending', 'failed')
         AND COALESCE(archived_at IS NULL, true)
         AND status NOT IN ('completed', 'cancelled')
       RETURNING id`,
