@@ -11260,17 +11260,24 @@ Thank you for your business!
       // but not lat/lng, so we attribute by matching the city string
       // against each zone's name as a loose first-pass. Unmapped revenue
       // is reported under the "_unmapped" bucket.
-      const { rows } = await pool.query(`
-        SELECT LOWER(COALESCE(city, '')) AS city,
-               CAST(COALESCE(total_price, '0') AS DECIMAL)::float AS revenue
-        FROM leads
-        WHERE status = 'completed'
-          AND archived_at IS NULL
-          AND updated_at >= date_trunc('day', now())
-      `).catch(() => ({ rows: [] as any[] }));
+      interface RevenueRow { city: string | null; revenue: number }
+      let revenueRows: RevenueRow[] = [];
+      try {
+        const result = await pool.query<RevenueRow>(`
+          SELECT LOWER(COALESCE(city, '')) AS city,
+                 CAST(COALESCE(total_price, '0') AS DECIMAL)::float AS revenue
+          FROM leads
+          WHERE status = 'completed'
+            AND archived_at IS NULL
+            AND updated_at >= date_trunc('day', now())
+        `);
+        revenueRows = result.rows;
+      } catch {
+        revenueRows = [];
+      }
       const revenueByZone: Record<string, number> = {};
       let unmapped = 0;
-      for (const r of rows) {
+      for (const r of revenueRows) {
         const city = String(r.city || "");
         const match = snapshot.zones.find(z => city && z.zoneName.toLowerCase().includes(city));
         if (match) {
@@ -11325,10 +11332,14 @@ Thank you for your business!
       // Under the first 2 hours of the day the projection is too noisy,
       // so we fall back to trailing 4-same-weekday average.
       let projectedEod = todaySoFar;
+      let sampleCount = 0;
+      let method: "elapsed_ratio" | "trailing_avg" = "elapsed_ratio";
       if (elapsedRatio >= 2 / 24) {
         projectedEod = todaySoFar / elapsedRatio;
+        sampleCount = 1;
       } else {
-        const { rows: avgRows } = await pool.query(`
+        method = "trailing_avg";
+        const { rows: avgRows } = await pool.query<{ revenue: number }>(`
           SELECT COALESCE(SUM(CAST(COALESCE(total_price, '0') AS DECIMAL)), 0)::float AS revenue,
                  date_trunc('day', updated_at) AS day
           FROM leads
@@ -11338,12 +11349,15 @@ Thank you for your business!
           GROUP BY 2 ORDER BY 2 DESC LIMIT 4
         `);
         const samples = avgRows.map(r => Number(r.revenue) || 0);
+        sampleCount = samples.length;
         projectedEod = samples.length ? samples.reduce((a, b) => a + b, 0) / samples.length : 0;
       }
       res.json({
         todaySoFar: Math.round(todaySoFar * 100) / 100,
         projectedEod: Math.round(projectedEod * 100) / 100,
         elapsedRatio: Math.round(elapsedRatio * 1000) / 1000,
+        method,
+        sampleCount,
         // Legacy field for existing callers (admin overview tile).
         projectedToday: Math.round(projectedEod * 100) / 100,
       });

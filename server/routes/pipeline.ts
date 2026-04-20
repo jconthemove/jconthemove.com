@@ -38,6 +38,10 @@ const inputSchema = z.object({
   notes: z.string().optional(),
   source: z.string().optional(),
   persist: z.boolean().optional(),
+  // Task #174 — optional service coordinates used by demand/surge steps
+  // to resolve the zone and apply the proper multiplier.
+  serviceLat: z.number().optional(),
+  serviceLng: z.number().optional(),
 });
 
 router.post("/pipeline/run", async (req: Request, res: Response) => {
