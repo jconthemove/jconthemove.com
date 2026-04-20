@@ -763,7 +763,7 @@ export default function CrewTodayPage() {
         const myWeekTokens = allTimeJobCounts[String(user?.id)] ?? 0;
         if (notClaimed) {
           return (
-            <Link href="/earn/mining">
+            <Link href="/mining">
               <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 cursor-pointer hover:bg-amber-500/15 transition-colors">
                 <span className="text-xl">🪙</span>
                 <div className="flex-1">
