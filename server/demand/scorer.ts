@@ -9,6 +9,7 @@
 // at peak. Deterministic by design so operators can reason about pricing.
 
 import type { ZoneWindowCounts } from "./windows";
+import { getZoneOverride } from "./calibration";
 
 export interface ZoneDemand {
   zoneCode: string;
@@ -22,6 +23,23 @@ export interface ZoneDemand {
 }
 
 export function scoreZone(c: ZoneWindowCounts): ZoneDemand {
+  const override = getZoneOverride(c.zone.code);
+  if (override.enabled === false) {
+    return {
+      zoneCode: c.zone.code,
+      zoneName: c.zone.name,
+      score: 0,
+      rawScore: 0,
+      counts: {
+        q15m: c.quoteRequests15m,
+        q60m: c.quoteRequests60m,
+        q24h: c.quoteRequests24h,
+        activeJobs: c.activeJobs,
+        onlineCrew: c.onlineCrew,
+      },
+      reasons: ["zone disabled by operator"],
+    };
+  }
   let raw =
     0.4 * c.quoteRequests15m +
     0.3 * c.quoteRequests60m +

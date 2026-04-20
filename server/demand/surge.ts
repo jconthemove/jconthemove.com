@@ -19,6 +19,29 @@ export interface SurgeDecision {
   mode: "shadow" | "soft" | "full";
 }
 
+/** Pure spec-shape helper: maps a base price, demand score, and current
+ *  crew availability into a multiplier. Does NOT consult calibration
+ *  modes — callers that need mode gating should use decideSurge instead.
+ *  Returned `surgedTotal` is `base * multiplier` rounded to cents. */
+export function computeSurge(base: number, demandScore: number, crewAvailable: number): {
+  multiplier: number;
+  band: SurgeDecision["band"];
+  surgedTotal: number;
+} {
+  let multiplier = 1.0;
+  let band: SurgeDecision["band"] = "normal";
+  if (crewAvailable === 0) { multiplier = 1.5; band = "scarcity"; }
+  else if (demandScore > 1.0) { multiplier = 1.3; band = "peak"; }
+  else if (demandScore > 0.7) { multiplier = 1.15; band = "elevated"; }
+  else if (demandScore < 0.2 && crewAvailable >= 4) { multiplier = 0.9; band = "discount"; }
+  multiplier = Math.max(0.85, Math.min(1.5, multiplier));
+  return {
+    multiplier,
+    band,
+    surgedTotal: Math.round(base * multiplier * 100) / 100,
+  };
+}
+
 export function decideSurge(demand: ZoneDemand): SurgeDecision {
   const cal = getDemandCalibration();
   let band: SurgeDecision["band"] = "normal";

@@ -11290,7 +11290,21 @@ Thank you for your business!
         ...z,
         revenue: Math.round((revenueByZone[z.zoneCode] || 0) * 100) / 100,
       }));
-      res.json({ ...snapshot, zones, unmappedRevenue: Math.round(unmapped * 100) / 100 });
+      // Spec-shape: zones-keyed object with {count, revenue, score}.
+      const zonesByCode: Record<string, { count: number; revenue: number; score: number }> = {};
+      for (const z of zones) {
+        zonesByCode[z.zoneCode] = {
+          count: z.counts.quoteRequests60m,
+          revenue: z.revenue,
+          score: z.score,
+        };
+      }
+      res.json({
+        ...snapshot,
+        zones,              // array form (existing callers)
+        zonesByCode,        // object form keyed by zone code (spec shape)
+        unmappedRevenue: Math.round(unmapped * 100) / 100,
+      });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -11310,9 +11324,10 @@ Thank you for your business!
     }
   });
 
-  // Task #174 — Revenue projection. Primary baseline is the trailing
-  // 4-same-weekday average of completed revenue. We also surface today's
-  // running total so operators can see where the day is tracking.
+  // Task #174 — Revenue projection. Returns BOTH the elapsed-day ratio
+  // EOD projection (today's running total scaled by fraction of day
+  // elapsed) and the trailing 4-same-weekday average so admin UI can
+  // show observed + historical baseline side by side.
   app.get("/api/admin/revenue-projection", isAuthenticated, requireBusinessOwner, async (_req, res) => {
     try {
       const { rows: todayRows } = await pool.query<{ revenue: number }>(`
@@ -11323,6 +11338,15 @@ Thank you for your business!
       `);
       const todaySoFar = Number(todayRows[0]?.revenue) || 0;
 
+      // Elapsed-day ratio EOD projection. Below 2h elapsed the ratio is
+      // too noisy so we hold the projection equal to todaySoFar.
+      const now = new Date();
+      const startOfDay = new Date(now); startOfDay.setHours(0, 0, 0, 0);
+      const msElapsed = now.getTime() - startOfDay.getTime();
+      const elapsedRatio = Math.max(0, Math.min(1, msElapsed / (24 * 60 * 60 * 1000)));
+      const projectedEod = elapsedRatio >= 2 / 24 ? todaySoFar / elapsedRatio : todaySoFar;
+
+      // Trailing 4-same-weekday average baseline.
       const { rows: avgRows } = await pool.query<{ revenue: number }>(`
         SELECT COALESCE(SUM(CAST(COALESCE(total_price, '0') AS DECIMAL)), 0)::float AS revenue,
                date_trunc('day', updated_at) AS day
@@ -11334,15 +11358,18 @@ Thank you for your business!
       `);
       const samples = avgRows.map(r => Number(r.revenue) || 0);
       const sampleCount = samples.length;
-      const projectedToday = sampleCount
-        ? samples.reduce((a, b) => a + b, 0) / sampleCount
-        : 0;
+      const trailingAvg = sampleCount ? samples.reduce((a, b) => a + b, 0) / sampleCount : 0;
 
       res.json({
-        projectedToday: Math.round(projectedToday * 100) / 100,
         todaySoFar: Math.round(todaySoFar * 100) / 100,
+        projectedEod: Math.round(projectedEod * 100) / 100,
+        elapsedRatio: Math.round(elapsedRatio * 1000) / 1000,
+        trailingAvg: Math.round(trailingAvg * 100) / 100,
         sampleCount,
         samples,
+        // Legacy field: admin overview tile reads projectedToday; keep it
+        // as the elapsed-ratio EOD value so today's pace drives the tile.
+        projectedToday: Math.round(projectedEod * 100) / 100,
       });
     } catch (e: any) {
       res.status(500).json({ error: e.message });

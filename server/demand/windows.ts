@@ -84,6 +84,36 @@ export async function getWindowCountsByZone(): Promise<ZoneWindowCounts[]> {
   });
 }
 
+/** Pure spec-shape helper: given an array of job-like records with
+ *  {lat, lng, createdAt, status}, bucket them by zone and return the
+ *  same counts shape as getWindowCountsByZone — but WITHOUT touching
+ *  the DB or crew-location pings. Useful for unit tests and for callers
+ *  that already have an in-memory job set (e.g. pipeline simulation). */
+export interface BuildWindowsJob {
+  lat: number | null;
+  lng: number | null;
+  createdAt: Date;
+  status: string;
+}
+export function buildWindows(
+  jobs: BuildWindowsJob[],
+  crewPings: { lat: number; lng: number; updatedAt: Date }[] = [],
+  nowMs: number = Date.now(),
+): ZoneWindowCounts[] {
+  const zones = listZones();
+  return zones.map(z => {
+    const inZoneLeads = jobs.filter(l => l.lat != null && l.lng != null && within(l.lat!, l.lng!, z));
+    const quoteRequests24h = inZoneLeads.filter(l => nowMs - l.createdAt.getTime() < 24 * 3600_000).length;
+    const quoteRequests60m = inZoneLeads.filter(l => nowMs - l.createdAt.getTime() < 60 * 60_000).length;
+    const quoteRequests15m = inZoneLeads.filter(l => nowMs - l.createdAt.getTime() < 15 * 60_000).length;
+    const activeJobs = inZoneLeads.filter(l => ACTIVE_JOB_STATUSES.includes(l.status)).length;
+    const onlineCrew = crewPings.filter(c =>
+      nowMs - c.updatedAt.getTime() < 15 * 60_000 && within(c.lat, c.lng, z)
+    ).length;
+    return { zone: z, quoteRequests15m, quoteRequests60m, quoteRequests24h, activeJobs, onlineCrew };
+  });
+}
+
 export async function getCountsForZone(zoneCode: string): Promise<ZoneWindowCounts | null> {
   const all = await getWindowCountsByZone();
   return all.find(w => w.zone.code === zoneCode) ?? null;
