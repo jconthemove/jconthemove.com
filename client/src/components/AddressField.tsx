@@ -82,15 +82,21 @@ export default function AddressField({
   const resolvedValueRef = useRef<string>("");
 
   useEffect(() => {
-    if (resolved && value !== resolvedValueRef.current) {
-      setResolved(false);
+    // Drift detection isn't gated by `resolved` because the onChange handler
+    // sets `resolved=false` synchronously, which would otherwise prevent the
+    // stale-data cleanup from ever running. We trigger any time the input
+    // diverges from the address we last successfully resolved.
+    if (resolvedValueRef.current && value !== resolvedValueRef.current) {
       // Clear the now-stale city/state/zip so the customer can't accidentally
       // submit "555 Oak St" with the previously-resolved "Ironwood, MI 49938"
       // still attached to it. The geocode-on-blur will re-fill them as soon
       // as the new address resolves; until then the manual fields are open.
+      if (resolved) setResolved(false);
       onCityChange("");
       onStateChange("");
       onZipChange("");
+      // Forget the snapshot so we don't re-fire the clear on every keystroke.
+      resolvedValueRef.current = "";
       if (showManualFields && value.trim().length > 0) setManualOpen(true);
     }
   }, [value, resolved, showManualFields, onCityChange, onStateChange, onZipChange]);

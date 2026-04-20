@@ -79,6 +79,23 @@ interface PlacesAutocompleteProps {
 let mapsApiKey: string | null = null;
 let mapsLoadingPromise: Promise<void> | null = null;
 
+// Inject a no-op `-webkit-autofill` keyframe so we get a deterministic
+// `animationend` event when Chrome / Edge / Safari autofill our address
+// inputs. Without this rule no animation runs and the autofill hook in
+// the component below never fires for browser-driven fills.
+let autofillStyleInjected = false;
+function ensureAutofillAnimationCss() {
+  if (autofillStyleInjected || typeof document === "undefined") return;
+  const style = document.createElement("style");
+  style.setAttribute("data-jc-autofill", "1");
+  style.textContent = `
+    @keyframes jcAutofillStart { from { opacity: 1; } to { opacity: 1; } }
+    input:-webkit-autofill { animation-name: jcAutofillStart; animation-duration: 0.001s; }
+  `;
+  document.head.appendChild(style);
+  autofillStyleInjected = true;
+}
+
 async function getMapsApiKey(): Promise<string> {
   if (mapsApiKey) return mapsApiKey;
   const res = await fetch("/api/maps-config");
@@ -164,6 +181,7 @@ export function PlacesAutocomplete({
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
 
   useEffect(() => {
+    ensureAutofillAnimationCss();
     let cancelled = false;
     setStatus("loading");
 
