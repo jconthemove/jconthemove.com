@@ -10863,6 +10863,107 @@ Thank you for your business!
     }
   });
 
+  // Task #171 — Dedicated admin reassign endpoint. Unlike PATCH /api/leads/:id/quote
+  // (which recomputes totals + special-item fees on every call), this only touches
+  // the assignment fields. Safe to call repeatedly from the live dispatch UI.
+  app.post("/api/admin/leads/:id/assign", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { crewId, crewIds } = req.body || {};
+      const ids: string[] = Array.isArray(crewIds)
+        ? crewIds.filter((s): s is string => typeof s === "string" && s.length > 0)
+        : (typeof crewId === "string" && crewId.length > 0 ? [crewId] : []);
+      if (ids.length === 0) {
+        return res.status(400).json({ error: "crewId or crewIds[] required" });
+      }
+      const current = await storage.getLead(id);
+      if (!current) return res.status(404).json({ error: "Lead not found" });
+
+      const crewSize = (current as any).crewSize || ids.length;
+      const fullyStaffed = ids.length >= crewSize;
+
+      const [updated] = await db.update(leads)
+        .set({
+          crewMembers: ids,
+          status: fullyStaffed ? "assigned" : (current.status === "completed" ? current.status : "open"),
+        })
+        .where(eq(leads.id, id))
+        .returning();
+
+      // Notify newly-assigned crew
+      const previous = Array.isArray(current.crewMembers) ? current.crewMembers : [];
+      const newlyAssigned = ids.filter(uid => !previous.includes(uid));
+      for (const uid of newlyAssigned) {
+        try {
+          await db.insert(notifications).values({
+            userId: uid,
+            type: "job_assigned",
+            title: "New Job Assignment",
+            message: "You've been assigned to a job. Open your dashboard to accept or decline.",
+            data: { leadId: id },
+          });
+        } catch (e) {
+          console.warn("[assign] notification insert failed", e);
+        }
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Error assigning lead crew:", error);
+      res.status(500).json({ error: "Failed to assign crew" });
+    }
+  });
+
+  // Task #171 — Live dispatch metrics strip. Today-only counters so the
+  // dispatch page can show "what happened so far today" without pulling
+  // historical data. Intentionally lightweight — pure SQL, no ORM.
+  app.get("/api/admin/today-metrics", isAuthenticated, requireBusinessOwner, async (_req, res) => {
+    try {
+      const { rows } = await pool.query(`
+        SELECT
+          COUNT(*) FILTER (
+            WHERE archived_at IS NULL
+              AND created_at >= date_trunc('day', now())
+          ) AS jobs_today,
+          COUNT(*) FILTER (
+            WHERE archived_at IS NULL
+              AND status = 'completed'
+              AND updated_at >= date_trunc('day', now())
+          ) AS completed_today,
+          COALESCE(SUM(
+            CASE WHEN status = 'completed'
+                  AND updated_at >= date_trunc('day', now())
+                 THEN CAST(COALESCE(total_price, '0') AS DECIMAL)
+                 ELSE 0 END
+          ), 0) AS revenue_today,
+          COALESCE(AVG(
+            CASE WHEN status = 'completed'
+                  AND updated_at >= date_trunc('day', now())
+                  AND CAST(COALESCE(total_price, '0') AS DECIMAL) > 0
+                 THEN CAST(total_price AS DECIMAL)
+                 ELSE NULL END
+          ), 0) AS avg_ticket
+        FROM leads
+      `);
+      const { rows: tokenRows } = await pool.query(`
+        SELECT COALESCE(SUM(CAST(token_amount AS DECIMAL)), 0) AS tokens_issued
+        FROM reserve_transactions
+        WHERE transaction_type = 'distribution'
+          AND created_at >= date_trunc('day', now())
+      `);
+      const r = rows[0] || {};
+      res.json({
+        revenueToday: parseFloat(r.revenue_today || '0'),
+        jobsToday: parseInt(r.jobs_today || '0'),
+        completedToday: parseInt(r.completed_today || '0'),
+        avgTicket: parseFloat(r.avg_ticket || '0'),
+        jcmovesIssuedToday: parseFloat(tokenRows[0]?.tokens_issued || '0'),
+      });
+    } catch (error) {
+      console.error("Error getting today metrics:", error);
+      res.status(500).json({ error: "Failed to get today metrics" });
+    }
+  });
+
   // ── Site Analytics ─────────────────────────────────────────────────────────
   // POST /api/analytics/pageview — public, fire-and-forget page view tracker
   app.post("/api/analytics/pageview", async (req, res) => {

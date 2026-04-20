@@ -111,8 +111,8 @@ const AdminPeoplePage = lazy(() => import("@/pages/admin/people"));
 const AdminFinancePage = lazy(() => import("@/pages/admin/finance"));
 const AdminMarketplacePage = lazy(() => import("@/pages/admin/marketplace"));
 const AdminSystemPage = lazy(() => import("@/pages/admin/system"));
-const AdminCalibratePage = lazy(() => import("@/pages/admin/calibrate"));
-const AdminPricingCalibrationPage = lazy(() => import("@/pages/admin/pricing-calibration"));
+const AdminPricingPage = lazy(() => import("@/pages/admin/pricing"));
+const AdminDispatchPage = lazy(() => import("@/pages/admin/dispatch"));
 const AdminSponsorsPage = lazy(() => import("@/pages/admin/sponsors"));
 const AdminAnalyticsPage = lazy(() => import("@/pages/admin/analytics"));
 const AdminBookingAnalyticsPage = lazy(() => import("@/pages/admin/booking-analytics"));
@@ -487,18 +487,20 @@ function AuthenticatedApp() {
           <AdminLayout>
             <Switch>
               <Route path="/admin"><AdminOverviewPage /></Route>
+              <Route path="/admin/dispatch"><AdminDispatchPage /></Route>
               <Route path="/admin/jobs"><AdminJobsPage /></Route>
               <Route path="/admin/people"><AdminPeoplePage /></Route>
               <Route path="/admin/finance"><AdminFinancePage /></Route>
+              <Route path="/admin/pricing"><AdminPricingPage /></Route>
               <Route path="/admin/marketplace"><AdminMarketplacePage /></Route>
               <Route path="/admin/system"><AdminSystemPage /></Route>
-              <Route path="/admin/calibrate"><AdminCalibratePage /></Route>
-              <Route path="/admin/pricing-calibration"><AdminPricingCalibrationPage /></Route>
               <Route path="/admin/sponsors"><AdminSponsorsPage /></Route>
               <Route path="/admin/analytics"><AdminAnalyticsPage /></Route>
               <Route path="/admin/booking-analytics"><AdminBookingAnalyticsPage /></Route>
               <Route path="/admin/schedule"><AdminSchedulePage /></Route>
               {/* Legacy admin URL redirects */}
+              <Route path="/admin/calibrate"><Redirect to="/admin/pricing" /></Route>
+              <Route path="/admin/pricing-calibration"><Redirect to="/admin/pricing" /></Route>
               <Route path="/admin/treasury"><Redirect to="/admin/finance" /></Route>
               <Route path="/admin/users"><Redirect to="/admin/people" /></Route>
               <Route path="/admin/employees"><Redirect to="/admin/people" /></Route>
