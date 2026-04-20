@@ -124,6 +124,7 @@ export function listZones(): ZoneInfo[] {
  *  when the point falls outside every zone. */
 export function getZone(lat: number | null | undefined, lng: number | null | undefined): ZoneInfo | null {
   if (lat == null || lng == null || !isFinite(Number(lat)) || !isFinite(Number(lng))) return null;
+  ensureSeed();
   const la = Number(lat);
   const ln = Number(lng);
   let best: { z: ZoneInfo; d: number } | null = null;
