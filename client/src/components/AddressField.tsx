@@ -112,8 +112,8 @@ export default function AddressField({
   }
 
   const inputs = theme === "zinc"
-    ? "w-full rounded-md border border-zinc-700 bg-zinc-800 text-white placeholder:text-zinc-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/40 focus:border-orange-500/60 transition-all"
-    : "w-full rounded-md border border-slate-700 bg-slate-800 text-white placeholder:text-slate-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500/60 transition-all";
+    ? "w-full rounded-md border border-zinc-700 bg-zinc-800 text-white placeholder:text-zinc-500 px-3.5 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-orange-500/40 focus:border-orange-500/60 transition-all"
+    : "w-full rounded-md border border-slate-700 bg-slate-800 text-white placeholder:text-slate-500 px-3.5 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500/60 transition-all";
 
   // Show the "needs more info" callout when the customer typed an address
   // we couldn't resolve and the manual fields are open.

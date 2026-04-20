@@ -263,7 +263,7 @@ export function PlacesAutocomplete({
   }
 
   const baseInput =
-    "w-full bg-slate-800 border border-slate-700 text-white placeholder:text-slate-500 text-sm rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500/60 transition-all";
+    "w-full bg-slate-800 border border-slate-700 text-white placeholder:text-slate-500 text-base rounded-md px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500/60 transition-all";
 
   return (
     <div className={`relative ${className || ""}`}>
@@ -273,8 +273,8 @@ export function PlacesAutocomplete({
         </div>
       )}
       {status === "ready" && (
-        <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
-          <MapPin className="h-3.5 w-3.5 text-teal-400" />
+        <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+          <MapPin className="h-4 w-4 text-teal-400" />
         </div>
       )}
       <input
