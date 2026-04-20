@@ -149,6 +149,38 @@ export async function tryAcceptOffer(id: string, crewId: string): Promise<boolea
   return rows.length > 0;
 }
 
+/**
+ * Race-safe offer start. Performs an atomic compare-and-set on
+ * dispatch_state: the UPDATE only lands if the row is currently in a
+ * state that permits starting an offer (pending, OR an offering row
+ * whose crew is already in our tried_ids — meaning the previous offer
+ * finished). Returns true if the row was successfully transitioned.
+ * This prevents two concurrent dispatch triggers (e.g., retry cron +
+ * manual admin dispatch) from racing against one another and one
+ * clobbering the other's offer.
+ */
+export async function tryStartOffer(
+  id: string,
+  offeredTo: string,
+  expiresAt: Date,
+  triedIds: string[],
+): Promise<boolean> {
+  const { rows } = await pool.query(
+    `UPDATE leads
+        SET dispatch_state = 'offering',
+            dispatch_offered_to = $2,
+            dispatch_offer_expires_at = $3,
+            dispatch_tried_ids = $4
+      WHERE id = $1
+        AND COALESCE(dispatch_state, 'pending') = 'pending'
+        AND COALESCE(archived_at IS NULL, true)
+        AND status NOT IN ('completed', 'cancelled')
+      RETURNING id`,
+    [id, offeredTo, expiresAt, triedIds],
+  );
+  return rows.length > 0;
+}
+
 export async function tryDeclineOffer(id: string, crewId: string): Promise<boolean> {
   const { rows } = await pool.query(
     `UPDATE leads

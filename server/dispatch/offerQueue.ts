@@ -9,7 +9,7 @@ import { pool } from "../db";
 import { acquireLock, releaseLock } from "./locks";
 import { sendOffer } from "./notify";
 import { rankCandidates } from "./engine";
-import { logDispatchEvent, recheckKillSwitch, loadJob, persistState } from "./store";
+import { logDispatchEvent, recheckKillSwitch, loadJob, persistState, tryStartOffer } from "./store";
 import { OFFER_TTL_MS, OFFER_LOCK_TTL_MS, NON_DISPATCHABLE_STATES, type DispatchCandidate } from "./types";
 
 // In-memory timers + lock ownership keyed by jobId so a subsequent
@@ -73,12 +73,18 @@ export async function startOfferLoop(jobId: string): Promise<void> {
   }
 
   const expiresAt = new Date(Date.now() + OFFER_TTL_MS);
-  await persistState(jobId, {
-    dispatchState: "offering",
-    dispatchOfferedTo: top.crewId,
-    dispatchOfferExpiresAt: expiresAt,
-    dispatchTriedIds: [...triedIds, top.crewId],
-  });
+  const nextTried = [...triedIds, top.crewId];
+  // Atomic compare-and-set: only flip to 'offering' if we're still in
+  // 'pending'. If another writer (admin override, another retry tick)
+  // raced us, the UPDATE affects zero rows and we bail without
+  // clobbering their state.
+  const claimed = await tryStartOffer(jobId, top.crewId, expiresAt, nextTried);
+  if (!claimed) {
+    releaseLock(`job:${jobId}`, offerId);
+    await logDispatchEvent(jobId, "skipped", top.crewId, null, job.dispatchState, job.dispatchState,
+      "state changed before offer could start (CAS miss)");
+    return;
+  }
 
   await logDispatchEvent(jobId, "offer_sent", top.crewId, null, job.dispatchState, "offering",
     `score=${top.score} reasons=${top.reasons.join(",")}`);
