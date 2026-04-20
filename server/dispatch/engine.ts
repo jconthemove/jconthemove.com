@@ -12,6 +12,7 @@
 import { inAnyTerritory } from "./territories";
 import { getEligibleCrew } from "./crew";
 import type { DispatchCandidate } from "./types";
+import { getDemandForCoords } from "../demand";
 
 export interface RankJob {
   id: string;
@@ -28,6 +29,13 @@ export async function rankCandidates(
 ): Promise<DispatchCandidate[]> {
   const pool = await getEligibleCrew({ serviceType: job.serviceType, excludeIds });
   if (pool.length === 0) return [];
+
+  // Task #174 — When the job's zone is hot (>0.7), reward crews who
+  // are already close by doubling the per-mile distance penalty. The
+  // effect is marginal today (distance is a stub 10mi flat) but the
+  // hook is in place for Task #173 GPS-derived distances.
+  const { demand } = await getDemandForCoords(job.lat, job.lng);
+  const distanceWeight = demand && demand.score > 0.7 ? 16 : 8;
 
   const hasCoords = typeof job.lat === "number" && typeof job.lng === "number";
   const inTerritory = hasCoords ? inAnyTerritory(job.lat!, job.lng!) : true;
@@ -49,9 +57,9 @@ export async function rankCandidates(
     const distanceMi = hasCoords ? 10 : 0;
 
     const reasons: string[] = [];
-    let score = 100 - distanceMi * 8 - c.jobsToday * 6;
+    let score = 100 - distanceMi * distanceWeight - c.jobsToday * 6;
     reasons.push(`base=100`);
-    if (distanceMi > 0) reasons.push(`dist -${Math.round(distanceMi * 8)}`);
+    if (distanceMi > 0) reasons.push(`dist -${Math.round(distanceMi * distanceWeight)}${distanceWeight === 16 ? " (hot zone ×2)" : ""}`);
     if (c.jobsToday > 0) reasons.push(`load -${c.jobsToday * 6}`);
 
     if (job.urgency === "high") {

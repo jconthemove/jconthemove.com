@@ -177,6 +177,38 @@ function writeBeaconToStorage(userId: string | number, isAvailable: boolean, ava
   } catch { /* ignore */ }
 }
 
+type PositioningResponse =
+  | { muted: true }
+  | {
+      best: { zoneName: string; score: number } | null;
+      current: { zoneName: string; score: number } | null;
+      shouldRelocate: boolean;
+      headline: string;
+      detail: string;
+    };
+
+function CrewPositioningCard() {
+  const { data } = useQuery<PositioningResponse>({
+    queryKey: ["/api/crew/positioning"],
+    refetchInterval: 45000,
+  });
+  if (!data || "muted" in data) return null;
+  if (!data.best) return null;
+  const isHot = data.shouldRelocate;
+  const color = isHot
+    ? "bg-amber-500/15 border-amber-500/40 text-amber-300"
+    : "bg-emerald-500/10 border-emerald-500/30 text-emerald-300";
+  return (
+    <div className={`flex items-center gap-3 rounded-xl border p-3 ${color}`}>
+      <span className="text-xl">{isHot ? "📍" : "✅"}</span>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-bold">{data.headline}</p>
+        <p className="text-slate-300 text-[11px] truncate">{data.detail}</p>
+      </div>
+    </div>
+  );
+}
+
 export default function CrewTodayPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -873,6 +905,9 @@ export default function CrewTodayPage() {
           </div>
         </div>
       )}
+
+      {/* Task #174 — Crew positioning card (surfaces only while on duty) */}
+      {dutyStatus && <CrewPositioningCard />}
 
       {/* Dynamic Earn More shortcut — context-aware fastest path */}
       {(() => {

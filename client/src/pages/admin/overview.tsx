@@ -42,6 +42,10 @@ export default function AdminOverviewPage() {
   const { data: liveBalance } = useQuery<{ balance: number }>({ queryKey: ["/api/solana/balance"], refetchInterval: 30000 });
   const { data: pendingPayouts } = useQuery<{ payouts: Payout[] }>({ queryKey: ["/api/admin/payouts/pending"] });
   const { data: btcPayments } = useQuery<BtcPayment[]>({ queryKey: ["/api/admin/btc-payments"] });
+  const { data: projection } = useQuery<{ projectedToday: number; sampleCount: number }>({
+    queryKey: ["/api/admin/revenue-projection"],
+    refetchInterval: 60000,
+  });
 
   const pendingPayoutCount = pendingPayouts?.payouts?.length || 0;
   const pendingBtcCount = btcPayments?.filter((p: BtcPayment) => p.status === "pending").length || 0;
@@ -67,6 +71,12 @@ export default function AdminOverviewPage() {
           { icon: Users, label: "Total Users", value: String(adminStats?.totalUsers ?? "—"), color: "text-orange-400" },
           { icon: BarChart2, label: "Views This Month", value: Number(trafficData?.totals?.this_month_views || 0).toLocaleString(), color: "text-cyan-400" },
           { icon: Users, label: "Visitors This Month", value: Number(trafficData?.totals?.this_month_unique || 0).toLocaleString(), color: "text-teal-400" },
+          {
+            icon: TrendingUp,
+            label: `Projected Today${projection?.sampleCount ? ` (${projection.sampleCount}w avg)` : ""}`,
+            value: projection ? `$${Math.round(projection.projectedToday).toLocaleString()}` : "—",
+            color: "text-emerald-400",
+          },
         ].map(s => (
           <Card key={s.label} className="border-white/5 bg-white/[0.03]">
             <CardContent className="p-4 text-center">

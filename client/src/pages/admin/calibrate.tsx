@@ -114,6 +114,24 @@ export default function PricingCalibratePage() {
     queryKey: ["/api/admin/calibration/history"],
   });
 
+  const { data: demandSnapshot, refetch: refetchDemand } = useQuery<{
+    calibration: { mode: "shadow" | "soft" | "full"; crewPositioningMuted: boolean };
+    zones: Array<{ zoneCode: string; zoneName: string; score: number; counts: Record<string, number>; surge: { multiplier: number; theoreticalMultiplier: number; band: string; reason: string } }>;
+  }>({ queryKey: ["/api/admin/demand"], refetchInterval: 30000 });
+
+  const demandModeMutation = useMutation({
+    mutationFn: async (patch: { mode?: "shadow" | "soft" | "full"; crewPositioningMuted?: boolean }) => {
+      const res = await apiRequest("PUT", "/api/admin/demand/calibration", patch);
+      if (!res.ok) throw new Error("Failed to update");
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchDemand();
+      toast({ title: "Demand calibration updated" });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
   const [step, setStep] = useState(0);
   const [notes, setNotes] = useState("");
   const [applied, setApplied] = useState(false);
@@ -405,6 +423,72 @@ export default function PricingCalibratePage() {
             )}
           </div>
         )}
+
+        {/* Demand & surge calibration */}
+        <div className="mt-8 bg-slate-900/60 border border-slate-700/50 rounded-2xl p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Zap className="h-4 w-4 text-amber-400" />
+            <h3 className="text-white text-sm font-bold tracking-wide">Demand & Surge</h3>
+            {demandSnapshot && (
+              <Badge variant="outline" className={`ml-auto text-[10px] ${
+                demandSnapshot.calibration.mode === "full" ? "border-emerald-500/40 text-emerald-300" :
+                demandSnapshot.calibration.mode === "soft" ? "border-amber-500/40 text-amber-300" :
+                "border-slate-500/40 text-slate-300"
+              }`}>
+                Mode: {demandSnapshot.calibration.mode}
+              </Badge>
+            )}
+          </div>
+          <p className="text-slate-400 text-xs leading-relaxed mb-3">
+            Shadow = compute but don't apply (collect data). Soft = apply half the surge delta.
+            Full = apply full surge. New deployments default to shadow for the first 100 pipeline runs.
+          </p>
+          <div className="flex gap-2 mb-4">
+            {(["shadow", "soft", "full"] as const).map(m => (
+              <Button
+                key={m}
+                size="sm"
+                variant={demandSnapshot?.calibration.mode === m ? "default" : "outline"}
+                onClick={() => demandModeMutation.mutate({ mode: m })}
+                disabled={demandModeMutation.isPending}
+                className="flex-1 capitalize text-xs h-8"
+              >
+                {m}
+              </Button>
+            ))}
+          </div>
+          <div className="flex items-center justify-between text-xs text-slate-300 mb-3">
+            <span>Mute crew positioning cards</span>
+            <input
+              type="checkbox"
+              checked={demandSnapshot?.calibration.crewPositioningMuted ?? false}
+              onChange={e => demandModeMutation.mutate({ crewPositioningMuted: e.target.checked })}
+              className="h-4 w-4 accent-amber-500"
+            />
+          </div>
+          {demandSnapshot && (
+            <div className="space-y-1.5">
+              {demandSnapshot.zones.map(z => (
+                <div key={z.zoneCode} className="flex items-center gap-2 bg-slate-800/40 rounded-lg p-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-white truncate">{z.zoneName}</p>
+                    <p className="text-[10px] text-slate-500">
+                      q15m {z.counts.q15m ?? 0} · q60m {z.counts.q60m ?? 0} · active {z.counts.activeJobs ?? 0} · crew online {z.counts.onlineCrew ?? 0}
+                    </p>
+                  </div>
+                  <div className="flex-shrink-0 text-right">
+                    <p className={`text-sm font-black ${
+                      z.score > 0.7 ? "text-red-400" : z.score > 0.4 ? "text-amber-400" : "text-slate-300"
+                    }`}>{Math.round(z.score * 100)}%</p>
+                    <p className="text-[10px] text-slate-500">
+                      surge {z.surge.multiplier}×{demandSnapshot.calibration.mode !== "full" && ` (theo ${z.surge.theoreticalMultiplier}×)`}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Calibration History */}
         {history.length > 0 && (

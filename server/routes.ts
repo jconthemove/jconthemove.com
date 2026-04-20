@@ -11251,6 +11251,85 @@ Thank you for your business!
     }
   });
 
+  // Task #174 — Demand & surge snapshot (admin heatmap + diagnostics).
+  app.get("/api/admin/demand", isAuthenticated, requireBusinessOwner, async (_req, res) => {
+    try {
+      const { getDemandSnapshot } = await import("./demand");
+      const snapshot = await getDemandSnapshot();
+      res.json(snapshot);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Task #174 — Update calibration toggles (shadow/soft/full + mute).
+  app.put("/api/admin/demand/calibration", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const { setDemandCalibration } = await import("./demand");
+      const next = setDemandCalibration({
+        mode: req.body?.mode,
+        crewPositioningMuted: req.body?.crewPositioningMuted,
+      });
+      res.json(next);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Task #174 — Daily revenue projection = average of the trailing four
+  // same-weekday completed revenue totals. Cheap single SQL call, no
+  // need to cache.
+  app.get("/api/admin/revenue-projection", isAuthenticated, requireBusinessOwner, async (_req, res) => {
+    try {
+      const { rows } = await pool.query(`
+        SELECT
+          date_trunc('day', updated_at) AS day,
+          COALESCE(SUM(CAST(COALESCE(total_price, '0') AS DECIMAL)), 0) AS revenue
+        FROM leads
+        WHERE status = 'completed'
+          AND archived_at IS NULL
+          AND updated_at >= now() - interval '35 days'
+          AND extract(dow from updated_at) = extract(dow from now())
+        GROUP BY 1
+        ORDER BY 1 DESC
+        LIMIT 4
+      `);
+      const samples = rows.map(r => Number(r.revenue) || 0);
+      const projected = samples.length ? samples.reduce((a, b) => a + b, 0) / samples.length : 0;
+      res.json({
+        projectedToday: Math.round(projected * 100) / 100,
+        sampleCount: samples.length,
+        samples,
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Task #174 — Crew positioning suggestion. Served to on-duty crew
+  // from the Today screen's yellow card.
+  app.get("/api/crew/positioning", isAuthenticated, (req: any, res: any, next: any) => requireEmployee(req, res, next), async (req: any, res) => {
+    try {
+      const { suggestPosition, getDemandCalibration } = await import("./demand");
+      if (getDemandCalibration().crewPositioningMuted) {
+        return res.json({ muted: true });
+      }
+      let lat: number | null = null;
+      let lng: number | null = null;
+      try {
+        const { rows } = await pool.query(
+          "SELECT lat::float AS lat, lng::float AS lng FROM crew_locations WHERE user_id = $1",
+          [req.currentUser.id],
+        );
+        if (rows[0]) { lat = rows[0].lat; lng = rows[0].lng; }
+      } catch { /* ignore missing location */ }
+      const suggestion = await suggestPosition(lat, lng);
+      res.json(suggestion);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // Manual re-dispatch: start (or restart) the offer loop for a job.
   app.post("/api/admin/jobs/:id/dispatch", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
     try {
