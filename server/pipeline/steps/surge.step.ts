@@ -10,6 +10,7 @@ export async function surgeStep(ctx: PipelineContext): Promise<PipelineContext> 
 
   const base = ctx.quote?.finalTotal ?? 0;
   ctx.surgeMultiplier = surge.multiplier;
+  ctx.theoreticalSurgeMultiplier = surge.theoreticalMultiplier;
   ctx.surgeReason = `${surge.reason} [${surge.mode}${surge.mode !== "full" ? `, theo ${surge.theoreticalMultiplier}×` : ""}]`;
   ctx.surgedTotal = Math.round(base * surge.multiplier * 100) / 100;
   return ctx;

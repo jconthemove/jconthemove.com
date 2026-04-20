@@ -17,9 +17,11 @@ export async function demandStep(ctx: PipelineContext): Promise<PipelineContext>
   if (!demand || !zone) {
     ctx.demandScore = 0;
     ctx.demandReason = "no coordinates or outside service area";
+    ctx.demandZoneCode = undefined;
     return ctx;
   }
   ctx.demandScore = demand.score; // full 0..1.5 range preserved per spec
   ctx.demandReason = `${zone.name} · ${demand.reasons.join(", ") || "baseline"}`;
+  ctx.demandZoneCode = zone.code;
   return ctx;
 }

@@ -126,6 +126,22 @@ app.use((req, res, next) => {
       } catch (e) { console.error('payment columns init error:', e); }
     })();
 
+    // Task #185 — Self-healing demand columns on pipeline_runs so the
+    // 7-day demand & surge history chart on /admin/calibrate has the
+    // data it needs. Additive only; safe to run on every boot.
+    (async () => {
+      try {
+        const { pool: dbPool } = await import('./db');
+        await dbPool.query(`
+          ALTER TABLE pipeline_runs
+            ADD COLUMN IF NOT EXISTS demand_score      NUMERIC(5,3),
+            ADD COLUMN IF NOT EXISTS theoretical_surge NUMERIC(5,3),
+            ADD COLUMN IF NOT EXISTS zone_code         VARCHAR(64)
+        `);
+        console.log('✅ Task #185 demand history columns ready');
+      } catch (e) { console.error('demand history columns init error:', e); }
+    })();
+
     // Initialize server with comprehensive error handling
     console.log('Initializing application server...');
     server = await registerRoutes(app);

@@ -107,6 +107,10 @@ export async function runPipeline(input: PipelineInput): Promise<PipelineResult>
       status,
       totalAmount: ctx.surgedTotal != null ? String(ctx.surgedTotal) : (ctx.quote?.finalTotal != null ? String(ctx.quote.finalTotal) : null),
       surgeMultiplier: ctx.surgeMultiplier != null ? String(ctx.surgeMultiplier) : null,
+      // Task #185 — demand intelligence for the 7-day history chart.
+      demandScore: ctx.demandScore != null ? String(ctx.demandScore) : null,
+      theoreticalSurge: ctx.theoreticalSurgeMultiplier != null ? String(ctx.theoreticalSurgeMultiplier) : null,
+      zoneCode: ctx.demandZoneCode ?? null,
       crewSize: ctx.crew?.recommendedCrewSize ?? null,
       assignedCrewId: ctx.crew?.primaryCrewId ?? null,
       tokenEstimate: ctx.rewards?.tokenEstimate ?? null,

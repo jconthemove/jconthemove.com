@@ -52,9 +52,15 @@ export interface PipelineContext {
   // Filled by demand step — 0..1 (0 = quiet, 1 = red hot)
   demandScore?: number;
   demandReason?: string;
+  /** Task #185 — Zone the service address resolved into, persisted on
+   *  pipeline_runs so we can chart per-zone history. */
+  demandZoneCode?: string;
 
   // Filled by surge step
   surgeMultiplier?: number;
+  /** What the surge multiplier *would* have been at full calibration —
+   *  recorded even in shadow/soft mode. */
+  theoreticalSurgeMultiplier?: number;
   surgeReason?: string;
   surgedTotal?: number;
 

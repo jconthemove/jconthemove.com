@@ -8,8 +8,13 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import {
   ChevronRight, ChevronLeft, Check, DollarSign, Zap, Truck,
-  FlaskConical, History, RotateCcw, ArrowRight, MapPin, Plus, Trash2, Save
+  FlaskConical, History, RotateCcw, ArrowRight, MapPin, Plus, Trash2, Save,
+  TrendingUp
 } from "lucide-react";
+import {
+  ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip,
+  CartesianGrid, Legend, ReferenceLine,
+} from "recharts";
 
 interface CalibrationValues {
   rate_per_mover_hour: number;
@@ -533,6 +538,9 @@ export default function PricingCalibratePage() {
           )}
         </div>
 
+        {/* Demand history chart — Task #185 */}
+        <DemandHistoryPanel />
+
         {/* Custom Zones */}
         <CustomZonesPanel />
 
@@ -586,6 +594,258 @@ export default function PricingCalibratePage() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// Task #185 — 7-day demand & surge history chart.
+interface DemandHistoryPoint {
+  day: string;
+  zone_code: string | null;
+  runs: number;
+  avg_demand: number | null;
+  max_demand: number | null;
+  avg_surge: number | null;
+  max_surge: number | null;
+  avg_theoretical: number | null;
+  max_theoretical: number | null;
+  elevated_runs: number;
+}
+interface DemandHistoryResponse {
+  days: number;
+  zones: Array<{ code: string; name: string }>;
+  points: DemandHistoryPoint[];
+}
+
+const HISTORY_RANGES = [
+  { label: "7d", days: 7 },
+  { label: "14d", days: 14 },
+  { label: "30d", days: 30 },
+] as const;
+
+const ZONE_COLORS = [
+  "#34d399", "#60a5fa", "#fbbf24", "#f472b6",
+  "#a78bfa", "#fb7185", "#22d3ee", "#facc15",
+];
+
+function DemandHistoryPanel() {
+  const [days, setDays] = useState<number>(7);
+  const [metric, setMetric] = useState<"demand" | "surge" | "theoretical">("demand");
+  const [view, setView] = useState<"aggregate" | "perZone">("aggregate");
+
+  // The default fetcher does queryKey.join("/"), so we encode `days` as a
+  // query string in a single key segment to avoid producing /history/7.
+  const { data, isLoading } = useQuery<DemandHistoryResponse>({
+    queryKey: [`/api/admin/demand/history?days=${days}`],
+    refetchInterval: 60_000,
+  });
+
+  const points = data?.points ?? [];
+  const zones = data?.zones ?? [];
+
+  // Build the day axis (fill missing days so the chart isn't gappy).
+  const dayKeys: string[] = (() => {
+    const out: string[] = [];
+    const today = new Date();
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(today);
+      d.setUTCDate(d.getUTCDate() - i);
+      out.push(d.toISOString().slice(0, 10));
+    }
+    return out;
+  })();
+
+  const valueOf = (p: DemandHistoryPoint): number | null => {
+    if (metric === "demand") return p.avg_demand;
+    if (metric === "surge") return p.avg_surge;
+    return p.avg_theoretical;
+  };
+
+  // Aggregate: average across all zones per day, plus run count.
+  const aggregateRows = dayKeys.map(day => {
+    const todays = points.filter(p => p.day === day);
+    const runs = todays.reduce((s, p) => s + p.runs, 0);
+    const elevated = todays.reduce((s, p) => s + p.elevated_runs, 0);
+    let weighted = 0;
+    let weight = 0;
+    for (const p of todays) {
+      const v = valueOf(p);
+      if (v != null && p.runs > 0) {
+        weighted += v * p.runs;
+        weight += p.runs;
+      }
+    }
+    const value = weight > 0 ? weighted / weight : null;
+    return {
+      day: day.slice(5),
+      runs,
+      elevated,
+      value: value != null ? Number(value.toFixed(3)) : null,
+    };
+  });
+
+  // Per-zone rows: { day, runs, [zoneCode]: value, ... }
+  const activeZoneCodes = Array.from(new Set(points.filter(p => p.zone_code).map(p => p.zone_code!)));
+  const perZoneRows = dayKeys.map(day => {
+    const row: Record<string, any> = { day: day.slice(5) };
+    for (const zc of activeZoneCodes) {
+      const p = points.find(x => x.day === day && x.zone_code === zc);
+      const v = p ? valueOf(p) : null;
+      row[zc] = v != null ? Number(v.toFixed(3)) : null;
+    }
+    return row;
+  });
+
+  const totalRuns = points.reduce((s, p) => s + p.runs, 0);
+  const totalElevated = points.reduce((s, p) => s + p.elevated_runs, 0);
+  const peakSurge = points.reduce<number>((m, p) => Math.max(m, Number(p.max_surge ?? 0), Number(p.max_theoretical ?? 0)), 1);
+
+  const yDomain: [number, number | "auto"] = metric === "demand" ? [0, 1.5] : [0.8, "auto"];
+  const yLabel = metric === "demand" ? "Demand score" : metric === "surge" ? "Applied surge ×" : "Theoretical surge ×";
+
+  return (
+    <div className="mt-8 bg-slate-900/60 border border-slate-700/50 rounded-2xl p-5" data-testid="demand-history-panel">
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <TrendingUp className="h-4 w-4 text-cyan-400" />
+        <h3 className="text-white text-sm font-bold tracking-wide">Demand History</h3>
+        <Badge variant="outline" className="ml-auto text-[10px] border-cyan-500/40 text-cyan-300">
+          {totalRuns} runs · {totalElevated} elevated
+        </Badge>
+      </div>
+      <p className="text-slate-400 text-xs leading-relaxed mb-3">
+        Per-day pattern of demand scores and applied / theoretical surge. Use this to decide
+        when to promote calibration mode (shadow → soft → full).
+      </p>
+
+      {/* Controls */}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <div className="flex gap-1">
+          {HISTORY_RANGES.map(r => (
+            <Button
+              key={r.label}
+              size="sm"
+              variant={days === r.days ? "default" : "outline"}
+              className="text-xs h-7 px-2.5"
+              onClick={() => setDays(r.days)}
+              data-testid={`history-range-${r.label}`}
+            >{r.label}</Button>
+          ))}
+        </div>
+        <div className="flex gap-1 ml-1">
+          {(["demand", "surge", "theoretical"] as const).map(m => (
+            <Button
+              key={m}
+              size="sm"
+              variant={metric === m ? "default" : "outline"}
+              className="text-xs h-7 px-2.5 capitalize"
+              onClick={() => setMetric(m)}
+              data-testid={`history-metric-${m}`}
+            >{m}</Button>
+          ))}
+        </div>
+        <div className="flex gap-1 ml-auto">
+          <Button
+            size="sm"
+            variant={view === "aggregate" ? "default" : "outline"}
+            className="text-xs h-7 px-2.5"
+            onClick={() => setView("aggregate")}
+            data-testid="history-view-aggregate"
+          >Aggregate</Button>
+          <Button
+            size="sm"
+            variant={view === "perZone" ? "default" : "outline"}
+            className="text-xs h-7 px-2.5"
+            onClick={() => setView("perZone")}
+            data-testid="history-view-perzone"
+            disabled={activeZoneCodes.length === 0}
+          >Per zone</Button>
+        </div>
+      </div>
+
+      {/* Chart */}
+      <div className="h-56 bg-slate-950/40 border border-slate-700/40 rounded-lg p-2">
+        {isLoading ? (
+          <div className="h-full flex items-center justify-center text-slate-500 text-xs">Loading…</div>
+        ) : totalRuns === 0 ? (
+          <div className="h-full flex items-center justify-center text-slate-500 text-xs">
+            No pipeline runs in the last {days} days yet.
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart
+              data={view === "aggregate" ? aggregateRows : perZoneRows}
+              margin={{ top: 10, right: 12, left: 0, bottom: 4 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+              <XAxis dataKey="day" tick={{ fill: "#94a3b8", fontSize: 10 }} stroke="#475569" />
+              <YAxis
+                tick={{ fill: "#94a3b8", fontSize: 10 }}
+                stroke="#475569"
+                domain={yDomain as any}
+                width={40}
+              />
+              <Tooltip
+                contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, fontSize: 12 }}
+                labelStyle={{ color: "#cbd5e1" }}
+              />
+              {metric !== "demand" && (
+                <ReferenceLine y={1} stroke="#64748b" strokeDasharray="3 3" label={{ value: "1×", fill: "#64748b", fontSize: 10, position: "right" }} />
+              )}
+              {metric === "demand" && (
+                <ReferenceLine y={0.7} stroke="#f59e0b" strokeDasharray="3 3" label={{ value: "elevated", fill: "#f59e0b", fontSize: 10, position: "right" }} />
+              )}
+              {view === "aggregate" ? (
+                <Line
+                  type="monotone"
+                  dataKey="value"
+                  name={yLabel}
+                  stroke="#22d3ee"
+                  strokeWidth={2}
+                  dot={{ r: 3, fill: "#22d3ee" }}
+                  connectNulls
+                />
+              ) : (
+                <>
+                  <Legend wrapperStyle={{ fontSize: 10, color: "#94a3b8" }} />
+                  {activeZoneCodes.map((zc, i) => {
+                    const zone = zones.find(z => z.code === zc);
+                    return (
+                      <Line
+                        key={zc}
+                        type="monotone"
+                        dataKey={zc}
+                        name={zone?.name || zc}
+                        stroke={ZONE_COLORS[i % ZONE_COLORS.length]}
+                        strokeWidth={1.75}
+                        dot={{ r: 2.5 }}
+                        connectNulls
+                      />
+                    );
+                  })}
+                </>
+              )}
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      {/* Per-day mini summary (always-visible context for the chart) */}
+      {totalRuns > 0 && (
+        <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+          <div className="bg-slate-800/40 rounded-lg p-2">
+            <p className="text-[10px] text-slate-500 uppercase tracking-wide">Pipeline runs</p>
+            <p className="text-white font-mono font-bold text-sm">{totalRuns}</p>
+          </div>
+          <div className="bg-slate-800/40 rounded-lg p-2">
+            <p className="text-[10px] text-slate-500 uppercase tracking-wide">Elevated runs</p>
+            <p className="text-amber-300 font-mono font-bold text-sm">{totalElevated}</p>
+          </div>
+          <div className="bg-slate-800/40 rounded-lg p-2">
+            <p className="text-[10px] text-slate-500 uppercase tracking-wide">Peak surge</p>
+            <p className="text-cyan-300 font-mono font-bold text-sm">{peakSurge.toFixed(2)}×</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

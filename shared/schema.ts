@@ -2747,6 +2747,12 @@ export const pipelineRuns = pgTable("pipeline_runs", {
   status: text("status").notNull().default("ok"), // 'ok' | 'error' | 'partial'
   totalAmount: decimal("total_amount", { precision: 10, scale: 2 }),
   surgeMultiplier: decimal("surge_multiplier", { precision: 5, scale: 3 }),
+  // Task #185 — Persist demand intelligence so the calibrate page can
+  // chart 7-day patterns. theoreticalSurge captures what surge *would*
+  // have applied even when calibration mode is shadow/soft.
+  demandScore: decimal("demand_score", { precision: 5, scale: 3 }),
+  theoreticalSurge: decimal("theoretical_surge", { precision: 5, scale: 3 }),
+  zoneCode: varchar("zone_code", { length: 64 }),
   crewSize: integer("crew_size"),
   assignedCrewId: varchar("assigned_crew_id"),
   tokenEstimate: integer("token_estimate"),

@@ -11320,6 +11320,53 @@ Thank you for your business!
     }
   });
 
+  // Task #185 — 7-day demand & surge history (per-zone, per-day buckets).
+  // Backs the "Demand history" chart on /admin/calibrate.
+  app.get("/api/admin/demand/history", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const days = Math.min(30, Math.max(1, parseInt(String(req.query.days ?? "7"), 10) || 7));
+      const { rows } = await pool.query<{
+        day: string;
+        zone_code: string | null;
+        runs: number;
+        avg_demand: number | null;
+        max_demand: number | null;
+        avg_surge: number | null;
+        max_surge: number | null;
+        avg_theoretical: number | null;
+        max_theoretical: number | null;
+        elevated_runs: number;
+      }>(`
+        SELECT
+          to_char(date_trunc('day', created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,
+          zone_code,
+          COUNT(*)::int                                                AS runs,
+          AVG(demand_score)::float                                     AS avg_demand,
+          MAX(demand_score)::float                                     AS max_demand,
+          AVG(surge_multiplier)::float                                 AS avg_surge,
+          MAX(surge_multiplier)::float                                 AS max_surge,
+          AVG(theoretical_surge)::float                                AS avg_theoretical,
+          MAX(theoretical_surge)::float                                AS max_theoretical,
+          COUNT(*) FILTER (WHERE COALESCE(theoretical_surge, surge_multiplier, 1) > 1.0)::int AS elevated_runs
+        FROM pipeline_runs
+        WHERE created_at >= now() - ($1::int || ' days')::interval
+        GROUP BY 1, 2
+        ORDER BY 1 ASC, 2 ASC
+      `, [days]);
+
+      // Pull zone names so the UI can label series without a second roundtrip.
+      let zones: Array<{ code: string; name: string }> = [];
+      try {
+        const { listAllZones } = await import("./demand/zones");
+        zones = (await listAllZones()).map(z => ({ code: z.code, name: z.name }));
+      } catch { /* zones table may be unavailable in dev */ }
+
+      res.json({ days, zones, points: rows });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // Task #174 — Update calibration toggles (shadow/soft/full + mute).
   app.put("/api/admin/demand/calibration", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
     try {
