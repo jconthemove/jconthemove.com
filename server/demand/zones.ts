@@ -176,6 +176,32 @@ function validate(input: Partial<ZoneInput>, requireAll: boolean): string | null
   return null;
 }
 
+async function fetchZoneById(id: number): Promise<ZoneInfo | null> {
+  // Always reads directly from DB so admin operations on inactive
+  // zones still return the row (the active-only cache is for hot-path
+  // demand lookups, not admin reads).
+  const { rows } = await pool.query<{
+    id: number; code: string; name: string;
+    center_lat: string; center_lng: string; radius_mi: string;
+    active: boolean;
+  }>(
+    `SELECT id, code, name, center_lat, center_lng, radius_mi, active
+       FROM demand_zones WHERE id = $1`,
+    [id]
+  );
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    id: r.id,
+    code: r.code,
+    name: r.name,
+    centerLat: Number(r.center_lat),
+    centerLng: Number(r.center_lng),
+    radiusMi: Number(r.radius_mi),
+    active: r.active,
+  };
+}
+
 export async function createZone(input: ZoneInput): Promise<ZoneInfo> {
   await initDemandZones();
   const err = validate(input, true);
@@ -187,13 +213,16 @@ export async function createZone(input: ZoneInput): Promise<ZoneInfo> {
     [code, input.name.trim(), input.centerLat, input.centerLng, input.radiusMi, input.active ?? true]
   );
   await reloadZones();
-  return cache.find(z => z.id === rows[0].id) ?? { ...input, code, active: input.active ?? true };
+  const fresh = await fetchZoneById(rows[0].id);
+  return fresh ?? { ...input, code, active: input.active ?? true };
 }
 
 export async function updateZone(id: number, patch: Partial<ZoneInput>): Promise<ZoneInfo | null> {
   await initDemandZones();
   const err = validate(patch, false);
   if (err) throw new Error(err);
+  const existing = await fetchZoneById(id);
+  if (!existing) return null;
   const sets: string[] = [];
   const args: any[] = [];
   let i = 1;
@@ -203,11 +232,14 @@ export async function updateZone(id: number, patch: Partial<ZoneInput>): Promise
   if (patch.centerLng !== undefined) { sets.push(`center_lng = $${i++}`); args.push(Number(patch.centerLng)); }
   if (patch.radiusMi !== undefined) { sets.push(`radius_mi = $${i++}`); args.push(Number(patch.radiusMi)); }
   if (patch.active !== undefined) { sets.push(`active = $${i++}`); args.push(!!patch.active); }
-  if (!sets.length) return cache.find(z => z.id === id) ?? null;
-  args.push(id);
-  await pool.query(`UPDATE demand_zones SET ${sets.join(", ")} WHERE id = $${i}`, args);
-  await reloadZones();
-  return cache.find(z => z.id === id) ?? null;
+  if (sets.length) {
+    args.push(id);
+    await pool.query(`UPDATE demand_zones SET ${sets.join(", ")} WHERE id = $${i}`, args);
+    await reloadZones();
+  }
+  // Always return fresh from DB — works whether the zone is active or
+  // inactive after the update (e.g. admin just toggled it off).
+  return fetchZoneById(id);
 }
 
 export async function deleteZone(id: number): Promise<boolean> {
