@@ -162,6 +162,21 @@ router.post("/bookings/quote", async (req: Request, res: Response) => {
       flatBookingBonus: settings.flatBonus,
       earnRatePerDollar: settings.earnRate,
     });
+    // Task #170 — shadow mode. Fire-and-forget a parallel pipeline run
+    // and log the parity comparison. Never awaited — response latency is
+    // unchanged.
+    void (async () => {
+      try {
+        const { shadowCompareAndLog } = await import("../pipeline");
+        await shadowCompareAndLog(
+          { items: pricingInputs, source: "shadow", persist: false },
+          result.finalTotal,
+        );
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn("[bookings/quote] shadow run failed:", e instanceof Error ? e.message : e);
+      }
+    })();
     return res.json({ success: true, quote: result });
   } catch (err) {
     if (err instanceof ZodError) {

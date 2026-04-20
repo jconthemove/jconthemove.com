@@ -44,6 +44,7 @@ import lawnCareRouter from "./routes/lawnCare";
 import serviceRebookRouter from "./routes/serviceRebookReminders";
 import serviceRebookPublicRouter from "./routes/serviceRebookPublic";
 import bookingsRouter from "./routes/bookings";
+import pipelineRouter from "./routes/pipeline";
 import { ensureBookingCatalogSeeded } from "./services/bookingCatalogSeed";
 
 const STAKING_TREASURY_USER_ID = "staking-treasury-system";
@@ -21800,6 +21801,10 @@ Thank you for your business!
   // the upcoming /book page. Mounted at root so paths read /api/bookings,
   // /api/bookings/quote, /api/bundles/featured, /api/service-catalog.
   app.use("/api", bookingsRouter);
+  // Task #170 — unified orchestrator endpoint. Shadow mode is wired inside
+  // the legacy /api/bookings/quote handler so both paths run in parallel
+  // until parity is confirmed.
+  app.use("/api", pipelineRouter);
   ensureBookingCatalogSeeded().catch((e) =>
     console.error("[bootstrap] ensureBookingCatalogSeeded failed:", e),
   );

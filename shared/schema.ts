@@ -2688,3 +2688,29 @@ export const insertCalibrationSessionSchema = createInsertSchema(calibrationSess
   appliedAt: true,
 });
 export type InsertCalibrationSession = z.infer<typeof insertCalibrationSessionSchema>;
+
+// ── Pipeline orchestrator observability (Task #170) ──────────────────────
+// One row per /api/pipeline/run invocation (and per shadow-mode run from
+// /api/bookings/quote). Captures the input hash, each step's outcome, the
+// decided total/crew/eta, and the parity comparison against the legacy
+// /api/bookings/quote path while shadow mode is active.
+export const pipelineRuns = pgTable("pipeline_runs", {
+  id: serial("id").primaryKey(),
+  inputHash: varchar("input_hash", { length: 64 }).notNull(),
+  source: text("source").default("api"), // 'api' | 'shadow' | 'internal'
+  status: text("status").notNull().default("ok"), // 'ok' | 'error' | 'partial'
+  totalAmount: decimal("total_amount", { precision: 10, scale: 2 }),
+  surgeMultiplier: decimal("surge_multiplier", { precision: 5, scale: 3 }),
+  crewSize: integer("crew_size"),
+  assignedCrewId: varchar("assigned_crew_id"),
+  tokenEstimate: integer("token_estimate"),
+  steps: jsonb("steps").notNull().default("[]"), // [{ name, ok, ms, note }]
+  shadowCompare: jsonb("shadow_compare"), // { legacyTotal, pipelineTotal, match }
+  elapsedMs: integer("elapsed_ms"),
+  error: text("error"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_pipeline_runs_created").on(table.createdAt),
+  index("idx_pipeline_runs_input_hash").on(table.inputHash),
+]);
+export type PipelineRun = typeof pipelineRuns.$inferSelect;
