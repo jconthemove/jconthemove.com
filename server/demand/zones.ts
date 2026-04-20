@@ -22,9 +22,25 @@ export interface ZoneInfo {
   active?: boolean;
 }
 
-let cache: ZoneInfo[] = TERRITORIES.map(t => ({ ...t, active: true }));
+// Cache starts empty. Until initDemandZones() runs at boot, listZones()
+// returns the seeded TERRITORIES list lazily so callers (including the
+// dispatch territory check, which imports us via a static cycle) never
+// see undefined behavior. Once init loads from DB, that becomes the
+// authoritative source of truth.
+let cache: ZoneInfo[] = [];
 let initialized = false;
 let initPromise: Promise<void> | null = null;
+let seededFromTerritories = false;
+
+function ensureSeed() {
+  if (initialized) return;
+  if (seededFromTerritories) return;
+  // TERRITORIES may be temporarily undefined during the dispatch ↔
+  // demand circular import; guard against that.
+  if (!Array.isArray(TERRITORIES) || TERRITORIES.length === 0) return;
+  cache = TERRITORIES.map(t => ({ ...t, active: true }));
+  seededFromTerritories = true;
+}
 
 async function loadFromDb(): Promise<ZoneInfo[]> {
   const { rows } = await pool.query<{
@@ -96,9 +112,11 @@ export async function reloadZones(): Promise<ZoneInfo[]> {
   return listZones();
 }
 
-/** Sync read of the in-memory cache. Falls back to the seeded list
- *  before initDemandZones() finishes. */
+/** Sync read of the in-memory cache. Before initDemandZones() finishes
+ *  we lazily seed from the legacy TERRITORIES list so callers never get
+ *  an empty result during boot. After init the DB is the truth. */
 export function listZones(): ZoneInfo[] {
+  ensureSeed();
   return cache.map(z => ({ ...z }));
 }
 

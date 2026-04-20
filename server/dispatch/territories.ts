@@ -1,9 +1,10 @@
-// Task #172 — Static territory definitions for JC ON THE MOVE's Upper
-// Peninsula / Northwoods service area. Crews are matched to a job when
-// the job site falls inside *any* territory radius the crew can serve.
-// For now every approved worker can serve all three — the array is kept
-// so per-worker territory tags can be layered in later without changing
-// the engine.
+// Task #172 — Original static territory list for JC ON THE MOVE's Upper
+// Peninsula / Northwoods service area. As of Task #184 these values are
+// only used to seed the operator-editable `demand_zones` table on first
+// boot. Live containment checks read from server/demand/zones.ts so
+// that demand scoring and dispatch always agree.
+
+import { listZones } from "../demand/zones";
 
 export interface Territory {
   code: string;
@@ -20,18 +21,13 @@ export const TERRITORIES: Territory[] = [
 ];
 
 export function inAnyTerritory(lat: number, lng: number): boolean {
-  // Task #184 — delegate to the operator-editable zones table so demand
-  // and dispatch share one source of truth. We ONLY fall back to the
-  // seeded TERRITORIES list when the zones module itself failed to
-  // load — an empty active-zone set is a valid operational state
-  // (operator has deactivated all zones) and means "no service area".
-  try {
-    const zonesMod = require("../demand/zones") as typeof import("../demand/zones");
-    const zones = zonesMod.listZones();
-    return zones.some(z => haversine(lat, lng, z.centerLat, z.centerLng) <= z.radiusMi);
-  } catch {
-    return TERRITORIES.some(t => haversine(lat, lng, t.centerLat, t.centerLng) <= t.radiusMi);
-  }
+  // Task #184 — single source of truth: the operator-editable zones
+  // cache. An empty active-zone set is a valid operational state
+  // (operator has deactivated all zones) and means "no service area",
+  // matching the demand engine's behavior. We do not silently fall
+  // back to the seeded TERRITORIES list.
+  const zones = listZones();
+  return zones.some(z => haversine(lat, lng, z.centerLat, z.centerLng) <= z.radiusMi);
 }
 
 export function haversine(lat1: number, lng1: number, lat2: number, lng2: number): number {
