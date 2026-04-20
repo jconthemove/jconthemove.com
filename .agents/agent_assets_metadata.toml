@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "S_XhlbPcfH2WVV4b4_tZt"
+uri = "file://exports/jc-blueprint.pdf"
+type = "pdf"
+title = "JC ON THE MOVE - Current System Blueprint"

@@ -1,0 +1,487 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Count 3 /Kids [4 0 R 6 0 R 8 0 R] >>
+endobj
+3 0 obj
+<< /Length 10586 >>
+stream
+BT 0 0 0 rg /F2 18 Tf 54.00 732.00 Td (JC ON THE MOVE - Current System Blueprint) Tj ET
+q 0.6 0.6 0.6 RG 0.5 w 54 712 m 558 712 l S Q
+BT 0 0 0 rg /F3 10 Tf 54.00 704.00 Td (Snapshot of the application's customer, crew, and admin surfaces as of April 2026. Use this as a markup sheet: circle) Tj ET
+BT 0 0 0 rg /F3 10 Tf 54.00 691.00 Td (what to keep, cross out what to retire, and add notes for what is missing.) Tj ET
+BT 0 0 0 rg /F2 14 Tf 54.00 660.00 Td (A. Three Audiences, Three Apps \(one codebase\)) Tj ET
+q 0.93 0.93 0.95 rg 54 619 504 21 re f Q
+q 0.75 0.75 0.78 RG 0.4 w 54 619 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 164.88 619 m 164.88 640 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 275.76 619 m 275.76 640 l S Q
+BT 0 0 0 rg /F2 9 Tf 58.00 626.00 Td (Audience) Tj ET
+BT 0 0 0 rg /F2 9 Tf 168.88 626.00 Td (Bottom-tab home) Tj ET
+BT 0 0 0 rg /F2 9 Tf 279.76 626.00 Td (Where they do work) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 598 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 164.88 598 m 164.88 619 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 275.76 598 m 275.76 619 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 605.00 Td (Customer) Tj ET
+BT 0 0 0 rg /F1 9 Tf 168.88 605.00 Td (/ or /hub) Tj ET
+BT 0 0 0 rg /F1 9 Tf 279.76 605.00 Td (Booking, wallet, rewards, mining, jobs) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 577 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 164.88 577 m 164.88 598 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 275.76 577 m 275.76 598 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 584.00 Td (Crew / Worker) Tj ET
+BT 0 0 0 rg /F1 9 Tf 168.88 584.00 Td (/crew) Tj ET
+BT 0 0 0 rg /F1 9 Tf 279.76 584.00 Td (Today, Jobs, Schedule, Earnings) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 556 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 164.88 556 m 164.88 577 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 275.76 556 m 275.76 577 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 563.00 Td (Admin) Tj ET
+BT 0 0 0 rg /F1 9 Tf 168.88 563.00 Td (/admin) Tj ET
+BT 0 0 0 rg /F1 9 Tf 279.76 563.00 Td (Overview, Jobs, People, Finance, Pricing, etc.) Tj ET
+BT 0 0 0 rg /F2 14 Tf 54.00 540.00 Td (B. Customer Booking Surfaces \(where the inconsistency lives\)) Tj ET
+BT 0 0 0 rg /F1 10 Tf 54.00 520.00 Td (There are 8 different ways a customer can start a job. They overlap heavily.) Tj ET
+q 0.93 0.93 0.95 rg 54 480 504 21 re f Q
+q 0.75 0.75 0.78 RG 0.4 w 54 480 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 74.16 480 m 74.16 501 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 164.88 480 m 164.88 501 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 275.76 480 m 275.76 501 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 416.88 480 m 416.88 501 l S Q
+BT 0 0 0 rg /F2 9 Tf 58.00 487.00 Td (#) Tj ET
+BT 0 0 0 rg /F2 9 Tf 78.16 487.00 Td (Route) Tj ET
+BT 0 0 0 rg /F2 9 Tf 168.88 487.00 Td (What it is) Tj ET
+BT 0 0 0 rg /F2 9 Tf 279.76 487.00 Td (Services covered) Tj ET
+BT 0 0 0 rg /F2 9 Tf 420.88 487.00 Td (Flow style) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 459 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 74.16 459 m 74.16 480 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 164.88 459 m 164.88 480 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 275.76 459 m 275.76 480 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 416.88 459 m 416.88 480 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 466.00 Td (1) Tj ET
+BT 0 0 0 rg /F1 9 Tf 78.16 466.00 Td (/ Homepage) Tj ET
+BT 0 0 0 rg /F1 9 Tf 168.88 466.00 Td (Service tiles) Tj ET
+BT 0 0 0 rg /F1 9 Tf 279.76 466.00 Td (All 14) Tj ET
+BT 0 0 0 rg /F1 9 Tf 420.88 466.00 Td (Sends to /book?service=X) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 438 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 74.16 438 m 74.16 459 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 164.88 438 m 164.88 459 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 275.76 438 m 275.76 459 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 416.88 438 m 416.88 459 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 445.00 Td (2) Tj ET
+BT 0 0 0 rg /F1 9 Tf 78.16 445.00 Td (/hub) Tj ET
+BT 0 0 0 rg /F1 9 Tf 168.88 445.00 Td (Customer hub) Tj ET
+BT 0 0 0 rg /F1 9 Tf 279.76 445.00 Td (All 14) Tj ET
+BT 0 0 0 rg /F1 9 Tf 420.88 445.00 Td (Embeds the chatbot) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 417 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 74.16 417 m 74.16 438 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 164.88 417 m 164.88 438 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 275.76 417 m 275.76 438 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 416.88 417 m 416.88 438 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 424.00 Td (3) Tj ET
+BT 0 0 0 rg /F1 9 Tf 78.16 424.00 Td (/book) Tj ET
+BT 0 0 0 rg /F1 9 Tf 168.88 424.00 Td (Multi-service cart wizard) Tj ET
+BT 0 0 0 rg /F1 9 Tf 279.76 424.00 Td (All 14) Tj ET
+BT 0 0 0 rg /F1 9 Tf 420.88 424.00 Td (Step-by-step form) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 396 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 74.16 396 m 74.16 417 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 164.88 396 m 164.88 417 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 275.76 396 m 275.76 417 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 416.88 396 m 416.88 417 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 403.00 Td (4) Tj ET
+BT 0 0 0 rg /F1 9 Tf 78.16 403.00 Td (/book/chat) Tj ET
+BT 0 0 0 rg /F1 9 Tf 168.88 403.00 Td (Dedicated chatbot page) Tj ET
+BT 0 0 0 rg /F1 9 Tf 279.76 403.00 Td (All 14) Tj ET
+BT 0 0 0 rg /F1 9 Tf 420.88 403.00 Td (Conversational) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 375 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 74.16 375 m 74.16 396 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 164.88 375 m 164.88 396 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 275.76 375 m 275.76 396 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 416.88 375 m 416.88 396 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 382.00 Td (5) Tj ET
+BT 0 0 0 rg /F1 9 Tf 78.16 382.00 Td (/book/lawn-care) Tj ET
+BT 0 0 0 rg /F1 9 Tf 168.88 382.00 Td (Lawn-care 3-step wizard) Tj ET
+BT 0 0 0 rg /F1 9 Tf 279.76 382.00 Td (Lawn only) Tj ET
+BT 0 0 0 rg /F1 9 Tf 420.88 382.00 Td (Form) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 354 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 74.16 354 m 74.16 375 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 164.88 354 m 164.88 375 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 275.76 354 m 275.76 375 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 416.88 354 m 416.88 375 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 361.00 Td (6) Tj ET
+BT 0 0 0 rg /F1 9 Tf 78.16 361.00 Td (/post-job) Tj ET
+BT 0 0 0 rg /F1 9 Tf 168.88 361.00 Td (Post a Job, Step 1 of 3) Tj ET
+BT 0 0 0 rg /F1 9 Tf 279.76 361.00 Td (Only 10 of 14) Tj ET
+BT 0 0 0 rg /F1 9 Tf 420.88 361.00 Td (Form + packages) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 333 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 74.16 333 m 74.16 354 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 164.88 333 m 164.88 354 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 275.76 333 m 275.76 354 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 416.88 333 m 416.88 354 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 340.00 Td (7) Tj ET
+BT 0 0 0 rg /F1 9 Tf 78.16 340.00 Td (/packages) Tj ET
+BT 0 0 0 rg /F1 9 Tf 168.88 340.00 Td (JC222 / JC272 picker) Tj ET
+BT 0 0 0 rg /F1 9 Tf 279.76 340.00 Td (Moving + Junk) Tj ET
+BT 0 0 0 rg /F1 9 Tf 420.88 340.00 Td (Package list) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 301 504 32 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 74.16 301 m 74.16 333 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 164.88 301 m 164.88 333 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 275.76 301 m 275.76 333 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 416.88 301 m 416.88 333 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 319.00 Td (8) Tj ET
+BT 0 0 0 rg /F1 9 Tf 78.16 319.00 Td (Service landing) Tj ET
+BT 0 0 0 rg /F1 9 Tf 78.16 308.00 Td (pages) Tj ET
+BT 0 0 0 rg /F1 9 Tf 168.88 319.00 Td (One page per service) Tj ET
+BT 0 0 0 rg /F1 9 Tf 279.76 319.00 Td (Lawn, Window, Cleaning, Roofing,) Tj ET
+BT 0 0 0 rg /F1 9 Tf 279.76 308.00 Td (Demo, Snow, Trash Valet) Tj ET
+BT 0 0 0 rg /F1 9 Tf 420.88 319.00 Td (Each one different) Tj ET
+BT 0 0 0 rg /F2 10 Tf 54.00 293.00 Td (Problems this creates:) Tj ET
+BT 0 0 0 rg /F1 10 Tf 68.00 276.00 Td (- Click 'Moving' on / can land you in /book, /book/chat, /packages, OR /post-job depending on entry.) Tj ET
+BT 0 0 0 rg /F1 10 Tf 68.00 259.00 Td (- Worker 'Add a Job' buttons send them into the customer /post-job flow that is missing 4 services.) Tj ET
+BT 0 0 0 rg /F1 10 Tf 68.00 242.00 Td (- The chatbot exists and works, but is bypassed entirely on /post-job and /packages.) Tj ET
+BT 0 0 0 rg /F1 10 Tf 68.00 225.00 Td (- Each service landing page hands off to a different next-step \(sometimes chatbot, sometimes its own form\).) Tj ET
+BT 0 0 0 rg /F1 10 Tf 68.00 208.00 Td (- Your handwritten 'Click a service -> asked to click a service AGAIN' complaint = the /post-job Step 1 -> Step 2) Tj ET
+BT 0 0 0 rg /F1 10 Tf 68.00 195.00 Td (service pivot.) Tj ET
+BT 0 0 0 rg /F2 14 Tf 54.00 166.00 Td (C. The 14 Services & Which Flow Owns Them Today) Tj ET
+q 0.93 0.93 0.95 rg 54 125 504 21 re f Q
+q 0.75 0.75 0.78 RG 0.4 w 54 125 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 134.64 125 m 134.64 146 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 200.15999999999997 125 m 200.15999999999997 146 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 290.88 125 m 290.88 146 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 391.68 125 m 391.68 146 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 477.36 125 m 477.36 146 l S Q
+BT 0 0 0 rg /F2 9 Tf 58.00 132.00 Td (Service) Tj ET
+BT 0 0 0 rg /F2 9 Tf 138.64 132.00 Td (Key) Tj ET
+BT 0 0 0 rg /F2 9 Tf 204.16 132.00 Td (Today's flow) Tj ET
+BT 0 0 0 rg /F2 9 Tf 294.88 132.00 Td (Pkg pricing?) Tj ET
+BT 0 0 0 rg /F2 9 Tf 395.68 132.00 Td (Chatbot?) Tj ET
+BT 0 0 0 rg /F2 9 Tf 481.36 132.00 Td (Landing page?) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 93 504 32 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 134.64 93 m 134.64 125 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 200.15999999999997 93 m 200.15999999999997 125 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 290.88 93 m 290.88 125 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 391.68 93 m 391.68 125 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 477.36 93 m 477.36 125 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 111.00 Td (Moving) Tj ET
+BT 0 0 0 rg /F1 9 Tf 138.64 111.00 Td (residential) Tj ET
+BT 0 0 0 rg /F1 9 Tf 204.16 111.00 Td (Packages on) Tj ET
+BT 0 0 0 rg /F1 9 Tf 204.16 100.00 Td (/post-job) Tj ET
+BT 0 0 0 rg /F1 9 Tf 294.88 111.00 Td (Yes - JC222, JC272,) Tj ET
+BT 0 0 0 rg /F1 9 Tf 294.88 100.00 Td (Heavy Item) Tj ET
+BT 0 0 0 rg /F1 9 Tf 395.68 111.00 Td (Yes - full intake) Tj ET
+BT 0 0 0 rg /F1 9 Tf 481.36 111.00 Td (-) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 61 504 32 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 134.64 61 m 134.64 93 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 200.15999999999997 61 m 200.15999999999997 93 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 290.88 61 m 290.88 93 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 391.68 61 m 391.68 93 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 477.36 61 m 477.36 93 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 79.00 Td (Junk Removal) Tj ET
+BT 0 0 0 rg /F1 9 Tf 138.64 79.00 Td (junk) Tj ET
+BT 0 0 0 rg /F1 9 Tf 204.16 79.00 Td (Packages on) Tj ET
+BT 0 0 0 rg /F1 9 Tf 204.16 68.00 Td (/post-job) Tj ET
+BT 0 0 0 rg /F1 9 Tf 294.88 79.00 Td (Yes - Tier 1-4) Tj ET
+BT 0 0 0 rg /F1 9 Tf 395.68 79.00 Td (Yes - full intake) Tj ET
+BT 0 0 0 rg /F1 9 Tf 481.36 79.00 Td (-) Tj ET
+endstream
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 9 0 R /F2 10 0 R /F3 11 0 R >> >> /Contents 3 0 R >>
+endobj
+5 0 obj
+<< /Length 12633 >>
+stream
+q 0.75 0.75 0.78 RG 0.4 w 54 706 504 32 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 134.64 706 m 134.64 738 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 200.15999999999997 706 m 200.15999999999997 738 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 290.88 706 m 290.88 738 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 391.68 706 m 391.68 738 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 477.36 706 m 477.36 738 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 724.00 Td (Snow Removal) Tj ET
+BT 0 0 0 rg /F1 9 Tf 138.64 724.00 Td (snow) Tj ET
+BT 0 0 0 rg /F1 9 Tf 204.16 724.00 Td (Form) Tj ET
+BT 0 0 0 rg /F1 9 Tf 294.88 724.00 Td (Yes - $50/visit,) Tj ET
+BT 0 0 0 rg /F1 9 Tf 294.88 713.00 Td ($2,500/yr) Tj ET
+BT 0 0 0 rg /F1 9 Tf 395.68 724.00 Td (Yes - quote-only) Tj ET
+BT 0 0 0 rg /F1 9 Tf 481.36 724.00 Td (/snow-removal) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 685 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 134.64 685 m 134.64 706 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 200.15999999999997 685 m 200.15999999999997 706 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 290.88 685 m 290.88 706 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 391.68 685 m 391.68 706 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 477.36 685 m 477.36 706 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 692.00 Td (Handyman) Tj ET
+BT 0 0 0 rg /F1 9 Tf 138.64 692.00 Td (handyman) Tj ET
+BT 0 0 0 rg /F1 9 Tf 204.16 692.00 Td (Form) Tj ET
+BT 0 0 0 rg /F1 9 Tf 294.88 692.00 Td (From $150) Tj ET
+BT 0 0 0 rg /F1 9 Tf 395.68 692.00 Td (Yes - quote-only) Tj ET
+BT 0 0 0 rg /F1 9 Tf 481.36 692.00 Td (-) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 664 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 134.64 664 m 134.64 685 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 200.15999999999997 664 m 200.15999999999997 685 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 290.88 664 m 290.88 685 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 391.68 664 m 391.68 685 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 477.36 664 m 477.36 685 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 671.00 Td (Flooring) Tj ET
+BT 0 0 0 rg /F1 9 Tf 138.64 671.00 Td (flooring) Tj ET
+BT 0 0 0 rg /F1 9 Tf 204.16 671.00 Td (Form) Tj ET
+BT 0 0 0 rg /F1 9 Tf 294.88 671.00 Td (-) Tj ET
+BT 0 0 0 rg /F1 9 Tf 395.68 671.00 Td (Yes - quote-only) Tj ET
+BT 0 0 0 rg /F1 9 Tf 481.36 671.00 Td (-) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 643 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 134.64 643 m 134.64 664 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 200.15999999999997 643 m 200.15999999999997 664 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 290.88 643 m 290.88 664 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 391.68 643 m 391.68 664 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 477.36 643 m 477.36 664 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 650.00 Td (Painting) Tj ET
+BT 0 0 0 rg /F1 9 Tf 138.64 650.00 Td (painting) Tj ET
+BT 0 0 0 rg /F1 9 Tf 204.16 650.00 Td (Form) Tj ET
+BT 0 0 0 rg /F1 9 Tf 294.88 650.00 Td (-) Tj ET
+BT 0 0 0 rg /F1 9 Tf 395.68 650.00 Td (Yes - quote-only) Tj ET
+BT 0 0 0 rg /F1 9 Tf 481.36 650.00 Td (-) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 622 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 134.64 622 m 134.64 643 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 200.15999999999997 622 m 200.15999999999997 643 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 290.88 622 m 290.88 643 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 391.68 622 m 391.68 643 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 477.36 622 m 477.36 643 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 629.00 Td (Lawn Care) Tj ET
+BT 0 0 0 rg /F1 9 Tf 138.64 629.00 Td (lawn_care) Tj ET
+BT 0 0 0 rg /F1 9 Tf 204.16 629.00 Td (Dedicated wizard) Tj ET
+BT 0 0 0 rg /F1 9 Tf 294.88 629.00 Td (From $50) Tj ET
+BT 0 0 0 rg /F1 9 Tf 395.68 629.00 Td (Yes - quote-only) Tj ET
+BT 0 0 0 rg /F1 9 Tf 481.36 629.00 Td (/lawn-care) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 590 504 32 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 134.64 590 m 134.64 622 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 200.15999999999997 590 m 200.15999999999997 622 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 290.88 590 m 290.88 622 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 391.68 590 m 391.68 622 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 477.36 590 m 477.36 622 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 608.00 Td (Window Cleaning) Tj ET
+BT 0 0 0 rg /F1 9 Tf 138.64 608.00 Td (window_cleani) Tj ET
+BT 0 0 0 rg /F1 9 Tf 138.64 597.00 Td (ng) Tj ET
+BT 0 0 0 rg /F1 9 Tf 204.16 608.00 Td (Landing -> chatbot) Tj ET
+BT 0 0 0 rg /F1 9 Tf 294.88 608.00 Td ($5/pane, $20 min) Tj ET
+BT 0 0 0 rg /F1 9 Tf 395.68 608.00 Td (Yes - full intake) Tj ET
+BT 0 0 0 rg /F1 9 Tf 481.36 608.00 Td (/window-cleaning) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 569 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 134.64 569 m 134.64 590 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 200.15999999999997 569 m 200.15999999999997 590 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 290.88 569 m 290.88 590 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 391.68 569 m 391.68 590 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 477.36 569 m 477.36 590 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 576.00 Td (Trash Valet) Tj ET
+BT 0 0 0 rg /F1 9 Tf 138.64 576.00 Td (trash_valet) Tj ET
+BT 0 0 0 rg /F1 9 Tf 204.16 576.00 Td (Dedicated wizard) Tj ET
+BT 0 0 0 rg /F1 9 Tf 294.88 576.00 Td ($30/mo, $6 first can) Tj ET
+BT 0 0 0 rg /F1 9 Tf 395.68 576.00 Td (Yes - full intake) Tj ET
+BT 0 0 0 rg /F1 9 Tf 481.36 576.00 Td (/trash-valet) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 537 504 32 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 134.64 537 m 134.64 569 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 200.15999999999997 537 m 200.15999999999997 569 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 290.88 537 m 290.88 569 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 391.68 537 m 391.68 569 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 477.36 537 m 477.36 569 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 555.00 Td (Move Cleaning) Tj ET
+BT 0 0 0 rg /F1 9 Tf 138.64 555.00 Td (cleaning) Tj ET
+BT 0 0 0 rg /F1 9 Tf 204.16 555.00 Td (MISSING on) Tj ET
+BT 0 0 0 rg /F1 9 Tf 204.16 544.00 Td (/post-job) Tj ET
+BT 0 0 0 rg /F1 9 Tf 294.88 555.00 Td ($300+, deep $500+) Tj ET
+BT 0 0 0 rg /F1 9 Tf 395.68 555.00 Td (Yes - quote-only) Tj ET
+BT 0 0 0 rg /F1 9 Tf 481.36 555.00 Td (/cleaning) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 505 504 32 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 134.64 505 m 134.64 537 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 200.15999999999997 505 m 200.15999999999997 537 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 290.88 505 m 290.88 537 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 391.68 505 m 391.68 537 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 477.36 505 m 477.36 537 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 523.00 Td (Demolition) Tj ET
+BT 0 0 0 rg /F1 9 Tf 138.64 523.00 Td (demolition) Tj ET
+BT 0 0 0 rg /F1 9 Tf 204.16 523.00 Td (MISSING on) Tj ET
+BT 0 0 0 rg /F1 9 Tf 204.16 512.00 Td (/post-job) Tj ET
+BT 0 0 0 rg /F1 9 Tf 294.88 523.00 Td (-) Tj ET
+BT 0 0 0 rg /F1 9 Tf 395.68 523.00 Td (Yes - quote-only) Tj ET
+BT 0 0 0 rg /F1 9 Tf 481.36 523.00 Td (/demolition) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 473 504 32 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 134.64 473 m 134.64 505 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 200.15999999999997 473 m 200.15999999999997 505 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 290.88 473 m 290.88 505 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 391.68 473 m 391.68 505 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 477.36 473 m 477.36 505 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 491.00 Td (Roofing) Tj ET
+BT 0 0 0 rg /F1 9 Tf 138.64 491.00 Td (roofing) Tj ET
+BT 0 0 0 rg /F1 9 Tf 204.16 491.00 Td (MISSING on) Tj ET
+BT 0 0 0 rg /F1 9 Tf 204.16 480.00 Td (/post-job) Tj ET
+BT 0 0 0 rg /F1 9 Tf 294.88 491.00 Td (-) Tj ET
+BT 0 0 0 rg /F1 9 Tf 395.68 491.00 Td (Yes - quote-only) Tj ET
+BT 0 0 0 rg /F1 9 Tf 481.36 491.00 Td (/roofing) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 441 504 32 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 134.64 441 m 134.64 473 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 200.15999999999997 441 m 200.15999999999997 473 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 290.88 441 m 290.88 473 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 391.68 441 m 391.68 473 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 477.36 441 m 477.36 473 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 459.00 Td (Labor Only) Tj ET
+BT 0 0 0 rg /F1 9 Tf 138.64 459.00 Td (labor) Tj ET
+BT 0 0 0 rg /F1 9 Tf 204.16 459.00 Td (MISSING on) Tj ET
+BT 0 0 0 rg /F1 9 Tf 204.16 448.00 Td (/post-job) Tj ET
+BT 0 0 0 rg /F1 9 Tf 294.88 459.00 Td ($75/hr, 2hr min) Tj ET
+BT 0 0 0 rg /F1 9 Tf 395.68 459.00 Td (-) Tj ET
+BT 0 0 0 rg /F1 9 Tf 481.36 459.00 Td (-) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 420 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 134.64 420 m 134.64 441 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 200.15999999999997 420 m 200.15999999999997 441 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 290.88 420 m 290.88 441 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 391.68 420 m 391.68 441 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 477.36 420 m 477.36 441 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 427.00 Td (Something Else) Tj ET
+BT 0 0 0 rg /F1 9 Tf 138.64 427.00 Td (custom) Tj ET
+BT 0 0 0 rg /F1 9 Tf 204.16 427.00 Td (Form) Tj ET
+BT 0 0 0 rg /F1 9 Tf 294.88 427.00 Td (-) Tj ET
+BT 0 0 0 rg /F1 9 Tf 395.68 427.00 Td (Yes - quote-only) Tj ET
+BT 0 0 0 rg /F1 9 Tf 481.36 427.00 Td (-) Tj ET
+BT 0 0 0 rg /F2 14 Tf 54.00 404.00 Td (D. Pricing - Where It Lives) Tj ET
+q 0.93 0.93 0.95 rg 54 363 504 21 re f Q
+q 0.75 0.75 0.78 RG 0.4 w 54 363 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 235.44 363 m 235.44 384 l S Q
+BT 0 0 0 rg /F2 9 Tf 58.00 370.00 Td (Where) Tj ET
+BT 0 0 0 rg /F2 9 Tf 239.44 370.00 Td (What's there) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 342 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 235.44 342 m 235.44 363 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 349.00 Td (client/src/pages/pricing.tsx) Tj ET
+BT 0 0 0 rg /F1 9 Tf 239.44 349.00 Td (Customer-facing rate sheet \(Junk tiers, Lawn, Windows, Trash Valet, etc.\)) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 321 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 235.44 321 m 235.44 342 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 328.00 Td (client/src/pages/service-packages.tsx) Tj ET
+BT 0 0 0 rg /F1 9 Tf 239.44 328.00 Td (JC222 / JC272 / Heavy Item / Oversized / 2 Movers x N hrs grid) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 300 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 235.44 300 m 235.44 321 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 307.00 Td (attached_assets/pricing_*.ts) Tj ET
+BT 0 0 0 rg /F1 9 Tf 239.44 307.00 Td (Labor $75/hr, Truck $300/$600 - referenced in places) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 279 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 235.44 279 m 235.44 300 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 286.00 Td (client/src/pages/post-job.tsx) Tj ET
+BT 0 0 0 rg /F1 9 Tf 239.44 286.00 Td (PACKAGE_SERVICES hardcoded list \(Moving + Junk only get packages here\)) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 258 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 235.44 258 m 235.44 279 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 265.00 Td (booking-chatbot.tsx) Tj ET
+BT 0 0 0 rg /F1 9 Tf 239.44 265.00 Td (Inline pricing logic for the 5 instant-quote services) Tj ET
+BT 0 0 0 rg /F3 10 Tf 54.00 250.00 Td (There is no single source of truth for pricing. Your handwritten notes \(the moving matrix by bedroom x stairs x load) Tj ET
+BT 0 0 0 rg /F3 10 Tf 54.00 237.00 Td (type, junk tiers Tiny -> X-Large -> Custom, snow $50 / $2,500/yr / $3,800 w-rod, windows by pane size\) do not live) Tj ET
+BT 0 0 0 rg /F3 10 Tf 54.00 224.00 Td (anywhere in code yet.) Tj ET
+BT 0 0 0 rg /F2 14 Tf 54.00 199.00 Td (E. Worker Side - How a Crew Member Books or Adds Work) Tj ET
+q 0.93 0.93 0.95 rg 54 158 504 21 re f Q
+q 0.75 0.75 0.78 RG 0.4 w 54 158 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 164.88 158 m 164.88 179 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 275.76 158 m 275.76 179 l S Q
+BT 0 0 0 rg /F2 9 Tf 58.00 165.00 Td (Where) Tj ET
+BT 0 0 0 rg /F2 9 Tf 168.88 165.00 Td (Button) Tj ET
+BT 0 0 0 rg /F2 9 Tf 279.76 165.00 Td (Goes to) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 137 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 164.88 137 m 164.88 158 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 275.76 137 m 275.76 158 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 144.00 Td (/crew \(Today\)) Tj ET
+BT 0 0 0 rg /F1 9 Tf 168.88 144.00 Td (Claim daily reward) Tj ET
+BT 0 0 0 rg /F1 9 Tf 279.76 144.00 Td (/mining \(was broken, now fixed\)) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 116 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 164.88 116 m 164.88 137 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 275.76 116 m 275.76 137 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 123.00 Td (/crew/jobs) Tj ET
+BT 0 0 0 rg /F1 9 Tf 168.88 123.00 Td (Add Lead) Tj ET
+BT 0 0 0 rg /F1 9 Tf 279.76 123.00 Td (/post-job \(customer flow, missing 4 services\)) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 95 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 164.88 95 m 164.88 116 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 275.76 95 m 275.76 116 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 102.00 Td (/employee-home) Tj ET
+BT 0 0 0 rg /F1 9 Tf 168.88 102.00 Td (Add a Job) Tj ET
+BT 0 0 0 rg /F1 9 Tf 279.76 102.00 Td (/post-job \(wrong\)) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 74 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 164.88 74 m 164.88 95 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 275.76 74 m 275.76 95 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 81.00 Td (/employee-dashboard) Tj ET
+BT 0 0 0 rg /F1 9 Tf 168.88 81.00 Td (Add a Job) Tj ET
+BT 0 0 0 rg /F1 9 Tf 279.76 81.00 Td (/post-job \(wrong\)) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 9 0 R /F2 10 0 R /F3 11 0 R >> >> /Contents 5 0 R >>
+endobj
+7 0 obj
+<< /Length 4113 >>
+stream
+q 0.75 0.75 0.78 RG 0.4 w 54 717 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 164.88 717 m 164.88 738 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 275.76 717 m 275.76 738 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 724.00 Td (/hub) Tj ET
+BT 0 0 0 rg /F1 9 Tf 168.88 724.00 Td (Add a Job) Tj ET
+BT 0 0 0 rg /F1 9 Tf 279.76 724.00 Td (/post-job \(wrong\)) Tj ET
+q 0.75 0.75 0.78 RG 0.4 w 54 696 504 21 re S Q
+q 0.85 0.85 0.88 RG 0.4 w 164.88 696 m 164.88 717 l S Q
+q 0.85 0.85 0.88 RG 0.4 w 275.76 696 m 275.76 717 l S Q
+BT 0 0 0 rg /F1 9 Tf 58.00 703.00 Td (/employee/add-job) Tj ET
+BT 0 0 0 rg /F1 9 Tf 168.88 703.00 Td (\(no button points here\)) Tj ET
+BT 0 0 0 rg /F1 9 Tf 279.76 703.00 Td (Dedicated worker job-entry flow - exists but ORPHANED) Tj ET
+BT 0 0 0 rg /F2 14 Tf 54.00 680.00 Td (F. The 'Uniform Autonomous System' Gap) Tj ET
+BT 0 0 0 rg /F1 10 Tf 54.00 660.00 Td (Your concern about 'multiple inconsistent landing pages trying to separately do the work of a system that I want to) Tj ET
+BT 0 0 0 rg /F1 10 Tf 54.00 647.00 Td (uniformly and autonomously run' translates to these concrete gaps:) Tj ET
+BT 0 0 0 rg /F1 10 Tf 68.00 628.00 Td (- No single quoting brain. Pricing rules live in 5+ files. Chatbot, packages page, pricing page, and your) Tj ET
+BT 0 0 0 rg /F1 10 Tf 68.00 615.00 Td (handwritten matrix are all separate.) Tj ET
+BT 0 0 0 rg /F1 10 Tf 68.00 598.00 Td (- No single entry point. /, /hub, /book, /book/chat, /post-job, /packages, and 7 service landing pages all do) Tj ET
+BT 0 0 0 rg /F1 10 Tf 68.00 585.00 Td (overlapping work.) Tj ET
+BT 0 0 0 rg /F1 10 Tf 68.00 568.00 Td (- Worker tools borrow the customer flow. /post-job is used by both audiences but is incomplete for both.) Tj ET
+BT 0 0 0 rg /F1 10 Tf 68.00 551.00 Td (- The chatbot you already built is underused. It is wired to /book/chat, /hub, and 4 of 14 service landing pages -) Tj ET
+BT 0 0 0 rg /F1 10 Tf 68.00 538.00 Td (but Moving and Junk \(highest volume\) bypass it.) Tj ET
+BT 0 0 0 rg /F1 10 Tf 68.00 521.00 Td (- Pricing display is not the pricing engine. /pricing shows numbers, but those numbers are not what gets used to) Tj ET
+BT 0 0 0 rg /F1 10 Tf 68.00 508.00 Td (actually quote a job.) Tj ET
+BT 0 0 0 rg /F2 14 Tf 54.00 483.00 Td (G. Decisions I Need From You) Tj ET
+BT 0 0 0 rg /F1 10 Tf 54.00 463.00 Td (Mark these up and send them back. I will turn your edits into a concrete task list.) Tj ET
+BT 0 0 0 rg /F2 10 Tf 54.00 444.00 Td (1. One booking front door, or many?) Tj ET
+BT 0 0 0 rg /F1 10 Tf 68.00 429.00 Td (Should every 'Get a quote' button anywhere in the app land on the same flow \(likely the chatbot\), or should some) Tj ET
+BT 0 0 0 rg /F1 10 Tf 68.00 416.00 Td (services keep their dedicated landing pages?) Tj ET
+BT 0 0 0 rg /F2 10 Tf 54.00 397.00 Td (2. Packages or dynamic quoting for Moving / Junk?) Tj ET
+BT 0 0 0 rg /F1 10 Tf 68.00 382.00 Td (Keep JC222 / JC272 as the customer experience, replace with the weight-tier engine from your ChatGPT notes,) Tj ET
+BT 0 0 0 rg /F1 10 Tf 68.00 369.00 Td (or offer both?) Tj ET
+BT 0 0 0 rg /F2 10 Tf 54.00 350.00 Td (3. One pricing source of truth?) Tj ET
+BT 0 0 0 rg /F1 10 Tf 68.00 335.00 Td (Should pricing \(your handwritten matrix included\) be consolidated into a single module that the chatbot,) Tj ET
+BT 0 0 0 rg /F1 10 Tf 68.00 322.00 Td (packages, /pricing, and admin override panel all read from?) Tj ET
+BT 0 0 0 rg /F2 10 Tf 54.00 303.00 Td (4. Worker job-entry split.) Tj ET
+BT 0 0 0 rg /F1 10 Tf 68.00 288.00 Td (Should the orphaned /employee/add-job become the worker default, or do we delete it and just fix /post-job to) Tj ET
+BT 0 0 0 rg /F1 10 Tf 68.00 275.00 Td (serve both audiences?) Tj ET
+BT 0 0 0 rg /F2 10 Tf 54.00 256.00 Td (5. Service catalog completeness.) Tj ET
+BT 0 0 0 rg /F1 10 Tf 68.00 241.00 Td (Are all 14 services in services.ts actually services you offer - or should some get retired so the catalog matches) Tj ET
+BT 0 0 0 rg /F1 10 Tf 68.00 228.00 Td (reality?) Tj ET
+q 0.85 0.85 0.85 RG 0.4 w 54 195 m 558 195 l S Q
+BT 0.4 0.4 0.4 rg /F3 9 Tf 54.00 187.00 Td (Generated by Replit Agent for Darrell @ JC ON THE MOVE LLC.) Tj ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 9 0 R /F2 10 0 R /F3 11 0 R >> >> /Contents 7 0 R >>
+endobj
+9 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+10 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+11 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique /Encoding /WinAnsiEncoding >>
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000133 00000 n 
+0000010772 00000 n 
+0000010920 00000 n 
+0000023606 00000 n 
+0000023754 00000 n 
+0000027919 00000 n 
+0000028067 00000 n 
+0000028164 00000 n 
+0000028267 00000 n 
+trailer
+<< /Size 12 /Root 1 0 R >>
+startxref
+28373
+%%EOF
