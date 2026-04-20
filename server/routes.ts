@@ -16729,9 +16729,20 @@ Thank you for your business!
       // leaking PII to anyone holding the URL, redact customer contact
       // fields unless the requester is the payment owner.
       const requesterId = req.session?.userId || req.user?.id || null;
-      const isOwner = requesterId && payment.userId && requesterId === payment.userId;
+      let isOwner = !!(requesterId && payment.userId && requesterId === payment.userId);
+      if (!isOwner && requesterId) {
+        try {
+          const requester = await storage.getUser(requesterId);
+          if (requester && requester.role === "admin") {
+            isOwner = true;
+          }
+        } catch { /* non-fatal */ }
+      }
+      // Task #162 — also redact userId for non-owners so link-holders
+      // cannot correlate the payment to a specific customer account.
       const safe = isOwner ? payment : {
         ...payment,
+        userId: null,
         customerName: "",
         customerEmail: "",
         customerPhone: null,
