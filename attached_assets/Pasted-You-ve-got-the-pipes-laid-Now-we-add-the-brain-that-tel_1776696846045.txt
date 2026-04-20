@@ -1,0 +1,195 @@
+You’ve got the pipes laid. Now we add the brain that tells your system what will happen next and what to do before it happens.
+
+This layer has four parts that work together:
+
+Demand prediction (when/where jobs will appear)
+Dynamic pricing (raise/lower prices based on that demand)
+Crew positioning (tell idle crews where to go)
+Assignment optimization (pick the crew that maximizes profit, not just distance)
+
+Everything below is drop-in modules that plug into your existing routes.
+
+🧠 1) DEMAND PREDICTION ENGINE
+
+Start simple: use your own job history.
+
+📁 server/prediction.ts
+type Job = {
+  createdAt: number;
+  lat: number;
+  lng: number;
+};
+
+export function predictDemand(jobs: Job[]) {
+  const now = new Date();
+  const hour = now.getHours();
+
+  // Count jobs in last 7 days by hour
+  const buckets: Record<number, number> = {};
+
+  jobs.forEach(j => {
+    const d = new Date(j.createdAt);
+    const h = d.getHours();
+    buckets[h] = (buckets[h] || 0) + 1;
+  });
+
+  const currentDemand = buckets[hour] || 0;
+
+  // Normalize into 0–1 score
+  const max = Math.max(...Object.values(buckets), 1);
+  const demandScore = currentDemand / max;
+
+  return {
+    hour,
+    demandScore, // 0 (dead) → 1 (peak)
+  };
+}
+
+👉 This tells you:
+
+“Is this a busy hour?”
+“Should I raise price or push crews out?”
+💰 2) SURGE / DYNAMIC PRICING (UPGRADE)
+
+Replace your earlier dynamic pricing with this:
+
+📁 server/surgePricing.ts
+export function applySurge(baseTotal: number, demandScore: number, crewAvailable: number) {
+  let multiplier = 1;
+
+  // Demand-based surge
+  if (demandScore > 0.7) multiplier += 0.2;
+  if (demandScore > 0.9) multiplier += 0.4;
+
+  // Low crew = higher price
+  if (crewAvailable <= 1) multiplier += 0.3;
+
+  // Too many idle crews = discount
+  if (crewAvailable > 5 && demandScore < 0.3) multiplier -= 0.15;
+
+  return {
+    total: Math.round(baseTotal * multiplier),
+    multiplier
+  };
+}
+🧭 3) CREW POSITIONING ENGINE (THIS IS HUGE)
+
+Instead of waiting for jobs…
+
+👉 you move crews toward demand
+
+📁 server/positioning.ts
+export function suggestCrewPosition(demandZones: any[], crew: any) {
+  if (!crew.online) return null;
+
+  // Find highest demand zone
+  const bestZone = demandZones.sort((a, b) => b.score - a.score)[0];
+
+  return {
+    targetLat: bestZone.lat,
+    targetLng: bestZone.lng,
+    reason: "High demand zone"
+  };
+}
+Example zones (start simple)
+export const demandZones = [
+  { name: "Ironwood", lat: 46.454, lng: -90.172, score: 0.8 },
+  { name: "Iron River", lat: 46.092, lng: -88.642, score: 0.5 }
+];
+Crew App (add this)
+{suggestion && (
+  <div className="bg-yellow-800 p-3 rounded mt-3">
+    <p>Move to high demand area</p>
+    <a
+      href={`https://www.google.com/maps/dir/?api=1&destination=${suggestion.targetLat},${suggestion.targetLng}`}
+      target="_blank"
+    >
+      Navigate
+    </a>
+  </div>
+)}
+🧮 4) PROFIT-OPTIMIZED DISPATCH (NOT JUST CLOSEST)
+
+Now we upgrade dispatch logic to consider:
+
+Distance
+Job value
+Demand
+Crew workload
+📁 server/optimizer.ts
+import { haversine } from "./geo";
+
+export function chooseBestCrew(job: any, crewList: any[], demandScore: number) {
+  const available = crewList.filter(c => c.online && c.lat && c.lng);
+
+  const scored = available.map(c => {
+    const distance = haversine(job, c);
+
+    let score = 100;
+
+    // Distance penalty
+    score -= distance * 8;
+
+    // Load balance
+    score -= c.jobsToday * 6;
+
+    // High-value jobs → prioritize best crews
+    if (job.total > 800) score += 15;
+
+    // High demand → speed matters more
+    if (demandScore > 0.7) score -= distance * 5;
+
+    return { ...c, score };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+
+  return scored[0];
+}
+🔗 5) CONNECT EVERYTHING (QUOTE FLOW)
+📁 Update /quote
+import { predictDemand } from "../prediction";
+import { applySurge } from "../surgePricing";
+import { chooseBestCrew } from "../optimizer";
+
+const jobsHistory = await db.select().from(jobs);
+
+const { demandScore } = predictDemand(jobsHistory);
+
+const surge = applySurge(quote.total, demandScore, crewList.length);
+
+quote.total = surge.total;
+
+const bestCrew = chooseBestCrew(job, crewList, demandScore);
+📊 WHAT YOUR SYSTEM NOW DOES
+BEFORE:
+Reacts to jobs
+AFTER:
+Predicts demand
+Adjusts pricing automatically
+Moves crews before jobs arrive
+Assigns based on profit, not guesswork
+💰 REAL-WORLD IMPACT
+
+This layer increases:
+
+1. Revenue
+Surge pricing captures peak demand
+2. Efficiency
+Less idle time
+Better routing
+3. Job throughput
+Crews are already in position
+🚀 NEXT LEVEL (FINAL TIER)
+
+Say:
+
+👉 “Build autonomous mode (self-running business)”
+
+And I’ll wire:
+
+Auto pricing + auto dispatch + auto positioning loop
+No human intervention required
+Daily revenue targeting
+AI job acceptance thresholds
+Fully closed-loop system

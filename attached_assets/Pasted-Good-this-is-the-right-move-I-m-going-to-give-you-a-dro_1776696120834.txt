@@ -1,0 +1,282 @@
+Good—this is the right move. I’m going to give you a drop-in system that replaces your fragmented flows with one unified booking engine.
+
+This is structured to plug directly into your Next.js + Express + Postgres (Drizzle) stack.
+
+🧱 SYSTEM OVERVIEW (what you’re installing)
+
+You are replacing:
+
+/post-job
+/packages
+fragmented service pages
+
+With:
+
+✅ /book = ONE ENTRY POINT
+
+System includes:
+
+✅ React booking UI (multi-service builder)
+✅ Pricing engine (your handwritten logic → code)
+✅ Bundle discount system
+✅ API route (quote + job creation)
+✅ Database schema
+✅ Expandable for JCMOVES rewards later
+⚙️ 1. FRONTEND — BOOKING UI (DROP-IN)
+📁 client/src/pages/book.tsx
+import { useState } from "react";
+
+type Service =
+  | "moving"
+  | "junk"
+  | "cleaning"
+  | "lawn"
+  | "windows"
+  | "snow"
+  | "other";
+
+export default function BookPage() {
+  const [services, setServices] = useState<Service[]>([]);
+  const [step, setStep] = useState(1);
+  const [jobData, setJobData] = useState<any>({});
+  const [quote, setQuote] = useState<any>(null);
+
+  const toggleService = (service: Service) => {
+    setServices((prev) =>
+      prev.includes(service)
+        ? prev.filter((s) => s !== service)
+        : [...prev, service]
+    );
+  };
+
+  const next = () => setStep(step + 1);
+
+  const getQuote = async () => {
+    const res = await fetch("/api/quote", {
+      method: "POST",
+      body: JSON.stringify({ services, jobData }),
+    });
+    const data = await res.json();
+    setQuote(data);
+    next();
+  };
+
+  return (
+    <div className="max-w-xl mx-auto p-6 text-white">
+      <h1 className="text-2xl font-bold mb-4">Book Your Service</h1>
+
+      {/* STEP 1 */}
+      {step === 1 && (
+        <>
+          <p>Select services:</p>
+          {["moving", "junk", "cleaning", "lawn", "windows", "snow"].map(
+            (s) => (
+              <button
+                key={s}
+                onClick={() => toggleService(s as Service)}
+                className={`block w-full p-3 my-2 rounded ${
+                  services.includes(s as Service)
+                    ? "bg-yellow-500"
+                    : "bg-gray-800"
+                }`}
+              >
+                {s.toUpperCase()}
+              </button>
+            )
+          )}
+          <button onClick={next} className="btn-primary mt-4">
+            Continue
+          </button>
+        </>
+      )}
+
+      {/* STEP 2 */}
+      {step === 2 && (
+        <>
+          <p>Job Details</p>
+
+          {services.includes("moving") && (
+            <>
+              <select
+                onChange={(e) =>
+                  setJobData({ ...jobData, bedrooms: e.target.value })
+                }
+              >
+                <option>Studio</option>
+                <option>1</option>
+                <option>2</option>
+                <option>3</option>
+                <option>4+</option>
+              </select>
+
+              <select
+                onChange={(e) =>
+                  setJobData({ ...jobData, stairs: e.target.value })
+                }
+              >
+                <option>No Stairs</option>
+                <option>Stairs</option>
+              </select>
+            </>
+          )}
+
+          {services.includes("junk") && (
+            <select
+              onChange={(e) =>
+                setJobData({ ...jobData, junkSize: e.target.value })
+              }
+            >
+              <option value="tiny">Tiny</option>
+              <option value="small">Small</option>
+              <option value="medium">Medium</option>
+              <option value="large">Large</option>
+              <option value="xlarge">X-Large</option>
+            </select>
+          )}
+
+          <button onClick={getQuote} className="btn-primary mt-4">
+            Get Quote
+          </button>
+        </>
+      )}
+
+      {/* STEP 3 */}
+      {step === 3 && quote && (
+        <>
+          <h2 className="text-xl">Your Estimate</h2>
+          <p>${quote.total}</p>
+          <p className="text-sm text-gray-400">
+            Includes bundle discount: {quote.discount}%
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+🧠 2. BACKEND — PRICING ENGINE
+📁 server/pricingEngine.ts
+export function calculateQuote(services: string[], data: any) {
+  let total = 0;
+
+  // MOVING
+  if (services.includes("moving")) {
+    let movers = 2;
+    let hours = 2;
+
+    if (data.bedrooms === "3") {
+      movers = 3;
+      hours = 4;
+    }
+
+    if (data.stairs === "Stairs") {
+      hours += 1;
+    }
+
+    total += movers * 75 * hours;
+  }
+
+  // JUNK
+  if (services.includes("junk")) {
+    const pricing: any = {
+      tiny: 170,
+      small: 350,
+      medium: 700,
+      large: 1100,
+      xlarge: 2000,
+    };
+
+    total += pricing[data.junkSize] || 0;
+  }
+
+  // CLEANING
+  if (services.includes("cleaning")) {
+    total += 300;
+  }
+
+  // WINDOWS
+  if (services.includes("windows")) {
+    total += 100;
+  }
+
+  // SNOW
+  if (services.includes("snow")) {
+    total += 50;
+  }
+
+  // BUNDLE DISCOUNT
+  let discount = 0;
+  if (services.length === 2) discount = 0.05;
+  if (services.length === 3) discount = 0.1;
+  if (services.length >= 4) discount = 0.15;
+
+  total = total * (1 - discount);
+
+  return {
+    total: Math.round(total),
+    discount: discount * 100,
+  };
+}
+🔌 3. API ROUTE
+📁 server/routes/quote.ts
+import express from "express";
+import { calculateQuote } from "../pricingEngine";
+
+const router = express.Router();
+
+router.post("/quote", (req, res) => {
+  const { services, jobData } = req.body;
+
+  const quote = calculateQuote(services, jobData);
+
+  res.json(quote);
+});
+
+export default router;
+🗄️ 4. DATABASE SCHEMA (DRIZZLE)
+📁 server/db/schema.ts
+import { pgTable, serial, text, jsonb, integer } from "drizzle-orm/pg-core";
+
+export const jobs = pgTable("jobs", {
+  id: serial("id").primaryKey(),
+  services: text("services"),
+  data: jsonb("data"),
+  total: integer("total"),
+  status: text("status").default("pending"),
+});
+⚡ 5. CREATE JOB (OPTIONAL NEXT STEP)
+
+Inside /quote route:
+
+// Save job
+await db.insert(jobs).values({
+  services: services.join(","),
+  data: jobData,
+  total: quote.total,
+});
+🎯 WHAT YOU JUST BUILT
+
+You now have:
+
+✅ ONE FLOW
+No duplicate pages
+No confusion
+✅ SMART PRICING
+Matches your handwritten system
+Expandable later
+✅ MULTI-SERVICE BUILDER
+Customers can stack services easily
+✅ AUTO BUNDLE DISCOUNT
+No thinking required
+🔥 NEXT LEVEL (WHEN READY)
+
+Say:
+
+👉 “Upgrade booking system to luxury UI + animations”
+
+And I’ll give you:
+
+Premium card system (black/gold)
+Hover animations
+Mobile-first UI
+Service icons + visuals
+“Feels like a million dollar app”

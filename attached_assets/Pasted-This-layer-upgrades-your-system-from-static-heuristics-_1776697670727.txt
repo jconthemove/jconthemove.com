@@ -1,0 +1,263 @@
+This layer upgrades your system from static heuristics to a rolling, zone-aware demand model that directly drives surge pricing, crew positioning, and dispatch priority.
+
+🎯 OBJECTIVE
+
+Replace basic demand logic with:
+
+Real-time Signals + Rolling History → Zone Demand Score → Surge → Positioning → Dispatch Weighting
+
+Outcomes:
+
+Accurate “busy vs slow” detection
+Zone-level intelligence (Ironwood vs Iron River vs WI)
+Price adjusts automatically
+Crews move before jobs arrive
+🧱 TARGET ARCHITECTURE
+📁 New Files
+server/
+  demand/
+    index.ts                 // getDemandSnapshot()
+    windows.ts               // rolling windows (15m / 1h / 24h)
+    zones.ts                 // zone definitions + mapping
+    scorer.ts                // demand scoring model
+    surge.ts                 // price adjustments
+    positioning.ts           // crew movement suggestions
+    metrics.ts               // aggregates for admin
+📁 Existing (used, not replaced)
+jobs table (createdAt, lat/lng, total)
+crew table (online, lat/lng)
+haversine util
+pipeline (calls this layer)
+🧠 CORE MODEL
+Demand Score per Zone
+Demand Score = f(
+  jobs_last_15m,
+  jobs_last_60m,
+  jobs_last_24h,
+  active_jobs_now,
+  crew_available,
+  avg_job_value
+)
+
+Normalized:
+
+0.0 → dead
+0.5 → normal
+1.0+ → peak
+🌍 ZONE SYSTEM
+📁 server/demand/zones.ts
+export const ZONES = [
+  {
+    id: "ironwood",
+    name: "Ironwood",
+    center: { lat: 46.454, lng: -90.172 },
+    radiusMiles: 25
+  },
+  {
+    id: "ironriver",
+    name: "Iron River",
+    center: { lat: 46.092, lng: -88.642 },
+    radiusMiles: 30
+  },
+  {
+    id: "wisconsin",
+    name: "WI Border",
+    center: { lat: 46.3, lng: -90.0 },
+    radiusMiles: 40
+  }
+];
+Zone Mapping
+📁 zones.ts
+import { haversine } from "../geo";
+
+export function getZone(lat: number, lng: number) {
+  for (const z of ZONES) {
+    const d = haversine(z.center, { lat, lng });
+    if (d <= z.radiusMiles) return z.id;
+  }
+  return "out_of_zone";
+}
+⏱️ ROLLING WINDOWS
+📁 server/demand/windows.ts
+export function buildWindows(jobs) {
+  const now = Date.now();
+
+  return jobs.reduce((acc, j) => {
+    const diff = now - j.createdAt;
+
+    if (diff < 15 * 60_000) acc.last15m++;
+    if (diff < 60 * 60_000) acc.last60m++;
+    if (diff < 24 * 60 * 60_000) acc.last24h++;
+
+    return acc;
+  }, {
+    last15m: 0,
+    last60m: 0,
+    last24h: 0
+  });
+}
+📊 DEMAND SCORING
+📁 server/demand/scorer.ts
+export function scoreDemand({ windows, activeJobs, crewAvailable, avgValue }) {
+  let score = 0;
+
+  // Short-term spike
+  score += windows.last15m * 0.4;
+
+  // Mid-term trend
+  score += windows.last60m * 0.3;
+
+  // Baseline
+  score += windows.last24h * 0.1;
+
+  // Active workload
+  score += activeJobs * 0.2;
+
+  // Crew shortage multiplier
+  if (crewAvailable <= 1) score *= 1.5;
+
+  // Normalize (tune later)
+  return Math.min(score / 10, 1.5);
+}
+💰 SURGE PRICING
+📁 server/demand/surge.ts
+export function computeSurge(base, demandScore, crewAvailable) {
+  let multiplier = 1;
+
+  if (demandScore > 0.7) multiplier += 0.15;
+  if (demandScore > 1.0) multiplier += 0.3;
+
+  if (crewAvailable === 0) multiplier += 0.5;
+
+  if (demandScore < 0.3 && crewAvailable > 4) {
+    multiplier -= 0.1;
+  }
+
+  return {
+    total: Math.round(base * multiplier),
+    multiplier
+  };
+}
+🧭 CREW POSITIONING
+📁 server/demand/positioning.ts
+export function getPositionSuggestion(zoneScores, crew) {
+  if (!crew.online) return null;
+
+  const best = Object.entries(zoneScores)
+    .sort((a, b) => b[1] - a[1])[0];
+
+  if (!best) return null;
+
+  return {
+    targetZone: best[0],
+    reason: "High demand"
+  };
+}
+🔗 PIPELINE INTEGRATION
+In demand.step.ts
+import { buildWindows } from "../demand/windows";
+import { scoreDemand } from "../demand/scorer";
+import { getZone } from "../demand/zones";
+
+export async function demandStep(ctx) {
+  const jobs = await db.select().from(jobsTable);
+
+  const zone = getZone(ctx.input.lat, ctx.input.lng);
+
+  const zoneJobs = jobs.filter(j => getZone(j.lat, j.lng) === zone);
+
+  const windows = buildWindows(zoneJobs);
+
+  const activeJobs = zoneJobs.filter(j => j.status !== "completed").length;
+
+  const crewAvailable = ctx.crewAvailable ?? 0;
+
+  const avgValue = zoneJobs.reduce((s, j) => s + j.total, 0) / (zoneJobs.length || 1);
+
+  const score = scoreDemand({
+    windows,
+    activeJobs,
+    crewAvailable,
+    avgValue
+  });
+
+  ctx.demandScore = score;
+  ctx.zone = zone;
+}
+In surge.step.ts
+import { computeSurge } from "../demand/surge";
+
+export function surgeStep(ctx) {
+  const res = computeSurge(ctx.total, ctx.demandScore, ctx.crewAvailable);
+  ctx.total = res.total;
+  ctx.multiplier = res.multiplier;
+}
+📊 ADMIN METRICS (HEAT + FORECAST)
+📁 server/demand/metrics.ts
+export function buildZoneMetrics(jobs) {
+  const zones: Record<string, any> = {};
+
+  for (const j of jobs) {
+    const z = getZone(j.lat, j.lng);
+    zones[z] ??= { count: 0, revenue: 0 };
+
+    zones[z].count++;
+    zones[z].revenue += j.total;
+  }
+
+  return zones;
+}
+API
+GET /api/admin/demand
+
+Returns:
+
+{
+  "ironwood": { "count": 12, "revenue": 5400, "score": 0.9 },
+  "ironriver": { "count": 4, "revenue": 1200, "score": 0.4 }
+}
+🧪 MIGRATION PLAN
+Phase 1 — Passive Metrics
+Compute demandScore but don’t apply surge
+Log results
+Phase 2 — Soft Surge
+Apply surge capped at ±10%
+Phase 3 — Full Activation
+Enable full multiplier range
+Feed into dispatch weighting + positioning
+⚡ WHAT THIS ENABLES
+
+Immediately:
+
+Zone-level demand awareness
+Smarter pricing
+Better crew distribution
+
+Next:
+
+Predictive heatmaps
+Time-of-day surge curves
+Revenue targeting
+🚀 NEXT FILE
+
+👉 “Write crew-positioning.plan.md”
+
+Will:
+
+turn suggestions into actions
+add idle crew movement automation
+integrate with map + navigation
+build territory balancing rules
+🧠 FINAL TAKE
+
+You now have:
+
+Central pipeline ✅
+Safe dispatch system ✅
+Demand + surge intelligence ✅
+
+This is no longer reactive software.
+
+This is a system that anticipates demand and shapes behavior
+
+And that’s where your efficiency advantage compounds daily.

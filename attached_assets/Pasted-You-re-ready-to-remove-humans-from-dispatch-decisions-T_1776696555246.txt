@@ -1,0 +1,188 @@
+You’re ready to remove humans from dispatch decisions. The goal here is deterministic automation first, then add “AI-style” heuristics on top. This avoids chaos while still giving you smart behavior.
+
+Below is a drop-in Auto Dispatch System that replaces manual assignment.
+
+🧠 WHAT YOU’RE BUILDING
+Fully Automatic Pipeline
+
+Booking → Quote → Job Created → Auto Assign → Crew Notified → Job Accepted → Completed → Rewards Issued
+
+No dashboard clicks required.
+
+⚙️ 1. AUTO DISPATCH ENGINE (CORE)
+📁 server/autoDispatch.ts
+type Crew = {
+  id: number;
+  online: boolean;
+  jobsToday: number;
+  lastJobAt?: number;
+  location?: { lat: number; lng: number };
+};
+
+type Job = {
+  id: number;
+  services: string[];
+  urgency?: "low" | "normal" | "high";
+  location?: { lat: number; lng: number };
+  createdAt: number;
+};
+
+export function autoAssignCrew(job: Job, crewList: Crew[]) {
+  // STEP 1: Filter available crew
+  const available = crewList.filter(c => c.online);
+
+  if (available.length === 0) return null;
+
+  // STEP 2: Score each crew
+  const scored = available.map(c => {
+    let score = 100;
+
+    // Fewer jobs today = higher priority
+    score -= c.jobsToday * 10;
+
+    // Recently worked? slight penalty (prevents overload)
+    if (c.lastJobAt) {
+      const minutesAgo = (Date.now() - c.lastJobAt) / 60000;
+      if (minutesAgo < 60) score -= 15;
+    }
+
+    // Priority jobs boost score
+    if (job.urgency === "high") score += 20;
+
+    return { ...c, score };
+  });
+
+  // STEP 3: Sort best → worst
+  scored.sort((a, b) => b.score - a.score);
+
+  return scored[0];
+}
+🔌 2. AUTO ASSIGN ON JOB CREATION
+📁 server/routes/quote.ts (UPDATE)
+import { autoAssignCrew } from "../autoDispatch";
+
+router.post("/quote", async (req, res) => {
+  const { services, jobData } = req.body;
+
+  const quote = calculateQuote(services, jobData);
+
+  const job = await db.insert(jobs).values({
+    services: services.join(","),
+    data: jobData,
+    total: quote.total,
+    status: "pending",
+    createdAt: Date.now(),
+  }).returning();
+
+  const crewList = await db.select().from(crew);
+
+  const assigned = autoAssignCrew(job[0], crewList);
+
+  if (assigned) {
+    await db.update(jobs)
+      .set({
+        crewAssigned: assigned.id,
+        status: "assigned"
+      })
+      .where(eq(jobs.id, job[0].id));
+  }
+
+  res.json({
+    ...quote,
+    assignedCrew: assigned?.name || "Searching..."
+  });
+});
+⚖️ 3. LOAD BALANCING SYSTEM
+
+Already partially handled above, but let’s make it explicit.
+
+📁 server/loadBalancer.ts
+export function balanceCrew(crewList: any[]) {
+  return crewList.sort((a, b) => {
+    return a.jobsToday - b.jobsToday;
+  });
+}
+
+Use this before scoring if needed.
+
+🚦 4. PRIORITY ROUTING
+Add urgency logic to jobs
+Example triggers:
+Same-day move → HIGH
+Small junk → LOW
+Multi-service → HIGH
+📁 Add to job creation:
+let urgency = "normal";
+
+if (services.length >= 2) urgency = "high";
+if (services.includes("junk") && jobData.junkSize === "tiny") urgency = "low";
+📅 5. SMART SCHEDULING
+📁 server/scheduler.ts
+export function estimateStartTime(crew: any) {
+  const bufferMinutes = crew.jobsToday * 90;
+
+  return new Date(Date.now() + bufferMinutes * 60000);
+}
+Add to job:
+const startTime = estimateStartTime(assigned);
+
+await db.update(jobs)
+  .set({ startTime })
+  .where(eq(jobs.id, job.id));
+💰 6. WORKER INCENTIVE SYSTEM
+🔑 Goal
+
+Motivate behavior automatically
+
+📁 server/incentives.ts
+export function calculateCrewBonus(job: any) {
+  let bonus = 0;
+
+  // High priority jobs pay more
+  if (job.urgency === "high") bonus += 20;
+
+  // Late hours bonus
+  const hour = new Date().getHours();
+  if (hour > 18) bonus += 15;
+
+  // Low crew availability bonus
+  if (job.availableCrew < 2) bonus += 25;
+
+  return bonus;
+}
+Store it:
+await db.update(jobs)
+  .set({ crewBonus: bonus })
+  .where(eq(jobs.id, job.id));
+📲 7. CREW NOTIFICATION SYSTEM (BASIC)
+📁 server/notify.ts
+export function notifyCrew(crewId: number, job: any) {
+  console.log(`Notify crew ${crewId} of job ${job.id}`);
+}
+🔁 FINAL FLOW (AUTOMATED)
+When customer books:
+Job created
+System:
+Calculates price
+Calculates rewards
+Determines urgency
+Finds best crew
+Assigns crew
+Schedules start time
+Calculates bonus
+Sends notification
+Customer sees:
+Crew Assigned: Mike & Team
+Arrival Estimate: 2:30 PM
+🔥 WHAT YOU JUST UNLOCKED
+You now have:
+✅ AI-STYLE DISPATCH
+No human decision needed
+✅ LOAD BALANCING
+Crew evenly distributed
+✅ PRIORITY HANDLING
+Important jobs get attention
+✅ AUTOMATIC SCHEDULING
+No calendar management
+✅ INCENTIVE SYSTEM
+Workers self-optimize

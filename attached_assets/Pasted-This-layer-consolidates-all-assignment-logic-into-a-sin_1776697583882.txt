@@ -1,0 +1,307 @@
+This layer consolidates all assignment logic into a single, race-safe dispatch system that plugs into your pipeline. No rewrites—only unification + control + state management.
+
+🎯 OBJECTIVE
+
+Replace scattered assignment paths with one deterministic flow:
+
+Pipeline → Dispatch Service → Offer → Accept/Timeout → Assign → Execute
+
+Key outcomes:
+
+One source of truth for assignment
+Proximity + load-balanced selection
+Offer/accept loop (Uber-style)
+No double-assignments or race conditions
+🧱 TARGET ARCHITECTURE
+📁 New Files
+server/
+  dispatch/
+    index.ts                 // public API (dispatchJob)
+    engine.ts                // scoring + candidate selection
+    offerQueue.ts            // offer lifecycle + timeouts
+    locks.ts                 // lightweight locking
+    types.ts
+    adapters/
+      crew.adapter.ts        // reads crew (existing table)
+      geo.adapter.ts         // haversine (existing util)
+      notify.adapter.ts      // Twilio / push
+  routes/
+    crew-dispatch.ts         // accept/decline endpoints
+📁 Existing (kept, not edited directly)
+crew table (online, jobsToday, lat/lng)
+haversine util
+Twilio notify
+job table
+🧠 CORE CONCEPTS
+1) Single Dispatcher
+
+Only dispatchJob(jobId) assigns crews.
+
+2) Offer Queue
+
+Jobs are offered to crews in order; crews accept/decline.
+
+3) Lease/Lock
+
+A short-lived assignment lock prevents double assignment.
+
+4) State Machine (job.status)
+pending → offering → assigned → accepted → en_route → on_site → completed
+                 ↘ timeout ↘ re-offer ↘ pending
+🧩 TYPES
+📁 server/dispatch/types.ts
+export type Crew = {
+  id: number;
+  online: boolean;
+  jobsToday: number;
+  lat?: number;
+  lng?: number;
+};
+
+export type Job = {
+  id: number;
+  lat?: number;
+  lng?: number;
+  services: string[];
+  total: number;
+  urgency?: "low" | "normal" | "high";
+  status: string;
+};
+⚙️ ENGINE (SCORING + CANDIDATES)
+📁 server/dispatch/engine.ts
+import { haversine } from "../geo";
+
+export function rankCandidates(job: any, crewList: any[]) {
+  const available = crewList.filter(c => c.online && c.lat && c.lng && job.lat && job.lng);
+
+  const scored = available.map(c => {
+    const d = haversine({ lat: job.lat, lng: job.lng }, { lat: c.lat, lng: c.lng });
+
+    let score = 100;
+
+    // distance
+    score -= d * 8;
+
+    // load balance
+    score -= c.jobsToday * 6;
+
+    // urgency
+    if (job.urgency === "high") score += 15;
+
+    // high value jobs → prefer reliable crews (proxy: fewer jobs today)
+    if (job.total > 800) score += Math.max(0, 10 - c.jobsToday);
+
+    return { ...c, score, distance: d };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored;
+}
+🔐 LOCKING (RACE CONDITION PREVENTION)
+
+Use a simple DB-backed or in-memory lock (Redis ideal later).
+
+📁 server/dispatch/locks.ts
+const locks = new Map<string, number>(); // jobId -> expiry
+
+export function acquireLock(jobId: number, ttlMs = 10000) {
+  const now = Date.now();
+  const exp = locks.get(String(jobId));
+  if (exp && exp > now) return false;
+
+  locks.set(String(jobId), now + ttlMs);
+  return true;
+}
+
+export function releaseLock(jobId: number) {
+  locks.delete(String(jobId));
+}
+
+In production, replace with Redis SETNX + TTL.
+
+📬 OFFER QUEUE (UBER-STYLE)
+📁 server/dispatch/offerQueue.ts
+type Offer = {
+  jobId: number;
+  crewId: number;
+  expiresAt: number;
+};
+
+const offers = new Map<number, Offer>(); // jobId -> current offer
+
+export function createOffer(jobId: number, crewId: number, timeoutMs = 20000) {
+  const offer: Offer = {
+    jobId,
+    crewId,
+    expiresAt: Date.now() + timeoutMs,
+  };
+  offers.set(jobId, offer);
+  return offer;
+}
+
+export function getOffer(jobId: number) {
+  return offers.get(jobId);
+}
+
+export function clearOffer(jobId: number) {
+  offers.delete(jobId);
+}
+
+export function isExpired(offer: Offer) {
+  return Date.now() > offer.expiresAt;
+}
+🚀 DISPATCH ENTRY
+📁 server/dispatch/index.ts
+import { rankCandidates } from "./engine";
+import { acquireLock, releaseLock } from "./locks";
+import { createOffer, getOffer, clearOffer, isExpired } from "./offerQueue";
+import { getCrew } from "./adapters/crew.adapter";
+import { sendOfferSMS } from "./adapters/notify.adapter";
+import { db, jobs, crew } from "../db";
+
+export async function dispatchJob(jobId: number) {
+  // lock to prevent concurrent dispatchers
+  if (!acquireLock(jobId)) return;
+
+  try {
+    const job = await db.query.jobs.findFirst({ where: (j, { eq }) => eq(j.id, jobId) });
+    if (!job || !job.lat || !job.lng) return;
+
+    await db.update(jobs).set({ status: "offering" }).where(jobs.id.eq(jobId));
+
+    const crewList = await getCrew();
+    const ranked = rankCandidates(job, crewList);
+
+    for (const c of ranked) {
+      // create offer
+      const offer = createOffer(jobId, c.id);
+
+      // notify
+      await sendOfferSMS(c.id, job);
+
+      // wait loop (poll or event-driven)
+      const accepted = await waitForAcceptance(jobId, c.id, offer.expiresAt);
+
+      if (accepted) {
+        // finalize assignment atomically
+        await db.transaction(async (tx) => {
+          const fresh = await tx.query.jobs.findFirst({
+            where: (j, { eq }) => eq(j.id, jobId),
+          });
+
+          if (fresh?.status === "assigned" || fresh?.status === "accepted") {
+            return; // someone else got it
+          }
+
+          await tx.update(jobs)
+            .set({ status: "assigned", crewAssigned: c.id })
+            .where(jobs.id.eq(jobId));
+
+          await tx.update(crew)
+            .set({ jobsToday: c.jobsToday + 1 })
+            .where(crew.id.eq(c.id));
+        });
+
+        clearOffer(jobId);
+        return;
+      }
+
+      // expired or declined → try next crew
+      clearOffer(jobId);
+    }
+
+    // no one accepted
+    await db.update(jobs).set({ status: "pending" }).where(jobs.id.eq(jobId));
+  } finally {
+    releaseLock(jobId);
+  }
+}
+
+// naive wait; replace with event-based later
+async function waitForAcceptance(jobId: number, crewId: number, expiresAt: number) {
+  while (Date.now() < expiresAt) {
+    const offer = getOffer(jobId);
+    if (!offer || offer.crewId !== crewId) return false;
+
+    // check job status (set by accept endpoint)
+    const job = await db.query.jobs.findFirst({ where: (j, { eq }) => eq(j.id, jobId) });
+    if (job?.status === "accepted" && job.crewAssigned === crewId) {
+      return true;
+    }
+
+    await new Promise(r => setTimeout(r, 1500));
+  }
+  return false;
+}
+📲 CREW ENDPOINTS (ACCEPT / DECLINE)
+📁 server/routes/crew-dispatch.ts
+import express from "express";
+import { db, jobs } from "../db";
+
+const router = express.Router();
+
+router.post("/crew/accept", async (req, res) => {
+  const { jobId, crewId } = req.body;
+
+  await db.transaction(async (tx) => {
+    const job = await tx.query.jobs.findFirst({
+      where: (j, { eq }) => eq(j.id, jobId),
+    });
+
+    // accept only if still offering
+    if (job?.status !== "offering") {
+      return res.status(409).json({ ok: false, reason: "not-offerable" });
+    }
+
+    await tx.update(jobs)
+      .set({ status: "accepted", crewAssigned: crewId })
+      .where(jobs.id.eq(jobId));
+  });
+
+  res.json({ ok: true });
+});
+
+router.post("/crew/decline", async (req, res) => {
+  const { jobId } = req.body;
+  // no state change needed; offer will expire and next crew will be tried
+  res.json({ ok: true });
+});
+
+export default router;
+🔌 PIPELINE INTEGRATION
+In persist.step.ts (after job create)
+import { dispatchJob } from "../dispatch";
+
+await dispatchJob(ctx.job.id);
+
+Dispatch runs after persistence, ensuring jobId exists.
+
+⛑️ FAILURE HANDLING
+No crew online → set status: pending, retry via cron every 2–5 min
+SMS fail → log, continue
+All declines/timeouts → pending + notify admin (optional)
+🧪 MIGRATION PLAN (NO DOWNTIME)
+Phase 1 — Shadow
+Keep existing assignment logic
+Call dispatchJob(jobId) in parallel (no write)
+Log differences
+Phase 2 — Soft Switch
+Disable old assignment writes
+Let dispatcher own status + crewAssigned
+Phase 3 — Enforce
+Remove duplicate assignment paths
+All flows call dispatcher only
+📊 METRICS (ADD NOW)
+
+Track:
+
+time-to-first-offer
+acceptance rate
+average offers per job
+time-to-accept
+distance of assigned crew
+⚡ WHAT THIS FIXES
+❌ Duplicate assignment paths → single dispatcher
+❌ Race conditions → locks + transactions
+❌ Blind assignment → scored candidates
+❌ Manual dispatch → offer loop

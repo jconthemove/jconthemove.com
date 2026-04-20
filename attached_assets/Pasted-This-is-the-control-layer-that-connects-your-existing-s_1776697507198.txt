@@ -1,0 +1,238 @@
+This is the control layer that connects your existing systems into one deterministic pipeline—no rewrites, no downtime.
+
+🎯 OBJECTIVE
+
+Create a single orchestration entry point:
+
+POST /api/pipeline/run
+
+That executes, in order:
+
+Input → Pricing → Demand → Surge → Dispatch → Schedule → Incentives → Persist → Notify → Respond
+
+Do not rebuild existing modules. Wrap and call them.
+
+🧱 TARGET ARCHITECTURE
+📁 New Files
+server/
+  pipeline/
+    index.ts            // entry (runPipeline)
+    context.ts          // builds shared context
+    steps/
+      pricing.step.ts
+      demand.step.ts
+      surge.step.ts
+      dispatch.step.ts
+      schedule.step.ts
+      incentives.step.ts
+      persist.step.ts
+      notify.step.ts
+    adapters/
+      pricing.adapter.ts
+      dispatch.adapter.ts
+      rewards.adapter.ts
+      notify.adapter.ts
+  routes/
+    pipeline.ts         // POST /api/pipeline/run
+📁 Existing (unchanged, but wrapped)
+/api/bookings/quote (pricing engine)
+haversine / geo utils
+crew selection logic (proximity)
+rewards issuance (on completion)
+Twilio notify
+admin pricing editor
+🧠 PIPELINE CONTRACT
+Input (from /book)
+type PipelineInput = {
+  services: string[];
+  jobData: any;
+  customer: {
+    name: string;
+    phone: string;
+  };
+};
+Output
+type PipelineResult = {
+  jobId: number;
+  total: number;
+  multiplier: number;
+  crewAssigned?: { id: number; name: string };
+  eta?: string;
+  upsells?: string[];
+};
+⚙️ CORE ENTRY
+📁 server/pipeline/index.ts
+import { buildContext } from "./context";
+import { pricingStep } from "./steps/pricing.step";
+import { demandStep } from "./steps/demand.step";
+import { surgeStep } from "./steps/surge.step";
+import { dispatchStep } from "./steps/dispatch.step";
+import { scheduleStep } from "./steps/schedule.step";
+import { incentivesStep } from "./steps/incentives.step";
+import { persistStep } from "./steps/persist.step";
+import { notifyStep } from "./steps/notify.step";
+
+export async function runPipeline(input) {
+  const ctx = await buildContext(input);
+
+  await pricingStep(ctx);
+  await demandStep(ctx);
+  await surgeStep(ctx);
+  await dispatchStep(ctx);
+  await scheduleStep(ctx);
+  await incentivesStep(ctx);
+  await persistStep(ctx);
+  await notifyStep(ctx);
+
+  return {
+    jobId: ctx.job.id,
+    total: ctx.total,
+    multiplier: ctx.multiplier,
+    crewAssigned: ctx.crew,
+    eta: ctx.eta,
+    upsells: ctx.upsells
+  };
+}
+🔗 CONTEXT (shared state)
+📁 server/pipeline/context.ts
+export async function buildContext(input) {
+  return {
+    input,
+    quote: null,
+    total: 0,
+    multiplier: 1,
+    demandScore: 0,
+    crew: null,
+    eta: null,
+    bonus: 0,
+    upsells: [],
+    job: null,
+    now: Date.now()
+  };
+}
+🔌 ADAPTERS (NO REWRITES)
+📁 adapters/pricing.adapter.ts
+export async function getQuote(input) {
+  // call existing pricing endpoint OR import logic directly
+  return await pricingEngine(input);
+}
+📁 adapters/dispatch.adapter.ts
+export function selectCrew(job, crewList) {
+  return existingDispatchLogic(job, crewList);
+}
+📁 adapters/notify.adapter.ts
+export function sendSMS(job) {
+  return twilioSend(job);
+}
+🧩 STEP IMPLEMENTATIONS
+1) Pricing
+export async function pricingStep(ctx) {
+  const quote = await getQuote(ctx.input);
+  ctx.quote = quote;
+  ctx.total = quote.total;
+}
+2) Demand
+export function demandStep(ctx) {
+  const { demandScore } = predictDemand(ctx.input);
+  ctx.demandScore = demandScore;
+}
+3) Surge
+export function surgeStep(ctx) {
+  const res = applySurge(ctx.total, ctx.demandScore, ctx.input.availableCrew || 0);
+  ctx.total = res.total;
+  ctx.multiplier = res.multiplier;
+}
+4) Dispatch
+export async function dispatchStep(ctx) {
+  const crewList = await getCrew();
+  const crew = selectCrew(ctx.input, crewList);
+  ctx.crew = crew;
+}
+5) Schedule
+export function scheduleStep(ctx) {
+  ctx.eta = estimateStartTime(ctx.crew);
+}
+6) Incentives
+export function incentivesStep(ctx) {
+  ctx.bonus = calculateCrewBonus(ctx.input);
+}
+7) Persist
+export async function persistStep(ctx) {
+  const job = await createJob({
+    ...ctx.input,
+    total: ctx.total,
+    crew: ctx.crew?.id,
+    eta: ctx.eta,
+    bonus: ctx.bonus
+  });
+
+  ctx.job = job;
+}
+8) Notify
+export function notifyStep(ctx) {
+  if (ctx.crew) sendSMS(ctx.job);
+}
+🌐 ROUTE
+📁 server/routes/pipeline.ts
+import express from "express";
+import { runPipeline } from "../pipeline";
+
+const router = express.Router();
+
+router.post("/pipeline/run", async (req, res) => {
+  const result = await runPipeline(req.body);
+  res.json(result);
+});
+
+export default router;
+🔁 MIGRATION PLAN (NO DOWNTIME)
+Phase 1 — Shadow Mode
+Keep /api/bookings/quote
+Add /api/pipeline/run
+Log both outputs side-by-side
+Phase 2 — Dual Run
+/book calls BOTH endpoints
+Compare totals, crew assignment, timing
+Phase 3 — Switch
+Frontend uses /pipeline/run only
+Phase 4 — Cleanup
+Deprecate duplicate logic
+Keep adapters as stable interface
+🧪 SAFETY CHECKS
+
+Add guards:
+
+if (!ctx.total) throw new Error("Pricing failed");
+if (!ctx.job) throw new Error("Persist failed");
+
+Fallbacks:
+
+No crew → set status “pending”
+SMS fail → log only (don’t block pipeline)
+📊 OBSERVABILITY (ADD NOW)
+
+Log at each step:
+
+console.log("STEP: pricing", ctx.total);
+console.log("STEP: dispatch", ctx.crew?.id);
+
+Later → pipe into DB or analytics.
+
+⚡ WHAT THIS UNLOCKS
+
+Immediately:
+
+Single source of truth for decisions
+Deterministic execution
+Easier debugging
+
+Next:
+
+Plug in ML demand model
+Real surge pricing
+Auto crew positioning loop
+A/B testing pricing strategies
+🧭 FINAL NOTES
+This is a thin orchestration layer—not a rewrite.
+Adapters isolate your legacy logic so you can improve it safely.
+Every future feature plugs into a step, not scattered routes.

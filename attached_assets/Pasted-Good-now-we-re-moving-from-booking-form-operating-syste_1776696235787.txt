@@ -1,0 +1,201 @@
+Good—now we’re moving from “booking form” → operating system.
+
+Below is the next layer you can drop on top of what I just gave you. This is structured so each module is independent but plugs into your current /book → /api/quote flow.
+
+🧠 SYSTEM LAYERS YOU’RE ADDING
+
+You’re turning this into:
+
+👉 Booking Engine → Revenue Engine → Automation Engine
+
+We’ll add:
+
+JCMOVES Rewards Engine
+Crew Auto-Dispatch System
+Smart Upsell Engine
+Dynamic Pricing Engine
+🪙 1. JCMOVES REWARDS ENGINE
+🔑 Goal
+
+Reward customers automatically when they book.
+
+📁 server/rewardsEngine.ts
+export function calculateRewards(total: number) {
+  const rate = 15; // 15 JCMOVES per $1 (adjust later)
+
+  const base = total * rate;
+
+  let tierBonus = 1;
+
+  if (total > 1000) tierBonus = 1.2;
+  if (total > 2500) tierBonus = 1.4;
+
+  const final = Math.round(base * tierBonus);
+
+  return {
+    base,
+    bonusMultiplier: tierBonus,
+    final,
+  };
+}
+🔌 Inject into /quote
+import { calculateRewards } from "../rewardsEngine";
+
+const rewards = calculateRewards(quote.total);
+
+res.json({
+  ...quote,
+  rewards,
+});
+💡 Frontend Display
+
+Add under quote:
+
+<p>Earn {quote.rewards.final} JCMOVES</p>
+🚛 2. CREW AUTO-DISPATCH SYSTEM
+🔑 Goal
+
+Assign jobs automatically → no manual coordination
+
+📁 server/dispatchEngine.ts
+export function assignCrew(job: any, crewList: any[]) {
+  const requiredMovers =
+    job.services.includes("moving") ? 2 : 1;
+
+  const available = crewList
+    .filter((c) => c.online)
+    .sort((a, b) => a.jobsToday - b.jobsToday);
+
+  return available.slice(0, requiredMovers);
+}
+📁 Crew Table (Drizzle)
+export const crew = pgTable("crew", {
+  id: serial("id").primaryKey(),
+  name: text("name"),
+  online: boolean("online"),
+  jobsToday: integer("jobsToday"),
+});
+🔌 Use after job creation
+const assignedCrew = assignCrew(job, crewList);
+
+await db.update(jobs)
+  .set({ crewAssigned: JSON.stringify(assignedCrew) })
+  .where(eq(jobs.id, job.id));
+🔥 Later upgrade (Phase 2)
+WebSockets → live job offers
+Accept / decline system (Uber style)
+💰 3. SMART UPSELL ENGINE
+🔑 Goal
+
+Increase ticket size automatically
+
+📁 server/upsellEngine.ts
+export function getUpsells(services: string[]) {
+  const upsells: string[] = [];
+
+  if (services.includes("moving")) {
+    upsells.push("cleaning", "junk");
+  }
+
+  if (services.includes("junk")) {
+    upsells.push("moving");
+  }
+
+  if (services.includes("lawn")) {
+    upsells.push("snow");
+  }
+
+  return upsells;
+}
+🔌 Add to /quote
+const upsells = getUpsells(services);
+
+res.json({
+  ...quote,
+  upsells,
+});
+💡 Frontend
+{quote.upsells.map((u) => (
+  <button onClick={() => addService(u)}>
+    Add {u}
+  </button>
+))}
+📈 4. DYNAMIC PRICING ENGINE
+🔑 Goal
+
+Adjust pricing based on demand, crew availability, etc.
+
+📁 server/dynamicPricing.ts
+export function applyDynamicPricing(total: number, context: any) {
+  let multiplier = 1;
+
+  // High demand (weekends)
+  if (context.day === "Saturday" || context.day === "Sunday") {
+    multiplier += 0.1;
+  }
+
+  // Low crew availability
+  if (context.availableCrew < 2) {
+    multiplier += 0.15;
+  }
+
+  // Slow day discount
+  if (context.jobsToday < 3) {
+    multiplier -= 0.1;
+  }
+
+  return {
+    adjustedTotal: Math.round(total * multiplier),
+    multiplier,
+  };
+}
+🔌 Apply after base quote
+const dynamic = applyDynamicPricing(quote.total, {
+  day: new Date().toLocaleDateString("en-US", { weekday: "long" }),
+  availableCrew: crewList.length,
+  jobsToday: jobsTodayCount,
+});
+
+quote.total = dynamic.adjustedTotal;
+quote.multiplier = dynamic.multiplier;
+🔗 FINAL FLOW (HOW IT ALL CONNECTS)
+Customer flow:
+Select services
+Enter details
+System calculates:
+Base price
+Dynamic pricing
+Bundle discount
+Rewards
+Upsells
+Customer sees:
+Total: $1,240
+Bundle Discount: -10%
+Demand Adjustment: +5%
+Earn: 18,600 JCMOVES
+
+Suggested Add-ons:
++ Cleaning
++ Junk Removal
+🧱 ARCHITECTURE SUMMARY
+
+You now have:
+
+🧠 Core Engine
+pricingEngine.ts
+💰 Revenue Expansion
+upsellEngine.ts
+dynamicPricing.ts
+🪙 Loyalty System
+rewardsEngine.ts
+🚛 Operations
+dispatchEngine.ts
+🚀 WHAT THIS DOES FOR YOU
+Immediately:
+Higher ticket size
+Faster booking
+Automated decisions
+Soon:
+Fully automated business
+Minimal manual dispatch
+Token-powered ecosystem
