@@ -360,6 +360,16 @@ router.post("/bookings", async (req: Request, res: Response) => {
     });
     const appliedMultiplier = quote.bundleApplied?.bonusMultiplier ?? 1;
 
+    // Task #163 — guarantee every numeric column persists as a finite
+    // 2-decimal string. A non-finite quantity / unitPrice / lineSubtotal
+    // (NaN, Infinity, undefined) used to crash `.toFixed(2)` and bubble
+    // up as a generic 500 that hid the real cause. Quote-only / TBD
+    // lines persist as 0.00 with priceMode="quote" instead of throwing.
+    const money = (n: unknown): string => {
+      const v = typeof n === "number" && Number.isFinite(n) ? n : 0;
+      return Math.max(0, v).toFixed(2);
+    };
+
     // Wrap parent + children in a transaction so a child-insert failure
     // never leaves an orphan `bookings` row pointing at no line items.
     const booking = await db.transaction(async (tx) => {
@@ -371,14 +381,14 @@ router.post("/bookings", async (req: Request, res: Response) => {
           customerPhone: body.customerPhone,
           serviceAddress: body.serviceAddress || null,
           notes: body.notes || null,
-          subtotal: quote.subtotal.toFixed(2),
-          discountTotal: quote.discountTotal.toFixed(2),
-          finalTotal: quote.finalTotal.toFixed(2),
+          subtotal: money(quote.subtotal),
+          discountTotal: money(quote.discountTotal),
+          finalTotal: money(quote.finalTotal),
           bundleAppliedCode: quote.bundleApplied?.code ?? null,
-          tokenEstimate: quote.tokenEstimate,
+          tokenEstimate: Number.isFinite(quote.tokenEstimate) ? quote.tokenEstimate : 0,
           rewardFlatBonusSnapshot: Math.round(settings.flatBonus),
-          rewardEarnRateSnapshot: settings.earnRate.toFixed(4),
-          rewardBonusMultiplierSnapshot: appliedMultiplier.toFixed(2),
+          rewardEarnRateSnapshot: (Number.isFinite(settings.earnRate) ? settings.earnRate : 0).toFixed(4),
+          rewardBonusMultiplierSnapshot: money(appliedMultiplier),
           status: "quote",
           source: body.source || "api",
         })
@@ -391,9 +401,9 @@ router.post("/bookings", async (req: Request, res: Response) => {
             bookingId: created.id,
             serviceCode: p.serviceCode,
             serviceLabel: p.serviceLabel,
-            quantity: p.quantity.toFixed(2),
-            unitPrice: p.unitPrice.toFixed(2),
-            lineSubtotal: pricingByIdx[idx].lineSubtotal.toFixed(2),
+            quantity: money(p.quantity),
+            unitPrice: money(p.unitPrice),
+            lineSubtotal: money(pricingByIdx[idx]?.lineSubtotal),
             priceMode: p.priceMode,
             details: p.details,
           })),
@@ -408,16 +418,26 @@ router.post("/bookings", async (req: Request, res: Response) => {
     // POST /api/admin/bookings/:id/confirm.
 
     // Task #146 — auto-provision a Trash Valet subscription when bundled.
+    // Run OUTSIDE the booking transaction's try/catch path: the booking is
+    // already persisted, so a downstream provisioning failure must not
+    // turn a successful create into a 500 the customer sees.
     const trashItem = persistInputs.find((p) => p.serviceCode === "trash_valet");
     if (trashItem) {
-      await autoProvisionTrashSubscriptionFromBooking({
-        bookingId: booking.id,
-        customerName: body.customerName,
-        customerPhone: body.customerPhone,
-        customerEmail: body.customerEmail || null,
-        serviceAddress: body.serviceAddress || null,
-        trashItem,
-      });
+      try {
+        await autoProvisionTrashSubscriptionFromBooking({
+          bookingId: booking.id,
+          customerName: body.customerName,
+          customerPhone: body.customerPhone,
+          customerEmail: body.customerEmail || null,
+          serviceAddress: body.serviceAddress || null,
+          trashItem,
+        });
+      } catch (provisionErr) {
+        console.error("[bookings] trash auto-provision failed:", {
+          bookingId: booking.id,
+          error: provisionErr instanceof Error ? provisionErr.message : String(provisionErr),
+        });
+      }
     }
 
     return res.status(201).json({ success: true, booking, quote });
@@ -428,8 +448,23 @@ router.post("/bookings", async (req: Request, res: Response) => {
     if (err instanceof HttpError) {
       return res.status(err.status).json({ error: err.message });
     }
-    console.error("[bookings] persist error:", err);
-    return res.status(500).json({ error: "Failed to create booking" });
+    // Task #163 — log enough context to diagnose any future failure in
+    // one log line (serviceCodes, error name + message + stack).
+    const serviceCodes = (req.body?.items || [])
+      .map((it: any) => it?.serviceCode)
+      .filter(Boolean)
+      .join(",");
+    console.error("[bookings] persist error:", {
+      name: err instanceof Error ? err.name : typeof err,
+      message: err instanceof Error ? err.message : String(err),
+      serviceCodes,
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+    // Keep the raw error message server-side only — it can contain DB
+    // constraint names / column names / row snippets that shouldn't be
+    // surfaced to the customer. Validation errors that ARE safe to show
+    // are already returned above via HttpError / ZodError branches.
+    return res.status(500).json({ error: "Failed to create booking. Please try again or call us." });
   }
 });
 
