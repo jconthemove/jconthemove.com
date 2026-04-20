@@ -561,6 +561,9 @@ export default function CrewTodayPage() {
       setShowTimePicker(false);
       if (user?.id) writeBeaconToStorage(user.id, true, until);
       queryClient.invalidateQueries({ queryKey: ["/api/employees/available"] });
+      // Task #173 — kick auth cache so useCrewGpsBeacon (app-shell)
+      // sees isAvailable=true immediately instead of up to 60s later.
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       toast({ title: `🟢 Online until ${formatTime(until)}`, description: "You'll appear for job dispatch." });
     },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
@@ -577,6 +580,8 @@ export default function CrewTodayPage() {
       setShowTimePicker(false);
       if (user?.id) writeBeaconToStorage(user.id, false, null);
       queryClient.invalidateQueries({ queryKey: ["/api/employees/available"] });
+      // Task #173 — kick auth cache so GPS beacon stops quickly.
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       toast({ title: "🔴 You're OFF DUTY", description: "You won't appear in available crews." });
     },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
