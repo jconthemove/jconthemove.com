@@ -340,8 +340,10 @@ function MyJobCard({
   myTradeRequest: TradeRequestStatus | null;
   myId: string;
   onStatus: (leadId: string, status: "en_route"|"on_site"|"completed") => void;
+  onAccept: (leadId: string) => void;
   onDecline: (leadId: string) => void;
   statusPending: string | null;
+  acceptPending: string | null;
   declinePending: string | null;
 }) {
   const effectiveDate = lead.confirmedDate || lead.moveDate;
@@ -367,7 +369,8 @@ function MyJobCard({
     : "accepted";
   const currentIdx = STATUS_STEPS.findIndex(s => s.key === currentKey);
 
-  const nextAction: { label: string; icon: any; next: "en_route"|"on_site"|"completed" } | null =
+  type LucideIcon = React.ComponentType<{ className?: string }>;
+  const nextAction: { label: string; icon: LucideIcon; next: "en_route"|"on_site"|"completed" } | null =
     currentKey === "accepted" ? { label: "Start — I'm En Route", icon: Play, next: "en_route" }
     : currentKey === "en_route" ? { label: "I've Arrived On Site", icon: Flag, next: "on_site" }
     : currentKey === "on_site" ? { label: "Mark Complete", icon: CheckCircle2, next: "completed" }
@@ -376,6 +379,7 @@ function MyJobCard({
   const iAmActiveOffer = ds === "offering" && lead.dispatchOfferedTo === myId;
   const mapsLink = buildMapsLink(lead);
   const isStatusBusy = statusPending === lead.id;
+  const isAcceptBusy = acceptPending === lead.id;
   const isDeclineBusy = declinePending === lead.id;
 
   return (
@@ -467,14 +471,24 @@ function MyJobCard({
             <Navigation className="h-4 w-4" /> Navigate
           </a>
           {iAmActiveOffer ? (
-            <Button
-              onClick={e => { e.stopPropagation(); onDecline(lead.id); }}
-              disabled={isDeclineBusy}
-              className="flex-1 min-h-[44px] bg-red-600 hover:bg-red-500 text-white font-bold text-sm"
-              data-testid={`decline-${lead.id}`}
-            >
-              {isDeclineBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <><XCircle className="h-4 w-4 mr-1" /> Decline</>}
-            </Button>
+            <>
+              <Button
+                onClick={e => { e.stopPropagation(); onAccept(lead.id); }}
+                disabled={isAcceptBusy}
+                className="flex-1 min-h-[44px] bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm"
+                data-testid={`accept-${lead.id}`}
+              >
+                {isAcceptBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <><CheckCircle2 className="h-4 w-4 mr-1" /> Accept</>}
+              </Button>
+              <Button
+                onClick={e => { e.stopPropagation(); onDecline(lead.id); }}
+                disabled={isDeclineBusy}
+                className="flex-1 min-h-[44px] bg-red-600 hover:bg-red-500 text-white font-bold text-sm"
+                data-testid={`decline-${lead.id}`}
+              >
+                {isDeclineBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <><XCircle className="h-4 w-4 mr-1" /> Decline</>}
+              </Button>
+            </>
           ) : nextAction ? (
             <Button
               onClick={e => { e.stopPropagation(); onStatus(lead.id, nextAction.next); }}
@@ -832,6 +846,29 @@ export default function CrewJobsPage() {
   });
 
   // Task #173 — crew execution state machine transitions.
+  const [acceptPending, setAcceptPending] = useState<string | null>(null);
+  const acceptOfferMutation = useMutation({
+    mutationFn: async (leadId: string) => {
+      const res = await apiRequest("POST", `/api/crew/jobs/${leadId}/accept`, {});
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Offer no longer yours" }));
+        throw new Error(err.error || "Offer no longer yours");
+      }
+      return res.json();
+    },
+    onMutate: (leadId) => setAcceptPending(leadId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads/my-jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads/job-board"] });
+      setAcceptPending(null);
+      toast({ title: "✅ Offer accepted", description: "You're on the job — tap Start when en route." });
+    },
+    onError: (e: Error) => {
+      setAcceptPending(null);
+      toast({ title: "Couldn't accept", description: e.message, variant: "destructive" });
+    },
+  });
+
   const [statusPending, setStatusPending] = useState<string | null>(null);
   const statusMutation = useMutation({
     mutationFn: async ({ leadId, status }: { leadId: string; status: "en_route"|"on_site"|"completed" }) => {
@@ -990,8 +1027,10 @@ export default function CrewJobsPage() {
                         myTradeRequest={myTrade}
                         myId={user?.id || ""}
                         onStatus={(leadId, status) => statusMutation.mutate({ leadId, status })}
+                        onAccept={(leadId) => acceptOfferMutation.mutate(leadId)}
                         onDecline={(leadId) => declineMutation.mutate(leadId)}
                         statusPending={statusPending}
+                        acceptPending={acceptPending}
                         declinePending={declinePending}
                       />
                     );

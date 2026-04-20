@@ -5629,6 +5629,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dispatchNotes: leads.dispatchNotes,
         crewMembers: leads.crewMembers,
         createdAt: leads.createdAt,
+        urgency: leads.urgency,
       })
         .from(leads)
         .where(
@@ -5649,6 +5650,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const estimatedHrs = lead.confirmedHours || DEFAULT_HOURS;
         const crewSlotsFilled = Array.isArray(lead.crewMembers) ? lead.crewMembers.length : 0;
         const bonus = calcCrewBonus({
+          urgency: lead.urgency,
           arrivalWindow: lead.arrivalWindow,
           moveDate: lead.moveDate,
           confirmedDate: lead.confirmedDate,
@@ -11038,18 +11040,29 @@ Thank you for your business!
       const onCrew = Array.isArray(job.crewMembers) && job.crewMembers.includes(crewId);
       if (!onCrew) return res.status(403).json({ error: "you are not assigned to this job" });
 
-      // Enforce forward-only transitions.
-      const order = ["pending", "offering", "assigned", "accepted", "en_route", "on_site", "completed"];
-      const fromIdx = order.indexOf(job.dispatchState);
-      const toIdx = order.indexOf(next);
-      if (fromIdx >= 0 && toIdx <= fromIdx && !(job.dispatchState === "assigned" && next === "en_route")) {
+      // Enforce strict adjacent transitions — one tap = one step.
+      // Allowed edges (forward only):
+      //   assigned  -> en_route        (admin-pinned skips the accepted click)
+      //   accepted  -> en_route
+      //   en_route  -> on_site
+      //   on_site   -> completed
+      type DispatchStep = "pending" | "offering" | "assigned" | "accepted" | "en_route" | "on_site" | "completed";
+      const allowedEdges: Record<string, Array<"en_route" | "on_site" | "completed">> = {
+        assigned: ["en_route"],
+        accepted: ["en_route"],
+        en_route: ["on_site"],
+        on_site: ["completed"],
+      };
+      const from = (job.dispatchState || "") as DispatchStep;
+      const validNext = allowedEdges[from] || [];
+      if (!validNext.includes(next as "en_route" | "on_site" | "completed")) {
         return res.status(409).json({
-          error: `cannot move from ${job.dispatchState} to ${next}`,
+          error: `cannot move from ${job.dispatchState || "pending"} to ${next}`,
         });
       }
 
       const now = new Date();
-      const patch: Parameters<typeof persistState>[1] = { dispatchState: next as any };
+      const patch: Parameters<typeof persistState>[1] = { dispatchState: next as DispatchStep };
       if (next === "en_route") {
         patch.enRouteAt = now;
         patch.status = "in_progress";
