@@ -123,7 +123,7 @@ export async function crewAccept(leadId: string, crewId: string): Promise<{ ok: 
   if (!accepted) return { ok: false, message: "offer expired" };
   cancelOfferTimer(leadId);
   await logDispatchEvent(leadId, "offer_accepted", crewId, crewId,
-    before.dispatchState, "assigned", "crew accepted");
+    before.dispatchState, "accepted", "crew accepted");
   return { ok: true };
 }
 

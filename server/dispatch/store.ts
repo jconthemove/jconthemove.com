@@ -103,7 +103,7 @@ export async function persistState(
 export async function tryAcceptOffer(id: string, crewId: string): Promise<boolean> {
   const { rows } = await pool.query(
     `UPDATE leads
-        SET dispatch_state = 'assigned',
+        SET dispatch_state = 'accepted',
             dispatch_offered_to = NULL,
             dispatch_offer_expires_at = NULL,
             crew_members = (

@@ -10,7 +10,7 @@ import { acquireLock, releaseLock } from "./locks";
 import { sendOffer } from "./notify";
 import { rankCandidates } from "./engine";
 import { logDispatchEvent, recheckKillSwitch, loadJob, persistState } from "./store";
-import { OFFER_TTL_MS, OFFER_LOCK_TTL_MS, type DispatchCandidate } from "./types";
+import { OFFER_TTL_MS, OFFER_LOCK_TTL_MS, NON_DISPATCHABLE_STATES, type DispatchCandidate } from "./types";
 
 // In-memory timers + lock ownership keyed by jobId so a subsequent
 // dispatch call, an accept, a decline, or an admin override can cancel
@@ -32,9 +32,8 @@ export async function startOfferLoop(jobId: string): Promise<void> {
     await logDispatchEvent(jobId, "failed", null, null, null, "failed", "job not found");
     return;
   }
-  if (job.dispatchState === "assigned" || job.dispatchState === "en_route" ||
-      job.dispatchState === "on_site" || job.dispatchState === "completed") {
-    return; // nothing to do
+  if (NON_DISPATCHABLE_STATES.includes(job.dispatchState)) {
+    return; // already has a crew (assigned/accepted/en_route/on_site/completed)
   }
   if (["in_progress", "completed", "cancelled"].includes(job.status)) {
     return;

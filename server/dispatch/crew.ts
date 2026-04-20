@@ -73,7 +73,7 @@ export async function getEligibleCrew(opts: {
     [ids],
   );
   const todayMap = new Map<string, number>(
-    todayRows.rows.map((r: any) => [r.uid as string, Number(r.c) || 0]),
+    (todayRows.rows as Array<{ uid: string; c: number }>).map(r => [r.uid, Number(r.c) || 0]),
   );
 
   // Active (non-completed, non-cancelled) assignments — soft workload signal.
@@ -87,7 +87,7 @@ export async function getEligibleCrew(opts: {
     [ids],
   );
   const activeMap = new Map<string, number>(
-    activeRows.rows.map((r: any) => [r.uid as string, Number(r.c) || 0]),
+    (activeRows.rows as Array<{ uid: string; c: number }>).map(r => [r.uid, Number(r.c) || 0]),
   );
 
   const required = SERVICE_TO_CAPS[opts.serviceType] ?? [];

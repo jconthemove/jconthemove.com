@@ -7,13 +7,17 @@
 export type DispatchState =
   | "pending"    // just created, ready to be offered
   | "offering"   // an offer is outstanding to a single crew member
-  | "assigned"   // crew accepted; execution not yet started
+  | "assigned"   // admin manual override — crew pinned without an offer loop
+  | "accepted"   // crew accepted the offer; execution not yet started
   | "en_route"   // crew moving to site
   | "on_site"    // crew on site
   | "completed"  // job finished
   | "failed";    // exhausted all candidates / manual kill
 
 export const TERMINAL_STATES: DispatchState[] = ["completed", "failed"];
+// States in which an offer loop should NOT restart.
+export const NON_DISPATCHABLE_STATES: DispatchState[] =
+  ["assigned", "accepted", "en_route", "on_site", "completed"];
 
 export interface DispatchCandidate {
   crewId: string;
