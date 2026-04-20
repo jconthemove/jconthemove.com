@@ -12,7 +12,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Slider } from "@/components/ui/slider";
 import { useAuth } from "@/hooks/useAuth";
+import {
+  MIN_REDEMPTION_TOKENS,
+  REDEMPTION_INCREMENT,
+  maxTokensForSubtotal,
+  tokensToDollars,
+} from "@shared/tokenRedemptionRules";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import AddressField from "@/components/AddressField";
@@ -169,6 +177,11 @@ export default function MultiServiceBookPage() {
     internalNotes: "",    // crew-only notes invisible to the customer
   });
   const [quote, setQuote] = useState<QuoteResult | null>(null);
+  // Task #181 — wallet payment / token redemption state
+  const [payFromWallet, setPayFromWallet] = useState(false);
+  const [applyTokens, setApplyTokens] = useState(0);
+  const [tokenError, setTokenError] = useState<string | null>(null);
+  const customerTier = (user?.loyaltyTier as string | undefined) || "bronze";
   const [confirmation, setConfirmation] = useState<
     CreateBookingResponse["booking"] & { items: SelectedItem[]; quote: QuoteResult } | null
   >(null);
@@ -184,6 +197,49 @@ export default function MultiServiceBookPage() {
   });
   const allBundles: FeaturedBundle[] = bundlesData?.bundles || [];
 
+  // Task #181 — Live wallet balance for the signed-in customer. Only
+  // queried when authenticated; anonymous users see no wallet panel.
+  const { data: walletData } = useQuery<{ tokenBalance: string; cashBalance: string }>({
+    queryKey: ["/api/wallet/balance"],
+    enabled: !!user,
+  });
+  const walletCash = walletData ? parseFloat(walletData.cashBalance || "0") : 0;
+  const walletTokens = walletData ? Math.floor(parseFloat(walletData.tokenBalance || "0")) : 0;
+
+  // Task #181 — normalize the requested redemption whenever the tier cap
+  // (driven by quote.subtotal) or wallet token balance shrinks. Without
+  // this, the slider's rendered value clamps but state remains stale and
+  // submit could send an `applyTokens` above the cap, triggering a
+  // server rejection the user has no way to recover from once the
+  // slider hides.
+  const tokenSliderMax = useMemo(() => {
+    const subtotal = quote?.subtotal ?? 0;
+    if (subtotal <= 0) return 0;
+    const tierCap = maxTokensForSubtotal(subtotal, customerTier);
+    return Math.min(walletTokens, tierCap);
+  }, [quote?.subtotal, customerTier, walletTokens]);
+
+  useEffect(() => {
+    if (applyTokens === 0) return;
+    if (tokenSliderMax < MIN_REDEMPTION_TOKENS) {
+      setApplyTokens(0);
+      return;
+    }
+    if (applyTokens > tokenSliderMax) {
+      const snapped = Math.floor(tokenSliderMax / REDEMPTION_INCREMENT) * REDEMPTION_INCREMENT;
+      setApplyTokens(snapped < MIN_REDEMPTION_TOKENS ? 0 : snapped);
+    }
+  }, [tokenSliderMax, applyTokens]);
+
+  // Task #181 — auto-uncheck "Pay from wallet" if cash drops below the
+  // current total. The server has no partial-fallback today, so leaving
+  // the box checked would just guarantee a 400 at submit.
+  useEffect(() => {
+    if (!payFromWallet) return;
+    const total = quote?.finalTotal ?? 0;
+    if (walletCash < total) setPayFromWallet(false);
+  }, [walletCash, quote?.finalTotal, payFromWallet]);
+
   // ── Live quote (debounced + latest-wins to prevent stale-response races)
   // `quoteCartSig` records the cart signature the current `quote` represents.
   // Anything that reads `quote.bundleApplied` for behavior (the bundle popup)
@@ -194,8 +250,8 @@ export default function MultiServiceBookPage() {
   const [quoteCartSig, setQuoteCartSig] = useState<string>("");
   const quoteSeqRef = useRef(0);
   const quoteMutation = useMutation({
-    mutationFn: async (payload: { seq: number; sig: string; payloadItems: SelectedItem[] }) => {
-      const res = await apiRequest("POST", "/api/bookings/quote", {
+    mutationFn: async (payload: { seq: number; sig: string; payloadItems: SelectedItem[]; applyTokens: number }) => {
+      const body: Record<string, unknown> = {
         items: payload.payloadItems.map(i => ({
           serviceCode: i.serviceCode,
           quantity: i.quantity,
@@ -205,15 +261,38 @@ export default function MultiServiceBookPage() {
           details: i.details,
         })),
         source: "web_multi_book",
-      });
-      const data = await res.json();
-      return { seq: payload.seq, sig: payload.sig, data };
+      };
+      if (payload.applyTokens >= MIN_REDEMPTION_TOKENS) {
+        body.applyTokens = payload.applyTokens;
+        body.customerTier = customerTier;
+      }
+      try {
+        const res = await apiRequest("POST", "/api/bookings/quote", body);
+        const data = await res.json();
+        return { seq: payload.seq, sig: payload.sig, data, error: null as string | null };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Quote failed";
+        return { seq: payload.seq, sig: payload.sig, data: null, error: message };
+      }
     },
-    onSuccess: ({ seq, sig, data }) => {
+    onSuccess: ({ seq, sig, data, error }) => {
       if (seq !== quoteSeqRef.current) return;
+      if (error) {
+        // apiRequest throws on non-2xx with `${status}: ${body}`. Strip
+        // the status prefix and surface the server's message text.
+        const m = error.match(/^\d+:\s*(.*)$/);
+        let msg = m ? m[1] : error;
+        try {
+          const parsed = JSON.parse(msg);
+          msg = parsed.message || parsed.error || msg;
+        } catch { /* not json */ }
+        setTokenError(msg);
+        return;
+      }
       if (data?.quote) {
         setQuote(data.quote as QuoteResult);
         setQuoteCartSig(sig);
+        setTokenError(null);
       }
     },
   });
@@ -226,11 +305,12 @@ export default function MultiServiceBookPage() {
         seq: quoteSeqRef.current,
         sig: cartSigOf(items),
         payloadItems: items,
+        applyTokens,
       });
     }, 350);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(items)]);
+  }, [JSON.stringify(items), applyTokens]);
 
   // ── Item helpers
   const selectedCodes = useMemo(() => new Set(items.map(i => i.serviceCode)), [items]);
@@ -348,6 +428,17 @@ export default function MultiServiceBookPage() {
         serviceAddress: serviceAddress.trim() || undefined,
         notes: combinedNotes || undefined,
         source: isWorker ? "crew_add_job" : "web_multi_book",
+        ...((() => {
+          // Re-clamp at submit so a stale state value can never bypass
+          // the slider's tier/wallet cap (defense in depth — the effect
+          // above already normalises on cap changes).
+          const capped = Math.min(applyTokens, tokenSliderMax);
+          const snapped = Math.floor(capped / REDEMPTION_INCREMENT) * REDEMPTION_INCREMENT;
+          return snapped >= MIN_REDEMPTION_TOKENS
+            ? { applyTokens: snapped, customerTier }
+            : {};
+        })()),
+        ...(payFromWallet ? { payFromWallet: true } : {}),
       });
       return res.json() as Promise<CreateBookingResponse>;
     },
@@ -359,9 +450,22 @@ export default function MultiServiceBookPage() {
       }
     },
     onError: (err: Error) => {
+      // Task #181 — if the server rejected wallet/token redemption,
+      // surface the message inline in the wallet panel rather than
+      // burying it in a toast that disappears.
+      const raw = err.message || "";
+      const m = raw.match(/^\d+:\s*(.*)$/);
+      let parsed: { error?: string; message?: string } | null = null;
+      try { parsed = JSON.parse(m ? m[1] : raw); } catch { /* not json */ }
+      const errCode = parsed?.error || "";
+      const isWalletRedemptionError = /wallet|token|redemption|insufficient|jcmoves/i.test(errCode + " " + (parsed?.message || ""));
+      if (isWalletRedemptionError) {
+        setTokenError(parsed?.message || parsed?.error || "Wallet payment was rejected.");
+        return;
+      }
       toast({
         title: "Could not create booking",
-        description: err.message ? err.message.slice(0, 200) : "Please try again or call us.",
+        description: raw ? raw.slice(0, 200) : "Please try again or call us.",
         variant: "destructive",
       });
     },
@@ -757,6 +861,14 @@ export default function MultiServiceBookPage() {
                         <span>−${quote.discountTotal.toFixed(2)}</span>
                       </div>
                     )}
+                    {quote.tokenRedemption && quote.tokenRedemption.discountUsd > 0 && (
+                      <div className="flex justify-between text-sm text-orange-500" data-testid="line-token-redemption">
+                        <span className="flex items-center gap-1">
+                          <Coins className="h-3 w-3" /> {quote.tokenRedemption.tokens.toLocaleString()} JCMOVES applied
+                        </span>
+                        <span>−${quote.tokenRedemption.discountUsd.toFixed(2)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between text-base font-bold pt-1 border-t border-border">
                       <span>Total</span>
                       <span>${quote.finalTotal.toFixed(2)}</span>
@@ -767,6 +879,103 @@ export default function MultiServiceBookPage() {
                   </div>
                 )}
               </div>
+
+              {/* Task #181 — Wallet & JCMOVES token redemption */}
+              {user && walletData && (() => {
+                const subtotalForCap = quote?.subtotal ?? 0;
+                const tierCap = subtotalForCap > 0
+                  ? maxTokensForSubtotal(subtotalForCap, customerTier)
+                  : 0;
+                const sliderMax = tokenSliderMax;
+                const canRedeem = sliderMax >= MIN_REDEMPTION_TOKENS;
+                const cashShort = walletCash < (quote?.finalTotal ?? 0);
+                return (
+                  <div className="mt-4 rounded-2xl border border-border bg-card p-4 space-y-4" data-testid="wallet-panel">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Your JCMOVES wallet</p>
+                      <span className="text-[10px] uppercase tracking-widest text-muted-foreground">{customerTier}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div className="rounded-lg bg-muted/40 p-3">
+                        <p className="text-[10px] uppercase tracking-widest text-muted-foreground">USD credit</p>
+                        <p className="font-bold text-lg" data-testid="wallet-cash-balance">${walletCash.toFixed(2)}</p>
+                      </div>
+                      <div className="rounded-lg bg-muted/40 p-3">
+                        <p className="text-[10px] uppercase tracking-widest text-muted-foreground">JCMOVES tokens</p>
+                        <p className="font-bold text-lg flex items-center gap-1" data-testid="wallet-token-balance">
+                          <Coins className="h-4 w-4 text-orange-500" /> {walletTokens.toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+
+                    <label className="flex items-start gap-2 text-sm cursor-pointer">
+                      <Checkbox
+                        checked={payFromWallet}
+                        onCheckedChange={(c) => setPayFromWallet(!!c)}
+                        disabled={walletCash <= 0 || cashShort}
+                        data-testid="checkbox-pay-from-wallet"
+                      />
+                      <span className="leading-tight">
+                        <span className="font-semibold">Pay from wallet</span>
+                        <span className="block text-xs text-muted-foreground">
+                          {walletCash <= 0
+                            ? "No USD credit available. Add credit on the Wallet page."
+                            : cashShort
+                              ? `Need $${(quote?.finalTotal ?? 0).toFixed(2)} — wallet only has $${walletCash.toFixed(2)}. Top up to pay from wallet.`
+                              : "Use your JCMOVES USD credit instead of a card."}
+                        </span>
+                      </span>
+                    </label>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs">Apply JCMOVES tokens</Label>
+                        <span className="text-xs font-mono" data-testid="token-slider-value">
+                          {applyTokens.toLocaleString()} = ${tokensToDollars(applyTokens).toFixed(2)}
+                        </span>
+                      </div>
+                      {canRedeem ? (
+                        <>
+                          <Slider
+                            min={0}
+                            max={sliderMax}
+                            step={REDEMPTION_INCREMENT}
+                            value={[Math.min(applyTokens, sliderMax)]}
+                            onValueChange={(v) => {
+                              const raw = v[0] ?? 0;
+                              const snapped = Math.floor(raw / REDEMPTION_INCREMENT) * REDEMPTION_INCREMENT;
+                              setApplyTokens(snapped < MIN_REDEMPTION_TOKENS ? 0 : snapped);
+                            }}
+                            data-testid="slider-apply-tokens"
+                          />
+                          <p className="text-[11px] text-muted-foreground">
+                            Max {sliderMax.toLocaleString()} JCMOVES (your {customerTier} tier covers up to{" "}
+                            ${tokensToDollars(tierCap).toFixed(2)} of this job).
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-[11px] text-muted-foreground" data-testid="token-cap-too-low">
+                          {walletTokens < MIN_REDEMPTION_TOKENS
+                            ? `Need at least ${MIN_REDEMPTION_TOKENS.toLocaleString()} JCMOVES to redeem (you have ${walletTokens.toLocaleString()}).`
+                            : `Subtotal too low to redeem tokens at your ${customerTier} tier.`}
+                        </p>
+                      )}
+                      {tokenError && (
+                        <p className="text-[11px] text-red-500 flex items-start gap-1" data-testid="token-error">
+                          <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" /> {tokenError}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {!user && (
+                <div className="mt-4 rounded-xl border border-border bg-muted/20 p-3 text-xs text-muted-foreground" data-testid="wallet-signin-hint">
+                  <Coins className="inline h-3 w-3 mr-1 text-orange-500" />
+                  Sign in to pay from your JCMOVES wallet or apply your tokens.
+                </div>
+              )}
             </section>
           )}
 

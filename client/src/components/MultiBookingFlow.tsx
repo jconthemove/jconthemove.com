@@ -116,6 +116,7 @@ export interface QuoteResult {
   tokenEstimate: number;
   bundleApplied: { code: string; name: string; rawDiscount: number } | null;
   items: Array<{ serviceCode: string; lineSubtotal: number }>;
+  tokenRedemption?: { tokens: number; discountUsd: number };
 }
 
 const SERVICE_EMOJI: Record<string, string> = {
