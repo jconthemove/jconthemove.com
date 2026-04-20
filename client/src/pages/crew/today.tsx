@@ -279,6 +279,42 @@ export default function CrewTodayPage() {
     return () => clearInterval(t);
   }, [dutyStatus, availableUntil]);
 
+  // Task #173 — GPS watcher. While the crew is on duty we stream the
+  // device position to /api/crew/location at most once every 30s so the
+  // admin dispatch map can render live positions. Stops immediately when
+  // duty flips off to respect battery + privacy. Location permission
+  // failures are swallowed silently — this is best-effort, not required.
+  useEffect(() => {
+    if (!dutyStatus) return;
+    if (typeof navigator === "undefined" || !navigator.geolocation) return;
+    const MIN_INTERVAL_MS = 30_000;
+    let lastSent = 0;
+    let watchId: number | null = null;
+    try {
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const now = Date.now();
+          if (now - lastSent < MIN_INTERVAL_MS) return;
+          lastSent = now;
+          apiRequest("POST", "/api/crew/location", {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+          }).catch(() => { /* silent — best-effort */ });
+        },
+        (_err) => { /* permission denied, etc. — silent */ },
+        { enableHighAccuracy: false, maximumAge: 20_000, timeout: 30_000 },
+      );
+    } catch {
+      /* ignore */
+    }
+    return () => {
+      if (watchId != null && navigator.geolocation) {
+        try { navigator.geolocation.clearWatch(watchId); } catch { /* noop */ }
+      }
+    };
+  }, [dutyStatus]);
+
   // Heartbeat every 60 seconds while online
   useEffect(() => {
     if (dutyStatus) {

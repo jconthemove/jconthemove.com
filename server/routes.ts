@@ -5644,13 +5644,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const TOKENS_PER_HOUR = 25;
       const DEFAULT_HOURS = 3;
 
+      const { calcCrewBonus } = await import("@shared/crewIncentives");
       const masked = openLeads.map(lead => {
         const estimatedHrs = lead.confirmedHours || DEFAULT_HOURS;
+        const crewSlotsFilled = Array.isArray(lead.crewMembers) ? lead.crewMembers.length : 0;
+        const bonus = calcCrewBonus({
+          arrivalWindow: lead.arrivalWindow,
+          moveDate: lead.moveDate,
+          confirmedDate: lead.confirmedDate,
+          crewSize: lead.crewSize,
+          crewSlotsFilled,
+          totalPrice: lead.totalPrice,
+          serviceType: lead.serviceType,
+        });
         return {
           ...lead,
           estimatedTokens: FLAT_TOKEN_BASE + TOKENS_PER_HOUR * estimatedHrs,
           alreadyApplied: Array.isArray(lead.crewMembers) && lead.crewMembers.includes(userId),
-          crewSlotsFilled: Array.isArray(lead.crewMembers) ? lead.crewMembers.length : 0,
+          crewSlotsFilled,
+          bonus,
         };
       });
 
@@ -11000,6 +11012,139 @@ Thank you for your business!
       res.json({ ok: true });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Task #173 — crew execution state machine. Transitions:
+  //   accepted → en_route → on_site → completed
+  // Validates the caller is actually on the crew for the job, stamps
+  // the matching timestamp column, and mirrors dispatch_state + the
+  // legacy lead.status so downstream invoicing/rewards keep working.
+  // On "completed" this also fires the existing disbursement pipeline.
+  app.post("/api/crew/jobs/:id/status", isAuthenticated, requireEmployee, async (req: any, res) => {
+    const { id } = req.params;
+    const next = req.body?.status as string | undefined;
+    const crewId = req.currentUser.id;
+    const allowed = ["en_route", "on_site", "completed"];
+    if (!next || !allowed.includes(next)) {
+      return res.status(400).json({ error: `status must be one of ${allowed.join(", ")}` });
+    }
+
+    try {
+      const { loadJob, persistState, logDispatchEvent } = await import("./dispatch/index");
+      const job = await loadJob(id);
+      if (!job) return res.status(404).json({ error: "job not found" });
+
+      const onCrew = Array.isArray(job.crewMembers) && job.crewMembers.includes(crewId);
+      if (!onCrew) return res.status(403).json({ error: "you are not assigned to this job" });
+
+      // Enforce forward-only transitions.
+      const order = ["pending", "offering", "assigned", "accepted", "en_route", "on_site", "completed"];
+      const fromIdx = order.indexOf(job.dispatchState);
+      const toIdx = order.indexOf(next);
+      if (fromIdx >= 0 && toIdx <= fromIdx && !(job.dispatchState === "assigned" && next === "en_route")) {
+        return res.status(409).json({
+          error: `cannot move from ${job.dispatchState} to ${next}`,
+        });
+      }
+
+      const now = new Date();
+      const patch: Parameters<typeof persistState>[1] = { dispatchState: next as any };
+      if (next === "en_route") {
+        patch.enRouteAt = now;
+        patch.status = "in_progress";
+      } else if (next === "on_site") {
+        patch.onSiteAt = now;
+        patch.status = "in_progress";
+      } else if (next === "completed") {
+        patch.completedAt = now;
+        patch.status = "completed";
+      }
+      await persistState(id, patch);
+      await logDispatchEvent(id, `crew_${next}`, crewId, crewId,
+        job.dispatchState, next, `crew marked ${next}`);
+
+      // Mirror lead history + fire reward disbursement on completion.
+      if (next === "completed") {
+        try {
+          await writeLeadHistory(id, job.status, "completed", crewId, `Marked complete by crew (${next})`);
+        } catch (e) {
+          console.warn("[/api/crew/jobs/:id/status] history write failed:", e);
+        }
+        try {
+          const { ensureIdempotent } = await import("./lib/idempotency");
+          const idemKey = `job-reward-${id}-completion`;
+          const isNew = await ensureIdempotent(idemKey, "job_completion");
+          if (isNew) {
+            const { disburseJobTokens } = await import("./services/disburse-job-tokens");
+            await disburseJobTokens(id);
+          }
+        } catch (e) {
+          console.error("[/api/crew/jobs/:id/status] disbursement failed:", e);
+        }
+      }
+
+      res.json({ ok: true, state: next });
+    } catch (e: any) {
+      console.error("[/api/crew/jobs/:id/status] error:", e);
+      res.status(500).json({ error: e.message || "status update failed" });
+    }
+  });
+
+  // Task #173 — crew GPS ping. Client posts every ~30s while on duty.
+  // We upsert a single row per crew member so the admin map can render
+  // live positions and future geofencing can auto-detect on-site arrival.
+  app.post("/api/crew/location", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const { lat, lng, accuracy } = req.body ?? {};
+      const latN = Number(lat);
+      const lngN = Number(lng);
+      if (!isFinite(latN) || !isFinite(lngN) || Math.abs(latN) > 90 || Math.abs(lngN) > 180) {
+        return res.status(400).json({ error: "invalid coordinates" });
+      }
+      const accN = accuracy != null && isFinite(Number(accuracy)) ? Number(accuracy) : null;
+      await pool.query(
+        `INSERT INTO crew_locations (user_id, lat, lng, accuracy, updated_at)
+         VALUES ($1, $2, $3, $4, now())
+         ON CONFLICT (user_id) DO UPDATE
+           SET lat = EXCLUDED.lat,
+               lng = EXCLUDED.lng,
+               accuracy = EXCLUDED.accuracy,
+               updated_at = now()`,
+        [req.currentUser.id, latN, lngN, accN],
+      );
+      res.json({ ok: true });
+    } catch (e: any) {
+      console.error("[/api/crew/location] error:", e);
+      res.status(500).json({ error: e.message || "location update failed" });
+    }
+  });
+
+  // Admin — live crew positions for the dispatch map. Returns only
+  // rows updated in the last 15 minutes so stale devices don't pollute.
+  app.get("/api/admin/crew/locations", isAuthenticated, requireBusinessOwner, async (_req, res) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT cl.user_id, cl.lat, cl.lng, cl.accuracy, cl.updated_at,
+                u.first_name, u.last_name, u.is_available
+           FROM crew_locations cl
+           LEFT JOIN users u ON u.id = cl.user_id
+          WHERE cl.updated_at >= now() - interval '15 minutes'
+          ORDER BY cl.updated_at DESC`,
+      );
+      res.json(rows.map((r: any) => ({
+        userId: r.user_id,
+        lat: Number(r.lat),
+        lng: Number(r.lng),
+        accuracy: r.accuracy != null ? Number(r.accuracy) : null,
+        updatedAt: r.updated_at,
+        firstName: r.first_name,
+        lastName: r.last_name,
+        isAvailable: r.is_available,
+      })));
+    } catch (e: any) {
+      console.error("[/api/admin/crew/locations] error:", e);
+      res.status(500).json({ error: e.message || "failed" });
     }
   });
 

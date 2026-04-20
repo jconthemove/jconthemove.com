@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   MapPin, Calendar, Loader2, ChevronRight, Briefcase, Coins, Users,
   CheckCircle2, ClipboardList, Plus, Truck, Clock, ArrowLeftRight,
-  Star, AlertCircle, ChevronDown
+  Star, AlertCircle, ChevronDown, Navigation, Play, Flag, XCircle, DollarSign
 } from "lucide-react";
 import { useLocation } from "wouter";
 import type { User } from "@shared/schema";
@@ -92,6 +92,7 @@ type JobBoardLead = {
   firstName?: string;
   lastName?: string;
   dispatchNotes?: string | null;
+  bonus?: { amount: number; reasons: string[] } | null;
 };
 
 type EnrichedLead = {
@@ -117,6 +118,12 @@ type EnrichedLead = {
   lastName: string;
   dispatchNotes: string | null;
   phone?: string | null;
+  dispatchState?: string | null;
+  dispatchOfferedTo?: string | null;
+  dispatchOfferExpiresAt?: string | null;
+  enRouteAt?: string | null;
+  onSiteAt?: string | null;
+  completedAt?: string | null;
 };
 
 type TradeRequestStatus = {
@@ -196,8 +203,25 @@ function JobBoardCard({
                   ~{estimatedTokens.toLocaleString()}
                 </p>
                 <p className="text-slate-500 text-[10px]">JCMOVES</p>
+                {job.bonus && job.bonus.amount > 0 && (
+                  <p className="mt-1 inline-flex items-center gap-0.5 text-emerald-300 font-bold text-xs bg-emerald-500/15 border border-emerald-500/30 rounded-full px-2 py-0.5"
+                     data-testid={`bonus-${job.id}`}
+                     title={job.bonus.reasons.join(" · ")}>
+                    <DollarSign className="h-3 w-3" />
+                    +${job.bonus.amount} bonus
+                  </p>
+                )}
               </div>
             </div>
+            {job.bonus && job.bonus.reasons.length > 0 && (
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {job.bonus.reasons.map((r, i) => (
+                  <span key={i} className="text-[10px] font-semibold text-emerald-300/90 bg-emerald-500/10 border border-emerald-500/20 rounded px-1.5 py-0.5">
+                    {r}
+                  </span>
+                ))}
+              </div>
+            )}
 
             <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
               {effectiveDate && (
@@ -284,16 +308,41 @@ function JobBoardCard({
   );
 }
 
+// Task #173 — builds the Google Maps deep link crews tap to navigate
+// to the pickup address. Uses the universal `dir/?api=1&destination=`
+// URL so iOS/Android/web all route into the user's default maps app.
+function buildMapsLink(lead: Pick<EnrichedLead, "fromAddress" | "confirmedDate" | "moveDate">): string {
+  const dest = encodeURIComponent(lead.fromAddress || "");
+  return `https://www.google.com/maps/dir/?api=1&destination=${dest}`;
+}
+
+const STATUS_STEPS: { key: "accepted"|"en_route"|"on_site"|"completed"; label: string }[] = [
+  { key: "accepted", label: "Accepted" },
+  { key: "en_route", label: "En Route" },
+  { key: "on_site", label: "On Site" },
+  { key: "completed", label: "Complete" },
+];
+
 function MyJobCard({
   lead,
   onViewDetail,
   crewNames,
   myTradeRequest,
+  myId,
+  onStatus,
+  onDecline,
+  statusPending,
+  declinePending,
 }: {
   lead: EnrichedLead;
   onViewDetail: () => void;
   crewNames: string[];
   myTradeRequest: TradeRequestStatus | null;
+  myId: string;
+  onStatus: (leadId: string, status: "en_route"|"on_site"|"completed") => void;
+  onDecline: (leadId: string) => void;
+  statusPending: string | null;
+  declinePending: string | null;
 }) {
   const effectiveDate = lead.confirmedDate || lead.moveDate;
   const city = extractCity(lead.fromAddress);
@@ -306,13 +355,35 @@ function MyJobCard({
     denied: "bg-red-500/20 text-red-300",
   };
 
+  // Which step am I on?
+  const ds = (lead.dispatchState || "").toLowerCase();
+  // Normalize: assigned = freshly pinned by admin; treat as "accepted"
+  // so the crew can proceed to the En Route step immediately.
+  const currentKey: typeof STATUS_STEPS[number]["key"] =
+    ds === "completed" ? "completed"
+    : ds === "on_site" ? "on_site"
+    : ds === "en_route" ? "en_route"
+    : (ds === "accepted" || ds === "assigned") ? "accepted"
+    : "accepted";
+  const currentIdx = STATUS_STEPS.findIndex(s => s.key === currentKey);
+
+  const nextAction: { label: string; icon: any; next: "en_route"|"on_site"|"completed" } | null =
+    currentKey === "accepted" ? { label: "Start — I'm En Route", icon: Play, next: "en_route" }
+    : currentKey === "en_route" ? { label: "I've Arrived On Site", icon: Flag, next: "on_site" }
+    : currentKey === "on_site" ? { label: "Mark Complete", icon: CheckCircle2, next: "completed" }
+    : null;
+
+  const iAmActiveOffer = ds === "offering" && lead.dispatchOfferedTo === myId;
+  const mapsLink = buildMapsLink(lead);
+  const isStatusBusy = statusPending === lead.id;
+  const isDeclineBusy = declinePending === lead.id;
+
   return (
     <Card
-      className="bg-slate-800/40 border border-slate-700/50 hover:border-blue-500/40 transition-all cursor-pointer active:scale-[0.99]"
-      onClick={onViewDetail}
+      className="bg-slate-800/40 border border-slate-700/50 hover:border-blue-500/40 transition-all"
     >
       <CardContent className="p-4">
-        <div className="flex items-start gap-3">
+        <div className="flex items-start gap-3 cursor-pointer" onClick={onViewDetail}>
           <div className="text-2xl leading-none mt-0.5 flex-shrink-0">
             {SERVICE_ICONS[lead.serviceType] || "📦"}
           </div>
@@ -357,7 +428,72 @@ function MyJobCard({
               </div>
             )}
           </div>
-          <ChevronRight className="h-4 w-4 text-slate-600 flex-shrink-0 mt-1" />
+        </div>
+
+        {/* Step tracker */}
+        <div className="mt-3 flex items-center gap-1">
+          {STATUS_STEPS.map((s, i) => {
+            const done = currentIdx >= i;
+            const active = currentIdx === i && currentKey !== "completed";
+            return (
+              <div key={s.key} className="flex-1 flex items-center gap-1" data-testid={`step-${lead.id}-${s.key}`}>
+                <div className={`flex-1 h-1.5 rounded-full transition-colors ${
+                  done ? (active ? "bg-blue-500" : "bg-emerald-500") : "bg-slate-700"
+                }`} />
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-1 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide">
+          {STATUS_STEPS.map((s, i) => (
+            <span key={s.key} className={
+              currentIdx > i ? "text-emerald-400"
+              : currentIdx === i ? "text-blue-300"
+              : "text-slate-600"
+            }>{s.label}</span>
+          ))}
+        </div>
+
+        {/* Action row: navigate + primary action, plus decline while offering */}
+        <div className="mt-3 flex gap-2">
+          <a
+            href={mapsLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            className="flex-1 min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-600 text-slate-200 bg-slate-800/60 hover:bg-slate-700/60 text-sm font-semibold px-3"
+            data-testid={`nav-${lead.id}`}
+          >
+            <Navigation className="h-4 w-4" /> Navigate
+          </a>
+          {iAmActiveOffer ? (
+            <Button
+              onClick={e => { e.stopPropagation(); onDecline(lead.id); }}
+              disabled={isDeclineBusy}
+              className="flex-1 min-h-[44px] bg-red-600 hover:bg-red-500 text-white font-bold text-sm"
+              data-testid={`decline-${lead.id}`}
+            >
+              {isDeclineBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <><XCircle className="h-4 w-4 mr-1" /> Decline</>}
+            </Button>
+          ) : nextAction ? (
+            <Button
+              onClick={e => { e.stopPropagation(); onStatus(lead.id, nextAction.next); }}
+              disabled={isStatusBusy}
+              className="flex-1 min-h-[44px] bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm"
+              data-testid={`status-${lead.id}-${nextAction.next}`}
+            >
+              {isStatusBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : (
+                <>
+                  <nextAction.icon className="h-4 w-4 mr-1" />
+                  {nextAction.label}
+                </>
+              )}
+            </Button>
+          ) : (
+            <div className="flex-1 min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-sm font-semibold">
+              <CheckCircle2 className="h-4 w-4" /> Completed
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -695,6 +831,54 @@ export default function CrewJobsPage() {
     },
   });
 
+  // Task #173 — crew execution state machine transitions.
+  const [statusPending, setStatusPending] = useState<string | null>(null);
+  const statusMutation = useMutation({
+    mutationFn: async ({ leadId, status }: { leadId: string; status: "en_route"|"on_site"|"completed" }) => {
+      const res = await apiRequest("POST", `/api/crew/jobs/${leadId}/status`, { status });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Couldn't update status" }));
+        throw new Error(err.error || "Couldn't update status");
+      }
+      return res.json();
+    },
+    onMutate: ({ leadId }) => setStatusPending(leadId),
+    onSuccess: (_d, { status }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads/my-jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      setStatusPending(null);
+      const labels: Record<string, string> = { en_route: "🚚 En route", on_site: "📍 On site", completed: "✅ Job complete!" };
+      toast({ title: labels[status] });
+    },
+    onError: (e: Error) => {
+      setStatusPending(null);
+      toast({ title: "Status update failed", description: e.message, variant: "destructive" });
+    },
+  });
+
+  const [declinePending, setDeclinePending] = useState<string | null>(null);
+  const declineMutation = useMutation({
+    mutationFn: async (leadId: string) => {
+      const res = await apiRequest("POST", `/api/crew/jobs/${leadId}/decline`, {});
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Couldn't decline" }));
+        throw new Error(err.error || "Couldn't decline");
+      }
+      return res.json();
+    },
+    onMutate: (leadId) => setDeclinePending(leadId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads/my-jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads/job-board"] });
+      setDeclinePending(null);
+      toast({ title: "Offer declined", description: "We'll offer it to the next available crew." });
+    },
+    onError: (e: Error) => {
+      setDeclinePending(null);
+      toast({ title: "Couldn't decline", description: e.message, variant: "destructive" });
+    },
+  });
+
   const activeJobs = useMemo(
     () => myJobs.filter(l => !["completed", "cancelled"].includes(l.status)),
     [myJobs]
@@ -804,6 +988,11 @@ export default function CrewJobsPage() {
                         onViewDetail={() => openDetail(lead)}
                         crewNames={getCrewNames(lead.crewMembers)}
                         myTradeRequest={myTrade}
+                        myId={user?.id || ""}
+                        onStatus={(leadId, status) => statusMutation.mutate({ leadId, status })}
+                        onDecline={(leadId) => declineMutation.mutate(leadId)}
+                        statusPending={statusPending}
+                        declinePending={declinePending}
                       />
                     );
                   })}

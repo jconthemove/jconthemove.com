@@ -40,6 +40,15 @@ export async function migrateDispatchSchema(): Promise<void> {
        value TEXT NOT NULL,
        updated_at TIMESTAMP NOT NULL DEFAULT now()
      )`,
+    // Task #173 — live GPS pings from on-duty crew.
+    `CREATE TABLE IF NOT EXISTS crew_locations (
+       user_id VARCHAR PRIMARY KEY,
+       lat DECIMAL(10,7) NOT NULL,
+       lng DECIMAL(10,7) NOT NULL,
+       accuracy DECIMAL(10,2),
+       updated_at TIMESTAMP NOT NULL DEFAULT now()
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_crew_locations_updated ON crew_locations(updated_at DESC)`,
   ];
 
   for (const sql of statements) {

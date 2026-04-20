@@ -145,8 +145,35 @@ export const leads = pgTable("leads", {
   // clamped to a recent window so a customer can't backdate attribution.
   rebookSentAt: timestamp("rebook_sent_at"),
 
+  // Task #172/#173 — dispatch service state machine (columns also
+  // created/maintained via raw SQL in server/dispatch/migrate.ts so the
+  // app works even if drizzle push hasn't landed yet).
+  dispatchState: text("dispatch_state").default("pending"),
+  dispatchOfferedTo: varchar("dispatch_offered_to"),
+  dispatchOfferExpiresAt: timestamp("dispatch_offer_expires_at"),
+  dispatchTriedIds: text("dispatch_tried_ids").array().default(sql`ARRAY[]::text[]`),
+  enRouteAt: timestamp("en_route_at"),
+  onSiteAt: timestamp("on_site_at"),
+  completedAt: timestamp("completed_at"),
+  lat: decimal("lat", { precision: 10, scale: 7 }),
+  lng: decimal("lng", { precision: 10, scale: 7 }),
+  urgency: text("urgency").default("normal"),
+
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
+
+// Task #173 — live GPS pings from on-duty crew. One row per crew member,
+// updated via upsert each time the client posts a location. Used by the
+// admin dispatch map and for future geofenced on-site auto-detection.
+export const crewLocations = pgTable("crew_locations", {
+  userId: varchar("user_id").primaryKey().references(() => users.id),
+  lat: decimal("lat", { precision: 10, scale: 7 }).notNull(),
+  lng: decimal("lng", { precision: 10, scale: 7 }).notNull(),
+  accuracy: decimal("accuracy", { precision: 10, scale: 2 }),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export type CrewLocation = typeof crewLocations.$inferSelect;
 
 export const contacts = pgTable("contacts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
