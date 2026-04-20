@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { PlacesAutocomplete } from "@/components/places-autocomplete";
+import AddressField from "@/components/AddressField";
 import BookingConfirmedTiles from "@/components/BookingConfirmedTiles";
 import type { User } from "@shared/schema";
 import {
@@ -136,6 +136,13 @@ export default function MultiServiceBookPage() {
   const [step, setStep] = useState<Step>("services");
   const [items, setItems] = useState<SelectedItem[]>([]);
   const [serviceAddress, setServiceAddress] = useState("");
+  // Task #164 — captured by AddressField so the green confirmation pill
+  // can render after a Places click, geocode-on-blur, or autofill resolve.
+  // Not sent to the backend (the multi-booking POST only takes the full
+  // address string) but kept locally so the UX matches the other flows.
+  const [addressCity, setAddressCity] = useState("");
+  const [addressState, setAddressState] = useState("");
+  const [addressZip, setAddressZip] = useState("");
   const [contact, setContact] = useState({
     customerName: user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() : "",
     customerEmail: user?.email || "",
@@ -537,11 +544,20 @@ export default function MultiServiceBookPage() {
                 <h2 className="text-xl font-black">Where are we going?</h2>
                 <p className="text-sm text-muted-foreground">The address where the work will happen.</p>
               </header>
-              <PlacesAutocomplete
+              <AddressField
                 value={serviceAddress}
                 onChange={setServiceAddress}
-                onPlaceSelect={(p) => setServiceAddress(p.fullAddress)}
+                city={addressCity}
+                state={addressState}
+                zip={addressZip}
+                onCityChange={setAddressCity}
+                onStateChange={setAddressState}
+                onZipChange={setAddressZip}
+                onResolved={(p) => setServiceAddress(p.fullAddress)}
                 placeholder="123 Main St, Ironwood, MI"
+                theme="zinc"
+                hint="Pick a suggestion or just keep typing — we'll confirm the city, state, and ZIP automatically."
+                data-testid="address-field-multi"
               />
             </section>
           )}

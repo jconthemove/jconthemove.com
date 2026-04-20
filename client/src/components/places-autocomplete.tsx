@@ -17,6 +17,12 @@ interface PlacesAutocompleteProps {
   inputClassName?: string;
   autoFocus?: boolean;
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  /** Task #164 — when true (default), if the user types / pastes / autofills
+   *  an address and blurs without clicking a Places suggestion, we run a
+   *  Geocoder lookup against the typed value and fire `onPlaceSelect` with
+   *  the resolved city/state/zip. This makes typed and clicked addresses
+   *  behave identically for downstream UI (e.g. the green confirmation pill). */
+  resolveOnBlur?: boolean;
 }
 
 let mapsApiKey: string | null = null;
@@ -48,19 +54,39 @@ function loadGoogleMaps(apiKey: string): Promise<void> {
   return mapsLoadingPromise;
 }
 
-function extractComponents(place: google.maps.places.PlaceResult): PlaceResult {
-  const comps = place.address_components || [];
+function extractComponents(
+  formattedAddress: string,
+  comps: any[] | undefined,
+): PlaceResult {
+  const list = comps || [];
   const get = (type: string) =>
-    comps.find((c) => c.types.includes(type))?.long_name || "";
+    list.find((c: any) => c.types.includes(type))?.long_name || "";
   const getShort = (type: string) =>
-    comps.find((c) => c.types.includes(type))?.short_name || "";
+    list.find((c: any) => c.types.includes(type))?.short_name || "";
 
   return {
-    fullAddress: place.formatted_address || "",
+    fullAddress: formattedAddress || "",
     zip: get("postal_code"),
     city: get("locality") || get("sublocality"),
     state: getShort("administrative_area_level_1"),
   };
+}
+
+/** Returns true when the geocoded result is a real US street-level address
+ *  (street_number + route + city + state + ZIP). Anything less specific —
+ *  city-only, ZIP-only, or county-level matches — is rejected so the
+ *  confirmation pill never claims success on a partial address. */
+function isCompleteUsAddress(place: any): boolean {
+  const comps: any[] = place.address_components || [];
+  const has = (type: string) => comps.some((c) => c.types.includes(type));
+  return (
+    has("street_number") &&
+    has("route") &&
+    (has("locality") || has("sublocality")) &&
+    has("administrative_area_level_1") &&
+    has("postal_code") &&
+    comps.some((c) => c.short_name === "US")
+  );
 }
 
 export function PlacesAutocomplete({
@@ -72,9 +98,17 @@ export function PlacesAutocomplete({
   inputClassName,
   autoFocus,
   onKeyDown,
+  resolveOnBlur = true,
 }: PlacesAutocompleteProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+  const autocompleteRef = useRef<any>(null);
+  const geocoderRef = useRef<any>(null);
+  // Track the last address we successfully fired `onPlaceSelect` for so the
+  // blur-fallback never re-resolves the exact same string twice.
+  const lastResolvedRef = useRef<string>("");
+  // True for ~250ms after a Places suggestion is clicked. Prevents the
+  // immediate blur from kicking off a duplicate Geocoder lookup.
+  const justSelectedRef = useRef<boolean>(false);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
 
   useEffect(() => {
@@ -97,10 +131,17 @@ export function PlacesAutocomplete({
         autocomplete.addListener("place_changed", () => {
           const place = autocomplete.getPlace();
           if (!place || !place.formatted_address) return;
-          const result = extractComponents(place);
+          const result = extractComponents(place.formatted_address, place.address_components);
+          lastResolvedRef.current = result.fullAddress;
+          justSelectedRef.current = true;
+          setTimeout(() => { justSelectedRef.current = false; }, 250);
           onChange(result.fullAddress);
           onPlaceSelect?.(result);
         });
+        // Lazy-init the geocoder for the blur fallback path.
+        try {
+          geocoderRef.current = new (window as any).google.maps.Geocoder();
+        } catch { /* harmless — blur fallback simply no-ops */ }
         setStatus("ready");
       })
       .catch(() => {
@@ -116,7 +157,33 @@ export function PlacesAutocomplete({
         autocompleteRef.current = null;
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function tryResolveTypedAddress(addr: string) {
+    if (!resolveOnBlur) return;
+    if (!geocoderRef.current) return;
+    const trimmed = addr.trim();
+    if (trimmed.length < 5) return;            // ignore obvious partials
+    if (justSelectedRef.current) return;       // suggestion-click already fired
+    if (trimmed === lastResolvedRef.current) return; // already resolved this exact string
+    geocoderRef.current.geocode(
+      { address: trimmed, componentRestrictions: { country: "US" } },
+      (results: any, gStatus: any) => {
+        if (gStatus !== "OK" || !results || results.length === 0) return;
+        const place = results[0];
+        if (!isCompleteUsAddress(place)) return;
+        const result = extractComponents(place.formatted_address || trimmed, place.address_components);
+        if (!result.city || !result.state || !result.zip) return;
+        lastResolvedRef.current = result.fullAddress;
+        // Replace the raw input with the canonical formatted_address so the
+        // pill, the backend, and any downstream geocoders all see the same
+        // string the customer effectively confirmed.
+        onChange(result.fullAddress);
+        onPlaceSelect?.(result);
+      },
+    );
+  }
 
   const baseInput =
     "w-full bg-slate-800 border border-slate-700 text-white placeholder:text-slate-500 text-sm rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500/60 transition-all";
@@ -139,6 +206,17 @@ export function PlacesAutocomplete({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={onKeyDown}
+        onBlur={(e) => tryResolveTypedAddress(e.target.value)}
+        // Browser autofill: Chrome/Safari fire `animationstart` for the
+        // synthetic `-webkit-autofill` animation, and most browsers fire
+        // `change` after the user moves focus. The blur handler covers the
+        // common case; we also try once on `animationend` for sites where
+        // the browser fills before the user ever focused the field.
+        onAnimationEnd={(e) => {
+          if (e.animationName?.toLowerCase().includes("autofill")) {
+            tryResolveTypedAddress(e.currentTarget.value);
+          }
+        }}
         placeholder={status === "loading" ? "Loading maps…" : placeholder}
         autoFocus={autoFocus}
         className={
