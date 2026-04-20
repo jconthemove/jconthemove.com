@@ -25,8 +25,32 @@ export interface LoadedJob {
   dispatchTriedIds: string[];
 }
 
+type LeadRow = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  service_type: string;
+  lat: string | number | null;
+  lng: string | number | null;
+  urgency: string;
+  price: string | number;
+  crew_size: string | number;
+  crew_members: string[] | null;
+  status: string;
+  dispatch_state: string;
+  dispatch_offered_to: string | null;
+  dispatch_offer_expires_at: Date | null;
+  dispatch_tried_ids: string[] | null;
+};
+
+type UrgencyLevel = "low" | "normal" | "high";
+const URGENCY_VALUES: UrgencyLevel[] = ["low", "normal", "high"];
+function asUrgency(v: string | null | undefined): UrgencyLevel {
+  return URGENCY_VALUES.includes(v as UrgencyLevel) ? (v as UrgencyLevel) : "normal";
+}
+
 export async function loadJob(id: string): Promise<LoadedJob | null> {
-  const { rows } = await pool.query(
+  const { rows } = await pool.query<LeadRow>(
     `SELECT id, first_name, last_name, service_type,
             lat, lng, COALESCE(urgency, 'normal') AS urgency,
             COALESCE(total_price, base_price, '0') AS price,
@@ -49,7 +73,7 @@ export async function loadJob(id: string): Promise<LoadedJob | null> {
     serviceType: r.service_type,
     lat: r.lat != null ? Number(r.lat) : null,
     lng: r.lng != null ? Number(r.lng) : null,
-    urgency: (r.urgency as any) ?? "normal",
+    urgency: asUrgency(r.urgency),
     totalPrice: Number(r.price) || 0,
     crewSize: Number(r.crew_size) || 2,
     crewMembers: Array.isArray(r.crew_members) ? r.crew_members : [],
@@ -75,10 +99,11 @@ export async function persistState(
     crewMembers?: string[];
   },
 ): Promise<void> {
+  type Param = string | number | boolean | Date | string[] | null;
   const sets: string[] = [];
-  const params: any[] = [];
+  const params: Param[] = [];
   let i = 1;
-  const push = (col: string, val: any) => { sets.push(`${col} = $${i++}`); params.push(val); };
+  const push = (col: string, val: Param) => { sets.push(`${col} = $${i++}`); params.push(val); };
 
   if (patch.dispatchState !== undefined) push("dispatch_state", patch.dispatchState);
   if (patch.dispatchOfferedTo !== undefined) push("dispatch_offered_to", patch.dispatchOfferedTo);
@@ -147,7 +172,7 @@ export async function logDispatchEvent(
   fromState: string | null,
   toState: string | null,
   reason: string,
-  data?: Record<string, unknown>,
+  data?: Record<string, unknown> | null,
 ): Promise<void> {
   try {
     await pool.query(
