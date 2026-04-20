@@ -2760,3 +2760,23 @@ export const pipelineRuns = pgTable("pipeline_runs", {
   index("idx_pipeline_runs_input_hash").on(table.inputHash),
 ]);
 export type PipelineRun = typeof pipelineRuns.$inferSelect;
+
+// Task #184 — Operator-editable demand/dispatch zones. Replaces the
+// hard-coded TERRITORIES list so the business can add neighborhoods and
+// re-draw boundaries without a code release.
+export const demandZones = pgTable("demand_zones", {
+  id: serial("id").primaryKey(),
+  code: varchar("code", { length: 64 }).notNull().unique(),
+  name: text("name").notNull(),
+  centerLat: decimal("center_lat", { precision: 9, scale: 6 }).notNull(),
+  centerLng: decimal("center_lng", { precision: 9, scale: 6 }).notNull(),
+  radiusMi: decimal("radius_mi", { precision: 6, scale: 2 }).notNull(),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+export const insertDemandZoneSchema = createInsertSchema(demandZones).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertDemandZone = z.infer<typeof insertDemandZoneSchema>;
+export type DemandZone = typeof demandZones.$inferSelect;

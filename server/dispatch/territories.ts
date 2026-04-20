@@ -20,6 +20,18 @@ export const TERRITORIES: Territory[] = [
 ];
 
 export function inAnyTerritory(lat: number, lng: number): boolean {
+  // Task #184 — delegate to the operator-editable zones table. Falls
+  // back to the seeded TERRITORIES list on bare-metal failure.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  try {
+    const { listZones } = require("../demand/zones") as typeof import("../demand/zones");
+    const zones = listZones();
+    if (zones.length) {
+      return zones.some(z => haversine(lat, lng, z.centerLat, z.centerLng) <= z.radiusMi);
+    }
+  } catch {
+    // fall through
+  }
   return TERRITORIES.some(t => haversine(lat, lng, t.centerLat, t.centerLng) <= t.radiusMi);
 }
 

@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import {
   ChevronRight, ChevronLeft, Check, DollarSign, Zap, Truck,
-  FlaskConical, History, RotateCcw, ArrowRight
+  FlaskConical, History, RotateCcw, ArrowRight, MapPin, Plus, Trash2, Save
 } from "lucide-react";
 
 interface CalibrationValues {
@@ -533,6 +533,9 @@ export default function PricingCalibratePage() {
           )}
         </div>
 
+        {/* Custom Zones */}
+        <CustomZonesPanel />
+
         {/* Calibration History */}
         {history.length > 0 && (
           <div className="mt-8">
@@ -583,6 +586,254 @@ export default function PricingCalibratePage() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+interface AdminZone {
+  id: number;
+  code: string;
+  name: string;
+  centerLat: number;
+  centerLng: number;
+  radiusMi: number;
+  active: boolean;
+}
+
+function CustomZonesPanel() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useQuery<{ zones: AdminZone[] }>({
+    queryKey: ["/api/admin/zones"],
+  });
+
+  const [draft, setDraft] = useState({
+    code: "", name: "", centerLat: "", centerLng: "", radiusMi: "25",
+  });
+  const [edits, setEdits] = useState<Record<number, Partial<AdminZone>>>({});
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/zones"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/demand"] });
+  };
+
+  const createMut = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/zones", {
+        code: draft.code,
+        name: draft.name,
+        centerLat: parseFloat(draft.centerLat),
+        centerLng: parseFloat(draft.centerLng),
+        radiusMi: parseFloat(draft.radiusMi),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "Create failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      setDraft({ code: "", name: "", centerLat: "", centerLng: "", radiusMi: "25" });
+      invalidate();
+      toast({ title: "Zone created" });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const updateMut = useMutation({
+    mutationFn: async ({ id, patch }: { id: number; patch: Partial<AdminZone> }) => {
+      const res = await apiRequest("PATCH", `/api/admin/zones/${id}`, patch);
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "Update failed");
+      }
+      return res.json();
+    },
+    onSuccess: (_d, vars) => {
+      setEdits(prev => { const n = { ...prev }; delete n[vars.id]; return n; });
+      invalidate();
+      toast({ title: "Zone saved" });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("DELETE", `/api/admin/zones/${id}`);
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "Delete failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => { invalidate(); toast({ title: "Zone removed" }); },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const zones = data?.zones ?? [];
+
+  return (
+    <div className="mt-8 bg-slate-900/60 border border-slate-700/50 rounded-2xl p-5" data-testid="custom-zones-panel">
+      <div className="flex items-center gap-2 mb-3">
+        <MapPin className="h-4 w-4 text-emerald-400" />
+        <h3 className="text-white text-sm font-bold tracking-wide">Custom Zones</h3>
+        <Badge variant="outline" className="ml-auto text-[10px] border-slate-600 text-slate-400">
+          {zones.length} configured
+        </Badge>
+      </div>
+      <p className="text-slate-400 text-xs leading-relaxed mb-4">
+        Add neighborhoods, split high-volume zones, or re-draw boundaries without a code release.
+        Demand scoring, surge pricing, and dispatch territory checks all read from this list.
+      </p>
+
+      {/* Create new */}
+      <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl p-3 mb-4">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+          <Input
+            placeholder="CODE"
+            value={draft.code}
+            onChange={e => setDraft(d => ({ ...d, code: e.target.value.toUpperCase() }))}
+            className="bg-slate-900 border-slate-700 text-white text-xs h-9 col-span-1"
+            data-testid="input-new-zone-code"
+          />
+          <Input
+            placeholder="Display name"
+            value={draft.name}
+            onChange={e => setDraft(d => ({ ...d, name: e.target.value }))}
+            className="bg-slate-900 border-slate-700 text-white text-xs h-9 col-span-2"
+            data-testid="input-new-zone-name"
+          />
+          <Input
+            type="number" step="0.0001" placeholder="Lat"
+            value={draft.centerLat}
+            onChange={e => setDraft(d => ({ ...d, centerLat: e.target.value }))}
+            className="bg-slate-900 border-slate-700 text-white text-xs h-9"
+            data-testid="input-new-zone-lat"
+          />
+          <Input
+            type="number" step="0.0001" placeholder="Lng"
+            value={draft.centerLng}
+            onChange={e => setDraft(d => ({ ...d, centerLng: e.target.value }))}
+            className="bg-slate-900 border-slate-700 text-white text-xs h-9"
+            data-testid="input-new-zone-lng"
+          />
+          <Input
+            type="number" step="0.5" min="0.5" placeholder="Mi"
+            value={draft.radiusMi}
+            onChange={e => setDraft(d => ({ ...d, radiusMi: e.target.value }))}
+            className="bg-slate-900 border-slate-700 text-white text-xs h-9"
+            data-testid="input-new-zone-radius"
+          />
+        </div>
+        <Button
+          size="sm"
+          className="mt-2 w-full h-8 bg-emerald-600 hover:bg-emerald-500 text-white text-xs"
+          onClick={() => createMut.mutate()}
+          disabled={createMut.isPending || !draft.code || !draft.name || !draft.centerLat || !draft.centerLng}
+          data-testid="button-create-zone"
+        >
+          <Plus className="h-3.5 w-3.5 mr-1" />
+          {createMut.isPending ? "Adding…" : "Add zone"}
+        </Button>
+      </div>
+
+      {/* Existing zones */}
+      {isLoading ? (
+        <p className="text-slate-500 text-xs">Loading…</p>
+      ) : zones.length === 0 ? (
+        <p className="text-slate-500 text-xs italic">No zones yet — add your first one above.</p>
+      ) : (
+        <div className="space-y-2">
+          {zones.map(z => {
+            const e = edits[z.id] ?? {};
+            const v = { ...z, ...e };
+            const dirty = Object.keys(e).length > 0;
+            const setField = (k: keyof AdminZone, val: any) =>
+              setEdits(prev => ({ ...prev, [z.id]: { ...prev[z.id], [k]: val } }));
+            return (
+              <div
+                key={z.id}
+                className="bg-slate-800/40 border border-slate-700/40 rounded-xl p-3"
+                data-testid={`zone-row-${z.code}`}
+              >
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-2 items-center">
+                  <div className="col-span-1">
+                    <p className="text-[10px] text-slate-500 mb-0.5">Code</p>
+                    <p className="font-mono text-white text-xs font-bold">{v.code}</p>
+                  </div>
+                  <Input
+                    value={v.name}
+                    onChange={ev => setField("name", ev.target.value)}
+                    className="bg-slate-900 border-slate-700 text-white text-xs h-9 col-span-2"
+                    data-testid={`input-zone-name-${z.code}`}
+                  />
+                  <Input
+                    type="number" step="0.0001"
+                    value={v.centerLat}
+                    onChange={ev => setField("centerLat", parseFloat(ev.target.value))}
+                    className="bg-slate-900 border-slate-700 text-white text-xs h-9"
+                    data-testid={`input-zone-lat-${z.code}`}
+                  />
+                  <Input
+                    type="number" step="0.0001"
+                    value={v.centerLng}
+                    onChange={ev => setField("centerLng", parseFloat(ev.target.value))}
+                    className="bg-slate-900 border-slate-700 text-white text-xs h-9"
+                    data-testid={`input-zone-lng-${z.code}`}
+                  />
+                  <Input
+                    type="number" step="0.5" min="0.5"
+                    value={v.radiusMi}
+                    onChange={ev => setField("radiusMi", parseFloat(ev.target.value))}
+                    className="bg-slate-900 border-slate-700 text-white text-xs h-9"
+                    data-testid={`input-zone-radius-${z.code}`}
+                  />
+                </div>
+                <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-700/40">
+                  <label className="flex items-center gap-2 text-[11px] text-slate-400">
+                    <input
+                      type="checkbox"
+                      checked={v.active !== false}
+                      onChange={ev => setField("active", ev.target.checked)}
+                      className="h-3.5 w-3.5 accent-emerald-500"
+                      data-testid={`toggle-active-${z.code}`}
+                    />
+                    Active (used by demand + dispatch)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    {dirty && (
+                      <Button
+                        size="sm"
+                        className="h-7 px-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs"
+                        onClick={() => updateMut.mutate({ id: z.id, patch: e })}
+                        disabled={updateMut.isPending}
+                        data-testid={`button-save-${z.code}`}
+                      >
+                        <Save className="h-3 w-3 mr-1" />
+                        Save
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 text-xs"
+                      onClick={() => {
+                        if (confirm(`Delete zone "${z.name}"? This cannot be undone.`)) {
+                          deleteMut.mutate(z.id);
+                        }
+                      }}
+                      disabled={deleteMut.isPending}
+                      data-testid={`button-delete-${z.code}`}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

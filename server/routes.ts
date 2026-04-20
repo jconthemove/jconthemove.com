@@ -1126,6 +1126,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('⚠️ calibration_sessions migration error (non-fatal):', csErr);
   }
 
+  // Task #184 — DB-backed demand zones (replaces hard-coded TERRITORIES)
+  try {
+    const { initDemandZones } = await import("./demand/zones");
+    await initDemandZones();
+    console.log('🗺️  demand_zones table ready');
+  } catch (dzErr) {
+    console.error('⚠️ demand_zones migration error (non-fatal):', dzErr);
+  }
+
   // Ensure new staking pool columns exist in wallet_accounts
   try {
     await pool.query(`
@@ -11323,6 +11332,70 @@ Thank you for your business!
       res.json(next);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Task #184 — Operator-editable demand zones (CRUD).
+  app.get("/api/admin/zones", isAuthenticated, requireBusinessOwner, async (_req, res) => {
+    try {
+      const { listAllZones } = await import("./demand/zones");
+      res.json({ zones: await listAllZones() });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/admin/zones", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const { createZone } = await import("./demand/zones");
+      const zone = await createZone({
+        code: req.body?.code,
+        name: req.body?.name,
+        centerLat: Number(req.body?.centerLat),
+        centerLng: Number(req.body?.centerLng),
+        radiusMi: Number(req.body?.radiusMi),
+        active: req.body?.active !== false,
+      });
+      res.status(201).json({ zone });
+    } catch (e: any) {
+      const msg = String(e?.message || e);
+      if (/duplicate key|unique/i.test(msg)) {
+        return res.status(409).json({ error: "A zone with that code already exists" });
+      }
+      res.status(400).json({ error: msg });
+    }
+  });
+
+  app.patch("/api/admin/zones/:id", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id" });
+      const { updateZone } = await import("./demand/zones");
+      const zone = await updateZone(id, {
+        code: req.body?.code,
+        name: req.body?.name,
+        centerLat: req.body?.centerLat !== undefined ? Number(req.body.centerLat) : undefined,
+        centerLng: req.body?.centerLng !== undefined ? Number(req.body.centerLng) : undefined,
+        radiusMi: req.body?.radiusMi !== undefined ? Number(req.body.radiusMi) : undefined,
+        active: req.body?.active,
+      });
+      if (!zone) return res.status(404).json({ error: "Zone not found" });
+      res.json({ zone });
+    } catch (e: any) {
+      res.status(400).json({ error: e?.message || "Update failed" });
+    }
+  });
+
+  app.delete("/api/admin/zones/:id", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id" });
+      const { deleteZone } = await import("./demand/zones");
+      const ok = await deleteZone(id);
+      if (!ok) return res.status(404).json({ error: "Zone not found" });
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message || "Delete failed" });
     }
   });
 
