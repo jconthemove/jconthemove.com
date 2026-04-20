@@ -25,10 +25,14 @@ export interface CrewBonus {
   reasons: string[];       // short human-readable labels, shown as badges
 }
 
+// Task #173 — canonical crew incentive composition. Per task spec the
+// bonus is the sum of exactly three signals:
+//   • urgency          → +$20
+//   • late-hour        → +$15
+//   • low-availability → +$25
 const LATE_HOUR_BONUS = 15;
 const HIGH_URGENCY_BONUS = 20;
 const LOW_AVAILABILITY_BONUS = 25;
-const LARGE_MOVE_BONUS = 20; // totalPrice ≥ $800
 
 function isLateHour(arrivalWindow?: string | null, moveDate?: string | null): boolean {
   // arrivalWindow looks like "6:00 PM – 8:00 PM" → late if start hour ≥ 17
@@ -78,12 +82,6 @@ export function calcCrewBonus(input: CrewBonusInput): CrewBonus {
   if (isLateHour(input.arrivalWindow, input.confirmedDate || input.moveDate)) {
     amount += LATE_HOUR_BONUS;
     reasons.push(`+$${LATE_HOUR_BONUS} late hour`);
-  }
-
-  const price = typeof input.totalPrice === "string" ? parseFloat(input.totalPrice) : (input.totalPrice ?? 0);
-  if (price >= 800) {
-    amount += LARGE_MOVE_BONUS;
-    reasons.push(`+$${LARGE_MOVE_BONUS} large job`);
   }
 
   return { amount, reasons };

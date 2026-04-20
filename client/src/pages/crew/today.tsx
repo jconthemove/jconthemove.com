@@ -700,8 +700,32 @@ export default function CrewTodayPage() {
     };
   }) ?? [];
 
+  // Task #173 — sticky mobile bottom action bar. Surfaces the single
+  // primary state-advance button for the crew's active assignment so
+  // the driver doesn't have to scroll back up a long page mid-move.
+  // Picks the first assignment the user is on that is not yet completed
+  // and is past the offering stage. Hidden on md+ where the inline row
+  // is already visible on screen.
+  const primaryActiveJob = (() => {
+    const uid = user?.id ? String(user.id) : null;
+    if (!uid) return null;
+    for (const job of myAssignments) {
+      const ds = String((job as any).dispatchState || "").toLowerCase();
+      const members: string[] = Array.isArray((job as any).crewMembers) ? ((job as any).crewMembers as string[]) : [];
+      if (!members.includes(uid)) continue;
+      if (ds === "completed" || ds === "offering" || ds === "") continue;
+      return { job, ds } as { job: any; ds: string };
+    }
+    return null;
+  })();
+  const primaryNext: { label: string; next: "en_route"|"on_site"|"completed" } | null = primaryActiveJob
+    ? (primaryActiveJob.ds === "on_site" ? { label: "Mark Complete", next: "completed" }
+      : primaryActiveJob.ds === "en_route" ? { label: "I've Arrived", next: "on_site" }
+      : { label: "Start — En Route", next: "en_route" })
+    : null;
+
   return (
-    <div className="max-w-2xl mx-auto px-4 pt-4 space-y-3">
+    <div className="max-w-2xl mx-auto px-4 pt-4 pb-24 md:pb-4 space-y-3">
 
       {/* Hero — compact */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-900/60 via-slate-800/80 to-slate-900 border border-blue-500/20 p-3">
@@ -1448,7 +1472,7 @@ export default function CrewTodayPage() {
                               <p className="text-[9px] text-emerald-200/80 leading-snug">{bonus.reasons.join(" • ")}</p>
                             )}
                           </div>
-                          <span className="text-sm font-black text-emerald-300" data-testid={`today-bonus-${job.id}`}>+${bonus.total}</span>
+                          <span className="text-sm font-black text-emerald-300" data-testid={`today-bonus-${job.id}`}>+${bonus.amount}</span>
                         </div>
                       )}
                       <div className="mt-2 flex gap-2">
@@ -1516,6 +1540,31 @@ export default function CrewTodayPage() {
       )}
 
       <div className="h-2" />
+
+      {/* Task #173 — sticky mobile bottom action bar for active job. */}
+      {primaryActiveJob && primaryNext && (
+        <div
+          className="fixed bottom-16 inset-x-0 z-40 md:hidden px-3 pointer-events-none"
+          data-testid="sticky-action-bar"
+        >
+          <div className="pointer-events-auto max-w-2xl mx-auto bg-slate-900/95 backdrop-blur border border-blue-500/30 rounded-xl shadow-lg shadow-black/40 p-2 flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] text-slate-400 uppercase tracking-wider">Active Job</p>
+              <p className="text-xs font-semibold text-white truncate">
+                {primaryActiveJob.job.firstName} {primaryActiveJob.job.lastName} — {primaryActiveJob.ds.replace("_", " ")}
+              </p>
+            </div>
+            <Button
+              onClick={() => statusMutation.mutate({ leadId: primaryActiveJob.job.id, status: primaryNext.next })}
+              disabled={statusPending === primaryActiveJob.job.id}
+              className="min-h-[44px] bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-3"
+              data-testid={`sticky-status-${primaryNext.next}`}
+            >
+              {statusPending === primaryActiveJob.job.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : primaryNext.label}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
