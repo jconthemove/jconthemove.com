@@ -309,10 +309,18 @@ function JobBoardCard({
 }
 
 // Task #173 — builds the Google Maps deep link crews tap to navigate
-// to the pickup address. Uses the universal `dir/?api=1&destination=`
-// URL so iOS/Android/web all route into the user's default maps app.
-function buildMapsLink(lead: Pick<EnrichedLead, "fromAddress" | "confirmedDate" | "moveDate">): string {
-  const dest = encodeURIComponent(lead.fromAddress || "");
+// to the pickup. Prefers the lat,lng pair stored on the lead (no
+// geocode ambiguity); falls back to the address string when geocoding
+// has not produced coordinates yet. Uses the universal
+// `dir/?api=1&destination=` URL so iOS/Android/web all route into the
+// user's default maps app.
+function buildMapsLink(lead: Pick<EnrichedLead, "fromAddress" | "confirmedDate" | "moveDate"> & { lat?: string | number | null; lng?: string | number | null }): string {
+  const latN = lead.lat != null ? Number(lead.lat) : NaN;
+  const lngN = lead.lng != null ? Number(lead.lng) : NaN;
+  const hasCoords = Number.isFinite(latN) && Number.isFinite(lngN) && latN !== 0 && lngN !== 0;
+  const dest = hasCoords
+    ? `${latN},${lngN}`
+    : encodeURIComponent(lead.fromAddress || "");
   return `https://www.google.com/maps/dir/?api=1&destination=${dest}`;
 }
 
@@ -893,6 +901,13 @@ export default function CrewJobsPage() {
     onSuccess: (_d, { status }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/leads/my-jobs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      // On completion, also refresh earnings so the crew sees their
+      // base + bonus payout land on the Earnings tab immediately.
+      if (status === "completed") {
+        queryClient.invalidateQueries({ queryKey: ["/api/rewards/wallet"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/rewards/history"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/rewards/balance"] });
+      }
       setStatusPending(null);
       const labels: Record<string, string> = { en_route: "🚚 En route", on_site: "📍 On site", completed: "✅ Job complete!" };
       toast({ title: labels[status] });

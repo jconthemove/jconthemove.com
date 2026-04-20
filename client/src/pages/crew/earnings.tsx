@@ -322,18 +322,38 @@ export default function CrewEarningsPage() {
           </div>
         ) : (
           <div className="space-y-2">
-            {recentHistory.map(item => (
-              <div key={item.id} className="flex items-center gap-3 bg-slate-800/40 border border-slate-700/30 rounded-xl px-4 py-3">
-                <div className="w-9 h-9 rounded-lg bg-green-900/30 border border-green-700/30 flex items-center justify-center flex-shrink-0">
-                  <TrendingUp className="h-4 w-4 text-green-400" />
+            {recentHistory.map(item => {
+              // Task #173 — visually break out base payout vs. bonus on
+              // completed jobs so the crew can see exactly why the number
+              // came in higher than the base amount.
+              const isBonus = item.rewardType === "worker_job_completion_bonus"
+                || item.rewardType === "worker_hours_bonus";
+              const isBase = item.rewardType === "job_completion";
+              const accent = isBonus
+                ? { border: "border-emerald-500/30", chip: "bg-emerald-900/30 border-emerald-700/40", icon: "text-emerald-300", amount: "text-emerald-300", tag: "BONUS" }
+                : isBase
+                ? { border: "border-green-500/20", chip: "bg-green-900/30 border-green-700/30", icon: "text-green-400", amount: "text-green-400", tag: "BASE" }
+                : { border: "border-slate-700/30", chip: "bg-slate-900/30 border-slate-700/30", icon: "text-green-400", amount: "text-green-400", tag: "" };
+              return (
+                <div key={item.id} className={`flex items-center gap-3 bg-slate-800/40 border ${accent.border} rounded-xl px-4 py-3`} data-testid={`earning-${item.id}`}>
+                  <div className={`w-9 h-9 rounded-lg ${accent.chip} border flex items-center justify-center flex-shrink-0`}>
+                    <TrendingUp className={`h-4 w-4 ${accent.icon}`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-medium text-white truncate">{REWARD_LABELS[item.rewardType] || item.rewardType}</p>
+                      {accent.tag && (
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${isBonus ? "bg-emerald-500/20 text-emerald-300" : "bg-green-500/20 text-green-300"}`}>
+                          {accent.tag}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-400">{new Date(item.earnedDate).toLocaleDateString()}</p>
+                  </div>
+                  <span className={`text-sm font-bold ${accent.amount}`}>+{parseFloat(item.tokenAmount).toFixed(2)}</span>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate">{REWARD_LABELS[item.rewardType] || item.rewardType}</p>
-                  <p className="text-xs text-slate-400">{new Date(item.earnedDate).toLocaleDateString()}</p>
-                </div>
-                <span className="text-sm font-bold text-green-400">+{parseFloat(item.tokenAmount).toFixed(2)}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

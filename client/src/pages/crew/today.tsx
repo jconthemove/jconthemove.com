@@ -413,6 +413,12 @@ export default function CrewTodayPage() {
     onSuccess: (_d, { status }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/leads/my-jobs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      // Refresh earnings on completion so base + bonus appear immediately.
+      if (status === "completed") {
+        queryClient.invalidateQueries({ queryKey: ["/api/rewards/wallet"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/rewards/history"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/rewards/balance"] });
+      }
       setStatusPending(null);
       const labels: Record<string, string> = { en_route: "🚚 En route", on_site: "📍 On site", completed: "✅ Job complete!" };
       toast({ title: labels[status] });
@@ -1390,10 +1396,10 @@ export default function CrewTodayPage() {
                 : "Date TBD";
               // Task #173 — state-machine aware action bar. Only the assigned
               // crew sees advance-state buttons; admin-offering shows Accept/Decline.
-              const ds = String((job as any).dispatchState || "").toLowerCase();
+              const ds = String(job.dispatchState || "").toLowerCase();
               const members: string[] = Array.isArray(job.crewMembers) ? (job.crewMembers as string[]) : [];
               const amAssigned = !!user?.id && members.includes(String(user.id));
-              const amOffered = ds === "offering" && (job as any).dispatchOfferedTo === user?.id;
+              const amOffered = ds === "offering" && job.dispatchOfferedTo === user?.id;
               type Step = "accepted" | "en_route" | "on_site" | "completed";
               const normalized: Step =
                 ds === "completed" ? "completed"
@@ -1406,7 +1412,13 @@ export default function CrewTodayPage() {
                 : normalized === "accepted" ? { label: "Start — En Route", Icon: Play, next: "en_route" }
                 : normalized === "en_route" ? { label: "I've Arrived", Icon: Flag, next: "on_site" }
                 : { label: "Mark Complete", Icon: CheckCircle2, next: "completed" };
-              const mapsHref = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(job.fromAddress || "")}`;
+              // Prefer lat/lng (no geocode ambiguity); fall back to address string.
+              const latN = job.lat != null ? Number(job.lat) : NaN;
+              const lngN = job.lng != null ? Number(job.lng) : NaN;
+              const hasCoords = Number.isFinite(latN) && Number.isFinite(lngN) && latN !== 0 && lngN !== 0;
+              const mapsHref = `https://www.google.com/maps/dir/?api=1&destination=${
+                hasCoords ? `${latN},${lngN}` : encodeURIComponent(job.fromAddress || "")
+              }`;
               const statusBusy = statusPending === job.id;
               const acceptBusy = acceptPending === job.id;
               return (
