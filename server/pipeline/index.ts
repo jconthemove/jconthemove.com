@@ -161,13 +161,28 @@ export async function shadowCompareAndLog(
     const result = await runPipeline({ ...input, source: "shadow", persist: false });
     const pipelineTotal = result.context.quote?.finalTotal ?? 0;
     const match = Math.abs(legacyTotal - pipelineTotal) < 0.01;
+    const pipelineCrewId = result.context.crew?.primaryCrewId ?? null;
+    const pipelineEta = result.context.schedule?.estimatedStart ?? null;
     if (!match) {
       // eslint-disable-next-line no-console
       console.warn(`[pipeline.shadow] MISMATCH legacy=${legacyTotal} pipeline=${pipelineTotal}`);
     }
     if (result.runId != null) {
+      // Legacy /api/bookings/quote path has no crew_id or eta fields, so
+      // those slots are null on the legacy side. Parity across total only;
+      // crew_id/eta are captured for pipeline-side observability.
       await db.update(pipelineRuns)
-        .set({ shadowCompare: { legacyTotal, pipelineTotal, match } })
+        .set({
+          shadowCompare: {
+            legacyTotal,
+            pipelineTotal,
+            match,
+            legacyCrewId: null,
+            pipelineCrewId,
+            legacyEta: null,
+            pipelineEta,
+          },
+        })
         .where(eq(pipelineRuns.id, result.runId));
     }
   } catch (e) {

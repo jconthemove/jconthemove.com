@@ -53,6 +53,13 @@ router.post("/pipeline/run", async (req: Request, res: Response) => {
           .where(eq(serviceCatalog.isActive, true))
       : [];
     const catalog = new Map(catalogRows.map((r) => [r.code, r]));
+    // Match /api/bookings/quote validation: unknown service codes are
+    // rejected rather than silently priced as zero.
+    for (const i of parsed.items) {
+      if (!catalog.has(i.serviceCode)) {
+        return res.status(400).json({ error: `Unknown serviceCode: ${i.serviceCode}` });
+      }
+    }
     const resolvedItems = parsed.items.map((i) => {
       const cat = catalog.get(i.serviceCode);
       const unitPrice =
