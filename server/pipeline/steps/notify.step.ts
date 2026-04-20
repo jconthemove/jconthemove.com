@@ -15,6 +15,10 @@ export async function notifyStep(ctx: PipelineContext): Promise<PipelineContext>
     phone: ctx.input.customerPhone,
     createdBy: ctx.input.source,
   });
-  ctx.notifications = { sms: r.ok };
+  ctx.notifications = { sms: r.ok, error: r.ok ? undefined : r.error };
+  if (!r.ok) {
+    // eslint-disable-next-line no-console
+    console.warn(`[pipeline.notify] sms failed: ${r.error ?? "unknown"}`);
+  }
   return ctx;
 }

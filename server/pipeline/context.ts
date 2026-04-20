@@ -86,7 +86,7 @@ export interface PipelineContext {
   persistedLeadId?: string;
 
   // Filled by notify step
-  notifications?: { sms?: boolean; email?: boolean };
+  notifications?: { sms?: boolean; email?: boolean; error?: string };
 
   // Diagnostics
   stepLogs: StepLog[];
