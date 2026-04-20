@@ -730,7 +730,7 @@ export default function CrewJobsPage() {
           <h1 className="text-2xl font-black text-white">Jobs</h1>
           <p className="text-slate-400 text-sm">Job board & your assignments</p>
         </div>
-        <Button size="sm" className="bg-blue-600 hover:bg-blue-500" onClick={() => navigate("/post-job")}>
+        <Button size="sm" className="bg-blue-600 hover:bg-blue-500" onClick={() => navigate("/book?worker=1")}>
           <Plus className="h-4 w-4 mr-1" /> Add Lead
         </Button>
       </div>

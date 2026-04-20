@@ -267,6 +267,36 @@ const CATALOG_SEED: InsertServiceCatalogEntry[] = [
     sortOrder: 100,
     description: "Local truck delivery for store pickups & furniture.",
   },
+  // Task #169 — Move Cleaning, Demolition, and Roofing added so /book covers
+  // every service the app advertises (was 11; now 14 incl. Move Cleaning,
+  // Light Demolition, Roofing, Labor Only — the latter two were already in
+  // the catalog as `cleaning` and `labor`).
+  {
+    code: "demolition",
+    name: "Light Demolition",
+    category: "core",
+    defaultPriceMode: "quote",
+    defaultPrice: null,
+    suggestedMin: "300",
+    suggestedMax: "1500",
+    discountEligible: true,
+    isAddon: false,
+    sortOrder: 110,
+    description: "Tear-out, cleanout & debris haul-off — small to medium demo.",
+  },
+  {
+    code: "roofing",
+    name: "Roofing",
+    category: "core",
+    defaultPriceMode: "quote",
+    defaultPrice: null,
+    suggestedMin: "500",
+    suggestedMax: "8000",
+    discountEligible: true,
+    isAddon: false,
+    sortOrder: 120,
+    description: "Shingle repairs and full replacements.",
+  },
   // ── Small-job add-ons ($200–$400 ranges per spec) ───────────────────────
   {
     code: "junk_reset",

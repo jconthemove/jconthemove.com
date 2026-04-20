@@ -29,13 +29,13 @@ const SplashPage = lazy(() => import("@/pages/splash"));
 const OnboardingPage = lazy(() => import("@/pages/onboarding"));
 const CustomerHomePage = lazy(() => import("@/pages/customer-home"));
 const MyJobsPage = lazy(() => import("@/pages/my-jobs"));
-const PostJobPage = lazy(() => import("@/pages/post-job"));
+// Task #169 — PostJobPage retired (route redirects to /book?worker=1)
 const CustomerBookPage = lazy(() => import("@/pages/customer/book"));
 const MultiServiceBookPage = lazy(() => import("@/pages/book"));
 const CustomerWalletPage = lazy(() => import("@/pages/customer/wallet"));
 const WalletAddCreditPage = lazy(() => import("@/pages/wallet-add-credit"));
 const CustomerEarnPage = lazy(() => import("@/pages/customer/earn"));
-const ServicePackagesPage = lazy(() => import("@/pages/service-packages"));
+// Task #169 — ServicePackagesPage retired (route redirects to /book)
 const CrewJobsPage = lazy(() => import("@/pages/crew-jobs"));
 const CustomerRewardsPage = lazy(() => import("@/pages/customer-rewards"));
 const CustomerProfilePage = lazy(() => import("@/pages/customer-profile"));
@@ -45,7 +45,7 @@ const ProfilePage = lazy(() => import("@/pages/profile"));
 const EmployeeHomePage = lazy(() => import("@/pages/employee-home"));
 const AdminControlPage = lazy(() => import("@/pages/control"));
 const EmployeeDashboard = lazy(() => import("@/pages/employee-dashboard"));
-const EmployeeAddJob = lazy(() => import("@/pages/employee-add-job"));
+// Task #169 — EmployeeAddJob retired (route redirects to /book?worker=1)
 const LeadsPage = lazy(() => import("@/pages/leads"));
 const CustomerPortal = lazy(() => import("@/pages/customer-portal"));
 const PendingApprovalPage = lazy(() => import("@/pages/pending-approval"));
@@ -353,8 +353,9 @@ function CustomerApp() {
           <Route path="/earn">
             <CustomerEarnPage />
           </Route>
+          {/* Task #169 — /post-job consolidated into /book?worker=1 */}
           <Route path="/post-job">
-            <PostJobPage />
+            <Redirect to="/book?worker=1" />
           </Route>
           <Route path="/window-cleaning">
             <WindowCleaningPage />
@@ -371,8 +372,9 @@ function CustomerApp() {
           <Route path="/demolition">
             <DemolitionPage />
           </Route>
+          {/* Task #169 — /packages consolidated into /book */}
           <Route path="/packages">
-            <ServicePackagesPage />
+            <Redirect to="/book" />
           </Route>
           <Route path="/crew-jobs">
             <CrewJobsPage />
@@ -450,7 +452,10 @@ function AuthenticatedApp() {
   }
   
   // === CREW APP (employees, admin, business_owner) ===
-  if (location.startsWith("/crew") || location === "/post-job") {
+  // Task #169 — /post-job no longer routes inside CrewLayout. Workers land
+  // on /book?worker=1 (the unified front door), redirected via the route
+  // below for in-app navigations and via server-side 301 for cold hits.
+  if (location.startsWith("/crew")) {
     return (
       <ComplianceCheck>
         <RouteGuard allowedRoles={['admin', 'employee', 'business_owner']}>
@@ -461,13 +466,15 @@ function AuthenticatedApp() {
               <Route path="/crew/jobs"><CrewJobsNewPage /></Route>
               <Route path="/crew/schedule"><CrewSchedulePage /></Route>
               <Route path="/crew/earnings"><CrewEarningsPage /></Route>
-              <Route path="/post-job"><PostJobPage /></Route>
               <Route><Redirect to="/crew" /></Route>
             </Switch>
           </CrewLayout>
         </RouteGuard>
       </ComplianceCheck>
     );
+  }
+  if (location === "/post-job") {
+    return <Redirect to="/book?worker=1" />;
   }
 
   // === ADMIN PANEL (admin, business_owner) ===
@@ -515,10 +522,9 @@ function AuthenticatedApp() {
           <Route path="/dashboard">
             <Redirect to="/admin" />
           </Route>
+          {/* Task #169 — /employee/add-job consolidated into /book?worker=1 */}
           <Route path="/employee/add-job">
-            <RouteGuard allowedRoles={['admin', 'employee', 'business_owner']}>
-              <EmployeeAddJob />
-            </RouteGuard>
+            <Redirect to="/book?worker=1" />
           </Route>
           <Route path="/employee/dashboard">
             <RouteGuard allowedRoles={['admin', 'employee', 'business_owner']}>

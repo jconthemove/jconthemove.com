@@ -783,7 +783,7 @@ export default function MobileLeadManager() {
                 Swipe right to accept • Tap for details
               </p>
               <Button
-                onClick={() => window.location.href = '/employee/add-job'}
+                onClick={() => window.location.href = '/book?worker=1'}
                 className="w-full mb-4"
                 data-testid="button-add-job-mobile"
               >

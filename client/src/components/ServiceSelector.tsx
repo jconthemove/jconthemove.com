@@ -489,7 +489,7 @@ function SnowPanel() {
         Residential and commercial snow plowing for driveways, walkways, and parking lots. Available seasonally.
       </p>
       <button
-        onClick={() => setLocation("/post-job")}
+        onClick={() => setLocation("/book")}
         className="w-full py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 active:scale-[0.97] transition-all text-white text-sm font-semibold flex items-center justify-center gap-2"
       >
         Post a Job Now

@@ -112,6 +112,28 @@ app.use((req, res, next) => {
     server = await registerRoutes(app);
     console.log('Application routes registered successfully');
 
+    // Task #169 — Deprecated booking entry points redirect to the unified
+    // /book front door (server-side, before Vite's SPA catch-all). The
+    // worker-facing flows preserve the worker mode flag.
+    app.get('/post-job', (req: Request, res: Response) => {
+      const qs = new URLSearchParams(req.query as Record<string, string>);
+      // /post-job was a crew/worker endpoint, so default to worker mode
+      // unless a customer-facing rebook link explicitly opts out.
+      if (!qs.has('worker') && !qs.has('rebook')) qs.set('worker', '1');
+      const tail = qs.toString();
+      res.redirect(301, `/book${tail ? `?${tail}` : ''}`);
+    });
+    app.get('/packages', (req: Request, res: Response) => {
+      const qs = new URLSearchParams(req.query as Record<string, string>);
+      const tail = qs.toString();
+      res.redirect(301, `/book${tail ? `?${tail}` : ''}`);
+    });
+    app.get('/employee/add-job', (req: Request, res: Response) => {
+      const qs = new URLSearchParams(req.query as Record<string, string>);
+      qs.set('worker', '1');
+      res.redirect(301, `/book?${qs.toString()}`);
+    });
+
     // Ensure idempotency_keys table exists (extra durability layer for reward ops)
     (async () => {
       try {

@@ -24,7 +24,7 @@ const RECURRING_DESTINATIONS: Record<string, { href: string; label: string; hint
     hint: "We'll show up every storm — no calling required",
   },
   cleaning: {
-    href: "/post-job?serviceType=cleaning",
+    href: "/book?serviceType=cleaning",
     label: "Schedule recurring cleanings",
     hint: "Weekly, biweekly, or monthly — your call",
   },

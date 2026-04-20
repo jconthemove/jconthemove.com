@@ -133,6 +133,16 @@ export default function MultiServiceBookPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Task #169 — `?worker=1` opts the page into worker mode (used by crew
+  // posting a job on behalf of a customer). Right now this changes the
+  // banner + post-confirmation routing; the form fields are identical so
+  // workers and customers stay in lock-step on pricing.
+  const isWorker = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    const sp = new URLSearchParams(window.location.search);
+    return sp.get("worker") === "1" || sp.get("mode") === "worker";
+  }, []);
+
   const [step, setStep] = useState<Step>("services");
   const [items, setItems] = useState<SelectedItem[]>([]);
   const [serviceAddress, setServiceAddress] = useState("");
@@ -493,12 +503,24 @@ export default function MultiServiceBookPage() {
           <button onClick={() => setLocation("/")} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground" data-testid="link-home">
             <ArrowLeft className="h-4 w-4" /> Home
           </button>
-          <h1 className="font-bold text-base sm:text-lg">Book Your Services</h1>
+          <h1 className="font-bold text-base sm:text-lg">
+            {isWorker ? "Add a Job (Crew)" : "Book Your Services"}
+          </h1>
           <a href="tel:+19062859312" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
             <Phone className="h-3.5 w-3.5" /> Call
           </a>
         </div>
       </div>
+
+      {/* Task #169 — worker-mode banner */}
+      {isWorker && (
+        <div className="max-w-6xl mx-auto px-4 pt-3" data-testid="banner-worker-mode">
+          <div className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs text-blue-700 dark:text-blue-300 flex items-center gap-2">
+            <Users className="h-3.5 w-3.5" />
+            <span>Crew mode — posting on behalf of a customer. Pricing & token estimate match the customer-facing flow exactly.</span>
+          </div>
+        </div>
+      )}
 
       {/* Progress indicator */}
       <div className="max-w-6xl mx-auto px-4 pt-4">

@@ -684,7 +684,7 @@ export default function MyJobsPage() {
         <div className="flex items-center justify-between mb-5">
           <h1 className="text-2xl font-black text-white">My Jobs</h1>
           <button
-            onClick={() => setLocation("/post-job")}
+            onClick={() => setLocation("/book")}
             className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-400 text-white text-sm font-bold px-3 py-1.5 rounded-xl active:scale-95 transition-all"
           >
             <Plus className="h-3.5 w-3.5" /> New
@@ -804,7 +804,7 @@ export default function MyJobsPage() {
               {filter === "all" ? "Post a job and earn JCMOVES tokens" : "Book a new service to get started"}
             </p>
             <button
-              onClick={() => setLocation("/post-job")}
+              onClick={() => setLocation("/book")}
               className="h-11 px-8 rounded-xl bg-orange-500 text-white font-bold text-sm hover:bg-orange-400 active:scale-[0.97] transition-all"
             >
               Book a Service
@@ -1069,7 +1069,7 @@ export default function MyJobsPage() {
           job={selectedJob}
           open={true}
           onClose={() => setSelectedJob(null)}
-          onNewJob={() => { setSelectedJob(null); setLocation("/post-job"); }}
+          onNewJob={() => { setSelectedJob(null); setLocation("/book"); }}
         />
       )}
 

@@ -238,7 +238,7 @@ export function EarnTasksButton({ embedded = false }: { embedded?: boolean } = {
         : "Submit a new moving or junk removal lead",
       reward: "+500",
       done: leadDone,
-      action: () => { setOpen(false); setLocation("/employee/add-job"); },
+      action: () => { setOpen(false); setLocation("/book?worker=1"); },
       actionLabel: leadDone ? "Add More" : "Add Lead",
       isPending: false,
     },
