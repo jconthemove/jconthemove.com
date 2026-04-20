@@ -607,6 +607,8 @@ type DemandSnapshot = {
     score: number;
     counts: { q15m: number; q60m: number; q24h: number; activeJobs: number; onlineCrew: number };
     surge: { multiplier: number; band: string };
+    center?: { lat: number; lng: number };
+    radiusMi?: number;
   }>;
 };
 
@@ -618,36 +620,85 @@ function DemandHeatmapStrip() {
   const zones = data?.zones ?? [];
   if (zones.length === 0) return null;
   const sorted = [...zones].sort((a, b) => b.score - a.score);
-  const heat = (score: number) => {
-    if (score > 1.0) return "bg-red-500/25 border-red-500/50 text-red-200";
-    if (score > 0.7) return "bg-orange-500/20 border-orange-500/40 text-orange-200";
-    if (score > 0.4) return "bg-amber-500/15 border-amber-500/35 text-amber-200";
-    if (score < 0.2) return "bg-sky-500/10 border-sky-500/30 text-sky-200";
-    return "bg-slate-800/50 border-slate-700/50 text-slate-300";
+
+  // Compute a bounding box around all zones with centers, then project
+  // each to SVG coordinates. Zones without centers fall through to the
+  // supplemental strip below.
+  const geo = sorted
+    .map(z => ({ z, c: z.center }))
+    .filter((x): x is { z: typeof sorted[number]; c: { lat: number; lng: number } } => !!x.c);
+  const hasGeo = geo.length > 0;
+  const lats = geo.map(g => g.c.lat);
+  const lngs = geo.map(g => g.c.lng);
+  const pad = 0.05;
+  const minLat = Math.min(...lats) - pad, maxLat = Math.max(...lats) + pad;
+  const minLng = Math.min(...lngs) - pad, maxLng = Math.max(...lngs) + pad;
+  const W = 800, H = 260;
+  const project = (lat: number, lng: number) => ({
+    x: ((lng - minLng) / Math.max(1e-6, maxLng - minLng)) * W,
+    y: H - ((lat - minLat) / Math.max(1e-6, maxLat - minLat)) * H,
+  });
+  const heatColor = (score: number) => {
+    if (score > 1.0) return { fill: "#ef4444", stroke: "#fca5a5" };
+    if (score > 0.7) return { fill: "#f97316", stroke: "#fdba74" };
+    if (score > 0.4) return { fill: "#f59e0b", stroke: "#fcd34d" };
+    if (score < 0.2) return { fill: "#0ea5e9", stroke: "#7dd3fc" };
+    return { fill: "#64748b", stroke: "#cbd5e1" };
   };
+
   return (
     <div className="mb-5">
       <div className="flex items-center gap-2 mb-2">
         <MapPin className="h-3.5 w-3.5 text-amber-400" />
-        <h2 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Demand Heatmap</h2>
+        <h2 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+          Demand Heatmap
+        </h2>
       </div>
+      {hasGeo && (
+        <div className="rounded-xl bg-slate-950/50 border border-slate-700/50 p-2 mb-2">
+          <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label="Demand heatmap">
+            <rect x={0} y={0} width={W} height={H} fill="#0f172a" />
+            {geo.map(({ z, c }) => {
+              const p = project(c.lat, c.lng);
+              const r = Math.max(18, Math.min(90, 22 + z.score * 50));
+              const color = heatColor(z.score);
+              const opacity = Math.max(0.18, Math.min(0.75, 0.2 + z.score * 0.5));
+              return (
+                <g key={z.zoneCode} data-testid={`heatmap-circle-${z.zoneCode}`}>
+                  <circle cx={p.x} cy={p.y} r={r} fill={color.fill} opacity={opacity} />
+                  <circle cx={p.x} cy={p.y} r={r} fill="none" stroke={color.stroke} strokeOpacity={0.7} strokeWidth={1.5} />
+                  <text x={p.x} y={p.y - 4} textAnchor="middle" fill="#fff" fontSize="11" fontWeight="700">{z.zoneName}</text>
+                  <text x={p.x} y={p.y + 10} textAnchor="middle" fill="#e2e8f0" fontSize="10">
+                    {Math.round(z.score * 100)}% · {z.surge.multiplier}×
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+      )}
+      {/* Supplemental strip (ordered list) — renders for all zones */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
-        {sorted.map(z => (
-          <div
-            key={z.zoneCode}
-            className={`rounded-lg border px-2.5 py-2 ${heat(z.score)}`}
-            data-testid={`heatmap-zone-${z.zoneCode}`}
-          >
-            <p className="text-[11px] font-bold truncate">{z.zoneName}</p>
-            <div className="flex items-baseline justify-between mt-0.5">
-              <span className="text-lg font-black">{Math.round(z.score * 100)}%</span>
-              <span className="text-[10px] opacity-80">{z.surge.multiplier}×</span>
+        {sorted.map(z => {
+          const color = heatColor(z.score);
+          return (
+            <div
+              key={z.zoneCode}
+              className="rounded-lg border px-2.5 py-2"
+              style={{ borderColor: color.stroke + "55", background: color.fill + "14" }}
+              data-testid={`heatmap-zone-${z.zoneCode}`}
+            >
+              <p className="text-[11px] font-bold truncate text-slate-100">{z.zoneName}</p>
+              <div className="flex items-baseline justify-between mt-0.5">
+                <span className="text-lg font-black" style={{ color: color.stroke }}>{Math.round(z.score * 100)}%</span>
+                <span className="text-[10px] text-slate-400">{z.surge.multiplier}×</span>
+              </div>
+              <p className="text-[10px] text-slate-400 truncate">
+                q60m {z.counts.q60m} · crew {z.counts.onlineCrew}
+              </p>
             </div>
-            <p className="text-[10px] opacity-70 truncate">
-              q60m {z.counts.q60m} · crew {z.counts.onlineCrew}
-            </p>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

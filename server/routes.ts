@@ -11318,6 +11318,7 @@ Thank you for your business!
       const next = setDemandCalibration({
         mode: req.body?.mode,
         crewPositioningMuted: req.body?.crewPositioningMuted,
+        zones: req.body?.zones,
       });
       res.json(next);
     } catch (e: any) {
@@ -11361,12 +11362,13 @@ Thank you for your business!
       const sampleCount = samples.length;
       const trailingAvg = sampleCount ? samples.reduce((a, b) => a + b, 0) / sampleCount : 0;
 
-      // Primary projection per spec: today's running total + projected
-      // end-of-day based on same-day-last-4-weeks average. We return the
-      // historical baseline as projectedToday (drives the admin tile),
-      // plus the elapsed-ratio projection as a secondary reference.
+      // Spec formula: today's running total + EOD projection based on
+      // same weekday last 4 weeks' average, with elapsed-day treatment.
+      //   projectedToday = todaySoFar + trailingAvg * (1 - elapsedRatio)
+      // Falls back to elapsed-ratio extrapolation when no trailing
+      // samples exist (new market, fresh install, etc.).
       const projectedTodayPrimary = sampleCount > 0
-        ? Math.max(todaySoFar, trailingAvg)
+        ? todaySoFar + trailingAvg * (1 - elapsedRatio)
         : projectedEod;
       res.json({
         todaySoFar: Math.round(todaySoFar * 100) / 100,
@@ -11376,7 +11378,7 @@ Thank you for your business!
         elapsedRatio: Math.round(elapsedRatio * 1000) / 1000,
         sampleCount,
         samples,
-        method: sampleCount > 0 ? "same_weekday_last_4_avg" : "elapsed_ratio_fallback",
+        method: sampleCount > 0 ? "running_plus_trailing_remainder" : "elapsed_ratio_fallback",
       });
     } catch (e: any) {
       res.status(500).json({ error: e.message });

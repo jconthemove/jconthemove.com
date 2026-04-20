@@ -16,13 +16,27 @@ export { listZones, getZone, setDemandCalibration, getDemandCalibration, maybeAu
 export interface DemandSnapshot {
   generatedAt: string;
   calibration: DemandCalibration;
-  zones: Array<ZoneDemand & { surge: SurgeDecision }>;
+  zones: Array<ZoneDemand & {
+    surge: SurgeDecision;
+    center: { lat: number; lng: number };
+    radiusMi: number;
+  }>;
 }
 
 export async function getDemandSnapshot(): Promise<DemandSnapshot> {
   const counts = await getWindowCountsByZone();
   const scored = scoreAllZones(counts);
-  const zones = scored.map(z => ({ ...z, surge: decideSurge(z) }));
+  const zones = scored.map(z => {
+    const info = getZone
+      ? listZones().find(x => x.code === z.zoneCode)
+      : null;
+    return {
+      ...z,
+      surge: decideSurge(z),
+      center: info ? { lat: info.centerLat, lng: info.centerLng } : { lat: 0, lng: 0 },
+      radiusMi: info?.radiusMi ?? 0,
+    };
+  });
   return {
     generatedAt: new Date().toISOString(),
     calibration: getDemandCalibration(),

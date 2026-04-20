@@ -84,6 +84,26 @@ export async function getWindowCountsByZone(): Promise<ZoneWindowCounts[]> {
   });
 }
 
+/** Pure spec-shape helper: counts trailing-window observations across
+ *  an in-memory job list without any zone bucketing. Returns the raw
+ *  counts shape the scorer expects to see — useful for tests and for
+ *  quick single-market setups where zone boundaries aren't relevant. */
+export function buildWindowsTrailing(
+  jobs: { createdAt: Date; status: string }[],
+  nowMs: number = Date.now(),
+): { quoteRequests15m: number; quoteRequests60m: number; quoteRequests24h: number; activeJobs: number } {
+  const q15m = jobs.filter(l => nowMs - l.createdAt.getTime() < 15 * 60_000).length;
+  const q60m = jobs.filter(l => nowMs - l.createdAt.getTime() < 60 * 60_000).length;
+  const q24h = jobs.filter(l => nowMs - l.createdAt.getTime() < 24 * 3600_000).length;
+  const active = jobs.filter(l => ACTIVE_JOB_STATUSES.includes(l.status)).length;
+  return {
+    quoteRequests15m: q15m,
+    quoteRequests60m: q60m,
+    quoteRequests24h: q24h,
+    activeJobs: active,
+  };
+}
+
 /** Pure spec-shape helper: given an array of job-like records with
  *  {lat, lng, createdAt, status}, bucket them by zone and return the
  *  same counts shape as getWindowCountsByZone — but WITHOUT touching
