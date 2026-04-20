@@ -115,12 +115,20 @@ export default function PricingCalibratePage() {
   });
 
   const { data: demandSnapshot, refetch: refetchDemand } = useQuery<{
-    calibration: { mode: "shadow" | "soft" | "full"; crewPositioningMuted: boolean };
+    calibration: {
+      mode: "shadow" | "soft" | "full";
+      crewPositioningMuted: boolean;
+      zones?: Record<string, { enabled: boolean; elevatedThreshold?: number }>;
+    };
     zones: Array<{ zoneCode: string; zoneName: string; score: number; counts: Record<string, number>; surge: { multiplier: number; theoreticalMultiplier: number; band: string; reason: string } }>;
   }>({ queryKey: ["/api/admin/demand"], refetchInterval: 30000 });
 
   const demandModeMutation = useMutation({
-    mutationFn: async (patch: { mode?: "shadow" | "soft" | "full"; crewPositioningMuted?: boolean }) => {
+    mutationFn: async (patch: {
+      mode?: "shadow" | "soft" | "full";
+      crewPositioningMuted?: boolean;
+      zones?: Record<string, { enabled?: boolean; elevatedThreshold?: number }>;
+    }) => {
       const res = await apiRequest("PUT", "/api/admin/demand/calibration", patch);
       if (!res.ok) throw new Error("Failed to update");
       return res.json();
@@ -468,24 +476,59 @@ export default function PricingCalibratePage() {
           </div>
           {demandSnapshot && (
             <div className="space-y-1.5">
-              {demandSnapshot.zones.map(z => (
-                <div key={z.zoneCode} className="flex items-center gap-2 bg-slate-800/40 rounded-lg p-2">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-white truncate">{z.zoneName}</p>
-                    <p className="text-[10px] text-slate-500">
-                      q15m {z.counts.q15m ?? 0} · q60m {z.counts.q60m ?? 0} · active {z.counts.activeJobs ?? 0} · crew online {z.counts.onlineCrew ?? 0}
-                    </p>
+              {demandSnapshot.zones.map(z => {
+                const override = demandSnapshot.calibration.zones?.[z.zoneCode];
+                const enabled = override?.enabled !== false;
+                const threshold = override?.elevatedThreshold ?? 0.7;
+                return (
+                  <div key={z.zoneCode} className="flex flex-wrap items-center gap-2 bg-slate-800/40 rounded-lg p-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-white truncate">{z.zoneName}</p>
+                      <p className="text-[10px] text-slate-500">
+                        q15m {z.counts.q15m ?? 0} · q60m {z.counts.q60m ?? 0} · active {z.counts.activeJobs ?? 0} · crew online {z.counts.onlineCrew ?? 0}
+                      </p>
+                    </div>
+                    <div className="flex-shrink-0 text-right">
+                      <p className={`text-sm font-black ${
+                        z.score > 0.7 ? "text-red-400" : z.score > 0.4 ? "text-amber-400" : "text-slate-300"
+                      }`}>{Math.round(z.score * 100)}%</p>
+                      <p className="text-[10px] text-slate-500">
+                        surge {z.surge.multiplier}×{demandSnapshot.calibration.mode !== "full" && ` (theo ${z.surge.theoreticalMultiplier}×)`}
+                      </p>
+                    </div>
+                    <div className="w-full flex items-center justify-between gap-3 pt-1 border-t border-slate-700/40">
+                      <label className="flex items-center gap-2 text-[11px] text-slate-400">
+                        <input
+                          type="checkbox"
+                          checked={enabled}
+                          onChange={e => demandModeMutation.mutate({
+                            zones: { [z.zoneCode]: { enabled: e.target.checked } },
+                          })}
+                          className="h-3.5 w-3.5 accent-emerald-500"
+                          data-testid={`toggle-zone-${z.zoneCode}`}
+                        />
+                        Zone enabled
+                      </label>
+                      <label className="flex items-center gap-2 text-[11px] text-slate-400">
+                        Elevated threshold
+                        <input
+                          type="number"
+                          step="0.05" min="0.1" max="1.5"
+                          value={threshold}
+                          onChange={e => {
+                            const v = parseFloat(e.target.value);
+                            if (!isNaN(v)) demandModeMutation.mutate({
+                              zones: { [z.zoneCode]: { elevatedThreshold: v } },
+                            });
+                          }}
+                          className="w-16 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-white"
+                          data-testid={`threshold-zone-${z.zoneCode}`}
+                        />
+                      </label>
+                    </div>
                   </div>
-                  <div className="flex-shrink-0 text-right">
-                    <p className={`text-sm font-black ${
-                      z.score > 0.7 ? "text-red-400" : z.score > 0.4 ? "text-amber-400" : "text-slate-300"
-                    }`}>{Math.round(z.score * 100)}%</p>
-                    <p className="text-[10px] text-slate-500">
-                      surge {z.surge.multiplier}×{demandSnapshot.calibration.mode !== "full" && ` (theo ${z.surge.theoreticalMultiplier}×)`}
-                    </p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

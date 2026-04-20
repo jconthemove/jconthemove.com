@@ -11291,18 +11291,19 @@ Thank you for your business!
         revenue: Math.round((revenueByZone[z.zoneCode] || 0) * 100) / 100,
       }));
       // Spec-shape: zones-keyed object with {count, revenue, score}.
-      const zonesByCode: Record<string, { count: number; revenue: number; score: number }> = {};
+      // scorer emits counts.q60m (not quoteRequests60m).
+      const zonesKeyed: Record<string, { count: number; revenue: number; score: number }> = {};
       for (const z of zones) {
-        zonesByCode[z.zoneCode] = {
-          count: z.counts.quoteRequests60m,
+        zonesKeyed[z.zoneCode] = {
+          count: z.counts.q60m,
           revenue: z.revenue,
           score: z.score,
         };
       }
       res.json({
         ...snapshot,
-        zones,              // array form (existing callers)
-        zonesByCode,        // object form keyed by zone code (spec shape)
+        zones,                // array form (existing admin UI callers)
+        zonesByCode: zonesKeyed, // spec-shape keyed by zone code
         unmappedRevenue: Math.round(unmapped * 100) / 100,
       });
     } catch (e: any) {
@@ -11360,16 +11361,22 @@ Thank you for your business!
       const sampleCount = samples.length;
       const trailingAvg = sampleCount ? samples.reduce((a, b) => a + b, 0) / sampleCount : 0;
 
+      // Primary projection per spec: today's running total + projected
+      // end-of-day based on same-day-last-4-weeks average. We return the
+      // historical baseline as projectedToday (drives the admin tile),
+      // plus the elapsed-ratio projection as a secondary reference.
+      const projectedTodayPrimary = sampleCount > 0
+        ? Math.max(todaySoFar, trailingAvg)
+        : projectedEod;
       res.json({
         todaySoFar: Math.round(todaySoFar * 100) / 100,
+        projectedToday: Math.round(projectedTodayPrimary * 100) / 100,
+        trailingAvg: Math.round(trailingAvg * 100) / 100,
         projectedEod: Math.round(projectedEod * 100) / 100,
         elapsedRatio: Math.round(elapsedRatio * 1000) / 1000,
-        trailingAvg: Math.round(trailingAvg * 100) / 100,
         sampleCount,
         samples,
-        // Legacy field: admin overview tile reads projectedToday; keep it
-        // as the elapsed-ratio EOD value so today's pace drives the tile.
-        projectedToday: Math.round(projectedEod * 100) / 100,
+        method: sampleCount > 0 ? "same_weekday_last_4_avg" : "elapsed_ratio_fallback",
       });
     } catch (e: any) {
       res.status(500).json({ error: e.message });

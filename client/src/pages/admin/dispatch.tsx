@@ -428,6 +428,10 @@ export default function AdminDispatchPage() {
         />
       </div>
 
+      {/* Task #174 — Demand heatmap strip. Operators can glance at per-zone
+          demand intensity from the dispatch screen before manually reassigning. */}
+      <DemandHeatmapStrip />
+
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-5">
         {/* Jobs feed */}
         <div>
@@ -592,6 +596,59 @@ function LiveCrewPositions() {
           </Card>
         </div>
       )}
+    </div>
+  );
+}
+
+type DemandSnapshot = {
+  zones: Array<{
+    zoneCode: string;
+    zoneName: string;
+    score: number;
+    counts: { q15m: number; q60m: number; q24h: number; activeJobs: number; onlineCrew: number };
+    surge: { multiplier: number; band: string };
+  }>;
+};
+
+function DemandHeatmapStrip() {
+  const { data } = useQuery<DemandSnapshot>({
+    queryKey: ["/api/admin/demand"],
+    refetchInterval: 15000,
+  });
+  const zones = data?.zones ?? [];
+  if (zones.length === 0) return null;
+  const sorted = [...zones].sort((a, b) => b.score - a.score);
+  const heat = (score: number) => {
+    if (score > 1.0) return "bg-red-500/25 border-red-500/50 text-red-200";
+    if (score > 0.7) return "bg-orange-500/20 border-orange-500/40 text-orange-200";
+    if (score > 0.4) return "bg-amber-500/15 border-amber-500/35 text-amber-200";
+    if (score < 0.2) return "bg-sky-500/10 border-sky-500/30 text-sky-200";
+    return "bg-slate-800/50 border-slate-700/50 text-slate-300";
+  };
+  return (
+    <div className="mb-5">
+      <div className="flex items-center gap-2 mb-2">
+        <MapPin className="h-3.5 w-3.5 text-amber-400" />
+        <h2 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Demand Heatmap</h2>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
+        {sorted.map(z => (
+          <div
+            key={z.zoneCode}
+            className={`rounded-lg border px-2.5 py-2 ${heat(z.score)}`}
+            data-testid={`heatmap-zone-${z.zoneCode}`}
+          >
+            <p className="text-[11px] font-bold truncate">{z.zoneName}</p>
+            <div className="flex items-baseline justify-between mt-0.5">
+              <span className="text-lg font-black">{Math.round(z.score * 100)}%</span>
+              <span className="text-[10px] opacity-80">{z.surge.multiplier}×</span>
+            </div>
+            <p className="text-[10px] opacity-70 truncate">
+              q60m {z.counts.q60m} · crew {z.counts.onlineCrew}
+            </p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
