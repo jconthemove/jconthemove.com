@@ -139,6 +139,20 @@ export async function crewDecline(leadId: string, crewId: string): Promise<{ ok:
   cancelOfferTimer(leadId);
   await logDispatchEvent(leadId, "offer_declined", crewId, crewId,
     before.dispatchState, "pending", "crew declined");
+  // Task #173 — surface chronic decliners to admin. Increment on every
+  // confirmed decline. Wrapped so a stat failure never blocks the core
+  // dispatch flow (the offer already rolled).
+  try {
+    await pool.query(
+      `UPDATE users
+          SET dispatch_decline_count = COALESCE(dispatch_decline_count,0) + 1,
+              dispatch_last_declined_at = now()
+        WHERE id = $1`,
+      [crewId],
+    );
+  } catch (e) {
+    console.warn(`[dispatch.decline] stat bump failed for ${crewId}:`, e);
+  }
   // Roll to next candidate asynchronously.
   void startOfferLoop(leadId);
   return { ok: true };

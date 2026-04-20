@@ -452,29 +452,53 @@ function MyJobCard({
           </div>
         </div>
 
-        {/* Step tracker */}
-        <div className="mt-3 flex items-center gap-1">
-          {STATUS_STEPS.map((s, i) => {
-            const done = currentIdx >= i;
-            const active = currentIdx === i && currentKey !== "completed";
-            return (
-              <div key={s.key} className="flex-1 flex items-center gap-1" data-testid={`step-${lead.id}-${s.key}`}>
-                <div className={`flex-1 h-1.5 rounded-full transition-colors ${
-                  done ? (active ? "bg-blue-500" : "bg-emerald-500") : "bg-slate-700"
-                }`} />
-              </div>
-            );
-          })}
-        </div>
-        <div className="mt-1 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide">
-          {STATUS_STEPS.map((s, i) => (
-            <span key={s.key} className={
-              currentIdx > i ? "text-emerald-400"
-              : currentIdx === i ? "text-blue-300"
-              : "text-slate-600"
-            }>{s.label}</span>
-          ))}
-        </div>
+        {/* Step tracker — only when the viewer is genuinely on the crew
+            (actionable state) or when we're showing Accept/Decline to
+            them. For open/unassigned jobs we hide the tracker entirely. */}
+        {(actionable || iAmActiveOffer) && (
+          <>
+            <div className="mt-3 flex items-center gap-1">
+              {STATUS_STEPS.map((s, i) => {
+                const done = currentIdx >= i;
+                const active = currentIdx === i && currentKey !== "completed";
+                return (
+                  <div key={s.key} className="flex-1 flex items-center gap-1" data-testid={`step-${lead.id}-${s.key}`}>
+                    <div className={`flex-1 h-1.5 rounded-full transition-colors ${
+                      done ? (active ? "bg-blue-500" : "bg-emerald-500") : "bg-slate-700"
+                    }`} />
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide">
+              {STATUS_STEPS.map((s, i) => (
+                <span key={s.key} className={
+                  currentIdx > i ? "text-emerald-400"
+                  : currentIdx === i ? "text-blue-300"
+                  : "text-slate-600"
+                }>{s.label}</span>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Bonus preview — shown BEFORE accept so the worker sees the
+            same $ incentive the job-board card advertises. */}
+        {iAmActiveOffer && lead.bonus && lead.bonus.total > 0 && (
+          <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-950/30 px-3 py-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-300">Crew Bonus</span>
+              <span className="text-sm font-black text-emerald-300" data-testid={`bonus-amount-${lead.id}`}>
+                +${lead.bonus.total}
+              </span>
+            </div>
+            {Array.isArray(lead.bonus.reasons) && lead.bonus.reasons.length > 0 && (
+              <p className="text-[10px] text-emerald-200/80 mt-0.5 leading-snug">
+                {lead.bonus.reasons.join(" • ")}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Action row: navigate + primary action, plus decline while offering */}
         <div className="mt-3 flex gap-2">
@@ -521,9 +545,24 @@ function MyJobCard({
                 </>
               )}
             </Button>
-          ) : (
-            <div className="flex-1 min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-sm font-semibold">
+          ) : ds === "completed" ? (
+            <div className="flex-1 min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-sm font-semibold" data-testid={`status-label-${lead.id}`}>
               <CheckCircle2 className="h-4 w-4" /> Completed
+            </div>
+          ) : ds === "offering" ? (
+            // Offered to a teammate — viewer should not see Accept/Decline
+            <div className="flex-1 min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-300 text-sm font-semibold" data-testid={`status-label-${lead.id}`}>
+              <Clock className="h-4 w-4" /> Offered to teammate
+            </div>
+          ) : amCrewMember ? (
+            // Edge case: on crew but dispatchState is unrecognized.
+            <div className="flex-1 min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-md bg-slate-700/40 border border-slate-600 text-slate-300 text-sm font-semibold" data-testid={`status-label-${lead.id}`}>
+              <Clock className="h-4 w-4" /> Awaiting dispatch
+            </div>
+          ) : (
+            // Open job listed in my-jobs feed (viewer isn't on crew yet).
+            <div className="flex-1 min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-md bg-blue-500/10 border border-blue-500/30 text-blue-300 text-sm font-semibold" data-testid={`status-label-${lead.id}`}>
+              <Clock className="h-4 w-4" /> Open — available to claim
             </div>
           )}
         </div>

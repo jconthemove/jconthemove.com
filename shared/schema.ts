@@ -227,6 +227,11 @@ export const users = pgTable("users", {
   capabilities: text("capabilities").array().default(sql`ARRAY[]::text[]`), // Capability flags: 'mover','driver','truck_small','truck_large','trailer_small','trailer_large','uhaul'
   isDriver: boolean("is_driver").default(false), // Whether this employee can drive the truck
   acceptedJobTypes: text("accepted_job_types").array().default(sql`ARRAY['moving','junk','snow','handyman','labor','cleaning','demolition']::text[]`), // Job types this worker will accept
+  // Task #173 — dispatch decline tracking. Admin visibility into chronic
+  // decliners. Incremented atomically on POST /api/crew/jobs/:id/decline
+  // and surfaced via /api/admin/crew/decline-counts.
+  dispatchDeclineCount: integer("dispatch_decline_count").notNull().default(0),
+  dispatchLastDeclinedAt: timestamp("dispatch_last_declined_at"),
   rewardsEnrolled: boolean("rewards_enrolled").notNull().default(false),
   loyaltyTier: text("loyalty_tier").default("bronze"), // 'bronze', 'silver', 'gold', 'vip'
   totalCompletedSpend: decimal("total_completed_spend", { precision: 10, scale: 2 }).default("0.00"),

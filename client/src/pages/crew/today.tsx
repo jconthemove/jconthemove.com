@@ -451,6 +451,29 @@ export default function CrewTodayPage() {
     },
   });
 
+  const [declinePending, setDeclinePending] = useState<string | null>(null);
+  const declineOfferMutation = useMutation({
+    mutationFn: async (leadId: string) => {
+      const res = await apiRequest("POST", `/api/crew/jobs/${leadId}/decline`, {});
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Couldn't decline" }));
+        throw new Error(err.error || "Couldn't decline");
+      }
+      return res.json();
+    },
+    onMutate: (leadId) => setDeclinePending(leadId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads/my-jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      setDeclinePending(null);
+      toast({ title: "Offer declined", description: "We'll route it to the next crew." });
+    },
+    onError: (e: Error) => {
+      setDeclinePending(null);
+      toast({ title: "Couldn't decline", description: e.message, variant: "destructive" });
+    },
+  });
+
   const { data: employees = [] } = useQuery<User[]>({ queryKey: ["/api/employees"] });
   const { data: wallet } = useQuery<{ balance: string }>({ queryKey: ["/api/rewards/balance"] });
   const { data: stakingPerk } = useQuery<{ stakedTotal: number; perkPercent: number; perkLabel: string }>({
@@ -1421,6 +1444,8 @@ export default function CrewTodayPage() {
               }`;
               const statusBusy = statusPending === job.id;
               const acceptBusy = acceptPending === job.id;
+              const declineBusy = declinePending === job.id;
+              const bonus = (job as Lead & { bonus?: { total: number; reasons?: string[] } }).bonus;
               return (
                 <div key={job.id} className="bg-white/[0.03] rounded-xl p-3 border border-orange-500/10">
                   <Link href={`/lead/${job.id}`}>
@@ -1446,27 +1471,49 @@ export default function CrewTodayPage() {
                     </div>
                   </Link>
                   {(amAssigned || amOffered) && (
-                    <div className="mt-2 flex gap-2">
-                      <a
-                        href={mapsHref}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={e => e.stopPropagation()}
-                        className="flex-1 min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-600 text-slate-200 bg-slate-800/60 hover:bg-slate-700/60 text-xs font-semibold px-3"
-                        data-testid={`today-nav-${job.id}`}
-                      >
-                        <Navigation className="h-3.5 w-3.5" /> Navigate
-                      </a>
-                      {amOffered ? (
-                        <Button
-                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); acceptOfferMutation.mutate(job.id); }}
-                          disabled={acceptBusy}
-                          className="flex-1 min-h-[44px] bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs"
-                          data-testid={`today-accept-${job.id}`}
+                    <>
+                      {amOffered && bonus && bonus.total > 0 && (
+                        <div className="mt-2 rounded-lg border border-emerald-500/30 bg-emerald-950/30 px-3 py-1.5 flex items-center justify-between">
+                          <div>
+                            <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-300">Crew Bonus</span>
+                            {Array.isArray(bonus.reasons) && bonus.reasons.length > 0 && (
+                              <p className="text-[9px] text-emerald-200/80 leading-snug">{bonus.reasons.join(" • ")}</p>
+                            )}
+                          </div>
+                          <span className="text-sm font-black text-emerald-300" data-testid={`today-bonus-${job.id}`}>+${bonus.total}</span>
+                        </div>
+                      )}
+                      <div className="mt-2 flex gap-2">
+                        <a
+                          href={mapsHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          className="flex-1 min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-600 text-slate-200 bg-slate-800/60 hover:bg-slate-700/60 text-xs font-semibold px-3"
+                          data-testid={`today-nav-${job.id}`}
                         >
-                          {acceptBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Accept</>}
-                        </Button>
-                      ) : nextAction ? (
+                          <Navigation className="h-3.5 w-3.5" /> Navigate
+                        </a>
+                        {amOffered ? (
+                          <>
+                            <Button
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); acceptOfferMutation.mutate(job.id); }}
+                              disabled={acceptBusy}
+                              className="flex-1 min-h-[44px] bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs"
+                              data-testid={`today-accept-${job.id}`}
+                            >
+                              {acceptBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Accept</>}
+                            </Button>
+                            <Button
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); declineOfferMutation.mutate(job.id); }}
+                              disabled={declineBusy}
+                              className="flex-1 min-h-[44px] bg-red-600 hover:bg-red-500 text-white font-bold text-xs"
+                              data-testid={`today-decline-${job.id}`}
+                            >
+                              {declineBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><XCircle className="h-3.5 w-3.5 mr-1" /> Decline</>}
+                            </Button>
+                          </>
+                        ) : nextAction ? (
                         <Button
                           onClick={(e) => { e.preventDefault(); e.stopPropagation(); statusMutation.mutate({ leadId: job.id, status: nextAction.next }); }}
                           disabled={statusBusy}
@@ -1481,7 +1528,8 @@ export default function CrewTodayPage() {
                           )}
                         </Button>
                       ) : null}
-                    </div>
+                      </div>
+                    </>
                   )}
                 </div>
               );

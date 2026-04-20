@@ -712,6 +712,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('⚠️ accepted_job_types migration error (non-fatal):', migErr);
   }
 
+  // Task #173 — dispatch decline tracking columns on users
+  try {
+    await pool.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS dispatch_decline_count INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS dispatch_last_declined_at TIMESTAMP;
+    `);
+    console.log('✅ dispatch_decline_count column ready');
+  } catch (migErr) {
+    console.error('⚠️ dispatch_decline_count migration error (non-fatal):', migErr);
+  }
+
   // Schema migration: add customer-selected package column to leads
   try {
     await pool.query(`
@@ -5598,7 +5609,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...assignedLeads,
         ...openLeads.filter((l: any) => !assignedIds.has(l.id)),
       ];
-      res.json(await enrichLeadsWithPhone(merged));
+      const enriched = await enrichLeadsWithPhone(merged);
+      // Task #173 — decorate every job with the per-crew incentive bonus
+      // so the offered card (Accept/Decline) can show the same $ amount
+      // the worker sees on the job-board signup card. Keeps the source
+      // of truth in @shared/crewIncentives so UI and dispatch agree.
+      const { calcCrewBonus } = await import("@shared/crewIncentives");
+      const withBonus = enriched.map((lead: any) => {
+        const crewSlotsFilled = Array.isArray(lead.crewMembers) ? lead.crewMembers.length : 0;
+        const bonus = calcCrewBonus({
+          urgency: lead.urgency,
+          arrivalWindow: lead.arrivalWindow,
+          moveDate: lead.moveDate,
+          confirmedDate: lead.confirmedDate,
+          crewSize: lead.crewSize,
+          crewSlotsFilled,
+          totalPrice: lead.totalPrice,
+          serviceType: lead.serviceType,
+        });
+        return { ...lead, bonus };
+      });
+      res.json(withBonus);
     } catch (error) {
       console.error("Error fetching assigned leads:", error);
       res.status(500).json({ error: "Failed to fetch assigned jobs" });
@@ -11157,6 +11188,36 @@ Thank you for your business!
       })));
     } catch (e: any) {
       console.error("[/api/admin/crew/locations] error:", e);
+      res.status(500).json({ error: e.message || "failed" });
+    }
+  });
+
+  // Task #173 — admin visibility into chronic decliners. Returns all
+  // employees with non-zero decline counts, sorted desc, alongside
+  // name + last-declined timestamp so admin can follow up or rebalance
+  // the offer queue away from decliners.
+  app.get("/api/admin/crew/decline-counts", isAuthenticated, requireBusinessOwner, async (_req, res) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT id, first_name, last_name, email,
+                COALESCE(dispatch_decline_count, 0) AS decline_count,
+                dispatch_last_declined_at
+           FROM users
+          WHERE role IN ('employee','admin','business_owner')
+            AND COALESCE(dispatch_decline_count, 0) > 0
+          ORDER BY dispatch_decline_count DESC, dispatch_last_declined_at DESC NULLS LAST
+          LIMIT 100`,
+      );
+      res.json(rows.map((r: any) => ({
+        userId: r.id,
+        firstName: r.first_name,
+        lastName: r.last_name,
+        email: r.email,
+        declineCount: Number(r.decline_count) || 0,
+        lastDeclinedAt: r.dispatch_last_declined_at,
+      })));
+    } catch (e: any) {
+      console.error("[/api/admin/crew/decline-counts] error:", e);
       res.status(500).json({ error: e.message || "failed" });
     }
   });
