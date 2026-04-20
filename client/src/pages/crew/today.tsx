@@ -1445,7 +1445,7 @@ export default function CrewTodayPage() {
               const statusBusy = statusPending === job.id;
               const acceptBusy = acceptPending === job.id;
               const declineBusy = declinePending === job.id;
-              const bonus = (job as Lead & { bonus?: { total: number; reasons?: string[] } }).bonus;
+              const bonus = (job as Lead & { bonus?: { amount: number; reasons?: string[] } }).bonus;
               return (
                 <div key={job.id} className="bg-white/[0.03] rounded-xl p-3 border border-orange-500/10">
                   <Link href={`/lead/${job.id}`}>

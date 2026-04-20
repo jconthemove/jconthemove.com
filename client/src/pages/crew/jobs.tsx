@@ -484,12 +484,12 @@ function MyJobCard({
 
         {/* Bonus preview — shown BEFORE accept so the worker sees the
             same $ incentive the job-board card advertises. */}
-        {iAmActiveOffer && lead.bonus && lead.bonus.total > 0 && (
+        {iAmActiveOffer && lead.bonus && lead.bonus.amount > 0 && (
           <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-950/30 px-3 py-2">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-300">Crew Bonus</span>
               <span className="text-sm font-black text-emerald-300" data-testid={`bonus-amount-${lead.id}`}>
-                +${lead.bonus.total}
+                +${lead.bonus.amount}
               </span>
             </div>
             {Array.isArray(lead.bonus.reasons) && lead.bonus.reasons.length > 0 && (
