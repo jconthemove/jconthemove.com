@@ -16,6 +16,7 @@ import {
   UserX, XCircle, Check, X
 } from "lucide-react";
 import type { User } from "@shared/schema";
+import { PaymentStatusPill } from "@/components/PaymentStatusPill";
 
 const SERVICE_ICONS: Record<string, string> = {
   residential: "🚛", commercial: "🏢", junk: "🗑️", snow: "❄️",
@@ -230,8 +231,35 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
   const [btcAmount, setBtcAmount] = useState("");
   const [btcLink, setBtcLink] = useState<string | null>(null);
   const [tradeNote, setTradeNote] = useState<Record<string, string>>({});
+  const [overrideReason, setOverrideReason] = useState("");
 
   const jobTradeRequests = tradeRequests.filter(r => r.leadId === lead?.id && r.status === "pending");
+
+  type PaymentPanel = {
+    status: { key: string; label: string; color: "green" | "yellow" | "blue" | "gray" } | null;
+    lead: { dispatch_override_reason: string | null } | null;
+    invoices: Array<{
+      id: string; square_invoice_id: string | null; status: string | null;
+      amount: string | number | null; sent_at: string | null; paid_at: string | null;
+      public_url: string | null;
+    }>;
+    btcPayments: Array<{
+      id: string; btc_amount: string | number | null; usd_amount: string | number | null;
+      tx_hash: string | null; status: string | null; verified_at: string | null; created_at: string;
+    }>;
+    walletEntries: Array<{
+      id: string; kind: string; amount_usd: string | number | null;
+      balance_after: string | number | null; note: string | null; created_at: string;
+    }>;
+  };
+
+  const paymentPanelKey = ["/api/admin/leads", lead?.id, "payment-panel"] as const;
+
+  const { data: panel, isLoading: panelLoading } = useQuery<PaymentPanel>({
+    queryKey: paymentPanelKey,
+    enabled: !!lead?.id && open,
+    refetchInterval: open ? 30_000 : false,
+  });
 
   const crewMembersArr = Array.isArray(lead?.crewMembers) ? lead!.crewMembers! : [];
   const crewEmployees = crewMembersArr
@@ -363,6 +391,45 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
       toast({ title: status === "approved" ? "Trade approved" : "Trade denied" });
     },
     onError: () => toast({ title: "Error", variant: "destructive" }),
+  });
+
+  const overrideMutation = useMutation({
+    mutationFn: async () => {
+      const reason = overrideReason.trim();
+      if (!reason) throw new Error("Reason required");
+      const res = await apiRequest("POST", `/api/admin/leads/${lead!.id}/dispatch-override`, { reason });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Failed" }));
+        throw new Error(err.error || "Failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      setOverrideReason("");
+      queryClient.invalidateQueries({ queryKey: paymentPanelKey });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payment-status", lead!.id] });
+      toast({ title: "Override applied", description: "Deposit gate is now overridden." });
+    },
+    onError: (e: Error) => toast({ title: "Override failed", description: e.message, variant: "destructive" }),
+  });
+
+  const clearOverrideMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/leads/${lead!.id}/dispatch-override/clear`, {});
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Failed" }));
+        throw new Error(err.error || "Failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: paymentPanelKey });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payment-status", lead!.id] });
+      toast({ title: "Override cleared", description: "Deposit gate re-enabled." });
+    },
+    onError: (e: Error) => toast({ title: "Clear failed", description: e.message, variant: "destructive" }),
   });
 
   const sendReviewLinkMutation = useMutation({
@@ -526,6 +593,192 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
                   <CheckCircle2 className="h-3.5 w-3.5" /> View Square Payment Page
                 </a>
               </div>
+            )}
+          </div>
+
+          {/* Payments Block — Task #182 */}
+          <div className="bg-slate-800/60 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold flex items-center gap-1.5">
+                <DollarSign className="h-3 w-3" /> Payments
+              </p>
+              <PaymentStatusPill leadId={lead.id} />
+            </div>
+
+            {panelLoading && !panel ? (
+              <div className="flex justify-center py-4">
+                <Loader2 className="h-4 w-4 animate-spin text-slate-500" />
+              </div>
+            ) : (
+              <>
+                {/* Override state */}
+                {panel?.lead?.dispatch_override_reason ? (
+                  <div className="bg-amber-950/30 border border-amber-500/30 rounded-lg p-2.5 mb-3">
+                    <p className="text-[10px] text-amber-400 uppercase tracking-wide mb-1">Deposit gate overridden</p>
+                    <p className="text-xs text-amber-200 mb-2">"{panel.lead.dispatch_override_reason}"</p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => clearOverrideMutation.mutate()}
+                      disabled={clearOverrideMutation.isPending}
+                      className="w-full border-amber-500/40 text-amber-300 hover:bg-amber-950/40 text-xs h-7"
+                    >
+                      {clearOverrideMutation.isPending
+                        ? <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                        : <X className="h-3 w-3 mr-1" />}
+                      Clear Override
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="bg-slate-900/40 border border-slate-700/40 rounded-lg p-2.5 mb-3">
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1.5">Override Deposit Gate</p>
+                    <Textarea
+                      value={overrideReason}
+                      onChange={e => setOverrideReason(e.target.value)}
+                      placeholder="Reason (required, max 500 chars)…"
+                      maxLength={500}
+                      rows={2}
+                      className="bg-slate-700/60 border-slate-600 text-white text-xs mb-2 resize-none"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => overrideMutation.mutate()}
+                      disabled={overrideMutation.isPending || !overrideReason.trim()}
+                      className="w-full bg-amber-700 hover:bg-amber-600 text-white text-xs h-7"
+                    >
+                      {overrideMutation.isPending
+                        ? <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                        : <Check className="h-3 w-3 mr-1" />}
+                      Override Deposit Gate
+                    </Button>
+                  </div>
+                )}
+
+                {/* Square Invoices */}
+                <div className="mb-3">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+                    <Receipt className="h-3 w-3" /> Square Invoices ({panel?.invoices?.length ?? 0})
+                  </p>
+                  {(!panel?.invoices || panel.invoices.length === 0) ? (
+                    <p className="text-xs text-slate-600 italic px-1">No invoices yet</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {panel.invoices.map(inv => (
+                        <div key={inv.id} className="bg-slate-900/40 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-semibold text-white">
+                                ${Number(inv.amount ?? 0).toFixed(2)}
+                              </span>
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                                inv.status === "PAID" || inv.paid_at
+                                  ? "bg-green-500/20 text-green-300"
+                                  : inv.status === "SENT" || inv.sent_at
+                                  ? "bg-blue-500/20 text-blue-300"
+                                  : "bg-slate-700/60 text-slate-400"
+                              }`}>{inv.status || (inv.paid_at ? "PAID" : inv.sent_at ? "SENT" : "DRAFT")}</span>
+                            </div>
+                            {inv.sent_at && (
+                              <p className="text-[10px] text-slate-500 mt-0.5">
+                                Sent {formatDateShort(inv.sent_at)}
+                                {inv.paid_at && ` · Paid ${formatDateShort(inv.paid_at)}`}
+                              </p>
+                            )}
+                          </div>
+                          {inv.public_url && (
+                            <a
+                              href={inv.public_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[10px] text-blue-400 hover:text-blue-300 flex-shrink-0"
+                            >
+                              View →
+                            </a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* BTC Payments */}
+                <div className="mb-3">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+                    <Bitcoin className="h-3 w-3" /> Bitcoin Payments ({panel?.btcPayments?.length ?? 0})
+                  </p>
+                  {(!panel?.btcPayments || panel.btcPayments.length === 0) ? (
+                    <p className="text-xs text-slate-600 italic px-1">No BTC payments</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {panel.btcPayments.map(btc => (
+                        <div key={btc.id} className="bg-slate-900/40 rounded-lg px-2.5 py-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-semibold text-white">
+                                  ${Number(btc.usd_amount ?? 0).toFixed(2)}
+                                </span>
+                                <span className="text-[10px] text-orange-400">
+                                  ₿{Number(btc.btc_amount ?? 0).toFixed(8)}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-slate-500 mt-0.5">
+                                {formatDateShort(btc.created_at)}
+                                {btc.verified_at && ` · Verified ${formatDateShort(btc.verified_at)}`}
+                              </p>
+                            </div>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                              btc.verified_at || btc.status === "verified" || btc.status === "completed"
+                                ? "bg-green-500/20 text-green-300"
+                                : btc.status === "pending"
+                                ? "bg-yellow-500/20 text-yellow-300"
+                                : "bg-slate-700/60 text-slate-400"
+                            }`}>{btc.status || "pending"}</span>
+                          </div>
+                          {btc.tx_hash && (
+                            <p className="text-[10px] text-slate-600 truncate mt-1 font-mono">{btc.tx_hash}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Wallet Ledger */}
+                <div>
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+                    <Coins className="h-3 w-3" /> Wallet Ledger ({panel?.walletEntries?.length ?? 0})
+                  </p>
+                  {(!panel?.walletEntries || panel.walletEntries.length === 0) ? (
+                    <p className="text-xs text-slate-600 italic px-1">No wallet activity</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {panel.walletEntries.map(w => {
+                        const amt = Number(w.amount_usd ?? 0);
+                        return (
+                          <div key={w.id} className="bg-slate-900/40 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-700/60 text-slate-300">{w.kind}</span>
+                                <span className={`text-xs font-semibold ${amt >= 0 ? "text-green-400" : "text-red-400"}`}>
+                                  {amt >= 0 ? "+" : ""}${amt.toFixed(2)}
+                                </span>
+                              </div>
+                              {w.note && <p className="text-[10px] text-slate-500 mt-0.5 truncate">{w.note}</p>}
+                              <p className="text-[10px] text-slate-600">{formatDateShort(w.created_at)}</p>
+                            </div>
+                            {w.balance_after != null && (
+                              <span className="text-[10px] text-slate-500 flex-shrink-0">
+                                bal ${Number(w.balance_after).toFixed(2)}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </>
             )}
           </div>
 
