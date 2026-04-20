@@ -1,6 +1,53 @@
 import { useEffect, useRef, useState } from "react";
 import { MapPin, Loader2 } from "lucide-react";
 
+// ─── Minimal local Google Maps types ───────────────────────────────────────
+// We don't take a dependency on `@types/google.maps` for this single
+// component, but we still want strong types instead of `any`. These are the
+// only fields we actually read — extend as needed if more of the API is used.
+interface GAddressComponent {
+  long_name: string;
+  short_name: string;
+  types: string[];
+}
+interface GGeocoderResult {
+  formatted_address?: string;
+  address_components?: GAddressComponent[];
+}
+type GGeocoderStatus = "OK" | "ZERO_RESULTS" | "OVER_QUERY_LIMIT" | "REQUEST_DENIED" | "INVALID_REQUEST" | "UNKNOWN_ERROR" | "ERROR";
+interface GGeocoderRequest {
+  address?: string;
+  componentRestrictions?: { country?: string | string[] };
+}
+interface GGeocoder {
+  geocode(
+    request: GGeocoderRequest,
+    callback: (results: GGeocoderResult[] | null, status: GGeocoderStatus) => void,
+  ): void;
+}
+interface GAutocomplete {
+  getPlace(): GGeocoderResult;
+  addListener(event: string, handler: () => void): void;
+}
+interface GMaps {
+  Geocoder: new () => GGeocoder;
+  places: {
+    Autocomplete: new (
+      input: HTMLInputElement,
+      opts: {
+        types?: string[];
+        componentRestrictions?: { country?: string | string[] };
+        fields?: string[];
+      },
+    ) => GAutocomplete;
+  };
+  event?: { clearInstanceListeners(instance: unknown): void };
+}
+function getMaps(): GMaps | null {
+  const w = window as unknown as { google?: { maps?: GMaps } };
+  return w.google?.maps ?? null;
+}
+
 interface PlaceResult {
   fullAddress: string;
   zip: string;
@@ -23,6 +70,10 @@ interface PlacesAutocompleteProps {
    *  the resolved city/state/zip. This makes typed and clicked addresses
    *  behave identically for downstream UI (e.g. the green confirmation pill). */
   resolveOnBlur?: boolean;
+  /** Fires after EVERY blur-driven resolve attempt with the outcome. Lets the
+   *  parent reveal a manual City / State / ZIP fallback whenever a typed or
+   *  autofilled address can't be resolved into a complete street address. */
+  onResolveAttempt?: (success: boolean) => void;
 }
 
 let mapsApiKey: string | null = null;
@@ -39,7 +90,7 @@ async function getMapsApiKey(): Promise<string> {
 
 function loadGoogleMaps(apiKey: string): Promise<void> {
   if (mapsLoadingPromise) return mapsLoadingPromise;
-  if (typeof window !== "undefined" && (window as any).google?.maps?.places) {
+  if (typeof window !== "undefined" && getMaps()?.places) {
     mapsLoadingPromise = Promise.resolve();
     return mapsLoadingPromise;
   }
@@ -56,13 +107,13 @@ function loadGoogleMaps(apiKey: string): Promise<void> {
 
 function extractComponents(
   formattedAddress: string,
-  comps: any[] | undefined,
+  comps: GAddressComponent[] | undefined,
 ): PlaceResult {
   const list = comps || [];
   const get = (type: string) =>
-    list.find((c: any) => c.types.includes(type))?.long_name || "";
+    list.find((c) => c.types.includes(type))?.long_name || "";
   const getShort = (type: string) =>
-    list.find((c: any) => c.types.includes(type))?.short_name || "";
+    list.find((c) => c.types.includes(type))?.short_name || "";
 
   return {
     fullAddress: formattedAddress || "",
@@ -76,8 +127,8 @@ function extractComponents(
  *  (street_number + route + city + state + ZIP). Anything less specific —
  *  city-only, ZIP-only, or county-level matches — is rejected so the
  *  confirmation pill never claims success on a partial address. */
-function isCompleteUsAddress(place: any): boolean {
-  const comps: any[] = place.address_components || [];
+function isCompleteUsAddress(place: GGeocoderResult): boolean {
+  const comps = place.address_components || [];
   const has = (type: string) => comps.some((c) => c.types.includes(type));
   return (
     has("street_number") &&
@@ -99,10 +150,11 @@ export function PlacesAutocomplete({
   autoFocus,
   onKeyDown,
   resolveOnBlur = true,
+  onResolveAttempt,
 }: PlacesAutocompleteProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const autocompleteRef = useRef<any>(null);
-  const geocoderRef = useRef<any>(null);
+  const autocompleteRef = useRef<GAutocomplete | null>(null);
+  const geocoderRef = useRef<GGeocoder | null>(null);
   // Track the last address we successfully fired `onPlaceSelect` for so the
   // blur-fallback never re-resolves the exact same string twice.
   const lastResolvedRef = useRef<string>("");
@@ -119,14 +171,13 @@ export function PlacesAutocomplete({
       .then((key) => loadGoogleMaps(key))
       .then(() => {
         if (cancelled || !inputRef.current) return;
-        const autocomplete = new (window as any).google.maps.places.Autocomplete(
-          inputRef.current,
-          {
-            types: ["address"],
-            componentRestrictions: { country: "us" },
-            fields: ["formatted_address", "address_components"],
-          }
-        );
+        const maps = getMaps();
+        if (!maps) { setStatus("error"); return; }
+        const autocomplete = new maps.places.Autocomplete(inputRef.current, {
+          types: ["address"],
+          componentRestrictions: { country: "us" },
+          fields: ["formatted_address", "address_components"],
+        });
         autocompleteRef.current = autocomplete;
         autocomplete.addListener("place_changed", () => {
           const place = autocomplete.getPlace();
@@ -134,14 +185,11 @@ export function PlacesAutocomplete({
           const result = extractComponents(place.formatted_address, place.address_components);
           lastResolvedRef.current = result.fullAddress;
           justSelectedRef.current = true;
-          setTimeout(() => { justSelectedRef.current = false; }, 250);
+          window.setTimeout(() => { justSelectedRef.current = false; }, 250);
           onChange(result.fullAddress);
           onPlaceSelect?.(result);
         });
-        // Lazy-init the geocoder for the blur fallback path.
-        try {
-          geocoderRef.current = new (window as any).google.maps.Geocoder();
-        } catch { /* harmless — blur fallback simply no-ops */ }
+        try { geocoderRef.current = new maps.Geocoder(); } catch { /* harmless */ }
         setStatus("ready");
       })
       .catch(() => {
@@ -150,39 +198,50 @@ export function PlacesAutocomplete({
 
     return () => {
       cancelled = true;
-      if (autocompleteRef.current) {
-        (window as any).google?.maps?.event?.clearInstanceListeners(
-          autocompleteRef.current
-        );
-        autocompleteRef.current = null;
+      const maps = getMaps();
+      if (autocompleteRef.current && maps?.event) {
+        maps.event.clearInstanceListeners(autocompleteRef.current);
       }
+      autocompleteRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function tryResolveTypedAddress(addr: string) {
-    if (!resolveOnBlur) return;
-    if (!geocoderRef.current) return;
+  function tryResolveTypedAddress(addr: string): Promise<boolean> {
+    if (!resolveOnBlur) return Promise.resolve(false);
+    const geocoder = geocoderRef.current;
+    if (!geocoder) return Promise.resolve(false);
     const trimmed = addr.trim();
-    if (trimmed.length < 5) return;            // ignore obvious partials
-    if (justSelectedRef.current) return;       // suggestion-click already fired
-    if (trimmed === lastResolvedRef.current) return; // already resolved this exact string
-    geocoderRef.current.geocode(
-      { address: trimmed, componentRestrictions: { country: "US" } },
-      (results: any, gStatus: any) => {
-        if (gStatus !== "OK" || !results || results.length === 0) return;
-        const place = results[0];
-        if (!isCompleteUsAddress(place)) return;
-        const result = extractComponents(place.formatted_address || trimmed, place.address_components);
-        if (!result.city || !result.state || !result.zip) return;
-        lastResolvedRef.current = result.fullAddress;
-        // Replace the raw input with the canonical formatted_address so the
-        // pill, the backend, and any downstream geocoders all see the same
-        // string the customer effectively confirmed.
-        onChange(result.fullAddress);
-        onPlaceSelect?.(result);
-      },
-    );
+    if (trimmed.length < 5) return Promise.resolve(false);     // obvious partial
+    if (justSelectedRef.current) return Promise.resolve(true); // suggestion-click already fired
+    if (trimmed === lastResolvedRef.current) return Promise.resolve(true);
+
+    return new Promise<boolean>((resolve) => {
+      geocoder.geocode(
+        { address: trimmed, componentRestrictions: { country: "US" } },
+        (results, gStatus) => {
+          if (gStatus !== "OK" || !results || results.length === 0) return resolve(false);
+          const place = results[0];
+          if (!isCompleteUsAddress(place)) return resolve(false);
+          const result = extractComponents(place.formatted_address || trimmed, place.address_components);
+          if (!result.city || !result.state || !result.zip) return resolve(false);
+          lastResolvedRef.current = result.fullAddress;
+          // Replace the raw input with the canonical formatted_address so the
+          // pill, the backend, and any downstream geocoders all see the same
+          // string the customer effectively confirmed.
+          onChange(result.fullAddress);
+          onPlaceSelect?.(result);
+          resolve(true);
+        },
+      );
+    });
+  }
+
+  function handleResolveAttempt(addr: string) {
+    if (addr.trim().length < 5) return;
+    tryResolveTypedAddress(addr).then((success) => {
+      onResolveAttempt?.(success);
+    });
   }
 
   const baseInput =
@@ -206,15 +265,13 @@ export function PlacesAutocomplete({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={onKeyDown}
-        onBlur={(e) => tryResolveTypedAddress(e.target.value)}
-        // Browser autofill: Chrome/Safari fire `animationstart` for the
-        // synthetic `-webkit-autofill` animation, and most browsers fire
-        // `change` after the user moves focus. The blur handler covers the
-        // common case; we also try once on `animationend` for sites where
-        // the browser fills before the user ever focused the field.
+        onBlur={(e) => handleResolveAttempt(e.target.value)}
+        // Browser autofill (Chrome/Safari) can fire `change` without ever
+        // focusing the field. The `-webkit-autofill` animation gives us a
+        // reliable hook to retry resolution in that case.
         onAnimationEnd={(e) => {
           if (e.animationName?.toLowerCase().includes("autofill")) {
-            tryResolveTypedAddress(e.currentTarget.value);
+            handleResolveAttempt(e.currentTarget.value);
           }
         }}
         placeholder={status === "loading" ? "Loading maps…" : placeholder}

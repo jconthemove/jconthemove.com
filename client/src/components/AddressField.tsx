@@ -130,6 +130,15 @@ export default function AddressField({
           }
         }}
         onPlaceSelect={handlePlace}
+        // Fired after every blur / autofill resolve attempt. When the
+        // attempt fails (typo, out-of-area, partial street) we reveal the
+        // manual City / State / ZIP inputs so the customer can finish the
+        // address by hand — required for the green pill UX to be honest.
+        onResolveAttempt={(success) => {
+          if (!success && showManualFields && value.trim().length > 0) {
+            setManualOpen(true);
+          }
+        }}
         placeholder={placeholder}
         inputClassName={inputClassName || inputs}
       />
