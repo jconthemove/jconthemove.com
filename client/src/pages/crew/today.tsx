@@ -185,6 +185,7 @@ type PositioningResponse =
       shouldRelocate: boolean;
       headline: string;
       detail: string;
+      targetZone: { code: string; name: string; lat: number; lng: number; dispatchBonusPct: number } | null;
     };
 
 function CrewPositioningCard({ hasAcceptedJobs }: { hasAcceptedJobs: boolean }) {
@@ -203,20 +204,33 @@ function CrewPositioningCard({ hasAcceptedJobs }: { hasAcceptedJobs: boolean }) 
   const color = isHot
     ? "bg-amber-500/15 border-amber-500/40 text-amber-300"
     : "bg-emerald-500/10 border-emerald-500/30 text-emerald-300";
-  return (
-    <Link href="/crew/map">
-      <div className={`flex items-center gap-3 rounded-xl border p-3 cursor-pointer hover:opacity-90 transition-opacity ${color}`}>
-        <span className="text-xl">{isHot ? "📍" : "✅"}</span>
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-bold">{data.headline}</p>
-          <p className="text-slate-300 text-[11px] truncate">
-            {data.detail} · bonus offers may arrive
-          </p>
-        </div>
-        <ChevronRight className="h-4 w-4 opacity-70" />
+  const tz = data.targetZone;
+  const mapsHref = tz
+    ? `https://www.google.com/maps/dir/?api=1&destination=${tz.lat},${tz.lng}`
+    : null;
+  const bonusTag = tz && tz.dispatchBonusPct > 0
+    ? `+${tz.dispatchBonusPct}% dispatch bonus`
+    : "bonus offers may arrive";
+  const content = (
+    <div className={`flex items-center gap-3 rounded-xl border p-3 cursor-pointer hover:opacity-90 transition-opacity ${color}`}>
+      <span className="text-xl">{isHot ? "📍" : "✅"}</span>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-bold">{data.headline}</p>
+        <p className="text-slate-300 text-[11px] truncate">
+          {data.detail} · {bonusTag}
+        </p>
       </div>
-    </Link>
+      <ChevronRight className="h-4 w-4 opacity-70" />
+    </div>
   );
+  if (mapsHref) {
+    return (
+      <a href={mapsHref} target="_blank" rel="noopener noreferrer">
+        {content}
+      </a>
+    );
+  }
+  return content;
 }
 
 export default function CrewTodayPage() {

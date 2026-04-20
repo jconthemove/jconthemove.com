@@ -190,6 +190,28 @@ router.post("/bookings/quote", async (req: Request, res: Response) => {
         finalTotal: +Math.max(0, baseResult.finalTotal - tokenDiscount).toFixed(2),
       };
     }
+    // Task #174 — Apply demand-based surge multiplier to the finalTotal
+    // if the caller provided service coordinates. Mode gating (shadow/
+    // soft/full) is enforced inside decideSurge(), so shadow returns 1.0
+    // here and the customer sees no change until operators promote.
+    let surge: { multiplier: number; band: string; reason: string; surgedTotal: number; zone: string | null } | null = null;
+    try {
+      const { getDemandForCoords } = await import("../demand");
+      const { surge: decision, zone } = await getDemandForCoords(body.serviceLat, body.serviceLng);
+      if (decision.multiplier !== 1) {
+        const surgedTotal = +(result.finalTotal * decision.multiplier).toFixed(2);
+        result = { ...result, finalTotal: surgedTotal };
+      }
+      surge = {
+        multiplier: decision.multiplier,
+        band: decision.band,
+        reason: decision.reason,
+        surgedTotal: result.finalTotal,
+        zone: zone?.name ?? null,
+      };
+    } catch (e) {
+      console.warn("[bookings/quote] surge compute failed:", e instanceof Error ? e.message : e);
+    }
     // Task #170 — shadow mode. Fire-and-forget a parallel pipeline run
     // and log the parity comparison. Never awaited — response latency is
     // unchanged.
@@ -197,7 +219,13 @@ router.post("/bookings/quote", async (req: Request, res: Response) => {
       try {
         const { shadowCompareAndLog } = await import("../pipeline");
         await shadowCompareAndLog(
-          { items: pricingInputs, source: "shadow", persist: false },
+          {
+            items: pricingInputs,
+            source: "shadow",
+            persist: false,
+            serviceLat: body.serviceLat,
+            serviceLng: body.serviceLng,
+          },
           result.finalTotal,
         );
       } catch (e) {
@@ -205,7 +233,7 @@ router.post("/bookings/quote", async (req: Request, res: Response) => {
         console.warn("[bookings/quote] shadow run failed:", e instanceof Error ? e.message : e);
       }
     })();
-    return res.json({ success: true, quote: result });
+    return res.json({ success: true, quote: result, surge });
   } catch (err) {
     if (err instanceof ZodError) {
       return res.status(400).json({ error: "Invalid request", details: err.errors });

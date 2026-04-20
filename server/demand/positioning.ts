@@ -4,7 +4,7 @@
 
 import { scoreAllZones, type ZoneDemand } from "./scorer";
 import { getWindowCountsByZone } from "./windows";
-import { getZone } from "./zones";
+import { getZone, listZones } from "./zones";
 
 export interface PositioningSuggestion {
   best: ZoneDemand | null;
@@ -12,6 +12,16 @@ export interface PositioningSuggestion {
   shouldRelocate: boolean;
   headline: string;
   detail: string;
+  /** Task #174 — concrete navigation target so the crew card can
+   *  one-tap into maps / the assigned destination on the dispatch
+   *  screen. Null when no suggestion or crew is already in the best zone. */
+  targetZone: {
+    code: string;
+    name: string;
+    lat: number;
+    lng: number;
+    dispatchBonusPct: number;
+  } | null;
 }
 
 export async function suggestPosition(
@@ -29,6 +39,18 @@ export async function suggestPosition(
     if (z) current = zones.find(x => x.zoneCode === z.code) ?? null;
   }
 
+  const bestZoneInfo = best ? getZoneInfoByCode(best.zoneCode) : null;
+  // Dispatch bonus scales with surge band — hot zones earn more tokens
+  // per completed job as a nudge to reposition.
+  const dispatchBonusPct = best ? Math.round(Math.max(0, best.score - 0.5) * 20) : 0;
+  const buildTarget = () => (bestZoneInfo ? {
+    code: bestZoneInfo.code,
+    name: bestZoneInfo.name,
+    lat: bestZoneInfo.centerLat,
+    lng: bestZoneInfo.centerLng,
+    dispatchBonusPct,
+  } : null);
+
   if (!best || best.score < 0.3) {
     return {
       best,
@@ -36,6 +58,7 @@ export async function suggestPosition(
       shouldRelocate: false,
       headline: "Quiet right now — hold your position",
       detail: "No elevated demand zones yet. Stay posted and we'll route the next job your way.",
+      targetZone: null,
     };
   }
 
@@ -47,7 +70,10 @@ export async function suggestPosition(
       current,
       shouldRelocate: true,
       headline: `Head to ${best.zoneName}`,
-      detail: `Demand there is ${Math.round(best.score * 100)}% vs ${Math.round(current.score * 100)}% where you are.`,
+      detail: dispatchBonusPct > 0
+        ? `Demand ${Math.round(best.score * 100)}% vs ${Math.round(current.score * 100)}% where you are · +${dispatchBonusPct}% dispatch bonus`
+        : `Demand ${Math.round(best.score * 100)}% vs ${Math.round(current.score * 100)}% where you are`,
+      targetZone: buildTarget(),
     };
   }
 
@@ -58,6 +84,13 @@ export async function suggestPosition(
     headline: current && current.zoneCode === best.zoneCode
       ? `You're in a hot zone — ${best.zoneName}`
       : `Hottest zone: ${best.zoneName}`,
-    detail: best.reasons.slice(0, 2).join(" · ") || "Orders are coming in.",
+    detail: dispatchBonusPct > 0
+      ? `${best.reasons.slice(0, 2).join(" · ") || "Orders incoming"} · +${dispatchBonusPct}% dispatch bonus`
+      : best.reasons.slice(0, 2).join(" · ") || "Orders are coming in.",
+    targetZone: current && current.zoneCode === best.zoneCode ? null : buildTarget(),
   };
+}
+
+function getZoneInfoByCode(code: string) {
+  return listZones().find(z => z.code === code) ?? null;
 }

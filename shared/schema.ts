@@ -2689,6 +2689,9 @@ export const bookingQuoteRequestSchema = z.object({
   applyTokens: z.number().int().nonnegative().optional(),
   /** Customer JCMOVES tier — used to compute the redemption cap. */
   customerTier: z.string().optional(),
+  /** Task #174 — service coordinates for demand/surge zone pricing. */
+  serviceLat: z.number().optional(),
+  serviceLng: z.number().optional(),
 });
 export type BookingQuoteRequest = z.infer<typeof bookingQuoteRequestSchema>;
 
