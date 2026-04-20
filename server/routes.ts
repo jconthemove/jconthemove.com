@@ -420,6 +420,14 @@ async function ensureJackpotsSeeded() {
   } catch (err) {
     console.error('Failed to seed jackpots:', err);
   }
+
+  // Task #172 — Dispatch service schema + retry cron bootstrap.
+  try {
+    const { initDispatchModule } = await import("./dispatch/index");
+    await initDispatchModule();
+  } catch (err) {
+    console.error('Failed to init dispatch module:', err);
+  }
 }
 
 // Shared welcome email builder for approved users
@@ -10940,6 +10948,116 @@ Thank you for your business!
   };
   app.post("/api/admin/jobs/:id/assign", isAuthenticated, requireBusinessOwner, adminAssignHandler);
   app.post("/api/admin/leads/:id/assign", isAuthenticated, requireBusinessOwner, adminAssignHandler);
+
+  // Task #172 — Dispatch service endpoints.
+  //
+  // /reassign is the audited, single-crew override path: it force-pins a
+  // specific worker to a job, cancels any outstanding offer, and writes
+  // a dispatch_log row with the admin's user id + free-text reason.
+  // /assign (above) is the bulk-replace crew path used by the quote panel.
+  app.post("/api/admin/jobs/:id/reassign", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { crewId, reason } = req.body || {};
+      if (typeof crewId !== "string" || !crewId) {
+        return res.status(400).json({ error: "crewId required" });
+      }
+      const { adminReassign } = await import("./dispatch/index");
+      const r = await adminReassign({
+        leadId: id,
+        crewId,
+        actorUserId: req.currentUser.id,
+        reason: typeof reason === "string" ? reason : undefined,
+      });
+      if (!r.ok) return res.status(400).json({ error: r.message || "reassign failed" });
+      res.json({ ok: true });
+    } catch (e: any) {
+      console.error("[/reassign] error:", e);
+      res.status(500).json({ error: e.message || "reassign failed" });
+    }
+  });
+
+  // Crew accept / decline offers. Transactional — returns 409 if the
+  // offer has already been claimed or has expired.
+  app.post("/api/crew/jobs/:id/accept", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { crewAccept } = await import("./dispatch/index");
+      const r = await crewAccept(id, req.currentUser.id);
+      if (!r.ok) return res.status(409).json({ error: r.message });
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/crew/jobs/:id/decline", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { crewDecline } = await import("./dispatch/index");
+      const r = await crewDecline(id, req.currentUser.id);
+      if (!r.ok) return res.status(409).json({ error: r.message });
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Dispatch metrics + kill switch (admin-only).
+  app.get("/api/admin/dispatch/metrics", isAuthenticated, requireBusinessOwner, async (_req, res) => {
+    try {
+      const { getDispatchMetrics, recheckKillSwitch } = await import("./dispatch/index");
+      const [m, enabled] = await Promise.all([getDispatchMetrics(), recheckKillSwitch()]);
+      res.json({ ...m, enabled });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.put("/api/admin/dispatch/kill-switch", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const enabled = req.body?.enabled !== false;
+      const { setKillSwitch, logDispatchEvent } = await import("./dispatch/index");
+      await setKillSwitch(enabled);
+      await logDispatchEvent("system", "kill_switch_change", null, req.currentUser.id,
+        null, null, enabled ? "enabled" : "disabled");
+      res.json({ ok: true, enabled });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Manual re-dispatch: start (or restart) the offer loop for a job.
+  app.post("/api/admin/jobs/:id/dispatch", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { dispatchJob } = await import("./dispatch/index");
+      const r = await dispatchJob(id, {
+        actorUserId: req.currentUser.id,
+        reason: req.body?.reason || "admin manual dispatch",
+      });
+      res.json(r);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Public tail of the dispatch audit trail — scoped to a single lead so
+  // admins can see exactly what happened to an offer.
+  app.get("/api/admin/jobs/:id/dispatch-log", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { rows } = await pool.query(
+        `SELECT id, event, crew_id, actor_user_id, from_state, to_state, reason, data, created_at
+           FROM dispatch_log WHERE lead_id = $1
+           ORDER BY created_at DESC LIMIT 100`,
+        [id],
+      );
+      res.json(rows);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
 
   // Task #171 — Live dispatch metrics strip. Today-only counters so the
   // dispatch page can show "what happened so far today" without pulling

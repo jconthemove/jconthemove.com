@@ -9,9 +9,10 @@ import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   Radio, DollarSign, Briefcase, Coins, TrendingUp, Circle, Loader2,
-  Users, Calendar, ChevronRight,
+  Users, Calendar, ChevronRight, Power, Zap, Send,
 } from "lucide-react";
 import type { User } from "@shared/schema";
 
@@ -43,6 +44,16 @@ type TodayMetrics = {
   completedToday: number;
   avgTicket: number;
   jcmovesIssuedToday: number;
+};
+
+type DispatchMetrics = {
+  activeOffers: number;
+  pendingJobs: number;
+  assignedToday: number;
+  avgTimeToAssignSec: number;
+  acceptRate7d: number;
+  failedToday: number;
+  enabled: boolean;
 };
 
 const STATUS_COLOR: Record<string, string> = {
@@ -221,6 +232,40 @@ export default function AdminDispatchPage() {
     refetchInterval: 10000,
   });
 
+  const { data: dispatchMetrics } = useQuery<DispatchMetrics>({
+    queryKey: ["/api/admin/dispatch/metrics"],
+    refetchInterval: 5000,
+  });
+
+  const killSwitchMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const res = await apiRequest("PUT", "/api/admin/dispatch/kill-switch", { enabled });
+      if (!res.ok) throw new Error("Failed to toggle");
+      return res.json();
+    },
+    onSuccess: (d) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/dispatch/metrics"] });
+      toast({ title: d.enabled ? "Dispatch ENABLED" : "Dispatch DISABLED" });
+    },
+    onError: (e: Error) => toast({ title: "Toggle failed", description: e.message, variant: "destructive" }),
+  });
+
+  const manualDispatchMutation = useMutation({
+    mutationFn: async (leadId: string) => {
+      const res = await apiRequest("POST", `/api/admin/jobs/${leadId}/dispatch`, {
+        reason: "manual re-dispatch from admin console",
+      });
+      if (!res.ok) throw new Error("Failed to dispatch");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/dispatch/metrics"] });
+      toast({ title: "Offer loop started" });
+    },
+    onError: (e: Error) => toast({ title: "Dispatch failed", description: e.message, variant: "destructive" }),
+  });
+
   const reassignMutation = useMutation({
     mutationFn: async ({ leadId, crewId }: { leadId: string; crewId: string }) => {
       const res = await apiRequest("POST", `/api/admin/jobs/${leadId}/assign`, {
@@ -281,13 +326,57 @@ export default function AdminDispatchPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 pt-6 pb-8">
-      <div className="mb-6 flex items-center justify-between gap-3">
+      <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Radio className="h-5 w-5 text-blue-400" />
           <h1 className="text-2xl font-black text-white">Live Dispatch</h1>
           <Badge variant="outline" className="ml-2 text-xs border-green-500/40 text-green-400">
             LIVE · 3s
           </Badge>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/60 border border-slate-700/50">
+            <Power className={`h-4 w-4 ${dispatchMetrics?.enabled ? "text-green-400" : "text-red-400"}`} />
+            <span className="text-xs text-slate-300 font-medium">
+              Auto-dispatch
+            </span>
+            <Switch
+              checked={dispatchMetrics?.enabled ?? true}
+              onCheckedChange={(v) => killSwitchMutation.mutate(v)}
+              disabled={killSwitchMutation.isPending}
+              data-testid="toggle-dispatch-kill-switch"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Dispatch engine status strip */}
+      <div className="mb-5 grid grid-cols-2 md:grid-cols-5 gap-2">
+        <div className="rounded-lg bg-slate-800/40 border border-slate-700/50 px-3 py-2">
+          <p className="text-[10px] uppercase tracking-wider text-slate-500">Active offers</p>
+          <p className="text-lg font-black text-blue-300" data-testid="dispatch-active-offers">
+            {dispatchMetrics?.activeOffers ?? 0}
+          </p>
+        </div>
+        <div className="rounded-lg bg-slate-800/40 border border-slate-700/50 px-3 py-2">
+          <p className="text-[10px] uppercase tracking-wider text-slate-500">Pending jobs</p>
+          <p className="text-lg font-black text-amber-300">{dispatchMetrics?.pendingJobs ?? 0}</p>
+        </div>
+        <div className="rounded-lg bg-slate-800/40 border border-slate-700/50 px-3 py-2">
+          <p className="text-[10px] uppercase tracking-wider text-slate-500">Assigned today</p>
+          <p className="text-lg font-black text-green-300">{dispatchMetrics?.assignedToday ?? 0}</p>
+        </div>
+        <div className="rounded-lg bg-slate-800/40 border border-slate-700/50 px-3 py-2">
+          <p className="text-[10px] uppercase tracking-wider text-slate-500">Avg time to assign</p>
+          <p className="text-lg font-black text-purple-300">
+            {dispatchMetrics ? `${dispatchMetrics.avgTimeToAssignSec}s` : "—"}
+          </p>
+        </div>
+        <div className="rounded-lg bg-slate-800/40 border border-slate-700/50 px-3 py-2">
+          <p className="text-[10px] uppercase tracking-wider text-slate-500">Accept rate 7d</p>
+          <p className="text-lg font-black text-orange-300">
+            {dispatchMetrics ? `${Math.round((dispatchMetrics.acceptRate7d || 0) * 100)}%` : "—"}
+          </p>
         </div>
       </div>
 
