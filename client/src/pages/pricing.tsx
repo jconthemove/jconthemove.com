@@ -32,12 +32,18 @@ const SERVICE_SECTIONS = [
   { id: "other",     label: "More Services",   icon: Wrench,      color: "text-yellow-400", bg: "bg-yellow-500/10", border: "border-yellow-500/30" },
 ];
 
-// Task #169 — JUNK_PACKAGES is now derived from the unified pricing engine's
-// JUNK_TIERS table (server/services/pricingEngine.ts) so a price change in
-// the engine flows to /pricing, /book, the chatbot, and admin
-// pricing-calibrate at once. We import the named export from a shared file
-// to keep the engine importable on both server and client.
-import { JUNK_TIERS } from "@shared/pricingTables";
+// Task #169 — every pricing array on this page is sourced from
+// @shared/pricingTables (the unified pricing-engine tables). A price change
+// in that file flows to /pricing, /book, the chatbot, and admin
+// pricing-calibrate automatically. No hardcoded pricing should live in
+// this file.
+import {
+  JUNK_TIERS,
+  WINDOW_TIERS,
+  TRASH_PLANS,
+  LAWN_PACKAGES,
+  LAWN_ADDONS,
+} from "@shared/pricingTables";
 const JUNK_PACKAGES = JUNK_TIERS.map((t, i) => ({
   label: t.label,
   desc: `${t.loadFraction} · ${t.weightCap}`,
@@ -45,38 +51,6 @@ const JUNK_PACKAGES = JUNK_TIERS.map((t, i) => ({
   high: t.price,
   popular: i === 2, // Medium remains the highlighted option
 }));
-
-const WINDOW_TIERS = [
-  { label: "4 Windows",   price: 20,  desc: "Minimum booking" },
-  { label: "8 Windows",   price: 40,  desc: "Average home" },
-  { label: "12 Windows",  price: 60,  desc: "Larger home" },
-  { label: "20+ Windows", price: null, desc: "Custom quote" },
-];
-
-const TRASH_PLANS = [
-  { label: "1 Can",   mo: 30,  perVisit: "~$7.50" },
-  { label: "2 Cans",  mo: 36,  perVisit: "~$9" },
-  { label: "3 Cans",  mo: 42,  perVisit: "~$10.50" },
-  { label: "4+ Cans", mo: null, perVisit: "Custom" },
-];
-
-const LAWN_PACKAGES = [
-  { label: "Mowing",       small: 45, medium: 65, large: 95, xlarge: 145 },
-  { label: "Trimming",     small: 35, medium: 55, large: 80, xlarge: 120 },
-  { label: "Yard Cleanup", small: 50, medium: 75, large: 110, xlarge: 160 },
-  { label: "Full Service", small: 85, medium: 120, large: 175, xlarge: 250, popular: true },
-];
-
-const LAWN_ADDONS = [
-  { label: "Edging", price: 15 },
-  { label: "Blowing", price: 10 },
-  { label: "Weeding", price: 25 },
-  { label: "Fertilization", price: 35 },
-  { label: "Leaf Removal", price: 40 },
-  { label: "Mulching", price: 50 },
-  { label: "Hedge Trimming", price: 30 },
-  { label: "Gutter Cleaning", price: 60 },
-];
 
 const OTHER_SERVICES = [
   { icon: HardHat,    label: "Light Demo",  sub: "Tear-out, cleanout, drywall removal", href: "/book?service=demolition" },

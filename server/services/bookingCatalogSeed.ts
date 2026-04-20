@@ -269,8 +269,22 @@ const CATALOG_SEED: InsertServiceCatalogEntry[] = [
   },
   // Task #169 — Move Cleaning, Demolition, and Roofing added so /book covers
   // every service the app advertises (was 11; now 14 incl. Move Cleaning,
-  // Light Demolition, Roofing, Labor Only — the latter two were already in
-  // the catalog as `cleaning` and `labor`).
+  // Light Demolition, Roofing, Labor Only — Labor was already in the
+  // catalog as `labor`; `move_cleaning` is a distinct code from generic
+  // `cleaning` because it has its own flat-rate tier and staging workflow.
+  {
+    code: "move_cleaning",
+    name: "Move-In/Out Cleaning",
+    category: "core",
+    defaultPriceMode: "fixed",
+    defaultPrice: "300",
+    suggestedMin: "300",
+    suggestedMax: "1200",
+    discountEligible: true,
+    isAddon: false,
+    sortOrder: 105,
+    description: "Deep turnover cleaning before or after a move — per home size.",
+  },
   {
     code: "demolition",
     name: "Light Demolition",

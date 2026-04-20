@@ -49,3 +49,89 @@ export function quoteJunkFromTable(tierCode: string): { amount: number; tier: Ju
   const tier = JUNK_TIERS.find((t) => t.code === tierCode) ?? null;
   return { amount: tier?.price ?? 0, tier };
 }
+
+// ── Moving crew-rate / truck-add tables (display on /pricing) ────────────
+export const MOVER_RATE_PER_HOUR = 85;
+export const MOVER_TRUCK_ADD_PER_HOUR = 40;
+export const MOVING_MIN_HOURS: Record<number, number> = {
+  1: 2, 2: 2, 3: 2, 4: 3, 5: 4,
+};
+export const JC222_FLAT_PRICE = 222;
+export const JC222_REGULAR_EQUIVALENT = 360;
+
+// ── Window cleaning tier display rows ────────────────────────────────────
+export interface WindowTier {
+  label: string;
+  price: number | null;
+  desc: string;
+}
+export const WINDOW_TIERS: WindowTier[] = [
+  { label: "4 Windows",   price: 20,   desc: "Minimum booking" },
+  { label: "8 Windows",   price: 40,   desc: "Average home" },
+  { label: "12 Windows",  price: 60,   desc: "Larger home" },
+  { label: "20+ Windows", price: null, desc: "Custom quote" },
+];
+
+// ── Trash Valet monthly plan display rows ────────────────────────────────
+export interface TrashPlan {
+  label: string;
+  mo: number | null;
+  perVisit: string;
+}
+export const TRASH_PLANS: TrashPlan[] = [
+  { label: "1 Can",   mo: 30,   perVisit: "~$7.50" },
+  { label: "2 Cans",  mo: 36,   perVisit: "~$9" },
+  { label: "3 Cans",  mo: 42,   perVisit: "~$10.50" },
+  { label: "4+ Cans", mo: null, perVisit: "Custom" },
+];
+
+// ── Lawn-care package matrix (by property size) ──────────────────────────
+export interface LawnPackage {
+  label: string;
+  small: number;
+  medium: number;
+  large: number;
+  xlarge: number;
+  popular?: boolean;
+}
+export const LAWN_PACKAGES: LawnPackage[] = [
+  { label: "Mowing",       small: 45, medium: 65,  large: 95,  xlarge: 145 },
+  { label: "Trimming",     small: 35, medium: 55,  large: 80,  xlarge: 120 },
+  { label: "Yard Cleanup", small: 50, medium: 75,  large: 110, xlarge: 160 },
+  { label: "Full Service", small: 85, medium: 120, large: 175, xlarge: 250, popular: true },
+];
+export const LAWN_ADDONS: Array<{ label: string; price: number }> = [
+  { label: "Edging",          price: 15 },
+  { label: "Blowing",         price: 10 },
+  { label: "Weeding",         price: 25 },
+  { label: "Fertilization",   price: 35 },
+  { label: "Leaf Removal",    price: 40 },
+  { label: "Mulching",        price: 50 },
+  { label: "Hedge Trimming",  price: 30 },
+  { label: "Gutter Cleaning", price: 60 },
+];
+
+// ── Per-service line-item minimum floors (keep parity with the server
+//    SERVICE_LINE_MINIMUMS constant in bookingPricing). Explicit client
+//    copy so /pricing, /book, the chatbot, and admin pricing-calibrate
+//    can show the same floors without a server round-trip. Keep these
+//    numbers in sync with server/services/bookingPricing.ts. */
+export const SERVICE_LINE_FLOORS: Record<string, number> = {
+  cleaning:       300,
+  move_cleaning:  300,   // Task #169 — new distinct service code
+  handyman:       150,
+  labor:          200,
+  delivery:       100,
+  snow_removal:    50,
+  demolition:     300,
+  roofing:        500,
+  lawn_care:       50,
+  junk_removal:    95,   // tiny-tier floor
+  moving:         285,   // studio / no-stairs floor
+  window_cleaning: 20,   // 4-window minimum
+  trash_valet:     30,   // monthly minimum
+  jump_start:      50,
+  painting:       500,
+  flooring:       800,
+};
+
