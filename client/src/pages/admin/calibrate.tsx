@@ -684,10 +684,11 @@ function DemandHistoryPanel() {
     };
   });
 
-  // Per-zone rows: { day, runs, [zoneCode]: value, ... }
+  // Per-zone rows: { day, [zoneCode]: value, ... }
   const activeZoneCodes = Array.from(new Set(points.filter(p => p.zone_code).map(p => p.zone_code!)));
-  const perZoneRows = dayKeys.map(day => {
-    const row: Record<string, any> = { day: day.slice(5) };
+  type PerZoneRow = { day: string } & Record<string, string | number | null>;
+  const perZoneRows: PerZoneRow[] = dayKeys.map(day => {
+    const row: PerZoneRow = { day: day.slice(5) };
     for (const zc of activeZoneCodes) {
       const p = points.find(x => x.day === day && x.zone_code === zc);
       const v = p ? valueOf(p) : null;
@@ -700,7 +701,8 @@ function DemandHistoryPanel() {
   const totalElevated = points.reduce((s, p) => s + p.elevated_runs, 0);
   const peakSurge = points.reduce<number>((m, p) => Math.max(m, Number(p.max_surge ?? 0), Number(p.max_theoretical ?? 0)), 1);
 
-  const yDomain: [number, number | "auto"] = metric === "demand" ? [0, 1.5] : [0.8, "auto"];
+  type AxisDomain = [number | "auto" | "dataMin" | "dataMax", number | "auto" | "dataMin" | "dataMax"];
+  const yDomain: AxisDomain = metric === "demand" ? [0, 1.5] : [0.8, "auto"];
   const yLabel = metric === "demand" ? "Demand score" : metric === "surge" ? "Applied surge ×" : "Theoretical surge ×";
 
   return (
@@ -781,7 +783,7 @@ function DemandHistoryPanel() {
               <YAxis
                 tick={{ fill: "#94a3b8", fontSize: 10 }}
                 stroke="#475569"
-                domain={yDomain as any}
+                domain={yDomain}
                 width={40}
               />
               <Tooltip
