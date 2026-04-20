@@ -95,6 +95,13 @@ function JobCard({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
+              <span
+                className="text-[10px] font-mono text-slate-500 bg-slate-900/70 px-1.5 py-0.5 rounded"
+                title={lead.id}
+                data-testid={`job-id-${lead.id}`}
+              >
+                #{lead.id.slice(0, 8)}
+              </span>
               <p className="font-bold text-white text-sm truncate">
                 {lead.firstName} {lead.lastName}
               </p>
@@ -162,7 +169,9 @@ function JobCard({
   );
 }
 
-function CrewStatus({ e, jobsToday }: { e: User; jobsToday: number }) {
+function CrewStatus({
+  e, jobsToday, currentJob,
+}: { e: User; jobsToday: number; currentJob: Lead | null }) {
   // Minimal "online/offline" stub — we don't track presence yet, so
   // approved+active employees are shown as available. Real presence lands
   // with the Crew app (Task #173).
@@ -175,8 +184,18 @@ function CrewStatus({ e, jobsToday }: { e: User; jobsToday: number }) {
           {e.firstName || "Crew"} {e.lastName || ""}
         </p>
         <p className="text-[10px] text-slate-500 uppercase tracking-wider">
-          {online ? "Available" : "Offline"} · {jobsToday} job{jobsToday === 1 ? "" : "s"} today
+          {online ? "Available" : "Offline"} · {jobsToday} today
         </p>
+        {currentJob ? (
+          <p className="text-[11px] text-blue-300 mt-0.5 truncate" data-testid={`crew-current-${e.id}`}>
+            <span className="font-mono text-slate-500">#{currentJob.id.slice(0, 8)}</span>
+            {" · "}
+            {currentJob.firstName} {currentJob.lastName}
+            <span className="text-slate-500"> ({currentJob.status.replace(/_/g, " ")})</span>
+          </p>
+        ) : (
+          <p className="text-[11px] text-slate-600 mt-0.5">No current job</p>
+        )}
       </div>
     </div>
   );
@@ -204,7 +223,7 @@ export default function AdminDispatchPage() {
 
   const reassignMutation = useMutation({
     mutationFn: async ({ leadId, crewId }: { leadId: string; crewId: string }) => {
-      const res = await apiRequest("POST", `/api/admin/leads/${leadId}/assign`, {
+      const res = await apiRequest("POST", `/api/admin/jobs/${leadId}/assign`, {
         crewId,
       });
       if (!res.ok) {
@@ -228,20 +247,27 @@ export default function AdminDispatchPage() {
     [leads]
   );
 
-  const crewJobsToday = useMemo(() => {
-    const map = new Map<string, number>();
+  const { crewJobsToday, crewCurrentJob } = useMemo(() => {
+    const countMap = new Map<string, number>();
+    const currentMap = new Map<string, Lead>();
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
+    const ACTIVE = new Set(["assigned", "in_progress", "available"]);
     for (const l of leads) {
       if (l.archivedAt) continue;
       const d = new Date(l.confirmedDate || l.moveDate || l.createdAt || 0);
       if (d >= todayStart) {
         for (const uid of l.crewMembers || []) {
-          map.set(uid, (map.get(uid) || 0) + 1);
+          countMap.set(uid, (countMap.get(uid) || 0) + 1);
+        }
+      }
+      if (ACTIVE.has(l.status)) {
+        for (const uid of l.crewMembers || []) {
+          if (!currentMap.has(uid)) currentMap.set(uid, l);
         }
       }
     }
-    return map;
+    return { crewJobsToday: countMap, crewCurrentJob: currentMap };
   }, [leads]);
 
   const activeEmployees = useMemo(
@@ -344,7 +370,12 @@ export default function AdminDispatchPage() {
               </Card>
             ) : (
               activeEmployees.map(e => (
-                <CrewStatus key={e.id} e={e} jobsToday={crewJobsToday.get(e.id) || 0} />
+                <CrewStatus
+                  key={e.id}
+                  e={e}
+                  jobsToday={crewJobsToday.get(e.id) || 0}
+                  currentJob={crewCurrentJob.get(e.id) || null}
+                />
               ))
             )}
           </div>

@@ -10866,12 +10866,15 @@ Thank you for your business!
   // Task #171 — Dedicated admin reassign endpoint. Unlike PATCH /api/leads/:id/quote
   // (which recomputes totals + special-item fees on every call), this only touches
   // the assignment fields. Safe to call repeatedly from the live dispatch UI.
-  app.post("/api/admin/leads/:id/assign", isAuthenticated, requireBusinessOwner, async (req, res) => {
+  //
+  // Exposed at both /api/admin/jobs/:id/assign (spec path) and
+  // /api/admin/leads/:id/assign (alias matching the underlying table name).
+  const adminAssignHandler = async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const { crewId, crewIds } = req.body || {};
       const ids: string[] = Array.isArray(crewIds)
-        ? crewIds.filter((s): s is string => typeof s === "string" && s.length > 0)
+        ? crewIds.filter((s: unknown): s is string => typeof s === "string" && s.length > 0)
         : (typeof crewId === "string" && crewId.length > 0 ? [crewId] : []);
       if (ids.length === 0) {
         return res.status(400).json({ error: "crewId or crewIds[] required" });
@@ -10879,8 +10882,8 @@ Thank you for your business!
       const current = await storage.getLead(id);
       if (!current) return res.status(404).json({ error: "Lead not found" });
 
-      const crewSize = (current as any).crewSize || ids.length;
-      const fullyStaffed = ids.length >= crewSize;
+      const requiredCrew = current.crewSize ?? ids.length;
+      const fullyStaffed = ids.length >= requiredCrew;
 
       const [updated] = await db.update(leads)
         .set({
@@ -10890,17 +10893,32 @@ Thank you for your business!
         .where(eq(leads.id, id))
         .returning();
 
-      // Notify newly-assigned crew
+      // Notify newly-assigned crew with today's running job count so the
+      // Crew app (downstream) can surface the per-worker "jobs today"
+      // counter without a second round-trip.
       const previous = Array.isArray(current.crewMembers) ? current.crewMembers : [];
       const newlyAssigned = ids.filter(uid => !previous.includes(uid));
       for (const uid of newlyAssigned) {
+        let jobsToday = 0;
+        try {
+          const { rows } = await pool.query(
+            `SELECT COUNT(*)::int AS c FROM leads
+             WHERE archived_at IS NULL
+               AND $1 = ANY(crew_members)
+               AND COALESCE(confirmed_date, move_date, created_at) >= date_trunc('day', now())`,
+            [uid]
+          );
+          jobsToday = rows[0]?.c ?? 0;
+        } catch (e) {
+          console.warn("[assign] jobsToday count failed", e);
+        }
         try {
           await db.insert(notifications).values({
             userId: uid,
             type: "job_assigned",
             title: "New Job Assignment",
             message: "You've been assigned to a job. Open your dashboard to accept or decline.",
-            data: { leadId: id },
+            data: { leadId: id, jobsToday },
           });
         } catch (e) {
           console.warn("[assign] notification insert failed", e);
@@ -10911,7 +10929,9 @@ Thank you for your business!
       console.error("Error assigning lead crew:", error);
       res.status(500).json({ error: "Failed to assign crew" });
     }
-  });
+  };
+  app.post("/api/admin/jobs/:id/assign", isAuthenticated, requireBusinessOwner, adminAssignHandler);
+  app.post("/api/admin/leads/:id/assign", isAuthenticated, requireBusinessOwner, adminAssignHandler);
 
   // Task #171 — Live dispatch metrics strip. Today-only counters so the
   // dispatch page can show "what happened so far today" without pulling

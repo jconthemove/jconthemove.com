@@ -486,7 +486,8 @@ function AuthenticatedApp() {
           <NotificationPrompt />
           <AdminLayout>
             <Switch>
-              <Route path="/admin"><AdminOverviewPage /></Route>
+              <Route path="/admin"><Redirect to="/admin/dispatch" /></Route>
+              <Route path="/admin/overview"><AdminOverviewPage /></Route>
               <Route path="/admin/dispatch"><AdminDispatchPage /></Route>
               <Route path="/admin/jobs"><AdminJobsPage /></Route>
               <Route path="/admin/people"><AdminPeoplePage /></Route>
@@ -505,7 +506,7 @@ function AuthenticatedApp() {
               <Route path="/admin/users"><Redirect to="/admin/people" /></Route>
               <Route path="/admin/employees"><Redirect to="/admin/people" /></Route>
               <Route path="/admin/rewards"><Redirect to="/admin/marketplace" /></Route>
-              <Route><Redirect to="/admin" /></Route>
+              <Route><Redirect to="/admin/dispatch" /></Route>
             </Switch>
           </AdminLayout>
         </RouteGuard>

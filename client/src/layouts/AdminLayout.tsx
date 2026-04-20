@@ -12,7 +12,6 @@ import { apiRequest, clearTokens, queryClient } from "@/lib/queryClient";
 //   "Closet" = everything else, still reachable but tucked away.
 // Keep this list in sync with the routes wired in client/src/App.tsx.
 const DAILY = [
-  { label: "Overview", icon: LayoutDashboard, path: "/admin" },
   { label: "Dispatch", icon: Radio, path: "/admin/dispatch" },
   { label: "Jobs", icon: Briefcase, path: "/admin/jobs" },
   { label: "Pricing", icon: Sliders, path: "/admin/pricing" },
@@ -21,6 +20,7 @@ const DAILY = [
 ];
 
 const CLOSET = [
+  { label: "Overview", icon: LayoutDashboard, path: "/admin/overview" },
   { label: "Marketplace", icon: ShoppingBag, path: "/admin/marketplace" },
   { label: "System", icon: Settings, path: "/admin/system" },
   { label: "Sponsors", icon: Handshake, path: "/admin/sponsors" },
