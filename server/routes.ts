@@ -3734,6 +3734,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Shared helper so /api/leads, /api/leads/marketplace, and /api/leads/employee
+  // all surface the same diagnosable shape:
+  //  - Zod failures → 422 with the issue list (so the next regression doesn't
+  //    masquerade as a generic 400 for two weeks).
+  //  - Anything else → 500 with a stable errorCode + the underlying error
+  //    message logged so a developer pulling logs can find the cause in <30s.
+  function respondLeadError(
+    res: Response,
+    error: unknown,
+    context: { route: string; errorCode: string },
+  ) {
+    if (error instanceof z.ZodError) {
+      console.warn(`[${context.route}] Zod validation failed:`, JSON.stringify(error.errors, null, 2));
+      return res.status(422).json({
+        error: "Invalid lead data",
+        errorCode: "LEAD_VALIDATION_FAILED",
+        details: error.errors.map((issue) => ({
+          field: issue.path.join("."),
+          message: issue.message,
+          code: issue.code,
+        })),
+      });
+    }
+    const err = error as { message?: string; code?: string; detail?: string; hint?: string };
+    console.error(`[${context.route}] Internal error creating lead:`, {
+      errorCode: context.errorCode,
+      message: err?.message,
+      pgCode: err?.code,
+      pgDetail: err?.detail,
+      pgHint: err?.hint,
+    });
+    return res.status(500).json({
+      error: "Failed to submit quote request. Please try again.",
+      errorCode: context.errorCode,
+    });
+  }
+
   // Submit quote request
   app.post(
     "/api/leads",
@@ -3916,8 +3953,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           : { applied: false },
       });
     } catch (error) {
-      console.error("Error creating lead:", error);
-      res.status(400).json({ error: "Invalid lead data" });
+      respondLeadError(res, error, { route: "leads_public", errorCode: "LEAD_CREATE_FAILED" });
     }
   });
 
@@ -3963,8 +3999,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { rebookSource: _stripSrc, rebookSentAt: _stripSentAt, ...bodyForParse } = (req.body || {}) as Record<string, unknown>;
       const parseResult = insertLeadSchema.safeParse(bodyForParse);
       if (!parseResult.success) {
-        console.error("[marketplace] Zod validation failed:", JSON.stringify(parseResult.error.errors, null, 2));
-        return res.status(400).json({ error: "Invalid lead data", details: parseResult.error.errors });
+        return respondLeadError(res, parseResult.error, { route: "leads_marketplace", errorCode: "LEAD_VALIDATION_FAILED" });
       }
       const leadData = parseResult.data;
 
@@ -4118,8 +4153,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`🏪 Marketplace job created: ${lead.id} (available)`);
       res.status(201).json({ ...updatedLead, rewardMessage });
     } catch (error) {
-      console.error("Error creating marketplace lead:", error);
-      res.status(400).json({ error: "Invalid lead data" });
+      respondLeadError(res, error, { route: "leads_marketplace", errorCode: "LEAD_CREATE_FAILED" });
     }
   });
 
@@ -5388,22 +5422,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.json({ success: true, leadId: lead.id, orderNumber: lead.orderNumber ?? null, message: `Job created!${rewardMessage} You'll also earn a bonus when it's completed.` });
-    } catch (error: any) {
-      console.error("❌ Error creating employee lead:", error);
-      
-      // If it's a Zod validation error, provide details
-      if (error.issues) {
-        console.error("❌ Validation errors:", JSON.stringify(error.issues, null, 2));
-        return res.status(400).json({ 
-          error: "Invalid lead data",
-          details: error.issues.map((issue: any) => ({
-            field: issue.path.join('.'),
-            message: issue.message
-          }))
-        });
-      }
-      
-      res.status(400).json({ error: error.message || "Invalid lead data" });
+    } catch (error) {
+      respondLeadError(res, error, { route: "leads_employee", errorCode: "LEAD_CREATE_FAILED" });
     }
   });
 
@@ -5478,9 +5498,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const q = String(req.query.q || "").trim();
       if (!q) return res.status(400).json({ error: "Query parameter 'q' is required" });
-      // Try order number first (JC-XXXXXX format)
-      if (/^JC-\d+$/i.test(q)) {
-        const lead = await storage.lookupLeadByOrderNumber(q.toUpperCase());
+      // Try order number first (JC-XXXXXX or bare digits)
+      if (/^(?:JC-)?\d+$/i.test(q)) {
+        const lead = await storage.lookupLeadByOrderNumber(q);
         if (!lead) return res.status(404).json({ error: "No job found with that order number" });
         return res.json(lead);
       }

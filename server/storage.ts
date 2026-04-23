@@ -59,7 +59,6 @@ export interface IStorage {
   updateLeadQuote(id: string, quoteData: any): Promise<Lead | undefined>;
   deleteLead(id: string): Promise<boolean>; // soft-archive
   lookupLeadByOrderNumber(orderNumber: string): Promise<Lead | undefined>;
-  nextOrderNumber(): Promise<string>;
   
   // Job assignment operations
   assignLeadToEmployee(leadId: string, employeeId: string): Promise<Lead | undefined>;
@@ -326,20 +325,13 @@ export class DatabaseStorage implements IStorage {
     return user || undefined;
   }
 
-  async nextOrderNumber(): Promise<string> {
-    const [{ max_num }] = await db.execute<{ max_num: number }>(sql`
-      SELECT COALESCE(MAX(CAST(SUBSTRING(order_number FROM 4) AS INTEGER)), 0) AS max_num
-      FROM leads WHERE order_number IS NOT NULL
-    `);
-    const next = (max_num ?? 0) + 1;
-    return `JC-${String(next).padStart(6, '0')}`;
-  }
-
   async createLead(insertLead: InsertLead): Promise<Lead> {
-    const orderNumber = await this.nextOrderNumber();
+    // order_number is a Postgres serial column — let the DB auto-generate it.
+    // Do NOT pass orderNumber here; the previous JC-XXXXXX helper was removed
+    // because the column type changed to integer/serial.
     const [lead] = await db
       .insert(leads)
-      .values({ ...insertLead, orderNumber })
+      .values(insertLead)
       .returning();
     return lead;
   }
@@ -366,8 +358,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async lookupLeadByOrderNumber(orderNumber: string): Promise<Lead | undefined> {
-    const normalized = orderNumber.trim().toUpperCase();
-    const [lead] = await db.select().from(leads).where(eq(leads.orderNumber, normalized));
+    // order_number is an integer serial column. Accept either a bare number
+    // ("42") or the human-friendly "JC-42" / "JC-000042" format and pull the
+    // numeric part out for the query.
+    const match = orderNumber.trim().toUpperCase().match(/^(?:JC-)?0*(\d+)$/);
+    if (!match) return undefined;
+    const numeric = parseInt(match[1], 10);
+    if (!Number.isFinite(numeric)) return undefined;
+    const [lead] = await db.select().from(leads).where(eq(leads.orderNumber, numeric));
     return lead || undefined;
   }
 

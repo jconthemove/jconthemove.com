@@ -108,9 +108,6 @@ export const leads = pgTable("leads", {
   depositPaid: boolean("deposit_paid").default(false),
   isQuoteOnly: boolean("is_quote_only").default(false),
 
-  // Human-readable order number (e.g. JC-000042)
-  orderNumber: varchar("order_number").unique(),
-
   // Crew dispatch tracking
   dispatchSentAt: timestamp("dispatch_sent_at"),
   dispatchNotes: text("dispatch_notes"),
