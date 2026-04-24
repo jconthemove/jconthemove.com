@@ -2166,7 +2166,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // their wallet, and links the user.
       try {
         const { reconcilePendingGrantsForUser } = await import("./services/bundleBilling");
-        await reconcilePendingGrantsForUser({ userId: newUser.id, email: newUser.email });
+        await reconcilePendingGrantsForUser({
+          userId: newUser.id,
+          email: newUser.email,
+          phone: (newUser as any).phone ?? null,
+        });
       } catch (reconcileErr) {
         console.error("Shop-card reconcile error (non-blocking):", reconcileErr);
       }

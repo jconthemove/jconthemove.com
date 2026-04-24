@@ -317,8 +317,18 @@ export async function grantWalletCreditForSource(args: GrantArgs): Promise<Credi
 export async function reconcilePendingGrantsForUser(opts: {
   userId: string;
   email: string | null | undefined;
+  phone?: string | null | undefined;
 }): Promise<{ credited: number; totalUsd: number }> {
-  if (!opts.email) return { credited: 0, totalUsd: 0 };
+  const email = opts.email ?? null;
+  const phoneRaw = opts.phone ?? null;
+  const phoneLast10 = phoneRaw
+    ? (() => {
+        const digits = phoneRaw.replace(/\D/g, "");
+        return digits.length >= 10 ? digits.slice(-10) : null;
+      })()
+    : null;
+  if (!email && !phoneLast10) return { credited: 0, totalUsd: 0 };
+  // Match on email OR normalized phone — same fallback the grant path uses.
   const { rows } = await pool.query<{
     id: string;
     amount_usd: string;
@@ -328,10 +338,14 @@ export async function reconcilePendingGrantsForUser(opts: {
   }>(
     `SELECT id, amount_usd, addon_id, source_type, source_id
        FROM wallet_credit_grants
-      WHERE LOWER(customer_email) = LOWER($1)
-        AND granted_to_user_id IS NULL
-        AND status = 'granted'`,
-    [opts.email],
+      WHERE granted_to_user_id IS NULL
+        AND status = 'granted'
+        AND (
+          ($1::text IS NOT NULL AND LOWER(customer_email) = LOWER($1))
+          OR ($2::text IS NOT NULL AND customer_phone IS NOT NULL
+              AND right(regexp_replace(customer_phone, '\\D', '', 'g'), 10) = $2)
+        )`,
+    [email, phoneLast10],
   );
 
   if (rows.length === 0) return { credited: 0, totalUsd: 0 };
