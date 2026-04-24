@@ -170,22 +170,28 @@ export class DailyCheckinService {
           .limit(1);
 
         if (existingWallet.length > 0) {
-          // Update existing wallet
+          // Update existing wallet — tokens only.
+          //
+          // INVARIANT: JCMOVES USD (cash_balance) is ONLY minted on a real
+          // payment received (Square invoice paid, prepaid top-up paid,
+          // admin "mark as paid"). Daily check-in is a free engagement
+          // reward, so it pays out JCMOVES *tokens* from the treasury but
+          // must NOT touch cash_balance. The rewards row below still
+          // records the USD-equivalent of the tokens for display only.
           await tx
             .update(walletAccounts)
             .set({
               tokenBalance: sql`${walletAccounts.tokenBalance} + ${rewardCalc.tokenAmount.toString()}`,
-              cashBalance: sql`${walletAccounts.cashBalance} + ${rewardCalc.cashValue.toString()}`,
               totalEarned: sql`${walletAccounts.totalEarned} + ${rewardCalc.tokenAmount.toString()}`,
               lastActivity: new Date()
             })
             .where(eq(walletAccounts.userId, request.userId));
         } else {
-          // Create new wallet
+          // Create new wallet — tokens only; cash_balance defaults to 0.00
+          // per the invariant above.
           await tx.insert(walletAccounts).values({
             userId: request.userId,
             tokenBalance: rewardCalc.tokenAmount.toString(),
-            cashBalance: rewardCalc.cashValue.toString(),
             totalEarned: rewardCalc.tokenAmount.toString()
           });
         }

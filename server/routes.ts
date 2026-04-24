@@ -21318,14 +21318,33 @@ Thank you for your business!
         .catch(() => null);
       const order: SquareOrder | undefined = orderResp?.result?.order ?? orderResp?.order;
       const tenders: SquareTender[] = order?.tenders ?? [];
-      const completedTender = tenders.find(t => t.payment_id || t.paymentId);
-      if (!completedTender) {
+      const tenderWithId = tenders.find(t => t.payment_id || t.paymentId);
+      if (!tenderWithId) {
         return res.json({ success: false, pending: true });
       }
-      const paymentId = completedTender.payment_id ?? completedTender.paymentId;
+      const paymentId = tenderWithId.payment_id ?? tenderWithId.paymentId;
       if (!paymentId) {
         return res.json({ success: false, pending: true });
       }
+
+      // INVARIANT enforcement — JCMOVES USD only mints on payment RECEIVED.
+      // A tender on an order does NOT mean the payment succeeded. Pull the
+      // actual Payment object from Square and require status === 'COMPLETED'
+      // before crediting the wallet. This matches the webhook path's check
+      // and closes the manual-reconcile bypass.
+      type SquarePayment = { status?: string };
+      type SquarePaymentResponse = { result?: { payment?: SquarePayment }; payment?: SquarePayment };
+      const paymentsApi = (client as unknown as { payments: { get: (args: { paymentId: string }) => Promise<SquarePaymentResponse> } }).payments;
+      const paymentResp: SquarePaymentResponse | null = await paymentsApi
+        .get({ paymentId })
+        .catch(() => null);
+      const payment: SquarePayment | undefined = paymentResp?.result?.payment ?? paymentResp?.payment;
+      const paymentStatus = (payment?.status || "").toUpperCase();
+      if (paymentStatus !== "COMPLETED") {
+        console.log(`[prepaid-reconcile] payment ${paymentId} status=${paymentStatus || "unknown"} — refusing mint until COMPLETED`);
+        return res.json({ success: false, pending: true, paymentStatus });
+      }
+
       await creditJcMovesUsdFromPrepaid(userId, parseFloat(intent.amount_usd), paymentId);
       await pool.query(
         `UPDATE prepaid_credit_intents

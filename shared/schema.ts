@@ -294,6 +294,15 @@ export const walletAccounts = pgTable("wallet_accounts", {
   userId: varchar("user_id").notNull().references(() => users.id).unique(),
   walletAddress: text("wallet_address"),
   tokenBalance: decimal("token_balance", { precision: 18, scale: 8 }).default("0.00000000"),
+  // INVARIANT — JCMOVES USD wallet balance.
+  // This column may ONLY be incremented when a real customer payment is
+  // RECEIVED: Square invoice paid webhook, prepaid top-up paid webhook,
+  // admin "mark as paid" confirmation, or refund of previously-paid funds
+  // (e.g. jewelry reservation expiry). Engagement rewards (daily check-in,
+  // referrals, ratings, achievements) must mint *tokens* from the treasury,
+  // not USD. If you find yourself adding to cash_balance from a non-payment
+  // code path, stop — credit token_balance instead, or reach for the
+  // wallet_credit_grants pending→granted pattern in services/bundleBilling.
   cashBalance: decimal("cash_balance", { precision: 10, scale: 2 }).default("0.00"),
   totalEarned: decimal("total_earned", { precision: 18, scale: 8 }).default("0.00000000"),
   totalRedeemed: decimal("total_redeemed", { precision: 18, scale: 8 }).default("0.00000000"),

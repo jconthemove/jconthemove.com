@@ -165,28 +165,31 @@ export class GamificationService {
         };
       }
 
-      // Create or update user's wallet account with the distributed tokens
+      // Create or update user's wallet account with the distributed tokens.
+      //
+      // INVARIANT: JCMOVES USD (cash_balance) is ONLY minted on a real
+      // payment received (Square invoice paid, prepaid top-up paid, admin
+      // "mark as paid"). Daily check-in is a free engagement reward, so it
+      // pays out JCMOVES *tokens* from the treasury but must NOT touch
+      // cash_balance. The reward record above still stores the USD-equivalent
+      // of the tokens for display/analytics only.
       try {
         const existingWallet = await storage.getWalletAccount(userId);
-        
+
         if (existingWallet) {
-          // Update existing wallet
           await storage.updateWalletAccount(userId, {
             tokenBalance: (parseFloat(existingWallet.tokenBalance || "0") + parseFloat(tokenAmount)).toFixed(8),
-            cashBalance: (parseFloat(existingWallet.cashBalance || "0") + distributionResult.cashValue).toFixed(2),
             totalEarned: (parseFloat(existingWallet.totalEarned || "0") + parseFloat(tokenAmount)).toFixed(8),
           });
         } else {
-          // Create new wallet account
+          // Create new wallet account (cash_balance defaults to 0.00).
           await storage.createWalletAccount({
             userId,
             walletAddress: `0xJCMOVES_${userId.substring(0, 8)}`,
           });
-          
-          // Update with the token amounts
+
           await storage.updateWalletAccount(userId, {
             tokenBalance: tokenAmount,
-            cashBalance: distributionResult.cashValue.toFixed(2),
             totalEarned: tokenAmount,
           });
         }

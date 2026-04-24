@@ -72,5 +72,22 @@ Preferred communication style: Simple, everyday language.
 - **Solana Blockchain**: For JCMOVES token and treasury.
 - **DexScreener API**: For live JCMOVES token pricing.
 
+## JCMOVES USD wallet — INVARIANT
+JCMOVES USD lives in `wallet_accounts.cash_balance`. It may ONLY be incremented
+when a real customer payment has been RECEIVED:
+- Square `invoice.payment_made` / `invoice.paid` webhook → `creditJcMovesUsd`
+- Square `payment.created` COMPLETED webhook → `creditJcMovesUsdFromPrepaid`
+- Admin "Mark as Paid" on a lead (manual confirmation of cash/check)
+- Square invoice sync (only after Square confirms `paid`)
+- Bundle add-on grants disbursed via `services/bundleBilling.ts` — pending → granted
+  on `invoice.payment_made` (or registration reconcile of already-paid grants)
+- Refund of customer's previously-paid funds (e.g. jewelry reservation expiry)
+
+Free engagement rewards (daily check-in, ratings, achievements, referrals) must
+mint **JCMOVES tokens** from the treasury, never JCMOVES USD. The reward record
+may store a `cashValue` field for analytics/display, but it must NOT be added to
+`cash_balance`. See the inline comment on `walletAccounts.cashBalance` in
+`shared/schema.ts` for the canonical rule.
+
 ## Mobile App Framework
 - **Capacitor**: Hybrid mobile app wrapping.
