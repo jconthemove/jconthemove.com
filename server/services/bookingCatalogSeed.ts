@@ -414,7 +414,7 @@ const CATALOG_SEED: InsertServiceCatalogEntry[] = [
   },
 ];
 
-const BUNDLE_SEED: InsertBundleDefinition[] = [
+export const BUNDLE_SEED: InsertBundleDefinition[] = [
   {
     code: "move_junk_reset",
     name: "Move + Junk Reset",

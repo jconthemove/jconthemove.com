@@ -176,3 +176,23 @@ Wiring:
 To re-tune: edit the `PAINTING_RULES` / `FLOORING_RULES` objects (room base,
 addon prices, multipliers) — no schema changes or migrations needed; the
 wizard picks up the new numbers on next request.
+## Running server tests
+
+The repo uses a colocated assertion-style convention (no Vitest/Jest). Each
+test is a self-contained tsx-runnable script under
+`server/**/__tests__/*.test.ts` that exits non-zero on any failed assertion.
+
+Canonical command (discovers and runs every server test file in order):
+
+```bash
+bash scripts/run-server-tests.sh
+```
+
+To add a new test, drop a `*.test.ts` file in any `server/**/__tests__/`
+folder — the runner picks it up automatically.
+
+Individual test files can also be run directly, e.g.:
+
+```bash
+npx tsx server/services/__tests__/bundleSeed.test.ts
+```
