@@ -4,6 +4,22 @@ import type { InsertSquareInvoice, Lead } from "@shared/schema";
 
 export type InvoiceDeliveryMethod = "email" | "sms" | "both" | "none";
 
+/**
+ * Subset of `Lead` that `createItemizedInvoiceForLead` actually reads.
+ * Lawn-care quotes don't have a leads-table row, so they pass a typed
+ * shim that satisfies this shape — no `as unknown as Lead` casts.
+ */
+export interface InvoiceRecipient {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string | null;
+  totalPrice?: string | number | null;
+  bundleDiscountAmount?: string | number | null;
+  serviceType?: string | null;
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function safeLeadId(id: string | undefined | null): string | null {
   if (!id || typeof id !== "string") return null;
@@ -335,7 +351,7 @@ export class SquareInvoiceService {
   }
 
   async createItemizedInvoiceForLead(
-    lead: Lead,
+    lead: InvoiceRecipient,
     lineItems: Array<{ id?: string; name: string; qty: number; unitPrice: number; total: number; excludeFromBundleDiscount?: boolean }>,
     dueDate?: string,
     deliveryMethod: InvoiceDeliveryMethod = "email"
@@ -358,7 +374,7 @@ export class SquareInvoiceService {
     // Net total stays the same; the customer sees subtotal + discount line.
     // If line items don't match the discounted total (admin manually edited
     // them), we skip injection to avoid double-discounting.
-    const bundleDiscountAmt = parseFloat(String((lead as Lead).bundleDiscountAmount || "0")) || 0;
+    const bundleDiscountAmt = parseFloat(String(lead.bundleDiscountAmount || "0")) || 0;
     // Task #199 — split lines into "discountable" (the base service) and
     // "passthrough" (shop-card add-ons). The bundle-discount math only
     // looks at discountable lines so it never tries to take 10% off the

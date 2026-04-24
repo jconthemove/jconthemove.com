@@ -2169,7 +2169,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await reconcilePendingGrantsForUser({
           userId: newUser.id,
           email: newUser.email,
-          phone: (newUser as any).phone ?? null,
+          phone: newUser.phoneNumber ?? null,
         });
       } catch (reconcileErr) {
         console.error("Shop-card reconcile error (non-blocking):", reconcileErr);
@@ -8897,6 +8897,14 @@ Thank you for your business!
             <p style="margin:0 0 16px">Hi <strong>${lead.firstName}</strong>,</p>
             <p style="margin:0 0 16px">Thanks for reaching out! Here's your quote from JC on the Move:</p>
             <table style="width:100%;border-collapse:collapse;margin-bottom:16px">${detailRows}</table>
+            ${pendingShopCardLines.length > 0 ? `
+              <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:14px;margin:0 0 16px">
+                <p style="margin:0 0 6px;font-weight:700;color:#c2410c;font-size:13px">🛍️ Bundled Shop Card credit included</p>
+                <p style="margin:0;font-size:12px;color:#7c2d12;line-height:1.5">
+                  Your invoice includes ${pendingShopCardLines.map(li => `<strong>${li.name}</strong>`).join(" and ")}. The moment your invoice is paid, the equivalent JCMOVES USD lands in your wallet — spend it on any future JC on the Move service (moving, junk, cleaning, lawn, trash valet, or Ashley's Shop) at $1 = $1 off.
+                </p>
+              </div>
+            ` : ""}
             ${noteSection}
             ${payButtonSection}
             <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:16px;text-align:center;margin-top:16px">
