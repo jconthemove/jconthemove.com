@@ -4,6 +4,12 @@ import type { InsertSquareInvoice, Lead } from "@shared/schema";
 
 export type InvoiceDeliveryMethod = "email" | "sms" | "both" | "none";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function safeLeadId(id: string | undefined | null): string | null {
+  if (!id || typeof id !== "string") return null;
+  return UUID_RE.test(id) ? id : null;
+}
+
 function getSquareClient(): SquareClient {
   return new SquareClient({
     token: process.env.SQUARE_ACCESS_TOKEN || "",
@@ -195,7 +201,7 @@ export class SquareInvoiceService {
     }
 
     const invoiceData: InsertSquareInvoice = {
-      leadId: lead.id,
+      leadId: safeLeadId(lead.id),
       squareInvoiceId: publishedInvoice.id!,
       squareInvoiceNumber: publishedInvoice.invoiceNumber ?? undefined,
       squareOrderId: orderId,
@@ -330,7 +336,7 @@ export class SquareInvoiceService {
 
   async createItemizedInvoiceForLead(
     lead: Lead,
-    lineItems: Array<{ id?: string; name: string; qty: number; unitPrice: number; total: number }>,
+    lineItems: Array<{ id?: string; name: string; qty: number; unitPrice: number; total: number; excludeFromBundleDiscount?: boolean }>,
     dueDate?: string,
     deliveryMethod: InvoiceDeliveryMethod = "email"
   ): Promise<{ invoiceId: string; invoiceUrl: string; squareInvoiceId: string }> {
@@ -353,20 +359,28 @@ export class SquareInvoiceService {
     // If line items don't match the discounted total (admin manually edited
     // them), we skip injection to avoid double-discounting.
     const bundleDiscountAmt = parseFloat(String((lead as Lead).bundleDiscountAmount || "0")) || 0;
-    const netLineSum = lineItems.reduce((s, li) => s + li.total, 0);
+    // Task #199 — split lines into "discountable" (the base service) and
+    // "passthrough" (shop-card add-ons). The bundle-discount math only
+    // looks at discountable lines so it never tries to take 10% off the
+    // shop card itself.
+    const discountableLines = lineItems.filter(li => !li.excludeFromBundleDiscount);
+    const passthroughLines = lineItems.filter(li => li.excludeFromBundleDiscount);
+    const netDiscountableSum = discountableLines.reduce((s, li) => s + li.total, 0);
+    const passthroughSum = passthroughLines.reduce((s, li) => s + li.total, 0);
     const expectedNet = parseFloat(String(lead.totalPrice || "0")) || 0;
     // We can only safely scale ad-hoc (non-catalog) line items. If ANY
-    // line item resolves to a catalog variation, we can't change its
-    // price client-side, so injecting an order-level discount on top
-    // would undercharge the customer. Skip injection in that case.
-    const hasCatalogItem = lineItems.some(li => li.id && catalogMappings[li.id]);
+    // discountable line resolves to a catalog variation, we can't
+    // change its price client-side, so injecting an order-level
+    // discount on top would undercharge the customer. Skip injection
+    // in that case.
+    const hasCatalogItem = discountableLines.some(li => li.id && catalogMappings[li.id]);
     const isAutoDiscountCase =
       bundleDiscountAmt > 0 &&
       expectedNet > 0 &&
       !hasCatalogItem &&
-      Math.abs(netLineSum - expectedNet) < 0.01;
+      Math.abs(netDiscountableSum - expectedNet) < 0.01;
     const grossMultiplier = isAutoDiscountCase
-      ? (netLineSum + bundleDiscountAmt) / netLineSum
+      ? (netDiscountableSum + bundleDiscountAmt) / netDiscountableSum
       : 1;
 
     const squareLineItems = lineItems.map(li => {
@@ -377,7 +391,12 @@ export class SquareInvoiceService {
           quantity: String(li.qty),
         };
       }
-      const scaledUnitPrice = li.unitPrice * grossMultiplier;
+      // Passthrough lines (shop card) keep their full price; only
+      // discountable lines get scaled up so the order-level discount
+      // can show the savings.
+      const scaledUnitPrice = li.excludeFromBundleDiscount
+        ? li.unitPrice
+        : li.unitPrice * grossMultiplier;
       return {
         name: li.name,
         quantity: String(li.qty),
@@ -401,7 +420,8 @@ export class SquareInvoiceService {
       : undefined;
 
     // Final amount we expect to charge the customer.
-    const totalAmount = isAutoDiscountCase ? expectedNet : netLineSum;
+    // Final amount on the invoice = (discounted base service) + (full-price passthrough lines).
+    const totalAmount = (isAutoDiscountCase ? expectedNet : netDiscountableSum) + passthroughSum;
 
     const orderResponse = await client.orders.create({
       idempotencyKey: `order-itemized-${lead.id}-${Date.now()}`,
@@ -443,7 +463,7 @@ export class SquareInvoiceService {
     }
 
     const invoiceData: InsertSquareInvoice = {
-      leadId: lead.id,
+      leadId: safeLeadId(lead.id),
       squareInvoiceId: publishedInvoice.id!,
       squareInvoiceNumber: publishedInvoice.invoiceNumber ?? undefined,
       squareOrderId: orderId,

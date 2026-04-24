@@ -1,23 +1,10 @@
 import { CheckCircle2, Plus, Tag } from "lucide-react";
+import { BUNDLE_ADDONS, type BundleAddon } from "@shared/bundleAddons";
 
-export interface BundleService {
-  id: string;
-  label: string;
-  emoji: string;
-  hint: string;
-}
-
-export const ALL_BUNDLE_SERVICES: BundleService[] = [
-  { id: "moving",          label: "Moving",          emoji: "🚛", hint: "from $85/mover·hr" },
-  { id: "junk_removal",    label: "Junk Removal",    emoji: "🗑️", hint: "from $170" },
-  { id: "cleaning",        label: "Cleaning",        emoji: "🧼", hint: "from $150" },
-  { id: "window_cleaning", label: "Window Cleaning", emoji: "🪟", hint: "$5/pane" },
-  { id: "lawn_care",       label: "Lawn Care",       emoji: "🌿", hint: "from $50/visit" },
-  { id: "trash_valet",     label: "Trash Valet",     emoji: "♻️", hint: "from $25/mo" },
-  { id: "snow_removal",    label: "Snow Removal",    emoji: "❄️", hint: "from $40/visit" },
-  { id: "assembly",        label: "Assembly",        emoji: "🔧", hint: "$35/item" },
-  { id: "ashley_shop",     label: "$100 Shop Card",  emoji: "🛍️", hint: "$100 · 10% off" },
-];
+// Re-export the manifest under the legacy name so any consumer that
+// already imports `ALL_BUNDLE_SERVICES` keeps compiling.
+export type BundleService = BundleAddon;
+export const ALL_BUNDLE_SERVICES: BundleAddon[] = BUNDLE_ADDONS;
 
 interface ServiceBundleAddonProps {
   currentService?: string;
@@ -32,11 +19,11 @@ export default function ServiceBundleAddon({
   onChange,
   theme = "dark",
 }: ServiceBundleAddonProps) {
-  const services = ALL_BUNDLE_SERVICES.filter(s => s.id !== currentService);
+  const services = BUNDLE_ADDONS.filter((s) => s.id !== currentService);
   const hasSelected = selected.length > 0;
 
   const toggle = (id: string) => {
-    onChange(selected.includes(id) ? selected.filter(a => a !== id) : [...selected, id]);
+    onChange(selected.includes(id) ? selected.filter((a) => a !== id) : [...selected, id]);
   };
 
   const cardBg = hasSelected
@@ -50,9 +37,13 @@ export default function ServiceBundleAddon({
     : "border-zinc-700 bg-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300";
 
   const selectedNames = selected
-    .map(id => ALL_BUNDLE_SERVICES.find(s => s.id === id)?.label)
+    .map((id) => BUNDLE_ADDONS.find((s) => s.id === id)?.label)
     .filter(Boolean)
     .join(", ");
+
+  const shopCardSelected = selected.some(
+    (id) => BUNDLE_ADDONS.find((s) => s.id === id)?.fulfillmentType === "shop_card",
+  );
 
   return (
     <div className={`rounded-2xl p-4 space-y-3 border transition-all ${cardBg}`}>
@@ -80,7 +71,7 @@ export default function ServiceBundleAddon({
 
       {/* Service grid */}
       <div className="grid grid-cols-4 gap-2">
-        {services.map(svc => {
+        {services.map((svc) => {
           const active = selected.includes(svc.id);
           return (
             <button
@@ -108,15 +99,21 @@ export default function ServiceBundleAddon({
           <p className="text-[11px] text-green-300 font-semibold">
             🎉 10% off applied to today's quote — bundling with {selectedNames}.
           </p>
-          {selected.includes("ashley_shop") && (
+          {shopCardSelected && (
             <p className="text-[10px] text-pink-300">
-              🛍️ <span className="font-semibold">$100 Shop Card</span> added to your first invoice — billed alongside your service, redeemable as JCMOVES USD on Ashley's Shop.
+              🛍️ <span className="font-semibold">$100 Shop Card</span> billed alongside your service — pays out as <span className="font-semibold">$100 JCMOVES USD</span> in your wallet, redeemable on any future JC ON THE MOVE invoice.
             </p>
           )}
           <p className="text-[10px] text-zinc-500">
-            No code needed. {selected.filter(s => s !== "ashley_shop").length > 0
-              ? "We'll follow up to schedule the add-on service" + (selected.filter(s => s !== "ashley_shop").length > 1 ? "s" : "") + "."
-              : "Your gift card is issued the moment your subscription is created."}
+            No code needed. {selected.filter((s) => {
+              const a = BUNDLE_ADDONS.find((x) => x.id === s);
+              return a?.fulfillmentType !== "shop_card";
+            }).length > 0
+              ? "We'll follow up to schedule the add-on service" + (selected.filter((s) => {
+                  const a = BUNDLE_ADDONS.find((x) => x.id === s);
+                  return a?.fulfillmentType !== "shop_card";
+                }).length > 1 ? "s" : "") + "."
+              : "Wallet credit lands the moment your bundled invoice is paid."}
           </p>
         </div>
       ) : (

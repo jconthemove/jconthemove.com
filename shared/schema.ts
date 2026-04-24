@@ -386,6 +386,67 @@ export const walletTransactions = pgTable("wallet_transactions", {
   index("idx_transaction_status").on(table.status),
 ]);
 
+// ── Wallet Credit Grants (Task #199) ─────────────────────────────────────────
+// One row per priced bundle add-on (e.g. the $100 Shop Card) that gets
+// billed alongside a service. Lifecycle:
+//   1. Pending — created at lead/quote time so we have an audit trail
+//      *before* Square ever sees the invoice. paymentReference is null.
+//   2. Granted — flipped on by the Square invoice-paid webhook (or the
+//      manual mark-paid route). cash_balance on wallet_accounts has been
+//      bumped by `amountUsd` and a wallet_transactions ledger row written.
+//   3. Reconciled — when the customer wasn't a registered user at grant
+//      time, we leave the row pending; on registration we look it up by
+//      email, mint the credit, and mark it granted.
+// The unique index on (sourceType, sourceId) is what guarantees we never
+// double-mint when the Square webhook fires twice for the same invoice.
+export const walletCreditGrants = pgTable("wallet_credit_grants", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // 'lead' | 'lawn_care_quote' — extend as more booking surfaces wire in.
+  sourceType: text("source_type").notNull(),
+  // Stringified id of the row in the source table. Stored as text so a
+  // serial lawn_care_quote.id and a uuid lead.id share the same column.
+  sourceId: text("source_id").notNull(),
+  // Stable id from BUNDLE_ADDONS (e.g. 'ashley_shop' or
+  // 'shop_card_default') so admins can audit which bundle slot generated
+  // the grant.
+  addonId: text("addon_id").notNull(),
+  amountUsd: decimal("amount_usd", { precision: 10, scale: 2 }).notNull(),
+  currency: text("currency").notNull().default("JCMOVES_USD"),
+  // Snapshot the customer-identifying fields at grant time so we can
+  // reconcile on registration even if the source row is later edited.
+  customerEmail: text("customer_email"),
+  customerPhone: text("customer_phone"),
+  // 'pending' | 'granted' — `pending` means the invoice hasn't been paid
+  // yet OR the customer didn't have a user account when payment landed.
+  status: text("status").notNull().default("pending"),
+  // Square invoice id this grant is tied to. Null until the invoice is
+  // actually created (we set it once we have the id back from Square).
+  squareInvoiceId: text("square_invoice_id"),
+  // Whatever payment id we used as proof at grant time (Square payment id
+  // for webhook, 'manual' for ops, etc.). Doubles as the idempotency key
+  // for the rewards-table row we write alongside the cash mint.
+  paymentReference: text("payment_reference"),
+  grantedToUserId: varchar("granted_to_user_id").references(() => users.id),
+  grantedAt: timestamp("granted_at"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  // Idempotency: one grant per (sourceType, sourceId, addonId). Protects
+  // both webhook double-fires and accidental double-inserts at quote time.
+  uniqueIndex("uq_wallet_credit_grants_source")
+    .on(table.sourceType, table.sourceId, table.addonId),
+  index("idx_wallet_credit_grants_email").on(table.customerEmail),
+  index("idx_wallet_credit_grants_status").on(table.status),
+]);
+
+export const insertWalletCreditGrantSchema = createInsertSchema(walletCreditGrants).omit({
+  id: true,
+  createdAt: true,
+  grantedAt: true,
+});
+export type WalletCreditGrant = typeof walletCreditGrants.$inferSelect;
+export type InsertWalletCreditGrant = z.infer<typeof insertWalletCreditGrantSchema>;
+
 export const cashoutRequests = pgTable("cashout_requests", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),

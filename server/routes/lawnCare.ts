@@ -295,6 +295,99 @@ router.post("/quote", async (req: Request, res: Response) => {
       });
     }
 
+    // Task #199 — record pending shop-card grants up front so we have an
+    // audit trail before we ever publish the Square invoice. Also drives
+    // the auto-invoice block below: when at least one priced shop card
+    // is selected we publish a Square invoice immediately so the
+    // customer gets billed for the prepaid wallet credit alongside
+    // their lawn care total.
+    let pendingShopCardGrants: Awaited<ReturnType<typeof import("../services/bundleBilling").markPendingShopCardGrants>> = [];
+    try {
+      const { markPendingShopCardGrants } = await import("../services/bundleBilling");
+      pendingShopCardGrants = await markPendingShopCardGrants({
+        sourceType: "lawn_care_quote",
+        sourceId: String(quote.id),
+        bundleAddons,
+        customerEmail: data.email || null,
+        customerPhone: data.phone,
+        metadata: { serviceType: "lawn_care" },
+      });
+    } catch (grantErr) {
+      console.error("[lawn-care] markPendingShopCardGrants failed:", (grantErr as Error).message);
+    }
+
+    // Auto-publish a Square invoice when the customer bundled a priced
+    // shop card. The invoice contains the lawn-care service line PLUS
+    // the shop-card line; the bundle-discount math is applied to the
+    // service line only — the shop card is full price (it's prepaid
+    // JCMOVES USD and cannot itself be discounted).
+    let lawnCareInvoiceUrl: string | null = null;
+    let lawnCareInvoiceId: string | null = null;
+    if (data.email && pendingShopCardGrants.length > 0) {
+      try {
+        const { squareInvoiceService } = await import("../services/square-invoice");
+        const { attachInvoiceToGrants } = await import("../services/bundleBilling");
+        if (squareInvoiceService.isConfigured()) {
+          const sumShopCard = pendingShopCardGrants.reduce((s, g) => s + g.unitPriceUsd * g.quantity, 0);
+          const serviceLineTotal = finalTotalQuoted; // discount is already baked in
+          const lineItems = [
+            {
+              name: `Lawn Care — ${data.serviceCategory.replace(/_/g, " ")} (${data.serviceFrequency.replace(/_/g, " ")})`,
+              qty: 1,
+              unitPrice: serviceLineTotal,
+              total: serviceLineTotal,
+            },
+            ...pendingShopCardGrants.map((g) => ({
+              name: g.name,
+              qty: g.quantity,
+              unitPrice: g.unitPriceUsd,
+              total: g.unitPriceUsd * g.quantity,
+            })),
+          ];
+          // Lawn-care quotes don't have a leads-table row, so we shim a
+          // Lead-shaped object for `createItemizedInvoiceForLead`. The
+          // helper only reads firstName/lastName/email/phone/serviceType
+          // and the bundle-discount fields — all available here.
+          const [firstName, ...rest] = (data.customerName || "Customer").trim().split(/\s+/);
+          const lastName = rest.join(" ") || "(Lawn Care)";
+          const shimLead = {
+            id: `lawn_care_quote:${quote.id}`,
+            firstName,
+            lastName,
+            email: data.email,
+            phone: data.phone,
+            serviceType: "lawn_care",
+            // Critical: keep the bundle discount math limited to the
+            // SERVICE line by reporting bundleDiscountAmount=0 to the
+            // invoice helper. The discount is already baked into
+            // `finalTotalQuoted`, so we don't want the helper to also
+            // try to inject an order-level discount on top of the shop
+            // card line.
+            totalPrice: String(serviceLineTotal + sumShopCard),
+            bundleDiscountAmount: "0",
+          } as unknown as import("@shared/schema").Lead;
+          const result = await squareInvoiceService.createItemizedInvoiceForLead(
+            shimLead,
+            lineItems,
+            undefined,
+            "email",
+          );
+          lawnCareInvoiceUrl = result.invoiceUrl || null;
+          lawnCareInvoiceId = result.squareInvoiceId || null;
+          if (lawnCareInvoiceId) {
+            await attachInvoiceToGrants({
+              sourceType: "lawn_care_quote",
+              sourceId: String(quote.id),
+              squareInvoiceId: lawnCareInvoiceId,
+            });
+          }
+          console.log(`[lawn-care] auto-invoice published for quote ${quote.id} (shop_card included)`);
+        }
+      } catch (invErr) {
+        console.error("[lawn-care] auto-invoice failed:", (invErr as Error).message);
+      }
+    }
+
     if (data.email) {
       disburseServiceTokens({
         serviceType: "lawn_care",
@@ -330,14 +423,24 @@ router.post("/quote", async (req: Request, res: Response) => {
     const bundleServicesHtml = companionLeads.length > 0
       ? `<div style="background:#eff6ff;border:1px solid #3b82f6;padding:10px 14px;border-radius:8px;margin-top:10px"><b style="color:#1d4ed8">📦 Bundled Services (group ${bundleGroupId})</b><ul style="margin:6px 0 0 18px;padding:0;color:#1e3a8a">${companionLeads.map(l => `<li><b>${l.label}</b> — ${l.startDate ? `start ${l.startDate}` : "call to schedule"}</li>`).join("")}</ul></div>`
       : "";
+    // Task #199 — let admins see exactly what's about to land on the
+    // Square invoice (and what wallet credit will mint on payment).
+    const adminShopCardHtml = pendingShopCardGrants.length > 0
+      ? `<div style="background:#fef3c7;border:1px solid #f59e0b;padding:10px 14px;border-radius:8px;margin-top:10px"><b style="color:#b45309">🛍️ Bundled Add-ons (billable on this invoice)</b><ul style="margin:6px 0 0 18px;padding:0;color:#78350f">${pendingShopCardGrants.map(g => `<li><b>${g.name}</b> — $${g.unitPriceUsd.toFixed(2)} → mints $${g.unitPriceUsd.toFixed(2)} JCMOVES USD on payment</li>`).join("")}</ul>${lawnCareInvoiceUrl ? `<p style="margin:8px 0 0;font-size:12px;color:#92400e">Invoice published: <a href="${lawnCareInvoiceUrl}">${lawnCareInvoiceUrl}</a></p>` : ""}</div>`
+      : "";
+    const adminShopCardText = pendingShopCardGrants.length > 0
+      ? `\n\n=== BUNDLED ADD-ONS (BILLABLE) ===\n` +
+        pendingShopCardGrants.map(g => `• ${g.name} — $${g.unitPriceUsd.toFixed(2)} → mints $${g.unitPriceUsd.toFixed(2)} JCMOVES USD on payment`).join("\n") +
+        (lawnCareInvoiceUrl ? `\nInvoice: ${lawnCareInvoiceUrl}` : "")
+      : "";
 
     try {
       await sendEmail({
         to: companyEmail,
         from: companyEmail,
         subject: `New Lawn Care Quote — ${data.customerName}${bundleSubjectTag}${companionLeads.length > 0 ? ` [+${companionLeads.length} bundled]` : ""}`,
-        text: `New lawn care quote request.\n\nCustomer: ${data.customerName}\nPhone: ${data.phone}\nEmail: ${data.email || "N/A"}\nAddress: ${data.address}\nService: ${data.serviceCategory} — ${data.serviceFrequency}\nSubtotal: $${pricing.totalQuoted.toFixed(2)}\nTotal: $${finalTotalQuoted.toFixed(2)}${pricing.isCustomEstimate ? " (custom estimate)" : ""}\nNotes: ${data.notes || "—"}${bundleNote}${bundleServicesText}\n\n${briefText}`,
-        html: `<h2>New Lawn Care Quote</h2><p><b>Customer:</b> ${data.customerName}<br><b>Phone:</b> ${data.phone}<br><b>Email:</b> ${data.email || "N/A"}<br><b>Address:</b> ${data.address}<br><b>Service:</b> ${data.serviceCategory} — ${data.serviceFrequency}<br><b>Subtotal:</b> $${pricing.totalQuoted.toFixed(2)}<br><b>Total:</b> $${finalTotalQuoted.toFixed(2)}${pricing.isCustomEstimate ? " <em>(custom estimate)</em>" : ""}</p>${bundleHtml}${bundleServicesHtml}${briefHtml}`,
+        text: `New lawn care quote request.\n\nCustomer: ${data.customerName}\nPhone: ${data.phone}\nEmail: ${data.email || "N/A"}\nAddress: ${data.address}\nService: ${data.serviceCategory} — ${data.serviceFrequency}\nSubtotal: $${pricing.totalQuoted.toFixed(2)}\nTotal: $${finalTotalQuoted.toFixed(2)}${pricing.isCustomEstimate ? " (custom estimate)" : ""}\nNotes: ${data.notes || "—"}${bundleNote}${bundleServicesText}${adminShopCardText}\n\n${briefText}`,
+        html: `<h2>New Lawn Care Quote</h2><p><b>Customer:</b> ${data.customerName}<br><b>Phone:</b> ${data.phone}<br><b>Email:</b> ${data.email || "N/A"}<br><b>Address:</b> ${data.address}<br><b>Service:</b> ${data.serviceCategory} — ${data.serviceFrequency}<br><b>Subtotal:</b> $${pricing.totalQuoted.toFixed(2)}<br><b>Total:</b> $${finalTotalQuoted.toFixed(2)}${pricing.isCustomEstimate ? " <em>(custom estimate)</em>" : ""}</p>${bundleHtml}${bundleServicesHtml}${adminShopCardHtml}${briefHtml}`,
       });
     } catch (emailErr) {
       console.error("Lawn care admin email failed:", emailErr);
@@ -347,7 +450,23 @@ router.post("/quote", async (req: Request, res: Response) => {
     // services. Shows them everything we scheduled in one place so they don't
     // wonder whether the bundled services "took". Solo lawn-care quotes
     // continue to rely on the existing lawn-care-only flow.
-    if (data.email && companionLeads.length > 0) {
+    // Task #199 — bundled shop-card add-ons get their own customer-
+    // facing panel so the customer knows the $100 line on the invoice
+    // is going to land in their JCMOVES wallet on payment.
+    const shopCardLinesText = pendingShopCardGrants.length > 0
+      ? "\n\nBundled add-ons (billed alongside this quote):\n" +
+        pendingShopCardGrants.map(g => `• ${g.name} — $${g.unitPriceUsd.toFixed(2)} (lands in your JCMOVES wallet on payment)`).join("\n") +
+        "\n\nWhere can you spend the JCMOVES USD? On any future JC ON THE MOVE invoice — moving, junk, cleaning, lawn, trash valet, or Ashley's Shop. Applies $1 = $1 off."
+      : "";
+    const shopCardLinesHtml = pendingShopCardGrants.length > 0
+      ? `<div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:12px 14px;margin:12px 0">
+           <p style="margin:0 0 6px;font-weight:700;color:#b45309">🛍️ Bundled add-ons (billed with this quote)</p>
+           <ul style="margin:0 0 8px 18px;padding:0;color:#78350f">${pendingShopCardGrants.map(g => `<li><b>${g.name}</b> — $${g.unitPriceUsd.toFixed(2)} <span style="color:#92400e">(lands in your JCMOVES wallet on payment)</span></li>`).join("")}</ul>
+           <p style="margin:0;font-size:12px;color:#92400e">Where can you spend it? On any future JC ON THE MOVE invoice — moving, junk, cleaning, lawn, trash valet, or Ashley's Shop. Applies $1 = $1 off.</p>
+         </div>`
+      : "";
+
+    if (data.email && (companionLeads.length > 0 || pendingShopCardGrants.length > 0)) {
       const customerLines = [
         `Lawn Care — ${data.serviceCategory.replace(/_/g, " ")} (${data.serviceFrequency.replace(/_/g, " ")})${data.requestedStartDate ? ` — preferred start ${data.requestedStartDate}` : ""}`,
         ...companionLeads.map(l => `${l.label}${l.startDate ? ` — preferred start ${l.startDate}` : " — we'll call to schedule"}`),
@@ -364,9 +483,9 @@ router.post("/quote", async (req: Request, res: Response) => {
         await sendEmail({
           to: data.email,
           from: companyEmail,
-          subject: `We've got your bundle — ${customerLines.length} services scheduled${bundleDiscount.applied ? " (10% off applied)" : ""}`,
-          text: `Hi ${data.customerName.split(/\s+/)[0]},\n\nThanks for booking with us! Here's what we received:\n\n${customerLines.map(l => `• ${l}`).join("\n")}${discountLineText}\n\nWe'll be in touch shortly to confirm each service. Reply to this email if anything looks off.\n\n— The team`,
-          html: `<p>Hi ${data.customerName.split(/\s+/)[0]},</p><p>Thanks for booking with us! Here's what we received:</p><ul style="line-height:1.7">${customerLines.map(l => `<li>${l}</li>`).join("")}</ul>${discountLineHtml}<p>We'll be in touch shortly to confirm each service. Reply to this email if anything looks off.</p><p>— The team</p>`,
+          subject: `We've got your bundle — ${customerLines.length} services scheduled${bundleDiscount.applied ? " (10% off applied)" : ""}${pendingShopCardGrants.length > 0 ? " + JCMOVES Shop Card" : ""}`,
+          text: `Hi ${data.customerName.split(/\s+/)[0]},\n\nThanks for booking with us! Here's what we received:\n\n${customerLines.map(l => `• ${l}`).join("\n")}${discountLineText}${shopCardLinesText}${lawnCareInvoiceUrl ? `\n\nPay your invoice: ${lawnCareInvoiceUrl}` : ""}\n\nWe'll be in touch shortly to confirm each service. Reply to this email if anything looks off.\n\n— The team`,
+          html: `<p>Hi ${data.customerName.split(/\s+/)[0]},</p><p>Thanks for booking with us! Here's what we received:</p><ul style="line-height:1.7">${customerLines.map(l => `<li>${l}</li>`).join("")}</ul>${discountLineHtml}${shopCardLinesHtml}${lawnCareInvoiceUrl ? `<p style="text-align:center;margin:18px 0"><a href="${lawnCareInvoiceUrl}" target="_blank" style="display:inline-block;background:#f97316;color:#fff;font-weight:700;padding:12px 28px;border-radius:8px;text-decoration:none">Pay Invoice →</a></p>` : ""}<p>We'll be in touch shortly to confirm each service. Reply to this email if anything looks off.</p><p>— The team</p>`,
         });
       } catch (emailErr) {
         console.error("Lawn care bundle customer email failed:", emailErr);
@@ -376,7 +495,24 @@ router.post("/quote", async (req: Request, res: Response) => {
     const responsePricing = bundleDiscount.applied
       ? { ...pricing, totalQuoted: finalTotalQuoted }
       : pricing;
-    return res.json({ success: true, quote, pricing: responsePricing, bundleDiscount, bundleGroupId, companionLeads });
+    return res.json({
+      success: true,
+      quote,
+      pricing: responsePricing,
+      bundleDiscount,
+      bundleGroupId,
+      companionLeads,
+      // Task #199 — surface shop-card bundle add-ons to the
+      // confirmation screen so the customer sees what they'll be
+      // billed for and where the credit lands.
+      shopCardGrants: pendingShopCardGrants.map(g => ({
+        addonId: g.addonId,
+        name: g.name,
+        amountUsd: g.unitPriceUsd,
+        shortDescription: g.shortDescription,
+      })),
+      invoice: lawnCareInvoiceUrl ? { url: lawnCareInvoiceUrl, squareInvoiceId: lawnCareInvoiceId } : null,
+    });
   } catch (err: any) {
     console.error("Lawn care quote error:", err);
     if (err?.name === "ZodError") return res.status(400).json({ error: "Invalid request", details: err.errors });

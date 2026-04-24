@@ -98,6 +98,16 @@ interface QuoteResult {
     serviceType: string;
     startDate: string | null;
   }>;
+  // Task #199 — priced bundle add-ons (e.g. $100 Shop Card) that are
+  // billed alongside the lawn-care invoice. Each grant turns into
+  // JCMOVES USD service credit on the customer's wallet on payment.
+  shopCardGrants?: Array<{
+    addonId: string;
+    name: string;
+    amountUsd: number;
+    shortDescription?: string;
+  }>;
+  invoice?: { url: string; squareInvoiceId: string } | null;
 }
 
 // Per-add-on scheduling capture (Task #115). Drives the micro-step rendered
@@ -978,6 +988,39 @@ function ConfirmationPanel({
                 </li>
               ))}
             </ul>
+          </div>
+        )}
+
+        {/* Task #199 — bundled shop-card add-ons. Shows what the
+            customer will be billed for and where the JCMOVES USD lands. */}
+        {result.shopCardGrants && result.shopCardGrants.length > 0 && (
+          <div data-testid="confirm-shop-card-grants" className="rounded-xl bg-amber-500/10 border border-amber-500/30 px-4 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-amber-300 mb-2">🛍️ Bundled add-ons (billed with this quote)</p>
+            <ul className="space-y-1.5 mb-2">
+              {result.shopCardGrants.map(g => (
+                <li key={g.addonId} data-testid={`confirm-shop-card-${g.addonId}`} className="flex items-start gap-2 text-xs text-slate-200">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-amber-300 mt-0.5 shrink-0" />
+                  <span>
+                    <b>{g.name}</b> — ${g.amountUsd.toFixed(2)}
+                    <span className="text-amber-200/80"> · lands in your JCMOVES wallet on payment</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-[11px] text-slate-400 leading-snug">
+              Spend the JCMOVES USD on any future JC ON THE MOVE invoice — moving, junk, cleaning, lawn, trash valet, or Ashley's Shop. Applies $1 = $1 off.
+            </p>
+            {result.invoice?.url && (
+              <a
+                href={result.invoice.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="link-shop-card-invoice"
+                className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-amber-300 hover:text-amber-200 underline"
+              >
+                Pay invoice →
+              </a>
+            )}
           </div>
         )}
 

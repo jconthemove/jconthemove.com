@@ -2160,6 +2160,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error('Retroactive rewards error (non-blocking):', retroError);
       }
 
+      // Task #199 — reconcile any shop-card grants the customer paid
+      // for BEFORE they had an account. Looks up `granted` grants by
+      // email with no granted_to_user_id, mints the cash credit into
+      // their wallet, and links the user.
+      try {
+        const { reconcilePendingGrantsForUser } = await import("./services/bundleBilling");
+        await reconcilePendingGrantsForUser({ userId: newUser.id, email: newUser.email });
+      } catch (reconcileErr) {
+        console.error("Shop-card reconcile error (non-blocking):", reconcileErr);
+      }
+
       // Award 250 JCMOVES welcome bonus to new customer
       const CUSTOMER_WELCOME_BONUS = 250;
       try {
@@ -3835,7 +3846,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
           result: bundleDiscount,
         });
       }
-      
+
+      // Task #199 — record pending shop-card grants up front so we have
+      // an audit trail before Square ever sees the invoice. Idempotent.
+      let pendingShopCardGrants: Awaited<ReturnType<typeof import("./services/bundleBilling").markPendingShopCardGrants>> = [];
+      try {
+        const { markPendingShopCardGrants } = await import("./services/bundleBilling");
+        pendingShopCardGrants = await markPendingShopCardGrants({
+          sourceType: "lead",
+          sourceId: lead.id,
+          bundleAddons,
+          customerEmail: lead.email || null,
+          customerPhone: lead.phone || null,
+          metadata: { serviceType: lead.serviceType, route: "leads_public" },
+        });
+      } catch (grantErr) {
+        console.error("[leads] markPendingShopCardGrants failed:", (grantErr as Error).message);
+      }
+
       // Send email notification (non-blocking — a failed email must never reject the booking)
       const emailContent = generateLeadNotificationEmail(lead);
       const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
@@ -3863,13 +3891,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         bundleNote = `\n\nℹ️ Customer expressed interest in bundling: ${bundleAddons.join(", ")} (did not auto-qualify for the bundle discount this time).`;
         bundleHtml = `<br><br><b style="color:#888">ℹ️ Bundle interest:</b> ${bundleAddons.join(", ")} (did not auto-qualify).`;
       }
+      // Task #199 — bundled shop-card add-ons (admin parity).
+      let shopCardAdminNote = "";
+      let shopCardAdminHtml = "";
+      if (pendingShopCardGrants.length > 0) {
+        shopCardAdminNote = `\n\n=== BUNDLED ADD-ONS (BILLABLE ON QUOTE-SEND) ===\n` +
+          pendingShopCardGrants.map(g => `• ${g.name} — $${g.unitPriceUsd.toFixed(2)} → mints $${g.unitPriceUsd.toFixed(2)} JCMOVES USD on payment`).join("\n");
+        shopCardAdminHtml = `<br><br><div style="background:#fef3c7;border:1px solid #f59e0b;padding:10px 14px;border-radius:8px"><b style="color:#b45309">🛍️ Bundled Add-ons (billable on this invoice)</b><ul style="margin:6px 0 0 18px;padding:0;color:#78350f">${pendingShopCardGrants.map(g => `<li><b>${g.name}</b> — $${g.unitPriceUsd.toFixed(2)} → mints $${g.unitPriceUsd.toFixed(2)} JCMOVES USD on payment</li>`).join("")}</ul></div>`;
+      }
       try {
         await sendEmail({
           to: companyEmail,
           from: companyEmail,
-          subject: `New ${lead.serviceType} Lead - ${lead.firstName} ${lead.lastName}${bundleAddons.length > 0 ? " [+ Bundle Interest]" : ""}`,
-          text: emailContent.text + bundleNote,
-          html: emailContent.html + bundleHtml,
+          subject: `New ${lead.serviceType} Lead - ${lead.firstName} ${lead.lastName}${bundleAddons.length > 0 ? " [+ Bundle Interest]" : ""}${pendingShopCardGrants.length > 0 ? " + Shop Card" : ""}`,
+          text: emailContent.text + bundleNote + shopCardAdminNote,
+          html: emailContent.html + bundleHtml + shopCardAdminHtml,
         });
       } catch (emailError) {
         console.error("Admin email notification failed (lead still saved):", emailError);
@@ -8751,10 +8787,42 @@ Thank you for your business!
       const existingPaymentUrl = lead.squarePaymentUrl ?? null;
       let squarePaymentUrl: string | null = existingPaymentUrl;
       let squareInvoiceCreated = false;
+      let pendingShopCardLines: Array<{ id: string; name: string; unitPrice: number; qty: number }> = [];
       if (!existingPaymentUrl && squareInvoiceService.isConfigured()) {
         try {
-          // Build a single-line itemized invoice from the quote total
-          const lineItems = [{ name: `${serviceLabel} — ${customerName}`, qty: 1, unitPrice: price, total: price }];
+          // Build a single-line itemized invoice from the quote total.
+          // Task #199 — append any pending shop-card grants so the
+          // customer is billed for them on the same Square invoice.
+          const lineItems: Array<{ id?: string; name: string; qty: number; unitPrice: number; total: number; excludeFromBundleDiscount?: boolean }> = [
+            { name: `${serviceLabel} — ${customerName}`, qty: 1, unitPrice: price, total: price },
+          ];
+          try {
+            const { rows: grantRows } = await pool.query<{
+              id: string; addon_id: string; amount_usd: string; metadata: any;
+            }>(
+              `SELECT id, addon_id, amount_usd, metadata
+                 FROM wallet_credit_grants
+                WHERE source_type = 'lead' AND source_id = $1 AND status = 'pending'`,
+              [id],
+            );
+            pendingShopCardLines = grantRows.map(g => ({
+              id: g.id,
+              name: (g.metadata?.name as string) || "JCMOVES Shop Card",
+              unitPrice: parseFloat(g.amount_usd),
+              qty: 1,
+            }));
+            for (const li of pendingShopCardLines) {
+              lineItems.push({
+                name: li.name,
+                qty: 1,
+                unitPrice: li.unitPrice,
+                total: li.unitPrice,
+                excludeFromBundleDiscount: true,
+              });
+            }
+          } catch (grantErr) {
+            console.error("[send-quote] failed to load pending shop-card grants:", (grantErr as Error).message);
+          }
           const invoiceResult = await squareInvoiceService.createItemizedInvoiceForLead(
             lead,
             lineItems,
@@ -8766,19 +8834,41 @@ Thank you for your business!
           if (squarePaymentUrl) {
             await pool.query(`UPDATE leads SET square_payment_url = $1 WHERE id = $2`, [squarePaymentUrl, id]);
           }
+          if (invoiceResult.squareInvoiceId && pendingShopCardLines.length > 0) {
+            try {
+              const { attachInvoiceToGrants } = await import("./services/bundleBilling");
+              await attachInvoiceToGrants({
+                sourceType: "lead",
+                sourceId: id,
+                squareInvoiceId: invoiceResult.squareInvoiceId,
+              });
+            } catch (attachErr) {
+              console.error("[send-quote] attachInvoiceToGrants failed:", (attachErr as Error).message);
+            }
+          }
         } catch (sqErr) {
           console.error("Square invoice creation error (non-fatal, sending quote anyway):", sqErr);
         }
       }
 
-      // Build email HTML
+      // Build email HTML — show service line, shop-card add-ons, and grand total
+      // separately when bundle add-ons are billed alongside the service quote.
+      const shopCardSubtotal = pendingShopCardLines.reduce((sum, li) => sum + li.unitPrice * li.qty, 0);
+      const grandTotal = price + shopCardSubtotal;
+      const grandTotalFormatted = `$${grandTotal.toFixed(2)}`;
+      const shopCardRows = pendingShopCardLines.map(li =>
+        `<tr><td style="color:#888;padding:4px 0">+ ${li.name}</td><td style="font-weight:600;padding:4px 8px;color:#16a34a">$${(li.unitPrice * li.qty).toFixed(2)}</td></tr>`
+      ).join("");
+      const totalRow = pendingShopCardLines.length > 0
+        ? `<tr><td style="color:#888;padding:4px 0">Service total</td><td style="font-weight:600;padding:4px 8px">${totalFormatted}</td></tr>${shopCardRows}<tr><td style="color:#888;padding:8px 0;border-top:1px solid #eee">Invoice total</td><td style="font-weight:700;font-size:18px;color:#f97316;padding:8px 8px;border-top:1px solid #eee">${grandTotalFormatted}</td></tr>`
+        : `<tr><td style="color:#888;padding:4px 0">Quote total</td><td style="font-weight:700;font-size:18px;color:#f97316;padding:4px 8px">${totalFormatted}</td></tr>`;
       const detailRows = [
         orderLabel ? `<tr><td style="color:#888;padding:4px 0">Order #</td><td style="font-weight:700;padding:4px 8px;color:#3b82f6;font-family:monospace">${orderLabel}</td></tr>` : "",
         `<tr><td style="color:#888;padding:4px 0">Service</td><td style="font-weight:600;padding:4px 8px">${serviceLabel}</td></tr>`,
         crewLine ? `<tr><td style="color:#888;padding:4px 0">Crew</td><td style="font-weight:600;padding:4px 8px">${crewLine}</td></tr>` : "",
         dateLine ? `<tr><td style="color:#888;padding:4px 0">Estimated date</td><td style="font-weight:600;padding:4px 8px">${dateLine}</td></tr>` : "",
         windowLine ? `<tr><td style="color:#888;padding:4px 0">Arrival window</td><td style="font-weight:600;padding:4px 8px">${windowLine}</td></tr>` : "",
-        `<tr><td style="color:#888;padding:4px 0">Quote total</td><td style="font-weight:700;font-size:18px;color:#f97316;padding:4px 8px">${totalFormatted}</td></tr>`,
+        totalRow,
       ].join("");
 
       const noteSection = message ? `<p style="margin:16px 0;padding:12px;background:#f9f9f9;border-left:3px solid #f97316;border-radius:4px;color:#333">${message}</p>` : "";
@@ -15083,6 +15173,34 @@ Thank you for your business!
         const invoice = (data?.invoice as Record<string, unknown> | undefined);
         const squareInvoiceId = typeof invoice?.id === "string" ? invoice.id : undefined;
         if (squareInvoiceId) {
+          // Task #199 — fire any shop-card wallet grants tied to this
+          // invoice. This runs FIRST and is idempotent so duplicate
+          // webhook deliveries can't double-mint.
+          try {
+            const { rows: grantSourceRows } = await pool.query<{
+              source_type: string;
+              source_id: string;
+            }>(
+              `SELECT DISTINCT source_type, source_id
+                 FROM wallet_credit_grants
+                WHERE square_invoice_id = $1`,
+              [squareInvoiceId],
+            );
+            if (grantSourceRows.length > 0) {
+              const { grantWalletCreditForSource } = await import("./services/bundleBilling");
+              for (const src of grantSourceRows) {
+                await grantWalletCreditForSource({
+                  sourceType: src.source_type as "lead" | "lawn_care_quote",
+                  sourceId: src.source_id,
+                  paymentReference: `square_invoice:${squareInvoiceId}`,
+                  squareInvoiceId,
+                });
+              }
+            }
+          } catch (grantErr) {
+            console.error("[Square webhook] shop-card grant disbursement failed:", (grantErr as Error).message);
+          }
+
           const localInvoice = await storage.getSquareInvoiceBySquareId(squareInvoiceId);
           if (localInvoice) {
             await storage.updateSquareInvoiceStatus(squareInvoiceId, "paid", new Date());
