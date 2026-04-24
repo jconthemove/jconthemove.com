@@ -21208,6 +21208,10 @@ Thank you for your business!
   await ensurePrepaidIntentsTable();
   console.log('💵 Prepaid credit intents table ready');
 
+  // ── Task #199 — Bundle shop-card grants ───────────────────────────────────────
+  await ensureWalletCreditGrantsTable();
+  console.log('🎁 Wallet credit grants table ready');
+
   // Backfill activity-based tiers (background, non-blocking)
   setTimeout(() => {
     import('./services/recompute-tier').then(({ backfillTiers }) => backfillTiers()).catch(() => {});
@@ -22984,6 +22988,36 @@ async function creditJcMovesUsdFromPrepaid(
   } finally {
     client.release();
   }
+}
+
+async function ensureWalletCreditGrantsTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS wallet_credit_grants (
+      id                  VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      source_type         TEXT NOT NULL,
+      source_id           TEXT NOT NULL,
+      addon_id            TEXT NOT NULL,
+      amount_usd          NUMERIC(10,2) NOT NULL,
+      currency            TEXT NOT NULL DEFAULT 'JCMOVES_USD',
+      customer_email      TEXT,
+      customer_phone      TEXT,
+      status              TEXT NOT NULL DEFAULT 'pending',
+      square_invoice_id   TEXT,
+      payment_reference   TEXT,
+      granted_to_user_id  VARCHAR REFERENCES users(id),
+      granted_at          TIMESTAMP,
+      metadata            JSONB,
+      created_at          TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+    -- Idempotency: one grant per (source_type, source_id, addon_id). Protects
+    -- both webhook double-fires and accidental double-inserts at quote time.
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_wallet_credit_grants_source
+      ON wallet_credit_grants (source_type, source_id, addon_id);
+    CREATE INDEX IF NOT EXISTS idx_wallet_credit_grants_email
+      ON wallet_credit_grants (customer_email);
+    CREATE INDEX IF NOT EXISTS idx_wallet_credit_grants_status
+      ON wallet_credit_grants (status);
+  `);
 }
 
 async function ensurePrepaidIntentsTable() {
