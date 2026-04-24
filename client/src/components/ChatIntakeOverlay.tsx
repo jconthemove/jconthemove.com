@@ -22,7 +22,7 @@ import {
   X, Send, Loader2, Sparkles, ArrowRight, MessageCircle, Tag,
 } from "lucide-react";
 import {
-  parseJobIntake, friendlyServiceLabel, bundleHintName, ADDON_CHIPS,
+  parseJobIntake, friendlyServiceLabel, bundleHintName, ADDON_CHIPS, formatLaborBreakdownLine,
   chipToServiceCode, type ParseResult,
 } from "@/lib/serviceParser";
 
@@ -331,7 +331,7 @@ export default function ChatIntakeOverlay({
 
   const quoteMutation = useMutation({
     mutationFn: async (input: {
-      items: Array<{ serviceCode: string; quantity: number; unitPrice: number; priceMode: string; label: string }>;
+      items: Array<{ serviceCode: string; quantity: number; unitPrice: number; priceMode: string; label: string; details?: Record<string, unknown> }>;
     }) => {
       const res = await apiRequest("POST", "/api/bookings/quote", {
         items: input.items,
@@ -368,20 +368,39 @@ export default function ChatIntakeOverlay({
   useEffect(() => {
     if (step !== "show_result") return;
     if (!catalog?.services || parsed.services.length === 0) return;
+    // Task #218 — Pass the parser's jobSizeHint into each line's
+    // `details` so the server's labor-hours model honors small/medium/
+    // large mappings (small move = 2×2hr, medium = 2×4hr, large = 4×4hr,
+    // medium junk = 2×2hr, etc.). Without this the chat card would just
+    // see catalog defaults and the heading copy wouldn't match the math.
+    const sizeHint = parsed.jobSizeHint;
     const items = parsed.services
       .map((code) => catalog.services.find((s) => s.code === code))
       .filter((s): s is CatalogService => !!s)
-      .map((s) => ({
-        serviceCode: s.code,
-        quantity: 1,
-        unitPrice: s.defaultPrice
-          ? parseFloat(s.defaultPrice)
-          : s.suggestedMin
-            ? parseFloat(s.suggestedMin)
-            : 0,
-        priceMode: s.defaultPriceMode || "quote",
-        label: s.name,
-      }));
+      .map((s) => {
+        const details: Record<string, unknown> = {};
+        if (sizeHint) details.jobSize = sizeHint;
+        // Carry the moving bedrooms hint in the form the moving matrix
+        // expects so /quote's per-service handler also picks it up.
+        if (s.code === "moving" && sizeHint) {
+          details.bedrooms = sizeHint === "small" ? "1br" : sizeHint === "large" ? "4br" : "2br";
+        }
+        if (s.code === "junk_removal" && sizeHint) {
+          details.tier = sizeHint;
+        }
+        return {
+          serviceCode: s.code,
+          quantity: 1,
+          unitPrice: s.defaultPrice
+            ? parseFloat(s.defaultPrice)
+            : s.suggestedMin
+              ? parseFloat(s.suggestedMin)
+              : 0,
+          priceMode: s.defaultPriceMode || "quote",
+          label: s.name,
+          details,
+        };
+      });
     if (items.length === 0) return;
     quoteMutation.mutate({ items });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -736,15 +755,36 @@ function RecommendedPlanCard({
         </p>
       ) : (
         <ul className="space-y-1.5">
-          {parsed.services.map((code) => (
-            <li
-              key={code}
-              className="flex items-center justify-between text-sm text-slate-100"
-              data-testid={`chat-result-service-${code}`}
-            >
-              <span>{friendlyServiceLabel(code, { jobSize: parsed.jobSizeHint })}</span>
-            </li>
-          ))}
+          {parsed.services.map((code) => {
+            // Task #218 — When the live quote has resolved, prefer the
+            // server's crewSize/laborHours so the label matches the
+            // dollar math exactly (e.g. "2 Movers (4 hrs)" → $680).
+            const quotedItem = quote?.items?.find((it: any) => it.serviceCode === code);
+            const meta = quotedItem?.laborMeta;
+            return (
+              <li
+                key={code}
+                className="flex flex-col text-sm text-slate-100"
+                data-testid={`chat-result-service-${code}`}
+              >
+                <span>
+                  {friendlyServiceLabel(code, {
+                    jobSize: parsed.jobSizeHint,
+                    crewSize: meta?.crewSize,
+                    laborHours: meta?.laborHours,
+                  })}
+                </span>
+                {meta && formatLaborBreakdownLine(meta) && (
+                  <span
+                    className="text-[11px] text-slate-400 pl-5"
+                    data-testid={`chat-result-labor-${code}`}
+                  >
+                    {formatLaborBreakdownLine(meta)}
+                  </span>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
 

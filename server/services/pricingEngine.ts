@@ -85,6 +85,9 @@ import {
   type JunkTier,
   quoteMovingFromTable,
   quoteJunkFromTable,
+  quoteByLaborHours,
+  LABOR_RATE_PER_HOUR,
+  type LaborQuote,
 } from "../../shared/pricingTables";
 
 export {
@@ -93,8 +96,10 @@ export {
   JUNK_TIERS,
   quoteMovingFromTable,
   quoteJunkFromTable,
+  quoteByLaborHours,
+  LABOR_RATE_PER_HOUR,
 };
-export type { JunkTier };
+export type { JunkTier, LaborQuote };
 
 export function quoteMoving(opts: { bedrooms?: string; stairs?: number | string; loadType?: string }): { amount: number; breakdown: Record<string, unknown> } {
   const r = quoteMovingFromTable(opts);
@@ -195,25 +200,49 @@ export async function quoteService(
 
   if (serviceCode === "moving" && (d.bedrooms || d.stairs != null || d.loadType)) {
     const q = quoteMoving({ bedrooms: d.bedrooms, stairs: d.stairs, loadType: d.loadType });
+    // Task #218 — Even though moving is matrix-priced, surface a labor-
+    // hours read-out so the chat card can render "X movers × Y hrs". We
+    // back-compute hours from the matrix amount so the breakdown adds up.
+    const labor = quoteByLaborHours("moving", { jobSize: inferJobSizeFromBedrooms(d.bedrooms) });
+    const derivedHours = labor && labor.crewSize > 0
+      ? +(q.amount / (labor.crewSize * LABOR_RATE_PER_HOUR)).toFixed(2)
+      : labor?.laborHours ?? 0;
     return {
       serviceCode,
       amount: q.amount,
       minPrice: q.amount,
       maxPrice: q.amount,
       isQuoteOnly: false,
-      breakdown: q.breakdown,
+      breakdown: {
+        ...q.breakdown,
+        crewSize: labor?.crewSize ?? null,
+        laborHours: derivedHours,
+        ratePerHour: LABOR_RATE_PER_HOUR,
+        totalLaborHours: labor ? +(labor.crewSize * derivedHours).toFixed(2) : null,
+      },
     };
   }
 
   if (serviceCode === "junk_removal" && d.tier) {
     const q = quoteJunk(String(d.tier));
+    const tierToSize: Record<string, "small" | "medium" | "large"> = {
+      tiny: "small", small: "small", medium: "medium", large: "large", xlarge: "large",
+    };
+    const labor = quoteByLaborHours("junk_removal", { jobSize: tierToSize[String(d.tier)] });
     return {
       serviceCode,
       amount: q.amount,
       minPrice: q.amount,
       maxPrice: q.amount,
       isQuoteOnly: !q.tier,
-      breakdown: q.tier ?? {},
+      breakdown: {
+        ...(q.tier ?? {}),
+        crewSize: labor?.crewSize ?? 2,
+        laborHours: labor && labor.crewSize > 0
+          ? +(q.amount / (labor.crewSize * LABOR_RATE_PER_HOUR)).toFixed(2)
+          : labor?.laborHours ?? 0,
+        ratePerHour: LABOR_RATE_PER_HOUR,
+      },
     };
   }
 
@@ -230,36 +259,62 @@ export async function quoteService(
       ? Math.max(300, Math.round(sqft * (depthMode === "deep" ? 0.42 : 0.28)))
       : (serviceCode === "move_cleaning" ? 300 : 0);
     const amount = depthMode === "deep" ? Math.round(base * 1.4) : base;
+    const cleaningSize = inferCleaningJobSize(sqft);
+    const labor = quoteByLaborHours(serviceCode, { jobSize: cleaningSize });
     return {
       serviceCode,
       amount,
       minPrice: amount || 300,
       maxPrice: amount || 1200,
       isQuoteOnly: amount === 0,
-      breakdown: { squareFeet: sqft, depthMode, base },
+      breakdown: {
+        squareFeet: sqft, depthMode, base,
+        crewSize: labor?.crewSize ?? 2,
+        laborHours: labor?.laborHours ?? 3,
+        ratePerHour: LABOR_RATE_PER_HOUR,
+      },
     };
   }
 
   if (serviceCode === "handyman") {
-    // Per-hour model — $75/hr, 2 hour minimum.
+    // Task #218 — Per-hour labor model at the platform-wide $85/hr (was
+    // $75 — a stale legacy rate). 2-hr minimum. crewSize defaults to 1.
+    const crewSize = Math.max(1, Number(d.crewSize ?? d.movers ?? 1));
     const hours = Math.max(2, Number(d.hours ?? 2));
-    const amount = Math.round(hours * 75);
-    return { serviceCode, amount, minPrice: 150, maxPrice: Math.max(amount, 750), isQuoteOnly: false, breakdown: { hours, rate: 75 } };
+    const totalLaborHours = +(crewSize * hours).toFixed(2);
+    const amount = Math.round(totalLaborHours * LABOR_RATE_PER_HOUR);
+    return {
+      serviceCode, amount, minPrice: 170, maxPrice: Math.max(amount, 750), isQuoteOnly: false,
+      breakdown: { crewSize, laborHours: hours, totalLaborHours, ratePerHour: LABOR_RATE_PER_HOUR },
+    };
   }
 
   if (serviceCode === "labor") {
-    // Mover-hour model: $85/hr per mover × hours. 2-mover, 2-hr minimum.
-    const movers = Math.max(1, Number(d.movers ?? 2));
+    // Task #218 — Crew × hours × $85/hr. 2-mover, 2-hr minimum.
+    const crewSize = Math.max(1, Number(d.crewSize ?? d.movers ?? 2));
     const hours = Math.max(2, Number(d.hours ?? 2));
-    const amount = Math.round(movers * hours * 85);
-    return { serviceCode, amount, minPrice: Math.max(200, amount), maxPrice: Math.max(amount, 1000), isQuoteOnly: false, breakdown: { movers, hours, ratePerMoverHour: 85 } };
+    const totalLaborHours = +(crewSize * hours).toFixed(2);
+    const amount = Math.round(totalLaborHours * LABOR_RATE_PER_HOUR);
+    return {
+      serviceCode, amount, minPrice: Math.max(200, amount), maxPrice: Math.max(amount, 1000), isQuoteOnly: false,
+      breakdown: { crewSize, laborHours: hours, totalLaborHours, ratePerHour: LABOR_RATE_PER_HOUR },
+    };
   }
 
   if (serviceCode === "delivery") {
-    // $100 base + $3/mile past 10 miles.
+    // $100 base + $3/mile past 10 miles. Labor breakdown surfaced for
+    // chat-card display; dollars unchanged (mile-driven, not pure labor).
     const miles = Math.max(0, Number(d.miles ?? 0));
     const amount = Math.round(100 + Math.max(0, miles - 10) * 3);
-    return { serviceCode, amount, minPrice: 100, maxPrice: Math.max(amount, 400), isQuoteOnly: false, breakdown: { miles, base: 100 } };
+    const labor = quoteByLaborHours("delivery");
+    return {
+      serviceCode, amount, minPrice: 100, maxPrice: Math.max(amount, 400), isQuoteOnly: false,
+      breakdown: {
+        miles, base: 100,
+        crewSize: labor?.crewSize ?? 2, laborHours: labor?.laborHours ?? 1,
+        ratePerHour: LABOR_RATE_PER_HOUR,
+      },
+    };
   }
 
   // Task #211 — Painting & Flooring estimate from chatbot answer set.
@@ -296,10 +351,19 @@ export async function quoteService(
 
   if (serviceCode === "snow_removal") {
     // Handwritten tiers: per-event $50, yearly contract $2500, winter storm
-    // rod-out $3800.
+    // rod-out $3800. Surface labor breakdown so the chat card matches.
     const planRaw = String(d.plan || "per_event").toLowerCase();
     const amount = planRaw.includes("year") ? 2500 : planRaw.includes("rod") || planRaw.includes("storm") ? 3800 : 50;
-    return { serviceCode, amount, minPrice: amount, maxPrice: amount, isQuoteOnly: false, breakdown: { plan: planRaw } };
+    const labor = quoteByLaborHours("snow_removal");
+    return {
+      serviceCode, amount, minPrice: amount, maxPrice: amount, isQuoteOnly: false,
+      breakdown: {
+        plan: planRaw,
+        crewSize: labor?.crewSize ?? 1,
+        laborHours: labor?.laborHours ?? 0.6,
+        ratePerHour: LABOR_RATE_PER_HOUR,
+      },
+    };
   }
 
   if (serviceCode === "jump_start" || serviceCode === "jumpstart") {
@@ -315,6 +379,41 @@ export async function quoteService(
     };
   }
 
+  // ── Task #218 — Labor-hours fallback ────────────────────────────────────
+  // Any service that didn't match a per-service handler above and is in
+  // SERVICE_LABOR_DEFAULTS gets priced as crew × hours × $85/hr. Honors
+  // an explicit `jobSize` from the chat-intake parser when present.
+  // Currently catches: lawn_care, trash_valet, window_cleaning,
+  // demolition, junk_reset, deep_clean_turnover, assembly_finish,
+  // walkway_priority, assembly — i.e. every "simple labor" service.
+  const jobSizeHint = (typeof d.jobSize === "string" &&
+    (d.jobSize === "small" || d.jobSize === "medium" || d.jobSize === "large"))
+    ? d.jobSize as "small" | "medium" | "large"
+    : undefined;
+  const laborOnly = quoteByLaborHours(serviceCode, {
+    jobSize: jobSizeHint,
+    crewSize: d.crewSize != null ? Number(d.crewSize) : undefined,
+    laborHours: d.laborHours != null ? Number(d.laborHours) : (d.hours != null ? Number(d.hours) : undefined),
+  });
+  if (laborOnly && cat?.defaultPriceMode === "quote") {
+    const floor = SERVICE_LINE_MINIMUMS[serviceCode] ?? 0;
+    const amount = Math.max(laborOnly.amount, floor);
+    return {
+      serviceCode,
+      amount,
+      minPrice: amount,
+      maxPrice: amount,
+      isQuoteOnly: false,
+      breakdown: {
+        crewSize: laborOnly.crewSize,
+        laborHours: laborOnly.laborHours,
+        totalLaborHours: laborOnly.totalLaborHours,
+        ratePerHour: laborOnly.ratePerHour,
+        source: laborOnly.source,
+      },
+    };
+  }
+
   // ── Fallback: catalog default + suggested band ──────────────────────────
   if (!cat) {
     return { serviceCode, amount: 0, isQuoteOnly: true };
@@ -324,13 +423,41 @@ export async function quoteService(
   const max = cat.suggestedMax != null ? parseFloat(cat.suggestedMax) : def;
   const floor = SERVICE_LINE_MINIMUMS[serviceCode];
   const amount = Math.max(def, floor || 0);
+  // Even on the catalog-default path, attach a labor breakdown when we can
+  // so the chat card always has crewSize/laborHours to render.
+  const labor = quoteByLaborHours(serviceCode, { jobSize: jobSizeHint });
   return {
     serviceCode,
     amount,
     minPrice: Math.max(min, floor || 0),
     maxPrice: Math.max(max, floor || 0),
     isQuoteOnly: cat.defaultPriceMode === "quote" && def === 0,
+    breakdown: labor ? {
+      crewSize: labor.crewSize,
+      laborHours: labor.laborHours,
+      totalLaborHours: labor.totalLaborHours,
+      ratePerHour: labor.ratePerHour,
+    } : undefined,
   };
+}
+
+/** Map a moving bedrooms tag (studio/1br/.../5br+) onto the small/medium/
+ *  large jobSize bucket used by SERVICE_LABOR_DEFAULTS. */
+function inferJobSizeFromBedrooms(bedrooms: unknown): "small" | "medium" | "large" | undefined {
+  const b = String(bedrooms || "").toLowerCase();
+  if (!b) return undefined;
+  if (b === "studio" || b === "1br") return "small";
+  if (b === "2br" || b === "3br") return "medium";
+  if (b === "4br" || b === "5br+" || b === "5br") return "large";
+  return undefined;
+}
+
+/** Map cleaning sqft onto the small/medium/large jobSize bucket. */
+function inferCleaningJobSize(sqft: number): "small" | "medium" | "large" | undefined {
+  if (!sqft || sqft <= 0) return undefined;
+  if (sqft < 1000) return "small";
+  if (sqft < 2500) return "medium";
+  return "large";
 }
 
 async function loadCatalogEntry(code: string): Promise<ServiceCatalogEntry | null> {

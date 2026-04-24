@@ -135,3 +135,166 @@ export const SERVICE_LINE_FLOORS: Record<string, number> = {
   flooring:       800,
 };
 
+// ─────────────────────────────────────────────────────────────────────────
+// Task #218 — Labor-hours pricing model. Every service is fundamentally
+// "crew × hours × $85/hr". The matrices above stay (they encode all the
+// per-service nuance — bedrooms/stairs for moving, tier for junk, etc.),
+// but every quoted line ALSO carries a labor-hours breakdown so the
+// chat-intake card, /book wizard, and admin pricing-calibrate can show
+// "2 movers × 4 hrs at $85/hr" and have it match the actual price.
+// ─────────────────────────────────────────────────────────────────────────
+
+/** Single rate that drives every labor-hours quote across the platform.
+ *  Aliased to MOVER_RATE_PER_HOUR so the moving matrices and the labor-
+ *  hours helper can never drift. Bumping this is the one knob that
+ *  changes the platform-wide hourly rate. */
+export const LABOR_RATE_PER_HOUR = MOVER_RATE_PER_HOUR; // 85
+
+/** Per-service crew × hours defaults for the labor-hours pricing model.
+ *  Source of truth for every "X movers × Y hrs" string the customer sees.
+ *  When jobSize is provided, the per-size tuple overrides the default.
+ *
+ *  Spec (Task #218):
+ *    moving small  = 2×2hr (special)
+ *    moving medium = 2×4hr ≈ 16ft truck load+unload
+ *    moving large  = 4×4hr ≈ 26ft truck load
+ *    lawn_care     ≈ 0.5hr ($45)
+ *    trash_valet   ≈ 0.33hr (~$28)
+ *    rate          $85/hr
+ */
+export interface ServiceLaborDefaults {
+  defaultCrew: number;
+  defaultHours: number;
+  jobSize?: Partial<Record<"small" | "medium" | "large", { crew: number; hours: number }>>;
+}
+
+export const SERVICE_LABOR_DEFAULTS: Record<string, ServiceLaborDefaults> = {
+  moving: {
+    // Default = medium so a chat-intake "moving" line without a size hint
+    // still produces a sensible 16ft-truck estimate.
+    defaultCrew: 2, defaultHours: 4,
+    jobSize: {
+      small:  { crew: 2, hours: 2 },  // 4 labor-hr → $340
+      medium: { crew: 2, hours: 4 },  // 8 labor-hr → $680 (16ft truck load+unload)
+      large:  { crew: 4, hours: 4 },  // 16 labor-hr → $1360 (26ft truck load)
+    },
+  },
+  junk_removal: {
+    defaultCrew: 2, defaultHours: 1,  // 2 labor-hr → $170 (matches existing floor)
+    jobSize: {
+      small:  { crew: 2, hours: 1 },  // 2 labor-hr → $170
+      medium: { crew: 2, hours: 2 },  // 4 labor-hr → $340
+      large:  { crew: 2, hours: 4 },  // 8 labor-hr → $680 (full truckload)
+    },
+  },
+  cleaning: {
+    defaultCrew: 2, defaultHours: 3,  // 6 labor-hr → $510
+    jobSize: {
+      small:  { crew: 1, hours: 3 },  // 3 labor-hr → $255
+      medium: { crew: 2, hours: 3 },  // 6 labor-hr → $510
+      large:  { crew: 3, hours: 4 },  // 12 labor-hr → $1020
+    },
+  },
+  move_cleaning: {
+    defaultCrew: 2, defaultHours: 4,  // 8 labor-hr → $680
+    jobSize: {
+      small:  { crew: 2, hours: 2 },
+      medium: { crew: 2, hours: 4 },
+      large:  { crew: 3, hours: 5 },
+    },
+  },
+  lawn_care:       { defaultCrew: 1, defaultHours: 0.5 },   // ~$43 base mowing
+  trash_valet:     { defaultCrew: 1, defaultHours: 0.33 },  // ~$28 per pickup
+  snow_removal:    { defaultCrew: 1, defaultHours: 0.6 },   // ~$51 per event
+  window_cleaning: { defaultCrew: 1, defaultHours: 1 },     // ~$85 small home
+  handyman:        { defaultCrew: 1, defaultHours: 2 },     // 2-hr min → $170
+  labor:           { defaultCrew: 2, defaultHours: 2 },     // 4 labor-hr → $340
+  delivery:        { defaultCrew: 2, defaultHours: 1 },     // 2 labor-hr → $170
+  assembly:        { defaultCrew: 1, defaultHours: 2 },     // 2 labor-hr → $170
+  demolition: {
+    defaultCrew: 2, defaultHours: 2,
+    jobSize: {
+      small:  { crew: 2, hours: 2 },  // 4 labor-hr → $340
+      medium: { crew: 3, hours: 4 },  // 12 labor-hr → $1020
+      large:  { crew: 4, hours: 6 },  // 24 labor-hr → $2040
+    },
+  },
+  // Painting & Flooring keep their sqft-driven dollar math (services/
+  // quoteRules/painting.ts & flooring.ts) — these defaults exist purely
+  // so the customer-facing card can still show a labor-hours breakdown.
+  painting:        { defaultCrew: 2, defaultHours: 6 },
+  flooring:        { defaultCrew: 2, defaultHours: 8 },
+  junk_reset:      { defaultCrew: 2, defaultHours: 2 },
+  deep_clean_turnover: { defaultCrew: 2, defaultHours: 4 },
+  assembly_finish: { defaultCrew: 2, defaultHours: 2 },
+  walkway_priority: { defaultCrew: 1, defaultHours: 0.5 },
+};
+
+export interface LaborQuote {
+  crewSize: number;
+  laborHours: number;
+  /** crewSize × laborHours — the multiplier applied to ratePerHour. */
+  totalLaborHours: number;
+  ratePerHour: number;
+  amount: number;
+  /** Which slot in SERVICE_LABOR_DEFAULTS produced this tuple. */
+  source: "explicit" | "jobSize" | "default" | "unknown";
+}
+
+/** Pure helper — never throws. Returns null only when the service code is
+ *  not in SERVICE_LABOR_DEFAULTS and no explicit crew/hours were supplied. */
+export function quoteByLaborHours(
+  serviceCode: string,
+  opts: {
+    jobSize?: "small" | "medium" | "large";
+    crewSize?: number;
+    laborHours?: number;
+  } = {},
+): LaborQuote | null {
+  const def = SERVICE_LABOR_DEFAULTS[serviceCode];
+  const sized = opts.jobSize && def?.jobSize ? def.jobSize[opts.jobSize] : null;
+
+  let source: LaborQuote["source"];
+  let crewSize: number;
+  let laborHours: number;
+
+  if (opts.crewSize != null && opts.laborHours != null) {
+    crewSize = opts.crewSize;
+    laborHours = opts.laborHours;
+    source = "explicit";
+  } else if (sized) {
+    crewSize = opts.crewSize ?? sized.crew;
+    laborHours = opts.laborHours ?? sized.hours;
+    source = "jobSize";
+  } else if (def) {
+    crewSize = opts.crewSize ?? def.defaultCrew;
+    laborHours = opts.laborHours ?? def.defaultHours;
+    source = "default";
+  } else if (opts.crewSize != null || opts.laborHours != null) {
+    // Unknown service code but caller supplied at least one knob — honor it.
+    crewSize = opts.crewSize ?? 1;
+    laborHours = opts.laborHours ?? 1;
+    source = "unknown";
+  } else {
+    return null;
+  }
+
+  // Defensive clamp: at least 1 mover, at least 0.25 hr (15-min minimum).
+  crewSize = Math.max(1, Math.round(crewSize));
+  laborHours = Math.max(0.25, +laborHours.toFixed(2));
+  const totalLaborHours = +(crewSize * laborHours).toFixed(2);
+  const amount = Math.round(totalLaborHours * LABOR_RATE_PER_HOUR);
+  return { crewSize, laborHours, totalLaborHours, ratePerHour: LABOR_RATE_PER_HOUR, amount, source };
+}
+
+/** Friendly "2 movers × 4 hrs" string for use in chat cards & line items.
+ *  Singularises "mover" / "hr" when count is 1. */
+export function formatLaborSummary(meta: { crewSize: number; laborHours: number }): string {
+  const crewWord = meta.crewSize === 1 ? "mover" : "movers";
+  const hrs = Number.isInteger(meta.laborHours)
+    ? `${meta.laborHours}`
+    : `${meta.laborHours}`;
+  const hrWord = meta.laborHours === 1 ? "hr" : "hrs";
+  return `${meta.crewSize} ${crewWord} × ${hrs} ${hrWord}`;
+}
+

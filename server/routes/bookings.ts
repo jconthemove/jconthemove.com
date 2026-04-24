@@ -50,6 +50,7 @@ import {
   type PaintingAnswers,
   type FlooringAnswers,
 } from "../services/pricingEngine";
+import { quoteByLaborHours, LABOR_RATE_PER_HOUR } from "@shared/pricingTables";
 
 const router = Router();
 
@@ -100,6 +101,88 @@ interface ResolvedItems {
     priceMode: "fixed" | "hourly" | "per_unit" | "quote";
     details: Record<string, unknown>;
   }>;
+}
+
+/** Task #218 — Derive a small/medium/large jobSize hint from the per-line
+ *  details the chat-intake or wizard sends (size hint, bedrooms, junk
+ *  tier, sqft). Returns undefined when nothing in the details indicates a
+ *  size — the labor-hours helper then falls back to the service default. */
+function deriveJobSize(
+  serviceCode: string,
+  details: Record<string, unknown>,
+): "small" | "medium" | "large" | undefined {
+  // Explicit jobSize from the chat-intake parser wins.
+  const explicit = String(details.jobSize ?? "").toLowerCase();
+  if (explicit === "small" || explicit === "medium" || explicit === "large") {
+    return explicit;
+  }
+  if (serviceCode === "moving") {
+    const br = String(details.bedrooms ?? "").toLowerCase();
+    if (br === "studio" || br === "1br") return "small";
+    if (br === "2br" || br === "3br") return "medium";
+    if (br === "4br" || br === "5br+" || br === "5br") return "large";
+  }
+  if (serviceCode === "junk_removal") {
+    const tier = String(details.tier ?? "").toLowerCase();
+    if (tier === "tiny" || tier === "small") return "small";
+    if (tier === "medium") return "medium";
+    if (tier === "large" || tier === "xlarge") return "large";
+  }
+  if (serviceCode === "cleaning" || serviceCode === "move_cleaning") {
+    const sqft = Number(details.squareFeet ?? 0);
+    if (sqft > 0 && sqft < 1000) return "small";
+    if (sqft >= 1000 && sqft < 2500) return "medium";
+    if (sqft >= 2500) return "large";
+  }
+  return undefined;
+}
+
+/** Task #218 — Attach the canonical labor-hours breakdown to a quoted
+ *  line. For services whose dollars come from a per-service calculator
+ *  (moving matrix, painting/flooring sqft, etc.) we back-compute the
+ *  hours so crewSize × laborHours × $85 always equals the displayed
+ *  amount. */
+function buildLaborMeta(
+  serviceCode: string,
+  unitPrice: number,
+  quantity: number,
+  details: Record<string, unknown>,
+): BookingPricingItemInput["laborMeta"] {
+  const jobSize = deriveJobSize(serviceCode, details);
+  const explicitCrew = details.crewSize != null ? Number(details.crewSize)
+    : details.crew != null ? Number(details.crew)
+    : details.movers != null ? Number(details.movers)
+    : undefined;
+  const explicitHours = details.laborHours != null ? Number(details.laborHours)
+    : details.hours != null ? Number(details.hours)
+    : undefined;
+  const labor = quoteByLaborHours(serviceCode, {
+    jobSize,
+    crewSize: explicitCrew,
+    laborHours: explicitHours,
+  });
+  if (!labor) return undefined;
+
+  // For services where dollars come from a non-labor calculator (e.g.
+  // moving matrix, painting sqft), derive hours so the breakdown adds up
+  // to the actual line amount the customer is paying.
+  const lineTotal = Math.max(0, unitPrice * Math.max(1, quantity));
+  if (lineTotal > 0 && (explicitHours == null || serviceCode === "moving" || serviceCode === "painting" || serviceCode === "flooring")) {
+    const crew = labor.crewSize;
+    const derivedHours = +(lineTotal / (crew * LABOR_RATE_PER_HOUR)).toFixed(2);
+    return {
+      crewSize: crew,
+      laborHours: derivedHours,
+      totalLaborHours: +(crew * derivedHours).toFixed(2),
+      ratePerHour: LABOR_RATE_PER_HOUR,
+    };
+  }
+  return {
+    crewSize: labor.crewSize,
+    laborHours: labor.laborHours,
+    totalLaborHours: labor.totalLaborHours,
+    ratePerHour: labor.ratePerHour,
+  };
 }
 
 function resolveItems(
@@ -153,6 +236,15 @@ function resolveItems(
       if (est.amount > 0) unitPrice = est.amount;
     }
 
+    const laborMeta = buildLaborMeta(item.serviceCode, unitPrice, item.quantity, item.details || {});
+    // Task #218 — When the catalog has no defaultPrice (quote-only) AND
+    // we have a labor-hours fallback, USE the labor-derived dollars so
+    // the response total matches the breakdown we just attached. Without
+    // this, services like lawn_care/trash_valet would show $0 alongside
+    // a "1 person × 0.5 hrs at $85/hr" subline.
+    if (laborMeta && unitPrice === 0 && priceMode === "quote") {
+      unitPrice = +(laborMeta.crewSize * laborMeta.laborHours * laborMeta.ratePerHour).toFixed(2);
+    }
     pricingInputs.push({
       serviceCode: item.serviceCode,
       label,
@@ -161,6 +253,7 @@ function resolveItems(
       priceMode,
       discountEligible: cat.discountEligible,
       details: item.details || {},
+      laborMeta,
     });
     persistInputs.push({
       serviceCode: item.serviceCode,

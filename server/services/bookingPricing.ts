@@ -42,6 +42,17 @@ export interface BookingPricingItemInput {
   /** When false, this line is excluded from the bundle-discount base. */
   discountEligible?: boolean;
   details?: Record<string, unknown>;
+  /** Task #218 — labor-hours breakdown for the customer-facing card.
+   *  Always populated by routes/bookings.ts:resolveItems before the
+   *  engine sees the input so the response can render
+   *  "2 movers × 4 hrs at $85/hr". Optional here only so unit tests of
+   *  the pure engine don't have to fabricate it. */
+  laborMeta?: {
+    crewSize: number;
+    laborHours: number;
+    totalLaborHours: number;
+    ratePerHour: number;
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────

@@ -176,6 +176,41 @@ Wiring:
 To re-tune: edit the `PAINTING_RULES` / `FLOORING_RULES` objects (room base,
 addon prices, multipliers) — no schema changes or migrations needed; the
 wizard picks up the new numbers on next request.
+## Labor-hours pricing model (Task #218)
+
+Every priced service in the chat-intake recommended-plan card is now framed
+as **crew × hours × $85/hr** so the heading copy ("2 Movers (4 hrs)")
+literally drives the dollar amount the customer sees.
+
+- **`shared/pricingTables.ts`** — `LABOR_RATE_PER_HOUR` (=85), the
+  per-service `SERVICE_LABOR_DEFAULTS` table (small/medium/large mover-hour
+  presets, plus mowing 0.5hr, valet 0.33hr, snow 0.6hr, etc.), and the
+  `quoteByLaborHours()` helper that returns
+  `{ crewSize, laborHours, totalLaborHours, ratePerHour, amount, source }`.
+- **`server/services/pricingEngine.ts`** — every per-service branch (moving,
+  junk, cleaning, handyman, labor, delivery, snow, lawn, valet, demolition,
+  …) emits a `breakdown` that includes `crewSize/laborHours/ratePerHour`,
+  back-computing hours from the matrix dollars when needed so the math
+  always matches. A new labor-hours fallback at the end of `quoteService`
+  prices every catalog `defaultPriceMode==="quote"` service that lacks a
+  custom handler.
+- **`server/routes/bookings.ts`** — `resolveItems` calls `buildLaborMeta()`
+  per line, attaches it to `BookingPricingItemInput.laborMeta`, and uses
+  the labor-derived dollars as the unit price when the catalog has none.
+  The shape flows through `BookingPricingResult.items[i].laborMeta`.
+- **`client/src/lib/serviceParser.ts`** — `friendlyServiceLabel(code, {
+  crewSize, laborHours })` prefers the live quote's numbers over the
+  parser's job-size hint; new `formatLaborBreakdownLine()` returns the
+  "Based on N people × M hrs at $85/hr" subline.
+- **`client/src/components/ChatIntakeOverlay.tsx`** —
+  `RecommendedPlanCard` reads `laborMeta` from each `quote.items[i]` and
+  renders the subline beneath each service.
+
+Tests: `npx tsx server/services/__tests__/laborHoursPricing.test.ts`.
+
+To re-tune: edit `SERVICE_LABOR_DEFAULTS` in `shared/pricingTables.ts` —
+no migrations or calculator changes needed.
+
 ## Running server tests
 
 The repo uses a colocated assertion-style convention (no Vitest/Jest). Each

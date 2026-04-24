@@ -293,32 +293,93 @@ export function parseJobIntake(answers: ParserAnswers): ParseResult {
 }
 
 /** Friendly label rendered on the recommended-plan card for each detected
- *  service. Falls back to the catalog name when we don't have a custom one. */
-export function friendlyServiceLabel(code: string, opts?: { jobSize?: ParseResult["jobSizeHint"] }): string {
+ *  service. Falls back to the catalog name when we don't have a custom one.
+ *
+ *  Task #218 — When the server-quoted line carries crewSize/laborHours,
+ *  prefer those numbers in the heading so the card matches the actual
+ *  pricing math (crew × hours × $85). When they're absent (parser-only
+ *  preview before the quote returns), fall back to a jobSize-driven
+ *  label. */
+export function friendlyServiceLabel(
+  code: string,
+  opts?: { jobSize?: ParseResult["jobSizeHint"]; crewSize?: number; laborHours?: number },
+): string {
   const size = opts?.jobSize;
+  const crew = opts?.crewSize;
+  const hrs = opts?.laborHours;
+  const hasLabor = typeof crew === "number" && crew > 0
+    && typeof hrs === "number" && hrs > 0;
+
   switch (code) {
-    case "moving":
-      if (size === "small") return "🚛 1–2 Movers (1–2 hrs)";
-      if (size === "large") return "🚛 3–4 Movers (4–6 hrs)";
-      return "🚛 2 Movers (2–3 hrs)";
-    case "junk_removal":
+    case "moving": {
+      if (hasLabor) {
+        const moverWord = crew === 1 ? "Mover" : "Movers";
+        const hrsLabel = Number.isInteger(hrs) ? `${hrs}` : hrs!.toFixed(1);
+        return `🚛 ${crew} ${moverWord} (${hrsLabel} hrs)`;
+      }
+      if (size === "small") return "🚛 2 Movers (2 hrs)";
+      if (size === "large") return "🚛 4 Movers (4 hrs)";
+      return "🚛 2 Movers (4 hrs)";
+    }
+    case "junk_removal": {
+      if (hasLabor) {
+        const crewWord = crew === 1 ? "Crew" : "Crew of " + crew;
+        return `🗑️ ${crewWord} (${hrs} hrs haul-off)`;
+      }
       if (size === "large") return "🗑️ Full truckload haul-off";
       return "🗑️ Junk haul-away";
-    case "cleaning":         return "🧹 Move-Out / Deep Clean";
-    case "lawn_care":        return "🌿 Lawn Care visit";
+    }
+    case "cleaning":
+    case "move_cleaning":
+      if (hasLabor) return `🧹 ${crew} Cleaners (${hrs} hrs)`;
+      return code === "move_cleaning" ? "🧹 Move-Out / Deep Clean" : "🧹 Cleaning visit";
+    case "lawn_care":
+      if (hasLabor) return `🌿 Lawn Care (${hrs} hr visit)`;
+      return "🌿 Lawn Care visit";
     case "snow_removal":     return "❄️ Snow Removal";
-    case "window_cleaning":  return "🪟 Window Cleaning";
-    case "handyman":         return "🔧 Handyman visit";
-    case "trash_valet":      return "♻️ Trash Valet (weekly)";
-    case "demolition":       return "⚒️ Light Demolition";
+    case "window_cleaning":
+      if (hasLabor) return `🪟 Window Cleaning (${hrs} hrs)`;
+      return "🪟 Window Cleaning";
+    case "handyman":
+      if (hasLabor) return `🔧 Handyman (${hrs} hrs)`;
+      return "🔧 Handyman visit";
+    case "trash_valet":
+      if (hasLabor) return `♻️ Trash Valet (${hrs} hr/visit)`;
+      return "♻️ Trash Valet (weekly)";
+    case "demolition":
+      if (hasLabor) return `⚒️ Demolition Crew (${hrs} hrs)`;
+      return "⚒️ Light Demolition";
     case "flooring":         return "🪵 Flooring";
     case "painting":         return "🎨 Painting";
     case "roofing":          return "🏠 Roofing";
-    case "labor":            return "💪 Labor / extra hands";
-    case "delivery":         return "🚚 Delivery";
-    case "assembly":         return "🛠️ Assembly";
+    case "labor":
+      if (hasLabor) return `💪 ${crew} Helpers (${hrs} hrs)`;
+      return "💪 Labor / extra hands";
+    case "delivery":
+      if (hasLabor) return `🚚 Delivery (${crew}-person crew, ${hrs} hrs)`;
+      return "🚚 Delivery";
+    case "assembly":
+      if (hasLabor) return `🛠️ Assembly (${hrs} hrs)`;
+      return "🛠️ Assembly";
     default:                 return code;
   }
+}
+
+/** Format the secondary "Based on N movers × M hrs at $85/hr" subline.
+ *  Returns null when the line is not labor-priced. */
+export function formatLaborBreakdownLine(opts: {
+  crewSize?: number;
+  laborHours?: number;
+  ratePerHour?: number;
+}): string | null {
+  const crew = opts.crewSize;
+  const hrs = opts.laborHours;
+  const rate = opts.ratePerHour ?? 85;
+  if (typeof crew !== "number" || crew <= 0) return null;
+  if (typeof hrs !== "number" || hrs <= 0) return null;
+  const crewWord = crew === 1 ? "person" : "people";
+  const hrsLabel = Number.isInteger(hrs) ? `${hrs}` : hrs.toFixed(1);
+  return `Based on ${crew} ${crewWord} × ${hrsLabel} hrs at $${rate}/hr`;
 }
 
 /** Bundle code → display name lookup. Used when the parser hints a bundle
