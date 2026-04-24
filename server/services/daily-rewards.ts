@@ -9,7 +9,7 @@
 // Pays JCMOVES TOKENS only — never touches wallet_accounts.cash_balance.
 // See the invariant comment on walletAccounts.cashBalance in shared/schema.ts.
 
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { storage } from "../storage";
 import { db } from "../db";
 import {
@@ -22,7 +22,6 @@ import {
 } from "@shared/schema";
 import { treasuryService } from "./treasury";
 import { fraudDetectionService } from "./fraud-detection";
-import { getEasternDateStr, getEasternDayStart } from "../utils/dateUtils";
 import type { DailyCheckInResult } from "./gamification";
 import { GAMIFICATION_REWARDS, gamificationService } from "./gamification";
 
@@ -30,6 +29,37 @@ import { GAMIFICATION_REWARDS, gamificationService } from "./gamification";
 // re-check discovers another check-in landed for the same user since the
 // pre-check ran. Treated as a recoverable "already checked in" outcome.
 const DUPLICATE_CHECKIN_RACE = "DUPLICATE_CHECKIN_RACE";
+
+// True America/New_York Eastern day boundary, DST-safe via Intl. The rest
+// of the codebase still uses the (mislabeled) UTC-6 Central helpers in
+// utils/dateUtils.ts; the unified rewards engine intentionally uses the
+// real Eastern boundary the task requires. Local helpers so we don't
+// disturb the other consumers of dateUtils (mining, etc.).
+const EASTERN_TZ = "America/New_York";
+const easternFmt = new Intl.DateTimeFormat("en-CA", {
+  timeZone: EASTERN_TZ,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+function easternDateStrFor(d: Date): string {
+  // en-CA produces YYYY-MM-DD which matches the existing checkin_date column.
+  return easternFmt.format(d);
+}
+function easternToday(): string {
+  return easternDateStrFor(new Date());
+}
+// DST-safe "previous Eastern calendar day". We derive from the `today`
+// YYYY-MM-DD string and subtract ONE CALENDAR DAY (not 24 hours) using UTC
+// math, so the spring-forward / fall-back DST transitions can never produce
+// an off-by-one streak break. UTC is fine here because we're only doing
+// calendar arithmetic on a date string already anchored to Eastern.
+function easternYesterdayFromToday(todayStr: string): string {
+  const [y, m, d] = todayStr.split("-").map(Number);
+  const prev = new Date(Date.UTC(y, m - 1, d) - 24 * 60 * 60 * 1000);
+  return prev.toISOString().slice(0, 10);
+}
 
 // Base USD value of one daily check-in BEFORE the streak token multiplier
 // is applied. Kept at the same $0.25 anchor that the live system used so
@@ -85,16 +115,30 @@ export class DailyRewardsService {
     ctx: DailyCheckInContext = { ipAddress: "unknown", userAgent: "unknown" }
   ): Promise<DailyCheckInResult> {
     try {
-      // 1) Already-checked-in-today guard (Eastern day boundary).
-      const todayEasternStart = getEasternDayStart();
-      const recentCheckIn = await storage.getRecentCheckIn(userId, todayEasternStart);
+      // 1) Already-checked-in-today guard. Compares the YYYY-MM-DD
+      //    `checkin_date` column directly against today in true Eastern
+      //    time, so a single user can only earn one daily reward per
+      //    Eastern calendar day regardless of when their existing rows
+      //    were written.
+      const today = easternToday();
+      const yesterdayStr = easternYesterdayFromToday(today);
 
-      if (recentCheckIn) {
+      const [existingToday] = await db
+        .select({
+          streakCount: dailyCheckins.streakCount,
+        })
+        .from(dailyCheckins)
+        .where(
+          and(eq(dailyCheckins.userId, userId), eq(dailyCheckins.checkinDate, today))
+        )
+        .limit(1);
+
+      if (existingToday) {
         return {
           success: false,
           points: 0,
           tokens: "0",
-          streak: recentCheckIn.streakCount || 1,
+          streak: existingToday.streakCount || 1,
           isNewRecord: false,
           treasuryBalance: 0,
           error: "Already checked in today! Come back tomorrow.",
@@ -157,8 +201,7 @@ export class DailyRewardsService {
         userStats = await storage.createEmployeeStats({ userId });
       }
 
-      // 4) Streak calculation — Eastern-day aware.
-      const today = getEasternDateStr();
+      // 4) Streak calculation — true Eastern-day aware.
       const lastCheckIn = await storage.getLastCheckIn(userId);
 
       let newStreak = 1;
@@ -166,13 +209,8 @@ export class DailyRewardsService {
 
       if (lastCheckIn) {
         const lastDateStr = lastCheckIn.checkinDate;
-
-        // "Yesterday" in Eastern days = the date one day before today.
-        const yesterday = new Date(todayEasternStart.getTime() - 24 * 60 * 60 * 1000);
-        const yesterdayStr = yesterday.toISOString().split("T")[0];
-
         if (lastDateStr === today) {
-          // Defensive: getRecentCheckIn already guarded this, but keep consistent.
+          // Defensive: pre-check above already guarded this.
           newStreak = lastCheckIn.streakCount || 1;
         } else if (lastDateStr === yesterdayStr) {
           newStreak = (lastCheckIn.streakCount || 0) + 1;
@@ -209,7 +247,11 @@ export class DailyRewardsService {
       const tokenAmount = (usdValue / currentPrice.price).toFixed(8);
       const tokenAmountNum = parseFloat(tokenAmount);
 
-      // 6) Treasury check + distribution.
+      // 6) Pre-flight: cheap, no-DB-write check that the treasury can
+      //    cover this distribution at the current price. The actual
+      //    treasury debit + safety re-check happens inside the persistence
+      //    transaction below so it commits/rolls back atomically with the
+      //    user-side writes.
       const canDistribute = await treasuryService.canDistributeTokens(tokenAmountNum);
       if (!canDistribute.canDistribute) {
         const stats = await treasuryService.getTreasuryStats().catch(() => null);
@@ -224,53 +266,48 @@ export class DailyRewardsService {
         };
       }
 
-      const distribution = await treasuryService.distributeTokens(
-        tokenAmountNum,
-        `Daily check-in reward (${newStreak} day streak)`,
-        "daily_checkin",
-        userId
-      );
-
-      if (!distribution.success) {
-        const stats = await treasuryService.getTreasuryStats().catch(() => null);
-        return {
-          success: false,
-          points: 0,
-          tokens: "0",
-          streak: newStreak,
-          isNewRecord,
-          treasuryBalance: stats?.availableFunding ?? 0,
-          error: distribution.error || "Token distribution failed",
-        };
-      }
-
-      // 7) Persist user-side records in a SINGLE database transaction so we
-      //    never leave partial state (e.g. wallet credited but no
-      //    daily_checkins row, breaking tomorrow's streak math, or a
-      //    points ledger entry without a matching wallet credit).
+      // 7) ONE atomic unit for the entire check-in: treasury debit, audit
+      //    row, wallet credit, rewards row, points ledger, stats roll-up.
+      //    Either every record commits together or nothing does — no
+      //    orphan treasury debits, no broken streaks, no half-credited
+      //    wallets.
       //
-      //    INVARIANT: only token_balance / total_earned move. cash_balance
-      //    is NEVER touched here — that column may only be incremented on a
-      //    real customer payment received. See the comment on
-      //    walletAccounts.cashBalance in shared/schema.ts.
+      //    Concurrency safety:
+      //      - pg_advisory_xact_lock serializes concurrent requests for the
+      //        SAME user, so two parallel /api/gamification/checkin posts
+      //        from the same browser/tab can't double-spend.
+      //      - In-tx re-read of dailyCheckins by (userId, checkinDate)
+      //        provides a final guard that survives even if the lock is
+      //        bypassed somehow.
+      //      - Treasury debit and wallet credit both use FOR UPDATE / atomic
+      //        SQL increments so cross-user races stay consistent.
       //
-      //    Treasury distribution above is its own atomic operation. If this
-      //    tx rolls back the treasury debit is stranded and surfaced as a
-      //    failure — better than corrupting user-side state.
+      //    INVARIANT: only token_balance / total_earned move on
+      //    wallet_accounts. cash_balance is NEVER touched here — that
+      //    column may only be incremented on a real customer payment
+      //    received. See the comment on walletAccounts.cashBalance in
+      //    shared/schema.ts.
+      // Hoisted out of the tx so the success-return below can include the
+      // post-debit treasury balance for the frontend.
+      let distributionRemaining = 0;
       try {
         await db.transaction(async (tx) => {
-          // 7a) In-tx re-check to close the race window between the
-          //     pre-check and the persistence writes. Two concurrent
-          //     requests for the same user would both pass the pre-check
-          //     and both reach this point; only one will see an empty
-          //     result here.
+          // 7a) Per-user advisory lock — serializes concurrent check-ins
+          //     for THIS user only (other users are unaffected). Released
+          //     automatically at commit/rollback.
+          await tx.execute(
+            sql`SELECT pg_advisory_xact_lock(hashtextextended(${"daily_checkin:" + userId}, 0))`
+          );
+
+          // 7b) In-tx duplicate guard — a concurrent request that beat us
+          //     to the lock has already inserted today's row.
           const dup = await tx
             .select({ id: dailyCheckins.id })
             .from(dailyCheckins)
             .where(
               and(
                 eq(dailyCheckins.userId, userId),
-                gte(dailyCheckins.createdAt, todayEasternStart)
+                eq(dailyCheckins.checkinDate, today)
               )
             )
             .limit(1);
@@ -278,7 +315,18 @@ export class DailyRewardsService {
             throw new Error(DUPLICATE_CHECKIN_RACE);
           }
 
-          // 7b) Audit history row (streakCount / riskScore / rewardClaimed
+          // 7c) Treasury debit — runs INSIDE the user-side tx so a
+          //     downstream failure rolls the debit back too.
+          const distribution = await treasuryService.distributeTokensInTransaction(
+            tx,
+            tokenAmountNum,
+            `Daily check-in reward (${newStreak} day streak)`,
+            "daily_checkin",
+            userId
+          );
+          distributionRemaining = distribution.remainingBalance;
+
+          // 7d) Audit history row (streakCount / riskScore / rewardClaimed
           //     are not in the public InsertDailyCheckin type, so we write
           //     directly via the tx).
           await tx.insert(dailyCheckins).values({
@@ -292,7 +340,7 @@ export class DailyRewardsService {
             riskScore: fraudCheck.riskScore,
           });
 
-          // 7c) Wallet credit — atomic SQL increment to avoid the classic
+          // 7e) Wallet credit — atomic SQL increment to avoid the classic
           //     read-modify-write lost-update bug under concurrency.
           //     cashBalance is intentionally absent from both branches.
           const existingWallet = await tx
@@ -319,7 +367,7 @@ export class DailyRewardsService {
             });
           }
 
-          // 7d) Rewards-history row (analytics / display only).
+          // 7f) Rewards-history row (analytics / display only).
           await tx.insert(rewards).values({
             userId,
             rewardType: "daily_checkin",
@@ -337,7 +385,7 @@ export class DailyRewardsService {
             },
           });
 
-          // 7e) Points ledger.
+          // 7g) Points ledger.
           await tx.insert(pointTransactions).values({
             userId,
             points,
@@ -351,7 +399,7 @@ export class DailyRewardsService {
             },
           });
 
-          // 7f) Stats roll-up — atomic SQL bumps so a parallel mutation
+          // 7h) Stats roll-up — atomic SQL bumps so a parallel mutation
           //     elsewhere can't clobber this update.
           await tx
             .update(employeeStatsTable)
@@ -366,32 +414,35 @@ export class DailyRewardsService {
         });
       } catch (txErr) {
         if (txErr instanceof Error && txErr.message === DUPLICATE_CHECKIN_RACE) {
-          // Lost the race — another concurrent request just persisted
-          // today's check-in. Treasury was already debited above; log so
-          // ops can reconcile.
-          console.warn(
-            `[daily-rewards] duplicate check-in race for user ${userId}; treasury distribution ${distribution.transactionId} is now orphaned and needs reconciliation.`
-          );
+          // Lost the per-user advisory lock to another concurrent request
+          // that already wrote today's row. Treasury was NOT debited
+          // (everything was inside the same tx, all rolled back together).
           return {
             success: false,
             points: 0,
             tokens: "0",
             streak: newStreak,
             isNewRecord: false,
-            treasuryBalance: distribution.remainingBalance,
+            treasuryBalance: 0,
             error: "Already checked in today! Come back tomorrow.",
           };
         }
-        // Treasury was debited above; user-side writes rolled back.
+        // Anything else — treasury preflight failure, FOR UPDATE deadlock,
+        // wallet/stats write error — rolled back atomically. Surface a
+        // generic error; the entire unit is consistent (nothing committed).
         console.error("Daily check-in persistence tx failed:", txErr);
+        const stats = await treasuryService.getTreasuryStats().catch(() => null);
         return {
           success: false,
           points: 0,
           tokens: "0",
           streak: newStreak,
           isNewRecord,
-          treasuryBalance: distribution.remainingBalance,
-          error: "Reward processing failed. Please contact support.",
+          treasuryBalance: stats?.availableFunding ?? 0,
+          error:
+            txErr instanceof Error && txErr.message
+              ? txErr.message
+              : "Reward processing failed. Please try again shortly.",
         };
       }
 
@@ -415,7 +466,7 @@ export class DailyRewardsService {
         tokens: tokenAmount,
         streak: newStreak,
         isNewRecord,
-        treasuryBalance: distribution.remainingBalance,
+        treasuryBalance: distributionRemaining,
       };
     } catch (error) {
       console.error("Daily check-in error:", error);

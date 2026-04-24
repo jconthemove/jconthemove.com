@@ -204,6 +204,66 @@ export class TreasuryService {
   }
 
   /**
+   * Pre-distribution safety checks (risk assessment + bound check + funding
+   * pre-check). Pure-read, no DB writes. Returns either the cleared
+   * cash-value/price pair or an error result. Extracted so both
+   * `distributeTokens` (its own tx) and `distributeTokensInTransaction`
+   * (caller-supplied tx) share the exact same gating logic.
+   */
+  private async _preflightDistribution(
+    tokenAmount: number
+  ): Promise<{ ok: true; currentPrice: number; cashValue: number } | { ok: false; result: TokenDistributionResult }> {
+    const riskAssessment = await this.getAdvancedRiskAssessment();
+
+    if (riskAssessment.shouldHaltDistributions) {
+      return {
+        ok: false,
+        result: {
+          success: false,
+          tokensDistributed: 0,
+          cashValue: 0,
+          remainingBalance: 0,
+          transactionId: "",
+          error: `Distribution halted due to market conditions: ${riskAssessment.reasons.join('; ')}`,
+        },
+      };
+    }
+
+    if (tokenAmount > riskAssessment.maxSafeDistribution.tokens) {
+      return {
+        ok: false,
+        result: {
+          success: false,
+          tokensDistributed: 0,
+          cashValue: 0,
+          remainingBalance: 0,
+          transactionId: "",
+          error: `Distribution amount (${tokenAmount.toLocaleString()} tokens) exceeds safe limit (${riskAssessment.maxSafeDistribution.tokens.toLocaleString()} tokens) due to ${riskAssessment.riskLevel} volatility. ${riskAssessment.recommendations.join(' ')}`,
+        },
+      };
+    }
+
+    const canDistribute = await this.canDistributeTokens(tokenAmount);
+    if (!canDistribute.canDistribute) {
+      return {
+        ok: false,
+        result: {
+          success: false,
+          tokensDistributed: 0,
+          cashValue: 0,
+          remainingBalance: 0,
+          transactionId: "",
+          error: canDistribute.reason,
+        },
+      };
+    }
+
+    const currentPrice = canDistribute.currentPrice || 0;
+    const cashValue = tokenAmount * currentPrice;
+    return { ok: true, currentPrice, cashValue };
+  }
+
+  /**
    * Safely distribute JCMOVES tokens with real-time pricing and comprehensive checks
    */
   async distributeTokens(
@@ -213,55 +273,13 @@ export class TreasuryService {
     relatedEntityId?: string
   ): Promise<TokenDistributionResult> {
     try {
-      // CRITICAL: Advanced risk assessment with circuit breaker checks
-      const riskAssessment = await this.getAdvancedRiskAssessment();
-      
-      // Halt distributions if extreme volatility detected
-      if (riskAssessment.shouldHaltDistributions) {
-        return {
-          success: false,
-          tokensDistributed: 0,
-          cashValue: 0,
-          remainingBalance: 0,
-          transactionId: "",
-          error: `Distribution halted due to market conditions: ${riskAssessment.reasons.join('; ')}`
-        };
-      }
-      
-      // Enforce safe distribution limits based on volatility
-      if (tokenAmount > riskAssessment.maxSafeDistribution.tokens) {
-        return {
-          success: false,
-          tokensDistributed: 0,
-          cashValue: 0,
-          remainingBalance: 0,
-          transactionId: "",
-          error: `Distribution amount (${tokenAmount.toLocaleString()} tokens) exceeds safe limit (${riskAssessment.maxSafeDistribution.tokens.toLocaleString()} tokens) due to ${riskAssessment.riskLevel} volatility. ${riskAssessment.recommendations.join(' ')}`
-        };
-      }
+      const preflight = await this._preflightDistribution(tokenAmount);
+      if (!preflight.ok) return preflight.result;
 
-      // Pre-distribution checks with real-time pricing
-      const canDistribute = await this.canDistributeTokens(tokenAmount);
-      if (!canDistribute.canDistribute) {
-        return {
-          success: false,
-          tokensDistributed: 0,
-          cashValue: 0,
-          remainingBalance: 0,
-          transactionId: "",
-          error: canDistribute.reason
-        };
-      }
-
-      // Calculate cash value using real-time JCMOVES price
-      const currentPrice = canDistribute.currentPrice || 0;
-      const cashValue = tokenAmount * currentPrice;
-
-      // Execute the distribution with crypto pricing
       const transaction = await storage.deductFromReserve(
         tokenAmount,
         description,
-        currentPrice, // Pass the real-time JCMOVES price
+        preflight.currentPrice,
         relatedEntityType,
         relatedEntityId
       );
@@ -271,7 +289,7 @@ export class TreasuryService {
         tokensDistributed: tokenAmount,
         cashValue: parseFloat(transaction.cashValue),
         remainingBalance: parseFloat(transaction.balanceAfter),
-        transactionId: transaction.id
+        transactionId: transaction.id,
       };
     } catch (error) {
       console.error(`Treasury distribution error:`, error);
@@ -281,9 +299,51 @@ export class TreasuryService {
         cashValue: 0,
         remainingBalance: 0,
         transactionId: "",
-        error: error instanceof Error ? error.message : "Unknown distribution error"
+        error: error instanceof Error ? error.message : "Unknown distribution error",
       };
     }
+  }
+
+  /**
+   * Tx-aware variant: runs all the same safety preflight checks as
+   * `distributeTokens` but writes the treasury debit on the caller-supplied
+   * transaction so the debit can commit/rollback atomically with the
+   * caller's user-side writes (e.g. the unified daily rewards engine
+   * pairing the debit with the wallet credit + check-in audit row).
+   *
+   * Throws on safety failures inside the tx so the caller's `db.transaction`
+   * rolls back. Pre-flight HTTP calls run before the heavy DB work to keep
+   * the FOR UPDATE row lock window short.
+   */
+  async distributeTokensInTransaction(
+    tx: any,
+    tokenAmount: number,
+    description: string,
+    relatedEntityType?: string,
+    relatedEntityId?: string,
+  ): Promise<TokenDistributionResult> {
+    const preflight = await this._preflightDistribution(tokenAmount);
+    if (!preflight.ok) {
+      // Inside an active tx — throw so the whole unit rolls back.
+      throw new Error(preflight.result.error || "Treasury distribution preflight failed");
+    }
+
+    const transaction = await storage.deductFromReserveInTransaction(
+      tx,
+      tokenAmount,
+      description,
+      preflight.currentPrice,
+      relatedEntityType,
+      relatedEntityId,
+    );
+
+    return {
+      success: true,
+      tokensDistributed: tokenAmount,
+      cashValue: parseFloat(transaction.cashValue),
+      remainingBalance: parseFloat(transaction.balanceAfter),
+      transactionId: transaction.id,
+    };
   }
 
   /**

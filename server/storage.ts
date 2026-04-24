@@ -98,6 +98,11 @@ export interface IStorage {
   getReserveTransactions(treasuryAccountId?: string, limit?: number): Promise<ReserveTransaction[]>;
   checkFundingAvailability(tokenAmount: number, tokenPrice?: number): Promise<{ available: boolean; currentBalance: number; requiredValue: number }>;
   deductFromReserve(tokenAmount: number, description: string, tokenPrice: number, relatedEntityType?: string, relatedEntityId?: string): Promise<ReserveTransaction>;
+  // Same semantics as deductFromReserve but reuses an existing db.transaction
+  // so callers (e.g. the unified daily rewards engine) can fold the treasury
+  // debit into a larger user-side atomic unit. Volatility safety checks still
+  // run before the DB writes.
+  deductFromReserveInTransaction(tx: any, tokenAmount: number, description: string, tokenPrice: number, relatedEntityType?: string, relatedEntityId?: string): Promise<ReserveTransaction>;
   addToReserve(tokenAmount: number, cashValue: number, description: string): Promise<ReserveTransaction>;
   atomicDepositFunds(depositedBy: string, usdAmount: number, depositMethod?: string, notes?: string): Promise<FundingDeposit>;
   
@@ -1375,111 +1380,137 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async deductFromReserve(tokenAmount: number, description: string, tokenPrice: number, relatedEntityType?: string, relatedEntityId?: string): Promise<ReserveTransaction> {
-    // CRITICAL: Universal circuit breaker enforcement - NO distribution can bypass this
+  // Volatility / circuit-breaker guard. Always run BEFORE opening (or
+  // joining) a transaction so external HTTP latency doesn't hold DB locks.
+  private async _enforceVolatilityCircuitBreaker(tokenAmount: number): Promise<void> {
     try {
       const volatilityCheck = await cryptoService.checkPriceVolatility();
-      
+
       // Extreme volatility halt (>20% price change)
       if (Math.abs(volatilityCheck.changePercent) > 20) {
         throw new Error(`Distribution HALTED due to extreme market volatility: ${volatilityCheck.changePercent.toFixed(2)}% price change detected. Distribution blocked for safety.`);
       }
-      
-      // High volatility limits (>10% price change) 
+
+      // High volatility limits (>10% price change)
       if (Math.abs(volatilityCheck.changePercent) > 10) {
-        const maxSafeTokens = 500; // Conservative limit for high volatility
+        const maxSafeTokens = 500;
         if (tokenAmount > maxSafeTokens) {
           throw new Error(`Distribution amount (${tokenAmount.toLocaleString()} tokens) exceeds safe limit (${maxSafeTokens.toLocaleString()} tokens) due to high market volatility (${volatilityCheck.changePercent.toFixed(2)}%).`);
         }
       }
-      
       // Medium volatility limits (>5% price change)
       else if (Math.abs(volatilityCheck.changePercent) > 5) {
-        const maxSafeTokens = 1000; // Moderate limit for medium volatility
+        const maxSafeTokens = 1000;
         if (tokenAmount > maxSafeTokens) {
           throw new Error(`Distribution amount (${tokenAmount.toLocaleString()} tokens) exceeds safe limit (${maxSafeTokens.toLocaleString()} tokens) due to medium market volatility (${volatilityCheck.changePercent.toFixed(2)}%).`);
         }
       }
-      
     } catch (volatilityError: unknown) {
-      // CRITICAL: Fail-safe behavior - if volatility check fails, HALT all distributions
       if (volatilityError instanceof Error && volatilityError.message && volatilityError.message.includes('Distribution HALTED')) {
-        throw volatilityError; // Re-throw volatility halt errors
+        throw volatilityError;
       }
       console.error('Volatility check failed for treasury distribution - HALTING as safety measure:', volatilityError);
       throw new Error('Distribution HALTED due to market data unavailability. This is a safety measure to prevent distributions during uncertain market conditions.');
     }
+  }
+
+  // Pure DB-side treasury debit. Runs against either a fresh db.transaction
+  // (called by deductFromReserve) or an existing one (called by
+  // deductFromReserveInTransaction). All safety reads use FOR UPDATE so
+  // concurrent debits serialize on the treasury row.
+  private async _deductFromReserveTxBody(
+    tx: any,
+    tokenAmount: number,
+    description: string,
+    cashValue: number,
+    relatedEntityType?: string,
+    relatedEntityId?: string,
+  ): Promise<ReserveTransaction> {
+    const [treasury] = await tx
+      .select()
+      .from(treasuryAccounts)
+      .where(eq(treasuryAccounts.isActive, true))
+      .orderBy(treasuryAccounts.createdAt)
+      .limit(1)
+      .for('update');
+
+    if (!treasury) {
+      throw new Error("No active treasury account found");
+    }
+
+    const totalFunding = parseFloat(treasury.totalFunding);
+    const totalDistributed = parseFloat(treasury.totalDistributed);
+    const currentBalance = totalFunding - totalDistributed;
+    const currentTokenReserve = parseFloat(treasury.tokenReserve);
+    const minimumBalance = TREASURY_CONFIG.MINIMUM_BALANCE;
+
+    if (currentBalance < cashValue) {
+      throw new Error(`Insufficient funding. Required: $${cashValue.toFixed(2)}, Available: $${currentBalance.toFixed(2)}`);
+    }
+    if (currentTokenReserve < tokenAmount) {
+      throw new Error(`Insufficient token reserve. Required: ${tokenAmount} tokens, Available: ${currentTokenReserve.toFixed(8)} tokens`);
+    }
+
+    const newBalance = currentBalance - cashValue;
+    if (newBalance < minimumBalance) {
+      throw new Error(`Distribution would leave balance below minimum threshold ($${minimumBalance}). Remaining would be: $${newBalance.toFixed(2)}`);
+    }
+    const newTokenReserve = currentTokenReserve - tokenAmount;
+
+    await tx
+      .update(treasuryAccounts)
+      .set({
+        tokenReserve: newTokenReserve.toFixed(8),
+        totalDistributed: (parseFloat(treasury.totalDistributed) + cashValue).toFixed(2),
+        updatedAt: new Date(),
+      })
+      .where(eq(treasuryAccounts.id, treasury.id));
+
+    const [transaction] = await tx
+      .insert(reserveTransactions)
+      .values({
+        treasuryAccountId: treasury.id,
+        transactionType: 'distribution',
+        relatedEntityType,
+        relatedEntityId,
+        tokenAmount: tokenAmount.toFixed(8),
+        cashValue: cashValue.toFixed(2),
+        balanceAfter: newBalance.toFixed(2),
+        tokenReserveAfter: newTokenReserve.toFixed(8),
+        description,
+      })
+      .returning();
+
+    return transaction;
+  }
+
+  async deductFromReserve(tokenAmount: number, description: string, tokenPrice: number, relatedEntityType?: string, relatedEntityId?: string): Promise<ReserveTransaction> {
+    // CRITICAL: Universal circuit breaker enforcement - NO distribution can bypass this
+    await this._enforceVolatilityCircuitBreaker(tokenAmount);
 
     const cashValue = tokenAmount * tokenPrice;
 
     return await db.transaction(async (tx) => {
-      // Lock and get current treasury state
-      const [treasury] = await tx
-        .select()
-        .from(treasuryAccounts)
-        .where(eq(treasuryAccounts.isActive, true))
-        .orderBy(treasuryAccounts.createdAt)
-        .limit(1)
-        .for('update'); // Row-level lock to prevent race conditions
-
-      if (!treasury) {
-        throw new Error("No active treasury account found");
-      }
-
-      // Calculate actual available funding from totalFunding - totalDistributed
-      const totalFunding = parseFloat(treasury.totalFunding);
-      const totalDistributed = parseFloat(treasury.totalDistributed);
-      const currentBalance = totalFunding - totalDistributed;
-      const currentTokenReserve = parseFloat(treasury.tokenReserve);
-      const minimumBalance = TREASURY_CONFIG.MINIMUM_BALANCE;
-
-      // Check funding availability with safety buffer
-      if (currentBalance < cashValue) {
-        throw new Error(`Insufficient funding. Required: $${cashValue.toFixed(2)}, Available: $${currentBalance.toFixed(2)}`);
-      }
-
-      if (currentTokenReserve < tokenAmount) {
-        throw new Error(`Insufficient token reserve. Required: ${tokenAmount} tokens, Available: ${currentTokenReserve.toFixed(8)} tokens`);
-      }
-
-      const newBalance = currentBalance - cashValue;
-      
-      // Enforce minimum balance safety rule at transaction level
-      if (newBalance < minimumBalance) {
-        throw new Error(`Distribution would leave balance below minimum threshold ($${minimumBalance}). Remaining would be: $${newBalance.toFixed(2)}`);
-      }
-
-      const newTokenReserve = currentTokenReserve - tokenAmount;
-
-      // Update treasury account with locked row
-      // Note: availableFunding is kept at historical book value ($0.00), actual balance is calculated as totalFunding - totalDistributed
-      await tx
-        .update(treasuryAccounts)
-        .set({
-          tokenReserve: newTokenReserve.toFixed(8),
-          totalDistributed: (parseFloat(treasury.totalDistributed) + cashValue).toFixed(2),
-          updatedAt: new Date()
-        })
-        .where(eq(treasuryAccounts.id, treasury.id));
-
-      // Create reserve transaction record
-      const [transaction] = await tx
-        .insert(reserveTransactions)
-        .values({
-          treasuryAccountId: treasury.id,
-          transactionType: 'distribution',
-          relatedEntityType,
-          relatedEntityId,
-          tokenAmount: tokenAmount.toFixed(8),
-          cashValue: cashValue.toFixed(2),
-          balanceAfter: newBalance.toFixed(2),
-          tokenReserveAfter: newTokenReserve.toFixed(8),
-          description
-        })
-        .returning();
-
-      return transaction;
+      return await this._deductFromReserveTxBody(tx, tokenAmount, description, cashValue, relatedEntityType, relatedEntityId);
     });
+  }
+
+  async deductFromReserveInTransaction(
+    tx: any,
+    tokenAmount: number,
+    description: string,
+    tokenPrice: number,
+    relatedEntityType?: string,
+    relatedEntityId?: string,
+  ): Promise<ReserveTransaction> {
+    // Volatility check still runs (it's external HTTP) BEFORE we touch the
+    // shared tx. Caller should run this method only inside a tx that's
+    // already started — the unified daily-rewards engine relies on this so
+    // a treasury debit and the matching user-side wallet credit either
+    // commit together or roll back together.
+    await this._enforceVolatilityCircuitBreaker(tokenAmount);
+    const cashValue = tokenAmount * tokenPrice;
+    return await this._deductFromReserveTxBody(tx, tokenAmount, description, cashValue, relatedEntityType, relatedEntityId);
   }
 
   async addToReserve(tokenAmount: number, cashValue: number, description: string): Promise<ReserveTransaction> {
