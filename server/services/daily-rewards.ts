@@ -183,19 +183,8 @@ export class DailyRewardsService {
       const tokenAmount = (usdValue / currentPrice.price).toFixed(8);
       const tokenAmountNum = parseFloat(tokenAmount);
 
-      const canDistribute = await treasuryService.canDistributeTokens(tokenAmountNum);
-      if (!canDistribute.canDistribute) {
-        const stats = await treasuryService.getTreasuryStats().catch(() => null);
-        return {
-          success: false,
-          points: 0,
-          tokens: "0",
-          streak: newStreak,
-          isNewRecord,
-          treasuryBalance: stats?.availableFunding ?? 0,
-          error: canDistribute.reason || "Daily rewards are temporarily unavailable due to insufficient funding.",
-        };
-      }
+      // Treasury safety/funding gating happens inside the tx via
+      // distributeTokensInTransaction; failure there throws and rolls back.
 
       // Single atomic unit: per-user advisory lock + dup re-check + treasury
       // debit + audit row + wallet credit + rewards/points/stats writes.
