@@ -148,9 +148,10 @@ export async function grantWalletCreditForSource(args: GrantArgs): Promise<Credi
     amount_usd: string;
     currency: string;
     customer_email: string | null;
+    customer_phone: string | null;
     status: string;
   }>(
-    `SELECT id, addon_id, amount_usd, currency, customer_email, status
+    `SELECT id, addon_id, amount_usd, currency, customer_email, customer_phone, status
        FROM wallet_credit_grants
       WHERE source_type = $1 AND source_id = $2`,
     [args.sourceType, args.sourceId],
@@ -188,12 +189,28 @@ export async function grantWalletCreditForSource(args: GrantArgs): Promise<Credi
       // Look up the user inside the same transaction so a registration
       // racing with this webhook still mints to the correct user (instead
       // of leaving granted_to_user_id=null and stranding the credit).
+      // Try email first, then fall back to phone — the original task
+      // description called out either-or matching.
       if (grant.customer_email) {
         const { rows: userRows } = await client.query<{ id: string }>(
           `SELECT id FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`,
           [grant.customer_email],
         );
         userId = userRows[0]?.id ?? null;
+      }
+      if (!userId && grant.customer_phone) {
+        const normalized = grant.customer_phone.replace(/\D/g, "");
+        if (normalized.length >= 10) {
+          const last10 = normalized.slice(-10);
+          const { rows: phoneRows } = await client.query<{ id: string }>(
+            `SELECT id FROM users
+               WHERE phone IS NOT NULL
+                 AND right(regexp_replace(phone, '\\D', '', 'g'), 10) = $1
+               LIMIT 1`,
+            [last10],
+          );
+          userId = phoneRows[0]?.id ?? null;
+        }
       }
 
       if (userId) {
