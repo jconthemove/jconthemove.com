@@ -12369,9 +12369,12 @@ Thank you for your business!
       } else {
         res.status(400).json({
           success: false,
-          error: result.error,
+          points: result.points,
+          tokens: result.tokens,
           streak: result.streak,
-          treasuryBalance: result.treasuryBalance
+          isNewRecord: result.isNewRecord,
+          treasuryBalance: result.treasuryBalance,
+          error: result.error,
         });
       }
     } catch (error) {
