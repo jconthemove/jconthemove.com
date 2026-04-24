@@ -409,6 +409,58 @@ app.use((req, res, next) => {
       } catch (e) { console.error('service_rebook_reminders table init error:', e); }
     })();
 
+    // ── Lead Funnel Alerts table (Task #196) ────────────────────────────────
+    // Tracks open/resolved "no quote submissions in the last hour" alerts so
+    // the admin dashboard banner survives restarts and we never email twice
+    // for the same outage. Self-heals on every boot.
+    (async () => {
+      try {
+        const { pool: dbPool } = await import('./db');
+        await dbPool.query(`
+          CREATE TABLE IF NOT EXISTS lead_funnel_alerts (
+            id              SERIAL PRIMARY KEY,
+            started_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            resolved_at     TIMESTAMPTZ,
+            last_checked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            window_minutes  INTEGER NOT NULL,
+            previous_count  INTEGER NOT NULL,
+            email_sent_at   TIMESTAMPTZ
+          );
+          CREATE INDEX IF NOT EXISTS idx_lead_funnel_alerts_open
+            ON lead_funnel_alerts(resolved_at) WHERE resolved_at IS NULL;
+        `);
+        console.log('✅ lead_funnel_alerts table ready');
+      } catch (e) { console.error('lead_funnel_alerts table init error:', e); }
+    })();
+
+    // ── Lead Funnel Monitor (Task #196) ─────────────────────────────────────
+    // Watches the rolling rate of customer quote submissions so a Mercer-style
+    // outage (which sat unnoticed for 14 days) can never happen again. Set
+    // DISABLE_LEAD_FUNNEL_MONITOR=true to turn it off.
+    if (process.env.DISABLE_LEAD_FUNNEL_MONITOR !== "true") {
+      const CHECK_INTERVAL_MS = 15 * 60 * 1000; // every 15 minutes
+      const tick = async () => {
+        try {
+          const { runLeadFunnelCheck } = await import("./services/leadFunnelMonitor");
+          const result = await runLeadFunnelCheck();
+          if (result.alertOpened) {
+            console.warn(`[lead-funnel-monitor] OPENED — window=${result.windowMinutes}min current=0 previous=${result.previous} emailSent=${result.emailSent}`);
+          } else if (result.alertResolved) {
+            console.log(`[lead-funnel-monitor] resolved — window=${result.windowMinutes}min current=${result.current}`);
+          }
+        } catch (err) {
+          console.error("[lead-funnel-monitor] tick error:", err);
+        }
+      };
+      // First run 5 min after boot so the app has time to settle, then
+      // every 15 min.
+      setTimeout(tick, 5 * 60 * 1000);
+      setInterval(tick, CHECK_INTERVAL_MS);
+      console.log("✅ Lead funnel monitor scheduled (every 15 min)");
+    } else {
+      console.log("ℹ️  Lead funnel monitor disabled (DISABLE_LEAD_FUNNEL_MONITOR=true)");
+    }
+
     // ── Daily Lawn Care Re-book Reminder Sweep ──────────────────────────────
     // Off by default. Set ENABLE_REBOOK_REMINDER_EMAILS=true to enable.
     if (process.env.ENABLE_REBOOK_REMINDER_EMAILS === "true") {

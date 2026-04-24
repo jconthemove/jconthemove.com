@@ -11052,6 +11052,20 @@ Thank you for your business!
     }
   });
 
+  // Task #196 — Lead funnel outage alert. Returns the currently open
+  // "no-quote-submissions" alert (if any) so the admin layout can show
+  // a red banner across every admin page until the funnel recovers.
+  app.get("/api/admin/lead-funnel-alert", isAuthenticated, requireBusinessOwner, async (_req, res) => {
+    try {
+      const { getActiveLeadFunnelAlert } = await import("./services/leadFunnelMonitor");
+      const alert = await getActiveLeadFunnelAlert();
+      res.json({ alert });
+    } catch (error) {
+      console.error("Error getting lead funnel alert:", error);
+      res.status(500).json({ error: "Failed to get lead funnel alert" });
+    }
+  });
+
   // Task #171 — Dedicated admin reassign endpoint. Unlike PATCH /api/leads/:id/quote
   // (which recomputes totals + special-item fees on every call), this only touches
   // the assignment fields. Safe to call repeatedly from the live dispatch UI.

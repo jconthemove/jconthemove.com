@@ -3,9 +3,50 @@ import { useLocation } from "wouter";
 import {
   LayoutDashboard, Radio, Briefcase, Users, Wallet, Sliders, ChevronRight, LogOut,
   Menu, X, ShoppingBag, Settings, Handshake, BarChart2, CalendarDays,
-  Bitcoin, FileBarChart, CreditCard, Coins, Banknote, Rocket,
+  Bitcoin, FileBarChart, CreditCard, Coins, Banknote, Rocket, AlertTriangle,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { apiRequest, clearTokens, queryClient } from "@/lib/queryClient";
+
+// Task #196 — Lead funnel outage banner. Shown across every admin page
+// when the customer-quote submission rate drops to zero during a window
+// where it should not be zero (Mercer-style outage).
+type LeadFunnelAlert = {
+  id: number;
+  startedAt: string;
+  windowMinutes: number;
+  previousCount: number;
+};
+
+function LeadFunnelOutageBanner() {
+  const { data } = useQuery<{ alert: LeadFunnelAlert | null }>({
+    queryKey: ["/api/admin/lead-funnel-alert"],
+    refetchInterval: 60_000,
+  });
+  const alert = data?.alert;
+  if (!alert) return null;
+  let startedDisplay = alert.startedAt;
+  try {
+    startedDisplay = new Date(alert.startedAt).toLocaleString();
+  } catch {}
+  return (
+    <div
+      className="mx-3 md:mx-6 mt-3 md:mt-4 mb-2 flex items-start gap-3 px-4 py-3 bg-red-500/15 border border-red-500/40 rounded-lg"
+      data-testid="banner-lead-funnel-outage"
+    >
+      <AlertTriangle className="h-5 w-5 text-red-400 flex-shrink-0 mt-0.5" />
+      <div className="flex-1 min-w-0">
+        <p className="text-red-200 font-semibold text-sm">
+          Lead funnel down — 0 customer quote submissions in the last {alert.windowMinutes} minutes
+        </p>
+        <p className="text-red-300/80 text-xs mt-0.5 leading-snug">
+          The previous {alert.windowMinutes}-minute window had {alert.previousCount}. Detected{" "}
+          {startedDisplay}. Check the public quote form and recent server errors.
+        </p>
+      </div>
+    </div>
+  );
+}
 
 // Task #171 — Admin sidebar has two sections:
 //   "Daily" = the 5 pages operators use every shift.
@@ -185,6 +226,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         {/* Main content */}
         <main className="flex-1 md:ml-56 pt-12 md:pt-0 pb-6">
+          <LeadFunnelOutageBanner />
           {children}
         </main>
       </div>
