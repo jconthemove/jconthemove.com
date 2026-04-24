@@ -1,0 +1,51 @@
+Here's a plain-English rundown of every draft sitting in your queue right now. They're already waiting for you with "Accept" buttons — there are 27 of them, grouped by theme below so you can decide what to green-light in one pass.
+
+Booking & quotes (lawn / multi-service)
+
+#95 Show customers a satellite map of their lot so they can confirm it before booking
+#96 Cache lot-size lookups so the same address loads instantly and saves on API costs
+#118 Show the 10% bundle discount as a visible line item on quote pages
+#119 Cap bundle discounts at 3 per customer per quarter (anti-abuse)
+#124 Extend bundled-service scheduling to moving, junk, snow, and window flows
+#125 Show every bundled service inside the My Jobs detail sheet
+#165 Friendlier per-line error messages when a booking fails
+Re-book reminder emails
+
+#117 Add a trend/sparkline to re-book revenue (not just last 60 days)
+#120 Show re-book email conversion stats in the admin dashboard
+#121 One-click unsubscribe link on re-book reminder emails
+Trash Valet
+
+#149 Show bundled Trash Valet sign-up on the customer's My Jobs page
+#150 Let admins fix or recreate a trash subscription that failed to auto-create
+Rewards / shop / jewelry
+
+#153 Show total shop credit spent in the Earn History summary
+#154 Admin view of how often jewelry holds expire and auto-refund
+#181 Show wallet balance + tokens on the booking review step
+Dispatch & crew (live ops)
+
+#177 Live crew presence and location on Dispatch
+#178 Auto-send the first dispatch offer the moment a quote is booked
+#179 Make live dispatch offers work across multiple servers
+#180 Push live offers to crew phones instead of polling
+#184 Let operators build custom demand zones beyond the 5 seeded ones
+#185 7-day demand & surge history chart
+Admin / payments
+
+#176 Let admins edit pricing knobs (bundle %, surge, reward tiers) without code
+#182 Per-job admin payment panel using the new payment-panel API
+#183 Route every token disbursement through the pipeline completion step
+Reliability / infra
+
+#166 CI guard so missing database columns can't ship to production again
+#9 Make the crew side of the app mobile-friendly + installable as a phone app
+On "applying everything at one time": each draft is approved individually with its Accept button — there isn't a single "accept all" action on my side. But once you accept them, the system runs them in parallel where it can (and respects dependencies automatically), so you don't have to babysit them or accept them in order. You can hit Accept on all 27 right now and walk away.
+
+A few honest suggestions before you do that:
+
+#9 (mobile/PWA) is large and touches a lot of crew screens — worth being a deliberate yes/no, not just bulk-accepted.
+#177–#180 all build on the live dispatch system and are best accepted together since they're closely related.
+#118, #124, #125, #149 are the highest customer-visible polish wins if you want to prioritize.
+#166 (CI guard) is cheap insurance against the kind of silent prod breakage you just hit — easy yes.
+Want me to do anything specific here — for example, group some of these into a single combined task so you accept fewer items, drop ones you don't want, or leave them as-is for you to click through?
