@@ -3,13 +3,14 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
   CheckCircle2, Star, Shield, Zap, MapPin, Phone, Gift,
-  ArrowRight, CalendarCheck, MessageCircle,
+  ArrowRight, CalendarCheck, Sparkles, Send,
 } from "lucide-react";
 import { SiGoogle } from "react-icons/si";
 import { Link, useLocation } from "wouter";
 import CrewStatusCard from "@/components/CrewStatusCard";
 import ServiceCard from "@/components/ServiceCard";
 import { getService } from "@/lib/services";
+import ChatIntakeOverlay, { CHAT_QUICK_CHIPS } from "@/components/ChatIntakeOverlay";
 
 interface Testimonial {
   id: string;
@@ -53,6 +54,20 @@ export default function HomePage() {
   const [, setLocation] = useLocation();
   const [bannerIdx, setBannerIdx] = useState(0);
   const [showBundleTip, setShowBundleTip] = useState(false);
+
+  // Task #207 — chat-style intake overlay state. The hero prompt opens
+  // the overlay with either the typed text or the tapped chip as the
+  // first answer; the overlay handles the rest of the funnel.
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatSeedChip, setChatSeedChip] = useState<string | undefined>(undefined);
+  const [chatSeedText, setChatSeedText] = useState<string | undefined>(undefined);
+  const [heroChatDraft, setHeroChatDraft] = useState("");
+
+  function openChatWith(opts: { chip?: string; text?: string }) {
+    setChatSeedChip(opts.chip);
+    setChatSeedText(opts.text);
+    setChatOpen(true);
+  }
 
   const { data: liveTestimonials } = useQuery<Testimonial[]>({
     queryKey: ["/api/testimonials?status=published&featured=true&limit=3"],
@@ -181,19 +196,76 @@ export default function HomePage() {
                   </div>
                 ))}
               </div>
-              <div className="flex flex-wrap gap-3">
-                <Link href="/book">
-                  <Button className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 py-2.5 text-base rounded-xl">
-                    <CalendarCheck className="h-4 w-4 mr-2" />
-                    Book a Job
+              {/* Task #207 — chat-style "describe your job" intake. Replaces the
+                  old static CTA pair so customers can land directly into a
+                  conversational funnel that prefills the booking wizard. */}
+              <div
+                className="rounded-2xl border border-blue-500/30 bg-blue-950/30 backdrop-blur-sm p-3 sm:p-4 space-y-3"
+                data-testid="hero-chat-intake"
+              >
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-blue-300" />
+                  <p className="text-white font-bold text-sm sm:text-base">
+                    What do you need help with today?
+                  </p>
+                </div>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (heroChatDraft.trim()) openChatWith({ text: heroChatDraft.trim() });
+                    else openChatWith({});
+                  }}
+                  className="flex gap-2"
+                >
+                  <input
+                    value={heroChatDraft}
+                    onChange={(e) => setHeroChatDraft(e.target.value)}
+                    placeholder="e.g. Moving + need junk gone"
+                    className="flex-1 min-w-0 rounded-lg bg-slate-900 border border-slate-700 text-white text-sm px-3 py-2 placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
+                    data-testid="hero-chat-input"
+                  />
+                  <Button
+                    type="submit"
+                    className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 shrink-0"
+                    data-testid="hero-chat-start"
+                  >
+                    <Send className="h-4 w-4 sm:mr-1.5" />
+                    <span className="hidden sm:inline">Start chat</span>
                   </Button>
-                </Link>
-                <Link href="/quote">
-                  <Button variant="outline" className="border-slate-600 text-white hover:bg-slate-700 font-bold px-5 py-2.5 text-sm rounded-xl">
-                    <MessageCircle className="h-4 w-4 mr-2" />
-                    Get a Quote
-                  </Button>
-                </Link>
+                </form>
+                <div className="flex flex-wrap gap-1.5">
+                  {CHAT_QUICK_CHIPS.map((chip) => (
+                    <button
+                      key={chip}
+                      onClick={() => openChatWith({ chip })}
+                      className="text-xs font-semibold rounded-full border border-slate-600 bg-slate-800/70 text-white hover:bg-slate-700 hover:border-blue-500 px-3 py-1.5 transition-colors"
+                      data-testid={`hero-chip-${chip.toLowerCase().replace(/\s+/g, '-')}`}
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Link href="/book">
+                    <Button
+                      variant="outline"
+                      className="border-slate-600 text-white hover:bg-slate-700 font-semibold text-xs sm:text-sm h-9 px-4 rounded-lg"
+                      data-testid="hero-instant-quote"
+                    >
+                      <CalendarCheck className="h-3.5 w-3.5 mr-1.5" />
+                      Get Instant Quote
+                    </Button>
+                  </Link>
+                  <a href="tel:+19062859312">
+                    <Button
+                      variant="ghost"
+                      className="text-blue-300 hover:bg-blue-500/10 font-semibold text-xs sm:text-sm h-9 px-3 rounded-lg"
+                    >
+                      <Phone className="h-3.5 w-3.5 mr-1.5" />
+                      or call (906) 285-9312
+                    </Button>
+                  </a>
+                </div>
               </div>
             </div>
 
@@ -494,6 +566,14 @@ export default function HomePage() {
           </div>
         </div>
       </footer>
+
+      {/* Task #207 — chat-style intake overlay */}
+      <ChatIntakeOverlay
+        open={chatOpen}
+        onClose={() => setChatOpen(false)}
+        initialChip={chatSeedChip}
+        initialFreeText={chatSeedText}
+      />
 
     </div>
   );

@@ -151,6 +151,59 @@ export default function MultiServiceBookPage() {
     return sp.get("worker") === "1" || sp.get("mode") === "worker";
   }, []);
 
+  // Task #207 — URL prefill contract. Read once on mount so the chat-intake
+  // overlay (and the existing single-service homepage tiles) can hand the
+  // wizard a ready-made cart + jump straight to the configure / contact
+  // step. Resolved against the live catalog inside an effect below; here
+  // we just snapshot the raw query params.
+  //
+  // Note on `?bundle=<code>`: the URL contract carries it for analytics /
+  // hand-off transparency, but the wizard does not need to consume it —
+  // the live bundle engine in /api/bookings/quote auto-applies any
+  // matching bundle based purely on cart contents. So we deliberately
+  // do not extract it here; the existing one-away / auto-applied popup
+  // in this file (driven by `quote.bundleApplied`) is the single source
+  // of truth for bundle UX.
+  const urlPrefill = useMemo(() => {
+    if (typeof window === "undefined") return { codes: [] as string[], jumpStep: null as Step | null };
+    const sp = new URLSearchParams(window.location.search);
+    const codes = new Set<string>();
+    const multi = sp.get("services");
+    if (multi) multi.split(",").map((c) => c.trim()).filter(Boolean).forEach((c) => codes.add(c));
+    // Single-service alias used by the existing home tiles (e.g. ?service=moving).
+    // Tile values use slug-style codes that may differ from catalog codes; we
+    // normalise the few legacy aliases here.
+    const single = sp.get("service");
+    if (single) {
+      const aliases: Record<string, string> = {
+        moving: "moving",
+        junk: "junk_removal",
+        "junk-removal": "junk_removal",
+        cleaning: "cleaning",
+        snow: "snow_removal",
+        "snow-removal": "snow_removal",
+        handyman: "handyman",
+        window: "window_cleaning",
+        "window-cleaning": "window_cleaning",
+        "trash-valet": "trash_valet",
+        trash_valet: "trash_valet",
+        demolition: "demolition",
+        flooring: "flooring",
+        painting: "painting",
+        roofing: "roofing",
+        labor: "labor",
+        delivery: "delivery",
+      };
+      const resolved = aliases[single.toLowerCase()] ?? single;
+      codes.add(resolved);
+    }
+    const stepParam = sp.get("step");
+    const jumpStep = stepParam && (STEPS as readonly string[]).includes(stepParam)
+      ? (stepParam as Step)
+      : null;
+    return { codes: Array.from(codes), jumpStep };
+  }, []);
+
   const [step, setStep] = useState<Step>("services");
   const [items, setItems] = useState<SelectedItem[]>([]);
   const [serviceAddress, setServiceAddress] = useState("");
@@ -324,6 +377,37 @@ export default function MultiServiceBookPage() {
   function updateItem(next: SelectedItem) {
     setItems(prev => prev.map(i => i.serviceCode === next.serviceCode ? next : i));
   }
+
+  // Task #207 — Resolve URL prefill against the live catalog the moment
+  // the catalog query lands. Codes that don't exist in the catalog are
+  // silently skipped (e.g. a chip that points at "painting" before the
+  // catalog stocks it). Runs exactly once per page load using a ref so
+  // the customer can later remove an auto-added service without it
+  // bouncing back on the next render.
+  const prefillAppliedRef = useRef(false);
+  useEffect(() => {
+    if (prefillAppliedRef.current) return;
+    if (services.length === 0) return;
+    if (urlPrefill.codes.length === 0 && !urlPrefill.jumpStep) {
+      prefillAppliedRef.current = true;
+      return;
+    }
+    for (const code of urlPrefill.codes) {
+      const svc = services.find((s) => s.code === code);
+      if (!svc) continue;
+      addService(svc);
+    }
+    if (urlPrefill.jumpStep) {
+      // Honour ?step= unconditionally per the URL contract. If the
+      // customer lands on configure/contact without any matching
+      // services, the wizard's existing per-step gate
+      // (`canContinueReason()`) already surfaces "Add at least one
+      // service to continue" so they can't get stuck.
+      setStep(urlPrefill.jumpStep);
+    }
+    prefillAppliedRef.current = true;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [services.length]);
 
   // ── Smart bundle popup ───────────────────────────────────────────────────
   // Compute the right suggestion (auto_applied or one_away), gated by a
