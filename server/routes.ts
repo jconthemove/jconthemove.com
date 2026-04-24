@@ -15198,10 +15198,27 @@ Thank you for your business!
       if (eventType === "invoice.payment_made" || eventType === "invoice.paid") {
         const invoice = (data?.invoice as Record<string, unknown> | undefined);
         const squareInvoiceId = typeof invoice?.id === "string" ? invoice.id : undefined;
+
+        // INVARIANT — JCMOVES USD only mints on payment RECEIVED IN FULL.
+        // `invoice.payment_made` fires on EVERY payment, including partial
+        // ones (e.g. $50 paid on a $300 invoice). Only `invoice.paid` is
+        // guaranteed fully-paid. We gate ALL wallet-affecting work below
+        // on the actual invoice status from Square's payload — accepted
+        // statuses are PAID and the legacy alias "paid". This prevents a
+        // partial payment from minting the full shop-card grant, marking
+        // the lead paid, dispatching crew, or recording revenue.
+        const invoiceStatus = typeof invoice?.status === "string" ? invoice.status.toUpperCase() : "";
+        const isFullyPaid = invoiceStatus === "PAID" || eventType === "invoice.paid";
+        if (!isFullyPaid) {
+          console.log(`[Square webhook] ${eventType} for ${squareInvoiceId} — invoice status=${invoiceStatus || "unknown"}, NOT fully paid, skipping wallet/lead/dispatch work (waiting for invoice.paid)`);
+          return res.json({ received: true, skipped: "partial_payment" });
+        }
+
         if (squareInvoiceId) {
           // Task #199 — fire any shop-card wallet grants tied to this
           // invoice. This runs FIRST and is idempotent so duplicate
-          // webhook deliveries can't double-mint.
+          // webhook deliveries can't double-mint. Gated on isFullyPaid
+          // above per the JCMOVES USD invariant.
           try {
             const { rows: grantSourceRows } = await pool.query<{
               source_type: string;
