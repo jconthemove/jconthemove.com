@@ -204,8 +204,8 @@ export async function grantWalletCreditForSource(args: GrantArgs): Promise<Credi
           const last10 = normalized.slice(-10);
           const { rows: phoneRows } = await client.query<{ id: string }>(
             `SELECT id FROM users
-               WHERE phone IS NOT NULL
-                 AND right(regexp_replace(phone, '\\D', '', 'g'), 10) = $1
+               WHERE phone_number IS NOT NULL
+                 AND right(regexp_replace(phone_number, '\\D', '', 'g'), 10) = $1
                LIMIT 1`,
             [last10],
           );

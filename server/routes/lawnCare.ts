@@ -350,7 +350,7 @@ router.post("/quote", async (req: Request, res: Response) => {
           // and the bundle-discount fields — all available here.
           const [firstName, ...rest] = (data.customerName || "Customer").trim().split(/\s+/);
           const lastName = rest.join(" ") || "(Lawn Care)";
-          const shimLead = {
+          const shimLead: import("../services/square-invoice").InvoiceRecipient = {
             id: `lawn_care_quote:${quote.id}`,
             firstName,
             lastName,
@@ -365,7 +365,7 @@ router.post("/quote", async (req: Request, res: Response) => {
             // card line.
             totalPrice: String(serviceLineTotal + sumShopCard),
             bundleDiscountAmount: "0",
-          } as unknown as import("@shared/schema").Lead;
+          };
           const result = await squareInvoiceService.createItemizedInvoiceForLead(
             shimLead,
             lineItems,
