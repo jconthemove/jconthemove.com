@@ -89,5 +89,18 @@ may store a `cashValue` field for analytics/display, but it must NOT be added to
 `cash_balance`. See the inline comment on `walletAccounts.cashBalance` in
 `shared/schema.ts` for the canonical rule.
 
+## Unified Daily Rewards Engine
+There is exactly one daily check-in code path: `server/services/daily-rewards.ts`
+(`dailyRewardsService.checkIn`). It powers `POST /api/gamification/checkin`,
+which is hit by the Earn Tasks button, the mobile lead manager, and the spin
+wheel. It combines fraud detection (IP + device fingerprint + risk score logged
+to `fraud_logs`), Eastern-day streak tracking, treasury-funded JCMOVES
+distribution, wallet credit (tokens only — `cash_balance` is never touched),
+points / employee-stats updates, and the 7-day-streak achievement.
+Token payout = `$0.25 USD × tokenStreakMultiplier(streak) ÷ current JCMOVES
+price`, where `tokenStreakMultiplier` is `1 + 0.1 × (streak − 1)` capped at
+`2.5x`. Points keep the existing `1.1^n` curve capped at `3.0x`. Two services
+used to exist; the legacy `server/services/daily-checkin.ts` has been removed.
+
 ## Mobile App Framework
 - **Capacitor**: Hybrid mobile app wrapping.

@@ -271,9 +271,10 @@ export const rewards = pgTable("rewards", {
   // duplicate rows are deduplicated before the unique index is created.
 ]);
 
-// DEPRECATED: Daily check-ins replaced by unified mining system with streak tracking
-// This table is kept for historical data only. New streak tracking is in mining_sessions.
-// See mining_sessions.lastClaimDate and mining_sessions.streakCount for current implementation.
+// Daily check-in history. Written by the unified daily rewards engine
+// (server/services/daily-rewards.ts). One row per user per Eastern-time
+// day. Stores streak, fraud risk score, and the IP/device-fingerprint
+// captured at check-in time so suspicious patterns can be audited.
 export const dailyCheckins = pgTable("daily_checkins", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
@@ -298,9 +299,12 @@ export const walletAccounts = pgTable("wallet_accounts", {
   // This column may ONLY be incremented when a real customer payment is
   // RECEIVED: Square invoice paid webhook, prepaid top-up paid webhook,
   // admin "mark as paid" confirmation, or refund of previously-paid funds
-  // (e.g. jewelry reservation expiry). Engagement rewards (daily check-in,
-  // referrals, ratings, achievements) must mint *tokens* from the treasury,
-  // not USD. If you find yourself adding to cash_balance from a non-payment
+  // (e.g. jewelry reservation expiry). Engagement rewards must mint
+  // *tokens* from the treasury, not USD. The daily check-in lives in
+  // server/services/daily-rewards.ts (the single unified engine — there
+  // used to be two parallel services and they have been consolidated).
+  // It credits token_balance only and never touches cash_balance.
+  // If you find yourself adding to cash_balance from a non-payment
   // code path, stop — credit token_balance instead, or reach for the
   // wallet_credit_grants pending→granted pattern in services/bundleBilling.
   cashBalance: decimal("cash_balance", { precision: 10, scale: 2 }).default("0.00"),

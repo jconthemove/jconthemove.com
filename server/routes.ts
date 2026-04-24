@@ -8,8 +8,7 @@ import { sendEmail, generateLeadNotificationEmail, generateContactNotificationEm
 import { setupAuth, isAuthenticated, isAuthenticatedAllowPending, signJwt, signRefreshToken, verifyRefreshToken } from "./auth";
 import { ipRateLimit, getClientIp } from "./lib/persistentRateLimit";
 import bcrypt from "bcrypt";
-// REMOVED: Daily check-in service replaced by unified mining system with streaks
-// import { dailyCheckinService } from "./services/daily-checkin";
+import { dailyRewardsService } from "./services/daily-rewards";
 import { rewardsService } from "./services/rewards";
 import { cryptoCashoutService } from "./services/crypto-cashout";
 import { cryptoService } from "./services/crypto";
@@ -12347,7 +12346,14 @@ Thank you for your business!
   app.post("/api/gamification/checkin", isAuthenticated, async (req: any, res) => {
     try {
       const userId = (req.session as any).userId;
-      const result = await gamificationService.performDailyCheckIn(userId);
+      const ipAddress = getClientIp(req) || (req.ip ?? "unknown");
+      const userAgent = (req.headers["user-agent"] as string) || "unknown";
+      const deviceFingerprint = req.body?.deviceFingerprint;
+      const result = await dailyRewardsService.checkIn(userId, {
+        ipAddress,
+        userAgent,
+        deviceFingerprint,
+      });
       
       if (result.success) {
         await awardTierPoints(userId, 'daily_checkin');
