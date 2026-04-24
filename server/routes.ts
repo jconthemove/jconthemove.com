@@ -21101,6 +21101,30 @@ Thank you for your business!
         await creditJcMovesUsd(req.params.id, totalPriceUsd, 'admin_mark_paid');
       }
 
+      // Task #199 — admin "mark paid" is also a "payment RECEIVED" signal,
+      // so disburse any pending shop-card wallet grants tied to this lead.
+      // Idempotent inside grantWalletCreditForSource (pending → granted).
+      try {
+        const { rows: pendingGrants } = await pool.query<{ source_type: string; source_id: string }>(
+          `SELECT DISTINCT source_type, source_id
+             FROM wallet_credit_grants
+            WHERE source_type = 'lead' AND source_id = $1 AND status = 'pending'`,
+          [req.params.id],
+        );
+        if (pendingGrants.length > 0) {
+          const { grantWalletCreditForSource } = await import("./services/bundleBilling");
+          for (const src of pendingGrants) {
+            await grantWalletCreditForSource({
+              sourceType: 'lead',
+              sourceId: src.source_id,
+              paymentReference: `admin_mark_paid:${user.id}`,
+            });
+          }
+        }
+      } catch (grantErr) {
+        console.error("[admin mark-paid] shop-card grant disbursement failed:", (grantErr as Error).message);
+      }
+
       await db.update(leads)
         .set({ status: "dispatched" as any, lastQuoteUpdatedAt: new Date() })
         .where(eq(leads.id, req.params.id));
