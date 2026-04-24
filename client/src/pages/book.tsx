@@ -30,7 +30,7 @@ import {
   ServiceSelector, InlineItemConfigure, BookingSummarySticky,
   BundleSuggestionDialog, type BundleSuggestion,
   type CatalogService, type FeaturedBundle, type SelectedItem, type QuoteResult,
-  emojiFor, recommendedCrewSize, schedulingModeFor,
+  emojiFor, recommendedCrewSize, schedulingModeFor, formatLinePrice,
 } from "@/components/MultiBookingFlow";
 
 interface BundleSlots {
@@ -613,14 +613,20 @@ export default function MultiServiceBookPage() {
             </div>
             <div className="rounded-xl bg-card border border-border p-4 text-left space-y-2">
               <p className="text-xs uppercase tracking-widest text-muted-foreground">Your services</p>
-              {c.items.map(i => (
-                <div key={i.serviceCode} className="flex justify-between text-sm">
-                  <span>{emojiFor(i.serviceCode)} {i.label}{i.details.requestedDate ? ` • ${i.details.requestedDate}` : ""}</span>
-                  <span className="font-semibold">
-                    {i.priceMode === "quote" ? "TBD" : `$${(i.quantity * i.unitPrice).toFixed(2)}`}
-                  </span>
-                </div>
-              ))}
+              {c.items.map(i => {
+                const linePrice = formatLinePrice(i, { fractionDigits: 2 });
+                return (
+                  <div key={i.serviceCode} className="flex justify-between text-sm">
+                    <span>{emojiFor(i.serviceCode)} {i.label}{i.details.requestedDate ? ` • ${i.details.requestedDate}` : ""}</span>
+                    <span className="font-semibold text-right">
+                      {linePrice.text}
+                      {linePrice.isEstimate && (
+                        <span className="block text-[10px] font-normal text-muted-foreground">estimate · crew confirms</span>
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
               {discount > 0 && c.quote.bundleApplied && (
                 <div className="flex justify-between text-sm text-emerald-500 pt-1 border-t border-border">
                   <span className="flex items-center gap-1"><Tag className="h-3 w-3" /> {c.quote.bundleApplied.name}</span>
@@ -919,18 +925,24 @@ export default function MultiServiceBookPage() {
                 <div className="border-t border-border pt-3">
                   <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Services</p>
                   <div className="space-y-1.5">
-                    {items.map(i => (
-                      <div key={i.serviceCode} className="flex justify-between text-sm">
-                        <span className="truncate pr-2">
-                          {emojiFor(i.serviceCode)} {i.label}
-                          {i.details.requestedDate ? ` · ${i.details.requestedDate}` : i.details.callToSchedule ? " · we'll call" : ""}
-                          {i.details.frequency ? ` · ${i.details.frequency}` : ""}
-                        </span>
-                        <span className="font-semibold whitespace-nowrap">
-                          {i.priceMode === "quote" ? "TBD" : `$${(i.quantity * i.unitPrice).toFixed(2)}`}
-                        </span>
-                      </div>
-                    ))}
+                    {items.map(i => {
+                      const linePrice = formatLinePrice(i, { fractionDigits: 2 });
+                      return (
+                        <div key={i.serviceCode} className="flex justify-between text-sm">
+                          <span className="truncate pr-2">
+                            {emojiFor(i.serviceCode)} {i.label}
+                            {i.details.requestedDate ? ` · ${i.details.requestedDate}` : i.details.callToSchedule ? " · we'll call" : ""}
+                            {i.details.frequency ? ` · ${i.details.frequency}` : ""}
+                          </span>
+                          <span className="font-semibold whitespace-nowrap text-right">
+                            {linePrice.text}
+                            {linePrice.isEstimate && (
+                              <span className="block text-[10px] font-normal text-muted-foreground">estimate · crew confirms</span>
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
                 {quote && (

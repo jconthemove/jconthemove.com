@@ -42,9 +42,13 @@ import {
 import {
   computeBookingQuote,
   quoteBundle,
+  estimatePainting,
+  estimateFlooring,
   type BookingPricingItemInput,
   type BundleDefinitionLike,
   type BookingPricingResult,
+  type PaintingAnswers,
+  type FlooringAnswers,
 } from "../services/pricingEngine";
 
 const router = Router();
@@ -110,7 +114,7 @@ function resolveItems(
     if (!cat) {
       throw new HttpError(`Unknown serviceCode: ${item.serviceCode}`, 400);
     }
-    const unitPrice =
+    let unitPrice =
       item.unitPrice != null
         ? item.unitPrice
         : cat.defaultPrice != null
@@ -122,6 +126,32 @@ function resolveItems(
       | "per_unit"
       | "quote";
     const label = item.label || cat.name;
+
+    // Task #211 — Painting & Flooring run the chatbot questionnaire
+    // through the editable rule files in services/quoteRules/ so the
+    // wizard line shows a believable estimate instead of $0/TBD. Always
+    // overrides the catalog/wizard-supplied unitPrice for these two
+    // codes; rule falls back to catalog suggested-min when no answers
+    // are present so we never end up at $0.
+    if (item.serviceCode === "painting") {
+      const fallbackMin = cat.suggestedMin != null ? parseFloat(cat.suggestedMin) : undefined;
+      const fallbackMax = cat.suggestedMax != null ? parseFloat(cat.suggestedMax) : undefined;
+      const est = estimatePainting({
+        answers: (item.details ?? {}) as PaintingAnswers,
+        fallbackMin,
+        fallbackMax,
+      });
+      if (est.amount > 0) unitPrice = est.amount;
+    } else if (item.serviceCode === "flooring") {
+      const fallbackMin = cat.suggestedMin != null ? parseFloat(cat.suggestedMin) : undefined;
+      const fallbackMax = cat.suggestedMax != null ? parseFloat(cat.suggestedMax) : undefined;
+      const est = estimateFlooring({
+        answers: (item.details ?? {}) as FlooringAnswers,
+        fallbackMin,
+        fallbackMax,
+      });
+      if (est.amount > 0) unitPrice = est.amount;
+    }
 
     pricingInputs.push({
       serviceCode: item.serviceCode,

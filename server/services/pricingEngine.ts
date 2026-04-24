@@ -47,6 +47,15 @@ import {
 import {
   calculateJumpStartQuote,
 } from "../../shared/jumpStartPricing";
+// Task #211 — handwritten rule files for painting & flooring estimates.
+// Lives under server/services/quoteRules/ so a non-engineer note can tune
+// the per-room base, ceiling/trim adders, removal & haul-away charges,
+// etc. without touching the routing layer.
+import { estimatePainting, type PaintingAnswers } from "./quoteRules/painting";
+import { estimateFlooring, type FlooringAnswers } from "./quoteRules/flooring";
+
+export { estimatePainting, estimateFlooring };
+export type { PaintingAnswers, FlooringAnswers };
 
 // Re-export the kernel so callers only need to import from one place.
 export {
@@ -251,6 +260,38 @@ export async function quoteService(
     const miles = Math.max(0, Number(d.miles ?? 0));
     const amount = Math.round(100 + Math.max(0, miles - 10) * 3);
     return { serviceCode, amount, minPrice: 100, maxPrice: Math.max(amount, 400), isQuoteOnly: false, breakdown: { miles, base: 100 } };
+  }
+
+  // Task #211 — Painting & Flooring estimate from chatbot answer set.
+  // Falls back to the catalog suggested-min when no answers are present so
+  // any caller (wizard, chatbot, admin pricing-calibrate) gets a real
+  // number instead of $0. Crew still confirms — these are estimates.
+  if (serviceCode === "painting") {
+    const fallbackMin = cat?.suggestedMin != null ? parseFloat(cat.suggestedMin) : undefined;
+    const fallbackMax = cat?.suggestedMax != null ? parseFloat(cat.suggestedMax) : undefined;
+    const est = estimatePainting({ answers: d as PaintingAnswers, fallbackMin, fallbackMax });
+    return {
+      serviceCode,
+      amount: est.amount,
+      minPrice: fallbackMin ?? est.amount,
+      maxPrice: fallbackMax ?? est.amount,
+      isQuoteOnly: est.amount === 0,
+      breakdown: est.breakdown,
+    };
+  }
+
+  if (serviceCode === "flooring") {
+    const fallbackMin = cat?.suggestedMin != null ? parseFloat(cat.suggestedMin) : undefined;
+    const fallbackMax = cat?.suggestedMax != null ? parseFloat(cat.suggestedMax) : undefined;
+    const est = estimateFlooring({ answers: d as FlooringAnswers, fallbackMin, fallbackMax });
+    return {
+      serviceCode,
+      amount: est.amount,
+      minPrice: fallbackMin ?? est.amount,
+      maxPrice: fallbackMax ?? est.amount,
+      isQuoteOnly: est.amount === 0,
+      breakdown: est.breakdown,
+    };
   }
 
   if (serviceCode === "snow_removal") {

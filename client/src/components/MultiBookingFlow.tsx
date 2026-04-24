@@ -173,6 +173,27 @@ export function priceModeLabel(mode: string, unit: number): string {
   }
 }
 
+/** Task #211 — Painting & Flooring lines come back priced (server runs the
+ *  chatbot questionnaire through services/quoteRules/) but the catalog
+ *  still flags them priceMode="quote" so we can tag them as a
+ *  crew-confirmed estimate rather than a binding rack price. Hides the
+ *  bare "TBD" copy when we have a real number. */
+export const ESTIMATE_SERVICE_CODES = new Set(["painting", "flooring"]);
+export function formatLinePrice(
+  item: { serviceCode: string; quantity: number; unitPrice: number; priceMode: string },
+  opts: { fractionDigits?: number } = {},
+): { text: string; isEstimate: boolean } {
+  const digits = opts.fractionDigits ?? 0;
+  const total = item.quantity * item.unitPrice;
+  if (item.priceMode === "quote") {
+    if (ESTIMATE_SERVICE_CODES.has(item.serviceCode) && total > 0) {
+      return { text: `$${total.toFixed(digits)}`, isEstimate: true };
+    }
+    return { text: "TBD", isEstimate: false };
+  }
+  return { text: `$${total.toFixed(digits)}`, isEstimate: false };
+}
+
 // ── ServiceSelector ────────────────────────────────────────────────────────
 export function ServiceSelector({
   services, selectedCodes, onAdd, onRemove,
@@ -355,14 +376,16 @@ export function ServiceItemEditor({
           <p className="font-semibold text-sm truncate">{item.label}</p>
           <p className="text-[11px] text-muted-foreground">
             {item.priceMode === "quote"
-              ? "Custom quote — confirmed after we review"
+              ? (ESTIMATE_SERVICE_CODES.has(item.serviceCode) && lineSubtotal > 0
+                  ? "Estimate — crew confirms"
+                  : "Custom quote — confirmed after we review")
               : `${priceModeLabel(item.priceMode, item.unitPrice)}${showQty ? ` × ${item.quantity}` : ""}`}
             {item.details.requestedDate ? ` • ${item.details.requestedDate}` : ""}
           </p>
         </div>
         <div className="text-right">
           <p className="text-sm font-bold">
-            {item.priceMode === "quote" ? "TBD" : `$${lineSubtotal.toFixed(0)}`}
+            {formatLinePrice(item).text}
           </p>
         </div>
       </div>
@@ -767,7 +790,9 @@ export function InlineItemConfigure({
             {usesPicker && item.details.packageLabel
               ? item.details.packageLabel
               : item.priceMode === "quote"
-                ? "Custom quote — confirmed after we review"
+                ? (ESTIMATE_SERVICE_CODES.has(item.serviceCode) && lineSubtotal > 0
+                    ? "Estimate — crew confirms"
+                    : "Custom quote — confirmed after we review")
                 : `${priceModeLabel(item.priceMode, item.unitPrice)}${showQty ? ` × ${item.quantity}` : ""}`}
           </p>
         </div>
@@ -775,7 +800,7 @@ export function InlineItemConfigure({
           <p className="text-sm font-bold">
             {usesPicker
               ? (item.details.packageId ? `$${lineSubtotal.toFixed(0)}` : "TBD")
-              : item.priceMode === "quote" ? "TBD" : `$${lineSubtotal.toFixed(0)}`}
+              : formatLinePrice(item).text}
           </p>
         </div>
       </div>
@@ -1268,14 +1293,20 @@ export function BookingSummarySticky({
         ) : (
           <>
             <div className="space-y-1.5">
-              {items.map(i => (
-                <div key={i.serviceCode} className="flex justify-between text-xs">
-                  <span className="truncate">{emojiFor(i.serviceCode)} {i.label}</span>
-                  <span className="font-semibold">
-                    {i.priceMode === "quote" ? "TBD" : `$${(i.quantity * i.unitPrice).toFixed(0)}`}
-                  </span>
-                </div>
-              ))}
+              {items.map(i => {
+                const lp = formatLinePrice(i);
+                return (
+                  <div key={i.serviceCode} className="flex justify-between text-xs">
+                    <span className="truncate">{emojiFor(i.serviceCode)} {i.label}</span>
+                    <span className="font-semibold">
+                      {lp.text}
+                      {lp.isEstimate && (
+                        <span className="ml-1 text-[9px] font-normal text-muted-foreground">(est)</span>
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
             <div className="border-t border-border pt-3 space-y-1">
               <div className="flex justify-between text-sm">
@@ -1337,14 +1368,20 @@ export function BookingSummarySticky({
       </button>
       {!collapsed && items.length > 0 && (
         <div className="px-4 pb-2 space-y-1.5 max-h-48 overflow-y-auto">
-          {items.map(i => (
-            <div key={i.serviceCode} className="flex justify-between text-xs">
-              <span className="truncate">{emojiFor(i.serviceCode)} {i.label}</span>
-              <span className="font-semibold">
-                {i.priceMode === "quote" ? "TBD" : `$${(i.quantity * i.unitPrice).toFixed(0)}`}
-              </span>
-            </div>
-          ))}
+          {items.map(i => {
+            const lp = formatLinePrice(i);
+            return (
+              <div key={i.serviceCode} className="flex justify-between text-xs">
+                <span className="truncate">{emojiFor(i.serviceCode)} {i.label}</span>
+                <span className="font-semibold">
+                  {lp.text}
+                  {lp.isEstimate && (
+                    <span className="ml-1 text-[9px] font-normal text-muted-foreground">(est)</span>
+                  )}
+                </span>
+              </div>
+            );
+          })}
           <div className="flex justify-between text-xs pt-1 border-t border-border">
             <span className="text-muted-foreground">Subtotal</span>
             <span>${subtotal.toFixed(2)}</span>

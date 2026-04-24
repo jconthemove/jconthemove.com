@@ -135,3 +135,44 @@ the booking-chatbot questionnaire is reviewed. Guardrails seeded in
 Quote-mode means the wizard's discount engine still applies any matching bundle
 (no bundle currently includes painting or flooring), but the per-line subtotal
 is whatever the crew lands on — there is no `defaultPrice × quantity` math.
+
+### Editable rule files (Task #211)
+The booking wizard now turns the BookingChatbot questionnaire answers into a
+soft estimate before the crew calls back, instead of dropping a `TBD`/$0
+line. Rules are *deliberately* split out into hand-editable TS so ops can tune
+the numbers without touching wizard code:
+
+- `server/services/quoteRules/painting.ts` exports `PAINTING_RULES` and
+  `estimatePainting(answers, fallback)`. Reads `paintingType` (interior /
+  exterior / both), `paintingRoomCount`, `paintingRoomSize`, `paintingAddons`,
+  `paintingPrep`, `paintingSurface`, `paintingMaterials`. Computes
+  `(roomBase × rooms) + addons` then multiplies by prep/surface/type factors
+  and clamps to the catalog suggested-min/max so we never quote outside the
+  guardrails above.
+- `server/services/quoteRules/flooring.ts` exports `FLOORING_RULES` and
+  `estimateFlooring(answers, fallback)`, plus a forgiving `parseRoomsSqft`
+  that pulls `~400 sq ft` (or `2 rooms`) out of the chatbot's free-text
+  answer. Per-sqft tier depends on product (laminate/LVP/hardwood/tile),
+  then adds flat fees for old-floor removal, haul-away, premium materials and
+  transition trim. Has a `MIN_JOB_FEE = $350` floor and the same suggested-
+  min/max clamp.
+
+Both helpers are tolerant of the chatbot's emoji prefixes (`🏠 Interior`,
+`🪵 Hardwood`, etc.) and return the catalog suggested-min when no chatbot
+answers are present, so unanswered legacy bookings still see a sane number.
+
+Wiring:
+1. `server/services/pricingEngine.ts → quoteService()` recognises
+   `serviceCode === "painting" | "flooring"` and routes through the rule file
+   (re-exporting `estimatePainting` / `estimateFlooring`).
+2. `server/routes/bookings.ts → resolveItems()` overrides `unitPrice` on
+   painting/flooring lines using `item.details` + the catalog
+   suggested-min/max as the fallback band.
+3. `client/src/components/MultiBookingFlow.tsx` exposes `formatLinePrice()` +
+   `ESTIMATE_SERVICE_CODES`; both `book.tsx` (review/confirmation) and the
+   inline editor / sticky summary show "$X (est)" with an "Estimate — crew
+   confirms" caption instead of the legacy `TBD` for these two services.
+
+To re-tune: edit the `PAINTING_RULES` / `FLOORING_RULES` objects (room base,
+addon prices, multipliers) — no schema changes or migrations needed; the
+wizard picks up the new numbers on next request.
