@@ -203,13 +203,7 @@ export class TreasuryService {
     return { canDistribute: true, currentPrice };
   }
 
-  /**
-   * Pre-distribution safety checks (risk assessment + bound check + funding
-   * pre-check). Pure-read, no DB writes. Returns either the cleared
-   * cash-value/price pair or an error result. Extracted so both
-   * `distributeTokens` (its own tx) and `distributeTokensInTransaction`
-   * (caller-supplied tx) share the exact same gating logic.
-   */
+  /** Shared preflight: risk + bound + funding check. No DB writes. */
   private async _preflightDistribution(
     tokenAmount: number
   ): Promise<{ ok: true; currentPrice: number; cashValue: number } | { ok: false; result: TokenDistributionResult }> {
@@ -305,15 +299,9 @@ export class TreasuryService {
   }
 
   /**
-   * Tx-aware variant: runs all the same safety preflight checks as
-   * `distributeTokens` but writes the treasury debit on the caller-supplied
-   * transaction so the debit can commit/rollback atomically with the
-   * caller's user-side writes (e.g. the unified daily rewards engine
-   * pairing the debit with the wallet credit + check-in audit row).
-   *
-   * Throws on safety failures inside the tx so the caller's `db.transaction`
-   * rolls back. Pre-flight HTTP calls run before the heavy DB work to keep
-   * the FOR UPDATE row lock window short.
+   * Tx-aware variant of distributeTokens: writes the treasury debit on
+   * the caller-supplied transaction. Throws on preflight failure so the
+   * caller's db.transaction rolls back atomically.
    */
   async distributeTokensInTransaction(
     tx: any,
@@ -324,7 +312,6 @@ export class TreasuryService {
   ): Promise<TokenDistributionResult> {
     const preflight = await this._preflightDistribution(tokenAmount);
     if (!preflight.ok) {
-      // Inside an active tx — throw so the whole unit rolls back.
       throw new Error(preflight.result.error || "Treasury distribution preflight failed");
     }
 

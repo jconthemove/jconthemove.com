@@ -1380,8 +1380,8 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  // Volatility / circuit-breaker guard. Always run BEFORE opening (or
-  // joining) a transaction so external HTTP latency doesn't hold DB locks.
+  // Volatility circuit breaker. Run BEFORE opening/joining a tx so
+  // external HTTP latency doesn't hold DB locks.
   private async _enforceVolatilityCircuitBreaker(tokenAmount: number): Promise<void> {
     try {
       const volatilityCheck = await cryptoService.checkPriceVolatility();
@@ -1414,10 +1414,8 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  // Pure DB-side treasury debit. Runs against either a fresh db.transaction
-  // (called by deductFromReserve) or an existing one (called by
-  // deductFromReserveInTransaction). All safety reads use FOR UPDATE so
-  // concurrent debits serialize on the treasury row.
+  // Treasury debit body. Runs against either a fresh tx or a caller-supplied
+  // one. Uses SELECT FOR UPDATE so concurrent debits serialize.
   private async _deductFromReserveTxBody(
     tx: any,
     tokenAmount: number,
@@ -1495,6 +1493,8 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
+  // Tx-aware variant of deductFromReserve. Caller passes in an existing tx
+  // so the debit commits/rolls back atomically with the caller's writes.
   async deductFromReserveInTransaction(
     tx: any,
     tokenAmount: number,
@@ -1503,11 +1503,6 @@ export class DatabaseStorage implements IStorage {
     relatedEntityType?: string,
     relatedEntityId?: string,
   ): Promise<ReserveTransaction> {
-    // Volatility check still runs (it's external HTTP) BEFORE we touch the
-    // shared tx. Caller should run this method only inside a tx that's
-    // already started — the unified daily-rewards engine relies on this so
-    // a treasury debit and the matching user-side wallet credit either
-    // commit together or roll back together.
     await this._enforceVolatilityCircuitBreaker(tokenAmount);
     const cashValue = tokenAmount * tokenPrice;
     return await this._deductFromReserveTxBody(tx, tokenAmount, description, cashValue, relatedEntityType, relatedEntityId);
