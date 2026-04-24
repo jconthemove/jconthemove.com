@@ -27,3 +27,7 @@ process.on('uncaughtException', (err) => {
 });
 
 export const db = drizzle({ client: pool, schema });
+
+// Convenience type for code that needs to accept a transaction handle
+// from db.transaction(async (tx) => ...).
+export type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];

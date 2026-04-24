@@ -1,7 +1,7 @@
 import { type User, type InsertUser, type UpsertUser, type Lead, type InsertLead, type Contact, type InsertContact, type Notification, type InsertNotification, type TreasuryAccount, type InsertTreasuryAccount, type FundingDeposit, type InsertFundingDeposit, type ReserveTransaction, type InsertReserveTransaction, type FaucetConfig, type InsertFaucetConfig, type FaucetClaim, type InsertFaucetClaim, type FaucetWallet, type InsertFaucetWallet, type FaucetRevenue, type InsertFaucetRevenue, type EmployeeStats, type InsertEmployeeStats, type AchievementType, type EmployeeAchievement, type InsertEmployeeAchievement, type PointTransaction, type InsertPointTransaction, type WeeklyLeaderboard, type DailyCheckin, type InsertDailyCheckin, type WalletAccount, type InsertWalletAccount, type SupportedCurrency, type InsertSupportedCurrency, type UserWallet, type InsertUserWallet, type TreasuryWallet, type InsertTreasuryWallet, type WalletTransaction, type InsertWalletTransaction, type ShopItem, type InsertShopItem, type Review, type InsertReview, type Testimonial, type InsertTestimonial, type WalletPayout, type InsertWalletPayout, type TokenConversion, type InsertTokenConversion, type TreasuryLimit, type InsertTreasuryLimit, type SquareInvoice, type InsertSquareInvoice, type SnowCustomer, type InsertSnowCustomer, type SnowServiceType, type InsertSnowServiceType, type SnowServiceLog, type InsertSnowServiceLog, type StakingTier, type Stake, type InsertStake, stakingTiers, stakes, leads, contacts, users, notifications, walletAccounts, rewards, treasuryAccounts, fundingDeposits, reserveTransactions, priceHistory, faucetConfig, faucetClaims, faucetWallets, faucetRevenue, employeeStats, achievementTypes, employeeAchievements, pointTransactions, weeklyLeaderboards, dailyCheckins, supportedCurrencies, userWallets, treasuryWallets, walletTransactions, shopItems, cashoutRequests, fraudLogs, helpRequests, miningSessions, miningClaims, treasuryWithdrawals, reviews, testimonials, walletPayouts, tokenConversions, treasuryLimits, squareInvoices, buybackFund, snowCustomers, snowServiceTypes, snowServiceLogs } from "@shared/schema";
 import { type WorkerDayBlock, type WorkerScheduleRow, type WorkerGoal, type WorkerHourOverride, workerDayBlocks, workerSchedule, workerGoals, workerHourOverrides } from "@shared/schema";
 import { type Sponsor, type InsertSponsor, sponsors } from "@shared/schema";
-import { db } from "./db";
+import { db, type DbTransaction } from "./db";
 import { eq, desc, isNull, and, isNotNull, sql, gt, gte, inArray, not, or, lte } from "drizzle-orm";
 import { TREASURY_CONFIG } from "./constants";
 import { cryptoService } from "./services/crypto";
@@ -102,7 +102,7 @@ export interface IStorage {
   // so callers (e.g. the unified daily rewards engine) can fold the treasury
   // debit into a larger user-side atomic unit. Volatility safety checks still
   // run before the DB writes.
-  deductFromReserveInTransaction(tx: any, tokenAmount: number, description: string, tokenPrice: number, relatedEntityType?: string, relatedEntityId?: string): Promise<ReserveTransaction>;
+  deductFromReserveInTransaction(tx: DbTransaction, tokenAmount: number, description: string, tokenPrice: number, relatedEntityType?: string, relatedEntityId?: string): Promise<ReserveTransaction>;
   addToReserve(tokenAmount: number, cashValue: number, description: string): Promise<ReserveTransaction>;
   atomicDepositFunds(depositedBy: string, usdAmount: number, depositMethod?: string, notes?: string): Promise<FundingDeposit>;
   
@@ -1417,7 +1417,7 @@ export class DatabaseStorage implements IStorage {
   // Treasury debit body. Runs against either a fresh tx or a caller-supplied
   // one. Uses SELECT FOR UPDATE so concurrent debits serialize.
   private async _deductFromReserveTxBody(
-    tx: any,
+    tx: DbTransaction,
     tokenAmount: number,
     description: string,
     cashValue: number,
@@ -1496,7 +1496,7 @@ export class DatabaseStorage implements IStorage {
   // Tx-aware variant of deductFromReserve. Caller passes in an existing tx
   // so the debit commits/rolls back atomically with the caller's writes.
   async deductFromReserveInTransaction(
-    tx: any,
+    tx: DbTransaction,
     tokenAmount: number,
     description: string,
     tokenPrice: number,

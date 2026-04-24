@@ -1,4 +1,5 @@
 import { storage } from "../storage";
+import type { DbTransaction } from "../db";
 import type { TreasuryAccount, FundingDeposit, ReserveTransaction, InsertFundingDeposit } from "@shared/schema";
 import { TREASURY_CONFIG } from "../constants";
 import { cryptoService, type TokenMarketData, type TokenBalance } from "./crypto";
@@ -304,7 +305,7 @@ export class TreasuryService {
    * caller's db.transaction rolls back atomically.
    */
   async distributeTokensInTransaction(
-    tx: any,
+    tx: DbTransaction,
     tokenAmount: number,
     description: string,
     relatedEntityType?: string,
