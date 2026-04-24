@@ -425,7 +425,7 @@ export class GamificationService {
   /**
    * Check and award achievements based on activities
    */
-  private async checkAndAwardAchievements(userId: string, activity: any): Promise<void> {
+  async checkAndAwardAchievements(userId: string, activity: any): Promise<void> {
     const stats = await storage.getEmployeeStats(userId);
     if (!stats) return;
 

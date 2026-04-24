@@ -9,14 +9,27 @@
 // Pays JCMOVES TOKENS only — never touches wallet_accounts.cash_balance.
 // See the invariant comment on walletAccounts.cashBalance in shared/schema.ts.
 
+import { and, eq, gte, sql } from "drizzle-orm";
 import { storage } from "../storage";
 import { db } from "../db";
-import { fraudLogs, dailyCheckins } from "@shared/schema";
+import {
+  fraudLogs,
+  dailyCheckins,
+  rewards,
+  walletAccounts,
+  pointTransactions,
+  employeeStats as employeeStatsTable,
+} from "@shared/schema";
 import { treasuryService } from "./treasury";
 import { fraudDetectionService } from "./fraud-detection";
 import { getEasternDateStr, getEasternDayStart } from "../utils/dateUtils";
 import type { DailyCheckInResult } from "./gamification";
-import { GAMIFICATION_REWARDS } from "./gamification";
+import { GAMIFICATION_REWARDS, gamificationService } from "./gamification";
+
+// Sentinel error thrown inside the persistence transaction when an in-tx
+// re-check discovers another check-in landed for the same user since the
+// pre-check ran. Treated as a recoverable "already checked in" outcome.
+const DUPLICATE_CHECKIN_RACE = "DUPLICATE_CHECKIN_RACE";
 
 // Base USD value of one daily check-in BEFORE the streak token multiplier
 // is applied. Kept at the same $0.25 anchor that the live system used so
@@ -137,10 +150,11 @@ export class DailyRewardsService {
         };
       }
 
-      // 3) Make sure stats row exists.
-      let employeeStats = await storage.getEmployeeStats(userId);
-      if (!employeeStats) {
-        employeeStats = await storage.createEmployeeStats({ userId });
+      // 3) Make sure stats row exists. (Renamed local to avoid shadowing
+      //    the imported employee_stats table reference used inside the tx.)
+      let userStats = await storage.getEmployeeStats(userId);
+      if (!userStats) {
+        userStats = await storage.createEmployeeStats({ userId });
       }
 
       // 4) Streak calculation — Eastern-day aware.
@@ -162,7 +176,7 @@ export class DailyRewardsService {
           newStreak = lastCheckIn.streakCount || 1;
         } else if (lastDateStr === yesterdayStr) {
           newStreak = (lastCheckIn.streakCount || 0) + 1;
-          isNewRecord = newStreak > (employeeStats.longestStreak || 0);
+          isNewRecord = newStreak > (userStats.longestStreak || 0);
         } else {
           newStreak = 1;
         }
@@ -230,41 +244,146 @@ export class DailyRewardsService {
         };
       }
 
-      // 7) Persist user-side records.
+      // 7) Persist user-side records in a SINGLE database transaction so we
+      //    never leave partial state (e.g. wallet credited but no
+      //    daily_checkins row, breaking tomorrow's streak math, or a
+      //    points ledger entry without a matching wallet credit).
+      //
       //    INVARIANT: only token_balance / total_earned move. cash_balance
       //    is NEVER touched here — that column may only be incremented on a
       //    real customer payment received. See the comment on
       //    walletAccounts.cashBalance in shared/schema.ts.
+      //
+      //    Treasury distribution above is its own atomic operation. If this
+      //    tx rolls back the treasury debit is stranded and surfaced as a
+      //    failure — better than corrupting user-side state.
       try {
-        const existingWallet = await storage.getWalletAccount(userId);
-        if (existingWallet) {
-          await storage.updateWalletAccount(userId, {
-            tokenBalance: (
-              parseFloat(existingWallet.tokenBalance || "0") + tokenAmountNum
-            ).toFixed(8),
-            totalEarned: (
-              parseFloat(existingWallet.totalEarned || "0") + tokenAmountNum
-            ).toFixed(8),
-            lastActivity: new Date(),
-          });
-        } else {
-          // createWalletAccount's insert schema omits balance columns, so
-          // create the row first, then bump tokens via updateWalletAccount.
-          // cash_balance defaults to 0.00 (invariant — never minted here).
-          await storage.createWalletAccount({
+        await db.transaction(async (tx) => {
+          // 7a) In-tx re-check to close the race window between the
+          //     pre-check and the persistence writes. Two concurrent
+          //     requests for the same user would both pass the pre-check
+          //     and both reach this point; only one will see an empty
+          //     result here.
+          const dup = await tx
+            .select({ id: dailyCheckins.id })
+            .from(dailyCheckins)
+            .where(
+              and(
+                eq(dailyCheckins.userId, userId),
+                gte(dailyCheckins.createdAt, todayEasternStart)
+              )
+            )
+            .limit(1);
+          if (dup.length > 0) {
+            throw new Error(DUPLICATE_CHECKIN_RACE);
+          }
+
+          // 7b) Audit history row (streakCount / riskScore / rewardClaimed
+          //     are not in the public InsertDailyCheckin type, so we write
+          //     directly via the tx).
+          await tx.insert(dailyCheckins).values({
             userId,
-            walletAddress: `0xJCMOVES_${userId.substring(0, 8)}`,
+            checkinDate: today,
+            deviceFingerprint: deviceFP,
+            ipAddress: ctx.ipAddress,
+            userAgent: ctx.userAgent,
+            rewardClaimed: true,
+            streakCount: newStreak,
+            riskScore: fraudCheck.riskScore,
           });
-          await storage.updateWalletAccount(userId, {
-            tokenBalance: tokenAmount,
-            totalEarned: tokenAmount,
-            lastActivity: new Date(),
+
+          // 7c) Wallet credit — atomic SQL increment to avoid the classic
+          //     read-modify-write lost-update bug under concurrency.
+          //     cashBalance is intentionally absent from both branches.
+          const existingWallet = await tx
+            .select({ userId: walletAccounts.userId })
+            .from(walletAccounts)
+            .where(eq(walletAccounts.userId, userId))
+            .limit(1);
+          if (existingWallet.length > 0) {
+            await tx
+              .update(walletAccounts)
+              .set({
+                tokenBalance: sql`${walletAccounts.tokenBalance} + ${tokenAmount}::numeric`,
+                totalEarned: sql`${walletAccounts.totalEarned} + ${tokenAmount}::numeric`,
+                lastActivity: new Date(),
+              })
+              .where(eq(walletAccounts.userId, userId));
+          } else {
+            await tx.insert(walletAccounts).values({
+              userId,
+              walletAddress: `0xJCMOVES_${userId.substring(0, 8)}`,
+              tokenBalance: tokenAmount,
+              totalEarned: tokenAmount,
+              lastActivity: new Date(),
+            });
+          }
+
+          // 7d) Rewards-history row (analytics / display only).
+          await tx.insert(rewards).values({
+            userId,
+            rewardType: "daily_checkin",
+            tokenAmount,
+            cashValue: usdValue.toFixed(4),
+            status: "confirmed",
+            metadata: {
+              streakCount: newStreak,
+              tokenStreakMultiplier: tokenMult.toFixed(2),
+              pointsStreakMultiplier: pointsMult.toFixed(2),
+              riskScore: fraudCheck.riskScore,
+              deviceFingerprint: deviceFP,
+              treasuryTransactionId: distribution.transactionId,
+              tokenPriceUsd: currentPrice.price,
+            },
           });
+
+          // 7e) Points ledger.
+          await tx.insert(pointTransactions).values({
+            userId,
+            points,
+            transactionType: "daily_checkin",
+            description: `Daily check-in - ${newStreak} day streak`,
+            metadata: {
+              streak: newStreak,
+              tokenAmount,
+              tokenStreakMultiplier: tokenMult.toFixed(2),
+              pointsStreakMultiplier: pointsMult.toFixed(2),
+            },
+          });
+
+          // 7f) Stats roll-up — atomic SQL bumps so a parallel mutation
+          //     elsewhere can't clobber this update.
+          await tx
+            .update(employeeStatsTable)
+            .set({
+              totalPoints: sql`${employeeStatsTable.totalPoints} + ${points}`,
+              currentStreak: newStreak,
+              longestStreak: sql`GREATEST(${employeeStatsTable.longestStreak}, ${newStreak})`,
+              totalEarnedTokens: sql`${employeeStatsTable.totalEarnedTokens} + ${tokenAmount}::numeric`,
+              lastActivityDate: new Date(),
+            })
+            .where(eq(employeeStatsTable.userId, userId));
+        });
+      } catch (txErr) {
+        if (txErr instanceof Error && txErr.message === DUPLICATE_CHECKIN_RACE) {
+          // Lost the race — another concurrent request just persisted
+          // today's check-in. Treasury was already debited above; log so
+          // ops can reconcile.
+          console.warn(
+            `[daily-rewards] duplicate check-in race for user ${userId}; treasury distribution ${distribution.transactionId} is now orphaned and needs reconciliation.`
+          );
+          return {
+            success: false,
+            points: 0,
+            tokens: "0",
+            streak: newStreak,
+            isNewRecord: false,
+            treasuryBalance: distribution.remainingBalance,
+            error: "Already checked in today! Come back tomorrow.",
+          };
         }
-      } catch (walletErr) {
-        // Tokens have already been deducted from treasury at this point —
-        // surface the failure so we don't silently swallow a wallet write.
-        console.error("Wallet update error during daily check-in:", walletErr);
+        // Treasury was debited above; user-side writes rolled back.
+        console.error("Daily check-in persistence tx failed:", txErr);
         return {
           success: false,
           points: 0,
@@ -272,71 +391,16 @@ export class DailyRewardsService {
           streak: newStreak,
           isNewRecord,
           treasuryBalance: distribution.remainingBalance,
-          error: "Reward distributed but wallet update failed. Please contact support.",
+          error: "Reward processing failed. Please contact support.",
         };
       }
 
-      // History row. We write directly to db because the storage helper's
-      // insert type omits streakCount / riskScore / rewardClaimed, and we
-      // want all of those persisted for audit + the streak math next time.
-      await db.insert(dailyCheckins).values({
-        userId,
-        checkinDate: today,
-        deviceFingerprint: deviceFP,
-        ipAddress: ctx.ipAddress,
-        userAgent: ctx.userAgent,
-        rewardClaimed: true,
-        streakCount: newStreak,
-        riskScore: fraudCheck.riskScore,
-      });
-
-      // Rewards-history row (for analytics / display only).
-      await storage.createReward({
-        userId,
-        rewardType: "daily_checkin",
-        tokenAmount,
-        cashValue: usdValue.toFixed(4),
-        status: "confirmed",
-        metadata: {
-          streakCount: newStreak,
-          tokenStreakMultiplier: tokenMult.toFixed(2),
-          pointsStreakMultiplier: pointsMult.toFixed(2),
-          riskScore: fraudCheck.riskScore,
-          deviceFingerprint: deviceFP,
-          treasuryTransactionId: distribution.transactionId,
-          tokenPriceUsd: currentPrice.price,
-        },
-      });
-
-      // Points ledger.
-      await storage.createPointTransaction({
-        userId,
-        points,
-        transactionType: "daily_checkin",
-        description: `Daily check-in - ${newStreak} day streak`,
-        metadata: {
-          streak: newStreak,
-          tokenAmount,
-          tokenStreakMultiplier: tokenMult.toFixed(2),
-          pointsStreakMultiplier: pointsMult.toFixed(2),
-        },
-      });
-
-      // Stats roll-up.
-      await storage.updateEmployeeStats(userId, {
-        totalPoints: (employeeStats.totalPoints || 0) + points,
-        currentStreak: newStreak,
-        longestStreak: Math.max(employeeStats.longestStreak || 0, newStreak),
-        totalEarnedTokens: (
-          parseFloat(employeeStats.totalEarnedTokens || "0") + tokenAmountNum
-        ).toFixed(8),
-        lastActivityDate: new Date(),
-      });
-
-      // 7-day-streak achievement (and any other daily-checkin achievements).
+      // 8) Achievements run AFTER the transaction commits. Achievement
+      //    awards are themselves idempotent (the underlying check verifies
+      //    the badge isn't already held) so a partial failure here can be
+      //    retried on the next check-in without double-awarding.
       try {
-        const { gamificationService } = await import("./gamification");
-        await (gamificationService as any).checkAndAwardAchievements?.(userId, {
+        await gamificationService.checkAndAwardAchievements(userId, {
           type: "daily_checkin",
           streak: newStreak,
           isNewRecord,
