@@ -475,6 +475,30 @@ const BUNDLE_SEED: InsertBundleDefinition[] = [
     merchandisingSlot: "fast_addon",
     priority: 50,
   },
+  {
+    code: "move_paint_refresh",
+    name: "Move + Paint Refresh",
+    description: "Move in + fresh paint before your stuff arrives — 10% off.",
+    serviceComboJson: ["moving", "painting"],
+    discountType: "percent",
+    discountValue: "10",
+    maxDiscount: "200",
+    isFeatured: true,
+    merchandisingSlot: "most_popular",
+    priority: 60,
+  },
+  {
+    code: "demo_flooring_replace",
+    name: "Demo + New Flooring",
+    description: "Tear out the old, lay down the new — $200 off when bundled.",
+    serviceComboJson: ["demolition", "flooring"],
+    discountType: "fixed",
+    discountValue: "200",
+    maxDiscount: null,
+    isFeatured: true,
+    merchandisingSlot: "best_value",
+    priority: 70,
+  },
 ];
 
 export async function ensureBookingCatalogSeeded(): Promise<void> {

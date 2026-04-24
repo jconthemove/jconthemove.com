@@ -199,6 +199,8 @@ const CHIP_TO_CODE: Record<string, string> = {
 const BUNDLE_HINT_RULES: Array<{ requires: string[]; code: string }> = [
   { requires: ["moving", "junk_removal"], code: "move_junk_reset" },
   { requires: ["junk_removal", "cleaning"], code: "junk_deep_clean_turnover" },
+  { requires: ["moving", "painting"], code: "move_paint_refresh" },
+  { requires: ["demolition", "flooring"], code: "demo_flooring_replace" },
   { requires: ["snow_removal"], code: "snow_walkway_priority" },
   { requires: ["labor", "delivery"], code: "labor_delivery_assembly" },
 ];
@@ -328,6 +330,8 @@ export function bundleHintName(code: string): string {
     case "junk_deep_clean_turnover": return "Junk + Deep Clean Turnover";
     case "labor_delivery_assembly": return "Labor + Delivery + Assembly";
     case "snow_walkway_priority":   return "Snow + Walkway Priority";
+    case "move_paint_refresh":      return "Move + Paint Refresh";
+    case "demo_flooring_replace":   return "Demo + New Flooring";
     default:                        return code;
   }
 }
@@ -426,6 +430,20 @@ export function runServiceParserTests(): number {
   // Lawn recognized
   const r15 = parseJobIntake({ freeText: "Mow my lawn next week" });
   _assert(r15.services.includes("lawn_care"), "lawn detected");
+  passed++;
+
+  // Move + paint bundle hint (Task #212)
+  const r16 = parseJobIntake({ freeText: "We're moving in next week and want to repaint before our stuff arrives" });
+  _assert(r16.services.includes("moving") && r16.services.includes("painting"),
+    "moving + painting both detected");
+  _assert(r16.bundleHint === "move_paint_refresh", "moving+painting bundle hint");
+  passed++;
+
+  // Demo + flooring bundle hint (Task #212)
+  const r17 = parseJobIntake({ freeText: "Tear out the carpet and put down LVP flooring" });
+  _assert(r17.services.includes("demolition") && r17.services.includes("flooring"),
+    "demolition + flooring both detected");
+  _assert(r17.bundleHint === "demo_flooring_replace", "demolition+flooring bundle hint");
   passed++;
 
   return passed;
