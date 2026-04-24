@@ -21,7 +21,8 @@ import { GAMIFICATION_REWARDS, gamificationService } from "./gamification";
 const DUPLICATE_CHECKIN_RACE = "DUPLICATE_CHECKIN_RACE";
 
 // True America/New_York Eastern day boundary (DST-safe via Intl).
-const easternFmt = new Intl.DateTimeFormat("en-CA", {
+// Uses formatToParts so we don't depend on locale-dependent string format.
+const easternFmt = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/New_York",
   year: "numeric",
   month: "2-digit",
@@ -29,7 +30,9 @@ const easternFmt = new Intl.DateTimeFormat("en-CA", {
 });
 
 function easternToday(): string {
-  return easternFmt.format(new Date());
+  const parts = easternFmt.formatToParts(new Date());
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
 // Calendar-day arithmetic on the Eastern-anchored date string so DST
@@ -321,10 +324,7 @@ export class DailyRewardsService {
           streak: newStreak,
           isNewRecord,
           treasuryBalance: stats?.availableFunding ?? 0,
-          error:
-            txErr instanceof Error && txErr.message
-              ? txErr.message
-              : "Reward processing failed. Please try again shortly.",
+          error: "Reward processing failed. Please try again shortly.",
         };
       }
 
