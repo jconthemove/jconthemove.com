@@ -311,6 +311,41 @@ const CATALOG_SEED: InsertServiceCatalogEntry[] = [
     sortOrder: 120,
     description: "Shingle repairs and full replacements.",
   },
+  // Task #210 — Painting & Flooring. Both ride the homepage tiles + the
+  // chat-intake parser already, but were silently dropped by the booking
+  // wizard's prefill (services.find(...code===) returned undefined when
+  // the catalog row didn't exist). Quote-mode like roofing/demolition
+  // because per-job scope (room count, sqft, prep, materials) varies too
+  // wildly to publish a single rack price; the booking-chatbot already
+  // collects the structured questionnaire that the crew uses to firm up
+  // a number off-platform. Suggested ranges below are guardrails for
+  // the "starting at" hint in the wizard, not a binding price.
+  {
+    code: "flooring",
+    name: "Flooring",
+    category: "core",
+    defaultPriceMode: "quote",
+    defaultPrice: null,
+    suggestedMin: "400",
+    suggestedMax: "5000",
+    discountEligible: true,
+    isAddon: false,
+    sortOrder: 130,
+    description: "Hardwood, vinyl plank, laminate, tile — install, refinish & old-floor removal.",
+  },
+  {
+    code: "painting",
+    name: "Painting",
+    category: "core",
+    defaultPriceMode: "quote",
+    defaultPrice: null,
+    suggestedMin: "300",
+    suggestedMax: "3500",
+    discountEligible: true,
+    isAddon: false,
+    sortOrder: 140,
+    description: "Interior & exterior painting — single rooms through full-house repaints, including prep & primer.",
+  },
   // ── Small-job add-ons ($200–$400 ranges per spec) ───────────────────────
   {
     code: "junk_reset",

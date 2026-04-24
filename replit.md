@@ -104,3 +104,34 @@ used to exist; the legacy `server/services/daily-checkin.ts` has been removed.
 
 ## Mobile App Framework
 - **Capacitor**: Hybrid mobile app wrapping.
+
+## Service Catalog — Crew Pricing Notes (Painting & Flooring)
+Both `painting` and `flooring` live in `service_catalog` as **quote-mode** rows
+(no rack price). The booking wizard surfaces only the suggested-min/max as a
+"starting at" hint; the crew always firms up the final number off-platform after
+the booking-chatbot questionnaire is reviewed. Guardrails seeded in
+`server/services/bookingCatalogSeed.ts`:
+
+- **Painting** — suggested range **$300–$3,500**.
+  - Interior single accent wall / small bedroom: ~$300–$600.
+  - Standard interior room (12×12, 1 coat over similar color): ~$450–$750.
+  - Whole-condo / 2-bed interior repaint: ~$1,500–$2,500.
+  - Full-house exterior repaint: ~$2,500–$3,500+ (escalate above range as needed).
+  - Add-ons that should bump the quote: ceilings, trim/doors, primer required,
+    heavy prep / patching, two-color or accent walls, popcorn or textured walls,
+    second-story exterior. The chatbot collects all of these in
+    `paintingAddons` / `paintingPrep` / `paintingMaterials` etc.
+
+- **Flooring** — suggested range **$400–$5,000**.
+  - Single small room install (LVP/laminate, ≤150 sqft, no removal): ~$400–$800.
+  - Standard 2-bed install with old-floor removal & haul-away: ~$1,500–$3,000.
+  - Whole-house LVP/laminate replacement: ~$3,500–$5,000+ (escalate above range).
+  - Add-ons that should bump the quote: removing existing floor, hauling away
+    debris, transition trim/quarter-round, subfloor leveling, hardwood refinish
+    vs. install, tile (labor-heavy). The chatbot collects these in
+    `flooringOldRemoval` / `flooringHaulAway` / `flooringTrim` /
+    `flooringMaterials`.
+
+Quote-mode means the wizard's discount engine still applies any matching bundle
+(no bundle currently includes painting or flooring), but the per-line subtotal
+is whatever the crew lands on — there is no `defaultPrice × quantity` math.
