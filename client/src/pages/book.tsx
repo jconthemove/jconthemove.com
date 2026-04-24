@@ -30,7 +30,7 @@ import {
   ServiceSelector, InlineItemConfigure, BookingSummarySticky,
   BundleSuggestionDialog, type BundleSuggestion,
   type CatalogService, type FeaturedBundle, type SelectedItem, type QuoteResult,
-  emojiFor, recommendedCrewSize, schedulingModeFor, formatLinePrice,
+  emojiFor, recommendedCrewSize, schedulingModeFor, formatLinePrice, formatLineLaborSubline,
 } from "@/components/MultiBookingFlow";
 
 interface BundleSlots {
@@ -615,9 +615,22 @@ export default function MultiServiceBookPage() {
               <p className="text-xs uppercase tracking-widest text-muted-foreground">Your services</p>
               {c.items.map(i => {
                 const linePrice = formatLinePrice(i, { fractionDigits: 2 });
+                // Task #218 — match the chat card's "N people × M hrs at
+                // $85/hr" subline so the wizard's confirmation step
+                // shows the same labor breakdown the customer saw in
+                // the recommended-plan card.
+                const laborMeta = c.quote.items.find(q => q.serviceCode === i.serviceCode)?.laborMeta;
+                const laborSubline = formatLineLaborSubline(laborMeta);
                 return (
                   <div key={i.serviceCode} className="flex justify-between text-sm">
-                    <span>{emojiFor(i.serviceCode)} {i.label}{i.details.requestedDate ? ` • ${i.details.requestedDate}` : ""}</span>
+                    <span>
+                      {emojiFor(i.serviceCode)} {i.label}{i.details.requestedDate ? ` • ${i.details.requestedDate}` : ""}
+                      {laborSubline && (
+                        <span className="block text-[10px] font-normal text-muted-foreground" data-testid={`confirm-line-labor-${i.serviceCode}`}>
+                          {laborSubline}
+                        </span>
+                      )}
+                    </span>
                     <span className="font-semibold text-right">
                       {linePrice.text}
                       {linePrice.isEstimate && (
@@ -927,12 +940,20 @@ export default function MultiServiceBookPage() {
                   <div className="space-y-1.5">
                     {items.map(i => {
                       const linePrice = formatLinePrice(i, { fractionDigits: 2 });
+                      // Task #218 — same labor subline as the chat card.
+                      const laborMeta = quote?.items.find(q => q.serviceCode === i.serviceCode)?.laborMeta;
+                      const laborSubline = formatLineLaborSubline(laborMeta);
                       return (
                         <div key={i.serviceCode} className="flex justify-between text-sm">
                           <span className="truncate pr-2">
                             {emojiFor(i.serviceCode)} {i.label}
                             {i.details.requestedDate ? ` · ${i.details.requestedDate}` : i.details.callToSchedule ? " · we'll call" : ""}
                             {i.details.frequency ? ` · ${i.details.frequency}` : ""}
+                            {laborSubline && (
+                              <span className="block text-[10px] font-normal text-muted-foreground" data-testid={`review-line-labor-${i.serviceCode}`}>
+                                {laborSubline}
+                              </span>
+                            )}
                           </span>
                           <span className="font-semibold whitespace-nowrap text-right">
                             {linePrice.text}

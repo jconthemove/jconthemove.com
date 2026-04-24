@@ -137,11 +137,15 @@ function deriveJobSize(
   return undefined;
 }
 
-/** Task #218 — Attach the canonical labor-hours breakdown to a quoted
- *  line. For services whose dollars come from a per-service calculator
- *  (moving matrix, painting/flooring sqft, etc.) we back-compute the
- *  hours so crewSize × laborHours × $85 always equals the displayed
- *  amount. */
+/** Task #218 — Set of services whose dollars come from a non-labor
+ *  calculator (sqft × $/sqft, etc.). For these, the labor meta is
+ *  back-computed from the line dollars so the displayed crew × hours
+ *  still adds up to the price the customer pays. Every OTHER service
+ *  uses the canonical labor breakdown from quoteByLaborHours and the
+ *  dollars are derived from THAT (see resolveItems below). */
+const CALCULATOR_DRIVEN_SERVICES = new Set(["painting", "flooring"]);
+
+/** Attach the canonical labor-hours breakdown to a quoted line. */
 function buildLaborMeta(
   serviceCode: string,
   unitPrice: number,
@@ -163,11 +167,11 @@ function buildLaborMeta(
   });
   if (!labor) return undefined;
 
-  // For services where dollars come from a non-labor calculator (e.g.
-  // moving matrix, painting sqft), derive hours so the breakdown adds up
-  // to the actual line amount the customer is paying.
+  // Painting / flooring have their own sqft × $/sqft calculator. Keep
+  // the dollars they produced and back-compute hours from that line
+  // total so the displayed breakdown still reconciles to the price.
   const lineTotal = Math.max(0, unitPrice * Math.max(1, quantity));
-  if (lineTotal > 0 && (explicitHours == null || serviceCode === "moving" || serviceCode === "painting" || serviceCode === "flooring")) {
+  if (CALCULATOR_DRIVEN_SERVICES.has(serviceCode) && lineTotal > 0 && explicitHours == null) {
     const crew = labor.crewSize;
     const derivedHours = +(lineTotal / (crew * LABOR_RATE_PER_HOUR)).toFixed(2);
     return {
@@ -177,6 +181,11 @@ function buildLaborMeta(
       ratePerHour: LABOR_RATE_PER_HOUR,
     };
   }
+
+  // For every other service, the canonical labor breakdown IS the
+  // source of truth — the dollars get derived from this in
+  // resolveItems below, so we never back-compute hours from a stale
+  // catalog suggested-min that the customer never agreed to.
   return {
     crewSize: labor.crewSize,
     laborHours: labor.laborHours,
@@ -237,13 +246,18 @@ function resolveItems(
     }
 
     const laborMeta = buildLaborMeta(item.serviceCode, unitPrice, item.quantity, item.details || {});
-    // Task #218 — When the catalog has no defaultPrice (quote-only) AND
-    // we have a labor-hours fallback, USE the labor-derived dollars so
-    // the response total matches the breakdown we just attached. Without
-    // this, services like lawn_care/trash_valet would show $0 alongside
-    // a "1 person × 0.5 hrs at $85/hr" subline.
-    if (laborMeta && unitPrice === 0 && priceMode === "quote") {
-      unitPrice = +(laborMeta.crewSize * laborMeta.laborHours * laborMeta.ratePerHour).toFixed(2);
+    // Task #218 — Make labor pricing AUTHORITATIVE for every quote-mode
+    // service that has a labor-hours mapping. Previously we only fell
+    // back when unitPrice was zero, so a non-zero catalog suggested-min
+    // would silently bypass crew × hours × $85 even though the chat
+    // card promised that math. Painting / flooring keep the dollars
+    // their own calculator produced (their meta is back-computed from
+    // those dollars inside buildLaborMeta to stay reconciled).
+    if (priceMode === "quote"
+        && laborMeta
+        && !CALCULATOR_DRIVEN_SERVICES.has(item.serviceCode)) {
+      const laborDollars = +(laborMeta.crewSize * laborMeta.laborHours * laborMeta.ratePerHour).toFixed(2);
+      if (laborDollars > 0) unitPrice = laborDollars;
     }
     pricingInputs.push({
       serviceCode: item.serviceCode,

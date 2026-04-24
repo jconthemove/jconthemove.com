@@ -109,13 +109,23 @@ export function schedulingModeFor(code: string): BundleSchedulingMode {
   return BUNDLE_SCHEDULING_MODE[code] ?? "date_only";
 }
 
+/** Task #218 — labor breakdown the chat card and wizard cart read off
+ *  each quoted line. Mirrors BookingPricingItemInput["laborMeta"] on the
+ *  server. */
+export interface QuoteLaborMeta {
+  crewSize: number;
+  laborHours: number;
+  totalLaborHours: number;
+  ratePerHour: number;
+}
+
 export interface QuoteResult {
   subtotal: number;
   discountTotal: number;
   finalTotal: number;
   tokenEstimate: number;
   bundleApplied: { code: string; name: string; rawDiscount: number } | null;
-  items: Array<{ serviceCode: string; lineSubtotal: number }>;
+  items: Array<{ serviceCode: string; lineSubtotal: number; laborMeta?: QuoteLaborMeta }>;
   tokenRedemption?: { tokens: number; discountUsd: number };
 }
 
@@ -192,6 +202,21 @@ export function formatLinePrice(
     return { text: "TBD", isEstimate: false };
   }
   return { text: `$${total.toFixed(digits)}`, isEstimate: false };
+}
+
+/** Task #218 — Returns the secondary "2 ppl × 4 hrs at $85/hr" line
+ *  the wizard cart and chat card both show beneath each priced
+ *  service. Returns null when the live quote did not attach a labor
+ *  breakdown (e.g. fixed-price line without a labor mapping). */
+export function formatLineLaborSubline(meta?: QuoteLaborMeta): string | null {
+  if (!meta) return null;
+  if (!meta.crewSize || meta.crewSize <= 0) return null;
+  if (!meta.laborHours || meta.laborHours <= 0) return null;
+  const crewWord = meta.crewSize === 1 ? "person" : "people";
+  const hrsLabel = Number.isInteger(meta.laborHours)
+    ? `${meta.laborHours}`
+    : meta.laborHours.toFixed(1);
+  return `${meta.crewSize} ${crewWord} × ${hrsLabel} hrs at $${meta.ratePerHour}/hr`;
 }
 
 // ── ServiceSelector ────────────────────────────────────────────────────────

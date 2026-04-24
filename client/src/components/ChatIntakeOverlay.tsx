@@ -77,6 +77,23 @@ interface CatalogService {
   suggestedMax: string | null;
 }
 
+/** Task #218 — labor breakdown the chat card reads off each quoted line.
+ *  Mirrors BookingPricingItemInput["laborMeta"] on the server. */
+interface QuoteLaborMeta {
+  crewSize: number;
+  laborHours: number;
+  totalLaborHours: number;
+  ratePerHour: number;
+}
+
+interface QuoteResponseItem {
+  serviceCode: string;
+  lineSubtotal: number;
+  unitPrice: number;
+  quantity: number;
+  laborMeta?: QuoteLaborMeta;
+}
+
 interface QuoteResponse {
   success: true;
   quote: {
@@ -84,7 +101,7 @@ interface QuoteResponse {
     discountTotal: number;
     finalTotal: number;
     bundleApplied: { code: string; name: string; rawDiscount: number } | null;
-    items: Array<{ serviceCode: string; lineSubtotal: number }>;
+    items: QuoteResponseItem[];
   };
 }
 
@@ -759,7 +776,7 @@ function RecommendedPlanCard({
             // Task #218 — When the live quote has resolved, prefer the
             // server's crewSize/laborHours so the label matches the
             // dollar math exactly (e.g. "2 Movers (4 hrs)" → $680).
-            const quotedItem = quote?.items?.find((it: any) => it.serviceCode === code);
+            const quotedItem = quote?.items?.find((it) => it.serviceCode === code);
             const meta = quotedItem?.laborMeta;
             return (
               <li
