@@ -50,7 +50,14 @@ import {
   type PaintingAnswers,
   type FlooringAnswers,
 } from "../services/pricingEngine";
-import { quoteByLaborHours, LABOR_RATE_PER_HOUR } from "@shared/pricingTables";
+import { quoteByLaborHours, LABOR_RATE_PER_HOUR, quoteMovingFromTable } from "@shared/pricingTables";
+
+// Task #218 spec: small moving "two-person 2-hour special" — flat $300
+// promotional price, regardless of bedrooms/stairs (sits below the raw
+// 2×2×85=$340 labor math as a marketing loss-leader for first-touch
+// customers). Labor breakdown still shows "2 movers × 2 hrs at $85/hr"
+// in the chat card; the dollars are this special.
+const SMALL_MOVE_SPECIAL_PRICE = 300;
 
 const router = Router();
 
@@ -267,6 +274,24 @@ function resolveItems(
         fallbackMax,
       });
       if (est.amount > 0) unitPrice = est.amount;
+    } else if (item.serviceCode === "moving") {
+      // Task #218 — Drive moving dollars from the matrix at the route
+      // layer too (not just the chat overlay), using whatever
+      // bedrooms/stairs/loadType the client passes in details.
+      // Small move honors the "two-person 2-hour special" of $300
+      // (spec table: "small | 2×2 hrs | $340 (special floor: $300)").
+      const details = (item.details ?? {}) as Record<string, unknown>;
+      const jobSize = deriveJobSize("moving", details);
+      if (jobSize === "small") {
+        unitPrice = SMALL_MOVE_SPECIAL_PRICE;
+      } else if (details.bedrooms != null || details.stairs != null || details.loadType != null) {
+        const matrix = quoteMovingFromTable({
+          bedrooms: details.bedrooms as string | undefined,
+          stairs: details.stairs as string | number | undefined,
+          loadType: details.loadType as string | undefined,
+        });
+        if (matrix.amount > 0) unitPrice = matrix.amount;
+      }
     }
 
     const laborMeta = buildLaborMeta(item.serviceCode, unitPrice, item.quantity, item.details || {});

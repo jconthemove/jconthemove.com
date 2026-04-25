@@ -7,6 +7,9 @@
 // Tunable knobs live in `FLOORING_RULES`. A non-engineer note can edit
 // the per-sqft labor rates, removal/haul-away surcharges, and trim
 // adders without touching any other file.
+
+import { LABOR_RATE_PER_HOUR } from "../../../shared/pricingTables";
+
 //
 // The rule accepts the chatbot's raw answer strings (with emoji prefixes
 // like "🪵 Hardwood", "✅ Yes — remove existing floor", etc.) plus the
@@ -202,7 +205,7 @@ export function estimateFlooring(input: FlooringEstimateInput = {}): FlooringEst
 
   // Task #218 — derive labor hours from the dollar amount; flooring uses
   // a 2-person crew by default, hours rounded to nearest 0.5.
-  const ratePerHour = 85;
+  const ratePerHour = LABOR_RATE_PER_HOUR;
   const crewSize = 2;
   const laborHours = Math.max(
     1,

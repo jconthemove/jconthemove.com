@@ -14,6 +14,8 @@
 // and the result is always clamped to [fallbackMin, fallbackMax] (the
 // catalog suggested band).
 
+import { LABOR_RATE_PER_HOUR } from "../../../shared/pricingTables";
+
 export const PAINTING_RULES = {
   // Room count selector → numeric rooms.
   ROOMS_BY_COUNT: {
@@ -249,7 +251,7 @@ export function estimatePainting(input: PaintingEstimateInput = {}): PaintingEst
   // the chat card can render "1 painter × N hrs at $85/hr" alongside
   // the rule-driven price. Painting defaults to a 1-painter crew;
   // hours are rounded to the nearest 0.5.
-  const ratePerHour = 85;
+  const ratePerHour = LABOR_RATE_PER_HOUR;
   const crewSize = 1;
   const laborHours = Math.max(
     0.5,
