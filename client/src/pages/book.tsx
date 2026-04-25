@@ -613,13 +613,16 @@ export default function MultiServiceBookPage() {
             </div>
             <div className="rounded-xl bg-card border border-border p-4 text-left space-y-2">
               <p className="text-xs uppercase tracking-widest text-muted-foreground">Your services</p>
-              {c.items.map(i => {
+              {c.items.map((i, idx) => {
                 const linePrice = formatLinePrice(i, { fractionDigits: 2 });
-                // Task #218 — match the chat card's "N people × M hrs at
-                // $85/hr" subline so the wizard's confirmation step
-                // shows the same labor breakdown the customer saw in
-                // the recommended-plan card.
-                const laborMeta = c.quote.items.find(q => q.serviceCode === i.serviceCode)?.laborMeta;
+                // Task #218 round-9 rev2 — match the chat card's
+                // "N people × M hrs at $85/hr" subline so the wizard's
+                // confirmation step shows the same labor breakdown the
+                // customer saw in the recommended-plan card. Use index
+                // alignment (not serviceCode find()) so duplicate lines
+                // of the same service get their own labor meta.
+                const quoteLine = c.quote.items[idx];
+                const laborMeta = quoteLine?.serviceCode === i.serviceCode ? quoteLine.laborMeta : undefined;
                 const laborSubline = formatLineLaborSubline(laborMeta);
                 return (
                   <div key={i.serviceCode} className="flex justify-between text-sm">
@@ -938,10 +941,15 @@ export default function MultiServiceBookPage() {
                 <div className="border-t border-border pt-3">
                   <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Services</p>
                   <div className="space-y-1.5">
-                    {items.map(i => {
+                    {items.map((i, idx) => {
                       const linePrice = formatLinePrice(i, { fractionDigits: 2 });
-                      // Task #218 — same labor subline as the chat card.
-                      const laborMeta = quote?.items.find(q => q.serviceCode === i.serviceCode)?.laborMeta;
+                      // Task #218 round-9 rev2 — same labor subline as the
+                      // chat card. Use index alignment (not serviceCode
+                      // find()) so duplicate lines of the same service get
+                      // their own labor meta instead of all sharing the
+                      // first matching line's tuple.
+                      const quoteLine = quote?.items[idx];
+                      const laborMeta = quoteLine?.serviceCode === i.serviceCode ? quoteLine.laborMeta : undefined;
                       const laborSubline = formatLineLaborSubline(laborMeta);
                       return (
                         <div key={i.serviceCode} className="flex justify-between text-sm">
