@@ -314,7 +314,9 @@ export function friendlyServiceLabel(
     case "moving": {
       if (hasLabor) {
         const moverWord = crew === 1 ? "Mover" : "Movers";
-        const hrsLabel = Number.isInteger(hrs) ? `${hrs}` : hrs!.toFixed(1);
+        const hrsLabel = Number.isInteger(hrs)
+          ? `${hrs}`
+          : hrs!.toFixed(2).replace(/0$/, "");
         return `🚛 ${crew} ${moverWord} (${hrsLabel} hrs)`;
       }
       if (size === "small") return "🚛 2 Movers (2 hrs)";
@@ -378,7 +380,9 @@ export function formatLaborBreakdownLine(opts: {
   if (typeof crew !== "number" || crew <= 0) return null;
   if (typeof hrs !== "number" || hrs <= 0) return null;
   const crewWord = crew === 1 ? "person" : "people";
-  const hrsLabel = Number.isInteger(hrs) ? `${hrs}` : hrs.toFixed(1);
+  const hrsLabel = Number.isInteger(hrs)
+    ? `${hrs}`
+    : hrs.toFixed(2).replace(/0$/, "");
   return `Based on ${crew} ${crewWord} × ${hrsLabel} hrs at $${rate}/hr`;
 }
 

@@ -87,6 +87,13 @@ async function endToEndPipeline() {
     ["window_cleaning", {},                   170,  1, 2],
     ["snow_removal",    {},                   63.75,1, 0.75],
     ["handyman",        {},                   170,  1, 2],
+    // Task #218 review-round-5: labor + moving must round-trip too,
+    // proving every reviewer-named service is parity-tight at the
+    // computeBookingQuote layer (not just at quoteByLaborHours).
+    ["labor",           {},                   340,  2, 2],
+    ["moving",          { jobSize: "small"},  340,  2, 2],
+    ["moving",          { jobSize: "medium"}, 680,  2, 4],
+    ["moving",          { jobSize: "large"}, 1360,  4, 4],
   ];
 
   for (const [code, details, expectedDollars, crew, hrs] of cases) {

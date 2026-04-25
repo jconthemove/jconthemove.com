@@ -322,9 +322,11 @@ function resolveItems(
     // card's promise. Calculator-priced services (moving matrix,
     // painting/flooring rules, delivery mileage) keep their unitPrice
     // — labor meta on those is metadata only.
-    if (priceMode === "quote"
-        && laborMeta
-        && LABOR_AUTHORITATIVE_SERVICES.has(item.serviceCode)) {
+    // Labor authority is independent of priceMode — even when the
+    // catalog row defaults to "fixed" (trash_valet flat rate) or
+    // "hourly" (handyman/labor), the chat card still promises crew ×
+    // hours × $85, so the route layer must bill that exact amount.
+    if (laborMeta && LABOR_AUTHORITATIVE_SERVICES.has(item.serviceCode)) {
       const laborDollars = +(laborMeta.crewSize * laborMeta.laborHours * laborMeta.ratePerHour).toFixed(2);
       if (laborDollars > 0) unitPrice = laborDollars;
     }
