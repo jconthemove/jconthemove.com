@@ -36,13 +36,48 @@ export const JUNK_TIERS: JunkTier[] = [
   { code: "xlarge", label: "X-Large Load", shortLabel: "X-Large", loadFraction: "Full truck", weightCap: "≤ 2400 lbs", price: 625 },
 ];
 
-export function quoteMovingFromTable(opts: { bedrooms?: string; stairs?: number | string; loadType?: string }): { amount: number; base: number; multiplier: number } {
+/** Bedroom → canonical crew size for moving matrix. Mirrors the labor
+ *  tuples in SERVICE_LABOR_DEFAULTS["moving"] (small=2, medium=2, large=4)
+ *  so any caller of quoteMovingFromTable can render a chat-card breakdown
+ *  whose crew × hours × $85 = the matrix amount. */
+const MOVING_MATRIX_CREW: Record<string, number> = {
+  studio: 2,  // small
+  "1br": 2,   // small
+  "2br": 2,   // medium
+  "3br": 3,   // large-ish — 3 movers handles the matrix range cleanly
+  "4br": 4,   // large
+  "5br+": 4,  // x-large still 4-mover crew per spec (matrix uses "5br+" key)
+};
+
+export function quoteMovingFromTable(opts: { bedrooms?: string; stairs?: number | string; loadType?: string }): {
+  amount: number;
+  base: number;
+  multiplier: number;
+  /** Canonical labor tuple — crew × hours × $85 = `amount` (to the cent). */
+  labor: { crewSize: number; laborHours: number; totalLaborHours: number; ratePerHour: number };
+} {
   const br = String(opts.bedrooms || "1br");
   const stairs = String(Math.max(0, Math.min(3, Number(opts.stairs ?? 0))));
   const lt = String(opts.loadType || "local");
   const base = MOVING_BASE_MATRIX[br]?.[stairs] ?? MOVING_BASE_MATRIX["1br"]["0"];
   const multiplier = MOVING_LOAD_TYPE_MULTIPLIER[lt] ?? 1;
-  return { amount: Math.round(base * multiplier), base, multiplier };
+  const amount = Math.round(base * multiplier);
+  // Canonical labor tuple: crew is fixed by bedroom tier, hours derived
+  // so crew × hours × $85 ≈ amount (within $1 due to 2-decimal hour
+  // rounding — matrix amounts like $1365 are not divisible by $85, so
+  // some cent-level slip is unavoidable). The tuple is what the chat
+  // card displays; the matrix `amount` remains the billed truth.
+  const crewSize = MOVING_MATRIX_CREW[br] ?? 2;
+  const laborHours = amount > 0
+    ? +(amount / (crewSize * LABOR_RATE_PER_HOUR)).toFixed(2)
+    : 0;
+  const totalLaborHours = +(crewSize * laborHours).toFixed(2);
+  return {
+    amount,
+    base,
+    multiplier,
+    labor: { crewSize, laborHours, totalLaborHours, ratePerHour: LABOR_RATE_PER_HOUR },
+  };
 }
 
 export function quoteJunkFromTable(tierCode: string): { amount: number; tier: JunkTier | null } {
@@ -291,17 +326,19 @@ export function quoteByLaborHours(
     source = "explicit";
   } else if (catalogHours != null) {
     // Catalog-driven path: the catalog row carries default labor hours
-    // and (optionally) a min crew. We still consult the static fallback
-    // for crew when the catalog only provides hours.
-    crewSize = opts.crewSize ?? cat?.minCrew ?? sized?.crew ?? def?.defaultCrew ?? 1;
+    // and (optionally) a min crew. We prefer size-specific crew
+    // (e.g., moving large = 4) over the row-level minCrew (which is the
+    // floor across ALL sizes); minCrew is enforced as a floor below.
+    crewSize = opts.crewSize ?? sized?.crew ?? def?.defaultCrew ?? cat?.minCrew ?? 1;
     laborHours = opts.laborHours ?? catalogHours;
     source = "catalog";
   } else if (sized) {
-    crewSize = opts.crewSize ?? cat?.minCrew ?? sized.crew;
+    // Size-specific tuple wins; minCrew applied as floor below.
+    crewSize = opts.crewSize ?? sized.crew;
     laborHours = opts.laborHours ?? sized.hours;
     source = "jobSize";
   } else if (def) {
-    crewSize = opts.crewSize ?? cat?.minCrew ?? def.defaultCrew;
+    crewSize = opts.crewSize ?? def.defaultCrew;
     laborHours = opts.laborHours ?? def.defaultHours;
     source = "default";
   } else if (opts.crewSize != null || opts.laborHours != null) {
@@ -311,6 +348,14 @@ export function quoteByLaborHours(
     source = "unknown";
   } else {
     return null;
+  }
+  // Catalog minCrew is a FLOOR, never an override. Larger size-specific
+  // crews (e.g., moving large = 4) must not be flattened down to the
+  // row-level minimum (moving minCrew = 2). This preserves the chat
+  // card's promised tuple — "4 movers × 4 hrs" for a large move — even
+  // when the catalog row defines a smaller minimum.
+  if (cat?.minCrew != null && opts.crewSize == null) {
+    crewSize = Math.max(crewSize, cat.minCrew);
   }
 
   // Defensive clamp: at least 1 mover, at least 0.25 hr (15-min minimum).

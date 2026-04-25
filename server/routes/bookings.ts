@@ -219,6 +219,18 @@ function buildLaborMeta(
   // never displays math that disagrees with the price.
   const lineTotal = Math.max(0, unitPrice * Math.max(1, quantity));
   if (serviceCode === "moving") {
+    // Small-move special ($300) is a marketed promotion — the chat card
+    // still promises "2 movers × 2 hrs"; we deliberately skip the
+    // back-computation that would otherwise show ~1.76 hrs (300 ÷ 170).
+    // The dollars are special-cased upstream; the tuple stays canonical.
+    if (jobSize === "small" && lineTotal === SMALL_MOVE_SPECIAL_PRICE) {
+      return {
+        crewSize: labor.crewSize,
+        laborHours: labor.laborHours,
+        totalLaborHours: labor.totalLaborHours,
+        ratePerHour: labor.ratePerHour,
+      };
+    }
     const canonicalDollars = +(labor.crewSize * labor.laborHours * LABOR_RATE_PER_HOUR).toFixed(2);
     if (lineTotal > 0 && Math.abs(lineTotal - canonicalDollars) > 0.01) {
       const crew = labor.crewSize;
@@ -286,6 +298,12 @@ function resolveItems(
       | "per_unit"
       | "quote";
     const label = item.label || cat.name;
+    // Captured in the moving branch when the matrix path produces an
+    // amount; consumed below buildLaborMeta so the chat-card crew/hours
+    // tuple reflects the matrix tier (e.g., 3br → crew=3) rather than
+    // SERVICE_LABOR_DEFAULTS' jobSize tuple. Declared at the for-loop
+    // scope because it crosses the moving-branch / labor-meta boundary.
+    let matrixLaborOverride: { crewSize: number; laborHours: number; totalLaborHours: number; ratePerHour: number } | undefined;
 
     // Task #211 — Painting & Flooring run the chatbot questionnaire
     // through the editable rule files in services/quoteRules/ so the
@@ -326,13 +344,22 @@ function resolveItems(
       const hasDetailedInputs =
         details.bedrooms != null || details.stairs != null || details.loadType != null;
       let appliedJobSize: ReturnType<typeof deriveJobSize> | undefined;
+      // matrixLaborOverride is declared at the for-loop scope above so
+      // it survives the closing brace of this `else if` branch and
+      // remains visible to the buildLaborMeta consumer below. When the
+      // matrix path is taken its labor tuple wins downstream — the
+      // chat-card crew count must reflect the matrix tier (3br → crew=3),
+      // not SERVICE_LABOR_DEFAULTS' jobSize tuple.
       if (hasDetailedInputs) {
         const matrix = quoteMovingFromTable({
           bedrooms: details.bedrooms as string | undefined,
           stairs: details.stairs as string | number | undefined,
           loadType: details.loadType as string | undefined,
         });
-        if (matrix.amount > 0) unitPrice = matrix.amount;
+        if (matrix.amount > 0) {
+          unitPrice = matrix.amount;
+          matrixLaborOverride = matrix.labor;
+        }
       } else {
         // No detailed inputs — only consider job-size / truck-size
         // explicit hints. We deliberately do NOT use deriveJobSize here
@@ -367,6 +394,17 @@ function resolveItems(
     }
 
     let laborMeta = buildLaborMeta(item.serviceCode, unitPrice, item.quantity, item.details || {}, cat);
+    // Matrix labor tuple wins for moving when bedrooms/stairs/loadType
+    // were supplied: per spec the matrix is the source of truth, and the
+    // chat-card crew count must reflect the matrix tier (3br → crew=3),
+    // not the SERVICE_LABOR_DEFAULTS jobSize tuple (medium → crew=2).
+    // We deliberately skip this override for the small-move special so
+    // that buildLaborMeta's preserved canonical 2-crew × 2-hr tuple
+    // continues to drive the chat card for $300 small-move quotes.
+    const isSmallSpecial = item.serviceCode === "moving" && unitPrice === SMALL_MOVE_SPECIAL_PRICE;
+    if (item.serviceCode === "moving" && matrixLaborOverride && !isSmallSpecial) {
+      laborMeta = matrixLaborOverride;
+    }
     // Labor-priced services (lawn, valet, snow, junk, handyman, etc.)
     // get their unitPrice replaced with the canonical crew × hrs × $85
     // so the catalog suggested-min never silently bypasses the chat

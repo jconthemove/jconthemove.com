@@ -15,6 +15,7 @@ import {
   formatLaborSummary,
   LABOR_RATE_PER_HOUR,
   SERVICE_LABOR_DEFAULTS,
+  quoteMovingFromTable,
 } from "../../../shared/pricingTables";
 
 let failures = 0;
@@ -346,6 +347,61 @@ const clampedDown = quoteByLaborHours("handyman", {
 });
 eq("catalog clamps amount down to suggestedMax=$800",
   { $: clampedDown?.amount }, { $: 800 });
+
+// Round-9 rev2: catalog `minCrew` is a floor, never an override.
+// For moving large the size-specific tuple is 4 movers × 4 hr; the
+// catalog row's minCrew=2 (floor across all sizes) must NOT flatten
+// the crew down to 2 (which would break the chat card's "4 movers"
+// promise). This is the regression the reviewer flagged.
+const movingLargeWithCatalog = quoteByLaborHours("moving", {
+  jobSize: "large",
+  catalog: { minCrew: 2, defaultLaborHours: { large: 4, default: 4 } },
+});
+eq("moving large + catalog minCrew=2 → keeps 4 crew × 4 hr (floor doesn't flatten)",
+  { crew: movingLargeWithCatalog?.crewSize, hrs: movingLargeWithCatalog?.laborHours, $: movingLargeWithCatalog?.amount },
+  { crew: 4, hrs: 4, $: 1360 });
+
+// minCrew DOES enforce a floor when the resolved crew is smaller.
+// Handyman default is 1 mover; a row-level minCrew=2 should lift it.
+const handymanFloor = quoteByLaborHours("handyman", {
+  catalog: { minCrew: 2 },
+});
+eq("handyman + catalog minCrew=2 → 2 crew × 2 hr × $85 = $340 (floor lifts)",
+  { crew: handymanFloor?.crewSize, hrs: handymanFloor?.laborHours, $: handymanFloor?.amount },
+  { crew: 2, hrs: 2, $: 340 });
+
+// Round-9 rev2: quoteMovingFromTable now carries a canonical labor
+// tuple in its return value so non-route callers (shared pricing
+// surfaces, e-mail quotes, etc.) can render the chat-card breakdown
+// without re-implementing the back-computation. crew × hours × $85
+// must approximate `amount` within $1 (matrix amounts like $1365 are
+// not divisible by $85, so a small cents-level slip is unavoidable).
+const matrix3br = quoteMovingFromTable({ bedrooms: "3br", stairs: 2, loadType: "heavy" });
+const tuple3br$ = +(matrix3br.labor.crewSize * matrix3br.labor.laborHours * matrix3br.labor.ratePerHour).toFixed(2);
+const within1Dollar = Math.abs(tuple3br$ - matrix3br.amount) <= 1;
+eq("quoteMovingFromTable 3br/2/heavy → labor tuple within $1 of matrix amount",
+  { within1Dollar, matrixAmount: matrix3br.amount },
+  { within1Dollar: true, matrixAmount: 1365 });
+eq("quoteMovingFromTable 3br → crew=3 (per MOVING_MATRIX_CREW)",
+  { crew: matrix3br.labor.crewSize }, { crew: 3 });
+
+// 1br matrix entry — base $425 × 1.0 = $425 (matrix value),
+// crew=2 → hours=425/(2*85)=2.5. Tuple round-trips cleanly to the cent.
+const matrix1br = quoteMovingFromTable({ bedrooms: "1br", stairs: 0, loadType: "local" });
+const tuple1br$ = +(matrix1br.labor.crewSize * matrix1br.labor.laborHours * matrix1br.labor.ratePerHour).toFixed(2);
+eq("quoteMovingFromTable 1br/0/local → crew=2 hrs=2.5 $=425 (tuple matches exactly)",
+  { crew: matrix1br.labor.crewSize, hrs: matrix1br.labor.laborHours, $: matrix1br.amount, tuple: tuple1br$ },
+  { crew: 2, hrs: 2.5, $: 425, tuple: 425 });
+
+// 5br+ matrix entry — must use literal "5br+" key (NOT "5br") so the
+// crew lookup hits MOVING_MATRIX_CREW["5br+"] = 4. Round-9 rev2 reviewer
+// caught this regression: a previous "5br" key would silently fall back
+// to crew=2 for the largest tier, breaking the chat-card promise.
+const matrix5br = quoteMovingFromTable({ bedrooms: "5br+", stairs: 0, loadType: "local" });
+const tuple5br$ = +(matrix5br.labor.crewSize * matrix5br.labor.laborHours * matrix5br.labor.ratePerHour).toFixed(2);
+eq("quoteMovingFromTable 5br+ → crew=4 (matrix key honors '5br+' literal)",
+  { crew: matrix5br.labor.crewSize, hasAmount: matrix5br.amount > 0, within$1: Math.abs(tuple5br$ - matrix5br.amount) <= 1 },
+  { crew: 4, hasAmount: true, within$1: true });
 
 if (failures > 0) {
   console.error(`\n${failures} assertion(s) failed.`);
