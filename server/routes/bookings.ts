@@ -153,9 +153,12 @@ function deriveJobSize(
 // the unitPrice. Moving keeps its bedrooms × stairs × loadType matrix
 // per Task #218 spec step 4. Painting/flooring keep their rule-file
 // dollars per spec step 5. Delivery keeps its mileage-based pricer.
-const CALCULATOR_DRIVEN_SERVICES = new Set([
-  "painting", "flooring", "moving", "delivery",
-]);
+//
+// Calculator-driven services (painting, flooring, moving, delivery)
+// run through their own per-service branches above (estimatePainting,
+// estimateFlooring, the moving matrix/labor-tier router, mileage)
+// — they do NOT need a Set lookup because the route only needs to
+// distinguish "is this in LABOR_AUTHORITATIVE_SERVICES?" below.
 
 // Services where labor IS the source of truth: the spec table maps
 // each one to crew × hours, and we override the catalog suggested-min
