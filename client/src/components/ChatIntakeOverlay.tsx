@@ -397,11 +397,12 @@ export default function ChatIntakeOverlay({
       .map((s) => {
         const details: Record<string, unknown> = {};
         if (sizeHint) details.jobSize = sizeHint;
-        // Carry the moving bedrooms hint in the form the moving matrix
-        // expects so /quote's per-service handler also picks it up.
-        if (s.code === "moving" && sizeHint) {
-          details.bedrooms = sizeHint === "small" ? "1br" : sizeHint === "large" ? "4br" : "2br";
-        }
+        // Task #218 round-7 — Do NOT synthesize a bedrooms value from
+        // the chat size hint. The route layer treats bedrooms as a
+        // signal that the customer hand-described their move, which
+        // forces matrix-based pricing and bypasses the labor tiers
+        // (small=$340, medium=$680, large=$1360) the chat card
+        // promised. The bare `jobSize` hint above is enough.
         if (s.code === "junk_removal" && sizeHint) {
           details.tier = sizeHint;
         }
