@@ -67,6 +67,53 @@ eq("formatLaborSummary copies the line we render in the chat card",
   formatLaborSummary({ crewSize: 2, laborHours: 4 }),
   "2 movers × 4 hrs");
 
+// ── End-to-end: /api/bookings/quote response shape ─────────────────
+// Drives a few canonical lines through the same resolveItems +
+// computeBookingQuote pipeline the HTTP route uses, then asserts the
+// per-item fields the chat card and wizard render against.
+async function endToEndPipeline() {
+  const { computeBookingQuote } = await import("../bookingPricing");
+  const { quoteByLaborHours, LABOR_RATE_PER_HOUR } =
+    await import("../../../shared/pricingTables");
+
+  const cases: Array<[string, { jobSize?: string }, number, number, number]> = [
+    // [serviceCode, details, expectedDollars, expectedCrew, expectedHours]
+    ["lawn_care",       {},                  42.5,  1, 0.5],
+    ["trash_valet",     {},                  28.05, 1, 0.33],
+    ["junk_removal",    { jobSize: "small"},  170,  2, 1],
+    ["junk_removal",    { jobSize: "medium"}, 340,  2, 2],
+    ["junk_removal",    { jobSize: "large"},  510,  2, 3],
+    ["window_cleaning", {},                   170,  1, 2],
+    ["snow_removal",    {},                   63.75,1, 0.75],
+    ["handyman",        {},                   170,  1, 2],
+  ];
+
+  for (const [code, details, expectedDollars, crew, hrs] of cases) {
+    const labor = quoteByLaborHours(code, { jobSize: details.jobSize as any });
+    const dollars = +(crew * hrs * LABOR_RATE_PER_HOUR).toFixed(2);
+    const result = computeBookingQuote([{
+      serviceCode: code,
+      label: code,
+      quantity: 1,
+      unitPrice: dollars,
+      priceMode: "quote",
+      details,
+      laborMeta: labor ? {
+        crewSize: labor.crewSize,
+        laborHours: labor.laborHours,
+        totalLaborHours: labor.totalLaborHours,
+        ratePerHour: labor.ratePerHour,
+      } : undefined,
+    }]);
+    const item = result.items[0];
+    eq(`${code}/${details.jobSize ?? "default"} → $${expectedDollars} crew=${crew} hrs=${hrs}`,
+      { $: item.lineSubtotal, crew: item.crewSize, hrs: item.laborHours, rate: item.ratePerHour },
+      { $: expectedDollars, crew, hrs, rate: 85 });
+  }
+}
+
+await endToEndPipeline();
+
 if (failures > 0) {
   console.error(`\n${failures} assertion(s) failed.`);
   process.exit(1);
