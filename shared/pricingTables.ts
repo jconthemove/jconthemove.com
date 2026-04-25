@@ -222,7 +222,7 @@ export const SERVICE_LABOR_DEFAULTS: Record<string, ServiceLaborDefaults> = {
   // Painting & Flooring keep their sqft-driven dollar math (services/
   // quoteRules/painting.ts & flooring.ts) — these defaults exist purely
   // so the customer-facing card can still show a labor-hours breakdown.
-  painting:        { defaultCrew: 2, defaultHours: 6 },
+  painting:        { defaultCrew: 1, defaultHours: 6 },
   flooring:        { defaultCrew: 2, defaultHours: 8 },
   junk_reset:      { defaultCrew: 2, defaultHours: 2 },
   deep_clean_turnover: { defaultCrew: 2, defaultHours: 4 },

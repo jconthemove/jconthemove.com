@@ -14,6 +14,7 @@ import {
   quoteByLaborHours,
   formatLaborSummary,
   LABOR_RATE_PER_HOUR,
+  SERVICE_LABOR_DEFAULTS,
 } from "../../../shared/pricingTables";
 
 let failures = 0;
@@ -182,6 +183,45 @@ async function movingRoutingPriority() {
 }
 
 await movingRoutingPriority();
+
+// ── Painting/Flooring labor metadata parity ─────────────────────────
+// Reviewer round-7 follow-up: the SERVICE_LABOR_DEFAULTS table feeds
+// buildLaborMeta for painting/flooring while the rule files compute
+// dollars; the crew-size assumption must be identical across both
+// surfaces or the chat card and rule output disagree.
+async function paintingFlooringLaborParity() {
+  const { estimatePainting } = await import("../quoteRules/painting");
+  const { estimateFlooring } = await import("../quoteRules/flooring");
+  // Drive both rules with minimal answers so they emit a labor
+  // breakdown (the no-answer fast path returns price-only).
+  const paint = estimatePainting({
+    answers: {
+      paintingIntExt: "Interior",
+      paintingRoomCount: "1 room",
+      paintingRoomSize: "Average (12x12)",
+    },
+    fallbackMin: 200,
+    fallbackMax: 5000,
+  });
+  const floor = estimateFlooring({
+    answers: {
+      flooringNewProduct: "LVP",
+      flooringRoomsSqft: "2 rooms, ~400 sq ft",
+    },
+    fallbackMin: 200,
+    fallbackMax: 10000,
+  });
+  // Painting rule uses crew=1 painter; table default must match.
+  eq("painting table crew matches rule output",
+    { crew: SERVICE_LABOR_DEFAULTS.painting?.defaultCrew, rate: LABOR_RATE_PER_HOUR },
+    { crew: paint.breakdown.crewSize, rate: paint.breakdown.ratePerHour });
+  // Flooring rule uses crew=2; table default must match.
+  eq("flooring table crew matches rule output",
+    { crew: SERVICE_LABOR_DEFAULTS.flooring?.defaultCrew, rate: LABOR_RATE_PER_HOUR },
+    { crew: floor.breakdown.crewSize, rate: floor.breakdown.ratePerHour });
+}
+
+await paintingFlooringLaborParity();
 
 if (failures > 0) {
   console.error(`\n${failures} assertion(s) failed.`);
