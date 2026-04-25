@@ -52,12 +52,10 @@ import {
 } from "../services/pricingEngine";
 import { quoteByLaborHours, LABOR_RATE_PER_HOUR, quoteMovingFromTable } from "@shared/pricingTables";
 
-// Task #218 spec: small moving "two-person 2-hour special" — flat $300
-// promotional price, regardless of bedrooms/stairs (sits below the raw
-// 2×2×85=$340 labor math as a marketing loss-leader for first-touch
-// customers). Labor breakdown still shows "2 movers × 2 hrs at $85/hr"
-// in the chat card; the dollars are this special.
-const SMALL_MOVE_SPECIAL_PRICE = 300;
+// Task #218 spec: small moving "$340 (special floor: $300)". The labor
+// math (2×2×85=$340) is the canonical price; this $300 floor exists so
+// any future tweak to crew/hours never drops a small move below $300.
+const SMALL_MOVE_FLOOR = 300;
 
 const router = Router();
 
@@ -124,6 +122,11 @@ function deriveJobSize(
     return explicit;
   }
   if (serviceCode === "moving") {
+    // Task #218 spec step 4: truckSize feeds the labor-hours tier.
+    // 15' → medium (2×4=8 labor-hr), 26' → large (4×4=16 labor-hr).
+    const truck = String(details.truckSize ?? "").toLowerCase();
+    if (truck.includes("15")) return "medium";
+    if (truck.includes("26")) return "large";
     const br = String(details.bedrooms ?? "").toLowerCase();
     if (br === "studio" || br === "1br") return "small";
     if (br === "2br" || br === "3br") return "medium";
@@ -187,11 +190,25 @@ function buildLaborMeta(
   });
   if (!labor) return undefined;
 
-  // Moving keeps its matrix dollars but ALWAYS uses the canonical
-  // labor hours from the spec table (small=2×2, medium=2×4, large=4×4).
-  // We never back-compute hours from the matrix amount because the
-  // chat card promised those exact crew/hour numbers.
+  // Moving: display crew × hours that match the billed dollars exactly.
+  // For job-size paths the canonical labor tuples already line up with
+  // the canonical billed amount. For matrix paths (bedrooms × stairs)
+  // we back-compute hours from the line dollars at 2-decimal precision
+  // so crew × hours × $85 == lineTotal to the cent — the chat card
+  // never displays math that disagrees with the price.
+  const lineTotal = Math.max(0, unitPrice * Math.max(1, quantity));
   if (serviceCode === "moving") {
+    const canonicalDollars = +(labor.crewSize * labor.laborHours * LABOR_RATE_PER_HOUR).toFixed(2);
+    if (lineTotal > 0 && Math.abs(lineTotal - canonicalDollars) > 0.01) {
+      const crew = labor.crewSize;
+      const derivedHours = +(lineTotal / (crew * LABOR_RATE_PER_HOUR)).toFixed(2);
+      return {
+        crewSize: crew,
+        laborHours: derivedHours,
+        totalLaborHours: +(crew * derivedHours).toFixed(2),
+        ratePerHour: LABOR_RATE_PER_HOUR,
+      };
+    }
     return {
       crewSize: labor.crewSize,
       laborHours: labor.laborHours,
@@ -203,7 +220,6 @@ function buildLaborMeta(
   // Painting / flooring scale by sqft so their hours genuinely vary
   // with the dollar amount. Back-compute from the line total so the
   // displayed breakdown stays internally consistent.
-  const lineTotal = Math.max(0, unitPrice * Math.max(1, quantity));
   if ((serviceCode === "painting" || serviceCode === "flooring")
       && lineTotal > 0 && explicitHours == null) {
     const crew = labor.crewSize;
@@ -275,15 +291,17 @@ function resolveItems(
       });
       if (est.amount > 0) unitPrice = est.amount;
     } else if (item.serviceCode === "moving") {
-      // Task #218 — Drive moving dollars from the matrix at the route
-      // layer too (not just the chat overlay), using whatever
-      // bedrooms/stairs/loadType the client passes in details.
-      // Small move honors the "two-person 2-hour special" of $300
-      // (spec table: "small | 2×2 hrs | $340 (special floor: $300)").
+      // Task #218 — Drive moving dollars from the labor model when a
+      // jobSize is set (small=$340, medium=$680, large=$1360 — these
+      // ARE crew × hours × $85 per the spec table). When the customer
+      // provided detailed bedrooms/stairs/loadType, route through the
+      // matrix lookup. Small move always respects the $300 floor per
+      // the spec ("small | 2×2 hrs | $340 (special floor: $300)").
       const details = (item.details ?? {}) as Record<string, unknown>;
       const jobSize = deriveJobSize("moving", details);
-      if (jobSize === "small") {
-        unitPrice = SMALL_MOVE_SPECIAL_PRICE;
+      const labor = quoteByLaborHours("moving", { jobSize });
+      if (jobSize && labor) {
+        unitPrice = labor.amount;
       } else if (details.bedrooms != null || details.stairs != null || details.loadType != null) {
         const matrix = quoteMovingFromTable({
           bedrooms: details.bedrooms as string | undefined,
@@ -291,6 +309,9 @@ function resolveItems(
           loadType: details.loadType as string | undefined,
         });
         if (matrix.amount > 0) unitPrice = matrix.amount;
+      }
+      if (jobSize === "small" && unitPrice < SMALL_MOVE_FLOOR) {
+        unitPrice = SMALL_MOVE_FLOOR;
       }
     }
 

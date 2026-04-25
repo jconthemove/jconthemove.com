@@ -280,10 +280,13 @@ export function quoteByLaborHours(
   }
 
   // Defensive clamp: at least 1 mover, at least 0.25 hr (15-min minimum).
+  // Amount uses 2-decimal rounding (matches the route layer's
+  // toFixed(2) override) so unit tests, e2e pipeline, and the live
+  // /api/bookings/quote response all agree on the same dollar figure.
   crewSize = Math.max(1, Math.round(crewSize));
   laborHours = Math.max(0.25, +laborHours.toFixed(2));
   const totalLaborHours = +(crewSize * laborHours).toFixed(2);
-  const amount = Math.round(totalLaborHours * LABOR_RATE_PER_HOUR);
+  const amount = +(totalLaborHours * LABOR_RATE_PER_HOUR).toFixed(2);
   return { crewSize, laborHours, totalLaborHours, ratePerHour: LABOR_RATE_PER_HOUR, amount, source };
 }
 

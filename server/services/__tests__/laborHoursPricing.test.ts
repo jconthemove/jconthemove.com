@@ -48,16 +48,16 @@ eq("large move = 4 movers × 4 hr = $1360",
   { crew: 4, hrs: 4, $: 1360 });
 
 const lawn = quoteByLaborHours("lawn_care");
-// 1 × 0.5 × 85 = $42.50, rounded for display = $43.
-eq("lawn care = 1 person × 0.5 hr ≈ $43",
+// 1 × 0.5 × 85 = $42.50 (precise; the route layer uses the same).
+eq("lawn care = 1 person × 0.5 hr = $42.50",
   { crew: lawn?.crewSize, hrs: lawn?.laborHours, $: lawn?.amount },
-  { crew: 1, hrs: 0.5, $: 43 });
+  { crew: 1, hrs: 0.5, $: 42.5 });
 
 const valet = quoteByLaborHours("trash_valet");
-// 1 × 0.33 × 85 = $28.05 → rounded $28.
-eq("trash valet = 1 person × 0.33 hr ≈ $28",
+// 1 × 0.33 × 85 = $28.05 (precise).
+eq("trash valet = 1 person × 0.33 hr = $28.05",
   { crew: valet?.crewSize, hrs: valet?.laborHours, $: valet?.amount },
-  { crew: 1, hrs: 0.33, $: 28 });
+  { crew: 1, hrs: 0.33, $: 28.05 });
 
 eq("explicit override honors caller's crew/hrs (source='explicit')",
   quoteByLaborHours("moving", { crewSize: 3, laborHours: 5 }),
@@ -76,7 +76,8 @@ async function endToEndPipeline() {
   const { quoteByLaborHours, LABOR_RATE_PER_HOUR } =
     await import("../../../shared/pricingTables");
 
-  const cases: Array<[string, { jobSize?: string }, number, number, number]> = [
+  type JobSize = "small" | "medium" | "large";
+  const cases: Array<[string, { jobSize?: JobSize }, number, number, number]> = [
     // [serviceCode, details, expectedDollars, expectedCrew, expectedHours]
     ["lawn_care",       {},                  42.5,  1, 0.5],
     ["trash_valet",     {},                  28.05, 1, 0.33],
@@ -89,7 +90,7 @@ async function endToEndPipeline() {
   ];
 
   for (const [code, details, expectedDollars, crew, hrs] of cases) {
-    const labor = quoteByLaborHours(code, { jobSize: details.jobSize as any });
+    const labor = quoteByLaborHours(code, { jobSize: details.jobSize });
     const dollars = +(crew * hrs * LABOR_RATE_PER_HOUR).toFixed(2);
     const result = computeBookingQuote([{
       serviceCode: code,
