@@ -2636,6 +2636,19 @@ export const serviceCatalog = pgTable("service_catalog", {
   sortOrder: integer("sort_order").notNull().default(100),
   description: text("description"),
   metadata: jsonb("metadata").default("{}"),
+  // Task #218 — labor-hours backbone: every catalog row carries minCrew and
+  // per-job-size default labor hours. quoteByLaborHours reads these to
+  // produce crew × hours × $85 amounts; the route layer clamps to
+  // suggestedMin/suggestedMax for safety. Both columns are nullable so
+  // older rows continue to fall back to the SERVICE_LABOR_DEFAULTS table
+  // in shared/pricingTables.ts (single source of truth for the seed).
+  minCrew: integer("min_crew"),
+  defaultLaborHours: jsonb("default_labor_hours").$type<{
+    small?: number;
+    medium?: number;
+    large?: number;
+    default?: number;
+  }>(),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 }, (table) => [
   index("idx_service_catalog_active").on(table.isActive, table.sortOrder),

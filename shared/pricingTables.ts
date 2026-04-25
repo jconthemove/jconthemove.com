@@ -237,22 +237,49 @@ export interface LaborQuote {
   totalLaborHours: number;
   ratePerHour: number;
   amount: number;
-  /** Which slot in SERVICE_LABOR_DEFAULTS produced this tuple. */
-  source: "explicit" | "jobSize" | "default" | "unknown";
+  /** Which slot in SERVICE_LABOR_DEFAULTS / catalog produced this tuple. */
+  source: "explicit" | "jobSize" | "default" | "unknown" | "catalog";
+}
+
+/** Catalog-driven labor metadata — when the caller passes a catalog row
+ *  the helper prefers its values over the SERVICE_LABOR_DEFAULTS fallback
+ *  AND clamps the final amount to the catalog's suggestedMin/suggestedMax
+ *  band. Per spec line 33 / step 2: the catalog is the source of truth. */
+export interface LaborCatalogContext {
+  minCrew?: number | null;
+  defaultLaborHours?: { small?: number; medium?: number; large?: number; default?: number } | null;
+  /** Inclusive lower bound for the returned amount. */
+  suggestedMin?: number | null;
+  /** Inclusive upper bound for the returned amount. */
+  suggestedMax?: number | null;
 }
 
 /** Pure helper — never throws. Returns null only when the service code is
- *  not in SERVICE_LABOR_DEFAULTS and no explicit crew/hours were supplied. */
+ *  not in SERVICE_LABOR_DEFAULTS, the caller passed no catalog metadata,
+ *  AND no explicit crew/hours were supplied. */
 export function quoteByLaborHours(
   serviceCode: string,
   opts: {
     jobSize?: "small" | "medium" | "large";
     crewSize?: number;
     laborHours?: number;
+    /** Optional catalog row (already loaded by the caller). When present,
+     *  its minCrew / defaultLaborHours win over the static fallback table
+     *  and its suggestedMin / suggestedMax clamp the returned amount. */
+    catalog?: LaborCatalogContext;
   } = {},
 ): LaborQuote | null {
   const def = SERVICE_LABOR_DEFAULTS[serviceCode];
+  const cat = opts.catalog;
   const sized = opts.jobSize && def?.jobSize ? def.jobSize[opts.jobSize] : null;
+  // Catalog defaults: prefer the per-job-size override, falling back to
+  // the catalog's `default` slot, then to the SERVICE_LABOR_DEFAULTS
+  // fallback. These are read-only — the helper still returns a single
+  // resolved tuple regardless of where the numbers came from.
+  const catalogHours =
+    (opts.jobSize && cat?.defaultLaborHours?.[opts.jobSize]) ??
+    cat?.defaultLaborHours?.default ??
+    null;
 
   let source: LaborQuote["source"];
   let crewSize: number;
@@ -262,17 +289,24 @@ export function quoteByLaborHours(
     crewSize = opts.crewSize;
     laborHours = opts.laborHours;
     source = "explicit";
+  } else if (catalogHours != null) {
+    // Catalog-driven path: the catalog row carries default labor hours
+    // and (optionally) a min crew. We still consult the static fallback
+    // for crew when the catalog only provides hours.
+    crewSize = opts.crewSize ?? cat?.minCrew ?? sized?.crew ?? def?.defaultCrew ?? 1;
+    laborHours = opts.laborHours ?? catalogHours;
+    source = "catalog";
   } else if (sized) {
-    crewSize = opts.crewSize ?? sized.crew;
+    crewSize = opts.crewSize ?? cat?.minCrew ?? sized.crew;
     laborHours = opts.laborHours ?? sized.hours;
     source = "jobSize";
   } else if (def) {
-    crewSize = opts.crewSize ?? def.defaultCrew;
+    crewSize = opts.crewSize ?? cat?.minCrew ?? def.defaultCrew;
     laborHours = opts.laborHours ?? def.defaultHours;
     source = "default";
   } else if (opts.crewSize != null || opts.laborHours != null) {
     // Unknown service code but caller supplied at least one knob — honor it.
-    crewSize = opts.crewSize ?? 1;
+    crewSize = opts.crewSize ?? cat?.minCrew ?? 1;
     laborHours = opts.laborHours ?? 1;
     source = "unknown";
   } else {
@@ -286,7 +320,18 @@ export function quoteByLaborHours(
   crewSize = Math.max(1, Math.round(crewSize));
   laborHours = Math.max(0.25, +laborHours.toFixed(2));
   const totalLaborHours = +(crewSize * laborHours).toFixed(2);
-  const amount = +(totalLaborHours * LABOR_RATE_PER_HOUR).toFixed(2);
+  let amount = +(totalLaborHours * LABOR_RATE_PER_HOUR).toFixed(2);
+  // Catalog-driven clamp per spec step 2: suggestedMin/suggestedMax
+  // bound the returned amount so a missing or undersized catalog value
+  // can't produce an estimate that undercuts a real-world minimum or
+  // overshoots the published range. Applied symmetrically — if the
+  // catalog provides only one bound, only that side is clamped.
+  if (cat?.suggestedMin != null && amount < cat.suggestedMin) {
+    amount = +Number(cat.suggestedMin).toFixed(2);
+  }
+  if (cat?.suggestedMax != null && amount > cat.suggestedMax) {
+    amount = +Number(cat.suggestedMax).toFixed(2);
+  }
   return { crewSize, laborHours, totalLaborHours, ratePerHour: LABOR_RATE_PER_HOUR, amount, source };
 }
 

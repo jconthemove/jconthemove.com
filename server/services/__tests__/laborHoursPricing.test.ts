@@ -135,6 +135,10 @@ async function movingRoutingPriority() {
   // (the route's own DB-backed catalog isn't worth booting for a unit
   // assertion). If the rules diverge the smoke tests catch it; this
   // test pins the contract.
+  // Mirrors the small-move special override in resolveItems: spec
+  // line 44 says we always bill $300 for a small move, even when the
+  // matrix or labor-tier math produces a higher amount.
+  const SMALL_MOVE_SPECIAL_PRICE = 300;
   function resolveMovingPrice(
     details: Record<string, unknown>,
     catalogUnitPrice: number,
@@ -162,16 +166,30 @@ async function movingRoutingPriority() {
         if (labor) { unit = labor.amount; jobSize = js; }
       }
     }
-    return { unit, jobSize };
+    // Resolve final jobSize the same way resolveItems does (deriveJobSize
+    // re-infers from bedrooms when the explicit hint is absent).
+    let finalJobSize = jobSize;
+    if (!finalJobSize) {
+      const beds = (details.bedrooms as string | undefined)?.toLowerCase() ?? "";
+      if (beds.startsWith("studio") || beds.startsWith("1br")) finalJobSize = "small";
+      else if (beds.startsWith("2br") || beds.startsWith("3br")) finalJobSize = "medium";
+      else if (beds.startsWith("4br") || beds.startsWith("5br")) finalJobSize = "large";
+    }
+    if (finalJobSize === "small") {
+      unit = SMALL_MOVE_SPECIAL_PRICE;
+    }
+    return { unit, jobSize: finalJobSize };
   }
 
-  // (a) bedrooms+stairs → matrix amount (NOT collapsed to a labor tier)
+  // (a) bedrooms+stairs → matrix amount preserved AS-IS (matrix is truth,
+  // never re-snapped to labor product). Use a 3br entry so the small-move
+  // special doesn't kick in.
   const matrix = quoteMovingFromTable({ bedrooms: "3br", stairs: "2", loadType: "Heavy" });
   const r1 = resolveMovingPrice({ bedrooms: "3br", stairs: 2, loadType: "Heavy" }, 500);
-  eq("moving 3br+stairs+heavy → matrix wins",
+  eq("moving 3br+stairs+heavy → matrix wins (no labor snap mutation)",
     { unit: r1.unit }, { unit: matrix.amount });
 
-  // (b) jobSize only → labor tier amount
+  // (b) jobSize=medium only → labor tier amount $680
   const r2 = resolveMovingPrice({ jobSize: "medium" }, 500);
   eq("moving jobSize=medium only → labor tier $680",
     { unit: r2.unit, js: r2.jobSize }, { unit: 680, js: "medium" });
@@ -180,6 +198,16 @@ async function movingRoutingPriority() {
   const r3 = resolveMovingPrice({}, 999);
   eq("moving with no details → wizard package amount preserved",
     { unit: r3.unit }, { unit: 999 });
+
+  // (d) small-move special: jobSize=small → $300 (NOT $340 from labor tier)
+  const r4 = resolveMovingPrice({ jobSize: "small" }, 999);
+  eq("moving jobSize=small → $300 special (not $340 labor tier)",
+    { unit: r4.unit, js: r4.jobSize }, { unit: 300, js: "small" });
+
+  // (e) small-move special overrides matrix too: 1br no stairs → $300
+  const r5 = resolveMovingPrice({ bedrooms: "1br", stairs: 0, loadType: "Light" }, 999);
+  eq("moving 1br matrix entry → $300 special (override matrix upward/downward)",
+    { unit: r5.unit, js: r5.jobSize }, { unit: 300, js: "small" });
 }
 
 await movingRoutingPriority();
@@ -267,6 +295,57 @@ async function quantityCollapseSafety() {
 }
 
 await quantityCollapseSafety();
+
+// ── Catalog-driven labor metadata (Task #218 step 2) ────────────
+// quoteByLaborHours must accept catalog metadata so a service_catalog
+// row can override the static SERVICE_LABOR_DEFAULTS table without
+// touching code, and clamp the resulting amount to the suggested range.
+console.log("\n── catalog-driven labor metadata ───────────────────");
+
+// Catalog overrides the default crew + hours when present.
+const catalogOverride = quoteByLaborHours("handyman", {
+  catalog: {
+    minCrew: 2,
+    defaultLaborHours: { default: 3 },
+  },
+});
+eq("catalog override → handyman 2 crew × 3 hr × $85 = $510",
+  { crew: catalogOverride?.crewSize, hrs: catalogOverride?.laborHours, $: catalogOverride?.amount, src: catalogOverride?.source },
+  { crew: 2, hrs: 3, $: 510, src: "catalog" });
+
+// Catalog jobSize-keyed hours (small/medium/large).
+const catalogMoving = quoteByLaborHours("moving", {
+  jobSize: "medium",
+  catalog: {
+    minCrew: 3,
+    defaultLaborHours: { small: 2, medium: 3, large: 4 },
+  },
+});
+eq("catalog moving medium → 3 × 3 × $85 = $765",
+  { crew: catalogMoving?.crewSize, hrs: catalogMoving?.laborHours, $: catalogMoving?.amount },
+  { crew: 3, hrs: 3, $: 765 });
+
+// Suggested-min clamp lifts the amount when crew × hrs × rate would be lower.
+const clampedUp = quoteByLaborHours("handyman", {
+  catalog: {
+    minCrew: 1,
+    defaultLaborHours: { default: 1 },   // would be 1×1×85 = $85
+    suggestedMin: 150,
+  },
+});
+eq("catalog clamps amount up to suggestedMin=$150",
+  { $: clampedUp?.amount }, { $: 150 });
+
+// Suggested-max clamp caps the amount.
+const clampedDown = quoteByLaborHours("handyman", {
+  catalog: {
+    minCrew: 4,
+    defaultLaborHours: { default: 4 },   // would be 4×4×85 = $1360
+    suggestedMax: 800,
+  },
+});
+eq("catalog clamps amount down to suggestedMax=$800",
+  { $: clampedDown?.amount }, { $: 800 });
 
 if (failures > 0) {
   console.error(`\n${failures} assertion(s) failed.`);

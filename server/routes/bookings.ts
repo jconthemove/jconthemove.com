@@ -52,10 +52,12 @@ import {
 } from "../services/pricingEngine";
 import { quoteByLaborHours, LABOR_RATE_PER_HOUR, quoteMovingFromTable } from "@shared/pricingTables";
 
-// Task #218 spec: small moving "$340 (special floor: $300)". The labor
-// math (2×2×85=$340) is the canonical price; this $300 floor exists so
-// any future tweak to crew/hours never drops a small move below $300.
-const SMALL_MOVE_FLOOR = 300;
+// Task #218 spec line 44: small moving = "$300 (or $340 if floor lifted;
+// we keep $300)". The labor math 2×2×$85 naturally produces $340, but
+// the customer-facing "two-person 2-hour special" is billed at $300 flat.
+// The route layer enforces this whenever the resolved jobSize is "small"
+// — overriding both the matrix output and the labor-tier amount.
+const SMALL_MOVE_SPECIAL_PRICE = 300;
 
 const router = Router();
 
@@ -177,6 +179,7 @@ function buildLaborMeta(
   unitPrice: number,
   quantity: number,
   details: Record<string, unknown>,
+  catalogEntry?: ServiceCatalogEntry,
 ): BookingPricingItemInput["laborMeta"] {
   const jobSize = deriveJobSize(serviceCode, details);
   const explicitCrew = details.crewSize != null ? Number(details.crewSize)
@@ -186,10 +189,25 @@ function buildLaborMeta(
   const explicitHours = details.laborHours != null ? Number(details.laborHours)
     : details.hours != null ? Number(details.hours)
     : undefined;
+  // Catalog context per Task #218 step 2: when a catalog row carries
+  // minCrew / defaultLaborHours, those win over the static
+  // SERVICE_LABOR_DEFAULTS table. We do NOT pass suggestedMin/Max as a
+  // clamp here because buildLaborMeta only computes display metadata —
+  // the dollar amount comes from `unitPrice` already resolved upstream.
+  const catalogContext = catalogEntry
+    ? {
+        minCrew: catalogEntry.minCrew,
+        defaultLaborHours: catalogEntry.defaultLaborHours as
+          | { small?: number; medium?: number; large?: number; default?: number }
+          | null
+          | undefined,
+      }
+    : undefined;
   const labor = quoteByLaborHours(serviceCode, {
     jobSize,
     crewSize: explicitCrew,
     laborHours: explicitHours,
+    catalog: catalogContext,
   });
   if (!labor) return undefined;
 
@@ -338,13 +356,17 @@ function resolveItems(
           }
         }
       }
+      // Small move special: per spec line 44 we always bill $300 for a
+      // small move, regardless of whether matrix or labor-tier produced
+      // the candidate amount. This overrides upward (matrix $340 → $300)
+      // and downward (matrix $250 → $300).
       const finalJobSize = appliedJobSize ?? deriveJobSize("moving", details);
-      if (finalJobSize === "small" && unitPrice < SMALL_MOVE_FLOOR) {
-        unitPrice = SMALL_MOVE_FLOOR;
+      if (finalJobSize === "small") {
+        unitPrice = SMALL_MOVE_SPECIAL_PRICE;
       }
     }
 
-    let laborMeta = buildLaborMeta(item.serviceCode, unitPrice, item.quantity, item.details || {});
+    let laborMeta = buildLaborMeta(item.serviceCode, unitPrice, item.quantity, item.details || {}, cat);
     // Labor-priced services (lawn, valet, snow, junk, handyman, etc.)
     // get their unitPrice replaced with the canonical crew × hrs × $85
     // so the catalog suggested-min never silently bypasses the chat
@@ -380,17 +402,11 @@ function resolveItems(
         effectiveQuantity = 1;
       }
     }
-    // Moving stays matrix-driven, but the back-computed display hours
-    // round to 0.01 — meaning crew × hrs × $85 can disagree with the
-    // matrix amount by a few cents (e.g. matrix $1365 vs displayed
-    // 2 × 8.03 × $85 = $1365.10). Snap unitPrice to the displayed
-    // labor product so the chat card's math is exact to the cent.
-    if (laborMeta && item.serviceCode === "moving") {
-      const displayedDollars = +(laborMeta.crewSize * laborMeta.laborHours * laborMeta.ratePerHour).toFixed(2);
-      if (displayedDollars > 0 && Math.abs(displayedDollars - unitPrice) <= 1) {
-        unitPrice = displayedDollars;
-      }
-    }
+    // Per spec line 38: moving keeps the matrix as the truth for the
+    // amount, with labor crew/hours surfaced in the breakdown for
+    // display only. We do NOT mutate the matrix dollars to match the
+    // back-computed labor product — any cent-level disagreement is
+    // accepted in favor of preserving matrix authority.
     pricingInputs.push({
       serviceCode: item.serviceCode,
       label,

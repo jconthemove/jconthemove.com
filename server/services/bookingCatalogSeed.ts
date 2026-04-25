@@ -14,6 +14,29 @@ import {
   type InsertBundleDefinition,
 } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { SERVICE_LABOR_DEFAULTS } from "@shared/pricingTables";
+
+// Task #218 — labor metadata derived from the SERVICE_LABOR_DEFAULTS
+// constant in shared/pricingTables.ts. This map is the source of truth
+// the seed writes into service_catalog.{min_crew, default_labor_hours}
+// so the helper can read crew/hours from the catalog row at quote time
+// without having to import the constant. Adding a new service is a
+// one-place change: drop a row in SERVICE_LABOR_DEFAULTS and the seed
+// picks it up on the next boot.
+function laborDefaultsFor(code: string): { minCrew: number; defaultLaborHours: Record<string, number> } | null {
+  const def = SERVICE_LABOR_DEFAULTS[code];
+  if (!def) return null;
+  const dlh: Record<string, number> = { default: def.defaultHours };
+  if (def.jobSize?.small)  dlh.small  = def.jobSize.small.hours;
+  if (def.jobSize?.medium) dlh.medium = def.jobSize.medium.hours;
+  if (def.jobSize?.large)  dlh.large  = def.jobSize.large.hours;
+  // minCrew = the lowest crew across job sizes, or the default crew when
+  // no per-size variants exist. Per spec (line 36) every catalog row
+  // carries this so dispatch + chat card see a single number.
+  const sizeCrews = [def.jobSize?.small?.crew, def.jobSize?.medium?.crew, def.jobSize?.large?.crew].filter((n): n is number => typeof n === "number");
+  const minCrew = sizeCrews.length > 0 ? Math.min(...sizeCrews, def.defaultCrew) : def.defaultCrew;
+  return { minCrew, defaultLaborHours: dlh };
+}
 
 // Safe DDL — idempotent CREATE TABLE IF NOT EXISTS for the new
 // multi-service booking tables. We do this at boot instead of via
@@ -98,6 +121,14 @@ async function ensureBookingTables(): Promise<void> {
     -- Task #131 — bonus JCMOVES multiplier per featured bundle
     ALTER TABLE bundle_definitions
       ADD COLUMN IF NOT EXISTS bonus_multiplier numeric(4,2) NOT NULL DEFAULT 1.00;
+
+    -- Task #218 — labor-hours backbone metadata on each catalog row.
+    -- Both columns are nullable so legacy rows fall back to
+    -- SERVICE_LABOR_DEFAULTS in shared/pricingTables.ts. The seed below
+    -- populates them with the per-service tuples from the spec table.
+    ALTER TABLE service_catalog
+      ADD COLUMN IF NOT EXISTS min_crew integer,
+      ADD COLUMN IF NOT EXISTS default_labor_hours jsonb;
 
     -- Task #131 — reward inputs snapshot on parent booking row, captured at
     -- creation so the customer's displayed estimate matches the final award
@@ -511,18 +542,42 @@ export async function ensureBookingCatalogSeeded(): Promise<void> {
   try {
     let inserted = 0;
     for (const row of CATALOG_SEED) {
+      const labor = laborDefaultsFor(row.code);
+      const rowWithLabor: InsertServiceCatalogEntry = labor
+        ? { ...row, minCrew: labor.minCrew, defaultLaborHours: labor.defaultLaborHours }
+        : row;
       const existing = await db
         .select({ id: serviceCatalog.id })
         .from(serviceCatalog)
         .where(eq(serviceCatalog.code, row.code))
         .limit(1);
       if (existing.length === 0) {
-        await db.insert(serviceCatalog).values(row);
+        await db.insert(serviceCatalog).values(rowWithLabor);
         inserted++;
       }
     }
     if (inserted > 0) {
       console.log(`✅ service_catalog seeded — ${inserted} new entr${inserted === 1 ? "y" : "ies"}`);
+    }
+    // Task #218 — backfill labor metadata onto existing rows that pre-date
+    // the schema change so a fresh boot wires every catalog row to the
+    // labor-hours backbone. Idempotent: only writes when min_crew is
+    // currently NULL so admin overrides are never clobbered.
+    let backfilled = 0;
+    for (const row of CATALOG_SEED) {
+      const labor = laborDefaultsFor(row.code);
+      if (!labor) continue;
+      const result = await pool.query(
+        `UPDATE service_catalog
+            SET min_crew = $1,
+                default_labor_hours = $2::jsonb
+          WHERE code = $3 AND min_crew IS NULL`,
+        [labor.minCrew, JSON.stringify(labor.defaultLaborHours), row.code],
+      );
+      if (result.rowCount && result.rowCount > 0) backfilled++;
+    }
+    if (backfilled > 0) {
+      console.log(`✅ service_catalog labor metadata backfilled — ${backfilled} row${backfilled === 1 ? "" : "s"}`);
     }
   } catch (err) {
     console.error("[bookingCatalogSeed] service_catalog seed failed:", (err as Error).message);
