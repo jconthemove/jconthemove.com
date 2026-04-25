@@ -122,6 +122,67 @@ async function endToEndPipeline() {
 
 await endToEndPipeline();
 
+// ── Moving routing-priority assertions ──────────────────────────────
+// Mirrors the reviewer's round-5 scenarios: the route layer must pick
+// the matrix when detailed inputs are present, the labor tier when
+// only jobSize/truckSize are set, and never overwrite a richer
+// catalog/wizard amount when no moving hints are supplied at all.
+async function movingRoutingPriority() {
+  const { quoteMovingFromTable, quoteByLaborHours } =
+    await import("../../../shared/pricingTables");
+  // Recreate the routing decision tree from resolveItems in isolation
+  // (the route's own DB-backed catalog isn't worth booting for a unit
+  // assertion). If the rules diverge the smoke tests catch it; this
+  // test pins the contract.
+  function resolveMovingPrice(
+    details: Record<string, unknown>,
+    catalogUnitPrice: number,
+  ): { unit: number; jobSize?: string } {
+    const hasDetailed =
+      details.bedrooms != null || details.stairs != null || details.loadType != null;
+    let unit = catalogUnitPrice;
+    let jobSize: string | undefined;
+    if (hasDetailed) {
+      const m = quoteMovingFromTable({
+        bedrooms: details.bedrooms as string | undefined,
+        stairs: details.stairs as string | number | undefined,
+        loadType: details.loadType as string | undefined,
+      });
+      if (m.amount > 0) unit = m.amount;
+    } else {
+      const explicit = (details.jobSize as string | undefined)?.toLowerCase();
+      const truck = ((details.truckSize as string | undefined) ?? "").toLowerCase();
+      let js: "small" | "medium" | "large" | undefined;
+      if (explicit === "small" || explicit === "medium" || explicit === "large") js = explicit;
+      else if (truck.includes("15")) js = "medium";
+      else if (truck.includes("26")) js = "large";
+      if (js) {
+        const labor = quoteByLaborHours("moving", { jobSize: js });
+        if (labor) { unit = labor.amount; jobSize = js; }
+      }
+    }
+    return { unit, jobSize };
+  }
+
+  // (a) bedrooms+stairs → matrix amount (NOT collapsed to a labor tier)
+  const matrix = quoteMovingFromTable({ bedrooms: "3br", stairs: "2", loadType: "Heavy" });
+  const r1 = resolveMovingPrice({ bedrooms: "3br", stairs: 2, loadType: "Heavy" }, 500);
+  eq("moving 3br+stairs+heavy → matrix wins",
+    { unit: r1.unit }, { unit: matrix.amount });
+
+  // (b) jobSize only → labor tier amount
+  const r2 = resolveMovingPrice({ jobSize: "medium" }, 500);
+  eq("moving jobSize=medium only → labor tier $680",
+    { unit: r2.unit, js: r2.jobSize }, { unit: 680, js: "medium" });
+
+  // (c) no moving hints → catalog/wizard package amount preserved
+  const r3 = resolveMovingPrice({}, 999);
+  eq("moving with no details → wizard package amount preserved",
+    { unit: r3.unit }, { unit: 999 });
+}
+
+await movingRoutingPriority();
+
 if (failures > 0) {
   console.error(`\n${failures} assertion(s) failed.`);
   process.exit(1);

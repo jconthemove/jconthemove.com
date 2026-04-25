@@ -291,26 +291,52 @@ function resolveItems(
       });
       if (est.amount > 0) unitPrice = est.amount;
     } else if (item.serviceCode === "moving") {
-      // Task #218 — Drive moving dollars from the labor model when a
-      // jobSize is set (small=$340, medium=$680, large=$1360 — these
-      // ARE crew × hours × $85 per the spec table). When the customer
-      // provided detailed bedrooms/stairs/loadType, route through the
-      // matrix lookup. Small move always respects the $300 floor per
-      // the spec ("small | 2×2 hrs | $340 (special floor: $300)").
+      // Task #218 — Moving has TWO pricing paths and the matrix wins
+      // whenever the customer (or wizard / package flow) provided
+      // detailed inputs. Order matters:
+      //   1. If bedrooms / stairs / loadType are present → matrix
+      //      (preserves nuance like "3br + stairs + heavy load").
+      //   2. Else if explicit jobSize / truckSize maps to a tier →
+      //      labor tier (small=$340, medium=$680, large=$1360 — these
+      //      ARE crew × hours × $85 per the spec table).
+      //   3. Else → leave unitPrice from the catalog/wizard alone.
+      // Small move always respects the $300 floor per the spec.
       const details = (item.details ?? {}) as Record<string, unknown>;
-      const jobSize = deriveJobSize("moving", details);
-      const labor = quoteByLaborHours("moving", { jobSize });
-      if (jobSize && labor) {
-        unitPrice = labor.amount;
-      } else if (details.bedrooms != null || details.stairs != null || details.loadType != null) {
+      const hasDetailedInputs =
+        details.bedrooms != null || details.stairs != null || details.loadType != null;
+      let appliedJobSize: ReturnType<typeof deriveJobSize> | undefined;
+      if (hasDetailedInputs) {
         const matrix = quoteMovingFromTable({
           bedrooms: details.bedrooms as string | undefined,
           stairs: details.stairs as string | number | undefined,
           loadType: details.loadType as string | undefined,
         });
         if (matrix.amount > 0) unitPrice = matrix.amount;
+      } else {
+        // No detailed inputs — only consider job-size / truck-size
+        // explicit hints. We deliberately do NOT use deriveJobSize here
+        // because that would re-infer from bedrooms (already handled
+        // above) and short-circuit future detailed paths.
+        const explicitJobSize = (details.jobSize as string | undefined)?.toLowerCase();
+        const truckSize = (details.truckSize as string | undefined)?.toLowerCase() ?? "";
+        let jobSize: "small" | "medium" | "large" | undefined;
+        if (explicitJobSize === "small" || explicitJobSize === "medium" || explicitJobSize === "large") {
+          jobSize = explicitJobSize;
+        } else if (truckSize.includes("15")) {
+          jobSize = "medium";
+        } else if (truckSize.includes("26")) {
+          jobSize = "large";
+        }
+        if (jobSize) {
+          const labor = quoteByLaborHours("moving", { jobSize });
+          if (labor) {
+            unitPrice = labor.amount;
+            appliedJobSize = jobSize;
+          }
+        }
       }
-      if (jobSize === "small" && unitPrice < SMALL_MOVE_FLOOR) {
+      const finalJobSize = appliedJobSize ?? deriveJobSize("moving", details);
+      if (finalJobSize === "small" && unitPrice < SMALL_MOVE_FLOOR) {
         unitPrice = SMALL_MOVE_FLOOR;
       }
     }
@@ -329,6 +355,17 @@ function resolveItems(
     if (laborMeta && LABOR_AUTHORITATIVE_SERVICES.has(item.serviceCode)) {
       const laborDollars = +(laborMeta.crewSize * laborMeta.laborHours * laborMeta.ratePerHour).toFixed(2);
       if (laborDollars > 0) unitPrice = laborDollars;
+    }
+    // Moving stays matrix-driven, but the back-computed display hours
+    // round to 0.01 — meaning crew × hrs × $85 can disagree with the
+    // matrix amount by a few cents (e.g. matrix $1365 vs displayed
+    // 2 × 8.03 × $85 = $1365.10). Snap unitPrice to the displayed
+    // labor product so the chat card's math is exact to the cent.
+    if (laborMeta && item.serviceCode === "moving") {
+      const displayedDollars = +(laborMeta.crewSize * laborMeta.laborHours * laborMeta.ratePerHour).toFixed(2);
+      if (displayedDollars > 0 && Math.abs(displayedDollars - unitPrice) <= 1) {
+        unitPrice = displayedDollars;
+      }
     }
     pricingInputs.push({
       serviceCode: item.serviceCode,
