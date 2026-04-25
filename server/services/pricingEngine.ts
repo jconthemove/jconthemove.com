@@ -199,11 +199,14 @@ export async function quoteService(
   }
 
   if (serviceCode === "moving" && (d.bedrooms || d.stairs != null || d.loadType)) {
+    const matrix = quoteMovingFromTable({ bedrooms: d.bedrooms, stairs: d.stairs, loadType: d.loadType });
     const q = quoteMoving({ bedrooms: d.bedrooms, stairs: d.stairs, loadType: d.loadType });
-    // Task #218 — Even though moving is matrix-priced, surface a labor-
-    // hours read-out so the chat card can render "X movers × Y hrs". We
-    // back-compute hours from the matrix amount so the breakdown adds up.
-    const labor = quoteByLaborHours("moving", { jobSize: inferJobSizeFromBedrooms(d.bedrooms) });
+    // Task #218 round-9 rev2 — pull the labor tuple straight from the matrix
+    // helper instead of back-computing through a coarse jobSize bucket. This
+    // keeps `quoteService` aligned with the route layer for matrix-specific
+    // bedroom tiers (e.g., 3br → crew=3, not the "medium" jobSize crew=2).
+    const labor = matrix.labor
+      ?? quoteByLaborHours("moving", { jobSize: inferJobSizeFromBedrooms(d.bedrooms) });
     const derivedHours = labor && labor.crewSize > 0
       ? +(q.amount / (labor.crewSize * LABOR_RATE_PER_HOUR)).toFixed(2)
       : labor?.laborHours ?? 0;

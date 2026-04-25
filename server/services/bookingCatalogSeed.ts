@@ -151,6 +151,13 @@ async function ensureBookingTables(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_bundle_audit_code    ON bundle_settings_audit_log(bundle_code);
     CREATE INDEX IF NOT EXISTS idx_bundle_audit_created ON bundle_settings_audit_log(created_at);
 
+    -- DEPRECATED (Task #218 round-9 rev2): crew_requirements is no longer
+    -- the source of truth for moving / handyman crew + labor-hour defaults.
+    -- That role moved to service_catalog.min_crew + service_catalog.default_labor_hours
+    -- (read by quoteByLaborHours in shared/pricingTables.ts). This CREATE is
+    -- left in place only so prod environments that already have the table do
+    -- not break on existing crewRequirements queries; new envs will get the
+    -- empty shell but no code path writes to or reads from it.
     CREATE TABLE IF NOT EXISTS crew_requirements (
       id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
       service_code text NOT NULL UNIQUE,
