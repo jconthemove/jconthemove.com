@@ -143,7 +143,13 @@ function deriveJobSize(
  *  still adds up to the price the customer pays. Every OTHER service
  *  uses the canonical labor breakdown from quoteByLaborHours and the
  *  dollars are derived from THAT (see resolveItems below). */
-const CALCULATOR_DRIVEN_SERVICES = new Set(["painting", "flooring"]);
+// Services whose dollar amount comes from a non-labor calculator
+// (matrix lookups, sqft × rate, rule files). For these the labor
+// breakdown is derived metadata only — never overrides the price.
+// Moving keeps its bedrooms × stairs × loadType matrix as the truth
+// per Task #218 spec step 4 ("keep the matrix as the truth for the
+// `amount`, but also derive crewSize and laborHours from the row").
+const CALCULATOR_DRIVEN_SERVICES = new Set(["painting", "flooring", "moving"]);
 
 /** Attach the canonical labor-hours breakdown to a quoted line. */
 function buildLaborMeta(

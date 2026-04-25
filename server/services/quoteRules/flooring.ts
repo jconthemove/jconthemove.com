@@ -87,6 +87,11 @@ export interface FlooringEstimate {
     minJobFloor: number;
     rawAmount: number;
     clamped: { min: number | null; max: number | null };
+    /** Task #218 — labor breakdown derived from the dollar amount so
+     *  the chat card can render "2 floorers × N hrs at $85/hr". */
+    crewSize?: number;
+    laborHours?: number;
+    ratePerHour?: number;
   };
 }
 
@@ -195,6 +200,15 @@ export function estimateFlooring(input: FlooringEstimateInput = {}): FlooringEst
   const raw = Math.max(FLOORING_RULES.MIN_JOB_FEE, laborSubtotal + haulAwayCharge + trimAdder);
   const amount = clamp(raw, fallbackMin, fallbackMax);
 
+  // Task #218 — derive labor hours from the dollar amount; flooring uses
+  // a 2-person crew by default, hours rounded to nearest 0.5.
+  const ratePerHour = 85;
+  const crewSize = 2;
+  const laborHours = Math.max(
+    1,
+    Math.round((amount / (crewSize * ratePerHour)) * 2) / 2,
+  );
+
   return {
     amount,
     isFromAnswers: true,
@@ -211,6 +225,9 @@ export function estimateFlooring(input: FlooringEstimateInput = {}): FlooringEst
       minJobFloor: FLOORING_RULES.MIN_JOB_FEE,
       rawAmount: Math.round(raw),
       clamped: { min: fallbackMin, max: fallbackMax },
+      crewSize,
+      laborHours,
+      ratePerHour,
     },
   };
 }

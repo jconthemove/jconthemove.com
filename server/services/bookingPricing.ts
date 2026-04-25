@@ -144,6 +144,12 @@ export interface AppliedBundle {
 
 export interface BookingPricingItemResult extends BookingPricingItemInput {
   lineSubtotal: number;
+  /** Task #218 — additive top-level labor fields so frontend code that
+   *  doesn't reach into laborMeta still gets the breakdown numbers.
+   *  These mirror laborMeta.* and are present whenever laborMeta is. */
+  crewSize?: number;
+  laborHours?: number;
+  ratePerHour?: number;
 }
 
 export interface BookingPricingResult {
@@ -239,6 +245,9 @@ export function computeBookingQuote(
     ...item,
     discountEligible: item.discountEligible !== false,
     lineSubtotal: computeLineSubtotal(item),
+    crewSize: item.laborMeta?.crewSize,
+    laborHours: item.laborMeta?.laborHours,
+    ratePerHour: item.laborMeta?.ratePerHour,
   }));
 
   const subtotal = round2(items.reduce((s, i) => s + i.lineSubtotal, 0));

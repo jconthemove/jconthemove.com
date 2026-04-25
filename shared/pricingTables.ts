@@ -184,7 +184,7 @@ export const SERVICE_LABOR_DEFAULTS: Record<string, ServiceLaborDefaults> = {
     jobSize: {
       small:  { crew: 2, hours: 1 },  // 2 labor-hr → $170
       medium: { crew: 2, hours: 2 },  // 4 labor-hr → $340
-      large:  { crew: 2, hours: 4 },  // 8 labor-hr → $680 (full truckload)
+      large:  { crew: 2, hours: 3 },  // 6 labor-hr → $510 (full truckload, per spec)
     },
   },
   cleaning: {
@@ -205,16 +205,16 @@ export const SERVICE_LABOR_DEFAULTS: Record<string, ServiceLaborDefaults> = {
   },
   lawn_care:       { defaultCrew: 1, defaultHours: 0.5 },   // ~$43 base mowing
   trash_valet:     { defaultCrew: 1, defaultHours: 0.33 },  // ~$28 per pickup
-  snow_removal:    { defaultCrew: 1, defaultHours: 0.6 },   // ~$51 per event
-  window_cleaning: { defaultCrew: 1, defaultHours: 1 },     // ~$85 small home
+  snow_removal:    { defaultCrew: 1, defaultHours: 0.75 },  // ~$64 per driveway visit (per spec)
+  window_cleaning: { defaultCrew: 1, defaultHours: 2 },     // ~$170 whole home (per spec)
   handyman:        { defaultCrew: 1, defaultHours: 2 },     // 2-hr min → $170
   labor:           { defaultCrew: 2, defaultHours: 2 },     // 4 labor-hr → $340
   delivery:        { defaultCrew: 2, defaultHours: 1 },     // 2 labor-hr → $170
   assembly:        { defaultCrew: 1, defaultHours: 2 },     // 2 labor-hr → $170
   demolition: {
-    defaultCrew: 2, defaultHours: 2,
+    defaultCrew: 2, defaultHours: 3,  // light demo (room) per spec → $510
     jobSize: {
-      small:  { crew: 2, hours: 2 },  // 4 labor-hr → $340
+      small:  { crew: 2, hours: 3 },  // 6 labor-hr → $510 (light demo room)
       medium: { crew: 3, hours: 4 },  // 12 labor-hr → $1020
       large:  { crew: 4, hours: 6 },  // 24 labor-hr → $2040
     },

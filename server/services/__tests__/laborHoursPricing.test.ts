@@ -1,16 +1,13 @@
 /** Task #218 — Labor-hours pricing model.
  *
- *  These are *documentation* tests: the project doesn't run a Vitest
- *  suite (`run_test` disabled at session level), so the assertions are
- *  intentionally tiny / framework-free. They serve two purposes:
- *
- *    1. Codify the canonical labor-hour breakdowns the customer-facing
- *       chat card claims (small moving = 2×2hr, medium = 2×4hr, etc.)
- *       so a future refactor that breaks them shows up loudly.
- *    2. Document, in one place, the contract between
- *       `quoteByLaborHours()` and the chat-intake card.
+ *  Framework-free assertions that codify the canonical labor-hour
+ *  breakdowns the customer-facing chat card claims (small moving =
+ *  2×2hr, medium = 2×4hr, etc.) so a future refactor that breaks them
+ *  shows up loudly. They also document the contract between
+ *  `quoteByLaborHours()` and the chat-intake card.
  *
  *  Run with: `tsx server/services/__tests__/laborHoursPricing.test.ts`
+ *  (auto-discovered by `scripts/run-server-tests.sh`).
  */
 
 import {

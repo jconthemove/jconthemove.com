@@ -119,6 +119,11 @@ export interface PaintingEstimate {
     };
     rawAmount: number;
     clamped: { min: number | null; max: number | null };
+    /** Task #218 — labor breakdown derived from the dollar amount so
+     *  the chat card can render "1 painter × N hrs at $85/hr". */
+    crewSize?: number;
+    laborHours?: number;
+    ratePerHour?: number;
   };
 }
 
@@ -240,6 +245,17 @@ export function estimatePainting(input: PaintingEstimateInput = {}): PaintingEst
   const raw = interiorSubtotal + exteriorSubtotal;
   const amount = clamp(raw, fallbackMin, fallbackMax);
 
+  // Task #218 — surface labor hours derived from the dollar amount so
+  // the chat card can render "1 painter × N hrs at $85/hr" alongside
+  // the rule-driven price. Painting defaults to a 1-painter crew;
+  // hours are rounded to the nearest 0.5.
+  const ratePerHour = 85;
+  const crewSize = 1;
+  const laborHours = Math.max(
+    0.5,
+    Math.round((amount / (crewSize * ratePerHour)) * 2) / 2,
+  );
+
   return {
     amount,
     isFromAnswers: true,
@@ -248,6 +264,9 @@ export function estimatePainting(input: PaintingEstimateInput = {}): PaintingEst
       exterior: exteriorBreakdown,
       rawAmount: Math.round(raw),
       clamped: { min: fallbackMin, max: fallbackMax },
+      crewSize,
+      laborHours,
+      ratePerHour,
     },
   };
 }
