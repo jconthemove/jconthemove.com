@@ -223,6 +223,51 @@ async function paintingFlooringLaborParity() {
 
 await paintingFlooringLaborParity();
 
+// ── Quantity > 1 collapse for labor-authoritative services ──────────
+// Reviewer round-8: previous code did `qty × full-labor-total`,
+// double-counting customers who asked for 3 hours of handyman. The
+// fix scales laborHours by quantity then collapses qty to 1, so the
+// final lineSubtotal == crew × (hours × qty) × $85, NOT qty squared.
+async function quantityCollapseSafety() {
+  // Recreate the resolveItems collapse rule in isolation; same shape
+  // as the moving routing test above.
+  function applyLaborAuthority(
+    code: string,
+    quantity: number,
+  ): { qty: number; unit: number; hrs: number; crew: number; sub: number } | null {
+    const labor = quoteByLaborHours(code, {});
+    if (!labor) return null;
+    let crew = labor.crewSize;
+    let hrs = labor.laborHours;
+    let qty = Math.max(1, quantity);
+    if (qty > 1) {
+      hrs = +(hrs * qty).toFixed(2);
+      qty = 1;
+    }
+    const unit = +(crew * hrs * LABOR_RATE_PER_HOUR).toFixed(2);
+    return { qty, unit, hrs, crew, sub: +(qty * unit).toFixed(2) };
+  }
+
+  const h3 = applyLaborAuthority("handyman", 3)!;
+  // 3 hrs × 1 person × $85 = $510, billed as 1 × $510 (not 3 × $170)
+  eq("handyman quantity=3 collapses to crew=1 hrs=6 sub=$510 (no double-count)",
+    { qty: h3.qty, unit: h3.unit, sub: h3.sub, crew: h3.crew, hrs: h3.hrs },
+    { qty: 1, unit: 510, sub: 510, crew: 1, hrs: 6 });
+
+  const l3 = applyLaborAuthority("labor", 3)!;
+  // labor default crew=2 hrs=2 → ×3 → crew=2 hrs=6 → 2×6×85 = $1020
+  eq("labor quantity=3 collapses to crew=2 hrs=6 sub=$1020 (no double-count)",
+    { qty: l3.qty, unit: l3.unit, sub: l3.sub, crew: l3.crew, hrs: l3.hrs },
+    { qty: 1, unit: 1020, sub: 1020, crew: 2, hrs: 6 });
+
+  const h1 = applyLaborAuthority("handyman", 1)!;
+  // qty=1 path stays untouched: 1 person × 2 hrs × $85 = $170
+  eq("handyman quantity=1 stays untouched (sub=$170)",
+    { qty: h1.qty, sub: h1.sub }, { qty: 1, sub: 170 });
+}
+
+await quantityCollapseSafety();
+
 if (failures > 0) {
   console.error(`\n${failures} assertion(s) failed.`);
   process.exit(1);

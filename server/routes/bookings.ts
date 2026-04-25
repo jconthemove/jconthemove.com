@@ -344,7 +344,7 @@ function resolveItems(
       }
     }
 
-    const laborMeta = buildLaborMeta(item.serviceCode, unitPrice, item.quantity, item.details || {});
+    let laborMeta = buildLaborMeta(item.serviceCode, unitPrice, item.quantity, item.details || {});
     // Labor-priced services (lawn, valet, snow, junk, handyman, etc.)
     // get their unitPrice replaced with the canonical crew × hrs × $85
     // so the catalog suggested-min never silently bypasses the chat
@@ -355,9 +355,30 @@ function resolveItems(
     // catalog row defaults to "fixed" (trash_valet flat rate) or
     // "hourly" (handyman/labor), the chat card still promises crew ×
     // hours × $85, so the route layer must bill that exact amount.
+    let effectiveQuantity = item.quantity;
     if (laborMeta && LABOR_AUTHORITATIVE_SERVICES.has(item.serviceCode)) {
       const laborDollars = +(laborMeta.crewSize * laborMeta.laborHours * laborMeta.ratePerHour).toFixed(2);
-      if (laborDollars > 0) unitPrice = laborDollars;
+      if (laborDollars > 0) {
+        // unitPrice now represents the FULL labor block (crew × hours
+        // × $85). If the customer requested quantity > 1, multiply the
+        // labor hours into the meta so the chat card stays honest, then
+        // collapse quantity to 1 — otherwise computeLineSubtotal would
+        // double-count (qty × full-labor-total).
+        const qty = Math.max(1, item.quantity);
+        if (qty > 1) {
+          const scaledHours = +(laborMeta.laborHours * qty).toFixed(2);
+          laborMeta = {
+            crewSize: laborMeta.crewSize,
+            laborHours: scaledHours,
+            totalLaborHours: +(laborMeta.crewSize * scaledHours).toFixed(2),
+            ratePerHour: laborMeta.ratePerHour,
+          };
+          unitPrice = +(laborMeta.crewSize * laborMeta.laborHours * laborMeta.ratePerHour).toFixed(2);
+        } else {
+          unitPrice = laborDollars;
+        }
+        effectiveQuantity = 1;
+      }
     }
     // Moving stays matrix-driven, but the back-computed display hours
     // round to 0.01 — meaning crew × hrs × $85 can disagree with the
@@ -373,7 +394,7 @@ function resolveItems(
     pricingInputs.push({
       serviceCode: item.serviceCode,
       label,
-      quantity: item.quantity,
+      quantity: effectiveQuantity,
       unitPrice,
       priceMode,
       discountEligible: cat.discountEligible,
@@ -383,7 +404,7 @@ function resolveItems(
     persistInputs.push({
       serviceCode: item.serviceCode,
       serviceLabel: label,
-      quantity: item.quantity,
+      quantity: effectiveQuantity,
       unitPrice,
       priceMode,
       details: item.details || {},
