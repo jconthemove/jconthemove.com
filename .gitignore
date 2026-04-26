@@ -30,3 +30,6 @@ Thumbs.db
 
 # hosting
 .vercel
+
+.config/
+.local/
