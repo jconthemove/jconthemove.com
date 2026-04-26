@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import express, { type Request, Response, NextFunction } from "express";
 import path from "path";
 import fs from "fs";
@@ -498,7 +499,7 @@ app.use((req, res, next) => {
       let offset = 90_000;
       for (const cfg of Object.values(SERVICE_CONFIGS)) {
         if (process.env[cfg.schedulerEnvFlag] !== "true") {
-          console.log(`ℹ️  ${cfg.label} re-book reminder sweep disabled (set ${cfg.schedulerEnvFlag}=true to enable)`);
+          console.log(`  ${cfg.label} re-book reminder sweep disabled (set ${cfg.schedulerEnvFlag}=true to enable)`);
           continue;
         }
         const tick = async () => {
@@ -514,7 +515,7 @@ app.use((req, res, next) => {
         };
         setTimeout(tick, offset);
         setInterval(tick, ONE_DAY_MS);
-        console.log(`✅ ${cfg.label} re-book reminder sweep scheduled (daily)`);
+        console.log(` ${cfg.label} re-book reminder sweep scheduled (daily)`);
         offset += 30_000;
       }
     }
@@ -549,7 +550,7 @@ app.use((req, res, next) => {
       // First run 2 min after boot, then every 10 minutes.
       setTimeout(tick, 120_000);
       setInterval(tick, SWEEP_INTERVAL_MS);
-      console.log("✅ Jewelry reservation expiry sweep scheduled (every 10 min)");
+      console.log(" Jewelry reservation expiry sweep scheduled (every 10 min)");
     }
 
     // ── Bitcoin Payment Auto-Verify Sweeper (Task #155) ─────────────────────
@@ -580,9 +581,9 @@ app.use((req, res, next) => {
       };
       setTimeout(tick, 90_000);
       setInterval(tick, BTC_SWEEP_INTERVAL_MS);
-      console.log("✅ Bitcoin payment auto-verify sweep scheduled (every 2 min)");
+      console.log(" Bitcoin payment auto-verify sweep scheduled (every 2 min)");
     } else {
-      console.log("ℹ️  BTC_WALLET_ADDRESS not set — Bitcoin auto-verify sweep disabled");
+      console.log("  BTC_WALLET_ADDRESS not set — Bitcoin auto-verify sweep disabled");
     }
 
     // Serve static files from attached_assets directory with proper video support
@@ -658,36 +659,28 @@ app.use((req, res, next) => {
       res.status(status).json({ message });
     });
 
-    // ALWAYS serve the app on the port specified in the environment variable PORT
-    // Other ports are firewalled. Default to 5000 if not specified.
-    // this serves both the API and the client.
-    // It is the only port that is not firewalled.
-    const port = parseInt(process.env.PORT || '5000', 10);
-    
-    console.log(`Starting server on port ${port}...`);
-    server.listen({
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    }, () => {
-      console.log('✅ JC ON THE MOVE application started successfully');
-      log(`serving on port ${port}`);
-    });
+// ALWAYS serve the app on the port specified in the environment variable
+const port = parseInt(process.env.PORT || '5000', 10);
 
-  } catch (error) {
-    console.error('❌ Failed to initialize JC ON THE MOVE application:');
-    console.error('Error details:', error);
-    
-    // In deployment, log detailed error but continue gracefully
-    if (process.env.NODE_ENV === 'production') {
-      console.error('Application startup failed in production. Check configuration.');
-      console.error('Common issues: Invalid environment variables, database connection, or service configurations');
-    }
-    
-    // Don't exit in development for better debugging
-    if (process.env.NODE_ENV !== 'development') {
-      console.error('Exiting due to startup failure...');
-      process.exit(1);
-    }
+console.log(`Starting server on port ${port}...`);
+
+server.listen(port, '0.0.0.0', () => {
+  console.log('JC ON THE MOVE application started successfully');
+  console.log(`Serving on http://0.0.0.0:${port}`);
+});
+
+} catch (error) {
+  console.error('Failed to initialize JC ON THE MOVE application:');
+  console.error('Error details:', error);
+
+  if (process.env.NODE_ENV === 'production') {
+    console.error('Application startup failed in production.');
   }
+
+  if (process.env.NODE_ENV !== 'development') {
+    process.exit(1);
+  }
+}
+
+// close the async IIFE
 })();
