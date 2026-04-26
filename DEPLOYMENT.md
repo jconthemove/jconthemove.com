@@ -1,157 +1,160 @@
-# Deployment Configuration Guide
+# Self-Hosting Deployment Guide (Node + Express + Vite)
 
-## Required Environment Variables for Production
+This project now supports a standard production deployment flow:
 
-To successfully deploy this application, you need to configure the following environment variables through Replit's Secrets pane (🔒 lock icon in the left sidebar):
+```bash
+npm run build
+npm start
+```
 
-### 1. Core Environment Variables
+---
 
-#### `NODE_ENV` (Required for Production)
-- **Value**: `production`
-- **Purpose**: Enables production mode with optimized builds and error handling
-- **Example**: `NODE_ENV=production`
+## 1) Runtime Requirements
 
-#### `REPLIT_DOMAINS` (Required for Authentication)
-- **Value**: Comma-separated list of domains where your app will be accessed
-- **Purpose**: Required for Replit authentication to work correctly
-- **Example**: `REPLIT_DOMAINS=jconthemove.replit.app,jconthemove.com,www.jconthemove.com`
-- **Note**: Include your `.replit.app` domain AND any custom domains
+- **Node.js 20+** (recommended: latest Node 20 LTS)
+- **npm 10+**
+- **PostgreSQL** reachable by `DATABASE_URL`
 
-### 2. Database Configuration
+---
 
-#### `DATABASE_URL` (Auto-configured by Replit)
-- Automatically set when you create a PostgreSQL database
-- Format: `postgresql://username:password@host:port/database`
+## 2) Environment Variables
 
-### 3. Authentication Configuration
+### Required in production
 
-#### `REPL_ID` (Auto-configured by Replit)
-- Automatically provided by Replit platform
-- Used for OAuth authentication
+Set these before running `npm start` in production:
 
-#### `SESSION_SECRET` (Auto-configured by Replit)
-- Automatically generated for session encryption
-- Should be a long random string
+- `NODE_ENV=production`
+- `PORT` (optional override; defaults to `5000`)
+- `DATABASE_URL`
+- `SESSION_SECRET`
+- `SQUARE_ACCESS_TOKEN`
+- `SQUARE_ENVIRONMENT` (`sandbox` or `production`)
 
-### 4. Treasury & Blockchain Configuration
+> In production, startup intentionally fails fast when required payment env vars are missing.
 
-#### `VITE_SOLANA_RPC_URL` (Required for Solana Integration)
-- **Value**: Solana RPC endpoint URL
-- **Purpose**: Connects the frontend to the Solana blockchain network
-- **Recommended Values**:
-  - **Free Public Endpoint**: `https://api.mainnet-beta.solana.com` (good for testing, has rate limits)
-  - **Alchemy** (Recommended): `https://solana-mainnet.g.alchemy.com/v2/YOUR_API_KEY`
-  - **QuickNode**: `https://YOUR_ENDPOINT.quiknode.pro/YOUR_API_KEY/`
-  - **Helius**: `https://mainnet.helius-rpc.com/?api-key=YOUR_API_KEY`
-- **Note**: For production, use a premium RPC service for better performance and reliability
-- **Status**: ✅ Required and configured
+### Optional in development
 
-#### `TREASURY_WALLET_PRIVATE_KEY`
-- **Status**: ✅ Already configured in .env
-- **Purpose**: Solana wallet for treasury operations
+In development (`npm run dev`), payment env vars are optional so local work can continue without live payment credentials.
 
-#### `TREASURY_WALLET_PUBLIC_KEY`
-- **Status**: ✅ Already configured in .env
-- **Purpose**: Public address for treasury wallet
+### Optional feature env vars
 
-#### `MOONSHOT_TOKEN_ADDRESS`
-- **Current Value**: `AY9NPebnvjcKSoUteYwNER3JHiJNPh6ptKmC8E4VGrxp`
-- **Status**: ⚠️ In .env file but needs to be set in Secrets pane
-- **Purpose**: JCMOVES token address on Solana/Moonshot
+Set these only if those features are enabled in your environment:
 
-### 5. Email Configuration (Optional)
+- `BTC_WALLET_ADDRESS`
+- `TWILIO_ACCOUNT_SID`
+- `TWILIO_AUTH_TOKEN`
+- `SENDGRID_API_KEY`
+- `COMPANY_EMAIL`
+- `VITE_SOLANA_RPC_URL`
+- `TREASURY_WALLET_PRIVATE_KEY`
+- `TREASURY_WALLET_PUBLIC_KEY`
+- `MOONSHOT_TOKEN_ADDRESS`
 
-#### `SENDGRID_API_KEY`
-- **Format**: Must start with `SG.`
-- **Purpose**: Email notifications for leads and contacts
-- **Note**: Email features will be disabled without valid API key
+---
 
-#### `COMPANY_EMAIL`
-- **Purpose**: Recipient email for notifications
-- **Example**: `admin@jconthemove.com`
+## 3) Production Build + Start
 
-### 6. Payment & Faucet Integration (Optional)
+From the project root:
 
-#### `FAUCETPAY_API_KEY`
-- **Purpose**: FaucetPay integration for crypto payments
-- **Status**: Listed as missing in project
+```bash
+npm ci
+npm run build
+npm start
+```
 
-#### `FAUCETPAY_USER_TOKEN`
-- **Purpose**: FaucetPay user authentication
-- **Status**: Listed as missing in project
+What this does:
 
-#### `STRIPE_SECRET_KEY` & `VITE_STRIPE_PUBLIC_KEY`
-- **Purpose**: Stripe payment integration
-- **Status**: Listed as missing in project
+- `npm run build`
+  - builds the Vite client to `dist/public`
+  - compiles/bundles the Express TypeScript server to `dist/index.js`
+- `npm start`
+  - runs compiled server with Node (`node dist/index.js`)
+  - serves API + static client assets from the same process
 
-## How to Configure Secrets in Replit
+---
 
-1. **Open Secrets Pane**
-   - Click the lock icon (🔒) in the left sidebar
-   - Or navigate to "Secrets" or "Environment Variables"
+## 4) Example Linux systemd Service
 
-2. **Add or Update a Secret**
-   - Find the secret by name (e.g., `NODE_ENV`)
-   - If it exists, click "Edit" and update the value
-   - If it doesn't exist, click "Add Secret" and enter:
-     - Key: `NODE_ENV`
-     - Value: `production`
-   - Click "Update Secret" or "Add Secret"
+Create `/etc/systemd/system/jconthemove.service`:
 
-3. **Essential Secrets for Deployment**
-   ```
-   NODE_ENV=production
-   REPLIT_DOMAINS=jconthemove.replit.app,jconthemove.com,www.jconthemove.com
-   MOONSHOT_TOKEN_ADDRESS=AY9NPebnvjcKSoUteYwNER3JHiJNPh6ptKmC8E4VGrxp
-   ```
+```ini
+[Unit]
+Description=JC On The Move
+After=network.target
 
-4. **Restart Application**
-   - After adding/updating secrets, the application will automatically restart
-   - Check the logs to verify successful startup
+[Service]
+Type=simple
+WorkingDirectory=/opt/JCONTHEMOVE.COM
+Environment=NODE_ENV=production
+Environment=PORT=5000
+EnvironmentFile=/opt/JCONTHEMOVE.COM/.env.production
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=5
+User=www-data
+Group=www-data
 
-## Deployment Checklist
+[Install]
+WantedBy=multi-user.target
+```
 
-- [ ] Set `NODE_ENV=production` in Secrets
-- [ ] Set `REPLIT_DOMAINS` with all deployment domains in Secrets
-- [ ] Verify `DATABASE_URL` is configured (auto-configured by Replit)
-- [ ] Move `MOONSHOT_TOKEN_ADDRESS` from .env to Secrets pane
-- [ ] Configure `SENDGRID_API_KEY` if email notifications are needed
-- [ ] Configure FaucetPay keys if crypto faucet features are needed
-- [ ] Configure Stripe keys if payment processing is needed
-- [ ] Test authentication flow after deployment
-- [ ] Verify treasury system is accessible
+Then:
 
-## Current Status
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now jconthemove
+sudo systemctl status jconthemove
+```
 
-✅ **Application starts successfully** with graceful error handling
-✅ **Authentication works** in development mode
-✅ **Database connected** and operational
-✅ **Treasury wallet configured** with JCMOVES tokens
-⚠️ **MOONSHOT_TOKEN_ADDRESS** needs to be set in Secrets pane (currently in .env only)
-⚠️ **Production deployment** requires NODE_ENV and REPLIT_DOMAINS in Secrets
+---
 
-## Troubleshooting
+## 5) Reverse Proxy (Nginx)
 
-### "Authentication setup failed"
-- Ensure `REPLIT_DOMAINS` is set in Secrets pane
-- Include ALL domains where users will access the app
-- Format: `domain1.com,domain2.com` (comma-separated, no spaces)
+Point your domain to the server and proxy to the Node app:
 
-### "Application failed to initialize"
-- Check that `NODE_ENV` is set to `production` for deployments
-- Verify all required secrets are configured
-- Review deployment logs for specific error messages
+```nginx
+server {
+  listen 80;
+  server_name jconthemove.com www.jconthemove.com;
 
-### "Token not found" (Moonshot API)
-- Your JCMOVES tokens exist and are working (verified in wallet)
-- Token may still be in bonding curve phase on Moonshot
-- System uses fallback price: $0.00000508432
-- Will auto-update when token is indexed in Moonshot's public API
+  location / {
+    proxy_pass http://127.0.0.1:5000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+}
+```
 
-## Notes
+After confirming traffic, add TLS (Let’s Encrypt) and redirect HTTP → HTTPS.
 
-- The application now has **graceful startup error handling**
-- Server will start even if some services fail to initialize
-- Authentication errors won't block server startup
-- Missing optional services (email, faucet) won't prevent deployment
-- All critical errors are logged for debugging
+---
+
+## 6) Smoke Test Checklist
+
+After deploy, verify:
+
+- Landing page loads
+- Booking flow works end-to-end
+- Square payment flow works
+- Database writes succeed
+- Rewards/JCMOVES pages and redemptions load
+
+---
+
+## 7) Troubleshooting
+
+### Build fails with missing tools/deps
+Run:
+
+```bash
+npm ci
+```
+
+### App refuses to boot in production
+Check startup logs for missing required env vars (`SQUARE_ACCESS_TOKEN`, `SQUARE_ENVIRONMENT`, etc.) and set them in your host environment.
+
+### App boots but no DB connectivity
+Validate `DATABASE_URL`, DB firewall/security groups, and SSL requirements for your provider.
