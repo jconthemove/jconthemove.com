@@ -30,8 +30,6 @@ app.set("trust proxy", 1);
 const allowedOrigins = [
   'https://jconthemove.com',
   'https://www.jconthemove.com',
-  'https://jconthemove.replit.app',
-  'https://jc-on-the-move-mobile.replit.app',
   'capacitor://localhost',
   'http://localhost',
   'http://localhost:5000',
@@ -42,7 +40,7 @@ app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (mobile apps, Postman, etc.)
     if (!origin) return callback(null, true);
-    if (allowedOrigins.some(allowed => origin.startsWith(allowed) || origin.includes('replit'))) {
+    if (allowedOrigins.some((allowed) => origin.startsWith(allowed))) {
       return callback(null, true);
     }
     return callback(null, true); // Allow all for now to debug

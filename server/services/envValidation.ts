@@ -46,6 +46,11 @@ export function validatePaymentEnv(): EnvValidationResult {
  * throws when any REQUIRED var is unset so the boot sequence aborts.
  */
 export function assertPaymentEnvOrExit(): void {
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[env-check] non-production environment detected; payment env vars are optional for local development.");
+    return;
+  }
+
   const result = validatePaymentEnv();
   // eslint-disable-next-line no-console
   console.log("[env-check] payment surface env vars:");
@@ -56,7 +61,7 @@ export function assertPaymentEnvOrExit(): void {
   }
   if (!result.ok) {
     const list = result.missingRequired.map((n) => `  • ${n}`).join("\n");
-    const msg = `\n[env-check] REFUSING TO BOOT — missing required payment env vars:\n${list}\n\nSet these in your environment (Replit Secrets) and restart.`;
+    const msg = `\n[env-check] REFUSING TO BOOT — missing required payment env vars:\n${list}\n\nSet these in your production environment and restart.`;
     // eslint-disable-next-line no-console
     console.error(msg);
     throw new Error(`Missing required env vars: ${result.missingRequired.join(", ")}`);
