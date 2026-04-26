@@ -1,6 +1,32 @@
-node_modules
-dist
+# dependencies
+node_modules/
+
+# build outputs
+.next/
+dist/
+out/
+build/
+
+# logs
+*.log
+pnpm-debug.log*
+npm-debug.log*
+
+# env files (CRITICAL)
+.env
+.env.local
+.env.production
+
+# system
 .DS_Store
-server/public
-vite.config.ts.*
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# archives
 *.tar.gz
+
+# hosting
+.vercel
