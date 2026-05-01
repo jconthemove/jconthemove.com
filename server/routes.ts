@@ -9135,19 +9135,65 @@ Thank you for your business!
   app.get("/api/rewards/wallet", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user?.id || (req.session as any).userId;
-      
+
       const wallet = await db
         .select()
         .from(walletAccounts)
         .where(eq(walletAccounts.userId, userId))
         .limit(1);
 
+      const [earnedRow] = await db
+        .select({
+          totalEarned: sql<number>`coalesce(sum(case when cast(${rewards.tokenAmount} as decimal) > 0 then cast(${rewards.tokenAmount} as decimal) else 0 end), 0)`,
+        })
+        .from(rewards)
+        .where(and(
+          eq(rewards.userId, userId),
+          eq(rewards.status, "confirmed"),
+        ));
+
+      const [redeemedRow] = await db
+        .select({
+          totalRedeemed: sql<number>`coalesce(sum(${rewardRedemptions.tokenCost}), 0)`,
+        })
+        .from(rewardRedemptions)
+        .where(and(
+          eq(rewardRedemptions.userId, userId),
+          inArray(rewardRedemptions.status, ["pending", "pending_approval", "approved", "redeemed_pending_schedule", "completed"]),
+        ));
+
+      const recoveredTotalEarned = Number(earnedRow?.totalEarned ?? 0);
+      const recoveredTotalRedeemed = Number(redeemedRow?.totalRedeemed ?? 0);
+      const recoveredBalance = Math.max(0, recoveredTotalEarned - recoveredTotalRedeemed);
+
       if (wallet.length === 0) {
-        // Create wallet if it doesn't exist
+        // Backfill migrated users from their existing confirmed reward history
+        // so they don't appear to have a zero balance on first wallet load.
         const newWallet = await db.insert(walletAccounts).values({
-          userId
+          userId,
+          tokenBalance: recoveredBalance.toFixed(8),
+          totalEarned: recoveredTotalEarned.toFixed(8),
+          totalRedeemed: recoveredTotalRedeemed.toFixed(8),
         }).returning();
         return res.json(newWallet[0]);
+      }
+
+      const existingWallet = wallet[0];
+      const existingBalance = Number(existingWallet.tokenBalance ?? 0);
+      const existingTotalEarned = Number(existingWallet.totalEarned ?? 0);
+
+      if (existingBalance <= 0 && existingTotalEarned <= 0 && recoveredTotalEarned > 0) {
+        const [repairedWallet] = await db
+          .update(walletAccounts)
+          .set({
+            tokenBalance: recoveredBalance.toFixed(8),
+            totalEarned: recoveredTotalEarned.toFixed(8),
+            totalRedeemed: recoveredTotalRedeemed.toFixed(8),
+            lastActivity: new Date(),
+          })
+          .where(eq(walletAccounts.userId, userId))
+          .returning();
+        return res.json(repairedWallet);
       }
 
       res.json(wallet[0]);
