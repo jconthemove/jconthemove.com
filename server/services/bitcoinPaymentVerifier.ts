@@ -241,7 +241,9 @@ export async function verifyBitcoinPayment(
     const autoLine = opts.autoVerified
       ? '<p style="color:#94a3b8;text-align:center;font-size:12px;margin:12px 0 0;">Auto-confirmed on the Bitcoin blockchain.</p>'
       : "";
-    const baseUrl = process.env.APP_URL || "https://jconthemove.com";
+  const baseUrl = process.env.APP_URL?.trim()
+    || process.env.RENDER_EXTERNAL_URL?.trim()
+    || "https://jconthemove.com";
     const receiptUrl = `${baseUrl}/payment-success?btcPaymentId=${encodeURIComponent(payment.id)}`;
     const receiptCta = `
           <div style="text-align:center;margin-top:20px;">

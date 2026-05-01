@@ -119,7 +119,9 @@ export const REBOOK_SWEEP_HARD_CAP = 1000;
 
 const FROM_EMAIL = process.env.FROM_EMAIL || "michigankid906@gmail.com";
 const COMPANY_PHONE = process.env.COMPANY_PHONE || "(906) 285-9312";
-const APP_URL = process.env.APP_URL || "https://jconthemove.com";
+const APP_URL = process.env.APP_URL?.trim()
+  || process.env.RENDER_EXTERNAL_URL?.trim()
+  || "https://jconthemove.com";
 
 // ── One-click unsubscribe (Task #109) ────────────────────────────────────────
 // HMAC-signed token over the (normalized email + phone) pair so the public

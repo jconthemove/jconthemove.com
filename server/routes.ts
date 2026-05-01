@@ -45,6 +45,8 @@ import serviceRebookPublicRouter from "./routes/serviceRebookPublic";
 import bookingsRouter from "./routes/bookings";
 import pipelineRouter from "./routes/pipeline";
 import { ensureBookingCatalogSeeded } from "./services/bookingCatalogSeed";
+import { getWeeklyCrewRuleForDate, normalizeCrewName } from "@shared/weeklyCrewSchedule";
+import { getAppUrl } from "./appUrl";
 
 const STAKING_TREASURY_USER_ID = "staking-treasury-system";
 
@@ -1378,7 +1380,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
-      const baseUrl = process.env.APP_URL || 'https://jconthemove.com';
+      const baseUrl = getAppUrl();
       const approveToken = await generateApprovalToken(targetUser.id, "approve");
       const rejectToken = await generateApprovalToken(targetUser.id, "reject");
       const approveUrl = `${baseUrl}/api/approve-user?token=${approveToken}&action=approve`;
@@ -1702,7 +1704,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       try {
         const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
-        const baseUrl = process.env.APP_URL || 'https://jconthemove.com';
+      const baseUrl = getAppUrl();
         const approveToken = await generateApprovalToken(newUser.id, "approve");
         const rejectToken = await generateApprovalToken(newUser.id, "reject");
         const approveUrl = `${baseUrl}/api/approve-user?token=${approveToken}&action=approve`;
@@ -2199,7 +2201,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       try {
         const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
-        const baseUrl = process.env.APP_URL || 'https://jconthemove.com';
+      const baseUrl = getAppUrl();
         const approveToken = await generateApprovalToken(newUser.id, "approve");
         const rejectToken = await generateApprovalToken(newUser.id, "reject");
         const approveUrl = `${baseUrl}/api/approve-user?token=${approveToken}&action=approve`;
@@ -2602,7 +2604,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       try {
         const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
-        const baseUrl = process.env.APP_URL || 'https://jconthemove.com';
+      const baseUrl = getAppUrl();
         const approveToken = await generateApprovalToken(newUser.id, "approve");
         const rejectToken = await generateApprovalToken(newUser.id, "reject");
         const approveUrl = `${baseUrl}/api/approve-user?token=${approveToken}&action=approve`;
@@ -4462,7 +4464,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       console.log(`📤 Returning user data for ${user.email} (role: ${user.role}, tosAccepted: ${user.tosAccepted})`);
       const { passwordHash, ...sanitizedUser } = user;
-      res.json(sanitizedUser);
+      const wallet = await storage.getWalletAccount(user.id);
+      res.json({
+        ...sanitizedUser,
+        tokenBalance: wallet?.tokenBalance || sanitizedUser.tokenBalance || "0.00000000",
+        cashBalance: wallet?.cashBalance || "0.00",
+      });
     } catch (error) {
       console.error("❌ Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
@@ -6095,7 +6102,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const serviceLabel = serviceLabels[lead.serviceType] || lead.serviceType;
       
       // Generate review link
-      const reviewLink = `${process.env.APP_URL || 'https://jconthemove.com'}/leave-review?jobId=${lead.id}`;
+      const reviewLink = `${getAppUrl()}/leave-review?jobId=${lead.id}`;
       
       // Send review request email to customer
       const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
@@ -10956,8 +10963,15 @@ Thank you for your business!
         LIMIT 200
       `);
 
+      const filteredRows = rows.filter((r) => {
+        const jobDate = String(r.confirmed_date || r.move_date || "").slice(0, 10);
+        if (!jobDate) return false;
+        return jobDate >= startDate && jobDate <= endDate;
+      });
+      const filteredLeadIds = filteredRows.map((row) => row.id);
+
       // Collect all unique crew IDs across all leads and batch-load their names
-      const allCrewIds = [...new Set(rows.flatMap(r => Array.isArray(r.crew_members) ? r.crew_members : []))];
+      const allCrewIds = [...new Set(filteredRows.flatMap(r => Array.isArray(r.crew_members) ? r.crew_members : []))];
       let crewMap: Record<string, string> = {};
       if (allCrewIds.length) {
         const placeholders = allCrewIds.map((_, i) => `$${i + 1}`).join(',');
@@ -10968,23 +10982,60 @@ Thank you for your business!
         crewMap = Object.fromEntries(crewRows.map(u => [u.id, u.first_name || u.username || "Crew"]));
       }
 
-      const jobs = rows.map(r => ({
-        id: r.id,
-        orderNumber: r.order_number,
-        customerName: r.first_name || "Customer",
-        serviceType: r.service_type,
-        date: r.confirmed_date || r.move_date,
-        arrivalWindow: r.arrival_window,
-        location: r.confirmed_from_address || r.from_address,
-        confirmedHours: r.confirmed_hours,
-        status: r.status,
-        crewIds: Array.isArray(r.crew_members) ? r.crew_members : [],
-        crewNames: (Array.isArray(r.crew_members) ? r.crew_members : []).map((id: string) => crewMap[id] || id),
-        crewSize: r.crew_size || 2,
-        dispatchSentAt: r.dispatch_sent_at,
-        dispatchNotes: r.dispatch_notes,
-        quoteNotes: r.quote_notes,
-      }));
+      const tradeRows = filteredLeadIds.length
+        ? await db.select().from(jobTradeRequests).where(inArray(jobTradeRequests.leadId, filteredLeadIds))
+        : [];
+      const tradeByLead = new Map<string, typeof tradeRows>();
+      for (const trade of tradeRows) {
+        const arr = tradeByLead.get(trade.leadId) ?? [];
+        arr.push(trade);
+        tradeByLead.set(trade.leadId, arr);
+      }
+
+      const jobs = filteredRows.map(r => {
+        const date = r.confirmed_date || r.move_date;
+        const rule = getWeeklyCrewRuleForDate(String(date).slice(0, 10));
+        const crewIds = Array.isArray(r.crew_members) ? r.crew_members : [];
+        const crewNames = crewIds.map((id: string) => crewMap[id] || id);
+        const trades = tradeByLead.get(r.id) ?? [];
+        const ownerName = rule.assignedWorkerName;
+        const ownerOnCrew = !!ownerName && crewNames.some((name) => normalizeCrewName(name) === normalizeCrewName(ownerName));
+        const neededCrew = r.crew_size || 2;
+        const needsCrew = crewIds.length < neededCrew;
+        const needsCoverage = !rule.isOpenMakeupDay && !ownerOnCrew;
+        const pendingTradeRequests = trades.filter((trade) => trade.status === "pending").length;
+        const approvedTradeRequests = trades.filter((trade) => trade.status === "approved").length;
+        const deniedTradeRequests = trades.filter((trade) => trade.status === "denied").length;
+
+        return {
+          id: r.id,
+          orderNumber: r.order_number,
+          customerName: r.first_name || "Customer",
+          serviceType: r.service_type,
+          date,
+          arrivalWindow: r.arrival_window,
+          location: r.confirmed_from_address || r.from_address,
+          confirmedHours: r.confirmed_hours,
+          status: r.status,
+          crewIds,
+          crewNames,
+          crewSize: neededCrew,
+          dispatchSentAt: r.dispatch_sent_at,
+          dispatchNotes: r.dispatch_notes,
+          quoteNotes: r.quote_notes,
+          assignedDayKey: rule.dayKey,
+          assignedDayLabel: rule.dayLabel,
+          assignedWorkerName: ownerName,
+          isOpenMakeupDay: rule.isOpenMakeupDay,
+          assignedDayOwnerOnCrew: ownerOnCrew,
+          needsCoverage,
+          needsCrew,
+          tradeRequestCount: trades.length,
+          pendingTradeRequests,
+          approvedTradeRequests,
+          deniedTradeRequests,
+        };
+      });
 
       res.json(jobs);
     } catch (error) {
@@ -19094,7 +19145,7 @@ Thank you for your business!
                   <p><strong>Service Type:</strong> ${serviceType}</p>
                   ${scheduledDate ? `<p><strong>Requested Date:</strong> ${new Date(scheduledDate).toLocaleDateString()}</p>` : ""}
                   <p><strong>Lead ID:</strong> ${autoCreatedLeadId}</p>
-                  <p style="margin-top:16px;"><a href="${process.env.APP_URL || "https://jconthemove.com"}/lead/${autoCreatedLeadId}" style="background:#f97316;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;">View Booking</a></p>
+        <p style="margin-top:16px;"><a href="${getAppUrl()}/lead/${autoCreatedLeadId}" style="background:#f97316;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;">View Booking</a></p>
                 </div>`,
                 text: `New reward service request: ${itemRow.name} redeemed by ${userRecord.email}. Lead: ${autoCreatedLeadId}`,
               });
@@ -20810,14 +20861,6 @@ Thank you for your business!
         moveDate = d.toISOString().split("T")[0];
       }
 
-      // Use selected package price if available, otherwise fall back to quote range
-      const basePrice = selectedPackage?.price
-        ? String(selectedPackage.price)
-        : String(quote.minPrice || 0);
-      const totalPrice = selectedPackage?.maxPrice
-        ? String(selectedPackage.maxPrice)
-        : String(quote.maxPrice || 0);
-
       const userId = (req.session as any)?.userId || null;
 
       // Task #169 — reconcile against the unified pricing engine so the
@@ -20864,6 +20907,28 @@ Thank you for your business!
         console.warn("[chatbot-quote] pricingEngine reconcile failed (non-fatal):", engineErr);
       }
 
+      const selectedPackageMin =
+        selectedPackage && typeof selectedPackage === "object" && Number.isFinite(selectedPackage.minPrice)
+          ? Number(selectedPackage.minPrice)
+          : null;
+      const selectedPackageMax =
+        selectedPackage && typeof selectedPackage === "object" && Number.isFinite(selectedPackage.maxPrice)
+          ? Number(selectedPackage.maxPrice)
+          : null;
+      const fallbackQuoteMin = Number.isFinite(quote.minPrice) ? Number(quote.minPrice) : 0;
+      const fallbackQuoteMax = Number.isFinite(quote.maxPrice) ? Number(quote.maxPrice) : fallbackQuoteMin;
+      const authoritativeMin = engineReconciledQuote
+        ?? selectedPackageMin
+        ?? fallbackQuoteMin;
+      const authoritativeMax = engineReconciledQuote
+        ?? selectedPackageMax
+        ?? fallbackQuoteMax
+        ?? authoritativeMin;
+      const authoritativeCrew =
+        (selectedPackage && typeof selectedPackage === "object" ? selectedPackage.crew : null)
+        ?? quote.crew
+        ?? 2;
+
       // Bundle discount (Task #114): chatbot collects bundleAddons via answers
       // (when present) and the cross-service history check fires for repeat
       // customers automatically.
@@ -20873,10 +20938,7 @@ Thank you for your business!
       // If the unified engine returned a quote, use it as the authoritative
       // subtotal so /book, /pricing, admin pricing-calibrate, and the
       // chatbot lead all reflect the same dollar figure.
-      const chatbotSubtotalRaw = engineReconciledQuote
-        ?? (selectedPackage && typeof selectedPackage === "object" ? selectedPackage.maxPrice : null)
-        ?? quote.maxPrice
-        ?? 0;
+      const chatbotSubtotalRaw = authoritativeMax;
       const chatbotSubtotal = parseFloat(String(chatbotSubtotalRaw)) || 0;
       const { evaluateBundleDiscount: evalBundle, logBundleDiscountApplication: logBundleApp } = await import("./services/bundleDiscount");
       const chatbotBundleDiscount = await evalBundle({
@@ -20900,8 +20962,8 @@ Thank you for your business!
         details: detailsJson,
         moveDate: moveDate || null,
         status: (serverDepositRequired ? "deposit_pending" : "chatbot_pending") as any,
-        crewSize: (selectedPackage && typeof selectedPackage === "object" ? selectedPackage.crew : null) ?? quote.crew ?? 2,
-        basePrice: String((selectedPackage && typeof selectedPackage === "object" ? selectedPackage.minPrice : null) ?? quote.minPrice ?? 0),
+        crewSize: authoritativeCrew,
+        basePrice: String(authoritativeMin),
         totalPrice: chatbotBundleDiscount.applied
           ? String(chatbotBundleDiscount.finalTotal)
           : String(chatbotSubtotalRaw),
@@ -21000,10 +21062,10 @@ Thank you for your business!
             <p><strong>Date:</strong> ${moveDateStr}</p>
             ${pkgLine}
             ${depositLine}
-            <p><strong>Estimated Range:</strong> $${quote.minPrice}–$${quote.maxPrice}</p>
-            ${(quote.crew || selectedPackage?.crew) ? `<p><strong>Crew:</strong> ${quote.crew || selectedPackage.crew} movers, ${quote.minHrs || ""}–${quote.maxHrs || ""} hrs</p>` : ""}
+            <p><strong>Estimated Range:</strong> $${authoritativeMin}–$${authoritativeMax}</p>
+            ${authoritativeCrew ? `<p><strong>Crew:</strong> ${authoritativeCrew} movers${selectedPackage?.hours ? `, ${selectedPackage.hours} hrs` : quote.minHrs ? `, ${quote.minHrs}–${quote.maxHrs || quote.minHrs} hrs` : ""}</p>` : ""}
             ${bundleBlock}
-            <p><a href="https://jconthemove.replit.app/admin/quote-review">Review at Admin Dashboard →</a></p>`,
+      <p><a href="${getAppUrl()}/admin/quote-review">Review at Admin Dashboard →</a></p>`,
         });
       } catch (_) {}
 
