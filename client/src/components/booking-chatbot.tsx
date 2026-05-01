@@ -2926,6 +2926,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
         serviceLabel: svc,
         isQuoteOnly,
         customerZip: zip,
+        verifiedDriveMiles: distanceMiles,
         depositPaid: withDeposit,
         ...(customerPhotos ? { photos: customerPhotos } : {}),
       });
@@ -2998,6 +2999,10 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
   const isTrashValet = isTrashValetService(answers);
   // For trash valet the "deposit" is actually the first month's subscription cost
   const firstMonthCost = selectedPackageObj?.minPrice ?? (pendingQuote as any)?.finalMonthlyPrice ?? 0;
+  const quoteTravelCharge =
+    pendingQuote && ("travelCharge" in pendingQuote)
+      ? Number((pendingQuote as MovingQuote | JunkQuote).travelCharge || 0)
+      : 0;
 
   const phase = submitted ? "submitted" : (quoteVisible && pendingQuote ? (isEmployee ? "employee_submit" : "deposit") : null);
 
@@ -3129,6 +3134,12 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
                         — {(pendingQuote as MovingQuote | JunkQuote).stakingPerkPct}% off · saving ${(pendingQuote as MovingQuote | JunkQuote).stakingPerkDiscount}
                       </span>
                     </div>
+                  )}
+                  {distanceMiles > 0 && (
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Drive verified from your address: ~{Math.round(distanceMiles)} miles
+                      {quoteTravelCharge > 0 ? ` · includes $${quoteTravelCharge} travel / gas charge` : ""}
+                    </p>
                   )}
                   <p className="text-[11px] text-slate-500 mt-1">Final price confirmed by Darrell after review</p>
                 </div>

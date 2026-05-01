@@ -49,6 +49,10 @@ import { getWeeklyCrewRuleForDate, normalizeCrewName } from "@shared/weeklyCrewS
 import { getAppUrl } from "./appUrl";
 
 const STAKING_TREASURY_USER_ID = "staking-treasury-system";
+const CHATBOT_DRIVE_BASE_LAT = 46.4539;
+const CHATBOT_DRIVE_BASE_LNG = -90.1715;
+const CHATBOT_TRAVEL_TIER_MILES = 25;
+const CHATBOT_TRAVEL_CHARGE_PER_TIER = 50;
 
 async function ensureStakingTreasuryUser() {
   try {
@@ -93,6 +97,60 @@ async function ensureStakingTreasuryUser() {
   } catch (error) {
     console.error("Failed to create staking treasury user:", error);
   }
+}
+
+function haversineDriveMiles(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const radiusMiles = 3958.8;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
+  return radiusMiles * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+async function geocodeUsAddressForDrive(addr: string): Promise<{ lat: number; lon: number } | null> {
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(addr)}&format=json&limit=1&countrycodes=us`;
+    const response = await fetch(url, {
+      headers: { "User-Agent": "JCOnTheMove/1.0 contact@jconthemove.com" },
+    });
+    if (!response.ok) return null;
+    const data: Array<{ lat: string; lon: string }> = await response.json() as any;
+    if (!data.length) return null;
+    return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+  } catch {
+    return null;
+  }
+}
+
+async function estimateDriveMilesForChatbot(pickupAddr: string, dropoffAddr?: string) {
+  const normalizedPickup = pickupAddr.trim();
+  if (normalizedPickup.length < 4) return { miles: 0, note: "No pickup address" };
+
+  const pickup = await geocodeUsAddressForDrive(normalizedPickup);
+  if (!pickup) return { miles: 0, note: "Pickup address not found" };
+
+  const baseToPickup = haversineDriveMiles(CHATBOT_DRIVE_BASE_LAT, CHATBOT_DRIVE_BASE_LNG, pickup.lat, pickup.lon);
+  let totalOneWay = baseToPickup;
+
+  if (!dropoffAddr?.trim()) {
+    return { miles: Math.ceil(totalOneWay * 1.25), note: "base-to-pickup only" };
+  }
+
+  const dropoff = await geocodeUsAddressForDrive(dropoffAddr.trim());
+  if (!dropoff) {
+    return { miles: Math.ceil(totalOneWay * 1.25), note: "dropoff not found; base-to-pickup only" };
+  }
+
+  const pickupToDropoff = haversineDriveMiles(pickup.lat, pickup.lon, dropoff.lat, dropoff.lon);
+  totalOneWay += pickupToDropoff;
+  return {
+    miles: Math.ceil(totalOneWay * 1.25),
+    note: "base-to-pickup plus pickup-to-dropoff",
+  };
 }
 
 async function ensureRewardSettingsSeeded() {
@@ -19888,6 +19946,8 @@ Thank you for your business!
     }
 
     try {
+      const estimate = await estimateDriveMilesForChatbot(pickupAddr, dropoffAddr);
+      return res.json(estimate);
       const pickup = await geocode(pickupAddr);
       if (!pickup) return res.json({ miles: 0, note: "Pickup address not found" });
 
@@ -20798,7 +20858,7 @@ Thank you for your business!
     }),
     async (req: any, res) => {
     try {
-      const { answers, quote, selectedPackage, depositRequired, depositAmount, serviceLabel, isQuoteOnly, customerZip, depositPaid, photos: submittedPhotos } = req.body;
+      const { answers, quote, selectedPackage, depositRequired, depositAmount, serviceLabel, isQuoteOnly, customerZip, depositPaid, verifiedDriveMiles, photos: submittedPhotos } = req.body;
       if (!answers || !quote) return res.status(400).json({ error: "Missing answers or quote" });
 
       const a = answers as Record<string, any>;
@@ -20812,8 +20872,11 @@ Thank you for your business!
 
       // Build from/to address strings (ZIPs for moving, addresses for other services)
       const fromZip = a.fromZip || customerZip || "";
+      const billingPickupAddress =
+        (a.serviceAddress || a.jobLocation || a.junkLocation || a.windowLocation || a.depositZip || fromZip || "").trim();
+      const billingDropoffAddress = String(a.toZip || "").trim();
       const fromAddress = fromZip ? `ZIP: ${fromZip}` :
-        (a.serviceAddress || a.windowAddress || a.trashAddress || "Not provided");
+        (a.serviceAddress || a.windowAddress || a.trashAddress || a.jobLocation || "Not provided");
       const toAddress = a.toZip ? `ZIP: ${a.toZip}` : undefined;
 
       // Determine service type label from new 8-service payload
@@ -20836,12 +20899,26 @@ Thank you for your business!
       const { required: serverDepositRequired, amount: serverDepositAmount } =
         getDepositInfo(serviceType, extractZip(fromZip || customerZip || ""));
 
+      let serverVerifiedDriveMiles = 0;
+      try {
+        const estimatedDrive = await estimateDriveMilesForChatbot(billingPickupAddress, billingDropoffAddress || undefined);
+        if (Number.isFinite(estimatedDrive.miles) && estimatedDrive.miles > 0) {
+          serverVerifiedDriveMiles = estimatedDrive.miles;
+        }
+      } catch {
+        serverVerifiedDriveMiles = 0;
+      }
+      if (!serverVerifiedDriveMiles && Number.isFinite(Number(verifiedDriveMiles))) {
+        serverVerifiedDriveMiles = Math.max(0, Number(verifiedDriveMiles));
+      }
+
       // Store all chatbot Q&A in details as JSON (uses server-computed deposit values)
       const photoList = Array.isArray(submittedPhotos) ? submittedPhotos : [];
       const detailsJson = JSON.stringify({
         _source: "chatbot",
         answers,
         estimatedQuote: quote,
+        verifiedDriveMiles: serverVerifiedDriveMiles || undefined,
         selectedPackage: (selectedPackage && typeof selectedPackage === "object") ? selectedPackage : null,
         depositRequired: serverDepositRequired,
         depositAmount: serverDepositAmount,
@@ -20917,10 +20994,10 @@ Thank you for your business!
           : null;
       const fallbackQuoteMin = Number.isFinite(quote.minPrice) ? Number(quote.minPrice) : 0;
       const fallbackQuoteMax = Number.isFinite(quote.maxPrice) ? Number(quote.maxPrice) : fallbackQuoteMin;
-      const authoritativeMin = engineReconciledQuote
+      let authoritativeMin = engineReconciledQuote
         ?? selectedPackageMin
         ?? fallbackQuoteMin;
-      const authoritativeMax = engineReconciledQuote
+      let authoritativeMax = engineReconciledQuote
         ?? selectedPackageMax
         ?? fallbackQuoteMax
         ?? authoritativeMin;
@@ -20928,6 +21005,41 @@ Thank you for your business!
         (selectedPackage && typeof selectedPackage === "object" ? selectedPackage.crew : null)
         ?? quote.crew
         ?? 2;
+
+      const submittedTravelCharge = Number.isFinite(Number(quote?.travelCharge))
+        ? Math.max(0, Number(quote.travelCharge))
+        : 0;
+      const verifiedTravelCharge =
+        serverVerifiedDriveMiles > 0
+          ? Math.floor(serverVerifiedDriveMiles / CHATBOT_TRAVEL_TIER_MILES) * CHATBOT_TRAVEL_CHARGE_PER_TIER
+          : 0;
+      const missingTravelCharge = Math.max(0, verifiedTravelCharge - submittedTravelCharge);
+
+      if ((serviceType === "residential" || serviceType === "junk") && missingTravelCharge > 0) {
+        authoritativeMin += missingTravelCharge;
+        authoritativeMax += missingTravelCharge;
+      }
+
+      if (serviceType === "trash_valet" && serverVerifiedDriveMiles > TRASH_VALET_TRAVEL_THRESHOLD_MILES) {
+        authoritativeMin = Math.max(TRASH_VALET_OUT_OF_AREA_MINIMUM, authoritativeMin + 50);
+        authoritativeMax = Math.max(authoritativeMin, authoritativeMax + 50);
+      }
+
+      if (serviceType === "window_cleaning" && serverVerifiedDriveMiles > 5) {
+        authoritativeMin += 50;
+        authoritativeMax += 50;
+      }
+
+      if (serviceType === "jump_start" && serverVerifiedDriveMiles > 0) {
+        const verifiedJumpStart = calculateJumpStartQuote(serverVerifiedDriveMiles);
+        if (verifiedJumpStart.isCustomQuote) {
+          authoritativeMin = Math.max(authoritativeMin, fallbackQuoteMin);
+          authoritativeMax = Math.max(authoritativeMax, fallbackQuoteMax);
+        } else if (verifiedJumpStart.flatPrice > 0) {
+          authoritativeMin = verifiedJumpStart.flatPrice;
+          authoritativeMax = verifiedJumpStart.flatPrice;
+        }
+      }
 
       // Bundle discount (Task #114): chatbot collects bundleAddons via answers
       // (when present) and the cross-service history check fires for repeat
@@ -21035,6 +21147,9 @@ Thank you for your business!
         const depositLine = serverDepositRequired
           ? `<p><strong>⚠️ Deposit Required:</strong> $${serverDepositAmount} (${serverIsQuoteOnly ? "in-person estimate" : "booking"})</p>`
           : "";
+        const travelLine = serverVerifiedDriveMiles > 0
+          ? `<p><strong>Verified drive miles:</strong> ${serverVerifiedDriveMiles} mi${verifiedTravelCharge > 0 ? ` · includes $${verifiedTravelCharge} travel / gas charge` : ""}</p>`
+          : "";
         const bundleBlock = chatbotBundleDiscount.applied
           ? `<div style="margin-top:8px;padding:8px;border:1px solid #16a34a33;background:#16a34a0d;border-radius:6px">
               <b style="color:green">⚡ Bundle Discount Applied</b><br>
@@ -21062,6 +21177,7 @@ Thank you for your business!
             <p><strong>Date:</strong> ${moveDateStr}</p>
             ${pkgLine}
             ${depositLine}
+            ${travelLine}
             <p><strong>Estimated Range:</strong> $${authoritativeMin}–$${authoritativeMax}</p>
             ${authoritativeCrew ? `<p><strong>Crew:</strong> ${authoritativeCrew} movers${selectedPackage?.hours ? `, ${selectedPackage.hours} hrs` : quote.minHrs ? `, ${quote.minHrs}–${quote.maxHrs || quote.minHrs} hrs` : ""}</p>` : ""}
             ${bundleBlock}
