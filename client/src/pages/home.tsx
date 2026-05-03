@@ -29,10 +29,10 @@ const FALLBACK_TESTIMONIALS: Testimonial[] = [
 ];
 
 const BANNER_MESSAGES = [
-  "ðŸš› Same-Day Moves Available",
-  "â­ 5-Star Local Movers",
-  "ðŸ’ª 500+ Jobs Completed",
-  "ðŸ“ž Call Now â€” (906) 285-9312",
+  "Same-Day Moves Available",
+  "5-Star Local Movers",
+  "500+ Jobs Completed",
+  "Call Now - (906) 285-9312",
 ];
 
 const HOME_SERVICES: Array<{ key: string; href: string }> = [
@@ -55,7 +55,7 @@ export default function HomePage() {
   const [bannerIdx, setBannerIdx] = useState(0);
   const [showBundleTip, setShowBundleTip] = useState(false);
 
-  // Task #207 â€” chat-style intake overlay state. The hero prompt opens
+  // Task #207 - chat-style intake overlay state. The hero prompt opens
   // the overlay with either the typed text or the tapped chip as the
   // first answer; the overlay handles the rest of the funnel.
   const [chatOpen, setChatOpen] = useState(false);
@@ -84,7 +84,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
-      {/* â”€â”€ ANIMATED TOP BANNER â”€â”€ */}
+      {/* Animated top banner */}
       <a
         href={BANNER_MESSAGES[bannerIdx].includes("Call Now") ? "tel:+19062859312" : undefined}
         className={`block w-full py-3 text-center text-sm md:text-base font-medium transition-colors ${
@@ -109,7 +109,7 @@ export default function HomePage() {
         </span>
       </a>
 
-      {/* â”€â”€ TOP NAV â”€â”€ */}
+      {/* Top nav */}
       <nav className="border-b border-slate-800/60 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
           <div>
@@ -124,14 +124,14 @@ export default function HomePage() {
             <Link href="/login">
               <span className="group relative text-white/30 hover:text-white text-sm font-medium px-3 py-1.5 rounded-full border border-white/0 hover:border-white/20 hover:bg-white/5 transition-all duration-200 cursor-pointer inline-flex items-center gap-1.5">
                 Login
-                <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-xs text-white/60">â†’ Sign in to your account</span>
+                <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-xs text-white/60">Sign in to your account</span>
               </span>
             </Link>
           </div>
         </div>
       </nav>
 
-      {/* â”€â”€ HERO SECTION â”€â”€ */}
+      {/* Hero section */}
       <section className="px-4 pt-7 pb-6">
         <div className="max-w-3xl mx-auto">
           {/* Location badge */}
@@ -164,7 +164,7 @@ export default function HomePage() {
                   </div>
                 ))}
               </div>
-              {/* Task #207 â€” chat-style "describe your job" intake. Replaces the
+              {/* Task #207 - chat-style "describe your job" intake. Replaces the
                   old static CTA pair so customers can land directly into a
                   conversational funnel that prefills the booking wizard. */}
               <div
@@ -237,7 +237,7 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Compact beacon â€” fixed width on desktop */}
+            {/* Compact beacon - fixed width on desktop */}
             <div className="md:w-64 flex-shrink-0">
               <CrewStatusCard />
             </div>
@@ -245,7 +245,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* â”€â”€ SERVICES GRID â”€â”€ */}
+      {/* Services grid */}
       <section className="py-10 px-4 bg-slate-950/60">
         <div className="max-w-5xl mx-auto">
           <p className="text-blue-400 text-xs font-semibold uppercase tracking-widest text-center mb-2">What We Do</p>
@@ -256,11 +256,11 @@ export default function HomePage() {
               onClick={() => setShowBundleTip((prev) => !prev)}
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-full px-3 py-1 transition-colors cursor-pointer"
             >
-              ðŸŽ Bundle &amp; Save 10%
+              Bundle &amp; Save 10%
             </button>
           </div>
           {showBundleTip && (
-            <p className="text-center text-xs text-slate-400 mb-3">Book 2 or more services together and we'll take 10% off your total â€” just mention it when you book.</p>
+            <p className="text-center text-xs text-slate-400 mb-3">Book 2 or more services together and we'll take 10% off your total - just mention it when you book.</p>
           )}
           <div className="flex justify-center mb-6">
             <Link href="/pricing">
@@ -285,7 +285,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* â”€â”€ TESTIMONIALS â”€â”€ */}
+      {/* Testimonials */}
       <section className="py-10 px-4">
         <div className="max-w-5xl mx-auto">
           <p className="text-blue-400 text-xs font-semibold uppercase tracking-widest text-center mb-2">Testimonials</p>
@@ -315,14 +315,14 @@ export default function HomePage() {
           <div className="text-center mt-6">
             <Link href="/reviews">
               <span className="text-slate-400 hover:text-white text-sm underline underline-offset-4 cursor-pointer transition-colors">
-                See all reviews â†’
+                See all reviews
               </span>
             </Link>
           </div>
         </div>
       </section>
 
-      {/* â”€â”€ NORTHWOODS NETWORK â”€â”€ */}
+      {/* Northwoods network */}
       <section className="py-14 px-4 bg-gradient-to-b from-slate-950/80 to-slate-900/60">
         <div className="max-w-5xl mx-auto">
           {/* Header */}
@@ -341,36 +341,36 @@ export default function HomePage() {
           <div className="flex flex-col sm:flex-row justify-center gap-6 mb-10 text-sm text-slate-300">
             <div className="flex items-center gap-2 justify-center">
               <Star className="h-4 w-4 text-yellow-400 fill-yellow-400 flex-shrink-0" />
-              <span>Most customers earn $25â€“$100 in rewards per job</span>
+              <span>Most customers earn $25-$100 in rewards per job</span>
             </div>
             <div className="flex items-center gap-2 justify-center">
               <CheckCircle2 className="h-4 w-4 text-blue-400 flex-shrink-0" />
-              <span>Spend rewards locally â€” like store credit</span>
+              <span>Spend rewards locally - like store credit</span>
             </div>
           </div>
 
           {/* Featured partner card */}
           <div className="bg-slate-800/70 border border-blue-500/20 rounded-2xl p-6 md:p-8 max-w-3xl mx-auto mb-8 shadow-xl">
-            <p className="text-blue-400 text-xs font-semibold uppercase tracking-widest mb-4">âœ¨ Featured Local Partner</p>
+            <p className="text-blue-400 text-xs font-semibold uppercase tracking-widest mb-4">Featured Local Partner</p>
 
             <h3 className="text-xl font-bold text-white mb-2">Nature Made Jewls</h3>
             <p className="text-slate-300 text-sm mb-6">
-              Handcrafted jewelry â€” copper wire, natural stone, custom designs. Purchased using your JCMOVES rewards.
+              Handcrafted jewelry - copper wire, natural stone, custom designs. Purchased using your JCMOVES rewards.
             </p>
 
             {/* Ashley testimonial */}
             <div className="bg-slate-900/70 border border-white/5 rounded-xl p-4 mb-6">
               <p className="text-slate-200 text-sm italic mb-2">
-                "I used my moving rewards to get jewelry â€” didn't expect that. Super cool."
+                "I used my moving rewards to get jewelry - didn't expect that. Super cool."
               </p>
-              <p className="text-slate-500 text-xs">â€” Ashley R.</p>
+              <p className="text-slate-500 text-xs">- Ashley R.</p>
             </div>
 
             {/* CTAs */}
             <div className="flex flex-col sm:flex-row gap-3 mb-4">
               <Link href="/nature-made-jewls">
                 <Button className="bg-blue-600 hover:bg-blue-500 text-white font-semibold px-6 py-3 rounded-xl text-base w-full sm:w-auto">
-                  Shop with Rewards â†’
+                  Shop with Rewards
                 </Button>
               </Link>
               <Link href="/book">
@@ -386,18 +386,18 @@ export default function HomePage() {
 
           {/* Final CTA */}
           <div className="text-center">
-            <p className="text-slate-400 text-base mb-5">Book a move â†’ Earn rewards â†’ Spend locally</p>
+            <p className="text-slate-400 text-base mb-5">Book a move. Earn rewards. Spend locally.</p>
             <Link href="/book">
               <Button className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-8 py-4 rounded-xl text-lg">
                 <CalendarCheck className="h-5 w-5 mr-2" />
-                Get Started â†’
+                Get Started
               </Button>
             </Link>
           </div>
         </div>
       </section>
 
-      {/* â”€â”€ FOOTER â”€â”€ */}
+      {/* Footer */}
       <footer className="bg-slate-950 border-t border-slate-800/60 py-10 px-4">
         <div className="max-w-5xl mx-auto">
           <div className="grid md:grid-cols-4 gap-8 mb-8">
@@ -470,7 +470,7 @@ export default function HomePage() {
         </div>
       </footer>
 
-      {/* Task #207 â€” chat-style intake overlay */}
+      {/* Task #207 - chat-style intake overlay */}
       <ChatIntakeOverlay
         open={chatOpen}
         onClose={() => setChatOpen(false)}
@@ -480,3 +480,5 @@ export default function HomePage() {
     </div>
   );
 }
+
+
