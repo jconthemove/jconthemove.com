@@ -144,6 +144,15 @@ function formatCountdown(until: Date): string {
   return `${m}m remaining`;
 }
 
+function dedupeLeadsById<T extends { id: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+}
+
 function getBeaconKey(userId: string | number) {
   return `jcmoves_beacon_${userId}`;
 }
@@ -671,19 +680,25 @@ export default function CrewTodayPage() {
       });
   }, [boardJobs]);
 
-  const todayJobs = leads.filter(l => {
-    const dateStr = l.confirmedDate || l.moveDate;
-    if (!dateStr) return false;
-    const parts = dateStr.split("T")[0].split("-");
-    const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-    return d.toDateString() === todayStr && !["cancelled", "completed", "paid"].includes(l.status);
-  });
+  const todayJobs = useMemo(() => {
+    const jobsForToday = leads.filter(l => {
+      const dateStr = l.confirmedDate || l.moveDate;
+      if (!dateStr) return false;
+      const parts = dateStr.split("T")[0].split("-");
+      const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+      return d.toDateString() === todayStr && !["cancelled", "completed", "paid"].includes(l.status);
+    });
+    return dedupeLeadsById(jobsForToday);
+  }, [leads, todayStr]);
 
-  const myAssignments = leads.filter(l => {
-    if (["cancelled", "completed", "paid"].includes(l.status)) return false;
-    const members: string[] = Array.isArray(l.crewMembers) ? (l.crewMembers as string[]) : [];
-    return members.includes(String(user?.id)) || l.assignedToUserId === String(user?.id);
-  });
+  const myAssignments = useMemo(() => {
+    const assignedLeads = leads.filter(l => {
+      if (["cancelled", "completed", "paid"].includes(l.status)) return false;
+      const members: string[] = Array.isArray(l.crewMembers) ? (l.crewMembers as string[]) : [];
+      return members.includes(String(user?.id)) || l.assignedToUserId === String(user?.id);
+    });
+    return dedupeLeadsById(assignedLeads);
+  }, [leads, user?.id]);
 
   const completedLeads = leads.filter(l => l.status === "completed");
   const { leaderboard, myRank, myCount, allTimeJobCounts } = useMemo(() => {

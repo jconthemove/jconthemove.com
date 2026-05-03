@@ -721,18 +721,52 @@ function PageViewTracker() {
   return null;
 }
 
-function Router() {
-  const { isAuthenticated, isLoading } = useAuth();
+const PUBLIC_PATH_PREFIXES = [
+  "/",
+  "/get-started",
+  "/home",
+  "/employee-register",
+  "/login",
+  "/employee-login",
+  "/customer-login",
+  "/forgot-access",
+  "/leave-review",
+  "/customer",
+  "/terms",
+  "/privacy",
+  "/quote",
+  "/book",
+  "/trash-valet",
+  "/window-cleaning",
+  "/lawn-care",
+  "/cleaning",
+  "/roofing",
+  "/demolition",
+  "/sponsors",
+  "/services",
+  "/pricing",
+  "/gallery",
+  "/reviews",
+  "/pi-jackpot",
+  "/nature-made-jewls",
+  "/legacy-home",
+  "/welcome",
+  "/moving-estimator",
+  "/payment-success",
+  "/promo/half-day",
+  "/cart",
+  "/bitcoin-payment",
+];
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background text-foreground font-sans flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-lg">Loading...</div>
-        </div>
-      </div>
-    );
-  }
+function isPublicPath(path: string) {
+  if (path === "/") return true;
+  return PUBLIC_PATH_PREFIXES.some((prefix) => prefix !== "/" && (path === prefix || path.startsWith(`${prefix}/`)));
+}
+
+function Router() {
+  const [location] = useLocation();
+  const { isAuthenticated, isLoading } = useAuth();
+  const shouldHoldProtectedRoute = isLoading && !isPublicPath(location);
 
   return (
     <Switch>
@@ -820,7 +854,13 @@ function Router() {
       
       {/* Authenticated vs unauthenticated routing */}
       <Route>
-        {isAuthenticated ? <AuthenticatedApp /> : <LandingPage />}
+        {shouldHoldProtectedRoute ? (
+          <div className="min-h-screen bg-background text-foreground font-sans flex items-center justify-center">
+            <div className="text-center">
+              <div className="text-lg">Loading...</div>
+            </div>
+          </div>
+        ) : isAuthenticated ? <AuthenticatedApp /> : <LandingPage />}
       </Route>
     </Switch>
   );
