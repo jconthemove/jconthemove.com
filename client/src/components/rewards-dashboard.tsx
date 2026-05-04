@@ -663,7 +663,7 @@ export default function RewardsDashboard() {
       {/* Stats Strip */}
       <div className="grid grid-cols-3 gap-2 mb-4">
         <div className="rounded-xl bg-slate-900 border border-cyan-500/20 p-3 text-center shadow-[0_0_12px_rgba(0,220,255,0.06)]">
-          <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-0.5">Balance</p>
+          <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-0.5">Spendable Balance</p>
           <p className="text-lg font-black text-cyan-400 leading-none">{tokenBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
           <p className="text-[9px] text-slate-600 mt-0.5">JCMOVES</p>
         </div>
@@ -673,11 +673,14 @@ export default function RewardsDashboard() {
           <p className="text-[9px] text-slate-600 mt-0.5">days 🔥</p>
         </div>
         <div className="rounded-xl bg-slate-900 border border-emerald-500/20 p-3 text-center shadow-[0_0_12px_rgba(52,211,153,0.06)]">
-          <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-0.5">All-Time</p>
+          <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-0.5">Lifetime Earned</p>
           <p className="text-lg font-black text-emerald-400 leading-none">{parseFloat(wallet?.totalEarned || '0').toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-          <p className="text-[9px] text-slate-600 mt-0.5">earned</p>
+          <p className="text-[9px] text-slate-600 mt-0.5">before spending or payouts</p>
         </div>
       </div>
+      <p className="mb-4 px-1 text-[11px] text-slate-500">
+        Spendable Balance is what you can use right now. Lifetime Earned includes tokens you have earned in total, even if some were already spent, paid out, or staked.
+      </p>
 
       {/* Pending Payout Alert - Fancy Blue Design */}
       {payoutStatus?.hasPendingPayout && payoutStatus.pendingPayout && (
@@ -1195,7 +1198,7 @@ export default function RewardsDashboard() {
           <div className="grid grid-cols-3 gap-2">
             <div className="rounded-xl bg-slate-900 border border-emerald-500/20 p-3 text-center">
               <p className="text-lg font-black text-emerald-400">{allTimeTokensEarned.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-              <p className="text-[10px] text-slate-500">All-Time JCMOVES</p>
+              <p className="text-[10px] text-slate-500">Lifetime Earned</p>
             </div>
             <div className="rounded-xl bg-slate-900 border border-blue-500/20 p-3 text-center">
               <p className="text-lg font-black text-blue-400">{totalRewards}</p>
