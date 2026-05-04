@@ -2,6 +2,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AdminTreasuryPage from "@/pages/admin-treasury";
 import AdminBtcPaymentsPage from "@/pages/admin-btc-payments";
 import StakingPage from "@/pages/staking";
+import AdminRewardsReconciliationPage from "@/pages/admin/AdminRewardsReconciliationPage";
 
 export default function AdminFinancePage() {
   return (
@@ -16,6 +17,7 @@ export default function AdminFinancePage() {
             <TabsTrigger value="treasury" className="data-[state=active]:bg-blue-600/20 data-[state=active]:text-blue-300">Treasury</TabsTrigger>
             <TabsTrigger value="btc" className="data-[state=active]:bg-blue-600/20 data-[state=active]:text-blue-300">BTC Payments</TabsTrigger>
             <TabsTrigger value="staking" className="data-[state=active]:bg-blue-600/20 data-[state=active]:text-blue-300">Staking</TabsTrigger>
+            <TabsTrigger value="reconciliation" className="data-[state=active]:bg-blue-600/20 data-[state=active]:text-blue-300">Reconciliation</TabsTrigger>
           </TabsList>
           <TabsContent value="treasury">
             <AdminTreasuryPage />
@@ -25,6 +27,9 @@ export default function AdminFinancePage() {
           </TabsContent>
           <TabsContent value="staking">
             <StakingPage />
+          </TabsContent>
+          <TabsContent value="reconciliation">
+            <AdminRewardsReconciliationPage />
           </TabsContent>
         </Tabs>
       </div>

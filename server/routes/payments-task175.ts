@@ -207,4 +207,66 @@ router.get("/admin/square-invoices", isAuthenticated, async (req: any, res: Resp
   }
 });
 
+router.get("/admin/rewards-reconciliation", isAuthenticated, async (req: any, res: Response) => {
+  if (!(await requireAdmin(req, res))) return;
+  const limit = Math.min(1000, Math.max(1, Number(req.query.limit) || 250));
+  const minDelta = Math.max(0, Number(req.query.minDelta) || 0.01);
+  try {
+    const { rows } = await pool.query(
+      `WITH reward_totals AS (
+         SELECT
+           user_id,
+           COALESCE(SUM(CASE WHEN token_amount::numeric > 0 THEN token_amount::numeric ELSE 0 END), 0) AS reward_credits,
+           COALESCE(SUM(CASE WHEN token_amount::numeric < 0 THEN token_amount::numeric ELSE 0 END), 0) AS reward_debits,
+           COUNT(*) FILTER (WHERE token_amount::numeric > 0) AS reward_credit_count,
+           COUNT(*) FILTER (WHERE token_amount::numeric < 0) AS reward_debit_count,
+           MAX(earned_date) AS last_reward_at
+         FROM rewards
+         GROUP BY user_id
+       )
+       SELECT
+         wa.user_id,
+         u.first_name,
+         u.last_name,
+         u.email,
+         u.role,
+         wa.token_balance,
+         wa.total_earned,
+         wa.total_redeemed,
+         wa.staked_balance,
+         wa.last_activity,
+         COALESCE(rt.reward_credits, 0) AS reward_credits,
+         COALESCE(rt.reward_debits, 0) AS reward_debits,
+         COALESCE(rt.reward_credit_count, 0) AS reward_credit_count,
+         COALESCE(rt.reward_debit_count, 0) AS reward_debit_count,
+         rt.last_reward_at,
+         (wa.total_earned::numeric - COALESCE(rt.reward_credits, 0)) AS earned_delta,
+         (wa.token_balance::numeric - (COALESCE(rt.reward_credits, 0) + COALESCE(rt.reward_debits, 0))) AS balance_delta
+       FROM wallet_accounts wa
+       LEFT JOIN reward_totals rt ON rt.user_id = wa.user_id
+       LEFT JOIN users u ON u.id = wa.user_id
+       WHERE ABS(wa.total_earned::numeric - COALESCE(rt.reward_credits, 0)) >= $1
+          OR ABS(wa.token_balance::numeric - (COALESCE(rt.reward_credits, 0) + COALESCE(rt.reward_debits, 0))) >= $1
+       ORDER BY ABS(wa.total_earned::numeric - COALESCE(rt.reward_credits, 0)) DESC,
+                ABS(wa.token_balance::numeric - (COALESCE(rt.reward_credits, 0) + COALESCE(rt.reward_debits, 0))) DESC
+       LIMIT $2`,
+      [minDelta, limit],
+    );
+
+    const summary = rows.reduce(
+      (acc, row: any) => {
+        acc.userCount += 1;
+        acc.totalEarnedDelta += Number(row.earned_delta || 0);
+        acc.totalBalanceDelta += Number(row.balance_delta || 0);
+        return acc;
+      },
+      { userCount: 0, totalEarnedDelta: 0, totalBalanceDelta: 0 },
+    );
+
+    res.json({ rows, summary, filters: { limit, minDelta } });
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
 export default router;

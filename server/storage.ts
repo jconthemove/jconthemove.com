@@ -10,6 +10,16 @@ import { creditNominees, creditPlatformGenerosityFund } from "./services/nominee
 
 const INTERNAL_WALLET_IDS = new Set(["nicolasa-jackson-generosity", "platform-generosity-fund"]);
 
+type WalletCreditOptions = {
+  rewardType?: string;
+  referenceId?: string | null;
+  cashValue?: string | number;
+  status?: string;
+  earnedDate?: Date;
+  metadata?: Record<string, unknown> | null;
+  skipRewardLedger?: boolean;
+};
+
 export interface IStorage {
   // User operations
   getUser(id: string): Promise<User | undefined>;
@@ -145,7 +155,7 @@ export interface IStorage {
   createWalletAccount(wallet: InsertWalletAccount): Promise<WalletAccount>;
   updateWalletAccount(userId: string, updates: Partial<WalletAccount>): Promise<void>;
   awardJobCompletionTokens(userId: string, tokenAmount: number, jobId: string): Promise<void>;
-  creditWalletTokens(userId: string, tokenAmount: number): Promise<void>;
+  creditWalletTokens(userId: string, tokenAmount: number, options?: WalletCreditOptions): Promise<void>;
   creditWalletTokensRaw(userId: string, tokenAmount: number): Promise<void>;
   debitWalletTokens(userId: string, tokenAmount: number): Promise<void>;
   getRewardsByUserAndTypeToday(userId: string, rewardType: string): Promise<any[]>;
@@ -2102,52 +2112,78 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async creditWalletTokens(userId: string, tokenAmount: number): Promise<void> {
+  async creditWalletTokens(userId: string, tokenAmount: number, options: WalletCreditOptions = {}): Promise<void> {
     if (!Number.isFinite(tokenAmount) || tokenAmount < 0) {
       throw new Error(`creditWalletTokens: amount must be non-negative finite, got ${tokenAmount}`);
     }
     if (tokenAmount === 0) return;
-    let wallet = await this.getWalletAccount(userId);
-    if (!wallet) {
-      wallet = await this.createWalletAccount({ userId });
-    }
+    const { skipRewardLedger = false } = options;
+    const shouldWriteRewardLedger = !skipRewardLedger && Boolean(options.rewardType);
+    await db.transaction(async (tx) => {
+      let [wallet] = await tx.select().from(walletAccounts).where(eq(walletAccounts.userId, userId)).limit(1);
+      if (!wallet) {
+        [wallet] = await tx.insert(walletAccounts).values({ userId }).returning();
+      }
 
-    const stakedBalance = parseFloat(wallet.stakedBalance ?? "0");
-    const isStakingActive = !INTERNAL_WALLET_IDS.has(userId) && !userId.startsWith("nominee-") && stakedBalance > 0;
-    const bonus = isStakingActive ? Math.floor(tokenAmount * 0.10) : 0;
-    const totalCredit = tokenAmount + bonus;
+      const stakedBalance = parseFloat(wallet.stakedBalance ?? "0");
+      const isStakingActive = !INTERNAL_WALLET_IDS.has(userId) && !userId.startsWith("nominee-") && stakedBalance > 0;
+      const bonus = isStakingActive ? Math.floor(tokenAmount * 0.10) : 0;
+      const totalCredit = tokenAmount + bonus;
 
-    const currentBalance = parseFloat(wallet.tokenBalance || "0");
-    const currentEarned = parseFloat(wallet.totalEarned || "0");
-
-    await this.updateWalletAccount(userId, {
-      tokenBalance: (currentBalance + totalCredit).toFixed(8),
-      totalEarned: (currentEarned + totalCredit).toFixed(8),
-    });
-
-    if (bonus > 0) {
+      const currentBalance = parseFloat(wallet.tokenBalance || "0");
+      const currentEarned = parseFloat(wallet.totalEarned || "0");
       const newBalance = (currentBalance + totalCredit).toFixed(8);
-      await db.insert(rewards).values({
-        userId,
-        rewardType: "staking_bonus",
-        tokenAmount: bonus.toFixed(8),
-        cashValue: "0.00",
-        status: "confirmed",
-        earnedDate: new Date(),
-        metadata: { baseAmount: tokenAmount, bonusPct: 10 },
-      });
-      const { pool: dbPool } = await import('./db');
-      const { rows: walletRows } = await dbPool.query<{ id: string }>(
-        `SELECT id FROM user_wallets WHERE user_id = $1 LIMIT 1`,
-        [userId]
-      );
-      const userWalletId = walletRows[0]?.id ?? null;
-      await dbPool.query(
-        `INSERT INTO wallet_transactions (user_wallet_id, transaction_type, amount, balance_after, status, metadata)
-         VALUES ($1, 'staking_bonus', $2, $3, 'confirmed', $4::jsonb)`,
-        [userWalletId, bonus.toFixed(8), newBalance, JSON.stringify({ userId, baseAmount: tokenAmount, bonusPct: 10 })]
-      );
-    }
+      const rewardMetadata = {
+        ...(options.metadata ?? {}),
+        source: (options.metadata as Record<string, unknown> | null | undefined)?.source ?? "creditWalletTokens",
+        baseAmount: tokenAmount,
+        balanceAfter: newBalance,
+      };
+
+      await tx
+        .update(walletAccounts)
+        .set({
+          tokenBalance: newBalance,
+          totalEarned: (currentEarned + totalCredit).toFixed(8),
+          lastActivity: new Date(),
+        })
+        .where(eq(walletAccounts.userId, userId));
+
+      if (shouldWriteRewardLedger) {
+        await tx.insert(rewards).values({
+          userId,
+          rewardType: options.rewardType!,
+          tokenAmount: tokenAmount.toFixed(8),
+          cashValue: String(options.cashValue ?? "0.00"),
+          status: options.status ?? "confirmed",
+          earnedDate: options.earnedDate ?? new Date(),
+          referenceId: options.referenceId ?? null,
+          metadata: rewardMetadata,
+        });
+      }
+
+      if (bonus > 0) {
+        const stakingBonusMetadata = { baseAmount: tokenAmount, bonusPct: 10 };
+        await tx.insert(rewards).values({
+          userId,
+          rewardType: "staking_bonus",
+          tokenAmount: bonus.toFixed(8),
+          cashValue: "0.00",
+          status: "confirmed",
+          earnedDate: new Date(),
+          metadata: stakingBonusMetadata,
+        });
+        const [userWallet] = await tx.select({ id: userWallets.id }).from(userWallets).where(eq(userWallets.userId, userId)).limit(1);
+        await tx.insert(walletTransactions).values({
+          userWalletId: userWallet?.id ?? null,
+          transactionType: "staking_bonus",
+          amount: bonus.toFixed(8),
+          balanceAfter: newBalance,
+          status: "confirmed",
+          metadata: stakingBonusMetadata,
+        });
+      }
+    });
 
     if (!INTERNAL_WALLET_IDS.has(userId) && !userId.startsWith("nominee-")) {
       // Use base tokenAmount only (not totalCredit) — staking bonus is treasury-funded

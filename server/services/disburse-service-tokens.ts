@@ -79,7 +79,7 @@ export async function disburseServiceTokens(input: ServiceRewardInput): Promise<
         referenceId,
         metadata: { serviceType, type: "flat_booking" },
       });
-      await storage.creditWalletTokens(customer.id, flatBonus);
+    await storage.creditWalletTokens(customer.id, flatBonus, { skipRewardLedger: true });
       console.log(`🎁 [${serviceType}] ${customer.email} +${flatBonus} JCMOVES (flat booking bonus)`);
     }
 
@@ -97,7 +97,7 @@ export async function disburseServiceTokens(input: ServiceRewardInput): Promise<
           referenceId,
           metadata: { serviceType, totalPrice, earnRate, type: "per_dollar" },
         });
-        await storage.creditWalletTokens(customer.id, earnTokens);
+    await storage.creditWalletTokens(customer.id, earnTokens, { skipRewardLedger: true });
         console.log(`🎁 [${serviceType}] ${customer.email} +${earnTokens} JCMOVES (earn @ $${totalPrice})`);
       }
     }

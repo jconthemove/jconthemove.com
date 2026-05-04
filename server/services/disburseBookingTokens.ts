@@ -192,7 +192,7 @@ export async function disburseBookingTokens(bookingId: string): Promise<BookingD
           baseFlatBonus: flatBonus,
         },
       });
-      await storage.creditWalletTokens(customer.id, flatAward);
+    await storage.creditWalletTokens(customer.id, flatAward, { skipRewardLedger: true });
       summary.flatAward = flatAward;
       summary.totalAwarded += flatAward;
       console.log(
@@ -217,7 +217,7 @@ export async function disburseBookingTokens(bookingId: string): Promise<BookingD
           bonusMultiplier,
         },
       });
-      await storage.creditWalletTokens(customer.id, earnAward);
+    await storage.creditWalletTokens(customer.id, earnAward, { skipRewardLedger: true });
       summary.earnAward = earnAward;
       summary.totalAwarded += earnAward;
       console.log(

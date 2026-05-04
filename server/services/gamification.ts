@@ -156,7 +156,7 @@ export class GamificationService {
     }
 
     // Credit the user's wallet balance with the tokens
-    await storage.creditWalletTokens(userId, parseFloat(tokenAmount));
+    await storage.creditWalletTokens(userId, parseFloat(tokenAmount), { skipRewardLedger: true });
 
     // Create reward record for history tracking (use actual cash value from distribution)
     await storage.createReward({

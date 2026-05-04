@@ -19159,7 +19159,12 @@ Thank you for your business!
 
       // Loyalty tier boost — immediately credit 500 tokens
       if (itemRow.name === "Loyalty Tier Boost") {
-        await storage.creditWalletTokens(userId, 500);
+        await storage.creditWalletTokens(userId, 500, {
+          rewardType: "loyalty_tier_boost",
+          cashValue: "0.00",
+          referenceId: String(redemption.id),
+          metadata: { itemId: itemRow.id, redemptionId: redemption.id, source: "reward_shop" },
+        });
         await db.execute(sql`INSERT INTO reward_entitlements (user_id, item_id, redemption_id, entitlement_type, value_json, status) VALUES (${userId}, ${itemRow.id}, ${redemption.id}, 'tier_points_bonus', '{"tokens":500}', 'consumed')`);
       }
 
@@ -19177,7 +19182,14 @@ Thank you for your business!
         const total = MYSTERY_PRIZES.reduce((s, p) => s + p.weight, 0);
         let rand = Math.random() * total, pick = MYSTERY_PRIZES[0];
         for (const p of MYSTERY_PRIZES) { rand -= p.weight; if (rand <= 0) { pick = p; break; } }
-        if (pick.tokens > 0) await storage.creditWalletTokens(userId, pick.tokens);
+        if (pick.tokens > 0) {
+          await storage.creditWalletTokens(userId, pick.tokens, {
+            rewardType: "mystery_box_win",
+            cashValue: "0.00",
+            referenceId: String(redemption.id),
+            metadata: { itemId: itemRow.id, redemptionId: redemption.id, label: pick.label, source: "reward_shop" },
+          });
+        }
         await db.update(rewardRedemptions).set({ adminNotes: `Mystery box: won ${pick.label}`, status: "completed" }).where(eq(rewardRedemptions.id, redemption.id));
         redemption.adminNotes = `Mystery box: won ${pick.label}`;
         (redemption as any).mysteryPrize = pick;
@@ -19499,7 +19511,11 @@ Thank you for your business!
       if (status === "cancelled") {
         const [redemption] = await db.select().from(rewardRedemptions).where(eq(rewardRedemptions.id, parseInt(req.params.id)));
         if (redemption) {
-          await storage.creditWalletTokens(redemption.userId, redemption.tokenCost);
+          const wallet = await storage.getWalletAccount(redemption.userId);
+          const currentBalance = parseFloat(wallet?.tokenBalance || "0");
+          await storage.updateWalletAccount(redemption.userId, {
+            tokenBalance: (currentBalance + parseFloat(redemption.tokenCost)).toFixed(8),
+          });
           console.log(`💰 Refunded ${redemption.tokenCost} JCMOVES to user ${redemption.userId}`);
         }
       }
@@ -19870,6 +19886,14 @@ Thank you for your business!
         mysteryType = true;
       }
       await storage.creditWalletTokens(userId, bonusTokens);
+      await db.insert(rewards).values({
+        userId,
+        rewardType: "spin_streak_bonus",
+        tokenAmount: bonusTokens.toFixed(8),
+        cashValue: (bonusTokens * 0.00000508432).toFixed(4),
+        status: "confirmed",
+        metadata: { milestone: m, mysteryType, source: "spin_streak" },
+      });
       // Log to activity feed
       const { rows: userRows } = await pool.query(`SELECT display_name FROM users WHERE id = $1`, [userId]);
       const displayName = userRows[0]?.display_name || "Someone";
@@ -21973,7 +21997,12 @@ Thank you for your business!
         `SELECT * FROM lottery_winners WHERE id=$1 AND payout_status IN ('pending','retry')`, [req.params.winnerId]
       );
       if (!winner) return res.status(404).json({ error: "Winner not found or already paid." });
-      await storage.creditWalletTokens(winner.user_id, winner.payout_amount);
+      await storage.creditWalletTokens(winner.user_id, winner.payout_amount, {
+        rewardType: "lottery_win_retry",
+        cashValue: (Number(winner.payout_amount) * 0.00000508432).toFixed(4),
+        referenceId: String(winner.id),
+        metadata: { roundId: winner.round_id, retry: true, source: "admin_lottery_retry" },
+      });
       await pool.query(`UPDATE lottery_winners SET payout_status='complete', updated_at=NOW() WHERE id=$1`, [winner.id]);
       await pool.query(
         `INSERT INTO lottery_audit_logs (round_id, event_type, message) VALUES ($1,'PAYOUT_RETRY','Payout retried by admin')`,
@@ -22880,7 +22909,12 @@ Thank you for your business!
       // Award 500 JCMOVES to the completing crew member
       if (userId) {
         try {
-          await storage.creditWalletTokens(userId, 500);
+          await storage.creditWalletTokens(userId, 500, {
+            rewardType: "trash_job_completion_bonus",
+            cashValue: "0.00",
+            referenceId: req.params.id,
+            metadata: { trashJobId: req.params.id, source: "trash_valet" },
+          });
         } catch (e) { console.error("Crew token award failed:", e); }
       }
 
@@ -22895,7 +22929,12 @@ Thank you for your business!
           if (customerRows.length > 0) {
             const customerTokens = Math.floor(parseFloat(String(job.jobValue)) * 15);
             if (customerTokens > 0) {
-              await storage.creditWalletTokens(customerRows[0].id, customerTokens);
+              await storage.creditWalletTokens(customerRows[0].id, customerTokens, {
+                rewardType: "trash_job_loyalty_booking",
+                cashValue: "0.00",
+                referenceId: req.params.id,
+                metadata: { trashJobId: req.params.id, jobValue: job.jobValue, source: "trash_valet" },
+              });
             }
           }
         }
@@ -23473,7 +23512,12 @@ async function executeLotteryDraw(roundId: number) {
         winnerPayoutAmount = round.seed_amount + round.winner_pool;
 
         // Credit winner
-        await storage.creditWalletTokens(winnerId, winnerPayoutAmount);
+        await storage.creditWalletTokens(winnerId, winnerPayoutAmount, {
+          rewardType: round.round_type === "monthly" ? "mega_lottery_win" : "lottery_win",
+          cashValue: (winnerPayoutAmount * 0.00000508432).toFixed(4),
+          referenceId: roundId,
+          metadata: { roundId, roundType: round.round_type, source: "lottery_draw" },
+        });
 
         const winnerUser = await storage.getUser(winnerId);
         // Check win streak

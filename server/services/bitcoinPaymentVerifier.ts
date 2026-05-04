@@ -77,7 +77,7 @@ export async function verifyBitcoinPayment(
   ) {
     try {
       const tokensToCredit = parseFloat(payment.jcmovesAmount);
-      await storage.creditWalletTokens(payment.userId, tokensToCredit);
+        await storage.creditWalletTokens(payment.userId, tokensToCredit, { skipRewardLedger: true });
       await db.insert(rewards).values({
         userId: payment.userId,
         rewardType: "btc_token_purchase",
@@ -188,7 +188,7 @@ export async function verifyBitcoinPayment(
               const tokensEarned = Math.round(purchasePrice * earnRate);
 
               if (tokensEarned > 0) {
-                await storage.creditWalletTokens(payment.userId!, tokensEarned);
+      await storage.creditWalletTokens(payment.userId!, tokensEarned, { skipRewardLedger: true });
                 await db.insert(rewards).values({
                   userId: payment.userId!,
                   rewardType: "jewelry_purchase",

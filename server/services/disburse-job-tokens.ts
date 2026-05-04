@@ -245,7 +245,7 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
             referenceId: leadId,
             metadata: { jobId: leadId, type: "flat", flatReward, isBonusMover: isBonus, multiplier },
           });
-          await storage.creditWalletTokens(memberId, flatReward);
+        await storage.creditWalletTokens(memberId, flatReward, { skipRewardLedger: true });
           await awardPoints(memberId, "employee_job_done");
           console.log(`🏆 Crew ${member.email}: flat=${flatReward} JCMOVES${isBonus ? " (+25%)" : ""}`);
         } else {
@@ -265,7 +265,7 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
               referenceId: leadId,
               metadata: { jobId: leadId, type: "hours", confirmedHours: confirmedHrs, ratePerHour: HOURS_RATE, isBonusMover: isBonus, multiplier },
             });
-            await storage.creditWalletTokens(memberId, hoursBonus);
+        await storage.creditWalletTokens(memberId, hoursBonus, { skipRewardLedger: true });
             console.log(`🕐 Crew ${member.email}: hours=${hoursBonus} JCMOVES${isBonus ? " (+25%)" : ""}`);
           } else {
             console.log(`ℹ️ Crew ${member.email}: hours reward already exists — skipping`);
@@ -309,7 +309,7 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
               referenceId: leadId,
               metadata: { jobId: leadId, type: "flat_completion" },
             });
-            await storage.creditWalletTokens(customer.id, completionBonus);
+        await storage.creditWalletTokens(customer.id, completionBonus, { skipRewardLedger: true });
             await awardPoints(customer.id, "job_completed");
             summary.customerTokens += completionBonus;
             summary.customerId = customer.id;
@@ -355,7 +355,7 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
                   source: explicitAlloc > 0 ? "tokenAllocation" : "formula",
                 },
               });
-              await storage.creditWalletTokens(customer.id, earnTokens);
+        await storage.creditWalletTokens(customer.id, earnTokens, { skipRewardLedger: true });
               const spentHundreds = Math.floor(jobPrice / 100);
               if (spentHundreds > 0) await awardPoints(customer.id, "per_100_spent", spentHundreds);
 
@@ -384,7 +384,7 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
               referenceId: leadId,
               metadata: { jobId: leadId, serviceType, bonusKey, type: "service_type_bonus" },
             });
-            await storage.creditWalletTokens(customer.id, serviceBonus);
+        await storage.creditWalletTokens(customer.id, serviceBonus, { skipRewardLedger: true });
             summary.customerTokens += serviceBonus;
             summary.customerId = customer.id;
             console.log(`🎁 Customer ${customer.email}: service-type bonus +${serviceBonus} JCMOVES (${serviceType || "default"})`);
@@ -412,7 +412,7 @@ export async function disburseJobTokens(leadId: string): Promise<DisbursementSum
                   referenceId: leadId,
                   metadata: { referredUserId: customer.id, jobId: leadId },
                 });
-                await storage.creditWalletTokens(customer.referred_by_user_id, referralBonus);
+        await storage.creditWalletTokens(customer.referred_by_user_id, referralBonus, { skipRewardLedger: true });
                 // Increment referral_count and recompute referrer's tier
                 await pool.query(
                   `UPDATE users SET referral_count = COALESCE(referral_count, 0) + 1 WHERE id = $1`,
