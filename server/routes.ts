@@ -2426,9 +2426,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       if (method === 'email') {
-        const { emailService } = await import('./services/email');
-        await emailService.sendEmail({
+        const { sendEmail } = await import('./services/email');
+        await sendEmail({
           to: matchedUser.email!,
+          from: process.env.COMPANY_EMAIL || 'michigankid906@gmail.com',
           subject: 'JC ON THE MOVE — Account Recovery Code',
           html: `
             <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px">
@@ -2824,7 +2825,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         jobs = await storage.getLeads();
       } else if (userRole === 'employee') {
         // Employees see their assigned jobs
-        jobs = await storage.getEmployeeJobs(userId);
+        jobs = await storage.getAssignedLeads(userId);
       } else {
         // Customers see their own requests
         jobs = await storage.getLeadsByCustomer(userId);
@@ -9229,7 +9230,8 @@ Thank you for your business!
            earned_date AS "earnedDate",
            metadata
          FROM rewards
-         WHERE user_id = $1`,
+         WHERE user_id = $1
+           AND reward_type <> 'mining_claim'`,
         [userId]
       );
 
@@ -9273,10 +9275,10 @@ Thank you for your business!
       // Totals (earned only, not counting spends)
       const { rows: totals } = await pool.query(
         `SELECT
-           (SELECT COALESCE(SUM(token_amount::numeric), 0) FROM rewards WHERE user_id = $1)
+           (SELECT COALESCE(SUM(token_amount::numeric), 0) FROM rewards WHERE user_id = $1 AND reward_type <> 'mining_claim')
            + (SELECT COALESCE(SUM(token_amount::numeric), 0) FROM mining_claims WHERE user_id = $1)
            AS total_earned,
-           (SELECT COUNT(*) FROM rewards WHERE user_id = $1)
+           (SELECT COUNT(*) FROM rewards WHERE user_id = $1 AND reward_type <> 'mining_claim')
            + (SELECT COUNT(*) FROM mining_claims WHERE user_id = $1)
            + (SELECT COUNT(*) FROM reward_redemptions WHERE user_id = $1 AND status NOT IN ('cancelled'))
            AS total_count`,
