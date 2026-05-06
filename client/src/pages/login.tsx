@@ -12,7 +12,7 @@ import { WelcomeModal } from "@/components/welcome-modal";
 import { Loader2, LogIn, Lock, Mail, User, UserPlus, Phone, Coins, Truck } from "lucide-react";
 
 function roleDestination(role: string, status: string): string {
-  if (status === "pending") return "/pending-approval";
+  if (status === "pending" || status === "pending_approval") return "/pending-approval";
   if (role === "admin" || role === "business_owner") return "/control";
   if (role === "employee") return "/crew";
   return "/";
@@ -57,7 +57,15 @@ export default function LoginPage() {
         credentials: "include",
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Invalid email or password");
+      if (!res.ok) {
+        const err = new Error(data.error || "Invalid email or password") as Error & {
+          code?: string;
+          status?: string;
+        };
+        err.code = data.code;
+        err.status = data.status;
+        throw err;
+      }
       // JWT tokens for cross-platform / mobile auth persistence
       try {
         const tokenRes = await fetch(`${base}/api/auth/token`, {
@@ -87,7 +95,18 @@ export default function LoginPage() {
     },
     onError: (e: any) => {
       clearTokens();
-      toast({ title: "Sign in failed", description: e.message || "Check your email and password.", variant: "destructive" });
+      if (e?.code === "PASSWORD_SETUP_REQUIRED") {
+        setMode("register");
+      }
+      const description =
+        e?.code === "ACCOUNT_RESTRICTED"
+          ? (e?.status === "pending" || e?.status === "pending_approval"
+              ? "Your account is waiting for approval. We’ll send you in as soon as it’s approved."
+              : e.message || "This account is restricted right now.")
+          : e?.message === "Invalid email or password"
+            ? "That password didn’t match this account. Use Forgot password if you need to reset it."
+            : e.message || "Check your email and password.";
+      toast({ title: "Sign in failed", description, variant: "destructive" });
     },
   });
 

@@ -21,11 +21,13 @@ import { z } from "zod";
 import { EncryptionService } from "./services/encryption";
 import { eq, desc, sql, and, gte, lte, or, ilike, inArray, isNull } from 'drizzle-orm';
 import { db, pool } from './db';
-import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, giftCards, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens, promoCodes, reviews, rewardCategories, rewardItems, rewardRedemptions, buybackFund, laborQuotes, jobTradeRequests } from '@shared/schema';
+import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, treasuryAccounts, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, giftCards, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens, promoCodes, reviews, rewardCategories, rewardItems, rewardRedemptions, buybackFund, laborQuotes, jobTradeRequests } from '@shared/schema';
 import { getFaucetPayService } from "./services/faucetpay";
 import { getAdvertisingService } from "./services/advertising";
 import { FAUCET_CONFIG, calculateJCMovesReward, getTierFromSpend, getTierFromPoints, LOYALTY_TIERS, TIER_POINT_AWARDS, type TierPointActivity } from "./constants";
 import { fetchZipLocation, calculateMovingPrice } from "@shared/pricing";
+import { TRASH_VALET_TRAVEL_THRESHOLD_MILES, TRASH_VALET_OUT_OF_AREA_MINIMUM } from "@shared/trashValetPricing";
+import { calculateJumpStartQuote } from "@shared/jumpStartPricing";
 import { walletService } from "./services/wallet";
 import { solanaMonitor } from "./services/solana-monitor";
 import type { BlockchainStatus } from "./services/bitcoinPaymentVerifier";
@@ -39,6 +41,7 @@ import { dispatchGenericJob } from "./services/dispatchGeneric";
 import { grantLotteryTicketsForActivity } from "./services/disburse-job-tokens";
 import { getDepositInfo, extractZip } from "@shared/depositRules";
 import { MIN_REDEMPTION_TOKENS, REDEMPTION_INCREMENT, roundToIncrement, validateRedemption, tokensToDollars } from "@shared/tokenRedemptionRules";
+import { buildLeadJobPayoutPreview } from "./services/jobPayoutEngine";
 import lawnCareRouter from "./routes/lawnCare";
 import serviceRebookRouter from "./routes/serviceRebookReminders";
 import serviceRebookPublicRouter from "./routes/serviceRebookPublic";
@@ -53,6 +56,17 @@ const CHATBOT_DRIVE_BASE_LAT = 46.4539;
 const CHATBOT_DRIVE_BASE_LNG = -90.1715;
 const CHATBOT_TRAVEL_TIER_MILES = 25;
 const CHATBOT_TRAVEL_CHARGE_PER_TIER = 50;
+
+function formatLoggableError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.stack || `${error.name}: ${error.message}`;
+  }
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
 
 async function ensureStakingTreasuryUser() {
   try {
@@ -128,27 +142,34 @@ async function geocodeUsAddressForDrive(addr: string): Promise<{ lat: number; lo
 
 async function estimateDriveMilesForChatbot(pickupAddr: string, dropoffAddr?: string) {
   const normalizedPickup = pickupAddr.trim();
-  if (normalizedPickup.length < 4) return { miles: 0, note: "No pickup address" };
+  if (normalizedPickup.length < 4) return { miles: 0, estimatedMinutes: 0, note: "No pickup address" };
+
+  const DRIVE_SPEED_MPH = 50;
+  const minutesFor = (miles: number) => Math.max(0, Math.round((miles / DRIVE_SPEED_MPH) * 60));
 
   const pickup = await geocodeUsAddressForDrive(normalizedPickup);
-  if (!pickup) return { miles: 0, note: "Pickup address not found" };
+  if (!pickup) return { miles: 0, estimatedMinutes: 0, note: "Pickup address not found" };
 
   const baseToPickup = haversineDriveMiles(CHATBOT_DRIVE_BASE_LAT, CHATBOT_DRIVE_BASE_LNG, pickup.lat, pickup.lon);
   let totalOneWay = baseToPickup;
 
   if (!dropoffAddr?.trim()) {
-    return { miles: Math.ceil(totalOneWay * 1.25), note: "base-to-pickup only" };
+    const miles = Math.ceil(totalOneWay * 1.25);
+    return { miles, estimatedMinutes: minutesFor(miles), note: "base-to-pickup only" };
   }
 
   const dropoff = await geocodeUsAddressForDrive(dropoffAddr.trim());
   if (!dropoff) {
-    return { miles: Math.ceil(totalOneWay * 1.25), note: "dropoff not found; base-to-pickup only" };
+    const miles = Math.ceil(totalOneWay * 1.25);
+    return { miles, estimatedMinutes: minutesFor(miles), note: "dropoff not found; base-to-pickup only" };
   }
 
   const pickupToDropoff = haversineDriveMiles(pickup.lat, pickup.lon, dropoff.lat, dropoff.lon);
   totalOneWay += pickupToDropoff;
+  const miles = Math.ceil(totalOneWay * 1.25);
   return {
-    miles: Math.ceil(totalOneWay * 1.25),
+    miles,
+    estimatedMinutes: minutesFor(miles),
     note: "base-to-pickup plus pickup-to-dropoff",
   };
 }
@@ -1357,7 +1378,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tokenRows = await db.execute(sql`
         SELECT user_id, action, expires_at, used_at FROM approval_tokens WHERE token = ${token}
       `);
-      const tokenData = (tokenRows as any).rows?.[0] || tokenRows[0];
+      const tokenData = (
+        tokenRows as unknown as { rows?: Array<{ user_id: string; action: string; expires_at: string; used_at: string | null }> }
+      ).rows?.[0] ?? null;
 
       if (!tokenData) {
         return res.status(400).send(renderApprovalPage("Link Expired", "This approval link has already been used or has expired. Please approve from the admin dashboard.", "error"));
@@ -1382,14 +1405,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await db.update(users).set({ status: "approved" }).where(eq(users.id, userId));
 
         try {
+          if (!user.email) {
+            throw new Error("Approved user is missing an email address");
+          }
           const welcomeEmail = buildApprovalWelcomeEmail(user.firstName || 'Friend');
-          await sendEmail({
-            to: user.email,
-            from: process.env.COMPANY_EMAIL || "michigankid906@gmail.com",
-            subject: welcomeEmail.subject,
-            text: welcomeEmail.text,
-            html: welcomeEmail.html,
-          });
+          if (user.email) {
+            await sendEmail({
+              to: user.email,
+              from: process.env.COMPANY_EMAIL || "michigankid906@gmail.com",
+              subject: welcomeEmail.subject,
+              text: welcomeEmail.text,
+              html: welcomeEmail.html,
+            });
+          }
         } catch (e) { console.error('Failed to send approval welcome email:', e); }
 
         return res.send(renderApprovalPage("Account Approved", `${user.firstName} ${user.lastName} (${user.email}) has been approved and can now access the platform.`, "success"));
@@ -1501,6 +1529,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (action === 'approve') {
         try {
+          if (!targetUser.email) {
+            throw new Error("Approved user is missing an email address");
+          }
           const welcomeEmail = buildApprovalWelcomeEmail(targetUser.firstName || 'Friend');
           await sendEmail({
             to: targetUser.email,
@@ -1740,7 +1771,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Award 250 JCMOVES welcome bonus to new employee
       const WELCOME_BONUS = 250;
       try {
-        await storage.createWalletAccount(newUser.id).catch(() => {});
+        await storage.createWalletAccount({ userId: newUser.id }).catch(() => {});
         await storage.creditWalletTokens(newUser.id, WELCOME_BONUS);
         await db.insert(rewards).values({
           userId: newUser.id,
@@ -1790,7 +1821,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         console.log(`📧 New employee registration notification sent for ${newUser.email}`);
       } catch (emailErr) {
-        console.error("Failed to send employee registration notification email:", emailErr);
+        console.error("Failed to send employee registration notification email:", formatLoggableError(emailErr));
       }
 
       req.session.save((saveErr) => {
@@ -1893,10 +1924,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!email || !password) return res.status(400).json({ error: "Email and password are required" });
 
       const [user] = await db.select().from(users).where(eq(users.email, email.trim().toLowerCase())).limit(1);
-      if (!user || !user.passwordHash) return res.status(401).json({ error: "Invalid email or password" });
+      if (!user) return res.status(401).json({ error: "Invalid email or password" });
+      if (!user.passwordHash) {
+        return res.status(409).json({
+          error: "No password set for this email yet. Create your account to track bookings.",
+          code: "PASSWORD_SETUP_REQUIRED",
+        });
+      }
 
       const match = await bcrypt.compare(password, user.passwordHash);
       if (!match) return res.status(401).json({ error: "Invalid email or password" });
+
+      const validStatuses = ["approved", "active"];
+      if (!validStatuses.includes(user.status || "")) {
+        return res.status(403).json({
+          error: "Account pending approval or restricted",
+          status: user.status,
+          code: "ACCOUNT_RESTRICTED",
+        });
+      }
 
       (req.session as any).userId = user.id;
       (req.session as any).userEmail = user.email;
@@ -1911,7 +1957,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (!noticeSeen) {
             // Mark as seen immediately so it only runs once regardless of past lead count
             await pool.query(`UPDATE users SET past_jobs_notice_seen = true WHERE id = $1`, [user.id]);
-            const pastLeads = await storage.getLeadsByEmail(user.email);
+            const pastLeads = user.email ? await storage.getLeadsByEmail(user.email) : [];
             pastJobsCount = pastLeads.length;
           }
         } catch (_) {}
@@ -2133,7 +2179,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         newUser = createdUser;
 
         // Create wallet account for customer
-        await storage.createWalletAccount(newUser.id);
+        await storage.createWalletAccount({ userId: newUser.id });
       }
 
       if (!newUser) {
@@ -2158,13 +2204,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const completedAmount = parseFloat(completedReward?.tokenAmount || '1500');
         
         // Find leads matching this email that are accepted or completed
-        const customerLeads = await db
-          .select()
-          .from(leads)
-          .where(and(
-            eq(leads.email, newUser.email),
-            sql`${leads.status} IN ('accepted', 'confirmed', 'in_progress', 'completed')`
-          ));
+        const customerLeads = newUser.email
+          ? await db
+              .select()
+              .from(leads)
+              .where(and(
+                eq(leads.email, newUser.email),
+                sql`${leads.status} IN ('accepted', 'confirmed', 'in_progress', 'completed')`
+              ))
+          : [];
         
         let totalTokensAwarded = 0;
         let acceptedCount = 0;
@@ -2287,7 +2335,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         console.log(`📧 New customer registration notification sent for ${newUser.email}`);
       } catch (emailErr) {
-        console.error("Failed to send customer registration notification email:", emailErr);
+        console.error("Failed to send customer registration notification email:", formatLoggableError(emailErr));
       }
 
       req.session.save((saveErr) => {
@@ -2351,7 +2399,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!noticeSeen) {
           // Mark as seen immediately so it only runs once regardless of past lead count
           await pool.query(`UPDATE users SET past_jobs_notice_seen = true WHERE id = $1`, [user.id]);
-          const pastLeads = await storage.getLeadsByEmail(user.email);
+          const pastLeads = user.email ? await storage.getLeadsByEmail(user.email) : [];
           pastJobsCount = pastLeads.length;
         }
       } catch (_) {}
@@ -2399,7 +2447,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Find user by email or phone
       let matchedUser = null;
       if (method === 'email') {
-        const [u] = await db.select().from(users).where(eq(users.email, value)).limit(1);
+        const [u] = await db.select().from(users).where(sql`lower(${users.email}) = ${value}`).limit(1);
         matchedUser = u || null;
       } else {
         const normalized = contact.trim().replace(/[\s\-\(\)]/g, '');
@@ -2425,8 +2473,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         expiresAt,
       });
 
+      const { sendEmail } = await import('./services/email');
+
       if (method === 'email') {
-        const { sendEmail } = await import('./services/email');
         await sendEmail({
           to: matchedUser.email!,
           from: process.env.COMPANY_EMAIL || 'michigankid906@gmail.com',
@@ -2468,8 +2517,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const deliveredVia = method === 'email' ? 'email' : (matchedUser.email ? 'email' : 'phone');
       res.json({ success: true, method: deliveredVia, masked });
     } catch (err) {
-      console.error("Recovery request error:", err);
-      res.status(500).json({ error: "Failed to send recovery code. Please try again." });
+      console.error("Recovery request error:", formatLoggableError(err));
+      const message = err instanceof Error && err.message
+        ? err.message
+        : "Failed to send recovery code. Please try again.";
+      res.status(500).json({ error: message });
     }
   });
 
@@ -2508,8 +2560,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ success: true, resetToken });
     } catch (err) {
-      console.error("Recovery verify error:", err);
-      res.status(500).json({ error: "Verification failed. Please try again." });
+      console.error("Recovery verify error:", formatLoggableError(err));
+      const message = err instanceof Error && err.message
+        ? err.message
+        : "Verification failed. Please try again.";
+      res.status(500).json({ error: message });
     }
   });
 
@@ -2540,8 +2595,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`🔐 Password reset successful for user ${sess.pendingResetUserId || 'unknown'}`);
       res.json({ success: true, message: "Password reset successfully. You can now log in." });
     } catch (err) {
-      console.error("Recovery reset error:", err);
-      res.status(500).json({ error: "Password reset failed. Please try again." });
+      console.error("Recovery reset error:", formatLoggableError(err));
+      const message = err instanceof Error && err.message
+        ? err.message
+        : "Password reset failed. Please try again.";
+      res.status(500).json({ error: message });
     }
   });
 
@@ -2586,8 +2644,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             lastName: user.lastName,
             role: user.role,
             status: user.status,
-            phone: user.phone,
-            tokenBalance: user.tokenBalance,
+            phone: user.phoneNumber,
           }
         });
       });
@@ -2691,7 +2748,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         console.log(`📧 New registration notification sent for ${newUser.email}`);
       } catch (emailErr) {
-        console.error("Failed to send registration notification email:", emailErr);
+        console.error("Failed to send registration notification email:", formatLoggableError(emailErr));
       }
 
       req.session.save((saveErr) => {
@@ -2736,11 +2793,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         lastName: user.lastName,
         role: user.role,
         status: user.status,
-        phone: user.phone,
-        tokenBalance: user.tokenBalance,
-        profileImage: user.profileImage,
+        phone: user.phoneNumber,
+        profileImage: user.profileImageUrl,
         referralCode: user.referralCode,
-        solanaWalletAddress: user.solanaWalletAddress,
+        solanaWalletAddress: user.personalWalletAddress,
         createdAt: user.createdAt,
       });
     } catch (error: any) {
@@ -2760,9 +2816,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
+      const wallet = await storage.getWalletAccount(userId);
       res.json({
-        balance: user.tokenBalance || "0",
-        solanaWalletAddress: user.solanaWalletAddress,
+        balance: wallet?.tokenBalance || "0",
+        solanaWalletAddress: user.personalWalletAddress,
       });
     } catch (error: any) {
       console.error("Error fetching balance:", error);
@@ -2796,7 +2853,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const { miningService } = await import('./services/mining');
-      const result = await miningService.claimTokens(userId, 'manual');
+      const result: any = await miningService.claimTokens(userId, 'manual');
       
       if (!result.success) {
         return res.status(400).json({ error: result.error || "Failed to claim tokens" });
@@ -2828,7 +2885,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         jobs = await storage.getAssignedLeads(userId);
       } else {
         // Customers see their own requests
-        jobs = await storage.getLeadsByCustomer(userId);
+        const user = await storage.getUser(userId);
+        jobs = user?.email ? await storage.getLeadsByEmail(user.email) : [];
       }
       
       // Format for calendar display
@@ -3891,12 +3949,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const createPayload: typeof leadData = bundleDiscount.applied
         ? {
             ...leadData,
-            status: "new",
             totalPrice: String(bundleDiscount.finalTotal),
             bundleDiscountAmount: bundleDiscount.amount.toFixed(2),
             bundleDiscountReason: bundleDiscount.reason,
           }
-        : { ...leadData, status: "new" };
+        : leadData;
       const lead = await storage.createLead(createPayload);
 
       if (bundleDiscount.applied) {
@@ -4976,7 +5033,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           const welcomeEmail = buildApprovalWelcomeEmail(user.firstName || 'Friend');
           await sendEmail({
-            to: user.email,
+            to: user.email || process.env.COMPANY_EMAIL || "michigankid906@gmail.com",
             from: process.env.COMPANY_EMAIL || "michigankid906@gmail.com",
             subject: welcomeEmail.subject,
             text: welcomeEmail.text,
@@ -5025,7 +5082,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .where(eq(walletAccounts.userId, id || ""))
           .limit(1);
         
-        const tokenBalance = wallet ? parseFloat(wallet.tokenBalance) : 0;
+        const tokenBalance = wallet ? parseFloat(wallet.tokenBalance || "0") : 0;
         reclaimedTokens = tokenBalance; // Capture for response
         
         // If user has tokens, transfer them to treasury within same transaction
@@ -5065,7 +5122,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               relatedEntityId: id,
               tokenAmount: tokenBalance.toFixed(8),
               cashValue: "0.00",
-              balanceAfter: treasuryAccount.cashReserve,
+              balanceAfter: treasuryAccount.availableFunding,
               tokenReserveAfter: newReserve.toFixed(8),
               description: `Tokens reclaimed from deleted user account: ${user.email || id}`,
             });
@@ -5172,16 +5229,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Add tokens to user wallet
-      await storage.addTokens(
-        userId,
-        parseFloat(tokenAmount),
-        distributionResult.cashValue,
-        'admin_transfer',
-        description
-      );
+      await storage.creditWalletTokens(userId, parseFloat(tokenAmount), {
+        rewardType: 'admin_transfer',
+        cashValue: distributionResult.cashValue,
+        metadata: { source: 'admin_transfer', description },
+      });
       
       // Get updated balance
-      const updatedBalance = await storage.getTokenBalance(userId);
+      const updatedWallet = await storage.getWalletAccount(userId);
+      const updatedBalance = parseFloat(updatedWallet?.tokenBalance || '0');
       
       res.json({
         success: true,
@@ -5645,7 +5701,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Fetch leads created by this customer (matching email)
-      const customerLeads = await storage.getLeadsByEmail(user.email);
+        const customerLeads = user.email ? await storage.getLeadsByEmail(user.email) : [];
       
       // Transform to match frontend CustomerJob interface
       const transformedLeads = customerLeads.map(lead => ({
@@ -6378,7 +6434,7 @@ Thank you for your business!
       res.json({ pipeline, total: Number(totalCount[0]?.count || 0) });
     } catch (err) {
       console.error("Pipeline fetch error:", err);
-      res.status(500).json({ error: err.message || "Failed to load pipeline" });
+      res.status(500).json({ error: err instanceof Error ? err.message : "Failed to load pipeline" });
     }
   });
 
@@ -6447,7 +6503,7 @@ Thank you for your business!
       await submitPublicReview(lead, req.body, res);
     } catch (err) {
       console.error("Error submitting review by token:", err);
-      res.status(500).json({ error: err.message || "Failed to submit review" });
+      res.status(500).json({ error: err instanceof Error ? err.message : "Failed to submit review" });
     }
   });
 
@@ -6459,7 +6515,7 @@ Thank you for your business!
       await submitPublicReview(lead, req.body, res);
     } catch (err) {
       console.error("Error submitting review by jobId:", err);
-      res.status(500).json({ error: err.message || "Failed to submit review" });
+      res.status(500).json({ error: err instanceof Error ? err.message : "Failed to submit review" });
     }
   });
 
@@ -7076,7 +7132,7 @@ Thank you for your business!
       res.json({ records: rows });
     } catch (err) {
       console.error("Error fetching disbursement summary:", err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err instanceof Error ? err.message : "Failed to fetch disbursement summary" });
     }
   });
 
@@ -7098,7 +7154,7 @@ Thank you for your business!
       res.json({ ok: true, summary });
     } catch (err) {
       console.error("Error retrying disbursement:", err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err instanceof Error ? err.message : "Failed to retry disbursement" });
     }
   });
 
@@ -7242,7 +7298,7 @@ Thank you for your business!
       });
     } catch (err) {
       console.error("Error awarding customer tokens:", err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err instanceof Error ? err.message : "Failed to award customer tokens" });
     }
   });
 
@@ -7328,9 +7384,9 @@ Thank you for your business!
         return res.status(400).json({ error: "Can only review completed jobs" });
       }
 
-      // Verify lead ownership: Check if this user's ID matches the lead's userId
-      // (Only users who created the lead can review it)
-      if (lead.userId && lead.userId !== userId) {
+      // Verify lead ownership against the customer's email on the job record.
+      const requesterEmail = req.user?.email ?? null;
+      if (lead.email && requesterEmail && lead.email !== requesterEmail) {
         return res.status(403).json({ error: "You can only review your own jobs" });
       }
 
@@ -7796,18 +7852,27 @@ Thank you for your business!
       }
       
       // Validate update data using partial schema
-      const updateSchema = insertShopItemSchema.partial().pick({
-        title: true,
-        description: true,
-        price: true,
-        photos: true,
-        status: true,
-        category: true,
+      const updateSchema = z.object({
+        title: z.string().min(3).max(200).optional(),
+        description: z.string().min(10).max(2000).optional(),
+        price: z.union([z.string(), z.number()]).optional(),
+        photos: z.array(z.string()).optional(),
+        status: z.string().optional(),
+        category: z.string().optional(),
       });
       
       const validatedUpdates = updateSchema.parse(req.body);
+      const normalizedUpdates = {
+        ...validatedUpdates,
+        price:
+          validatedUpdates.price === undefined
+            ? undefined
+            : typeof validatedUpdates.price === "number"
+              ? validatedUpdates.price.toFixed(2)
+              : validatedUpdates.price,
+      };
       
-      const updatedItem = await storage.updateShopItem(id, validatedUpdates);
+      const updatedItem = await storage.updateShopItem(id, normalizedUpdates);
       res.json(updatedItem);
     } catch (error) {
       console.error("Error updating shop item:", error);
@@ -10465,8 +10530,8 @@ Thank you for your business!
       // Create swap request
       const [request] = await db.insert(swapRequests).values({
         userId: user.id,
-        userEmail: user.email,
-        userName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+        userEmail: user.email || "",
+        userName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email || user.username || "Unknown User",
         jcmovesAmount: amount.toString(),
         desiredAsset,
         destinationWallet,
@@ -11105,7 +11170,7 @@ Thank you for your business!
         const crewNames = crewIds.map((id: string) => crewMap[id] || id);
         const trades = tradeByLead.get(r.id) ?? [];
         const ownerName = rule.assignedWorkerName;
-        const ownerOnCrew = !!ownerName && crewNames.some((name) => normalizeCrewName(name) === normalizeCrewName(ownerName));
+        const ownerOnCrew = !!ownerName && crewNames.some((name: string) => normalizeCrewName(name) === normalizeCrewName(ownerName));
         const neededCrew = r.crew_size || 2;
         const needsCrew = crewIds.length < neededCrew;
         const needsCoverage = !rule.isOpenMakeupDay && !ownerOnCrew;
@@ -11219,6 +11284,36 @@ Thank you for your business!
     } catch (error) {
       console.error("Error getting lead funnel alert:", error);
       res.status(500).json({ error: "Failed to get lead funnel alert" });
+    }
+  });
+
+  app.get("/api/admin/jobs/:id/payout-preview", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const lead = await storage.getLead(id);
+      if (!lead) return res.status(404).json({ error: "Lead not found" });
+
+      const crewIdSet = new Set<string>(
+        [lead.assignedToUserId, ...(lead.crewMembers || [])].filter((value): value is string => typeof value === "string" && value.length > 0),
+      );
+      const relevantIdSet = new Set<string>(
+        [lead.createdByUserId, ...Array.from(crewIdSet)].filter((value): value is string => typeof value === "string" && value.length > 0),
+      );
+      const userFilters = [];
+      if (relevantIdSet.size > 0) userFilters.push(inArray(users.id, Array.from(relevantIdSet)));
+      userFilters.push(ilike(users.firstName, "Darrell"));
+
+      const relatedUsers = await db.select().from(users).where(or(...userFilters));
+      const crewUsers = relatedUsers.filter((user) => crewIdSet.has(user.id));
+
+      res.json(buildLeadJobPayoutPreview({
+        lead,
+        crewUsers,
+        relatedUsers,
+      }));
+    } catch (error) {
+      console.error("Error building job payout preview:", error);
+      res.status(500).json({ error: "Failed to build payout preview" });
     }
   });
 
@@ -13615,7 +13710,7 @@ Thank you for your business!
       });
     } catch (error) {
       console.error("Error processing transfer:", error);
-      res.status(500).json({ error: error.message || "Failed to process transfer" });
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to process transfer" });
     }
   });
 
@@ -14436,7 +14531,7 @@ Thank you for your business!
       const userId = (req.session as any).userId;
       const { miningService } = await import('./services/mining');
       
-      const result = await miningService.claimTokens(userId, 'manual');
+      const result: any = await miningService.claimTokens(userId, 'manual');
       
       if (!result.success) {
         const rawErr = result.error || "";
@@ -14451,7 +14546,8 @@ Thank you for your business!
       }
 
       // Push notification: mining session claimed
-      if (result.tokensEarned && result.tokensEarned > 0) {
+      const claimedTokens = parseFloat(result.tokensClaimed || "0");
+      if (claimedTokens > 0) {
         try {
           const { notificationService: pushSvc } = await import('./services/notification');
           await pushSvc.sendPushNotification(userId, {
@@ -14828,9 +14924,10 @@ Thank you for your business!
       const enrichedPayouts = await Promise.all(
         pendingPayouts.map(async (payout) => {
           const user = await storage.getUser(payout.userId);
+          const userName = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim();
           return {
             ...payout,
-            userName: user?.name || user?.email || 'Unknown User',
+            userName: userName || user?.email || 'Unknown User',
             userEmail: user?.email || 'Unknown'
           };
         })
@@ -14859,9 +14956,10 @@ Thank you for your business!
       const enrichedPayouts = await Promise.all(
         payouts.map(async (payout) => {
           const user = await storage.getUser(payout.userId);
+          const userName = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim();
           return {
             ...payout,
-            userName: user?.name || user?.email || 'Unknown User',
+            userName: userName || user?.email || 'Unknown User',
             userEmail: user?.email || 'Unknown'
           };
         })
@@ -14924,16 +15022,16 @@ Thank you for your business!
           // Update payout with blockchain tx hash
           await storage.updateWalletPayout(payoutId, {
             status: 'completed',
-            transactionHash: result.signature,
+            transactionHash: result.transactionHash,
             processedAt: new Date()
           });
 
-          console.log(`[PAYOUT] Admin ${adminUserId} processed payout ${payoutId} on-chain: ${result.signature}`);
+          console.log(`[PAYOUT] Admin ${adminUserId} processed payout ${payoutId} on-chain: ${result.transactionHash}`);
 
           return res.json({
             success: true,
             message: "Payout processed and tokens sent on blockchain",
-            txHash: result.signature,
+            txHash: result.transactionHash,
             amount: payout.tokenAmount,
             destination: payout.recipientAddress
           });
@@ -15598,8 +15696,8 @@ Thank you for your business!
             address: '',
             city: '',
             phone: '',
-            pricePerVisit: customer.pricePerVisit,
-            notes: customer.notes,
+            pricePerVisit: customer.pricePerVisit.toFixed(2),
+            notes: customer.notes ?? '',
             isPrepaid: customer.isPrepaid,
             isActive: true,
           });
@@ -15658,7 +15756,7 @@ Thank you for your business!
           address: row.address?.trim() || '',
           city: row.city?.trim() || '',
           phone: row.phone?.trim() || '',
-          pricePerVisit: parseFloat(row.price) || 0,
+          pricePerVisit: (parseFloat(row.price) || 0).toFixed(2),
           notes: row.notes?.trim() || '',
           isPrepaid: row.prepaid === 'true' || row.prepaid === 'yes' || row.prepaid === '1',
           isActive: true,
@@ -15736,16 +15834,15 @@ Thank you for your business!
         try {
           await storage.createSnowServiceLog({
             customerId,
-            serviceDate,
-            serviceType: row.serviceType?.trim() || 'Snow Removal',
+            serviceDate: serviceDate.toISOString().slice(0, 10),
             notes: row.notes?.trim() || '',
-            price: parseFloat(row.price) || 0,
-            isPaid: row.notes?.toLowerCase().includes('paid') || false,
-            monthKey: serviceDate.toISOString().slice(0, 7).replace('-', '/') + '/01',
+            price: (parseFloat(row.price) || 0).toFixed(2),
+            status: row.notes?.toLowerCase().includes('paid') ? 'paid' : 'done',
+            monthKey: serviceDate.toISOString().slice(0, 7),
           });
           added.push(`${row.date} - ${customerName}`);
         } catch (err) {
-          errors.push(`Failed to add ${row.date} - ${customerName}: ${err.message}`);
+          errors.push(`Failed to add ${row.date} - ${customerName}: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
 
@@ -16261,7 +16358,7 @@ Thank you for your business!
       const existing = await db.select().from(rewards)
         .where(and(eq(rewards.userId, adminId), eq(rewards.rewardType, 'admin_grant'), eq(rewards.referenceId, 'job-reward-correction-20260301')));
       if (existing.length > 0) {
-        return res.status(409).json({ error: "Correction already applied", appliedAt: existing[0].createdAt });
+        return res.status(409).json({ error: "Correction already applied", appliedAt: existing[0].earnedDate });
       }
 
       const CORRECTION_AMOUNT = 650; // 200 (job 1 shortfall) + 450 (job 2 shortfall)
@@ -16393,7 +16490,7 @@ Thank you for your business!
         paymentNote: `Jewelry purchase: ${dbItem.title} (ID: ${itemId})${creditNote}`,
       });
 
-      const paymentLink = paymentLinkResponse.result?.paymentLink || paymentLinkResponse.paymentLink;
+      const paymentLink = (paymentLinkResponse as any).result?.paymentLink || paymentLinkResponse.paymentLink;
       if (!paymentLink?.url) {
         return res.status(500).json({ error: "Failed to create payment link" });
       }
@@ -16587,7 +16684,7 @@ Thank you for your business!
       res.json({ success: true, mappings });
     } catch (err) {
       console.error("Error saving catalog mappings:", err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err instanceof Error ? err.message : "Failed to save catalog mappings" });
     }
   });
 
@@ -16622,7 +16719,7 @@ Thank you for your business!
 
       const locationId = await squareInvoiceService.getLocationId();
 
-      const squareLineItems = lineItems.map(li => {
+      const squareLineItems: any[] = lineItems.map(li => {
         const catalogVariationId = li.id ? catalogMappings[li.id] : undefined;
         if (catalogVariationId) {
           return { catalogObjectId: catalogVariationId, quantity: String(li.qty) };
@@ -16657,7 +16754,7 @@ Thank you for your business!
     } catch (err) {
       console.error("Error creating Square order:", err);
       // Non-fatal — order totals already saved locally on lead; return gracefully
-      res.json({ success: false, squareOrderId: null, error: err.message });
+      res.json({ success: false, squareOrderId: null, error: err instanceof Error ? err.message : "Failed to create Square order" });
     }
   });
 
@@ -16676,7 +16773,7 @@ Thank you for your business!
           : SquareEnvironment.Sandbox,
       });
       const response = await client.catalog.list({ types: "ITEM" });
-      const objects = response.objects || [];
+      const objects = (response as any).objects || [];
       const items = objects
         .filter((o: any) => o.type === "ITEM" && o.itemData)
         .map((o: any) => ({
@@ -16692,7 +16789,7 @@ Thank you for your business!
       res.json({ items });
     } catch (err) {
       console.error("Square catalog error:", err);
-      res.status(200).json({ items: [], error: err.message });
+      res.status(200).json({ items: [], error: err instanceof Error ? err.message : "Failed to load Square catalog" });
     }
   });
 
@@ -16730,7 +16827,7 @@ Thank you for your business!
       res.json({ success: true, ...result });
     } catch (err) {
       console.error("Error creating itemized invoice:", err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err instanceof Error ? err.message : "Failed to create invoice" });
     }
   });
 
@@ -16838,7 +16935,7 @@ Thank you for your business!
         paymentNote: `Half Day Promo - ${firstName} ${lastName} - ${moveDate} - Lead ID: ${lead.id}${addOnNames ? ` | Add-ons: ${addOnNames}` : ""}`,
       });
 
-      const paymentLink = paymentLinkResponse.result?.paymentLink || paymentLinkResponse.paymentLink;
+      const paymentLink = (paymentLinkResponse as any).result?.paymentLink || paymentLinkResponse.paymentLink;
       if (!paymentLink?.url) {
         return res.status(500).json({ error: "Failed to create payment link" });
       }
@@ -16887,7 +16984,7 @@ Thank you for your business!
           text: `JC ON THE MOVE - Half Day Move Booking\n\nHi ${firstName},\n\nYour Half Day Loading/Unloading booking is confirmed!\n\nPackage: 3 Movers, 4 Hours, Travel Included\nPrice: $600.00\nDate: ${moveDate}\nPickup: ${fromAddress}\n${toAddress ? `Drop-off: ${toAddress}\n` : ""}${details ? `Notes: ${details}\n` : ""}\nCancellation Policy:\n- More than 48 hours: $10 or $100 fee (whichever is greater)\n- Within 48 hours: 25% ($150)\n- Within 24 hours: 50% ($300)\n\nCall 906-285-9312 with questions.`,
         });
       } catch (emailErr) {
-        console.error("Failed to send promo booking email:", emailErr);
+        console.error("Failed to send promo booking email:", formatLoggableError(emailErr));
       }
 
       // Notify business
@@ -16900,7 +16997,7 @@ Thank you for your business!
           text: `New Half Day Promo Booking\n${firstName} ${lastName}\nPhone: ${phone}\nEmail: ${email}\nDate: ${moveDate}\nFrom: ${fromAddress}\n${toAddress ? `To: ${toAddress}\n` : ""}Price: $600\nLead ID: ${lead.id}`,
         });
       } catch (emailErr) {
-        console.error("Failed to send business notification:", emailErr);
+        console.error("Failed to send business notification:", formatLoggableError(emailErr));
       }
 
       console.log(`Half Day Promo checkout created for ${firstName} ${lastName} (${moveDate}) - Lead: ${lead.id} - ${paymentLink.url}`);
@@ -17062,7 +17159,7 @@ Thank you for your business!
         paymentNote: `Move deposit — ${firstName} ${lastName} — ${moveDate} — Lead ${lead.id} — Full: $${pricing.grandTotal}`,
       });
 
-      const paymentLink = paymentLinkResponse.result?.paymentLink || paymentLinkResponse.paymentLink;
+      const paymentLink = (paymentLinkResponse as any).result?.paymentLink || paymentLinkResponse.paymentLink;
       if (!paymentLink?.url) {
         return res.status(500).json({ error: "Failed to create payment link. Please call 906-285-9312." });
       }
@@ -17172,7 +17269,7 @@ Thank you for your business!
       const discountAmount = hasMultiple ? Math.round(discountableSubtotal * 0.1 * 100) / 100 : 0;
       const totalPrice = Math.round((subtotal - discountAmount) * 100) / 100;
 
-      let leadId: number | null = null;
+      let leadId: string | null = null;
       if (hasServiceItems) {
         const serviceItems = validatedItems.filter((i: any) => i.type === "service" || i.type === "promo");
         const itemNames = serviceItems.map((i: any) => i.name).join(", ");
@@ -17234,7 +17331,7 @@ Thank you for your business!
       const baseUrl = `${protocol}://${host}`;
 
       let nonPromoIndex = 0;
-      const lineItems = validatedItems.map((item: any) => {
+      const lineItems: any[] = validatedItems.map((item: any) => {
         let itemPrice = item.price;
         const isNonPromo = item.type !== "promo";
         if (isNonPromo) {
@@ -17277,7 +17374,7 @@ Thank you for your business!
         paymentNote: `Cart Order - ${firstName} ${lastName}${leadId ? ` - Lead ${leadId}` : ""}`,
       });
 
-      const paymentLink = orderResponse.result?.paymentLink || orderResponse.paymentLink;
+      const paymentLink = (orderResponse as any).result?.paymentLink || orderResponse.paymentLink;
       if (!paymentLink?.url) {
         return res.status(500).json({ error: "Failed to create payment link" });
       }
@@ -17333,7 +17430,7 @@ Thank you for your business!
       const activeSponsors = await storage.getSponsors("active");
       res.json(activeSponsors);
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err instanceof Error ? err.message : "Failed to load sponsors" });
     }
   });
 
@@ -17346,7 +17443,7 @@ Thank you for your business!
       const allSponsors = await storage.getSponsors();
       res.json(allSponsors);
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err instanceof Error ? err.message : "Failed to load sponsors" });
     }
   });
 
@@ -17360,7 +17457,7 @@ Thank you for your business!
       if (!sponsor) return res.status(404).json({ error: "Sponsor not found" });
       res.json(sponsor);
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err instanceof Error ? err.message : "Failed to approve sponsor" });
     }
   });
 
@@ -17374,7 +17471,7 @@ Thank you for your business!
       if (!sponsor) return res.status(404).json({ error: "Sponsor not found" });
       res.json(sponsor);
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err instanceof Error ? err.message : "Failed to reject sponsor" });
     }
   });
 
@@ -17389,7 +17486,7 @@ Thank you for your business!
       const sponsor = await storage.updateSponsorFeatured(req.params.id, !current.featured);
       res.json(sponsor);
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err instanceof Error ? err.message : "Failed to update sponsor" });
     }
   });
 
@@ -17399,18 +17496,13 @@ Thank you for your business!
       const cardUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }).single("card");
       await new Promise<void>((resolve, reject) => cardUpload(req, res as any, (err) => err ? reject(err) : resolve()));
       if (!req.file) return res.status(400).json({ error: "No file provided" });
-      const { Client } = await import("@replit/object-storage");
-      const storage = new Client();
       const ext = (req.file.originalname.split(".").pop() || "jpg").toLowerCase();
-      const key = `public/sponsor-cards/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      await storage.uploadFromBytes(key, req.file.buffer, { contentType: req.file.mimetype });
-      const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
-      const host = req.headers["x-forwarded-host"] || req.headers.host;
-      const url = `${protocol}://${host}/api/object-storage/${encodeURIComponent(key)}`;
-      res.json({ success: true, url, key });
+      const objectStorage = new ObjectStorageService();
+      const url = await objectStorage.saveFileBuffer(req.file.buffer, req.file.mimetype, ext);
+      res.json({ success: true, url, key: url });
     } catch (err) {
       console.error("Sponsor card upload error:", err);
-      res.status(500).json({ error: err.message || "Upload failed" });
+      res.status(500).json({ error: err instanceof Error ? err.message : "Upload failed" });
     }
   });
 
@@ -17478,7 +17570,7 @@ Thank you for your business!
         paymentNote: `Sponsorship: ${tierName} - ${businessName} (${contactName}) - ${email}`,
       });
 
-      const paymentLink = paymentLinkResponse.result?.paymentLink || paymentLinkResponse.paymentLink;
+      const paymentLink = (paymentLinkResponse as any).result?.paymentLink || paymentLinkResponse.paymentLink;
       if (!paymentLink?.url) {
         return res.status(500).json({ error: "Failed to create payment link" });
       }
@@ -17593,7 +17685,7 @@ Thank you for your business!
       }
       res.json({ address: btcAddress, btcPrice, timestamp: Date.now() });
     } catch (err) {
-      res.status(500).json({ error: err.message || "Failed to load tip info" });
+      res.status(500).json({ error: err instanceof Error ? err.message : "Failed to load tip info" });
     }
   });
 
@@ -18144,7 +18236,14 @@ Thank you for your business!
         constructor(msg: string, status = 400) { super(msg); this.status = status; }
       }
 
-      let result: { newBalance: string; amountRedeemed: string; itemTitle: string | null };
+      let result: {
+        newBalance: string;
+        amountRedeemed: string;
+        itemTitle: string | null;
+        paidInFull: boolean;
+        remainingDueUsd: string;
+        itemPriceUsd: string;
+      };
       try {
         result = await db.transaction(async (tx) => {
           // Step 1: atomically reserve the item by flipping it to "sold"
@@ -18165,7 +18264,7 @@ Thank you for your business!
             claimedTitle = claimed[0].title;
           } else {
             const claimed = await tx.update(shopItems)
-              .set({ status: "sold", soldAt: new Date() })
+              .set({ status: "sold" })
               .where(sql`${shopItems.id} = ${referenceId} AND ${shopItems.status} = 'active'`)
               .returning();
             if (claimed.length !== 1) {
@@ -19227,7 +19326,7 @@ Thank you for your business!
               firstName: userRecord.firstName || userRecord.username || "Customer",
               lastName: userRecord.lastName || "",
               email: userRecord.email || "",
-              phone: userRecord.phone || "Not provided",
+              phone: userRecord.phoneNumber || "Not provided",
               serviceType,
               fromAddress: "To be provided",
               status: "quote_requested",
@@ -19478,12 +19577,12 @@ Thank you for your business!
       const user = await storage.getUser((req.session as any).userId);
       if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
       const { status } = req.query;
-      let list = db.select({ redemption: rewardRedemptions, user: { id: users.id, name: users.name, email: users.email } })
+      let list = db.select({ redemption: rewardRedemptions, user: { id: users.id, firstName: users.firstName, lastName: users.lastName, email: users.email } })
         .from(rewardRedemptions)
         .leftJoin(users, eq(rewardRedemptions.userId, users.id))
         .orderBy(desc(rewardRedemptions.createdAt));
       if (status) {
-        const rows = await db.select({ redemption: rewardRedemptions, user: { id: users.id, name: users.name, email: users.email } })
+        const rows = await db.select({ redemption: rewardRedemptions, user: { id: users.id, firstName: users.firstName, lastName: users.lastName, email: users.email } })
           .from(rewardRedemptions)
           .leftJoin(users, eq(rewardRedemptions.userId, users.id))
           .where(eq(rewardRedemptions.status, status as string))
@@ -19514,7 +19613,7 @@ Thank you for your business!
           const wallet = await storage.getWalletAccount(redemption.userId);
           const currentBalance = parseFloat(wallet?.tokenBalance || "0");
           await storage.updateWalletAccount(redemption.userId, {
-            tokenBalance: (currentBalance + parseFloat(redemption.tokenCost)).toFixed(8),
+            tokenBalance: (currentBalance + Number(redemption.tokenCost)).toFixed(8),
           });
           console.log(`💰 Refunded ${redemption.tokenCost} JCMOVES to user ${redemption.userId}`);
         }
@@ -20020,6 +20119,7 @@ Thank you for your business!
     try {
       const estimate = await estimateDriveMilesForChatbot(pickupAddr, dropoffAddr);
       return res.json(estimate);
+      /*
       const pickup = await geocode(pickupAddr);
       if (!pickup) return res.json({ miles: 0, note: "Pickup address not found" });
 
@@ -20040,8 +20140,9 @@ Thank you for your business!
 
       const estimated = Math.ceil(totalOneWay * 1.25); // road-factor multiplier
       return res.json({ miles: estimated, straight: Math.round(totalOneWay), route });
+      */
     } catch (err) {
-      return res.json({ miles: 0, error: err.message });
+      return res.json({ miles: 0, error: err instanceof Error ? err.message : String(err) });
     }
   });
 
@@ -20835,7 +20936,7 @@ Thank you for your business!
           firstName: userRecord.firstName || userRecord.username || "Customer",
           lastName: userRecord.lastName || "",
           email: userRecord.email || "",
-          phone: userRecord.phone || "Not provided",
+          phone: userRecord.phoneNumber || "Not provided",
           serviceType: leadServiceType,
           fromAddress: "To be provided",
           status: "quote_requested",
@@ -22111,7 +22212,7 @@ Thank you for your business!
 
   // Helper: verify caller is admin or business_owner
   async function requireAdminRole(req: Request, res: Response): Promise<boolean> {
-    const userId = (req.session as Record<string, unknown>)?.userId as string | undefined || req.user?.id;
+    const userId = (req.session as unknown as Record<string, unknown>)?.userId as string | undefined || req.user?.id;
     if (!userId) { res.status(401).json({ error: "Authentication required" }); return false; }
     const user = await storage.getUser(userId);
     if (!user || (user.role !== "admin" && user.role !== "business_owner")) {
@@ -22122,7 +22223,7 @@ Thank you for your business!
 
   // Helper: verify caller is employee, admin, or business_owner (crew access)
   async function requireCrewRole(req: Request, res: Response): Promise<boolean> {
-    const userId = (req.session as Record<string, unknown>)?.userId as string | undefined || req.user?.id;
+    const userId = (req.session as unknown as Record<string, unknown>)?.userId as string | undefined || req.user?.id;
     if (!userId) { res.status(401).json({ error: "Authentication required" }); return false; }
     const user = await storage.getUser(userId);
     if (!user || !["employee", "admin", "business_owner"].includes(user.role || "")) {
@@ -22886,7 +22987,7 @@ Thank you for your business!
     if (!await requireCrewRole(req, res)) return;
     try {
       const { trashJobs, trashSubscriptions } = await import("@shared/schema");
-      const userId = (req.session as Record<string, unknown>)?.userId as string | undefined || req.user?.id;
+      const userId = (req.session as unknown as Record<string, unknown>)?.userId as string | undefined || req.user?.id;
       const { photoUrl, notes } = req.body;
 
       const [job] = await db.select().from(trashJobs).where(eq(trashJobs.id, req.params.id));
@@ -22951,7 +23052,8 @@ Thank you for your business!
   app.get("/api/trash/my-subscription", isAuthenticated, async (req, res) => {
     try {
       const { trashSubscriptions } = await import("@shared/schema");
-      const userId = (req.session as Record<string, unknown>)?.userId as string | undefined || req.user?.id;
+      const userId = (req.session as unknown as Record<string, unknown>)?.userId as string | undefined || req.user?.id;
+      if (!userId) return res.status(401).json({ error: "Authentication required" });
       const user = await storage.getUser(userId);
       if (!user?.email) return res.json(null);
       const subs = await db.select().from(trashSubscriptions)
@@ -23512,14 +23614,14 @@ async function executeLotteryDraw(roundId: number) {
         winnerPayoutAmount = round.seed_amount + round.winner_pool;
 
         // Credit winner
-        await storage.creditWalletTokens(winnerId, winnerPayoutAmount, {
+        await storage.creditWalletTokens(String(winnerId), winnerPayoutAmount, {
           rewardType: round.round_type === "monthly" ? "mega_lottery_win" : "lottery_win",
           cashValue: (winnerPayoutAmount * 0.00000508432).toFixed(4),
-          referenceId: roundId,
+          referenceId: String(roundId),
           metadata: { roundId, roundType: round.round_type, source: "lottery_draw" },
         });
 
-        const winnerUser = await storage.getUser(winnerId);
+        const winnerUser = await storage.getUser(String(winnerId));
         // Check win streak
         const { rows: [prevWin] } = await pool.query(
           `SELECT win_streak FROM lottery_winners WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1`, [winnerId]

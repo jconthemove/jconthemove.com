@@ -40,8 +40,12 @@ export default function ForgotAccessPage() {
       } else {
         toast({ title: "Error", description: data.error || "Failed to send code", variant: "destructive" });
       }
-    } catch {
-      toast({ title: "Error", description: "Something went wrong. Please try again.", variant: "destructive" });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error?.message || "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -60,8 +64,12 @@ export default function ForgotAccessPage() {
       } else {
         toast({ title: "Invalid code", description: data.error || "The code is incorrect or expired.", variant: "destructive" });
       }
-    } catch {
-      toast({ title: "Error", description: "Verification failed. Please try again.", variant: "destructive" });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error?.message || "Verification failed. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -86,8 +94,12 @@ export default function ForgotAccessPage() {
       } else {
         toast({ title: "Reset failed", description: data.error || "Please start over.", variant: "destructive" });
       }
-    } catch {
-      toast({ title: "Error", description: "Password reset failed. Please try again.", variant: "destructive" });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error?.message || "Password reset failed. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
