@@ -16,7 +16,11 @@ export const BUNDLE_SCHEDULING_MODE: Record<string, BundleSchedulingMode> = {
   window_cleaning: "date_freq",
   junk_removal: "date_only",
   cleaning: "date_only",
-  snow_removal: "date_only",
+  move_cleaning: "date_only",
+  lawn_care: "date_freq",
+  snow_removal: "date_freq",
+  roofing: "call_only",
+  demolition: "call_only",
   moving: "call_only",
   assembly: "call_only",
 };
@@ -24,6 +28,8 @@ export const BUNDLE_SCHEDULING_MODE: Record<string, BundleSchedulingMode> = {
 export const BUNDLE_FREQUENCY_OPTIONS: Record<string, Array<{ value: string; label: string }>> = {
   trash_valet:     [{ value: "weekly", label: "Weekly" }, { value: "biweekly", label: "Biweekly" }],
   window_cleaning: [{ value: "one_time", label: "One time" }, { value: "biannual", label: "Twice a year" }, { value: "quarterly", label: "Quarterly" }],
+  lawn_care:       [{ value: "one_time", label: "One time" }, { value: "weekly", label: "Weekly" }, { value: "biweekly", label: "Biweekly" }],
+  snow_removal:    [{ value: "one_time", label: "One time" }, { value: "per_storm", label: "Per storm" }, { value: "seasonal", label: "Seasonal" }],
 };
 
 export type BundleSchedulePayloadEntry = {

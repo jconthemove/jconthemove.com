@@ -1,77 +1,111 @@
-import { useState, useCallback } from "react";
+import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
-import { Sparkles, CheckCircle2, Clock, Users, ChevronLeft, MessageCircle } from "lucide-react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { BookingChatbot } from "@/components/booking-chatbot";
+import { ArrowRight, ChevronLeft, CheckCircle2, Clock, Home, Sparkles, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import AddressField from "@/components/AddressField";
 import ServicePlacard, { getPlacardTheme } from "@/components/ServicePlacard";
-import { useSheetBackButton } from "@/hooks/useSheetBackButton";
+import { buildBookHref } from "@/lib/servicePagePrefill";
 
-const PACKAGES = [
-  {
-    label: "Standard Clean",
-    emoji: "🧹",
-    desc: "Surface-level refresh — ideal before movers arrive or for recently vacated spaces",
-    price: "From $120",
-    tags: ["2–3 hrs", "1–2 crew"],
-    color: "from-teal-600/20 to-teal-900/10",
-    border: "border-teal-600/30",
-  },
-  {
-    label: "Deep Clean",
-    emoji: "✨",
-    desc: "Full top-to-bottom — inside appliances, baseboards, inside cabinets, all surfaces",
-    price: "From $220",
-    tags: ["4–6 hrs", "1–3 crew"],
-    color: "from-teal-500/20 to-teal-900/10",
-    border: "border-teal-500/50",
-    tag: "Most Popular",
-  },
-  {
-    label: "Premium Clean",
-    emoji: "💎",
-    desc: "Everything in Deep Clean plus carpet treatment, window cleaning, and garage/basement",
-    price: "From $350",
-    tags: ["6–8 hrs", "2–3 crew"],
-    color: "from-cyan-600/20 to-cyan-900/10",
-    border: "border-cyan-600/30",
-    tag: "Best Value",
-  },
+const PACKAGE_OPTIONS = [
+  { id: "standard", label: "Standard Clean", desc: "Quick turnover reset for already-maintained spaces.", price: 120 },
+  { id: "deep", label: "Deep Clean", desc: "Top-to-bottom reset with appliances, baseboards, and cabinets.", price: 220 },
+  { id: "premium", label: "Premium Clean", desc: "Deep clean plus extra detail work for tough move-outs.", price: 350 },
+];
+
+const SIZE_OPTIONS = [
+  { id: "studio", label: "Studio / 1 bed", add: 0 },
+  { id: "two_bed", label: "2-3 bedroom", add: 60 },
+  { id: "large_home", label: "4+ bedroom or multi-level", add: 140 },
+];
+
+const ADDON_OPTIONS = [
+  { id: "inside_fridge", label: "Inside fridge / oven", price: 40 },
+  { id: "pet_hair", label: "Heavy pet hair", price: 35 },
+  { id: "garage", label: "Garage or basement sweep-out", price: 55 },
 ];
 
 const ALL_INCLUDES = [
-  "All bathrooms scrubbed top-to-bottom",
-  "Kitchen appliances wiped (outside & in)",
-  "Inside cabinet interiors wiped",
-  "Baseboards & window sills dusted",
-  "All floors vacuumed & mopped",
-  "Mirrors & glass streak-free",
-  "Light switches & door handles sanitized",
+  "Move-cleaning details stored with the shared booking item",
+  "Address and estimate handed off through the same /book flow",
+  "Space for entry codes, walkthrough notes, and timing requests",
+  "Cleaner scheduling routed through the standard booking system",
 ];
 
 const FAQS = [
-  { q: "Do you supply cleaning products?", a: "Yes — we bring everything. Just make sure we have access to the property." },
-  { q: "Do I need to be home?", a: "No, just leave us a key or code. We'll send a completion message when done." },
-  { q: "How long does it take?", a: "Standard: 2–3 hrs. Deep: 4–6 hrs. Premium: 6–8 hrs depending on home size." },
-  { q: "Can I book same-day?", a: "Often yes — call (906) 285-9312 to check availability." },
+  { q: "Should this page use cleaning or move_cleaning?", a: "This flow now books directly into the move_cleaning service code so the page matches the actual offer." },
+  { q: "Do you bring supplies?", a: "Yes. Crews bring standard cleaning products and tools for normal move-in and move-out work." },
+  { q: "Can I request appliance interiors?", a: "Yes. Those can be added here so the quote and booking both reflect the extra scope." },
 ];
 
 const theme = getPlacardTheme("cleaning");
 
+function roundToNearestTen(value: number) {
+  return Math.round(value / 10) * 10;
+}
+
 export default function MoveOutCleaningPage() {
   const [, setLocation] = useLocation();
-  const [showChatbot, setShowChatbot] = useState(false);
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const handleClose = useCallback(() => setShowChatbot(false), []);
-  useSheetBackButton(showChatbot, handleClose);
+  const [serviceAddress, setServiceAddress] = useState("");
+  const [addressCity, setAddressCity] = useState("");
+  const [addressState, setAddressState] = useState("");
+  const [addressZip, setAddressZip] = useState("");
+  const [packageId, setPackageId] = useState("deep");
+  const [sizeId, setSizeId] = useState("two_bed");
+  const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
+
+  const estimate = useMemo(() => {
+    const selectedPackage = PACKAGE_OPTIONS.find((option) => option.id === packageId) || PACKAGE_OPTIONS[1];
+    const selectedSize = SIZE_OPTIONS.find((option) => option.id === sizeId) || SIZE_OPTIONS[1];
+    const addonTotal = ADDON_OPTIONS
+      .filter((option) => selectedAddons.includes(option.id))
+      .reduce((sum, option) => sum + option.price, 0);
+
+    return {
+      selectedPackage,
+      selectedSize,
+      addonTotal,
+      total: roundToNearestTen(selectedPackage.price + selectedSize.add + addonTotal),
+    };
+  }, [packageId, selectedAddons, sizeId]);
+
+  function toggleAddon(addonId: string) {
+    setSelectedAddons((current) =>
+      current.includes(addonId)
+        ? current.filter((id) => id !== addonId)
+        : [...current, addonId],
+    );
+  }
+
+  function handleBooking() {
+    const selectedAddonLabels = ADDON_OPTIONS
+      .filter((option) => selectedAddons.includes(option.id))
+      .map((option) => option.label);
+
+    setLocation(buildBookHref({
+      service: "move_cleaning",
+      address: serviceAddress,
+      label: "Move Cleaning Estimate",
+      price: estimate.total,
+      details: {
+        cleaningPackage: estimate.selectedPackage.label,
+        cleaningHomeSize: estimate.selectedSize.label,
+        cleaningAddons: selectedAddonLabels,
+        scope: `${estimate.selectedPackage.label} for ${estimate.selectedSize.label.toLowerCase()}`,
+        notes: [
+          selectedAddonLabels.length ? `Requested cleaning add-ons: ${selectedAddonLabels.join(", ")}.` : null,
+          "Move-in / move-out service page handoff.",
+        ].filter(Boolean).join(" "),
+      },
+    }));
+  }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white pb-24">
-      <div className="max-w-[480px] mx-auto px-4 pt-4 space-y-5">
-
+    <div className="min-h-screen bg-zinc-950 pb-24 text-white">
+      <div className="mx-auto max-w-[480px] space-y-5 px-4 pt-4">
         <button
           onClick={() => setLocation("/")}
-          className="flex items-center gap-1.5 text-zinc-500 text-sm hover:text-zinc-300 transition-colors"
+          className="flex items-center gap-1.5 text-sm text-zinc-500 transition-colors hover:text-zinc-300"
         >
           <ChevronLeft className="h-4 w-4" />
           Back
@@ -79,121 +113,174 @@ export default function MoveOutCleaningPage() {
 
         <ServicePlacard
           theme={theme}
-          tagline="✨ Move-In / Move-Out"
-          headline="SPOTLESS"
-          subheadline="EVERY ROOM"
-          bodyText="We clean so your deposit comes back."
-          featuresLabel="Deep Clean Includes"
-          features={ALL_INCLUDES.slice(0, 4)}
+          tagline="Move-In / Move-Out"
+          headline="CLEAN"
+          subheadline="TURNOVER"
+          bodyText="This page now feeds one booking system instead of a separate chatbot funnel."
+          featuresLabel="What Carries Into Booking"
+          features={ALL_INCLUDES.slice(0, 3)}
           stats={[
-            { icon: Clock, value: "2–8 hrs", label: "depending on size" },
-            { icon: Users, value: "1–3 crew", label: "per job size" },
-            { icon: Sparkles, value: "From $120", label: "standard clean" },
+            { icon: Clock, value: "2-8 hrs", label: "depending on size" },
+            { icon: Users, value: "1-3 crew", label: "per job" },
+            { icon: Sparkles, value: "From $120", label: "starting point" },
           ]}
           howItWorks={[
-            { step: "1", label: "Pick your package" },
-            { step: "2", label: "We confirm & schedule" },
-            { step: "3", label: "Crew cleans & you inspect" },
+            { step: "1", label: "Choose the clean level" },
+            { step: "2", label: "Add size and detail work" },
+            { step: "3", label: "Finish inside booking" },
           ]}
           cta={{
-            label: "Get a Quote",
-            onClick: () => setShowChatbot(true),
+            label: "Build My Cleaning Quote",
+            onClick: () => document.getElementById("cleaning-quote-helper")?.scrollIntoView({ behavior: "smooth", block: "start" }),
             phoneNumber: "+19062859312",
             colorClass: "bg-teal-700 hover:bg-teal-600",
           }}
         />
 
-        <div>
-          <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-3">Packages</h2>
-          <div className="space-y-3">
-            {PACKAGES.map((pkg) => (
-              <div
-                key={pkg.label}
-                className={`relative rounded-2xl bg-gradient-to-br ${pkg.color} border ${pkg.border} p-4`}
+        <section id="cleaning-quote-helper" className="space-y-4 rounded-[28px] border border-teal-500/20 bg-zinc-900/85 p-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.24em] text-teal-300">Quote Helper</p>
+            <h2 className="text-lg font-black text-white">Instant Move Cleaning Estimate</h2>
+          </div>
+
+          <div>
+            <Label className="text-xs text-zinc-400">Service address</Label>
+            <AddressField
+              value={serviceAddress}
+              onChange={setServiceAddress}
+              city={addressCity}
+              state={addressState}
+              zip={addressZip}
+              onCityChange={setAddressCity}
+              onStateChange={setAddressState}
+              onZipChange={setAddressZip}
+              onResolved={(place) => setServiceAddress(place.fullAddress)}
+              placeholder="123 Main St, Ironwood, MI"
+              theme="zinc"
+              showManualFields={false}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs text-zinc-400">Cleaning package</Label>
+            {PACKAGE_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => setPackageId(option.id)}
+                className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
+                  packageId === option.id
+                    ? "border-teal-400 bg-teal-500/10"
+                    : "border-zinc-800 bg-zinc-950/60 hover:border-zinc-700"
+                }`}
               >
-                {pkg.tag && (
-                  <span className="absolute top-3 right-3 text-[9px] font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30 px-2 py-0.5 rounded-full uppercase tracking-wide">
-                    {pkg.tag}
-                  </span>
-                )}
-                <div className="flex items-start gap-3">
-                  <span className="text-2xl">{pkg.emoji}</span>
-                  <div className="flex-1">
-                    <p className="font-bold text-white text-sm">{pkg.label}</p>
-                    <p className="text-zinc-400 text-xs mt-0.5">{pkg.desc}</p>
-                    <div className="flex items-center gap-2 mt-2">
-                      {pkg.tags.map((t) => (
-                        <span key={t} className="text-[10px] font-semibold text-zinc-400 bg-zinc-800/60 px-2 py-0.5 rounded-full">{t}</span>
-                      ))}
-                      <span className="text-purple-300 text-xs font-bold ml-auto">{pkg.price}</span>
-                    </div>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-white">{option.label}</p>
+                    <p className="mt-1 text-xs text-zinc-400">{option.desc}</p>
                   </div>
+                  <span className="text-sm font-bold text-teal-300">From ${option.price}</span>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
-        </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs text-zinc-400">Home size</Label>
+            <div className="flex flex-wrap gap-2">
+              {SIZE_OPTIONS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setSizeId(option.id)}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                    sizeId === option.id
+                      ? "border-teal-400 bg-teal-500/10 text-teal-200"
+                      : "border-zinc-700 bg-zinc-900 text-zinc-300"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs text-zinc-400">Detail add-ons</Label>
+            {ADDON_OPTIONS.map((option) => (
+              <label
+                key={option.id}
+                className="flex cursor-pointer items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-950/60 px-4 py-3"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-white">{option.label}</p>
+                  <p className="text-xs text-zinc-400">Adds detail work before or after the move.</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-bold text-teal-300">+${option.price}</span>
+                  <input
+                    type="checkbox"
+                    checked={selectedAddons.includes(option.id)}
+                    onChange={() => toggleAddon(option.id)}
+                    className="h-4 w-4"
+                  />
+                </div>
+              </label>
+            ))}
+          </div>
+
+          <div className="rounded-2xl border border-teal-500/20 bg-teal-500/10 p-4">
+            <p className="text-xs uppercase tracking-widest text-teal-200">Estimated Clean</p>
+            <p className="mt-1 text-3xl font-black text-white">${estimate.total}</p>
+            <p className="mt-2 text-xs text-zinc-300">
+              Final labor timing can shift after we review property condition, access, and any extra rooms.
+            </p>
+          </div>
+
+          <Button
+            onClick={handleBooking}
+            disabled={!serviceAddress.trim()}
+            className="h-12 w-full rounded-2xl bg-teal-500 font-black text-black hover:bg-teal-400"
+          >
+            Continue To Booking
+            <ArrowRight className="ml-1.5 h-4 w-4" />
+          </Button>
+        </section>
 
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-2">
-          <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-3">Deep Clean Includes</p>
+          <p className="mb-3 text-xs font-bold uppercase tracking-widest text-zinc-500">Included</p>
           {ALL_INCLUDES.map((item) => (
             <div key={item} className="flex items-center gap-2">
-              <CheckCircle2 className="h-3.5 w-3.5 text-teal-400 flex-shrink-0" />
-              <span className="text-zinc-300 text-sm">{item}</span>
+              <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0 text-teal-400" />
+              <span className="text-sm text-zinc-300">{item}</span>
             </div>
           ))}
         </div>
 
-        <div>
-          <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-3">FAQs</h2>
-          <div className="space-y-2">
-            {FAQS.map((faq, i) => (
-              <div key={i} className="rounded-2xl border border-zinc-800 bg-zinc-900/40 overflow-hidden">
-                <button
-                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                  className="w-full flex items-center justify-between px-4 py-3 text-left"
-                >
-                  <span className="text-sm font-semibold text-zinc-200">{faq.q}</span>
-                  <span className="text-zinc-600 text-lg">{openFaq === i ? "−" : "+"}</span>
-                </button>
-                {openFaq === i && (
-                  <div className="px-4 pb-3">
-                    <p className="text-zinc-400 text-sm">{faq.a}</p>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+        <div className="space-y-2">
+          {FAQS.map((faq) => (
+            <div key={faq.q} className="rounded-2xl border border-zinc-800 bg-zinc-900/40 px-4 py-3">
+              <p className="text-sm font-semibold text-zinc-200">{faq.q}</p>
+              <p className="mt-1 text-sm text-zinc-400">{faq.a}</p>
+            </div>
+          ))}
         </div>
 
-        <Button
-          onClick={() => setShowChatbot(true)}
-          className="w-full h-13 bg-teal-700 hover:bg-teal-600 text-white font-bold text-sm rounded-2xl py-4"
-        >
-          Book a Cleaning — Get My Quote
-        </Button>
-      </div>
-
-      <Sheet open={showChatbot} onOpenChange={setShowChatbot}>
-        <SheetContent
-          side="bottom"
-          className="bg-zinc-950 border-zinc-800 rounded-t-3xl pb-10 h-[90vh] flex flex-col overflow-hidden"
-        >
-          <SheetHeader className="text-left mb-3 shrink-0">
-            <SheetTitle className="text-white font-black text-lg">Book a Cleaning</SheetTitle>
-            <p className="text-zinc-400 text-xs">Move-In / Move-Out · Standard, Deep & Premium packages</p>
-          </SheetHeader>
-          <div className="flex-1 overflow-hidden min-h-0">
-            <BookingChatbot
-              onClose={handleClose}
-              embedded={true}
-              showCloseButton={false}
-              className="h-full"
-              initialService="Move-In/Out Cleaning"
-            />
+        <div className="grid grid-cols-3 gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4 text-center">
+          <div>
+            <Home className="mx-auto h-4 w-4 text-teal-300" />
+            <p className="mt-2 text-xs text-zinc-300">Correct service code</p>
           </div>
-        </SheetContent>
-      </Sheet>
+          <div>
+            <Users className="mx-auto h-4 w-4 text-teal-300" />
+            <p className="mt-2 text-xs text-zinc-300">Ops-ready notes</p>
+          </div>
+          <div>
+            <Sparkles className="mx-auto h-4 w-4 text-teal-300" />
+            <p className="mt-2 text-xs text-zinc-300">Estimate in review step</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

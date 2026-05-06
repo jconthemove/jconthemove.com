@@ -33,6 +33,11 @@ interface Lead {
   crewMembers?: string[];
 }
 
+interface MiningStatusSnapshot {
+  lastScriptureClaimDate?: string | null;
+  scriptureStreak?: number | null;
+}
+
 interface User {
   id: string;
   email: string;
@@ -62,7 +67,7 @@ export default function EmployeeHomePage() {
   const scripture = getDailyScripture();
   const { toast } = useToast();
 
-  const { data: miningStatus } = useQuery({
+  const { data: miningStatus } = useQuery<MiningStatusSnapshot>({
     queryKey: ["/api/mining/status"],
   });
 
@@ -107,7 +112,7 @@ export default function EmployeeHomePage() {
   // Use Eastern time to match the server — avoids UTC midnight mismatch (e.g. 9:30 PM EST = next day UTC)
   const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
   const hasClaimedScripture = miningStatus?.lastScriptureClaimDate === todayStr;
-  const scriptureStreak = (miningStatus as any)?.scriptureStreak || 0;
+  const scriptureStreak = miningStatus?.scriptureStreak || 0;
   const streakToBonus = 7 - (scriptureStreak % 7);
 
   const { data: allJobs = [] } = useQuery<Lead[]>({
@@ -397,7 +402,7 @@ export default function EmployeeHomePage() {
           <div className="flex items-center justify-between">
             <div className={`text-sm font-bold ${isToday(day) ? 'text-orange-400' : 'text-slate-300'}`}>{day}</div>
             {snowDays.has(dateStr) && (
-              <Link href="/snow-removal" onClick={(e) => e.stopPropagation()}>
+              <Link href="/ops/snow-removal" onClick={(e) => e.stopPropagation()}>
                 <div className="p-0.5 rounded bg-sky-500/30 hover:bg-sky-500/50 transition-colors" title="Snow Service">
                   <Snowflake className="h-3 w-3 text-sky-300" />
                 </div>

@@ -32,9 +32,9 @@ isGmailAvailable().then(available => {
   }
 }).catch(() => {});
 
-interface EmailParams {
+export interface EmailParams {
   to: string;
-  from: string;
+  from?: string;
   subject: string;
   text?: string;
   html?: string;
@@ -45,7 +45,7 @@ export async function sendEmail(params: EmailParams): Promise<boolean> {
   try {
     const gmailAvailable = await isGmailAvailable();
     if (gmailAvailable) {
-      const sent = await sendGmailEmail(params);
+      const sent = await sendGmailEmail({ ...params, from: params.from || FROM_EMAIL });
       if (sent) return true;
       console.log("Gmail send failed, falling back to SendGrid...");
     }
@@ -68,7 +68,7 @@ export async function sendEmail(params: EmailParams): Promise<boolean> {
   try {
     const emailData: any = {
       to: params.to,
-      from: params.from,
+      from: params.from || FROM_EMAIL,
       subject: params.subject,
     };
     

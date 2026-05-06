@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   CheckCircle2, Plus, Minus, Tag, Coins, Users, ChevronUp, ChevronDown,
-  Sparkles, Trash2, Pencil, AlertCircle, PhoneCall, Package,
+  Sparkles, Trash2, Pencil, AlertCircle, PhoneCall, Package, Loader2, MapPin,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -78,9 +78,15 @@ export interface SelectedItem {
     maxPrice?: number;
     jobSize?: string;
     loadType?: string;
+    truckNeeded?: boolean;
+    truckSize?: string;
     hasStairs?: boolean;
     specialItems?: string[];
     promoCode?: string;
+    dropoffAddress?: string;
+    verifiedDriveMiles?: number;
+    estimatedDriveMinutes?: number;
+    driveEstimateNote?: string;
     // Task #144 — Trash Valet add-on flag captured from the bundled-cart UI
     // so the admin can see the customer wants the recycling can rolled too.
     recyclingEnabled?: boolean;
@@ -93,6 +99,17 @@ export interface SelectedItem {
     recyclingDayOfWeek?: number;
     recyclingAnchorDate?: string;
     planType?: "monthly" | "yearly";
+    // Roofing quote-helper snapshot. Stored on the booking item so ops can
+    // see exactly what estimate inputs produced the prefilled price.
+    roofSquares?: number;
+    roofAreaSqFt?: number;
+    roofingCurrentType?: string;
+    roofingStories?: string;
+    roofingPitch?: string;
+    roofingTearOff?: string;
+    roofingMaterials?: string;
+    fastSchedule?: boolean;
+    premiumIceShield?: boolean;
   };
 }
 
@@ -129,6 +146,13 @@ export interface QuoteResult {
   tokenRedemption?: { tokens: number; discountUsd: number };
 }
 
+interface DriveEstimateResult {
+  miles: number;
+  estimatedMinutes?: number;
+  note?: string;
+  error?: string;
+}
+
 const SERVICE_EMOJI: Record<string, string> = {
   moving: "📦",
   junk_removal: "🗑️",
@@ -137,6 +161,9 @@ const SERVICE_EMOJI: Record<string, string> = {
   window_cleaning: "🪟",
   snow_removal: "❄️",
   cleaning: "🧼",
+  move_cleaning: "🧼",
+  roofing: "🏠",
+  demolition: "🛠️",
   handyman: "🔧",
   labor: "💪",
   delivery: "🚚",
@@ -155,6 +182,9 @@ const CREW_HINT: Record<string, number> = {
   snow_removal: 2,
   lawn_care: 2,
   window_cleaning: 2,
+  roofing: 3,
+  demolition: 3,
+  move_cleaning: 2,
   trash_valet: 1,
   handyman: 1,
   labor: 2,
@@ -188,7 +218,14 @@ export function priceModeLabel(mode: string, unit: number): string {
  *  still flags them priceMode="quote" so we can tag them as a
  *  crew-confirmed estimate rather than a binding rack price. Hides the
  *  bare "TBD" copy when we have a real number. */
-export const ESTIMATE_SERVICE_CODES = new Set(["painting", "flooring"]);
+export const ESTIMATE_SERVICE_CODES = new Set([
+  "painting",
+  "flooring",
+  "roofing",
+  "lawn_care",
+  "snow_removal",
+  "demolition",
+]);
 export function formatLinePrice(
   item: { serviceCode: string; quantity: number; unitPrice: number; priceMode: string },
   opts: { fractionDigits?: number } = {},
@@ -217,6 +254,23 @@ export function formatLineLaborSubline(meta?: QuoteLaborMeta): string | null {
     ? `${meta.laborHours}`
     : meta.laborHours.toFixed(1);
   return `${meta.crewSize} ${crewWord} × ${hrsLabel} hrs at $${meta.ratePerHour}/hr`;
+}
+
+export function formatMovingFlowSummary(item: SelectedItem): string[] {
+  if (item.serviceCode !== "moving") return [];
+  const bits: string[] = [];
+  if (item.details.scope?.trim()) bits.push(item.details.scope.trim());
+  if (item.details.loadType) bits.push(item.details.loadType.replace(/^.[^\w]?\s*/, ""));
+  if (item.details.truckNeeded === true) {
+    bits.push(item.details.truckSize ? `JC truck: ${item.details.truckSize}` : "JC provides truck");
+  } else if (item.details.truckNeeded === false) {
+    bits.push("Customer truck");
+  }
+  if (item.details.dropoffAddress?.trim()) bits.push(`Drop-off set`);
+  if (item.details.verifiedDriveMiles && item.details.estimatedDriveMinutes) {
+    bits.push(`~${Math.round(item.details.verifiedDriveMiles)} mi · ~${item.details.estimatedDriveMinutes} min`);
+  }
+  return bits;
 }
 
 // ── ServiceSelector ────────────────────────────────────────────────────────
@@ -485,9 +539,16 @@ const PICKER_HOME_SIZES = [
 ];
 
 const PICKER_LOAD_TYPES = [
-  "📦 Load Only",
-  "📤 Unload Only",
-  "🔄 Both Load + Unload",
+  "Load only",
+  "Unload only",
+  "Load + unload",
+];
+
+const PICKER_TRUCK_SIZES = [
+  "10 ft",
+  "16 ft",
+  "26 ft",
+  "Custom",
 ];
 
 const PICKER_SPECIAL_ITEMS = [
@@ -501,10 +562,11 @@ const PICKER_SPECIAL_ITEMS = [
 ];
 
 export function MovingJunkPackagePicker({
-  item, onChange,
+  item, onChange, serviceAddress,
 }: {
   item: SelectedItem;
   onChange: (next: SelectedItem) => void;
+  serviceAddress: string;
 }) {
   const isMoving = item.serviceCode === "moving";
   const { data: pricingConfig } = useQuery<{ ratePerMoverHour: number; jc222Price: number }>({
@@ -513,6 +575,27 @@ export function MovingJunkPackagePicker({
   });
   const rate    = pricingConfig?.ratePerMoverHour ?? 85;
   const jc222   = pricingConfig?.jc222Price       ?? 222;
+  const trimmedPickupAddress = serviceAddress.trim();
+  const needsDropoffAddress = isMoving && (item.details.loadType || "").includes("Both");
+  const trimmedDropoffAddress = needsDropoffAddress ? (item.details.dropoffAddress || "").trim() : "";
+  const canEstimateDrive = isMoving
+    && trimmedPickupAddress.length >= 5
+    && (!needsDropoffAddress || trimmedDropoffAddress.length >= 5);
+
+  const driveEstimateQuery = useQuery<DriveEstimateResult>({
+    queryKey: ["/api/utility/estimate-drive-miles", trimmedPickupAddress, trimmedDropoffAddress],
+    enabled: canEstimateDrive,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const params = new URLSearchParams({ pickup: trimmedPickupAddress });
+      if (trimmedDropoffAddress) params.set("dropoff", trimmedDropoffAddress);
+      const res = await fetch(`/api/utility/estimate-drive-miles?${params.toString()}`);
+      if (!res.ok) throw new Error("Drive estimate unavailable");
+      return res.json() as Promise<DriveEstimateResult>;
+    },
+  });
+
+  const verifiedDriveMiles = driveEstimateQuery.data?.miles ?? Number(item.details.verifiedDriveMiles ?? 0);
 
   // Build an Answers shape from the persisted details so the chatbot's
   // pricing engine can compute the same packages it shows in chat.
@@ -537,9 +620,9 @@ export function MovingJunkPackagePicker({
   const quote = useMemo(() => {
     if (!item.details.jobSize) return null;
     return isMoving
-      ? computeMovingQuote(answers, rate, jc222)
+      ? computeMovingQuote(answers, rate, jc222, verifiedDriveMiles)
       : computeJunkQuote(answers, rate);
-  }, [answers, isMoving, rate, jc222, item.details.jobSize]);
+  }, [answers, isMoving, rate, jc222, item.details.jobSize, verifiedDriveMiles]);
 
   const packages: CrewPackage[] = useMemo(() => {
     return quote ? buildCrewPackages(answers, quote, rate, jc222) : [];
@@ -604,6 +687,47 @@ export function MovingJunkPackagePicker({
     onChange({ ...item, details: { ...item.details, ...d } });
   }
 
+  useEffect(() => {
+    if (!isMoving) return;
+    if (!canEstimateDrive) {
+      if (
+        item.details.verifiedDriveMiles != null ||
+        item.details.estimatedDriveMinutes != null ||
+        item.details.driveEstimateNote
+      ) {
+        patch({
+          verifiedDriveMiles: undefined,
+          estimatedDriveMinutes: undefined,
+          driveEstimateNote: undefined,
+        });
+      }
+      return;
+    }
+    if (!driveEstimateQuery.data) return;
+    const nextMiles = driveEstimateQuery.data.miles || 0;
+    const nextMinutes = driveEstimateQuery.data.estimatedMinutes || 0;
+    const nextNote = driveEstimateQuery.data.note || undefined;
+    if (
+      item.details.verifiedDriveMiles === nextMiles &&
+      item.details.estimatedDriveMinutes === nextMinutes &&
+      item.details.driveEstimateNote === nextNote
+    ) {
+      return;
+    }
+    patch({
+      verifiedDriveMiles: nextMiles,
+      estimatedDriveMinutes: nextMinutes,
+      driveEstimateNote: nextNote,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    isMoving,
+    canEstimateDrive,
+    driveEstimateQuery.data?.miles,
+    driveEstimateQuery.data?.estimatedMinutes,
+    driveEstimateQuery.data?.note,
+  ]);
+
   function toggleSpecial(label: string) {
     const cur = item.details.specialItems || [];
     const next = cur.includes(label) ? cur.filter(s => s !== label) : [...cur, label];
@@ -627,7 +751,7 @@ export function MovingJunkPackagePicker({
 
       {isMoving && (
         <div>
-          <Label className="text-xs">Load type</Label>
+          <Label className="text-xs">Do you need help loading, unloading, or both?</Label>
           <div className="grid grid-cols-3 gap-1.5 mt-1">
             {PICKER_LOAD_TYPES.map(opt => {
               const active = item.details.loadType === opt;
@@ -649,6 +773,130 @@ export function MovingJunkPackagePicker({
               );
             })}
           </div>
+        </div>
+      )}
+
+      {isMoving && (
+        <div>
+          <Label className="text-xs">What do you need help with?</Label>
+          <Textarea
+            value={item.details.scope || ""}
+            onChange={(e) => patch({ scope: e.target.value || undefined })}
+            placeholder="Apartment move, storage unit, POD load, rental truck unload, in-home rearrange..."
+            rows={2}
+            data-testid={`pkg-scope-${item.serviceCode}`}
+          />
+        </div>
+      )}
+
+      {isMoving && (
+        <div>
+          <Label className="text-xs">Do you need us to provide a truck?</Label>
+          <div className="grid grid-cols-2 gap-1.5 mt-1">
+            {[
+              { label: "Customer provides truck", value: false },
+              { label: "JC provides truck", value: true },
+            ].map((opt) => {
+              const active = item.details.truckNeeded === opt.value;
+              return (
+                <button
+                  key={String(opt.value)}
+                  type="button"
+                  onClick={() => patch({
+                    truckNeeded: opt.value,
+                    truckSize: opt.value ? item.details.truckSize : undefined,
+                  })}
+                  className={cn(
+                    "text-[11px] px-2 py-1.5 rounded-md border text-center leading-tight transition-all",
+                    active
+                      ? "border-emerald-400 bg-emerald-500/20 text-emerald-300"
+                      : "border-border bg-card hover:border-foreground/30",
+                  )}
+                  data-testid={`pkg-truck-needed-${item.serviceCode}-${opt.value ? "yes" : "no"}`}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {isMoving && item.details.truckNeeded && (
+        <div>
+          <Label className="text-xs">Truck size if we need to provide the truck</Label>
+          <div className="grid grid-cols-2 gap-1.5 mt-1">
+            {PICKER_TRUCK_SIZES.map((size) => {
+              const active = item.details.truckSize === size;
+              return (
+                <button
+                  key={size}
+                  type="button"
+                  onClick={() => patch({ truckSize: size })}
+                  className={cn(
+                    "text-[11px] px-2 py-1.5 rounded-md border text-center leading-tight transition-all",
+                    active
+                      ? "border-orange-400 bg-orange-500/20 text-orange-300"
+                      : "border-border bg-card hover:border-foreground/30",
+                  )}
+                  data-testid={`pkg-truck-size-${item.serviceCode}-${size.slice(0, 2)}`}
+                >
+                  {size}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {needsDropoffAddress && (
+        <div>
+          <Label className="text-xs">Drop-off address</Label>
+          <Input
+            value={item.details.dropoffAddress || ""}
+            onChange={(e) => patch({ dropoffAddress: e.target.value || undefined })}
+            placeholder="Destination address"
+            data-testid={`pkg-dropoff-${item.serviceCode}`}
+          />
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            We use this with the verified pickup address to estimate drive time.
+          </p>
+        </div>
+      )}
+
+      {isMoving && (
+        <div className="rounded-lg border border-sky-500/30 bg-sky-500/5 p-2.5">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-sky-400 flex items-center gap-1">
+            <MapPin className="h-3 w-3" /> Drive Estimate
+          </p>
+          {!trimmedPickupAddress ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Add the pickup address in the previous step to verify drive time.
+            </p>
+          ) : needsDropoffAddress && trimmedDropoffAddress.length < 5 ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Add the drop-off address to calculate the full move route.
+            </p>
+          ) : driveEstimateQuery.isLoading ? (
+            <p className="mt-1 text-xs text-muted-foreground flex items-center gap-1">
+              <Loader2 className="h-3 w-3 animate-spin" /> Verifying drive time from the address...
+            </p>
+          ) : item.details.verifiedDriveMiles && item.details.estimatedDriveMinutes ? (
+            <div className="mt-1 space-y-1">
+              <p className="text-xs text-white">
+                Verified route: ~{Math.round(item.details.verifiedDriveMiles)} miles · ~{item.details.estimatedDriveMinutes} min
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                {item.details.driveEstimateNote === "base-to-pickup plus pickup-to-dropoff"
+                  ? "Includes our Ironwood base, pickup, and destination."
+                  : "Includes our Ironwood base and the verified service address."}
+              </p>
+            </div>
+          ) : driveEstimateQuery.isError ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              We couldn't verify drive time yet, but the address is still saved with the job.
+            </p>
+          ) : null}
         </div>
       )}
 
@@ -785,12 +1033,13 @@ export function MovingJunkPackagePicker({
 // inside the service card. Used by the wizard's "configure" step so users
 // can edit every field without opening a modal/drawer.
 export function InlineItemConfigure({
-  item, onChange, onRemove, warning,
+  item, onChange, onRemove, warning, serviceAddress,
 }: {
   item: SelectedItem;
   onChange: (next: SelectedItem) => void;
   onRemove: () => void;
   warning?: string | null;
+  serviceAddress?: string;
 }) {
   const usesPicker = usesPackagePicker(item.serviceCode);
   const mode = schedulingModeFor(item.serviceCode);
@@ -831,7 +1080,7 @@ export function InlineItemConfigure({
       </div>
 
       {usesPicker && (
-        <MovingJunkPackagePicker item={item} onChange={onChange} />
+        <MovingJunkPackagePicker item={item} onChange={onChange} serviceAddress={serviceAddress || ""} />
       )}
 
       {/* Qty (hourly / per_unit only). Hidden when the package picker drives

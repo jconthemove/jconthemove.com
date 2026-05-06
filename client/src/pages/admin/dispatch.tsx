@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -15,6 +16,7 @@ import {
   Users, Calendar, ChevronRight, Power, Zap, Send, MapPin, Navigation,
 } from "lucide-react";
 import type { User } from "@shared/schema";
+import type { JobPayoutPreview } from "@shared/jobPayout";
 
 // Task #171 — Live Dispatch page. Polls jobs + crew every 3s so operators
 // can watch the feed and reassign with one click. Auto-dispatch logic is
@@ -87,12 +89,13 @@ function MetricCard({ icon: Icon, label, value, color }: {
 }
 
 function JobCard({
-  lead, employees, onReassign, onDispatchNow, isReassigning, isDispatching,
+  lead, employees, onReassign, onDispatchNow, onViewPayout, isReassigning, isDispatching,
 }: {
   lead: Lead;
   employees: User[];
   onReassign: (leadId: string, crewId: string) => void;
   onDispatchNow: (leadId: string) => void;
+  onViewPayout: (leadId: string) => void;
   isReassigning: boolean;
   isDispatching: boolean;
 }) {
@@ -166,6 +169,16 @@ function JobCard({
               <Send className="h-3 w-3 mr-1" />
               Dispatch
             </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-2 text-xs border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
+              onClick={() => onViewPayout(lead.id)}
+              data-testid={`button-payout-${lead.id}`}
+            >
+              <DollarSign className="h-3 w-3 mr-1" />
+              Payout
+            </Button>
             <Select
               value={primary || ""}
               onValueChange={(v) => onReassign(lead.id, v)}
@@ -230,6 +243,7 @@ export default function AdminDispatchPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [reassigningId, setReassigningId] = useState<string | null>(null);
+  const [payoutLeadId, setPayoutLeadId] = useState<string | null>(null);
 
   const { data: leads = [], isLoading: leadsLoading } = useQuery<Lead[]>({
     queryKey: ["/api/leads"],
@@ -249,6 +263,11 @@ export default function AdminDispatchPage() {
   const { data: dispatchMetrics } = useQuery<DispatchMetrics>({
     queryKey: ["/api/admin/dispatch/metrics"],
     refetchInterval: 5000,
+  });
+
+  const { data: payoutPreview, isLoading: payoutLoading } = useQuery<JobPayoutPreview | null>({
+    queryKey: payoutLeadId ? [`/api/admin/jobs/${payoutLeadId}/payout-preview`] : ["/api/admin/jobs/payout-preview/idle"],
+    enabled: !!payoutLeadId,
   });
 
   const killSwitchMutation = useMutation({
@@ -460,6 +479,7 @@ export default function AdminDispatchPage() {
                   employees={activeEmployees}
                   onReassign={handleReassign}
                   onDispatchNow={(id) => manualDispatchMutation.mutate(id)}
+                  onViewPayout={setPayoutLeadId}
                   isReassigning={reassigningId === l.id}
                   isDispatching={manualDispatchMutation.isPending &&
                     manualDispatchMutation.variables === l.id}
@@ -501,6 +521,133 @@ export default function AdminDispatchPage() {
           <LiveCrewPositions />
         </aside>
       </div>
+
+      <Dialog open={!!payoutLeadId} onOpenChange={(open) => !open && setPayoutLeadId(null)}>
+        <DialogContent className="max-w-3xl border-slate-800 bg-slate-950 text-white">
+          <DialogHeader>
+            <DialogTitle>Job Payout Engine</DialogTitle>
+          </DialogHeader>
+
+          {payoutLoading || !payoutPreview ? (
+            <div className="flex items-center justify-center py-10 text-slate-400">
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              Loading payout preview...
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <Card className="border-white/5 bg-white/[0.03]"><CardContent className="p-3"><p className="text-[10px] uppercase tracking-wider text-slate-500">Job Total</p><p className="text-lg font-black text-green-400">${payoutPreview.jobTotal.toLocaleString()}</p></CardContent></Card>
+                <Card className="border-white/5 bg-white/[0.03]"><CardContent className="p-3"><p className="text-[10px] uppercase tracking-wider text-slate-500">Service</p><p className="text-lg font-black text-blue-300 capitalize">{payoutPreview.serviceType.replace(/_/g, " ")}</p></CardContent></Card>
+                <Card className="border-white/5 bg-white/[0.03]"><CardContent className="p-3"><p className="text-[10px] uppercase tracking-wider text-slate-500">Hours</p><p className="text-lg font-black text-purple-300">{payoutPreview.confirmedHours}</p></CardContent></Card>
+                <Card className="border-white/5 bg-white/[0.03]"><CardContent className="p-3"><p className="text-[10px] uppercase tracking-wider text-slate-500">Crew</p><p className="text-lg font-black text-amber-300">{payoutPreview.crewCount}</p></CardContent></Card>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <Card className="border-slate-800 bg-slate-900/50">
+                  <CardContent className="p-4 space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Pools</p>
+                    {[
+                      ["Labor Pool", payoutPreview.pools.laborPool],
+                      ["Owner/Admin", payoutPreview.pools.ownerAdminPool],
+                      ["Company Profit", payoutPreview.pools.companyProfitPool],
+                      ["Referral", payoutPreview.pools.referralPool],
+                      ["Equipment", payoutPreview.pools.equipmentPool],
+                      ["Meal/Culture", payoutPreview.pools.mealCultureFund],
+                      ["Reserve", payoutPreview.pools.reserveFund],
+                    ].map(([label, value]) => (
+                      <div key={String(label)} className="flex items-center justify-between text-sm">
+                        <span className="text-slate-300">{label}</span>
+                        <span className="font-bold text-white">${Number(value).toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+
+                <Card className="border-slate-800 bg-slate-900/50">
+                  <CardContent className="p-4 space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Minimum-Pay Protection</p>
+                    <div className="flex items-center justify-between text-sm"><span className="text-slate-300">From company profit</span><span className="font-bold text-white">${payoutPreview.topUpFunding.fromCompanyProfit.toLocaleString()}</span></div>
+                    <div className="flex items-center justify-between text-sm"><span className="text-slate-300">From owner/admin</span><span className="font-bold text-white">${payoutPreview.topUpFunding.fromOwnerAdmin.toLocaleString()}</span></div>
+                    <div className="flex items-center justify-between text-sm"><span className="text-slate-300">From reserve</span><span className="font-bold text-white">${payoutPreview.topUpFunding.fromReserve.toLocaleString()}</span></div>
+                    <div className="flex items-center justify-between text-sm"><span className="text-slate-300">Uncovered</span><span className={`font-bold ${payoutPreview.topUpFunding.uncovered > 0 ? "text-red-400" : "text-emerald-400"}`}>${payoutPreview.topUpFunding.uncovered.toLocaleString()}</span></div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card className="border-slate-800 bg-slate-900/50">
+                <CardContent className="p-4">
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Crew Take-Home</p>
+                  <div className="space-y-2">
+                    {payoutPreview.crewPayouts.map((worker) => (
+                      <div key={worker.workerId} className="rounded-lg border border-slate-800 bg-slate-950/70 p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-white">{worker.name}</p>
+                            <p className="text-xs text-slate-500">{worker.hoursWorked} hrs • weight {worker.weight.toFixed(2)} • min ${worker.minRate}/hr</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-black text-emerald-300">${worker.totalTakeHome.toLocaleString()}</p>
+                            <p className="text-xs text-slate-500">${worker.effectiveHourly.toLocaleString()}/hr</p>
+                          </div>
+                        </div>
+                        <div className="mt-2 grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
+                          <div className="rounded bg-slate-900 px-2 py-1.5"><span className="text-slate-500">Weighted</span><p className="font-semibold text-white">${worker.weightedPay.toLocaleString()}</p></div>
+                          <div className="rounded bg-slate-900 px-2 py-1.5"><span className="text-slate-500">Minimum</span><p className="font-semibold text-white">${worker.minimumPay.toLocaleString()}</p></div>
+                          <div className="rounded bg-slate-900 px-2 py-1.5"><span className="text-slate-500">Top-up</span><p className="font-semibold text-white">${worker.topUpApplied.toLocaleString()}</p></div>
+                          <div className="rounded bg-slate-900 px-2 py-1.5"><span className="text-slate-500">Labor Pay</span><p className="font-semibold text-white">${worker.finalLaborPay.toLocaleString()}</p></div>
+                        </div>
+                        {worker.additionalPayouts.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {worker.additionalPayouts.map((item, idx) => (
+                              <Badge key={`${item.type}-${idx}`} variant="outline" className="border-emerald-500/40 text-emerald-300">
+                                {item.type.replace("_", " ")} +${item.amount.toLocaleString()}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {payoutPreview.rolePayouts.length > 0 && (
+                <Card className="border-slate-800 bg-slate-900/50">
+                  <CardContent className="p-4 space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Role Payouts</p>
+                    {payoutPreview.rolePayouts.map((item, idx) => (
+                      <div key={`${item.type}-${idx}`} className="flex items-center justify-between text-sm">
+                        <span className="text-slate-300">{item.recipientName} • {item.reason}</span>
+                        <span className="font-bold text-white">${item.amount.toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+
+              <Card className="border-slate-800 bg-slate-900/50">
+                <CardContent className="p-4 space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Retained Pools</p>
+                  <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-3">
+                    {Object.entries(payoutPreview.retainedPools).map(([key, value]) => (
+                      <div key={key} className="rounded bg-slate-950/70 px-3 py-2">
+                        <p className="text-[10px] uppercase tracking-wider text-slate-500">{key.replace(/([A-Z])/g, " $1")}</p>
+                        <p className="font-bold text-white">${Number(value).toLocaleString()}</p>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <div className="space-y-1 text-xs text-slate-400">
+                {payoutPreview.notes.map((note) => (
+                  <p key={note}>{note}</p>
+                ))}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

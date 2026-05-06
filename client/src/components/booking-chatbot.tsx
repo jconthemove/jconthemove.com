@@ -1500,7 +1500,7 @@ export function buildMovingRecommendations(
     };
     const sz = is26 ? "26'" : "15'";
     const altSz = is26 ? "15'" : "26'";
-    const b = bracket === "local" ? "1hr" : bracket;
+    const b = bracket;
     const { rate, hrs } = tables[sz][b];
     const { rate: altRate, hrs: altHrs } = tables[altSz][b];
     const total = applyPerk(rate * hrs);
@@ -2916,7 +2916,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
         type: "before" as const,
         timestamp: new Date().toISOString(),
       })) : undefined;
-      const result = await apiRequest("POST", "/api/chatbot-quote", {
+      const response = await apiRequest("POST", "/api/chatbot-quote", {
         answers,
         quote: pendingQuote,
         selectedPackage: selectedPackageObj || null,
@@ -2930,7 +2930,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
         depositPaid: withDeposit,
         ...(customerPhotos ? { photos: customerPhotos } : {}),
       });
-      return result as { leadId: string; message: string; depositInvoiceSent?: boolean; depositInvoiceUrl?: string };
+      return await response.json() as { leadId: string; message: string; depositInvoiceSent?: boolean; depositInvoiceUrl?: string };
     },
     onSuccess: (data, withDeposit) => {
       setDepositPaid(withDeposit);

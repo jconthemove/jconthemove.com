@@ -90,6 +90,67 @@ interface TreasuryStatus {
     recommendation: string;
   };
 }
+
+interface DutyStatusResponse {
+  isAvailable: boolean;
+}
+
+interface DailyCheckinResponse {
+  message?: string;
+  points?: number;
+  tokens?: number;
+}
+
+interface GamificationStatsResponse {
+  data: {
+    canCheckIn: boolean;
+    nextCheckInAt?: string | null;
+    lastCheckIn?: string | null;
+    tokenBalance?: number;
+    recentAchievements?: Array<{
+      id: string;
+      achievementType: {
+        name: string;
+      };
+      earnedAt?: string;
+    }>;
+    stats?: {
+      currentStreak?: number;
+      totalPoints?: number;
+    };
+    weeklyRank?: {
+      rank: number;
+      weeklyPoints: number;
+      totalEmployees: number;
+    } | null;
+  };
+}
+
+interface WalletCurrency {
+  id: string;
+  name: string;
+  symbol: string;
+}
+
+interface UserWalletRecord {
+  id: string;
+  walletAddress: string;
+  balance: string;
+  tokenBalance?: string;
+  currency: WalletCurrency;
+}
+
+interface WalletsResponse {
+  wallets: UserWalletRecord[];
+}
+
+interface WalletCurrenciesResponse {
+  currencies: WalletCurrency[];
+}
+
+interface RewardsWalletResponse {
+  tokenBalance?: string;
+}
 import { NotificationList } from "@/components/notification-list";
 import { JobMapView } from "@/components/job-map-view";
 import { JobPhoto } from "@shared/schema";
@@ -401,7 +462,7 @@ export default function MobileLeadManager() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [dutyStatus, setDutyStatus] = useState<boolean>(Boolean((user as any)?.isAvailable));
 
-  const toggleDutyMutation = useMutation({
+  const toggleDutyMutation = useMutation<DutyStatusResponse, Error, boolean>({
     mutationFn: async (next: boolean) => {
       const res = await apiRequest("PATCH", "/api/auth/user/availability", { isAvailable: next });
       return res.json();
@@ -456,7 +517,7 @@ export default function MobileLeadManager() {
   });
 
   // Gamification data queries
-  const { data: gamificationData, isLoading: gamificationLoading } = useQuery({
+  const { data: gamificationData, isLoading: gamificationLoading } = useQuery<GamificationStatsResponse>({
     queryKey: ["/api/gamification/stats"],
     enabled: isOnline && isAuthenticated,
     staleTime: 60 * 1000, // 1 minute
@@ -470,7 +531,7 @@ export default function MobileLeadManager() {
   });
 
   // Daily check-in mutation
-  const dailyCheckinMutation = useMutation({
+  const dailyCheckinMutation = useMutation<DailyCheckinResponse, Error>({
     mutationFn: () => {
       // Create device fingerprint for security/fraud prevention
       const deviceFingerprint = {
@@ -481,7 +542,7 @@ export default function MobileLeadManager() {
         platform: navigator.platform
       };
       
-      return apiRequest("POST", "/api/gamification/checkin", { deviceFingerprint });
+      return apiRequest("POST", "/api/gamification/checkin", { deviceFingerprint }).then((res) => res.json());
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/gamification/stats"] });
@@ -1394,19 +1455,19 @@ function WalletSection({ userId }: { userId?: string }) {
   const [showFundTreasury, setShowFundTreasury] = useState(false);
 
   // Fetch user's wallets
-  const { data: wallets, isLoading: walletsLoading } = useQuery({
+  const { data: wallets, isLoading: walletsLoading } = useQuery<WalletsResponse>({
     queryKey: ['/api/wallets'],
     enabled: !!userId,
   });
 
   // Fetch supported currencies
-  const { data: currenciesData } = useQuery({
+  const { data: currenciesData } = useQuery<WalletCurrenciesResponse>({
     queryKey: ['/api/wallets/currencies'],
     enabled: !!userId,
   });
 
   // Fetch rewards wallet balance to check for sync availability
-  const { data: rewardsWallet } = useQuery({
+  const { data: rewardsWallet } = useQuery<RewardsWalletResponse>({
     queryKey: ['/api/rewards/wallet'],
     enabled: !!userId,
   });
@@ -1574,7 +1635,7 @@ function WalletSection({ userId }: { userId?: string }) {
                 <div>
                   <h3 className="font-semibold text-green-800">Sync Available</h3>
                   <p className="text-sm text-green-600">
-                    {parseFloat(rewardsWallet.tokenBalance).toFixed(8)} JCMOVES ready to sync
+                    {parseFloat(rewardsWallet.tokenBalance || "0").toFixed(8)} JCMOVES ready to sync
                   </p>
                 </div>
               </div>

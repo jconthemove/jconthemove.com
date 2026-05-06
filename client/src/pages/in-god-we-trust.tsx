@@ -102,7 +102,7 @@ export default function InGodWeTrustPage() {
       badgeColor: "",
     },
     {
-      href: "/snow-removal",
+      href: "/ops/snow-removal",
       icon: Snowflake,
       label: "Snow Removal",
       description: "Seasonal service management",

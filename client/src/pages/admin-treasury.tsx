@@ -711,7 +711,7 @@ export default function AdminTreasuryPage() {
             </Card>
           </Link>
 
-          <Link href="/snow-removal" className="block">
+          <Link href="/ops/snow-removal" className="block">
             <Card className="p-6 bg-gradient-to-br from-blue-500 to-cyan-600 text-white cursor-pointer hover:from-blue-400 hover:to-cyan-500 transition-all duration-200 transform hover:scale-[1.02] border-0 shadow-xl shadow-blue-900/30 overflow-hidden relative">
               <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -mr-10 -mt-10"></div>
               <div className="flex items-center justify-between mb-2">

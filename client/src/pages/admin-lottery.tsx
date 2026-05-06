@@ -10,7 +10,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Link } from "wouter";
 import {
   Ticket, Trophy, Crown, ChevronLeft,
-  Play, Lock, Unlock, RefreshCw, AlertTriangle, CheckCircle, Gift, Plus, Search
+  Play, Lock, Unlock, RefreshCw, AlertTriangle, CheckCircle, Gift, Plus, Search, Coins
 } from "lucide-react";
 
 const GRANT_REASONS = [

@@ -31,6 +31,7 @@ import {
   BundleSuggestionDialog, type BundleSuggestion,
   type CatalogService, type FeaturedBundle, type SelectedItem, type QuoteResult,
   emojiFor, recommendedCrewSize, schedulingModeFor, formatLinePrice, formatLineLaborSubline,
+  formatMovingFlowSummary,
 } from "@/components/MultiBookingFlow";
 
 interface BundleSlots {
@@ -110,6 +111,12 @@ function itemNeedsAttention(item: SelectedItem): string | null {
   // before the booking submits.
   if (item.serviceCode === "moving" || item.serviceCode === "junk_removal") {
     if (!item.details.jobSize)   return "Pick a job size";
+    if (item.serviceCode === "moving" && !item.details.loadType) return "Pick load or unload";
+    if (item.serviceCode === "moving" && item.details.truckNeeded == null) return "Tell us who provides the truck";
+    if (item.serviceCode === "moving" && item.details.truckNeeded && !item.details.truckSize) return "Pick a truck size";
+    if (item.serviceCode === "moving" && (item.details.loadType || "").includes("Both") && !item.details.dropoffAddress?.trim()) {
+      return "Enter the drop-off address";
+    }
     if (!item.details.packageId) return "Pick a crew package";
     if (!item.details.requestedDate) return "Date required";
     return null;
@@ -165,7 +172,16 @@ export default function MultiServiceBookPage() {
   // in this file (driven by `quote.bundleApplied`) is the single source
   // of truth for bundle UX.
   const urlPrefill = useMemo(() => {
-    if (typeof window === "undefined") return { codes: [] as string[], jumpStep: null as Step | null };
+    if (typeof window === "undefined") {
+      return {
+        codes: [] as string[],
+        jumpStep: null as Step | null,
+        serviceAddress: "",
+        linePrice: null as number | null,
+        lineLabel: "",
+        lineDetails: {} as SelectedItem["details"],
+      };
+    }
     const sp = new URLSearchParams(window.location.search);
     const codes = new Set<string>();
     const multi = sp.get("services");
@@ -201,7 +217,21 @@ export default function MultiServiceBookPage() {
     const jumpStep = stepParam && (STEPS as readonly string[]).includes(stepParam)
       ? (stepParam as Step)
       : null;
-    return { codes: Array.from(codes), jumpStep };
+    const serviceAddress = sp.get("address")?.trim() || "";
+    const rawPrice = Number(sp.get("price"));
+    const linePrice = Number.isFinite(rawPrice) && rawPrice > 0 ? rawPrice : null;
+    const lineLabel = sp.get("label")?.trim() || "";
+    let lineDetails: SelectedItem["details"] = {};
+    const detailsParam = sp.get("details");
+    if (detailsParam) {
+      try {
+        const parsed = JSON.parse(detailsParam) as SelectedItem["details"];
+        if (parsed && typeof parsed === "object") lineDetails = parsed;
+      } catch {
+        lineDetails = {};
+      }
+    }
+    return { codes: Array.from(codes), jumpStep, serviceAddress, linePrice, lineLabel, lineDetails };
   }, []);
 
   const [step, setStep] = useState<Step>("services");
@@ -238,6 +268,8 @@ export default function MultiServiceBookPage() {
   const [confirmation, setConfirmation] = useState<
     CreateBookingResponse["booking"] & { items: SelectedItem[]; quote: QuoteResult } | null
   >(null);
+  const stepIndex = (s: Step) => STEPS.indexOf(s);
+  const hasMovingService = useMemo(() => items.some((item) => item.serviceCode === "moving"), [items]);
 
   // ── Data
   const { data: catalogData } = useQuery<{ services: CatalogService[] }>({
@@ -388,22 +420,54 @@ export default function MultiServiceBookPage() {
   useEffect(() => {
     if (prefillAppliedRef.current) return;
     if (services.length === 0) return;
-    if (urlPrefill.codes.length === 0 && !urlPrefill.jumpStep) {
+    if (
+      urlPrefill.codes.length === 0 &&
+      !urlPrefill.jumpStep &&
+      !urlPrefill.serviceAddress &&
+      !urlPrefill.linePrice &&
+      !urlPrefill.lineLabel &&
+      Object.keys(urlPrefill.lineDetails).length === 0
+    ) {
       prefillAppliedRef.current = true;
       return;
     }
+    let next = [...items];
     for (const code of urlPrefill.codes) {
       const svc = services.find((s) => s.code === code);
       if (!svc) continue;
-      addService(svc);
+      if (!next.some((item) => item.serviceCode === svc.code)) {
+        next = [...next, makeItem(svc)];
+      }
+    }
+
+    const firstCode = urlPrefill.codes[0];
+    if (firstCode) {
+      next = next.map((item) => {
+        if (item.serviceCode !== firstCode) return item;
+        return {
+          ...item,
+          label: urlPrefill.lineLabel || item.label,
+          unitPrice: urlPrefill.linePrice ?? item.unitPrice,
+          details: {
+            ...item.details,
+            ...urlPrefill.lineDetails,
+          },
+        };
+      });
+    }
+    setItems(next);
+    if (urlPrefill.serviceAddress) {
+      setServiceAddress(urlPrefill.serviceAddress);
     }
     if (urlPrefill.jumpStep) {
-      // Honour ?step= unconditionally per the URL contract. If the
-      // customer lands on configure/contact without any matching
-      // services, the wizard's existing per-step gate
-      // (`canContinueReason()`) already surfaces "Add at least one
-      // service to continue" so they can't get stuck.
-      setStep(urlPrefill.jumpStep);
+      let resolvedStep = urlPrefill.jumpStep;
+      if (!urlPrefill.serviceAddress && stepIndex(resolvedStep) >= stepIndex("address")) {
+        resolvedStep = "address";
+      }
+      if (stepIndex(resolvedStep) >= stepIndex("configure") && next.some((item) => !!itemNeedsAttention(item))) {
+        resolvedStep = "configure";
+      }
+      setStep(resolvedStep);
     }
     prefillAppliedRef.current = true;
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -561,16 +625,16 @@ export default function MultiServiceBookPage() {
     // case a user removes their last service after step 1 and tries to
     // proceed/submit (server requires items.length > 0 — would 400).
     if (items.length === 0) return "Add at least one service to continue";
-    if (step === "address") {
+    if (stepIndex(step) >= stepIndex("address")) {
       if (!serviceAddress.trim()) return "Enter the service address";
     }
-    if (step === "configure") {
+    if (stepIndex(step) >= stepIndex("configure")) {
       for (const item of items) {
         const w = itemNeedsAttention(item);
         if (w) return `${item.label}: ${w.toLowerCase()}`;
       }
     }
-    if (step === "contact") {
+    if (stepIndex(step) >= stepIndex("contact")) {
       if (!contact.customerName.trim()) return "Enter your full name";
       if (contact.customerPhone.replace(/\D/g, "").length < 7) return "Enter a valid phone number";
       const email = contact.customerEmail.trim();
@@ -614,7 +678,7 @@ export default function MultiServiceBookPage() {
             <div className="rounded-xl bg-card border border-border p-4 text-left space-y-2">
               <p className="text-xs uppercase tracking-widest text-muted-foreground">Your services</p>
               {c.items.map((i, idx) => {
-                const linePrice = formatLinePrice(i, { fractionDigits: 2 });
+                const fallbackLinePrice = formatLinePrice(i, { fractionDigits: 2 });
                 // Task #218 round-9 rev2 — match the chat card's
                 // "N people × M hrs at $85/hr" subline so the wizard's
                 // confirmation step shows the same labor breakdown the
@@ -624,6 +688,10 @@ export default function MultiServiceBookPage() {
                 const quoteLine = c.quote.items[idx];
                 const laborMeta = quoteLine?.serviceCode === i.serviceCode ? quoteLine.laborMeta : undefined;
                 const laborSubline = formatLineLaborSubline(laborMeta);
+                const movingSummary = formatMovingFlowSummary(i);
+                const resolvedLineSubtotal = typeof quoteLine?.lineSubtotal === "number"
+                  ? quoteLine.lineSubtotal
+                  : null;
                 return (
                   <div key={i.serviceCode} className="flex justify-between text-sm">
                     <span>
@@ -633,10 +701,17 @@ export default function MultiServiceBookPage() {
                           {laborSubline}
                         </span>
                       )}
+                      {movingSummary.length > 0 && (
+                        <span className="block text-[10px] font-normal text-muted-foreground" data-testid={`confirm-line-moving-${i.serviceCode}`}>
+                          {movingSummary.join(" · ")}
+                        </span>
+                      )}
                     </span>
                     <span className="font-semibold text-right">
-                      {linePrice.text}
-                      {linePrice.isEstimate && (
+                      {resolvedLineSubtotal !== null
+                        ? `$${resolvedLineSubtotal.toFixed(2)}`
+                        : fallbackLinePrice.text}
+                      {fallbackLinePrice.isEstimate && (
                         <span className="block text-[10px] font-normal text-muted-foreground">estimate · crew confirms</span>
                       )}
                     </span>
@@ -679,7 +754,7 @@ export default function MultiServiceBookPage() {
   // the mobile docked summary bar so it's visible across all steps.
   const wizardNav = (
     <div className="space-y-2 w-full">
-      {continueReason && !isLast && (
+      {continueReason && (
         <p className="text-[11px] text-amber-500 flex items-start gap-1" data-testid="continue-reason">
           <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" /> {continueReason}
         </p>
@@ -700,7 +775,7 @@ export default function MultiServiceBookPage() {
           <Button
             type="button"
             onClick={() => submitMutation.mutate()}
-            disabled={submitMutation.isPending}
+            disabled={submitMutation.isPending || !!continueReason}
             className="flex-1"
             data-testid="wizard-confirm"
           >
@@ -791,8 +866,12 @@ export default function MultiServiceBookPage() {
           {step === "address" && (
             <section data-testid="step-address">
               <header className="mb-3">
-                <h2 className="text-xl font-black">Where are we going?</h2>
-                <p className="text-sm text-muted-foreground">The address where the work will happen.</p>
+                <h2 className="text-xl font-black">{hasMovingService ? "Where do you need help?" : "Where are we going?"}</h2>
+                <p className="text-sm text-muted-foreground">
+                  {hasMovingService
+                    ? "Use the pickup address for load-only or full moves. If it's a full move, you'll add the destination in the next step."
+                    : "The address where the work will happen."}
+                </p>
               </header>
               <AddressField
                 value={serviceAddress}
@@ -824,6 +903,7 @@ export default function MultiServiceBookPage() {
                   <InlineItemConfigure
                     key={item.serviceCode}
                     item={item}
+                    serviceAddress={serviceAddress}
                     onChange={updateItem}
                     onRemove={() => removeService(item.serviceCode)}
                     warning={itemNeedsAttention(item)}
@@ -951,6 +1031,7 @@ export default function MultiServiceBookPage() {
                       const quoteLine = quote?.items[idx];
                       const laborMeta = quoteLine?.serviceCode === i.serviceCode ? quoteLine.laborMeta : undefined;
                       const laborSubline = formatLineLaborSubline(laborMeta);
+                      const movingSummary = formatMovingFlowSummary(i);
                       return (
                         <div key={i.serviceCode} className="flex justify-between text-sm">
                           <span className="truncate pr-2">
@@ -960,6 +1041,11 @@ export default function MultiServiceBookPage() {
                             {laborSubline && (
                               <span className="block text-[10px] font-normal text-muted-foreground" data-testid={`review-line-labor-${i.serviceCode}`}>
                                 {laborSubline}
+                              </span>
+                            )}
+                            {movingSummary.length > 0 && (
+                              <span className="block text-[10px] font-normal text-muted-foreground" data-testid={`review-line-moving-${i.serviceCode}`}>
+                                {movingSummary.join(" · ")}
                               </span>
                             )}
                           </span>

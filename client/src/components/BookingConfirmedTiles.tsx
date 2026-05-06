@@ -9,7 +9,7 @@ const RECURRING_DESTINATIONS: Record<string, { href: string; label: string; hint
     hint: "Switch to a monthly trash valet plan and never miss a pickup",
   },
   lawn_care: {
-    href: "/book-lawn-care",
+    href: "/book?service=lawn_care&step=configure",
     label: "Set up recurring lawn visits",
     hint: "Weekly or biweekly lawn care — auto-scheduled",
   },
@@ -24,7 +24,7 @@ const RECURRING_DESTINATIONS: Record<string, { href: string; label: string; hint
     hint: "We'll show up every storm — no calling required",
   },
   cleaning: {
-    href: "/book?serviceType=cleaning",
+    href: "/book?service=move_cleaning&step=configure",
     label: "Schedule recurring cleanings",
     hint: "Weekly, biweekly, or monthly — your call",
   },

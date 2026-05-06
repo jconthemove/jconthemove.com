@@ -43,15 +43,15 @@ export function setupAuth(app: Express) {
   console.log('✅ Session management setup completed');
 }
 
-export function signJwt(userId: number, role: string): string {
+export function signJwt(userId: string, role: string): string {
   return jwt.sign({ userId, role }, getJwtSecret(), { expiresIn: "90d" });
 }
 
-export function signRefreshToken(userId: number): string {
+export function signRefreshToken(userId: string): string {
   return jwt.sign({ userId, type: "refresh" }, getJwtSecret(), { expiresIn: "180d" });
 }
 
-export function verifyRefreshToken(token: string): { userId: number } | null {
+export function verifyRefreshToken(token: string): { userId: string } | null {
   try {
     const payload = jwt.verify(token, getJwtSecret()) as any;
     if (payload.type !== "refresh") return null;
@@ -61,7 +61,7 @@ export function verifyRefreshToken(token: string): { userId: number } | null {
   }
 }
 
-async function lookupUserById(userId: number, res: any): Promise<any | null> {
+async function lookupUserById(userId: string, res: any): Promise<any | null> {
   try {
     const { db } = await import('./db');
     const { users } = await import('@shared/schema');

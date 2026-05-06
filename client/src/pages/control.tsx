@@ -57,7 +57,7 @@ const SECTIONS = [
         color: "from-amber-600 to-orange-600",
       },
       {
-        href: "/snow-removal",
+        href: "/ops/snow-removal",
         icon: Snowflake,
         label: "Snow Removal",
         description: "Seasonal snow service management",

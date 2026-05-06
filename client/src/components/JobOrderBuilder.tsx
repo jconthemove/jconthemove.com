@@ -60,6 +60,7 @@ interface Pricing {
 
 interface Lead {
   serviceType: string;
+  status?: string;
   fromAddress?: string;
   confirmedFromAddress?: string;
   toAddress?: string;
@@ -79,10 +80,27 @@ interface Lead {
 }
 
 interface OrderPackage {
+  id: string;
   movers: number;
   hours: number;
   label: string;
   tag?: string;
+  isPromo?: boolean;
+  promoKey?: string;
+  durationMinutes?: number;
+  isHeavyItem?: boolean;
+  heavyTier?: "light" | "heavy";
+  isJc222?: boolean;
+}
+
+interface AddonOption {
+  id: string;
+  name: string;
+  description: string;
+  unitPrice: number;
+  qtyOptions: number[];
+  category?: string;
+  openPrice?: boolean;
 }
 
 interface LineItem {
@@ -140,7 +158,7 @@ interface JobOrderBuilderProps {
   }) => void;
 }
 
-const MOVING_PACKAGES: { id: string; movers: number; hours: number; label: string; tag?: string; isPromo?: boolean; promoKey?: string; durationMinutes?: number; isHeavyItem?: boolean }[] = [
+const MOVING_PACKAGES: OrderPackage[] = [
   { id: "moving_jc222", movers: 2, hours: 2, label: "JC222 — Local (≤10 mi)", tag: "Promo", isPromo: true, promoKey: "jc222", durationMinutes: 82 },
   { id: "moving_jc272", movers: 2, hours: 2, label: "JC272 — Outside 10 mi",  tag: "Promo", isPromo: true, promoKey: "jc272", durationMinutes: 82 },
   { id: "moving_heavy_light", movers: 3, hours: 2, label: "Heavy Item (≤500 lbs)", tag: "Specialty", isHeavyItem: true, heavyTier: "light" as const },
@@ -158,7 +176,7 @@ const MOVING_PACKAGES: { id: string; movers: number; hours: number; label: strin
   { id: "moving_3m_7h", movers: 3, hours: 7, label: "3 Movers × 7 hrs",  tag: "20% Off"        },
 ];
 
-const MOVING_ADDONS = [
+const MOVING_ADDONS: AddonOption[] = [
   { id: "mattress_bag",    name: "Mattress Bag(s)",                description: "Protect mattresses during transport",             unitPrice: 20, category: "supplies", qtyOptions: [1, 2, 3, 4] },
   { id: "wardrobe_boxes",  name: "Wardrobe Boxes",                 description: "Keep clothes on hangers during move",             unitPrice: 25, category: "supplies", qtyOptions: [1, 2, 3, 4] },
   { id: "packing_supplies",name: "Packing Tape & Supplies",        description: "Tape, wrap, and moving blankets",                 unitPrice: 40, category: "supplies", qtyOptions: [1] },
@@ -570,7 +588,7 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
         qty,
         unitPrice,
         total: unitPrice * qty,
-        category: addon.category ?? "addon",
+        category: "category" in addon ? addon.category ?? "addon" : "addon",
       });
     });
 
@@ -593,11 +611,11 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
       let laborTotal: number;
       let laborLabel: string;
 
-      if ((pkg as any).isPromo || pkg.isJc222) {
-        const promoPrice = (pkg as any).promoKey === "jc272" ? pricing.jc272Price : pricing.jc222Price;
+      if (pkg.isPromo || pkg.isJc222) {
+        const promoPrice = pkg.promoKey === "jc272" ? pricing.jc272Price : pricing.jc222Price;
         laborTotal = promoPrice;
         laborLabel = `${pkg.label} — Flat Rate Promo`;
-      } else if ((pkg as any).isHeavyItem) {
+      } else if (pkg.isHeavyItem) {
         const heavyTierLabel = (pkg as any).heavyTier === "heavy" ? "Oversized (500+ lbs)" : "Heavy (≤500 lbs)";
         const baseHeavyPrice = (pkg as any).heavyTier === "heavy" ? 600 : 400;
         laborTotal = baseHeavyPrice;
@@ -631,11 +649,14 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
       // AND the selected package is a regular crew package (not standalone heavy item).
       const CREW_ACTIVE_STATUSES = ["booked", "available", "in_progress"];
       const leadIsAlreadyBooked = CREW_ACTIVE_STATUSES.includes(lead?.status ?? "");
-      const isRegularCrewPkg = !((pkg as any).isHeavyItem);
+      const isRegularCrewPkg = !pkg.isHeavyItem;
       const applyCrewDiscount = leadIsAlreadyBooked && isRegularCrewPkg;
       specialItemsDefs.forEach(item => {
         if (specialItems[item.key]) {
-          const baseFee = specialFees[item.feeKey] ?? (pricing[(item as any).pricingKey] ?? item.baseFee);
+          const baseFee =
+            specialFees[item.feeKey] ??
+            (pricing[item.pricingKey as keyof Pricing] as number | undefined) ??
+            item.baseFee;
           const fee = applyCrewDiscount ? Math.round(baseFee * 0.6) : baseFee;
           const crewNote = item.crewMin >= 3 ? " · 3-mover min" : item.crewMin === 2 ? " · 2-mover min" : "";
           const discountNote = applyCrewDiscount ? " (40% crew discount)" : "";
@@ -727,7 +748,7 @@ export function JobOrderBuilder({ lead, leadId, disabled, onApply }: JobOrderBui
     const activePkg = selectedPkg !== null ? movingPackages[selectedPkg] : null;
     const CREW_ACTIVE_STATUSES_APPLY = ["booked", "available", "in_progress"];
     const leadIsAlreadyBookedApply = CREW_ACTIVE_STATUSES_APPLY.includes(lead?.status ?? "");
-    const applyCrewDiscountApply = leadIsAlreadyBookedApply && !((activePkg as any)?.isHeavyItem);
+    const applyCrewDiscountApply = leadIsAlreadyBookedApply && !activePkg?.isHeavyItem;
 
     const specialItemsFee = specialItemsDefs.reduce((acc, item) => {
       if (!specialItems[item.key]) return acc;

@@ -91,14 +91,15 @@ class PushNotificationService {
     try {
       const registration = await this.getSwRegistration();
       if (registration) {
-        await registration.showNotification(options.title, {
+        const notificationOptions: globalThis.NotificationOptions = {
           body: options.body,
           icon: options.icon || '/icons/icon-192x192.png',
           badge: '/icons/icon-72x72.png',
           tag: options.tag,
           requireInteraction: options.requireInteraction ?? false,
           data: { url: '/rewards' },
-        } as NotificationOptions);
+        };
+        await registration.showNotification(options.title, notificationOptions);
       } else {
         new Notification(options.title, {
           body: options.body,

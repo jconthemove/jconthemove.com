@@ -82,7 +82,8 @@ const ReviewsPage = lazy(() => import("@/pages/reviews"));
 const SwapPage = lazy(() => import("@/pages/swap"));
 const RequestSwapPage = lazy(() => import("@/pages/request-swap"));
 const MiningPage = lazy(() => import("@/pages/mining"));
-const SnowRemovalPage = lazy(() => import("@/pages/snow-removal"));
+const SnowRemovalOpsPage = lazy(() => import("@/pages/snow-removal"));
+const SnowRemovalPublicPage = lazy(() => import("@/pages/snow-removal-public"));
 const WindowCleaningPage = lazy(() => import("@/pages/window-cleaning"));
 const TrashValetPage = lazy(() => import("@/pages/trash-valet"));
 const TrashValetBookPage = lazy(() => import("@/pages/trash-valet/book"));
@@ -644,10 +645,13 @@ function AuthenticatedApp() {
           <Route path="/marketplace">
             <PageWrapper component={RewardsMarketplacePage} />
           </Route>
-          <Route path="/snow-removal">
+          <Route path="/ops/snow-removal">
             <RouteGuard allowedRoles={['admin', 'employee', 'business_owner']}>
-              <PageWrapper component={SnowRemovalPage} />
+              <PageWrapper component={SnowRemovalOpsPage} />
             </RouteGuard>
+          </Route>
+          <Route path="/admin/snow-removal">
+            <Redirect to="/ops/snow-removal" />
           </Route>
           <Route path="/admin-trash-valet">
             <RouteGuard allowedRoles={['admin', 'business_owner']}>
@@ -673,6 +677,9 @@ function AuthenticatedApp() {
           </Route>
           <Route path="/window-cleaning">
             <PageWrapper component={WindowCleaningPage} />
+          </Route>
+          <Route path="/snow-removal">
+            <PageWrapper component={SnowRemovalPublicPage} />
           </Route>
           <Route path="/mobile-preview">
             <RouteGuard allowedRoles={['admin', 'business_owner']}>
@@ -810,6 +817,7 @@ function Router() {
 
       {/* Window Cleaning booking page - accessible to all */}
       <Route path="/window-cleaning" component={WindowCleaningPage} />
+      <Route path="/snow-removal" component={SnowRemovalPublicPage} />
 
       {/* Service pages - accessible to all */}
       <Route path="/lawn-care" component={LawnCarePage} />
