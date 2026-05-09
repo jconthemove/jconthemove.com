@@ -639,6 +639,133 @@ async function awardTierPoints(userId: string, activity: TierPointActivity, mult
   }
 }
 
+const REQUIRED_HEALTH_ENV = [
+  "DATABASE_URL",
+  "SESSION_SECRET",
+  "SQUARE_ACCESS_TOKEN",
+  "SQUARE_ENVIRONMENT",
+] as const;
+
+const OPTIONAL_HEALTH_ENV = [
+  "APP_URL",
+  "MOONSHOT_TOKEN_ADDRESS",
+  "TREASURY_WALLET_PRIVATE_KEY",
+  "TREASURY_WALLET_PUBLIC_KEY",
+  "SENDGRID_API_KEY",
+  "COMPANY_EMAIL",
+  "VITE_SOLANA_RPC_URL",
+] as const;
+
+function envPresence(names: readonly string[]) {
+  return Object.fromEntries(
+    names.map((name) => [name, process.env[name]?.trim() ? "present" : "missing"]),
+  );
+}
+
+function toHealthError(error: unknown) {
+  if (error instanceof Error) {
+    return { message: error.message };
+  }
+  return { message: String(error) };
+}
+
+async function checkDatabaseReady() {
+  const timeout = new Promise<never>((_resolve, reject) => {
+    setTimeout(() => reject(new Error("Database readiness probe timed out")), 1500);
+  });
+
+  await Promise.race([pool.query("select 1"), timeout]);
+}
+
+async function sendReadinessHealth(_req: Request, res: Response) {
+  const startedAt = Date.now();
+  const missingRequiredEnv = REQUIRED_HEALTH_ENV.filter((name) => !process.env[name]?.trim());
+
+  let dbCheck:
+    | { status: "ready"; connected: true; latencyMs: number }
+    | { status: "not_ready"; connected: false; latencyMs: number; error: { message: string } };
+
+  try {
+    await checkDatabaseReady();
+    dbCheck = {
+      status: "ready",
+      connected: true,
+      latencyMs: Date.now() - startedAt,
+    };
+  } catch (error) {
+    dbCheck = {
+      status: "not_ready",
+      connected: false,
+      latencyMs: Date.now() - startedAt,
+      error: toHealthError(error),
+    };
+  }
+
+  const envReady = missingRequiredEnv.length === 0;
+  const ready = dbCheck.status === "ready" && envReady;
+
+  res.setHeader("Cache-Control", "no-store");
+  res.status(ready ? 200 : 503).json({
+    status: ready ? "ready" : "not_ready",
+    service: "jc-on-the-move",
+    timestamp: new Date().toISOString(),
+    uptimeSeconds: Math.round(process.uptime()),
+    checks: {
+      app: {
+        status: "ready",
+        nodeEnv: process.env.NODE_ENV || "development",
+        port: process.env.PORT || "5000",
+      },
+      db: dbCheck,
+      env: {
+        status: envReady ? "ready" : "not_ready",
+        missingRequired: missingRequiredEnv,
+        required: envPresence(REQUIRED_HEALTH_ENV),
+        optional: envPresence(OPTIONAL_HEALTH_ENV),
+      },
+    },
+  });
+}
+
+function publicUser(user: typeof users.$inferSelect) {
+  return {
+    id: user.id,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    role: user.role,
+    status: user.status,
+  };
+}
+
+function authPayload(user: typeof users.$inferSelect, extra: Record<string, unknown> = {}) {
+  return {
+    success: true,
+    accessToken: signJwt(user.id, user.role || "customer"),
+    refreshToken: signRefreshToken(user.id),
+    expiresIn: 7776000,
+    user: publicUser(user),
+    ...extra,
+  };
+}
+
+function saveLoginSession(req: Request, user: typeof users.$inferSelect): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (!req.session) {
+      return resolve();
+    }
+
+    (req.session as any).userId = user.id;
+    (req.session as any).userEmail = user.email;
+    (req.session as any).userRole = user.role;
+
+    req.session.save((err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Schema migration: create lawn_care_quotes and lawn_care_plans tables
   try {
@@ -1347,16 +1474,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('⚠️ Flash sale spin pack upsert failed (non-fatal):', flashErr);
   }
 
-  // Public health check endpoint for deployment monitoring (MUST be before auth setup)
-  // This endpoint is used by Replit Autoscale Deployments to verify the service is healthy
-  app.get("/health", (req, res) => {
-    res.status(200).json({
-      status: "healthy",
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-      service: "jc-on-the-move"
-    });
-  });
+  // Public readiness health checks for Render and API consumers.
+  app.get("/health", sendReadinessHealth);
+  app.get("/api/health", sendReadinessHealth);
 
   app.post("/api/client-error", (req, res) => {
     const { boundary, error, stack, componentStack } = req.body || {};
@@ -1883,31 +2003,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: "Invalid email or password" });
       }
 
-      // Set session data directly (avoid regenerate which can cause cookie issues behind proxies)
-      (req.session as any).userId = user.id;
-      (req.session as any).userEmail = user.email;
-      (req.session as any).userRole = user.role;
+      try {
+        await saveLoginSession(req, user);
+      } catch (saveErr) {
+        console.error('Session save error; continuing with JWT login:', saveErr);
+      }
 
-      req.session.save((saveErr) => {
-        if (saveErr) {
-          console.error('Session save error:', saveErr);
-          return res.status(500).json({ error: "Login failed. Please try again." });
-        }
-
-        console.log(`[LOGIN] Session saved successfully. Session ID: ${req.sessionID}, userId: ${user.id}`);
-
-        res.json({
-          success: true,
-          user: {
-            id: user.id,
-            email: user.email,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            role: user.role,
-            status: user.status,
-          }
-        });
-      });
+      console.log(`[LOGIN] Employee login successful. Session ID: ${req.sessionID || "none"}, userId: ${user.id}`);
+      res.json(authPayload(user));
     } catch (error: any) {
       console.error("Employee login error:", error);
       if (error.name === 'ZodError') {
@@ -1944,10 +2047,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      (req.session as any).userId = user.id;
-      (req.session as any).userEmail = user.email;
-      (req.session as any).userRole = user.role;
-
       // Count past leads for one-time first-login notice (customers only)
       let pastJobsCount = 0;
       if (user.role === 'customer') {
@@ -1963,14 +2062,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } catch (_) {}
       }
 
-      req.session.save((err) => {
-        if (err) return res.status(500).json({ error: "Login failed. Please try again." });
-        res.json({
-          success: true,
-          pastJobsCount,
-          user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role, status: user.status }
-        });
-      });
+      try {
+        await saveLoginSession(req, user);
+      } catch (err) {
+        console.error("Session save error; continuing with JWT login:", err);
+      }
+
+      res.json(authPayload(user, { pastJobsCount }));
     } catch (e: any) {
       console.error("Unified login error:", e);
       res.status(500).json({ error: "Login failed. Please try again." });
@@ -1998,25 +2096,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Account pending approval or restricted", status: user.status });
       }
 
-      const accessToken = signJwt(user.id, user.role || 'customer');
-      const refreshToken = signRefreshToken(user.id);
-
       console.log(`[JWT] Token issued for userId=${user.id} role=${user.role}`);
-
-      return res.json({
-        success: true,
-        accessToken,
-        refreshToken,
-        expiresIn: 7776000, // 90 days in seconds
-        user: {
-          id: user.id,
-          email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          role: user.role,
-          status: user.status,
-        }
-      });
+      return res.json(authPayload(user));
     } catch (e: any) {
       console.error("JWT token login error:", e);
       res.status(500).json({ error: "Login failed. Please try again." });
@@ -2387,10 +2468,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: "Invalid email or password" });
       }
 
-      (req.session as any).userId = user.id;
-      (req.session as any).userEmail = user.email;
-      (req.session as any).userRole = user.role;
-
       // Count past leads for one-time first-login notice
       let pastJobsCount = 0;
       try {
@@ -2404,24 +2481,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       } catch (_) {}
 
-      req.session.save((saveErr) => {
-        if (saveErr) {
-          return res.status(500).json({ error: "Login failed" });
-        }
+      try {
+        await saveLoginSession(req, user);
+      } catch (saveErr) {
+        console.error('Session save error; continuing with JWT login:', saveErr);
+      }
 
-        res.json({
-          success: true,
-          pastJobsCount,
-          user: {
-            id: user.id,
-            email: user.email,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            role: user.role,
-            status: user.status,
-          }
-        });
-      });
+      res.json(authPayload(user, { pastJobsCount }));
     } catch (error: any) {
       console.error("Customer login error:", error);
       if (error.name === 'ZodError') {
@@ -12500,20 +12566,8 @@ Thank you for your business!
     res.json({ success: allOk, sent: results.filter(r => r.ok).length, total: results.length, results });
   });
 
-  // Public health check for environment configuration
-  app.get("/api/health-check", (req, res) => {
-    res.json({
-      status: "healthy",
-      timestamp: new Date().toISOString(),
-      environment: process.env.NODE_ENV || 'development',
-      configured: {
-        database: !!process.env.DATABASE_URL,
-        sessionSecret: !!process.env.SESSION_SECRET,
-        sendgrid: !!process.env.SENDGRID_API_KEY,
-      },
-      authType: "email/password"
-    });
-  });
+  // Backward-compatible alias; prefer /health or /api/health.
+  app.get("/api/health-check", sendReadinessHealth);
 
   // Get system configuration (admin only) - shows environment variable status without exposing values
   app.get("/api/admin/system/config", isAuthenticated, requireBusinessOwner, async (req, res) => {

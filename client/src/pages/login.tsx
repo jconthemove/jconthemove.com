@@ -66,6 +66,10 @@ export default function LoginPage() {
         err.status = data.status;
         throw err;
       }
+      if (data.accessToken) {
+        storeTokens(data.accessToken, data.refreshToken);
+        return data;
+      }
       // JWT tokens for cross-platform / mobile auth persistence
       try {
         const tokenRes = await fetch(`${base}/api/auth/token`, {
@@ -125,6 +129,10 @@ export default function LoginPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not create account");
+      if (data.accessToken) {
+        storeTokens(data.accessToken, data.refreshToken);
+        return data;
+      }
       try {
         const tokenRes = await fetch(`${base}/api/auth/token`, {
           method: "POST",

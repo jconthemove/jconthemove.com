@@ -124,6 +124,60 @@ These are automatically set by the Replit platform:
 
 ---
 
+## Health Check Contract
+
+The production readiness endpoint is intentionally shared:
+
+- Render health check path: `/health`
+- API/operator health check path: `/api/health`
+- Legacy alias: `/api/health-check`
+
+All three return the same JSON contract. A ready service responds with HTTP `200`; a database or required-env failure responds with HTTP `503`.
+
+Example ready response:
+
+```json
+{
+  "status": "ready",
+  "service": "jc-on-the-move",
+  "timestamp": "2026-05-09T00:00:00.000Z",
+  "uptimeSeconds": 123,
+  "checks": {
+    "app": {
+      "status": "ready",
+      "nodeEnv": "production",
+      "port": "10000"
+    },
+    "db": {
+      "status": "ready",
+      "connected": true,
+      "latencyMs": 12
+    },
+    "env": {
+      "status": "ready",
+      "missingRequired": [],
+      "required": {
+        "DATABASE_URL": "present",
+        "SESSION_SECRET": "present",
+        "SQUARE_ACCESS_TOKEN": "present",
+        "SQUARE_ENVIRONMENT": "present"
+      },
+      "optional": {
+        "APP_URL": "present",
+        "MOONSHOT_TOKEN_ADDRESS": "present",
+        "TREASURY_WALLET_PRIVATE_KEY": "present",
+        "TREASURY_WALLET_PUBLIC_KEY": "present",
+        "SENDGRID_API_KEY": "present",
+        "COMPANY_EMAIL": "present",
+        "VITE_SOLANA_RPC_URL": "present"
+      }
+    }
+  }
+}
+```
+
+---
+
 ## Deployment Steps
 
 ### Step 1: Configure Secrets in Replit
@@ -153,18 +207,9 @@ Ensure these are set **before** deploying:
 
 Before deploying, verify your configuration:
 
-1. Visit `/api/health` endpoint to check system status
-2. Review the response for any missing configurations
-3. Example health check response:
-   ```json
-   {
-     "status": "healthy",
-     "environment": "production",
-     "database": { "status": "configured" },
-     "email": { "status": "configured" },
-     "blockchain": { "tokenAddress": "configured" }
-   }
-   ```
+1. Visit `/health` to check the exact path Render probes
+2. Visit `/api/health` to confirm the API alias returns the same JSON
+3. Review `checks.db.status`, `checks.env.status`, and `checks.env.missingRequired`
 
 ### Step 5: Deploy
 
@@ -217,7 +262,8 @@ Before going live, verify:
 - [ ] `SENDGRID_API_KEY` is valid (if using email)
 - [ ] `ENCRYPTION_KEY` is set for production
 - [ ] All custom domains are added to `REPLIT_DOMAINS`
-- [ ] Health check endpoint (`/api/health`) returns all green statuses
+- [ ] Render health check endpoint (`/health`) returns `status: "ready"`
+- [ ] API health check endpoint (`/api/health`) returns the same readiness JSON
 - [ ] Treasury blockchain verification shows correct balance
 - [ ] Test login/logout flow on published site
 - [ ] Test critical user flows (quotes, jobs, rewards)
@@ -228,7 +274,7 @@ Before going live, verify:
 
 If you encounter deployment issues:
 
-1. Check `/api/health` endpoint for configuration status
+1. Check `/health` or `/api/health` for app, database, and environment readiness
 2. Review deployment logs in Replit console
 3. Verify all critical environment variables are set
 4. Contact Replit support for platform-specific issues
@@ -237,7 +283,7 @@ If you encounter deployment issues:
 
 ## Current Configuration Status
 
-Last Updated: October 21, 2025
+Last Updated: May 9, 2026
 
 **Known Configuration:**
 - Treasury Wallet: `34e5eAwb6Eh6zgyARSrk7RX1bkK2rVX5bazCHYXKtRM7`
