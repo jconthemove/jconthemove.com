@@ -879,10 +879,57 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
     await pool.query(`
       ALTER TABLE users ADD COLUMN IF NOT EXISTS loyalty_tier TEXT DEFAULT 'bronze';
       ALTER TABLE users ADD COLUMN IF NOT EXISTS total_completed_spend DECIMAL(10,2) DEFAULT 0.00;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS tier_points INTEGER DEFAULT 0;
     `);
     console.log('✅ Loyalty tier columns ready');
   } catch (migErr) {
     console.error('⚠️ Loyalty tier migration error (non-fatal):', migErr);
+  }
+
+  // Schema migration: ensure the full users table shape exists before auth.
+  // Login selects from the Drizzle users schema, so a missing profile/rewards
+  // column in production can make otherwise valid credentials return a 500.
+  try {
+    await pool.query(`
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS username VARCHAR,
+        ADD COLUMN IF NOT EXISTS password_hash VARCHAR,
+        ADD COLUMN IF NOT EXISTS first_name VARCHAR,
+        ADD COLUMN IF NOT EXISTS last_name VARCHAR,
+        ADD COLUMN IF NOT EXISTS phone_number VARCHAR,
+        ADD COLUMN IF NOT EXISTS profile_image_url VARCHAR,
+        ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'employee',
+        ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending',
+        ADD COLUMN IF NOT EXISTS is_approved BOOLEAN NOT NULL DEFAULT false,
+        ADD COLUMN IF NOT EXISTS date_of_birth DATE,
+        ADD COLUMN IF NOT EXISTS tos_accepted BOOLEAN NOT NULL DEFAULT false,
+        ADD COLUMN IF NOT EXISTS tos_accepted_at TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS referral_code VARCHAR,
+        ADD COLUMN IF NOT EXISTS referred_by_user_id VARCHAR,
+        ADD COLUMN IF NOT EXISTS referral_count INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS push_subscription JSONB,
+        ADD COLUMN IF NOT EXISTS notifications_enabled BOOLEAN DEFAULT true,
+        ADD COLUMN IF NOT EXISTS wallet_mode TEXT,
+        ADD COLUMN IF NOT EXISTS personal_wallet_address TEXT,
+        ADD COLUMN IF NOT EXISTS company_wallet_id VARCHAR,
+        ADD COLUMN IF NOT EXISTS is_available BOOLEAN DEFAULT false,
+        ADD COLUMN IF NOT EXISTS available_until TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS last_active TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS capabilities TEXT[] DEFAULT ARRAY[]::TEXT[],
+        ADD COLUMN IF NOT EXISTS is_driver BOOLEAN DEFAULT false,
+        ADD COLUMN IF NOT EXISTS accepted_job_types TEXT[] DEFAULT ARRAY['moving','junk','snow','handyman','labor','cleaning','demolition']::TEXT[],
+        ADD COLUMN IF NOT EXISTS dispatch_decline_count INTEGER NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS dispatch_last_declined_at TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS rewards_enrolled BOOLEAN NOT NULL DEFAULT false,
+        ADD COLUMN IF NOT EXISTS loyalty_tier TEXT DEFAULT 'bronze',
+        ADD COLUMN IF NOT EXISTS total_completed_spend DECIMAL(10,2) DEFAULT 0.00,
+        ADD COLUMN IF NOT EXISTS tier_points INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW(),
+        ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();
+    `);
+    console.log('users auth/profile columns ready');
+  } catch (migErr) {
+    console.error('users auth/profile migration error (non-fatal):', migErr);
   }
 
   // Schema migration: add is_driver column to users
