@@ -2598,7 +2598,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
       const { sendEmail } = await import('./services/email');
 
       if (method === 'email') {
-        await sendEmail({
+        const sent = await sendEmail({
           to: matchedUser.email!,
           from: process.env.COMPANY_EMAIL || 'michigankid906@gmail.com',
           subject: 'JC ON THE MOVE — Account Recovery Code',
@@ -2614,19 +2614,25 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
           `,
           text: `Your JC ON THE MOVE account recovery code is: ${otp}\n\nThis code expires in 15 minutes.`,
         });
+        if (!sent) {
+          throw new Error('Email delivery is not configured. Set Gmail OAuth variables or SENDGRID_API_KEY and try again.');
+        }
         console.log(`📧 Sent recovery OTP to ${matchedUser.email}`);
       } else {
         // SMS no longer available — send recovery code via email if email is on file
         if (!matchedUser.email) {
           return res.status(400).json({ error: "Phone-based recovery is unavailable. No email address is on file for this account — please contact support." });
         }
-        await sendEmail({
+        const sent = await sendEmail({
           to: matchedUser.email,
           from: process.env.COMPANY_EMAIL || 'michigankid906@gmail.com',
           subject: 'JC ON THE MOVE — Account Recovery Code',
           text: `JC ON THE MOVE account recovery code: ${otp}\n\nExpires in 15 min. Don't share this code.`,
           html: `<p>Your JC ON THE MOVE account recovery code is: <strong>${otp}</strong></p><p>This code expires in 15 minutes.</p>`,
         });
+        if (!sent) {
+          throw new Error('Email delivery is not configured. Set Gmail OAuth variables or SENDGRID_API_KEY and try again.');
+        }
         console.log(`📧 Sent recovery OTP via email to ${matchedUser.email} (phone-method fallback)`);
       }
 

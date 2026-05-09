@@ -55,14 +55,14 @@ export async function sendEmail(params: EmailParams): Promise<boolean> {
 
   // Fall back to SendGrid
   if (!isEmailServiceAvailable) {
-    console.log('Email service not available. Email would be sent:', {
+    console.error('Email service not available. Email was not sent:', {
       to: params.to,
       from: params.from,
       subject: params.subject,
       hasText: !!params.text,
       hasHtml: !!params.html
     });
-    return true;
+    return false;
   }
 
   try {
