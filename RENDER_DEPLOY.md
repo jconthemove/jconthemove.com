@@ -12,7 +12,7 @@ It creates one Node web service with:
 - `plan`: `starter`
 - `region`: `ohio`
 
-`/health` is the canonical Render readiness probe. `/api/health` is intentionally mounted to the same handler for API clients and manual checks, so both paths return identical JSON for app, database, and environment readiness.
+`/health` is the canonical Render/Railway platform probe. `/api/health` is the strict readiness probe for API clients and manual checks, so both paths return identical JSON for app, database, and environment readiness while `/api/health` uses HTTP `503` when readiness fails.
 
 ## Required Render environment variables
 
@@ -60,7 +60,7 @@ Optional feature variables:
 
 ## Health check response
 
-Ready services return HTTP `200` and `status: "ready"`. If the database probe fails or a required environment variable is missing, the endpoint returns HTTP `503` and `status: "not_ready"`.
+Ready services return HTTP `200` and `status: "ready"`. If the database probe fails or a required environment variable is missing, `/health` still returns HTTP `200` with `status: "not_ready"` for platform liveness, while `/api/health` returns HTTP `503` with the same JSON for strict readiness.
 
 The JSON shape is:
 

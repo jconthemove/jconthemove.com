@@ -128,11 +128,11 @@ These are automatically set by the Replit platform:
 
 The production readiness endpoint is intentionally shared:
 
-- Render health check path: `/health`
-- API/operator health check path: `/api/health`
+- Render/Railway health check path: `/health`
+- Strict API/operator readiness path: `/api/health`
 - Legacy alias: `/api/health-check`
 
-All three return the same JSON contract. A ready service responds with HTTP `200`; a database or required-env failure responds with HTTP `503`.
+All three return the same JSON contract. `/health` always returns HTTP `200` when the Node process can answer, so deploy platforms do not reject a booting service before the JSON can be inspected. `/api/health` and `/api/health-check` are strict readiness probes: a ready service responds with HTTP `200`; a database or required-env failure responds with HTTP `503`.
 
 Example ready response:
 
@@ -207,8 +207,8 @@ Ensure these are set **before** deploying:
 
 Before deploying, verify your configuration:
 
-1. Visit `/health` to check the exact path Render probes
-2. Visit `/api/health` to confirm the API alias returns the same JSON
+1. Visit `/health` to check the exact path Render/Railway probes
+2. Visit `/api/health` to confirm strict readiness returns the same JSON
 3. Review `checks.db.status`, `checks.env.status`, and `checks.env.missingRequired`
 
 ### Step 5: Deploy
@@ -262,8 +262,8 @@ Before going live, verify:
 - [ ] `SENDGRID_API_KEY` is valid (if using email)
 - [ ] `ENCRYPTION_KEY` is set for production
 - [ ] All custom domains are added to `REPLIT_DOMAINS`
-- [ ] Render health check endpoint (`/health`) returns `status: "ready"`
-- [ ] API health check endpoint (`/api/health`) returns the same readiness JSON
+- [ ] Platform health check endpoint (`/health`) returns JSON and `status: "ready"` once DB/env are ready
+- [ ] API health check endpoint (`/api/health`) returns HTTP `200` with the same readiness JSON
 - [ ] Treasury blockchain verification shows correct balance
 - [ ] Test login/logout flow on published site
 - [ ] Test critical user flows (quotes, jobs, rewards)

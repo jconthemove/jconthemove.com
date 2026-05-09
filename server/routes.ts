@@ -677,7 +677,7 @@ async function checkDatabaseReady() {
   await Promise.race([pool.query("select 1"), timeout]);
 }
 
-async function sendReadinessHealth(_req: Request, res: Response) {
+async function sendHealthResponse(_req: Request, res: Response, options: { strictStatus: boolean }) {
   const startedAt = Date.now();
   const missingRequiredEnv = REQUIRED_HEALTH_ENV.filter((name) => !process.env[name]?.trim());
 
@@ -705,7 +705,7 @@ async function sendReadinessHealth(_req: Request, res: Response) {
   const ready = dbCheck.status === "ready" && envReady;
 
   res.setHeader("Cache-Control", "no-store");
-  res.status(ready ? 200 : 503).json({
+  res.status(options.strictStatus && !ready ? 503 : 200).json({
     status: ready ? "ready" : "not_ready",
     service: "jc-on-the-move",
     timestamp: new Date().toISOString(),
@@ -725,6 +725,14 @@ async function sendReadinessHealth(_req: Request, res: Response) {
       },
     },
   });
+}
+
+async function sendPlatformHealth(req: Request, res: Response) {
+  await sendHealthResponse(req, res, { strictStatus: false });
+}
+
+async function sendReadinessHealth(req: Request, res: Response) {
+  await sendHealthResponse(req, res, { strictStatus: true });
 }
 
 function publicUser(user: typeof users.$inferSelect) {
@@ -1474,8 +1482,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('⚠️ Flash sale spin pack upsert failed (non-fatal):', flashErr);
   }
 
-  // Public readiness health checks for Render and API consumers.
-  app.get("/health", sendReadinessHealth);
+  // Public health checks. /health is a platform liveness probe that always
+  // returns JSON; /api/health is the strict readiness probe for operators.
+  app.get("/health", sendPlatformHealth);
   app.get("/api/health", sendReadinessHealth);
 
   app.post("/api/client-error", (req, res) => {
