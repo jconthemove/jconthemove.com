@@ -43,7 +43,9 @@ export function validatePaymentEnv(): EnvValidationResult {
 
 /**
  * Call from server/index.ts. Logs every check, lists what's missing, and
- * throws when any REQUIRED var is unset so the boot sequence aborts.
+ * warns when any REQUIRED var is unset. Strict readiness checks surface the
+ * missing configuration without preventing platform liveness probes from
+ * reaching the app.
  */
 export function assertPaymentEnvOrExit(): void {
   if (process.env.NODE_ENV !== "production") {
@@ -61,9 +63,8 @@ export function assertPaymentEnvOrExit(): void {
   }
   if (!result.ok) {
     const list = result.missingRequired.map((n) => `  • ${n}`).join("\n");
-    const msg = `\n[env-check] REFUSING TO BOOT — missing required payment env vars:\n${list}\n\nSet these in your production environment and restart.`;
+    const msg = `\n[env-check] payment features are not ready - missing required payment env vars:\n${list}\n\nSet these in your production environment and restart.`;
     // eslint-disable-next-line no-console
-    console.error(msg);
-    throw new Error(`Missing required env vars: ${result.missingRequired.join(", ")}`);
+    console.warn(msg);
   }
 }

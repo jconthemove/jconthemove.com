@@ -774,7 +774,7 @@ function saveLoginSession(req: Request, user: typeof users.$inferSelect): Promis
   });
 }
 
-export async function registerRoutes(app: Express): Promise<Server> {
+export async function registerRoutes(app: Express, httpServer: Server = createServer(app)): Promise<Server> {
   // Schema migration: create lawn_care_quotes and lawn_care_plans tables
   try {
     await pool.query(`
@@ -23225,7 +23225,6 @@ Thank you for your business!
     console.error("[bootstrap] ensureBookingCatalogSeeded failed:", e),
   );
 
-  const httpServer = createServer(app);
   return httpServer;
 }
 

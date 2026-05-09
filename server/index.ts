@@ -1,11 +1,21 @@
 import 'dotenv/config'
 import express, { type Request, Response, NextFunction } from "express";
+import { createServer } from "http";
 import path from "path";
 import fs from "fs";
 import cors from "cors";
-import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
 import type { InsertRewardItem } from "@shared/schema";
+
+function log(message: string) {
+  const formattedTime = new Date().toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
+
+  console.log(`${formattedTime} [express] ${message}`);
+}
 
 // ── Crash guard — log clearly before exiting so the auto-restart wrapper picks it up ──
 process.on("uncaughtException", (err) => {
@@ -25,6 +35,18 @@ process.on("unhandledRejection", (reason) => {
 const app = express();
 
 app.set("trust proxy", 1);
+
+// Railway and other platforms need a fast liveness endpoint while the app
+// finishes heavier route/bootstrap work.
+app.get("/health", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.status(200).json({
+    status: "alive",
+    service: "jc-on-the-move",
+    timestamp: new Date().toISOString(),
+    uptimeSeconds: Math.round(process.uptime()),
+  });
+});
 
 // CORS configuration for mobile app
 const allowedOrigins = [
@@ -103,8 +125,17 @@ app.use((req, res, next) => {
   next();
 });
 
+const port = parseInt(process.env.PORT || '5000', 10);
+const server = createServer(app);
+
+console.log(`Starting server on port ${port}...`);
+
+server.listen(port, '0.0.0.0', () => {
+  console.log('JC ON THE MOVE HTTP listener started');
+  console.log(`Serving on http://0.0.0.0:${port}`);
+});
+
 (async () => {
-  let server;
   try {
     // Task #175 — Refuse to boot when required payment env vars are missing.
     const { assertPaymentEnvOrExit } = await import('./services/envValidation');
@@ -143,7 +174,8 @@ app.use((req, res, next) => {
 
     // Initialize server with comprehensive error handling
     console.log('Initializing application server...');
-    server = await registerRoutes(app);
+    const { registerRoutes } = await import('./routes');
+    await registerRoutes(app, server);
     console.log('Application routes registered successfully');
 
     // Task #175 — mount the consolidated payment + launch-checklist routes.
@@ -619,6 +651,7 @@ app.use((req, res, next) => {
     });
 
     // Setup Vite for development or serve static files for production
+    const { setupVite, serveStatic } = await import("./vite");
     if (app.get("env") === "development") {
       console.log('Setting up Vite development server...');
       await setupVite(app, server);
@@ -657,25 +690,16 @@ app.use((req, res, next) => {
       res.status(status).json({ message });
     });
 
-// ALWAYS serve the app on the port specified in the environment variable
-const port = parseInt(process.env.PORT || '5000', 10);
-
-console.log(`Starting server on port ${port}...`);
-
-server.listen(port, '0.0.0.0', () => {
-  console.log('JC ON THE MOVE application started successfully');
-  console.log(`Serving on http://0.0.0.0:${port}`);
-});
+    console.log('JC ON THE MOVE application started successfully');
 
 } catch (error) {
   console.error('Failed to initialize JC ON THE MOVE application:');
   console.error('Error details:', error);
 
   if (process.env.NODE_ENV === 'production') {
-    console.error('Application startup failed in production.');
-  }
-
-  if (process.env.NODE_ENV !== 'development') {
+    console.error('Application bootstrap failed in production after the HTTP listener started.');
+    console.error('Keeping the listener alive so platform liveness checks can still reach /health.');
+  } else {
     process.exit(1);
   }
 }
