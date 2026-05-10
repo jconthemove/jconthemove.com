@@ -124,15 +124,18 @@ export async function sendGmailEmail(params: {
   try {
     const gmail = await getUncachableGmailClient();
     const envCredentials = getEnvGmailCredentials();
-    const from = envCredentials?.user || params.from;
+    const configuredFrom = envCredentials?.user || params.from;
+    const profile = await gmail.users.getProfile({ userId: 'me' });
+    const from = profile.data.emailAddress || configuredFrom;
     const raw = buildRawEmail(params.to, from, params.subject, params.html, params.text);
     
-    await gmail.users.messages.send({
+    const response = await gmail.users.messages.send({
       userId: 'me',
       requestBody: { raw },
     });
     
     console.log(`📧 Gmail: Email sent to ${params.to} - "${params.subject}"`);
+    console.log(`Gmail: Email accepted by API id=${response.data.id || 'unknown'} from=${from} to=${params.to} subject="${params.subject}"`);
     return true;
   } catch (error: any) {
     console.error('Gmail send error:', error?.message || error);
