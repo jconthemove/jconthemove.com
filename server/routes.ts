@@ -932,6 +932,30 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
     console.error('users auth/profile migration error (non-fatal):', migErr);
   }
 
+  // Schema migration: account recovery depends on this table before it can
+  // generate and verify one-time codes.
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS recovery_tokens (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR NOT NULL,
+        token VARCHAR(8) NOT NULL,
+        method TEXT NOT NULL,
+        contact TEXT NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        used_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_recovery_tokens_user_created
+        ON recovery_tokens(user_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_recovery_tokens_token
+        ON recovery_tokens(token);
+    `);
+    console.log('recovery_tokens table ready');
+  } catch (migErr) {
+    console.error('recovery_tokens table migration error (non-fatal):', migErr);
+  }
+
   // Schema migration: add is_driver column to users
   try {
     await pool.query(`
