@@ -2106,9 +2106,14 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
       const { email, password } = req.body;
       if (!email || !password) return res.status(400).json({ error: "Email and password are required" });
 
-      const [user] = await db.select().from(users).where(eq(users.email, email.trim().toLowerCase())).limit(1);
-      if (!user) return res.status(401).json({ error: "Invalid email or password" });
+      const normalizedEmail = email.trim().toLowerCase();
+      const [user] = await db.select().from(users).where(eq(users.email, normalizedEmail)).limit(1);
+      if (!user) {
+        console.warn(`[LOGIN_DIAG] user not found for email=${normalizedEmail}`);
+        return res.status(401).json({ error: "Invalid email or password" });
+      }
       if (!user.passwordHash) {
+        console.warn(`[LOGIN_DIAG] password hash missing for email=${normalizedEmail}, userId=${user.id}`);
         return res.status(409).json({
           error: "No password set for this email yet. Create your account to track bookings.",
           code: "PASSWORD_SETUP_REQUIRED",
@@ -2116,6 +2121,10 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
       }
 
       const match = await bcrypt.compare(password, user.passwordHash);
+      console.warn(
+        `[LOGIN_DIAG] email=${normalizedEmail}, userId=${user.id}, role=${user.role}, status=${user.status}, ` +
+        `hashPrefix=${String(user.passwordHash).slice(0, 20)}, passwordLength=${String(password).length}, bcryptMatch=${match}`
+      );
       if (!match) return res.status(401).json({ error: "Invalid email or password" });
 
       const validStatuses = ["approved", "active"];
