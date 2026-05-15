@@ -42,6 +42,7 @@ import { grantLotteryTicketsForActivity } from "./services/disburse-job-tokens";
 import { getDepositInfo, extractZip } from "@shared/depositRules";
 import { MIN_REDEMPTION_TOKENS, REDEMPTION_INCREMENT, roundToIncrement, validateRedemption, tokensToDollars } from "@shared/tokenRedemptionRules";
 import { buildLeadJobPayoutPreview } from "./services/jobPayoutEngine";
+import { QUOTE_HELPER_MESSAGE_LIMIT, summarizeQuoteRequest } from "./services/geminiQuoteHelper";
 import lawnCareRouter from "./routes/lawnCare";
 import serviceRebookRouter from "./routes/serviceRebookReminders";
 import serviceRebookPublicRouter from "./routes/serviceRebookPublic";
@@ -1565,6 +1566,45 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
     if (stack) console.error(`[CLIENT-ERROR] JS Stack: ${String(stack).slice(0, 800)}`);
     res.json({ received: true });
   });
+
+  app.post(
+    "/api/ai/quote-helper",
+    ipRateLimit({
+      scope: "ai_quote_helper",
+      windowMs: 10 * 60_000,
+      maxHits: 20,
+      message: "Too many AI helper requests from this network. Please wait a few minutes before trying again.",
+    }),
+    async (req: Request, res: Response) => {
+      const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
+
+      if (!message) {
+        return res.status(400).json({ error: "message is required" });
+      }
+
+      if (message.length > QUOTE_HELPER_MESSAGE_LIMIT) {
+        return res.status(400).json({ error: `message must be ${QUOTE_HELPER_MESSAGE_LIMIT} characters or less` });
+      }
+
+      try {
+        const result = await summarizeQuoteRequest(message);
+        res.json(result);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "AI helper failed";
+
+        if (errorMessage === "GEMINI_API_KEY is not configured") {
+          return res.status(503).json({ error: errorMessage });
+        }
+
+        if (errorMessage === "message is required" || errorMessage.includes("characters or less")) {
+          return res.status(400).json({ error: errorMessage });
+        }
+
+        console.error("[ai.quote-helper] Gemini request failed:", formatLoggableError(error));
+        res.status(500).json({ error: "AI helper failed" });
+      }
+    },
+  );
 
   app.get("/api/approve-user", async (req, res) => {
     try {
