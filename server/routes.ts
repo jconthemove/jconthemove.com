@@ -1567,6 +1567,15 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
     res.json({ received: true });
   });
 
+  app.get("/api/ai/quote-helper/health", (_req: Request, res: Response) => {
+    res.json({
+      ok: true,
+      configured: Boolean(process.env.GEMINI_API_KEY),
+      model: process.env.GEMINI_QUOTE_HELPER_MODEL || "gemini-3-flash-preview",
+      commit: process.env.RAILWAY_GIT_COMMIT_SHA || null,
+    });
+  });
+
   app.post(
     "/api/ai/quote-helper",
     ipRateLimit({
