@@ -13,7 +13,7 @@ import { eq, and, asc, desc, or, inArray, ilike, gte, lte, sql } from "drizzle-o
 import { disburseBookingTokens, loadBookingRewardSettings } from "../services/disburseBookingTokens";
 import { computeBookingReward } from "../services/bookingPricing";
 import { ZodError, z } from "zod";
-import { db } from "../db";
+import { db, pool } from "../db";
 import { storage } from "../storage";
 import { isAuthenticated, isAuthenticatedAllowPending } from "../auth";
 
