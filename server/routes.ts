@@ -48,6 +48,7 @@ import serviceRebookRouter from "./routes/serviceRebookReminders";
 import serviceRebookPublicRouter from "./routes/serviceRebookPublic";
 import bookingsRouter from "./routes/bookings";
 import pipelineRouter from "./routes/pipeline";
+import aiBookingRouter from "./routes/aiBooking";
 import { ensureBookingCatalogSeeded } from "./services/bookingCatalogSeed";
 import { getWeeklyCrewRuleForDate, normalizeCrewName } from "@shared/weeklyCrewSchedule";
 import { getAppUrl } from "./appUrl";
@@ -21229,7 +21230,7 @@ Thank you for your business!
     }),
     async (req: any, res) => {
     try {
-      const { answers, quote, selectedPackage, depositRequired, depositAmount, serviceLabel, isQuoteOnly, customerZip, depositPaid, verifiedDriveMiles, photos: submittedPhotos } = req.body;
+      const { answers, quote, bookingIntake, bookingEngineQuote, selectedPackage, depositRequired, depositAmount, serviceLabel, isQuoteOnly, customerZip, depositPaid, verifiedDriveMiles, photos: submittedPhotos } = req.body;
       if (!answers || !quote) return res.status(400).json({ error: "Missing answers or quote" });
 
       const a = answers as Record<string, any>;
@@ -21289,6 +21290,8 @@ Thank you for your business!
         _source: "chatbot",
         answers,
         estimatedQuote: quote,
+        bookingIntake: bookingIntake && typeof bookingIntake === "object" ? bookingIntake : null,
+        bookingEngineQuote: bookingEngineQuote && typeof bookingEngineQuote === "object" ? bookingEngineQuote : null,
         verifiedDriveMiles: serverVerifiedDriveMiles || undefined,
         selectedPackage: (selectedPackage && typeof selectedPackage === "object") ? selectedPackage : null,
         depositRequired: serverDepositRequired,
@@ -23352,6 +23355,7 @@ Thank you for your business!
   // the upcoming /book page. Mounted at root so paths read /api/bookings,
   // /api/bookings/quote, /api/bundles/featured, /api/service-catalog.
   app.use("/api", bookingsRouter);
+  app.use("/api", aiBookingRouter);
   // Task #170 — unified orchestrator endpoint. Shadow mode is wired inside
   // the legacy /api/bookings/quote handler so both paths run in parallel
   // until parity is confirmed.

@@ -15,6 +15,7 @@ import { calculateTrashValetQuote, TRASH_VALET_TRAVEL_THRESHOLD_MILES, TRASH_VAL
 import { calculateJumpStartQuote } from "@shared/jumpStartPricing";
 import { getDepositInfo } from "@shared/depositRules";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
+import { buildBookingIntakeFromChatbot, type BookingIntakeResult } from "@shared/bookingIntake";
 
 // ─────────────────────────────────────────────
 // Service categories
@@ -2916,9 +2917,30 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
         type: "before" as const,
         timestamp: new Date().toISOString(),
       })) : undefined;
+      let bookingIntake: (BookingIntakeResult & { guardrails?: Record<string, unknown> }) | null = null;
+      let bookingEngineQuote: Record<string, unknown> | null = null;
+      try {
+        const intakeRes = await apiRequest("POST", "/api/ai/booking-intake", {
+          answers,
+          serviceLabel: svc,
+        });
+        bookingIntake = await intakeRes.json();
+      } catch {
+        bookingIntake = buildBookingIntakeFromChatbot(answers as Record<string, unknown>, svc);
+      }
+      try {
+        if (bookingIntake?.bookingQuoteRequest) {
+          const quoteRes = await apiRequest("POST", "/api/bookings/quote", bookingIntake.bookingQuoteRequest);
+          bookingEngineQuote = await quoteRes.json();
+        }
+      } catch {
+        bookingEngineQuote = null;
+      }
       const response = await apiRequest("POST", "/api/chatbot-quote", {
         answers,
         quote: pendingQuote,
+        bookingIntake,
+        bookingEngineQuote,
         selectedPackage: selectedPackageObj || null,
         depositRequired: isTV ? withDeposit : (dep?.required || false),
         depositAmount: isTV ? tvMonthly : (dep?.amount || 0),
