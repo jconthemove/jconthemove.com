@@ -298,6 +298,12 @@ function resolveItems(
       | "per_unit"
       | "quote";
     const label = item.label || cat.name;
+    if (priceMode === "quote" && unitPrice <= 0 && cat.suggestedMin != null) {
+      const suggestedMin = parseFloat(cat.suggestedMin);
+      if (Number.isFinite(suggestedMin) && suggestedMin > 0) {
+        unitPrice = suggestedMin;
+      }
+    }
     // Captured in the moving branch when the matrix path produces an
     // amount; consumed below buildLaborMeta so the chat-card crew/hours
     // tuple reflects the matrix tier (e.g., 3br → crew=3) rather than

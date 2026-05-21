@@ -31,6 +31,7 @@ function mapServiceCode(answers: ChatbotAnswers, serviceLabel?: string): string 
   if (raw.includes("clean")) return "move_cleaning";
   if (raw.includes("demo")) return "demolition";
   if (raw.includes("assembly")) return "assembly";
+  if (raw.includes("jump start") || raw.includes("jumpstart")) return "jump_start";
   return "moving";
 }
 

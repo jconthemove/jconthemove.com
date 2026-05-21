@@ -386,6 +386,19 @@ const CATALOG_SEED: InsertServiceCatalogEntry[] = [
   },
   // ── Small-job add-ons ($200–$400 ranges per spec) ───────────────────────
   {
+    code: "jump_start",
+    name: "Jump Start",
+    category: "core",
+    defaultPriceMode: "fixed",
+    defaultPrice: "25",
+    suggestedMin: "25",
+    suggestedMax: "150",
+    discountEligible: false,
+    isAddon: false,
+    sortOrder: 150,
+    description: "Portable battery jump start service with distance-based flat rates.",
+  },
+  {
     code: "junk_reset",
     name: "Junk Reset",
     category: "addon",
