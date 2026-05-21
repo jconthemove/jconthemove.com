@@ -81,11 +81,14 @@ export function buildBookingIntakeFromChatbot(
     const jobSize = mapMovingJobSize(answers);
     details.jobSize = jobSize;
     details.truckSize = text(answers.truckSize) || undefined;
-    details.loadType = includes(answers.loadType, "unload")
-      ? "unload_only"
-      : includes(answers.loadType, "load")
-        ? "load_only"
-        : "local";
+    const loadTypeRaw = text(answers.loadType).toLowerCase();
+    details.loadType = loadTypeRaw.includes("both") || (loadTypeRaw.includes("load") && loadTypeRaw.includes("unload"))
+      ? "local"
+      : loadTypeRaw.includes("unload")
+        ? "unload_only"
+        : loadTypeRaw.includes("load")
+          ? "load_only"
+          : "local";
     details.bedrooms = text(answers.homeSize) || text(answers.jobSize) || undefined;
     details.stairs = includes(answers.originFloor, "2nd") || includes(answers.destFloor, "2nd") ? 1
       : includes(answers.originFloor, "3rd") || includes(answers.destFloor, "3rd") ? 2
