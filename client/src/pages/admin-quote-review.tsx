@@ -45,6 +45,39 @@ interface ParsedDetails {
     tokensEstimate: number;
     specialSurcharge: number;
   };
+  bookingIntake?: {
+    confidence?: "high" | "medium" | "low";
+    missing?: string[];
+    bookingQuoteRequest?: {
+      items?: Array<{
+        serviceCode?: string;
+        details?: Record<string, any>;
+      }>;
+    };
+  } | null;
+  bookingEngineQuote?: {
+    subtotal?: number;
+    discountTotal?: number;
+    finalTotal?: number;
+    tokenEstimate?: number;
+    bundleApplied?: {
+      name?: string;
+      code?: string;
+      discountAmount?: number;
+    } | null;
+    items?: Array<{
+      serviceCode?: string;
+      serviceLabel?: string;
+      lineSubtotal?: number;
+      unitPrice?: number;
+      quantity?: number;
+      laborMeta?: {
+        crewSize?: number;
+        laborHours?: number;
+        ratePerHour?: number;
+      };
+    }>;
+  } | null;
 }
 
 function parseDetails(details?: string): ParsedDetails | null {
@@ -68,6 +101,17 @@ function AnswerTag({ label, value }: { label: string; value: string | string[] |
   );
 }
 
+function formatMoney(value?: number) {
+  if (!Number.isFinite(value)) return "TBD";
+  return `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function confidenceClass(confidence?: string) {
+  if (confidence === "high") return "border-emerald-500/50 text-emerald-300 bg-emerald-950/30";
+  if (confidence === "medium") return "border-amber-500/50 text-amber-300 bg-amber-950/30";
+  return "border-slate-600 text-slate-300 bg-slate-800/60";
+}
+
 function LeadCard({ lead, onApprove, onDismiss }: {
   lead: ChatbotLead;
   onApprove: (id: string, data: { basePrice: string; totalPrice: string; quoteNotes: string }) => void;
@@ -82,6 +126,10 @@ function LeadCard({ lead, onApprove, onDismiss }: {
   const parsed = parseDetails(lead.details);
   const a = parsed?.answers || {};
   const q = parsed?.estimatedQuote;
+  const engineQuote = parsed?.bookingEngineQuote || null;
+  const bookingIntake = parsed?.bookingIntake || null;
+  const engineItem = engineQuote?.items?.[0];
+  const intakeItem = bookingIntake?.bookingQuoteRequest?.items?.[0];
 
   const createdAt = new Date(lead.createdAt);
   const hoursAgo = Math.round((Date.now() - createdAt.getTime()) / 3600000);
@@ -99,6 +147,11 @@ function LeadCard({ lead, onApprove, onDismiss }: {
               <Badge variant="outline" className="text-[10px] border-teal-500/50 text-teal-400">
                 🤖 Chatbot
               </Badge>
+              {engineQuote && (
+                <Badge variant="outline" className="text-[10px] border-blue-500/50 text-blue-300 bg-blue-950/30">
+                  Booking engine {formatMoney(engineQuote.finalTotal)}
+                </Badge>
+              )}
               <span className="text-xs text-slate-500">{timeLabel}</span>
             </div>
             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
@@ -154,32 +207,74 @@ function LeadCard({ lead, onApprove, onDismiss }: {
         </button>
 
         {expanded && (
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 bg-slate-800/40 rounded-xl p-3 mb-3 text-sm">
-            <AnswerTag label="Origin Floor" value={a.originFloor} />
-            <AnswerTag label="Origin Elevator" value={a.originElevator} />
-            <AnswerTag label="Dest Floor" value={a.destFloor} />
-            <AnswerTag label="Dest Elevator" value={a.destElevator} />
-            <AnswerTag label="Parking Distance" value={a.parkingDistance} />
-            <AnswerTag label="Boxes" value={a.boxCount} />
-            <AnswerTag label="Packing Help" value={a.packingHelp} />
-            <AnswerTag label="Truck" value={a.truckSituation} />
-            <div className="col-span-2">
-              <AnswerTag label="Furniture" value={a.furniture} />
-            </div>
-            <div className="col-span-2">
-              <AnswerTag label="Special Items" value={a.specialItems} />
-            </div>
-            {a.notes && a.notes !== "(no additional notes)" && (
-              <div className="col-span-2">
-                <AnswerTag label="Customer Notes" value={a.notes} />
+          <div className="space-y-3 mb-3">
+            {engineQuote && (
+              <div className="rounded-xl border border-blue-500/30 bg-blue-950/20 p-3">
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <div>
+                    <p className="text-xs font-semibold text-blue-200">Booking engine quote</p>
+                    <p className="text-[11px] text-blue-300/70">Canonical no-persist quote from /api/bookings/quote</p>
+                  </div>
+                  <Badge variant="outline" className={`text-[10px] ${confidenceClass(bookingIntake?.confidence)}`}>
+                    {bookingIntake?.confidence || "unknown"} confidence
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                  <AnswerTag label="Service Code" value={engineItem?.serviceCode || intakeItem?.serviceCode} />
+                  <AnswerTag label="Line Label" value={engineItem?.serviceLabel} />
+                  <AnswerTag label="Subtotal" value={formatMoney(engineQuote.subtotal)} />
+                  <AnswerTag label="Final Total" value={formatMoney(engineQuote.finalTotal)} />
+                  {Number(engineQuote.discountTotal || 0) > 0 && (
+                    <AnswerTag label="Discount" value={formatMoney(engineQuote.discountTotal)} />
+                  )}
+                  {engineQuote.bundleApplied && (
+                    <AnswerTag label="Bundle" value={engineQuote.bundleApplied.name || engineQuote.bundleApplied.code} />
+                  )}
+                  {Number(engineQuote.tokenEstimate || 0) > 0 && (
+                    <AnswerTag label="JCMOVES Est." value={`${engineQuote.tokenEstimate?.toLocaleString()} tokens`} />
+                  )}
+                  {engineItem?.laborMeta && (
+                    <AnswerTag
+                      label="Labor"
+                      value={`${engineItem.laborMeta.crewSize || "?"} crew x ${engineItem.laborMeta.laborHours || "?"} hrs`}
+                    />
+                  )}
+                </div>
+                {bookingIntake?.missing && bookingIntake.missing.length > 0 && (
+                  <p className="text-[11px] text-amber-300 mt-2">
+                    Missing intake fields: {bookingIntake.missing.join(", ")}
+                  </p>
+                )}
               </div>
             )}
-            {q?.specialSurcharge && q.specialSurcharge > 0 && (
+
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 bg-slate-800/40 rounded-xl p-3 text-sm">
+              <AnswerTag label="Origin Floor" value={a.originFloor} />
+              <AnswerTag label="Origin Elevator" value={a.originElevator} />
+              <AnswerTag label="Dest Floor" value={a.destFloor} />
+              <AnswerTag label="Dest Elevator" value={a.destElevator} />
+              <AnswerTag label="Parking Distance" value={a.parkingDistance} />
+              <AnswerTag label="Boxes" value={a.boxCount} />
+              <AnswerTag label="Packing Help" value={a.packingHelp} />
+              <AnswerTag label="Truck" value={a.truckSituation} />
               <div className="col-span-2">
-                <span className="text-[10px] text-orange-400 uppercase tracking-wide">Specialty Surcharge</span>
-                <p className="text-xs text-orange-300">${q.specialSurcharge} (piano / pool table / safe / hot tub)</p>
+                <AnswerTag label="Furniture" value={a.furniture} />
               </div>
-            )}
+              <div className="col-span-2">
+                <AnswerTag label="Special Items" value={a.specialItems} />
+              </div>
+              {a.notes && a.notes !== "(no additional notes)" && (
+                <div className="col-span-2">
+                  <AnswerTag label="Customer Notes" value={a.notes} />
+                </div>
+              )}
+              {q?.specialSurcharge && q.specialSurcharge > 0 && (
+                <div className="col-span-2">
+                  <span className="text-[10px] text-orange-400 uppercase tracking-wide">Specialty Surcharge</span>
+                  <p className="text-xs text-orange-300">${q.specialSurcharge} (piano / pool table / safe / hot tub)</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
