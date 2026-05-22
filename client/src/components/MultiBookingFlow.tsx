@@ -576,7 +576,7 @@ export function MovingJunkPackagePicker({
   const rate    = pricingConfig?.ratePerMoverHour ?? 85;
   const jc222   = pricingConfig?.jc222Price       ?? 222;
   const trimmedPickupAddress = serviceAddress.trim();
-  const needsDropoffAddress = isMoving && (item.details.loadType || "").includes("Both");
+  const needsDropoffAddress = isMoving && /both|load \+ unload/i.test(item.details.loadType || "");
   const trimmedDropoffAddress = needsDropoffAddress ? (item.details.dropoffAddress || "").trim() : "";
   const canEstimateDrive = isMoving
     && trimmedPickupAddress.length >= 5

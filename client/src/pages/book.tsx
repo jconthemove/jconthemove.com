@@ -114,7 +114,7 @@ function itemNeedsAttention(item: SelectedItem): string | null {
     if (item.serviceCode === "moving" && !item.details.loadType) return "Pick load or unload";
     if (item.serviceCode === "moving" && item.details.truckNeeded == null) return "Tell us who provides the truck";
     if (item.serviceCode === "moving" && item.details.truckNeeded && !item.details.truckSize) return "Pick a truck size";
-    if (item.serviceCode === "moving" && (item.details.loadType || "").includes("Both") && !item.details.dropoffAddress?.trim()) {
+    if (item.serviceCode === "moving" && /both|load \+ unload/i.test(item.details.loadType || "") && !item.details.dropoffAddress?.trim()) {
       return "Enter the drop-off address";
     }
     if (!item.details.packageId) return "Pick a crew package";

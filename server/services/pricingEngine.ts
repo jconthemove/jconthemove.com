@@ -199,8 +199,15 @@ export async function quoteService(
   }
 
   if (serviceCode === "moving" && (d.bedrooms || d.stairs != null || d.loadType)) {
-    const matrix = quoteMovingFromTable({ bedrooms: d.bedrooms, stairs: d.stairs, loadType: d.loadType });
-    const q = quoteMoving({ bedrooms: d.bedrooms, stairs: d.stairs, loadType: d.loadType });
+    const rawLoadType = String(d.loadType ?? "").toLowerCase();
+    const normalizedLoadType =
+      rawLoadType.includes("load + unload") || rawLoadType.includes("both")
+        ? "local"
+        : rawLoadType.includes("load only") || rawLoadType.includes("unload only")
+          ? "labor_only"
+          : d.loadType;
+    const matrix = quoteMovingFromTable({ bedrooms: d.bedrooms, stairs: d.stairs, loadType: normalizedLoadType });
+    const q = quoteMoving({ bedrooms: d.bedrooms, stairs: d.stairs, loadType: normalizedLoadType });
     // Task #218 round-9 rev2 — pull the labor tuple straight from the matrix
     // helper instead of back-computing through a coarse jobSize bucket. This
     // keeps `quoteService` aligned with the route layer for matrix-specific
@@ -210,14 +217,21 @@ export async function quoteService(
     const derivedHours = labor && labor.crewSize > 0
       ? +(q.amount / (labor.crewSize * LABOR_RATE_PER_HOUR)).toFixed(2)
       : labor?.laborHours ?? 0;
+    const truckFee = Number(d.truckFee ?? 0);
+    const oversizedItemFee = Number(d.oversizedItemFee ?? 0);
+    const amount = q.amount
+      + (Number.isFinite(truckFee) && truckFee > 0 ? truckFee : 0)
+      + (Number.isFinite(oversizedItemFee) && oversizedItemFee > 0 ? oversizedItemFee : 0);
     return {
       serviceCode,
-      amount: q.amount,
-      minPrice: q.amount,
-      maxPrice: q.amount,
+      amount,
+      minPrice: amount,
+      maxPrice: amount,
       isQuoteOnly: false,
       breakdown: {
         ...q.breakdown,
+        truckFee,
+        oversizedItemFee,
         crewSize: labor?.crewSize ?? null,
         laborHours: derivedHours,
         ratePerHour: LABOR_RATE_PER_HOUR,

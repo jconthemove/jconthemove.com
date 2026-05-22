@@ -102,6 +102,7 @@ async function getMapsApiKey(): Promise<string> {
   if (!res.ok) throw new Error("Maps config unavailable");
   const data = await res.json();
   mapsApiKey = data.key;
+  if (!mapsApiKey) throw new Error("Maps key unavailable");
   return mapsApiKey!;
 }
 
@@ -112,11 +113,25 @@ function loadGoogleMaps(apiKey: string): Promise<void> {
     return mapsLoadingPromise;
   }
   mapsLoadingPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>("script[data-jc-google-maps='1']");
+    if (existing) {
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => reject(new Error("Failed to load Google Maps")), { once: true });
+      return;
+    }
     const script = document.createElement("script");
+    script.setAttribute("data-jc-google-maps", "1");
     script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
     script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Failed to load Google Maps"));
+    const timeout = window.setTimeout(() => reject(new Error("Google Maps timed out")), 8000);
+    script.onload = () => {
+      window.clearTimeout(timeout);
+      resolve();
+    };
+    script.onerror = () => {
+      window.clearTimeout(timeout);
+      reject(new Error("Failed to load Google Maps"));
+    };
     document.head.appendChild(script);
   });
   return mapsLoadingPromise;
@@ -235,31 +250,45 @@ export function PlacesAutocomplete({
     if (trimmed === lastResolvedRef.current) return Promise.resolve(true);
 
     return new Promise<boolean>((resolve) => {
-      geocoder.geocode(
-        { address: trimmed, componentRestrictions: { country: "US" } },
-        (results, gStatus) => {
-          if (gStatus !== "OK" || !results || results.length === 0) return resolve(false);
-          const place = results[0];
-          if (!isCompleteUsAddress(place)) return resolve(false);
-          const result = extractComponents(place.formatted_address || trimmed, place.address_components);
-          if (!result.city || !result.state || !result.zip) return resolve(false);
-          lastResolvedRef.current = result.fullAddress;
-          // Replace the raw input with the canonical formatted_address so the
-          // pill, the backend, and any downstream geocoders all see the same
-          // string the customer effectively confirmed.
-          onChange(result.fullAddress);
-          onPlaceSelect?.(result);
-          resolve(true);
-        },
-      );
+      let settled = false;
+      const finish = (success: boolean) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeout);
+        resolve(success);
+      };
+      const timeout = window.setTimeout(() => finish(false), 8000);
+      try {
+        geocoder.geocode(
+          { address: trimmed, componentRestrictions: { country: "US" } },
+          (results, gStatus) => {
+            if (gStatus !== "OK" || !results || results.length === 0) return finish(false);
+            const place = results[0];
+            if (!isCompleteUsAddress(place)) return finish(false);
+            const result = extractComponents(place.formatted_address || trimmed, place.address_components);
+            if (!result.city || !result.state || !result.zip) return finish(false);
+            lastResolvedRef.current = result.fullAddress;
+            // Replace the raw input with the canonical formatted_address so the
+            // pill, the backend, and any downstream geocoders all see the same
+            // string the customer effectively confirmed.
+            onChange(result.fullAddress);
+            onPlaceSelect?.(result);
+            finish(true);
+          },
+        );
+      } catch {
+        finish(false);
+      }
     });
   }
 
   function handleResolveAttempt(addr: string) {
     if (addr.trim().length < 5) return;
-    tryResolveTypedAddress(addr).then((success) => {
-      onResolveAttempt?.(success);
-    });
+    tryResolveTypedAddress(addr)
+      .then((success) => {
+        onResolveAttempt?.(success);
+      })
+      .catch(() => onResolveAttempt?.(false));
   }
 
   const baseInput =

@@ -357,10 +357,17 @@ function resolveItems(
       // chat-card crew count must reflect the matrix tier (3br → crew=3),
       // not SERVICE_LABOR_DEFAULTS' jobSize tuple.
       if (hasDetailedInputs) {
+        const rawLoadType = String(details.loadType ?? "").toLowerCase();
+        const normalizedLoadType =
+          rawLoadType.includes("load + unload") || rawLoadType.includes("both")
+            ? "local"
+            : rawLoadType.includes("load only") || rawLoadType.includes("unload only")
+              ? "labor_only"
+              : details.loadType as string | undefined;
         const matrix = quoteMovingFromTable({
           bedrooms: details.bedrooms as string | undefined,
           stairs: details.stairs as string | number | undefined,
-          loadType: details.loadType as string | undefined,
+          loadType: normalizedLoadType,
         });
         if (matrix.amount > 0) {
           unitPrice = matrix.amount;
@@ -396,6 +403,14 @@ function resolveItems(
       const finalJobSize = appliedJobSize ?? deriveJobSize("moving", details);
       if (finalJobSize === "small") {
         unitPrice = SMALL_MOVE_SPECIAL_PRICE;
+      }
+      const truckFee = Number(details.truckFee ?? 0);
+      if (Number.isFinite(truckFee) && truckFee > 0) {
+        unitPrice += truckFee;
+      }
+      const oversizedItemFee = Number(details.oversizedItemFee ?? 0);
+      if (Number.isFinite(oversizedItemFee) && oversizedItemFee > 0) {
+        unitPrice += oversizedItemFee;
       }
     }
 

@@ -27,8 +27,13 @@ import {
 } from "@/lib/serviceParser";
 
 type Step =
+  | "ask_location"
   | "ask_service"
   | "ask_size"
+  | "ask_moving_load"
+  | "ask_moving_truck"
+  | "ask_moving_stairs"
+  | "ask_moving_heavy"
   | "ask_addons"
   | "ask_timing"
   | "show_result"
@@ -127,6 +132,25 @@ const TIMING_OPTIONS = [
   "Just exploring",
 ];
 
+const MOVING_LOAD_OPTIONS = ["Load only", "Unload only", "Load + unload"];
+const MOVING_TRUCK_OPTIONS = [
+  "Customer provides truck",
+  "JC provides truck - local +$200",
+  "JC provides truck - out of town +$400",
+];
+const MOVING_STAIR_OPTIONS = [
+  "No stairs / elevator available",
+  "1 flight of stairs",
+  "2+ flights of stairs",
+];
+const MOVING_HEAVY_OPTIONS = [
+  "No oversized items",
+  "200 lb item +$100",
+  "400 lb item +$250",
+  "600 lb item +$450",
+  "800+ lb item - custom quote",
+];
+
 function shouldAskSize(services: string[]): boolean {
   return services.some((c) =>
     ["moving", "junk_removal", "cleaning", "demolition"].includes(c),
@@ -140,7 +164,12 @@ function track(event: string, payload?: Record<string, unknown>) {
   console.log(`[chat-intake] ${event}`, payload || {});
 }
 
-function buildBookUrl(parsed: ParseResult, step: "configure" | "contact"): string {
+function buildBookUrl(
+  parsed: ParseResult,
+  step: "configure" | "contact",
+  serviceAddress?: string,
+  details?: Record<string, unknown>,
+): string {
   const params = new URLSearchParams();
   if (parsed.services.length > 0) {
     params.set("services", parsed.services.join(","));
@@ -148,6 +177,8 @@ function buildBookUrl(parsed: ParseResult, step: "configure" | "contact"): strin
   if (parsed.bundleHint) {
     params.set("bundle", parsed.bundleHint);
   }
+  if (serviceAddress?.trim()) params.set("address", serviceAddress.trim());
+  if (details && Object.keys(details).length > 0) params.set("details", JSON.stringify(details));
   params.set("step", step);
   return `/book?${params.toString()}`;
 }
@@ -166,12 +197,17 @@ export default function ChatIntakeOverlay({
   open, onClose, initialChip, initialFreeText,
 }: ChatIntakeOverlayProps) {
   const [, setLocation] = useLocation();
-  const [step, setStep] = useState<Step>("ask_service");
+  const [step, setStep] = useState<Step>("ask_location");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [pickedService, setPickedService] = useState<string | undefined>(undefined);
   const [freeText, setFreeText] = useState("");
+  const [serviceLocation, setServiceLocation] = useState("");
   const [size, setSize] = useState<string | undefined>(undefined);
+  const [movingLoadType, setMovingLoadType] = useState<string | undefined>(undefined);
+  const [movingTruck, setMovingTruck] = useState<string | undefined>(undefined);
+  const [movingStairs, setMovingStairs] = useState<string | undefined>(undefined);
+  const [movingHeavy, setMovingHeavy] = useState<string | undefined>(undefined);
   const [addons, setAddons] = useState<string[]>([]);
   const [timing, setTiming] = useState<string | undefined>(undefined);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -182,15 +218,20 @@ export default function ChatIntakeOverlay({
     track("chat_opened", { initialChip, hasSeedText: !!initialFreeText });
     setMessages([{
       from: "bot",
-      text: "Tell me what you need help with — moving, junk, cleaning, snow, anything. I'll line up a plan.",
+      text: "What's the ZIP code or service address? I'll use that first so the quote starts with the right travel area.",
     }]);
     setDraft("");
     setPickedService(initialChip);
     setFreeText(initialFreeText || "");
+    setServiceLocation("");
     setSize(undefined);
+    setMovingLoadType(undefined);
+    setMovingTruck(undefined);
+    setMovingStairs(undefined);
+    setMovingHeavy(undefined);
     setAddons([]);
     setTiming(undefined);
-    if (initialChip || initialFreeText) {
+    if (false && (initialChip || initialFreeText)) {
       // pre-seed the first user message so the chat skips ahead
       const first = initialChip || initialFreeText || "";
       setMessages((m) => [
@@ -216,7 +257,7 @@ export default function ChatIntakeOverlay({
         setMessages((m) => [...m, { from: "bot", text: "Anything else to bundle? Tap any that apply." }]);
       }
     } else {
-      setStep("ask_service");
+      setStep("ask_location");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -233,6 +274,39 @@ export default function ChatIntakeOverlay({
   }
   function pushUser(text: string) {
     setMessages((m) => [...m, { from: "user", text }]);
+  }
+
+  function isMovingParsed(services: string[]) {
+    return services.includes("moving");
+  }
+
+  function promptAfterService(parsed: ParseResult) {
+    if (parsed.services.length === 0) {
+      setStep("fallback");
+      pushBot("Got it — pick the closest service below and I'll keep going.");
+    } else if (shouldAskSize(parsed.services)) {
+      setStep("ask_size");
+      pushBot("Roughly how big is the job?");
+    } else {
+      setStep("ask_timing");
+      pushBot("When do you need this done?");
+    }
+  }
+
+  function handleLocationSubmit(text: string) {
+    const trimmed = text.trim();
+    if (trimmed.length < 3) return;
+    pushUser(trimmed);
+    setDraft("");
+    setServiceLocation(trimmed);
+    const seeded = parseJobIntake({ pickedService, freeText });
+    if (seeded.services.length > 0) {
+      if (initialChip || initialFreeText) pushUser(initialChip || initialFreeText || "");
+      promptAfterService(seeded);
+    } else {
+      setStep("ask_service");
+      pushBot("What service do you need — moving, junk, cleaning, snow, lawn, windows, or something else?");
+    }
   }
 
   function handleAskServiceSubmit(text: string, viaChip?: string) {
@@ -253,20 +327,48 @@ export default function ChatIntakeOverlay({
       pushBot("Hmm — I'm not sure I caught that. Tap the service that best fits and I'll take it from there.");
       return;
     }
-    if (shouldAskSize(parsed.services)) {
-      setStep("ask_size");
-      pushBot("Roughly how big is the job?");
-    } else {
-      setStep("ask_addons");
-      pushBot("Anything else to bundle? Tap any that apply.");
-    }
+    promptAfterService(parsed);
   }
 
   function handleSizePick(value: string, label: string) {
     pushUser(label);
     setSize(value);
-    setStep("ask_addons");
-    pushBot("Anything else to bundle? Tap any that apply.");
+    const nextParsed = parseJobIntake({ pickedService, freeText, size: value });
+    if (isMovingParsed(nextParsed.services)) {
+      setStep("ask_moving_load");
+      pushBot("For the move, are we loading, unloading, or doing both?");
+    } else {
+      setStep("ask_timing");
+      pushBot("When do you need this done?");
+    }
+  }
+
+  function handleMovingLoadPick(value: string) {
+    pushUser(value);
+    setMovingLoadType(value);
+    setStep("ask_moving_truck");
+    pushBot("Who's providing the truck?");
+  }
+
+  function handleMovingTruckPick(value: string) {
+    pushUser(value);
+    setMovingTruck(value);
+    setStep("ask_moving_stairs");
+    pushBot("Any stairs at pickup or drop-off?");
+  }
+
+  function handleMovingStairsPick(value: string) {
+    pushUser(value);
+    setMovingStairs(value);
+    setStep("ask_moving_heavy");
+    pushBot("Any oversized or extra-heavy item?");
+  }
+
+  function handleMovingHeavyPick(value: string) {
+    pushUser(value);
+    setMovingHeavy(value);
+    setStep("ask_timing");
+    pushBot("When do you need this done?");
   }
 
   function handleAddonsContinue() {
@@ -275,15 +377,15 @@ export default function ChatIntakeOverlay({
     } else {
       pushUser("Nothing extra");
     }
-    setStep("ask_timing");
-    pushBot("When do you need this done?");
+    setStep("show_result");
+    pushBot("Here's the plan I put together for you →");
   }
 
   function handleTimingPick(value: string) {
     pushUser(value);
     setTiming(value);
-    setStep("show_result");
-    pushBot("Here's the plan I put together for you →");
+    setStep("ask_addons");
+    pushBot("Last thing: anything else to bundle with this job?");
   }
 
   // Step-aware free-text composer. Lets the customer type a reply on
@@ -295,6 +397,10 @@ export default function ChatIntakeOverlay({
     const trimmed = text.trim();
     if (!trimmed) return;
     setDraft("");
+    if (step === "ask_location") {
+      handleLocationSubmit(trimmed);
+      return;
+    }
     if (step === "ask_service") {
       handleAskServiceSubmit(trimmed);
       return;
@@ -306,16 +412,38 @@ export default function ChatIntakeOverlay({
       // bundle/addon logic.
       setFreeText((prev) => (prev ? `${prev} ${trimmed}` : trimmed));
       setSize((prev) => prev || "medium");
-      setStep("ask_addons");
-      pushBot("Anything else to bundle? Tap any that apply, or type one.");
-    } else if (step === "ask_addons") {
-      setFreeText((prev) => (prev ? `${prev} ${trimmed}` : trimmed));
+      const nextParsed = parseJobIntake({ pickedService, freeText: `${freeText} ${trimmed}`, size: size || "medium" });
+      if (isMovingParsed(nextParsed.services)) {
+        setStep("ask_moving_load");
+        pushBot("For the move, are we loading, unloading, or doing both?");
+      } else {
+        setStep("ask_timing");
+        pushBot("When do you need this done?");
+      }
+    } else if (step === "ask_moving_load") {
+      setMovingLoadType(trimmed);
+      setStep("ask_moving_truck");
+      pushBot("Who's providing the truck?");
+    } else if (step === "ask_moving_truck") {
+      setMovingTruck(trimmed);
+      setStep("ask_moving_stairs");
+      pushBot("Any stairs at pickup or drop-off?");
+    } else if (step === "ask_moving_stairs") {
+      setMovingStairs(trimmed);
+      setStep("ask_moving_heavy");
+      pushBot("Any oversized or extra-heavy item?");
+    } else if (step === "ask_moving_heavy") {
+      setMovingHeavy(trimmed);
       setStep("ask_timing");
       pushBot("When do you need this done?");
-    } else if (step === "ask_timing") {
-      setTiming(trimmed);
+    } else if (step === "ask_addons") {
+      setFreeText((prev) => (prev ? `${prev} ${trimmed}` : trimmed));
       setStep("show_result");
       pushBot("Here's the plan I put together for you →");
+    } else if (step === "ask_timing") {
+      setTiming(trimmed);
+      setStep("ask_addons");
+      pushBot("Last thing: anything else to bundle with this job?");
     }
   }
 
@@ -330,6 +458,35 @@ export default function ChatIntakeOverlay({
     }),
     [pickedService, freeText, size, addons, timing],
   );
+
+  const movingDetails = useMemo(() => {
+    const details: Record<string, unknown> = {};
+    if (serviceLocation.trim()) details.serviceAddress = serviceLocation.trim();
+    if (size) details.jobSize = size;
+    if (movingLoadType) {
+      details.loadType = movingLoadType;
+    }
+    if (movingTruck) {
+      details.truckNeeded = movingTruck.startsWith("JC provides");
+      details.truckFee = movingTruck.includes("out of town") ? 400 : movingTruck.includes("local") ? 200 : 0;
+      details.truckProviderLabel = movingTruck;
+    }
+    if (movingStairs) {
+      details.hasStairs = !movingStairs.toLowerCase().includes("no stairs");
+      details.stairs = movingStairs.includes("2+") ? 2 : movingStairs.includes("1 flight") ? 1 : 0;
+      details.stairsLabel = movingStairs;
+    }
+    if (movingHeavy && !movingHeavy.toLowerCase().includes("no oversized")) {
+      details.specialItems = [movingHeavy];
+      details.oversizedItemFee = movingHeavy.includes("200 lb") ? 100
+        : movingHeavy.includes("400 lb") ? 250
+          : movingHeavy.includes("600 lb") ? 450
+            : 0;
+      details.oversizedItemLabel = movingHeavy;
+    }
+    if (timing) details.requestedDate = timing;
+    return details;
+  }, [serviceLocation, size, movingLoadType, movingTruck, movingStairs, movingHeavy, timing]);
 
   // ── Live quote (only fires on the result step) ──────────────────────────
   const { data: catalog } = useQuery<{ services: CatalogService[] }>({
@@ -396,7 +553,9 @@ export default function ChatIntakeOverlay({
       .filter((s): s is CatalogService => !!s)
       .map((s) => {
         const details: Record<string, unknown> = {};
+        if (serviceLocation.trim()) details.serviceAddress = serviceLocation.trim();
         if (sizeHint) details.jobSize = sizeHint;
+        if (s.code === "moving") Object.assign(details, movingDetails);
         // Task #218 round-7 — Do NOT synthesize a bedrooms value from
         // the chat size hint. The route layer treats bedrooms as a
         // signal that the customer hand-described their move, which
@@ -422,7 +581,7 @@ export default function ChatIntakeOverlay({
     if (items.length === 0) return;
     quoteMutation.mutate({ items });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, cartSig, catalog?.services?.length]);
+  }, [step, cartSig, catalog?.services?.length, movingDetails, serviceLocation]);
 
   function handleHandoff(target: "configure" | "contact") {
     track("chat_handoff_to_book", {
@@ -430,7 +589,12 @@ export default function ChatIntakeOverlay({
       bundleHint: parsed.bundleHint,
       target,
     });
-    const url = buildBookUrl(parsed, target);
+    const url = buildBookUrl(
+      parsed,
+      target,
+      serviceLocation,
+      parsed.services.includes("moving") ? movingDetails : undefined,
+    );
     onClose();
     setLocation(url);
   }
@@ -583,13 +747,7 @@ export default function ChatIntakeOverlay({
                       setPickedService(chip);
                       setFreeText("");
                       const seed = parseJobIntake({ pickedService: chip });
-                      if (shouldAskSize(seed.services)) {
-                        setStep("ask_size");
-                        pushBot("Roughly how big is the job?");
-                      } else {
-                        setStep("ask_addons");
-                        pushBot("Anything else to bundle? Tap any that apply.");
-                      }
+                      promptAfterService(seed);
                     }}
                     className="text-xs font-semibold rounded-full border border-slate-700 bg-slate-800 hover:bg-slate-700 px-3 py-1.5"
                     data-testid={`chat-fallback-chip-${chip.toLowerCase().replace(/\s+/g, '-')}`}
@@ -611,6 +769,46 @@ export default function ChatIntakeOverlay({
                   data-testid={`chat-size-${opt.value}`}
                 >
                   {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {step === "ask_moving_load" && (
+            <div className="pt-2 space-y-1.5" data-testid="chat-step-moving-load">
+              {MOVING_LOAD_OPTIONS.map((opt) => (
+                <button key={opt} onClick={() => handleMovingLoadPick(opt)} className="w-full text-left text-sm rounded-xl border border-slate-700 bg-slate-800 hover:border-blue-500 hover:bg-slate-700 px-3 py-2">
+                  {opt}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {step === "ask_moving_truck" && (
+            <div className="pt-2 space-y-1.5" data-testid="chat-step-moving-truck">
+              {MOVING_TRUCK_OPTIONS.map((opt) => (
+                <button key={opt} onClick={() => handleMovingTruckPick(opt)} className="w-full text-left text-sm rounded-xl border border-slate-700 bg-slate-800 hover:border-blue-500 hover:bg-slate-700 px-3 py-2">
+                  {opt}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {step === "ask_moving_stairs" && (
+            <div className="pt-2 space-y-1.5" data-testid="chat-step-moving-stairs">
+              {MOVING_STAIR_OPTIONS.map((opt) => (
+                <button key={opt} onClick={() => handleMovingStairsPick(opt)} className="w-full text-left text-sm rounded-xl border border-slate-700 bg-slate-800 hover:border-blue-500 hover:bg-slate-700 px-3 py-2">
+                  {opt}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {step === "ask_moving_heavy" && (
+            <div className="pt-2 space-y-1.5" data-testid="chat-step-moving-heavy">
+              {MOVING_HEAVY_OPTIONS.map((opt) => (
+                <button key={opt} onClick={() => handleMovingHeavyPick(opt)} className="w-full text-left text-sm rounded-xl border border-slate-700 bg-slate-800 hover:border-blue-500 hover:bg-slate-700 px-3 py-2">
+                  {opt}
                 </button>
               ))}
             </div>
@@ -690,7 +888,7 @@ export default function ChatIntakeOverlay({
             quick-reply chips. Hidden on the result step where the card
             takes over and on the fallback step where chips are the
             recovery affordance. */}
-        {(step === "ask_service" || step === "ask_size" || step === "ask_addons" || step === "ask_timing") && (
+        {(step === "ask_location" || step === "ask_service" || step === "ask_size" || step === "ask_moving_load" || step === "ask_moving_truck" || step === "ask_moving_stairs" || step === "ask_moving_heavy" || step === "ask_addons" || step === "ask_timing") && (
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -702,13 +900,15 @@ export default function ChatIntakeOverlay({
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               placeholder={
-                step === "ask_service" ? "e.g. Moving out of a 2-bed and need junk gone"
+                step === "ask_location" ? "ZIP code or full service address"
+                : step === "ask_service" ? "e.g. Moving out of a 2-bed and need junk gone"
                 : step === "ask_size" ? "Type the size or tap a quick reply"
+                : step.startsWith("ask_moving_") ? "Type an answer or tap a quick reply"
                 : step === "ask_addons" ? "Type any extras or tap to skip"
                 : "Type a date / day or tap a quick reply"
               }
               className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
-              autoFocus={step === "ask_service"}
+              autoFocus={step === "ask_location" || step === "ask_service"}
               data-testid="chat-composer-input"
             />
             <Button
