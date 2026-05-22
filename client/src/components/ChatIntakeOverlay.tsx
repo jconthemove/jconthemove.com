@@ -25,6 +25,12 @@ import {
   parseJobIntake, friendlyServiceLabel, bundleHintName, ADDON_CHIPS, formatLaborBreakdownLine,
   chipToServiceCode, type ParseResult,
 } from "@/lib/serviceParser";
+import {
+  JC_TRUCK_EXTRA_MILE_RATE,
+  JC_TRUCK_INCLUDED_MILES,
+  JC_TRUCK_LOCAL_RENTAL_FEE,
+  JC_TRUCK_OUT_OF_TOWN_RENTAL_FEE,
+} from "@shared/movingTruckPricing";
 
 type Step =
   | "ask_location"
@@ -135,8 +141,8 @@ const TIMING_OPTIONS = [
 const MOVING_LOAD_OPTIONS = ["Load only", "Unload only", "Load + unload"];
 const MOVING_TRUCK_OPTIONS = [
   "Customer provides truck",
-  "JC provides truck - local +$200",
-  "JC provides truck - out of town +$400",
+  `JC provides truck - local +$${JC_TRUCK_LOCAL_RENTAL_FEE}`,
+  `JC provides truck - out of town +$${JC_TRUCK_OUT_OF_TOWN_RENTAL_FEE}`,
 ];
 const MOVING_STAIR_OPTIONS = [
   "No stairs / elevator available",
@@ -231,34 +237,7 @@ export default function ChatIntakeOverlay({
     setMovingHeavy(undefined);
     setAddons([]);
     setTiming(undefined);
-    if (false && (initialChip || initialFreeText)) {
-      // pre-seed the first user message so the chat skips ahead
-      const first = initialChip || initialFreeText || "";
-      setMessages((m) => [
-        ...m,
-        { from: "user", text: first },
-      ]);
-      // jump straight to the size step (or addons if size doesn't apply)
-      const seedParsed = parseJobIntake({
-        pickedService: initialChip,
-        freeText: initialFreeText,
-      });
-      if (seedParsed.services.length === 0) {
-        setStep("fallback");
-        setMessages((m) => [...m, {
-          from: "bot",
-          text: "Got it — pick the closest match below and I'll keep going.",
-        }]);
-      } else if (shouldAskSize(seedParsed.services)) {
-        setStep("ask_size");
-        setMessages((m) => [...m, { from: "bot", text: "Roughly how big is the job?" }]);
-      } else {
-        setStep("ask_addons");
-        setMessages((m) => [...m, { from: "bot", text: "Anything else to bundle? Tap any that apply." }]);
-      }
-    } else {
-      setStep("ask_location");
-    }
+    setStep("ask_location");
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -468,8 +447,14 @@ export default function ChatIntakeOverlay({
     }
     if (movingTruck) {
       details.truckNeeded = movingTruck.startsWith("JC provides");
-      details.truckFee = movingTruck.includes("out of town") ? 400 : movingTruck.includes("local") ? 200 : 0;
+      details.truckFee = movingTruck.includes("out of town")
+        ? JC_TRUCK_OUT_OF_TOWN_RENTAL_FEE
+        : movingTruck.includes("local")
+          ? JC_TRUCK_LOCAL_RENTAL_FEE
+          : 0;
       details.truckProviderLabel = movingTruck;
+      details.truckIncludedMiles = JC_TRUCK_INCLUDED_MILES;
+      details.truckExtraMileRate = JC_TRUCK_EXTRA_MILE_RATE;
     }
     if (movingStairs) {
       details.hasStairs = !movingStairs.toLowerCase().includes("no stairs");

@@ -577,7 +577,7 @@ const STEPS: Step[] = [
   {
     id: "truckSituation",
     question: "Do you have a moving truck?",
-    subtext: "Our trucks include fuel, mileage, and all travel — one flat bundled price.",
+    subtext: "Our rental includes 30 miles. Extra A-to-B miles are billed at $5/mi after that.",
     type: "choice",
     options: [
       "🚗 I'll bring my own truck (or rental)",
@@ -2155,22 +2155,23 @@ export function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMove
       const medPkgs: CrewPackage[] = [
         {
           id: "pkg_med_a",
-          label: "2 Movers × 4 hrs",
+          label: "2 Movers x 4 hrs",
           desc: `Steady pace · $85/mover/hr · best for ground-floor or elevator access${travelNote}`,
           minPrice: price(2, 4) + travel,
           maxPrice: price(2, 4) + travel,
           crew: 2,
           hours: 4,
+          tag: "Fast book",
         },
         {
           id: "pkg_med_b",
-          label: "3 Movers × 2.5 hrs",
+          label: "3 Movers x 4 hrs",
           desc: `Faster crew · same total effort · recommended with stairs or tight schedule${travelNote}`,
-          minPrice: price(3, 2.5) + travel,
-          maxPrice: price(3, 2.5) + travel,
+          minPrice: price(3, 4) + travel,
+          maxPrice: price(3, 4) + travel,
           crew: 3,
-          hours: 2.5,
-          tag: "Recommended",
+          hours: 4,
+          tag: "Stairs",
         },
       ];
       // Enforce minimum crew from quote engine (e.g. heavy item + stairs requires 3-mover min)
@@ -2181,21 +2182,22 @@ export function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMove
     const largePkgs: CrewPackage[] = [
       {
         id: "pkg_lg_c",
-        label: "2 Movers × 7 hrs",
+        label: "2 Movers x 8 hrs",
         desc: `Budget option · plenty of time · best without stairs or heavy items${travelNote}`,
-        minPrice: price(2, 7) + travel,
-        maxPrice: price(2, 7) + travel,
+        minPrice: price(2, 8) + travel,
+        maxPrice: price(2, 8) + travel,
         crew: 2,
-        hours: 7,
+        hours: 8,
+        tag: "26 ft load/unload",
       },
       {
         id: "pkg_lg_b",
-        label: "3 Movers × 5 hrs",
+        label: "3 Movers x 4 hrs",
         desc: `Balanced crew · great for 3BR house or 2+ flights of stairs${travelNote}`,
-        minPrice: price(3, 5) + travel,
-        maxPrice: price(3, 5) + travel,
+        minPrice: price(3, 4) + travel,
+        maxPrice: price(3, 4) + travel,
         crew: 3,
-        hours: 5,
+        hours: 4,
         tag: "Recommended",
       },
       {

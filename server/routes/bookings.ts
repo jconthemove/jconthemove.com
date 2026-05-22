@@ -408,6 +408,10 @@ function resolveItems(
       if (Number.isFinite(truckFee) && truckFee > 0) {
         unitPrice += truckFee;
       }
+      const truckMileageFee = Number(details.truckMileageFee ?? 0);
+      if (!truckFee && Number.isFinite(truckMileageFee) && truckMileageFee > 0) {
+        unitPrice += truckMileageFee;
+      }
       const oversizedItemFee = Number(details.oversizedItemFee ?? 0);
       if (Number.isFinite(oversizedItemFee) && oversizedItemFee > 0) {
         unitPrice += oversizedItemFee;

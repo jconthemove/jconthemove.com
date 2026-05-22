@@ -218,9 +218,11 @@ export async function quoteService(
       ? +(q.amount / (labor.crewSize * LABOR_RATE_PER_HOUR)).toFixed(2)
       : labor?.laborHours ?? 0;
     const truckFee = Number(d.truckFee ?? 0);
+    const truckMileageFee = Number(d.truckMileageFee ?? 0);
     const oversizedItemFee = Number(d.oversizedItemFee ?? 0);
     const amount = q.amount
       + (Number.isFinite(truckFee) && truckFee > 0 ? truckFee : 0)
+      + (!truckFee && Number.isFinite(truckMileageFee) && truckMileageFee > 0 ? truckMileageFee : 0)
       + (Number.isFinite(oversizedItemFee) && oversizedItemFee > 0 ? oversizedItemFee : 0);
     return {
       serviceCode,
@@ -231,6 +233,7 @@ export async function quoteService(
       breakdown: {
         ...q.breakdown,
         truckFee,
+        truckMileageFee,
         oversizedItemFee,
         crewSize: labor?.crewSize ?? null,
         laborHours: derivedHours,

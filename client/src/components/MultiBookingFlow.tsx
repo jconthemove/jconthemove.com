@@ -27,6 +27,11 @@ import {
   computeMovingQuote, computeJunkQuote, buildCrewPackages,
   type Answers, type CrewPackage,
 } from "@/components/booking-chatbot";
+import {
+  calculateJcTruckRentalFee,
+  JC_TRUCK_EXTRA_MILE_RATE,
+  JC_TRUCK_INCLUDED_MILES,
+} from "@shared/movingTruckPricing";
 
 export interface CatalogService {
   id: string;
@@ -80,6 +85,12 @@ export interface SelectedItem {
     loadType?: string;
     truckNeeded?: boolean;
     truckSize?: string;
+    truckFee?: number;
+    truckBaseFee?: number;
+    truckMileageFee?: number;
+    truckIncludedMiles?: number;
+    truckExtraMiles?: number;
+    truckExtraMileRate?: number;
     hasStairs?: boolean;
     specialItems?: string[];
     promoCode?: string;
@@ -596,6 +607,9 @@ export function MovingJunkPackagePicker({
   });
 
   const verifiedDriveMiles = driveEstimateQuery.data?.miles ?? Number(item.details.verifiedDriveMiles ?? 0);
+  const truckRental = isMoving && item.details.truckNeeded
+    ? calculateJcTruckRentalFee(verifiedDriveMiles, verifiedDriveMiles > JC_TRUCK_INCLUDED_MILES)
+    : null;
 
   // Build an Answers shape from the persisted details so the chatbot's
   // pricing engine can compute the same packages it shows in chat.
@@ -625,8 +639,17 @@ export function MovingJunkPackagePicker({
   }, [answers, isMoving, rate, jc222, item.details.jobSize, verifiedDriveMiles]);
 
   const packages: CrewPackage[] = useMemo(() => {
-    return quote ? buildCrewPackages(answers, quote, rate, jc222) : [];
-  }, [quote, answers, rate, jc222]);
+    const base = quote ? buildCrewPackages(answers, quote, rate, jc222) : [];
+    if (!truckRental) return base;
+    const truckNote = ` · truck rental $${truckRental.baseFee}`
+      + (truckRental.mileageFee > 0 ? ` + $${truckRental.mileageFee} mileage` : "");
+    return base.map((pkg) => ({
+      ...pkg,
+      desc: `${pkg.desc}${truckNote}`,
+      minPrice: pkg.minPrice + truckRental.totalFee,
+      maxPrice: pkg.maxPrice + truckRental.totalFee,
+    }));
+  }, [quote, answers, rate, jc222, truckRental?.baseFee, truckRental?.mileageFee, truckRental?.totalFee]);
 
   // Keep the selected package in sync with the live package list. Two cases:
   //  1. The selected id no longer exists (user changed job size, load type,
@@ -679,6 +702,12 @@ export function MovingJunkPackagePicker({
         hours: pkg.hours,
         minPrice: pkg.minPrice,
         maxPrice: pkg.maxPrice,
+        truckFee: truckRental?.totalFee,
+        truckBaseFee: truckRental?.baseFee,
+        truckMileageFee: truckRental?.mileageFee,
+        truckIncludedMiles: truckRental?.includedMiles,
+        truckExtraMiles: truckRental?.extraMiles,
+        truckExtraMileRate: truckRental?.ratePerExtraMile,
       },
     });
   }
@@ -805,6 +834,12 @@ export function MovingJunkPackagePicker({
                   onClick={() => patch({
                     truckNeeded: opt.value,
                     truckSize: opt.value ? item.details.truckSize : undefined,
+                    truckFee: opt.value ? item.details.truckFee : undefined,
+                    truckBaseFee: opt.value ? item.details.truckBaseFee : undefined,
+                    truckMileageFee: opt.value ? item.details.truckMileageFee : undefined,
+                    truckIncludedMiles: opt.value ? item.details.truckIncludedMiles : undefined,
+                    truckExtraMiles: opt.value ? item.details.truckExtraMiles : undefined,
+                    truckExtraMileRate: opt.value ? item.details.truckExtraMileRate : undefined,
                   })}
                   className={cn(
                     "text-[11px] px-2 py-1.5 rounded-md border text-center leading-tight transition-all",
@@ -891,6 +926,14 @@ export function MovingJunkPackagePicker({
                   ? "Includes our Ironwood base, pickup, and destination."
                   : "Includes our Ironwood base and the verified service address."}
               </p>
+              {truckRental && (
+                <p className="text-[10px] text-sky-300">
+                  Truck rental: ${truckRental.baseFee} includes {JC_TRUCK_INCLUDED_MILES} miles
+                  {truckRental.mileageFee > 0
+                    ? ` · +$${truckRental.mileageFee} for ${truckRental.extraMiles} extra miles at $${JC_TRUCK_EXTRA_MILE_RATE}/mi`
+                    : ""}
+                </p>
+              )}
             </div>
           ) : driveEstimateQuery.isError ? (
             <p className="mt-1 text-xs text-muted-foreground">
