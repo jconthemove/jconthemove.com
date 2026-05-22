@@ -69,6 +69,9 @@ export interface Answers {
   selectedMovingRec?: string;      // ID of the selected MovingRecommendation card
   selectedMovingRecLabel?: string; // e.g. "2 movers + 15' truck"
   selectedMovingRecNotes?: string; // full rate note written into job notes
+  selectedMovingRecCrew?: string;
+  selectedMovingRecTotalMin?: string;
+  selectedMovingRecTotalMax?: string;
   // Trash Valet fields
   trashCans?: string;
   trashBags?: string;
@@ -2742,8 +2745,12 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
     // Persist label + notes in answers so the server receives them in the chatbot-quote payload
     setAnswers(prev => ({
       ...prev,
+      selectedMovingRec: rec.id,
       selectedMovingRecLabel: rec.label,
       selectedMovingRecNotes: rec.notes,
+      selectedMovingRecCrew: String(rec.crew),
+      selectedMovingRecTotalMin: String(rec.totalMin),
+      selectedMovingRecTotalMax: String(rec.totalMax),
     }));
     if (!rec.customQuote) {
       // Synthesise a MovingQuote so the deposit step has a price to work with

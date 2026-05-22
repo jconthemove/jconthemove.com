@@ -73,6 +73,11 @@ export function buildBookingIntakeFromChatbot(
     toAddress: text(answers.toZip) || undefined,
     moveDate: text(answers.moveDate) || undefined,
     selectedPackage: text(answers.selectedPackage) || text(answers.selectedMovingRecLabel) || undefined,
+    selectedMovingRec: text(answers.selectedMovingRec) || undefined,
+    selectedMovingRecLabel: text(answers.selectedMovingRecLabel) || undefined,
+    selectedMovingRecNotes: text(answers.selectedMovingRecNotes) || undefined,
+    selectedMovingRecTotalMin: numberFrom(answers.selectedMovingRecTotalMin),
+    selectedMovingRecTotalMax: numberFrom(answers.selectedMovingRecTotalMax),
     notes: text(answers.notes) || undefined,
   };
 
@@ -82,6 +87,7 @@ export function buildBookingIntakeFromChatbot(
     const jobSize = mapMovingJobSize(answers);
     details.jobSize = jobSize;
     details.truckSize = text(answers.truckSize) || undefined;
+    details.crewSize = numberFrom(answers.selectedMovingRecCrew);
     const loadTypeRaw = text(answers.loadType).toLowerCase();
     details.loadType = loadTypeRaw.includes("both") || (loadTypeRaw.includes("load") && loadTypeRaw.includes("unload"))
       ? "local"
