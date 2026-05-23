@@ -1662,6 +1662,7 @@ export function buildMovingRecommendations(
   const loadTypeRaw = a.loadType || "";
   const isUnloadOnly = loadTypeRaw.includes("Unload only");
   const isLoadOnly = loadTypeRaw.includes("Load only");
+  const isBoth = loadTypeRaw.includes("Both") || loadTypeRaw.includes("load + unload") || loadTypeRaw.includes("Load + unload");
   const isHouse = propertyText.includes("House");
   const isLargeLoad = is26 || jobSizeText.includes("4") || (isHouse && jobSizeText.includes("3")) || (a.homeSize || "").includes("4+");
   const localLaborTotal = (base: number) => applyPerk(base) + oversizedQuote.fee;
@@ -2411,6 +2412,10 @@ export function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMove
     const r5   = (n: number) => Math.ceil(n / 5) * 5;
     const price = (crew: number, hrs: number) => r5(crew * hrs * RATE) + sur;
     const travelNote = travel > 0 ? ` · +$${travel} travel fee` : "";
+
+    const is26Truck = (a.truckSize || "").includes("26");
+    const hasStairs = getStairContext(a).hasAnyStairs;
+    const localPackage = (base: number) => base + sur + travel;
 
     if (mq.tier === "tiny") {
       // $170 minimum = 2 mover-hours. Offer two configurations at the same price.
