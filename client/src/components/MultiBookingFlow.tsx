@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DatePicker } from "@/components/ui/date-picker";
+import { PlacesAutocomplete } from "@/components/places-autocomplete";
 import {
   BUNDLE_SCHEDULING_MODE,
   BUNDLE_FREQUENCY_OPTIONS,
@@ -566,11 +567,12 @@ const PICKER_SPECIAL_ITEMS = [
 ];
 
 export function MovingJunkPackagePicker({
-  item, onChange, serviceAddress,
+  item, onChange, serviceAddress, onServiceAddressChange,
 }: {
   item: SelectedItem;
   onChange: (next: SelectedItem) => void;
   serviceAddress: string;
+  onServiceAddressChange?: (value: string) => void;
 }) {
   const isMoving = item.serviceCode === "moving";
   const { data: pricingConfig } = useQuery<{ ratePerMoverHour: number; jc222Price: number }>({
@@ -785,6 +787,22 @@ export function MovingJunkPackagePicker({
 
   return (
     <div className="space-y-3" data-testid={`pkg-picker-${item.serviceCode}`}>
+      {isMoving && onServiceAddressChange && (
+        <div>
+          <Label className="text-xs">Pickup / service address</Label>
+          <PlacesAutocomplete
+            value={serviceAddress}
+            onChange={onServiceAddressChange}
+            onPlaceSelect={(place) => onServiceAddressChange(place.fullAddress)}
+            placeholder="Start typing the pickup address"
+            inputClassName="mt-1 w-full h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-orange-500/30"
+          />
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            This drives the route, travel time, and JC truck mileage.
+          </p>
+        </div>
+      )}
+
       <div>
         <Label className="text-xs">{isMoving ? "How big is the move?" : "How much junk?"}</Label>
         <select
@@ -1087,13 +1105,14 @@ export function MovingJunkPackagePicker({
 // inside the service card. Used by the wizard's "configure" step so users
 // can edit every field without opening a modal/drawer.
 export function InlineItemConfigure({
-  item, onChange, onRemove, warning, serviceAddress,
+  item, onChange, onRemove, warning, serviceAddress, onServiceAddressChange,
 }: {
   item: SelectedItem;
   onChange: (next: SelectedItem) => void;
   onRemove: () => void;
   warning?: string | null;
   serviceAddress?: string;
+  onServiceAddressChange?: (value: string) => void;
 }) {
   const usesPicker = usesPackagePicker(item.serviceCode);
   const mode = schedulingModeFor(item.serviceCode);
@@ -1126,7 +1145,12 @@ export function InlineItemConfigure({
       </div>
 
       {usesPicker && (
-        <MovingJunkPackagePicker item={item} onChange={onChange} serviceAddress={serviceAddress || ""} />
+        <MovingJunkPackagePicker
+          item={item}
+          onChange={onChange}
+          serviceAddress={serviceAddress || ""}
+          onServiceAddressChange={onServiceAddressChange}
+        />
       )}
 
       {/* Qty (hourly / per_unit only). Hidden when the package picker drives

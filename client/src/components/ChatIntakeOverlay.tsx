@@ -192,6 +192,21 @@ function buildBookUrl(
   return `/book?${params.toString()}`;
 }
 
+function normalizeLocalAddress(input: string): string {
+  const trimmed = input.trim().replace(/\s+/g, " ");
+  if (!trimmed) return "";
+  if (/\b(mi|wi|ironwood|hurley|bessemer|wakefield|marenisco|ashland)\b/i.test(trimmed)) {
+    return trimmed;
+  }
+  if (/^\d+\s+/.test(trimmed)) {
+    return `${trimmed}, Ironwood, MI 49938`;
+  }
+  if (/^\d{5}(-\d{4})?$/.test(trimmed)) {
+    return trimmed;
+  }
+  return trimmed;
+}
+
 export interface ChatIntakeOverlayProps {
   open: boolean;
   onClose: () => void;
@@ -276,7 +291,7 @@ export default function ChatIntakeOverlay({
   }
 
   function handleLocationSubmit(text: string) {
-    const trimmed = text.trim();
+    const trimmed = normalizeLocalAddress(text);
     if (trimmed.length < 3) return;
     pushUser(trimmed);
     setDraft("");
@@ -890,7 +905,14 @@ export default function ChatIntakeOverlay({
               <PlacesAutocomplete
                 value={draft}
                 onChange={setDraft}
-                onPlaceSelect={(place) => setDraft(place.fullAddress)}
+                onPlaceSelect={(place) => {
+                  setDraft(place.fullAddress);
+                  setServiceLocation(place.fullAddress);
+                }}
+                onResolveAttempt={() => {
+                  const normalized = normalizeLocalAddress(draft);
+                  if (normalized && normalized !== draft) setDraft(normalized);
+                }}
                 placeholder="ZIP code or full service address"
                 autoFocus
                 className="flex-1"

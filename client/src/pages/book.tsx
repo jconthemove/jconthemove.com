@@ -915,6 +915,7 @@ export default function MultiServiceBookPage() {
                     key={item.serviceCode}
                     item={item}
                     serviceAddress={serviceAddress}
+                    onServiceAddressChange={setServiceAddress}
                     onChange={updateItem}
                     onRemove={() => removeService(item.serviceCode)}
                     warning={itemNeedsAttention(item)}

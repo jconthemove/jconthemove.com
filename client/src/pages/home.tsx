@@ -176,30 +176,31 @@ export default function HomePage() {
       </nav>
 
       <section
-        className="relative isolate min-h-[640px] overflow-hidden border-b border-white/10 bg-cover bg-center md:min-h-[720px]"
+        className="relative isolate min-h-[560px] overflow-hidden border-b border-white/10 bg-cover bg-center md:min-h-[660px]"
         style={{ backgroundImage: `url(${HERO_IMAGE})` }}
       >
         <div className="absolute inset-0 bg-gradient-to-r from-[#020915] via-[#020915]/78 to-[#020915]/25" />
         <div className="absolute inset-0 bg-gradient-to-t from-[#020915] via-transparent to-black/30" />
 
-        <div className="relative z-10 mx-auto grid max-w-6xl gap-10 px-4 py-14 md:grid-cols-[1fr_320px] md:items-center md:py-24">
+        <div className="relative z-10 mx-auto grid max-w-6xl gap-8 px-4 py-12 md:grid-cols-[1fr_300px] md:items-center md:py-20">
           <div className="max-w-3xl">
-            <p className="mb-5 text-xs font-black uppercase tracking-[0.28em] text-blue-300">Local movers. Northwoods strong.</p>
-            <h1 className="text-[clamp(2.45rem,10.5vw,5.8rem)] font-black leading-[0.94] tracking-tight md:text-8xl">
+            <p className="mb-4 text-xs font-black uppercase tracking-[0.24em] text-blue-300">Local movers. Northwoods strong.</p>
+            <h1 className="text-[clamp(2rem,8.2vw,4.9rem)] font-black leading-[0.94] tracking-tight md:text-7xl">
               WE MOVE<br />
-              THE <span className="text-blue-500">NORTHWOODS.</span>
+              THE<br />
+              <span className="text-blue-500">NORTHWOODS.</span>
             </h1>
-            <p className="mt-6 flex flex-wrap gap-x-3 gap-y-1 text-base font-bold text-white md:text-lg">
+            <p className="mt-5 flex flex-wrap gap-x-3 gap-y-1 text-base font-bold text-white">
               <span>Fast service</span>
               <span className="text-blue-300">Fair prices</span>
               <span>Done right</span>
             </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Button onClick={() => openChat("Moving")} className="h-14 rounded-lg bg-blue-600 px-8 text-base font-black hover:bg-blue-500">
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+              <Button onClick={() => openChat("Moving")} className="h-12 rounded-lg bg-blue-600 px-8 text-base font-black hover:bg-blue-500">
                 Get My Price <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
               <a href="sms:+19062859312">
-                <Button variant="outline" className="h-14 rounded-lg border-white/40 bg-black/30 px-8 text-base font-black text-white hover:bg-white/10">
+                <Button variant="outline" className="h-12 rounded-lg border-white/40 bg-black/30 px-8 text-base font-black text-white hover:bg-white/10">
                   <MessageCircle className="mr-2 h-5 w-5" />
                   Text Us Now
                 </Button>
@@ -207,7 +208,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/15 bg-slate-950/80 p-5 shadow-2xl backdrop-blur-md">
+          <div className="rounded-2xl border border-white/15 bg-slate-950/80 p-4 shadow-2xl backdrop-blur-md md:p-5">
             <div className="mb-4 flex items-center gap-2">
               <span className="h-3 w-3 rounded-full bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.8)]" />
               <p className="text-lg font-black uppercase text-emerald-300">Available Now</p>
@@ -236,7 +237,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section id="services" className="px-4 py-12">
+      <section id="services" className="px-4 py-10 md:py-12">
         <div className="mx-auto max-w-6xl">
           <div className="mb-7 flex items-center justify-center gap-5">
             <span className="h-px w-16 bg-white/20" />
@@ -251,7 +252,7 @@ export default function HomePage() {
                 <button
                   key={service.label}
                   onClick={() => setLocation(service.href)}
-                  className={`group relative min-h-[210px] overflow-hidden rounded-lg border ${color.border} bg-slate-900 text-left shadow-xl transition-transform hover:-translate-y-1`}
+                  className={`group relative min-h-[180px] overflow-hidden rounded-lg border ${color.border} bg-slate-900 text-left shadow-xl transition-transform hover:-translate-y-1 md:min-h-[200px]`}
                 >
                   <img src={service.image} alt="" className="absolute inset-0 h-full w-full object-cover opacity-70 transition-transform duration-500 group-hover:scale-105" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black via-black/45 to-transparent" />
@@ -290,7 +291,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section id="jobs" className="border-y border-white/10 bg-slate-950/70 px-4 py-12">
+      <section id="jobs" className="border-y border-white/10 bg-slate-950/70 px-4 py-10 md:py-12">
         <div className="mx-auto max-w-6xl">
           <div className="mb-7 flex items-center justify-center gap-5">
             <span className="h-px w-16 bg-white/20" />
@@ -299,7 +300,7 @@ export default function HomePage() {
           </div>
           <div className="grid gap-4 md:grid-cols-4">
             {JOB_PHOTOS.map((photo) => (
-              <div key={photo.label} className="relative h-40 overflow-hidden rounded-lg border border-white/10 bg-slate-900">
+              <div key={photo.label} className="relative h-36 overflow-hidden rounded-lg border border-white/10 bg-slate-900 md:h-40">
                 <img src={photo.image} alt={photo.label} className="h-full w-full object-cover" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/75 to-transparent" />
                 <span className="absolute bottom-3 left-3 rounded bg-black/80 px-3 py-1 text-xs font-black uppercase tracking-wider">
