@@ -17,6 +17,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PlacesAutocomplete } from "@/components/places-autocomplete";
 import { cn } from "@/lib/utils";
 import {
   X, Send, Loader2, Sparkles, ArrowRight, MessageCircle, Tag,
@@ -885,21 +886,38 @@ export default function ChatIntakeOverlay({
             }}
             className="border-t border-slate-800 px-3 py-3 flex items-center gap-2"
           >
-            <Input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder={
-                step === "ask_location" ? "ZIP code or full service address"
-                : step === "ask_service" ? "e.g. Moving out of a 2-bed and need junk gone"
-                : step === "ask_size" ? "Type the size or tap a quick reply"
-                : step.startsWith("ask_moving_") ? "Type an answer or tap a quick reply"
-                : step === "ask_addons" ? "Type any extras or tap to skip"
-                : "Type a date / day or tap a quick reply"
-              }
-              className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
-              autoFocus={step === "ask_location" || step === "ask_service"}
-              data-testid="chat-composer-input"
-            />
+            {step === "ask_location" ? (
+              <PlacesAutocomplete
+                value={draft}
+                onChange={setDraft}
+                onPlaceSelect={(place) => setDraft(place.fullAddress)}
+                placeholder="ZIP code or full service address"
+                autoFocus
+                className="flex-1"
+                inputClassName="w-full bg-slate-800 border border-slate-700 text-white placeholder:text-slate-500 rounded-md px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/60 transition-all"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleComposerSubmit(draft);
+                  }
+                }}
+              />
+            ) : (
+              <Input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder={
+                  step === "ask_service" ? "e.g. Moving out of a 2-bed and need junk gone"
+                  : step === "ask_size" ? "Type the size or tap a quick reply"
+                  : step.startsWith("ask_moving_") ? "Type an answer or tap a quick reply"
+                  : step === "ask_addons" ? "Type any extras or tap to skip"
+                  : "Type a date / day or tap a quick reply"
+                }
+                className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+                autoFocus={step === "ask_service"}
+                data-testid="chat-composer-input"
+              />
+            )}
             <Button
               type="submit"
               size="icon"
