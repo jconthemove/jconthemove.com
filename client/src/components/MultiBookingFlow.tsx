@@ -649,6 +649,15 @@ export function MovingJunkPackagePicker({
   const packageSig = packages
     .map(p => `${p.id}:${p.minPrice}-${p.maxPrice}:${p.crew ?? ""}x${p.hours ?? ""}`)
     .join("|");
+  const [showMorePackages, setShowMorePackages] = useState(false);
+  const selectedPackage = packages.find(p => p.id === item.details.packageId) || null;
+  const recommendedPackage = packages[0] || null;
+  const hasCoreForRecommendation = !isMoving || (
+    !!item.details.jobSize &&
+    !!item.details.loadType &&
+    item.details.truckNeeded != null &&
+    (!item.details.truckNeeded || !!item.details.truckSize)
+  );
   useEffect(() => {
     if (!item.details.packageId) return;
     const current = packages.find(p => p.id === item.details.packageId);
@@ -673,6 +682,12 @@ export function MovingJunkPackagePicker({
     if (drifted) applyPackage(current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [packageSig]);
+
+  useEffect(() => {
+    if (item.details.packageId || !recommendedPackage || !hasCoreForRecommendation) return;
+    applyPackage(recommendedPackage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.details.packageId, recommendedPackage?.id, hasCoreForRecommendation]);
 
   function applyPackage(pkg: CrewPackage) {
     const mid = Math.round((pkg.minPrice + pkg.maxPrice) / 2);
@@ -751,6 +766,16 @@ export function MovingJunkPackagePicker({
     patch({ specialItems: next });
   }
 
+  function shortSpecialLabel(label: string) {
+    if (/grand piano/i.test(label)) return "Grand piano";
+    if (/upright piano/i.test(label)) return "Upright piano";
+    if (/pool table/i.test(label)) return "Pool table";
+    if (/hot tub/i.test(label)) return "Hot tub";
+    if (/safe/i.test(label)) return "Safe";
+    if (/appliance|fitness/i.test(label)) return "Appliance";
+    return "Other heavy";
+  }
+
   return (
     <div className="space-y-3" data-testid={`pkg-picker-${item.serviceCode}`}>
       <div>
@@ -790,19 +815,6 @@ export function MovingJunkPackagePicker({
               );
             })}
           </div>
-        </div>
-      )}
-
-      {isMoving && (
-        <div>
-          <Label className="text-xs">What do you need help with?</Label>
-          <Textarea
-            value={item.details.scope || ""}
-            onChange={(e) => patch({ scope: e.target.value || undefined })}
-            placeholder="Apartment move, storage unit, POD load, rental truck unload, in-home rearrange..."
-            rows={2}
-            data-testid={`pkg-scope-${item.serviceCode}`}
-          />
         </div>
       )}
 
@@ -887,151 +899,6 @@ export function MovingJunkPackagePicker({
         </div>
       )}
 
-      {isMoving && (
-        <div className="rounded-lg border border-sky-500/30 bg-sky-500/5 p-2.5">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-sky-400 flex items-center gap-1">
-            <MapPin className="h-3 w-3" /> Drive Estimate
-          </p>
-          {!trimmedPickupAddress ? (
-            <p className="mt-1 text-xs text-muted-foreground">
-              Add the pickup address in the previous step to verify drive time.
-            </p>
-          ) : needsDropoffAddress && trimmedDropoffAddress.length < 5 ? (
-            <p className="mt-1 text-xs text-muted-foreground">
-              Add the drop-off address to calculate the full move route.
-            </p>
-          ) : driveEstimateQuery.isLoading ? (
-            <p className="mt-1 text-xs text-muted-foreground flex items-center gap-1">
-              <Loader2 className="h-3 w-3 animate-spin" /> Verifying drive time from the address...
-            </p>
-          ) : item.details.verifiedDriveMiles && item.details.estimatedDriveMinutes ? (
-            <div className="mt-1 space-y-1">
-              <p className="text-xs text-white">
-                Verified route: ~{Math.round(item.details.verifiedDriveMiles)} miles Â· ~{item.details.estimatedDriveMinutes} min
-              </p>
-              <p className="text-[10px] text-muted-foreground">
-                {item.details.driveEstimateNote === "base-to-pickup plus pickup-to-dropoff"
-                  ? "Includes our Ironwood base, pickup, and destination."
-                  : "Includes our Ironwood base and the verified service address."}
-              </p>
-              {truckRental && (
-                <p className="text-[10px] text-sky-300">
-                  Truck rental: ${truckRental.baseFee} includes {JC_TRUCK_INCLUDED_MILES} miles
-                  {truckRental.mileageFee > 0
-                    ? ` Â· +$${truckRental.mileageFee} for ${truckRental.extraMiles} extra miles at $${JC_TRUCK_EXTRA_MILE_RATE}/mi`
-                    : ""}
-                </p>
-              )}
-            </div>
-          ) : driveEstimateQuery.isError ? (
-            <p className="mt-1 text-xs text-muted-foreground">
-              We couldn't verify drive time yet, but the address is still saved with the job.
-            </p>
-          ) : null}
-        </div>
-      )}
-
-      <div className="flex items-center gap-2">
-        <input
-          id={`stairs-${item.serviceCode}`}
-          type="checkbox"
-          checked={!!item.details.hasStairs}
-          onChange={(e) => patch({ hasStairs: e.target.checked })}
-          className="h-4 w-4"
-          data-testid={`pkg-stairs-${item.serviceCode}`}
-        />
-        <Label htmlFor={`stairs-${item.serviceCode}`} className="text-xs cursor-pointer">
-          Stairs at the pickup or drop-off (no elevator)
-        </Label>
-      </div>
-
-      <div>
-        <Label className="text-xs">Special / heavy items (optional)</Label>
-        <div className="flex flex-wrap gap-1.5 mt-1">
-          {PICKER_SPECIAL_ITEMS.map(label => {
-            const active = (item.details.specialItems || []).includes(label);
-            return (
-              <button
-                key={label}
-                type="button"
-                onClick={() => toggleSpecial(label)}
-                className={cn(
-                  "text-[11px] px-2 py-1 rounded-full border transition-all",
-                  active
-                    ? "border-orange-400 bg-orange-500/20 text-orange-300"
-                    : "border-border bg-card hover:border-foreground/30",
-                )}
-                data-testid={`pkg-special-${item.serviceCode}-${label.slice(2, 6).trim()}`}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {isMoving && (
-        <div>
-          <Label className="text-xs">Promo code (optional)</Label>
-          <Input
-            value={item.details.promoCode || ""}
-            onChange={(e) => patch({ promoCode: e.target.value.toUpperCase() || undefined })}
-            placeholder="e.g. JC272 for the small-move flat rate"
-            data-testid={`pkg-promo-${item.serviceCode}`}
-            className="uppercase"
-          />
-        </div>
-      )}
-
-      <div>
-        <Label className="text-xs flex items-center gap-1">
-          <Package className="h-3 w-3" /> Pick your package
-        </Label>
-        {!quote ? (
-          <p className="mt-2 text-xs text-muted-foreground">
-            Pick a {isMoving ? "move size" : "load size"} to see crew options.
-          </p>
-        ) : packages.length === 0 ? (
-          <p className="mt-2 text-xs text-muted-foreground">
-            No standard packages available â€” we'll call to confirm pricing.
-          </p>
-        ) : (
-          <div className="mt-1.5 space-y-2">
-            {packages.map(pkg => {
-              const active = item.details.packageId === pkg.id;
-              return (
-                <button
-                  key={pkg.id}
-                  type="button"
-                  onClick={() => applyPackage(pkg)}
-                  className={cn(
-                    "w-full text-left rounded-xl border p-3 transition-all",
-                    active
-                      ? "border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500/40"
-                      : "border-border bg-card hover:border-orange-500/40",
-                  )}
-                  data-testid={`pkg-option-${pkg.id}`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold flex items-center gap-1.5">
-                        {pkg.label}
-                        {pkg.tag && (
-                          <span className="text-[10px] font-bold text-orange-400 bg-orange-500/15 px-1.5 py-0.5 rounded">
-                            {pkg.tag}
-                          </span>
-                        )}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">{pkg.desc}</p>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
       <div>
         <Label className="text-xs">Preferred date</Label>
         <DatePicker
@@ -1041,16 +908,169 @@ export function MovingJunkPackagePicker({
         />
       </div>
 
+      {isMoving && (
+        <div className="text-[11px] text-muted-foreground flex items-start gap-1.5">
+          <MapPin className="h-3 w-3 mt-0.5 shrink-0 text-sky-400" />
+          {!trimmedPickupAddress ? (
+            <p>Add the pickup address to verify drive time.</p>
+          ) : needsDropoffAddress && trimmedDropoffAddress.length < 5 ? (
+            <p>Add the drop-off address to calculate the full route.</p>
+          ) : driveEstimateQuery.isLoading ? (
+            <p className="flex items-center gap-1">
+              <Loader2 className="h-3 w-3 animate-spin" /> Verifying drive time...
+            </p>
+          ) : item.details.verifiedDriveMiles && item.details.estimatedDriveMinutes ? (
+            <div className="space-y-0.5">
+              <p>~{Math.round(item.details.verifiedDriveMiles)} miles away · ~{item.details.estimatedDriveMinutes} min</p>
+              {truckRental && (
+                <p className="text-sky-300">
+                  JC truck includes {JC_TRUCK_INCLUDED_MILES} miles
+                  {truckRental.mileageFee > 0 ? ` · ${truckRental.extraMiles} extra miles apply` : ""}
+                </p>
+              )}
+            </div>
+          ) : driveEstimateQuery.isError ? (
+            <p>Drive time will be confirmed after review.</p>
+          ) : null}
+        </div>
+      )}
+
       <div>
-        <Label className="text-xs">Notes for the crew (optional)</Label>
-        <Textarea
-          value={item.details.notes || ""}
-          onChange={(e) => patch({ notes: e.target.value })}
-          placeholder="Gate code, parking notes, anything we should know"
-          rows={2}
-          data-testid={`pkg-notes-${item.serviceCode}`}
-        />
+        <Label className="text-xs flex items-center gap-1">
+          <Package className="h-3 w-3" /> Recommended crew
+        </Label>
+        {!quote ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Pick a {isMoving ? "move size" : "load size"} to get the crew recommendation.
+          </p>
+        ) : packages.length === 0 ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            No standard packages available. Darrell will confirm the right setup.
+          </p>
+        ) : selectedPackage ? (
+          <div className="mt-1.5 rounded-xl border border-emerald-500 bg-emerald-500/10 p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm font-bold flex items-center gap-1.5">
+                  {selectedPackage.label}
+                  {selectedPackage.tag && (
+                    <span className="text-[10px] font-bold text-orange-400 bg-orange-500/15 px-1.5 py-0.5 rounded">
+                      {selectedPackage.tag}
+                    </span>
+                  )}
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">{selectedPackage.desc}</p>
+              </div>
+              <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+            </div>
+            {packages.length > 1 && (
+              <button
+                type="button"
+                onClick={() => setShowMorePackages((v) => !v)}
+                className="mt-2 text-[11px] font-semibold text-sky-300 hover:text-sky-200"
+              >
+                {showMorePackages ? "Hide other crew options" : "See more crew options"}
+              </button>
+            )}
+          </div>
+        ) : null}
+        {showMorePackages && packages.length > 1 && (
+          <div className="mt-2 space-y-2">
+            {packages.map(pkg => {
+              const active = item.details.packageId === pkg.id;
+              return (
+                <button
+                  key={pkg.id}
+                  type="button"
+                  onClick={() => applyPackage(pkg)}
+                  className={cn(
+                    "w-full text-left rounded-lg border p-3 transition-all",
+                    active
+                      ? "border-emerald-500 bg-emerald-500/10"
+                      : "border-border bg-card hover:border-orange-500/40",
+                  )}
+                  data-testid={`pkg-option-${pkg.id}`}
+                >
+                  <p className="text-sm font-bold">{pkg.label}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">{pkg.desc}</p>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
+
+      <details className="rounded-lg border border-border/70 bg-background/40">
+        <summary className="cursor-pointer list-none px-3 py-2 text-xs font-semibold flex items-center justify-between">
+          Optional details
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+        </summary>
+        <div className="border-t border-border/60 p-3 space-y-3">
+          <label className="flex items-center gap-2 text-xs cursor-pointer">
+            <input
+              id={`stairs-${item.serviceCode}`}
+              type="checkbox"
+              checked={!!item.details.hasStairs}
+              onChange={(e) => patch({ hasStairs: e.target.checked })}
+              className="h-4 w-4"
+              data-testid={`pkg-stairs-${item.serviceCode}`}
+            />
+            Stairs at pickup or drop-off
+          </label>
+
+          <div>
+            <Label className="text-xs">Heavy / special items</Label>
+            <div className="flex flex-wrap gap-1.5 mt-1">
+              {PICKER_SPECIAL_ITEMS.map(label => {
+                const active = (item.details.specialItems || []).includes(label);
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => toggleSpecial(label)}
+                    className={cn(
+                      "text-[11px] px-2 py-1 rounded-full border transition-all",
+                      active
+                        ? "border-orange-400 bg-orange-500/20 text-orange-300"
+                        : "border-border bg-card hover:border-foreground/30",
+                    )}
+                    data-testid={`pkg-special-${item.serviceCode}-${label.slice(2, 6).trim()}`}
+                  >
+                    {shortSpecialLabel(label)}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              Standard 200 lb+ heavy items add $100. Specialty items are confirmed after review.
+            </p>
+          </div>
+
+          {isMoving && (
+            <div>
+              <Label className="text-xs">Promo code</Label>
+              <Input
+                value={item.details.promoCode || ""}
+                onChange={(e) => patch({ promoCode: e.target.value.toUpperCase() || undefined })}
+                placeholder="JC272"
+                data-testid={`pkg-promo-${item.serviceCode}`}
+                className="uppercase"
+              />
+            </div>
+          )}
+
+          <div>
+            <Label className="text-xs">Anything we should know?</Label>
+            <Textarea
+              value={item.details.notes || item.details.scope || ""}
+              onChange={(e) => patch({ notes: e.target.value, scope: undefined })}
+              placeholder="Gate code, parking, tight stairs, inventory notes, timing..."
+              rows={3}
+              data-testid={`pkg-notes-${item.serviceCode}`}
+            />
+          </div>
+        </div>
+      </details>
     </div>
   );
 }

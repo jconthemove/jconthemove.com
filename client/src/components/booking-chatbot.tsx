@@ -3299,6 +3299,49 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
     pendingQuote && ("travelCharge" in pendingQuote)
       ? Number((pendingQuote as MovingQuote | JunkQuote).travelCharge || 0)
       : 0;
+  const bookingHandoffHref = useMemo(() => {
+    if (!submitted || isEmployee) return null;
+    const serviceCode = isMovingService(answers) ? "moving"
+      : isJunkService(answers) ? "junk_removal"
+        : isTrashValetService(answers) ? "trash_valet"
+          : isWindowCleaningService(answers) ? "window_cleaning"
+            : isCleaningService(answers) ? "cleaning"
+              : isSnowService(answers) ? "snow_removal"
+                : "moving";
+    const rawLoadType = String((answers as any).loadType || "").toLowerCase();
+    const details: Record<string, unknown> = {
+      source: "chatbot",
+      jobSize: (answers as any).homeSize || (answers as any).jobSize || undefined,
+      loadType: rawLoadType.includes("unload") && !rawLoadType.includes("load +")
+        ? "Unload only"
+        : rawLoadType.includes("both") || rawLoadType.includes("load +")
+          ? "Load + unload"
+          : rawLoadType ? "Load only" : undefined,
+      truckNeeded: String((answers as any).truckProvider || (answers as any).truck || "").toLowerCase().includes("jc"),
+      truckSize: (answers as any).truckSize || undefined,
+      dropoffAddress: (answers as any).toAddress || (answers as any).toZip || undefined,
+      requestedDate: (answers as any).moveDate || (answers as any).requestedDate || undefined,
+      hasStairs: String((answers as any).originFloor || (answers as any).destFloor || "").toLowerCase().includes("floor"),
+      specialItems: Array.isArray((answers as any).specialItems) ? (answers as any).specialItems : undefined,
+      promoCode: (answers as any).promoCode || undefined,
+      notes: (answers as any).notes || (answers as any).selectedMovingRecNotes || undefined,
+      packageId: selectedPackageObj?.id,
+      packageLabel: selectedPackageObj?.label,
+      crew: selectedPackageObj?.crew,
+      hours: selectedPackageObj?.hours,
+      minPrice: selectedPackageObj?.minPrice,
+      maxPrice: selectedPackageObj?.maxPrice,
+    };
+    Object.keys(details).forEach((key) => details[key] === undefined && delete details[key]);
+    const address = String((answers as any).serviceAddress || (answers as any).fromAddress || (answers as any).fromZip || "").trim();
+    const params = new URLSearchParams({
+      services: serviceCode,
+      step: address ? "configure" : "address",
+      details: JSON.stringify(details),
+    });
+    if (address) params.set("address", address);
+    return `/book?${params.toString()}`;
+  }, [answers, isEmployee, selectedPackageObj, submitted]);
 
   const phase = submitted ? "submitted" : (quoteVisible && pendingQuote ? (isEmployee ? "employee_submit" : "deposit") : null);
 
@@ -3693,6 +3736,15 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
                   Questions? Call or text us at{" "}
                   <a href="tel:+19062859312" className="text-slate-300 underline">(906) 285-9312</a>
                 </p>
+
+                {bookingHandoffHref && (
+                  <a
+                    href={bookingHandoffHref}
+                    className="block rounded-xl bg-teal-600 hover:bg-teal-500 px-4 py-3 text-center text-sm font-bold text-white transition-colors"
+                  >
+                    Continue to booking <ChevronRight className="inline h-4 w-4 ml-1" />
+                  </a>
+                )}
 
                 {onClose && showClose && (
                   <Button variant="outline" size="sm" onClick={onClose} className="w-full border-slate-600 text-slate-300 hover:bg-slate-800">
