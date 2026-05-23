@@ -57,7 +57,7 @@ const STEPS = [
   },
   {
     id: "jc222",
-    title: "JC222 Promo Price",
+    title: "JC272 Promo Price",
     icon: Zap,
     color: "text-teal-400",
     description: "The flat promotional price for qualifying small moves. A standard 2-mover × 2-hr job at your base rate costs more — this is the discount that wins short-haul bookings.",
@@ -65,7 +65,7 @@ const STEPS = [
     unit: "$ flat",
     min: 150,
     max: 300,
-    hint: "Default is $222. Must be less than 2 × 2 × rate to be a real discount.",
+    hint: "Default is $272. Must be less than 2 × 2 × rate to be a real discount.",
   },
   {
     id: "min_job",
@@ -102,7 +102,7 @@ function previewPrices(v: CalibrationValues) {
   return [
     { label: "Tiny (1 mover · 60 min)", price: `$${r}`, tag: "flat" },
     { label: "Small Standard (2×2 hrs)", price: `$${r5(r * 2 * 2)}`, tag: "per booking" },
-    { label: "Small JC222 Promo (2×2 hrs)", price: `$${j}`, tag: "promo" },
+    { label: "Small JC272 Promo (2×2 hrs)", price: `$${j}`, tag: "promo" },
     { label: "Medium A (2×4 hrs)", price: `$${r5(r * 2 * 4)}`, tag: "per booking" },
     { label: "Medium B (3×2.5 hrs)", price: `$${r5(r * 3 * 2.5)}`, tag: "per booking" },
     { label: "Large Balanced (3×5 hrs)", price: `$${r5(r * 3 * 5)}`, tag: "per booking" },
@@ -151,7 +151,7 @@ export default function PricingCalibratePage() {
 
   const [values, setValues] = useState<CalibrationValues>({
     rate_per_mover_hour: 85,
-    jc222_price: 222,
+    jc222_price: 272,
     short_job_full: 300,
     truck_small_flat: 300,
     truck_large_flat: 600,
@@ -163,7 +163,7 @@ export default function PricingCalibratePage() {
   if (currentPricing && !synced) {
     setValues({
       rate_per_mover_hour: currentPricing.ratePerMoverHour ?? 85,
-      jc222_price: currentPricing.jc222Price ?? 222,
+      jc222_price: currentPricing.jc222Price ?? 272,
       short_job_full: currentPricing.shortJobFull ?? 300,
       truck_small_flat: currentPricing.truckSmallFlat ?? 300,
       truck_large_flat: currentPricing.truckLargeFlat ?? 600,
@@ -371,7 +371,7 @@ export default function PricingCalibratePage() {
                   <div className="mt-4 grid grid-cols-3 gap-2 bg-slate-800/40 rounded-xl p-3">
                     {[
                       { label: "Rate", value: `$${values.rate_per_mover_hour}/hr` },
-                      { label: "JC222", value: `$${values.jc222_price}` },
+                      { label: "JC272", value: `$${values.jc222_price}` },
                       { label: "Min Job", value: `$${values.short_job_full}` },
                     ].map(s => (
                       <div key={s.label} className="text-center">
@@ -566,7 +566,7 @@ export default function PricingCalibratePage() {
                         </span>
                         {v.jc222_price && (
                           <Badge className="bg-teal-500/15 text-teal-300 border-teal-500/30 text-[10px]">
-                            JC222 ${v.jc222_price}
+                            JC272 ${v.jc222_price}
                           </Badge>
                         )}
                         {session.applied_by_name && (

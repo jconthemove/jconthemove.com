@@ -71,7 +71,7 @@ const DEFAULTS = {
   truck_small_flat: "300",
   truck_large_flat: "600",
   truck_add: "60",
-  jc222_price: "222",
+  jc222_price: "272",
   jc272_price: "272",
   jc222_miles: "10",
   jc222_minutes: "82",
@@ -181,7 +181,7 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
       truck_small_flat:    String(pricing.truckSmallFlat     ?? 300),
       truck_large_flat:    String(pricing.truckLargeFlat     ?? 600),
       truck_add:           String(pricing.truckAdd           ?? 60),
-      jc222_price:         String(pricing.jc222Price         ?? 222),
+      jc222_price:         String(pricing.jc222Price         ?? 272),
       jc272_price:         String(pricing.jc272Price         ?? 272),
       jc222_miles:         String(pricing.jc222Miles         ?? 10),
       jc222_minutes:       String(pricing.jc222Minutes       ?? 82),
@@ -270,7 +270,7 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
   });
 
   async function handleReset() {
-    if (!confirm("Reset ALL pricing to factory defaults?\n\nRate: $85/mover·hr · Small Truck: $300 flat · Large Truck: $600 flat · Drive: $40 · Min job: $300 · JC222: $222 · JC272: $272\n\nThis overwrites your current settings.")) return;
+    if (!confirm("Reset ALL pricing to factory defaults?\n\nRate: $85/mover·hr · Small Truck: $300 flat · Large Truck: $600 flat · Drive: $40 · Min job: $300 · JC272: $272\n\nThis overwrites your current settings.")) return;
     setResetting(true);
     try {
       await saveMutation.mutateAsync(DEFAULTS);
@@ -283,7 +283,7 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
 
   const rate  = parseFloat(draft.rate_per_mover_hour || "85");
   const floor = parseFloat(draft.short_job_full || "300");
-  const jc222 = parseFloat(draft.jc222_price || "222");
+  const jc222 = parseFloat(draft.jc222_price || "272");
   const jc272 = parseFloat(draft.jc272_price || "272");
 
   const SAMPLE_PKGS = [
@@ -385,7 +385,7 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
           {/* ── Promo Packages ── */}
           <Section icon={<span className="text-xs font-bold">%</span>} title="Promo Packages" color="text-amber-300">
             <div className="grid grid-cols-2 gap-2">
-              <Field label="JC222 promo price ($)" hint="≤10 mi — default $222">
+              <Field label="JC272 promo price ($)" hint="≤10 mi — default $272">
                 <Input type="number" value={draft.jc222_price}
                   onChange={e => set("jc222_price", e.target.value)} className={inp} />
               </Field>
@@ -401,7 +401,7 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
             <div>
               <p className="text-[11px] text-slate-400 mb-1.5 font-semibold">Promo Screening Thresholds</p>
               <div className="grid grid-cols-3 gap-2">
-                <Field label="Distance split (mi)" hint="JC222/272 cutoff">
+                <Field label="Distance split (mi)" hint="JC272 cutoff">
                   <Input type="number" value={draft.jc222_miles}
                     onChange={e => set("jc222_miles", e.target.value)}
                     className="bg-slate-900 border-slate-700 text-white h-8 text-sm text-center" />
@@ -419,8 +419,8 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
               </div>
             </div>
             <div className="text-xs text-slate-500 space-y-0.5">
-              <div className="flex justify-between"><span>JC222 (≤{draft.jc222_miles} mi)</span><span className="text-amber-400 font-medium">${jc222}</span></div>
-              <div className="flex justify-between"><span>JC272 (&gt;{draft.jc222_miles} mi)</span><span className="text-amber-400 font-medium">${jc272}</span></div>
+              <div className="flex justify-between"><span>JC272 (≤{draft.jc222_miles} mi)</span><span className="text-amber-400 font-medium">${jc222}</span></div>
+              <div className="flex justify-between"><span>Outside {draft.jc222_miles} mi</span><span className="text-amber-400 font-medium">${jc272}</span></div>
             </div>
           </Section>
 
@@ -624,7 +624,7 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
           </div>
 
           <p className="text-[10px] text-slate-600 text-center">
-            Defaults: $85/mover/hr · $300 small truck · $600 large truck · $40 drive · $300 min · $222 JC222 · $272 JC272
+            Defaults: $85/mover/hr · $300 small truck · $600 large truck · $40 drive · $300 min · $272 JC272
           </p>
         </div>
       )}

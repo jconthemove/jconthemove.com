@@ -184,7 +184,7 @@ const MOVING_ADDONS: AddonOption[] = [
   { id: "stairs",          name: "Stairs / Flights",               description: "+$25 per additional floor above ground",          unitPrice: 25, category: "access",   qtyOptions: [1, 2, 3, 4] },
   { id: "elevator",        name: "Elevator Fee",                   description: "Building elevator usage/waiting time",            unitPrice: 30, category: "access",   qtyOptions: [1] },
   { id: "tight_access",   name: "Tight Access / Narrow Stairwell", description: "Flat surcharge for difficult access situations",  unitPrice: 50, category: "access",   qtyOptions: [1] },
-  { id: "assembly",        name: "Furniture Assembly/Disassembly", description: "Beds, desks, and large furniture",                unitPrice: 75, category: "labor",    qtyOptions: [1] },
+  { id: "assembly",        name: "Furniture Assembly/Disassembly", description: "First 2 items included; beds, desks, and large furniture", unitPrice: 75, category: "labor", qtyOptions: [1] },
   { id: "appliance_connect",name: "Appliance Connection",          description: "Washer, dryer, fridge water line hookup",         unitPrice: 50, category: "labor",    qtyOptions: [1] },
 ];
 

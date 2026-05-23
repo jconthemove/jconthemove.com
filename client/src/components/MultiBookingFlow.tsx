@@ -319,13 +319,7 @@ export function ServiceSelector({
             {svc.description && (
               <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2">{svc.description}</p>
             )}
-            <p className="text-[10px] text-muted-foreground mt-1.5">
-              {svc.suggestedMin && svc.suggestedMax
-                ? `from $${svc.suggestedMin}`
-                : svc.defaultPrice
-                  ? priceModeLabel(svc.defaultPriceMode, parseFloat(svc.defaultPrice))
-                  : "Custom quote"}
-            </p>
+            <p className="text-[10px] text-muted-foreground mt-1.5">Price shown at review</p>
           </button>
         );
       })}
@@ -465,18 +459,12 @@ export function ServiceItemEditor({
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-sm truncate">{item.label}</p>
           <p className="text-[11px] text-muted-foreground">
-            {item.priceMode === "quote"
-              ? (ESTIMATE_SERVICE_CODES.has(item.serviceCode) && lineSubtotal > 0
-                  ? "Estimate — crew confirms"
-                  : "Custom quote — confirmed after we review")
-              : `${priceModeLabel(item.priceMode, item.unitPrice)}${showQty ? ` × ${item.quantity}` : ""}`}
+            Price shown on review
             {item.details.requestedDate ? ` • ${item.details.requestedDate}` : ""}
           </p>
         </div>
         <div className="text-right">
-          <p className="text-sm font-bold">
-            {formatLinePrice(item).text}
-          </p>
+          <p className="text-sm font-bold text-muted-foreground">Review</p>
         </div>
       </div>
       <div className="flex items-center justify-between gap-2 mt-2">
@@ -568,8 +556,8 @@ const PICKER_SPECIAL_ITEMS = [
   "🎱 Pool Table",
   "♨️ Hot Tub",
   "🔒 Heavy Safe (300 lbs+)",
-  "🏋️ Large Appliance or Fitness Equipment (100 lbs+)",
-  "📦 Other Heavy Item (100 lbs+)",
+  "🏋️ Large Appliance or Fitness Equipment (200 lbs+) +$100",
+  "📦 Other Heavy Item (200 lbs+) +$100",
 ];
 
 export function MovingJunkPackagePicker({
@@ -585,7 +573,7 @@ export function MovingJunkPackagePicker({
     staleTime: 5 * 60 * 1000,
   });
   const rate    = pricingConfig?.ratePerMoverHour ?? 85;
-  const jc222   = pricingConfig?.jc222Price       ?? 222;
+  const jc222   = pricingConfig?.jc222Price       ?? 272;
   const trimmedPickupAddress = serviceAddress.trim();
   const needsDropoffAddress = isMoving && /both|load \+ unload/i.test(item.details.loadType || "");
   const trimmedDropoffAddress = needsDropoffAddress ? (item.details.dropoffAddress || "").trim() : "";
@@ -988,7 +976,7 @@ export function MovingJunkPackagePicker({
           <Input
             value={item.details.promoCode || ""}
             onChange={(e) => patch({ promoCode: e.target.value.toUpperCase() || undefined })}
-            placeholder="e.g. JC222 for the small-move flat rate"
+            placeholder="e.g. JC272 for the small-move flat rate"
             data-testid={`pkg-promo-${item.serviceCode}`}
             className="uppercase"
           />
@@ -1001,7 +989,7 @@ export function MovingJunkPackagePicker({
         </Label>
         {!quote ? (
           <p className="mt-2 text-xs text-muted-foreground">
-            Pick a {isMoving ? "move size" : "load size"} to see crew options and pricing.
+            Pick a {isMoving ? "move size" : "load size"} to see crew options.
           </p>
         ) : packages.length === 0 ? (
           <p className="mt-2 text-xs text-muted-foreground">
@@ -1011,9 +999,6 @@ export function MovingJunkPackagePicker({
           <div className="mt-1.5 space-y-2">
             {packages.map(pkg => {
               const active = item.details.packageId === pkg.id;
-              const priceLabel = pkg.minPrice === pkg.maxPrice
-                ? `$${pkg.minPrice}`
-                : `$${pkg.minPrice}–$${pkg.maxPrice}`;
               return (
                 <button
                   key={pkg.id}
@@ -1039,7 +1024,6 @@ export function MovingJunkPackagePicker({
                       </p>
                       <p className="text-[11px] text-muted-foreground mt-0.5">{pkg.desc}</p>
                     </div>
-                    <span className="text-sm font-bold whitespace-nowrap">{priceLabel}</span>
                   </div>
                 </button>
               );
@@ -1106,19 +1090,11 @@ export function InlineItemConfigure({
           <p className="text-[11px] text-muted-foreground">
             {usesPicker && item.details.packageLabel
               ? item.details.packageLabel
-              : item.priceMode === "quote"
-                ? (ESTIMATE_SERVICE_CODES.has(item.serviceCode) && lineSubtotal > 0
-                    ? "Estimate — crew confirms"
-                    : "Custom quote — confirmed after we review")
-                : `${priceModeLabel(item.priceMode, item.unitPrice)}${showQty ? ` × ${item.quantity}` : ""}`}
+              : "Price shown on review"}
           </p>
         </div>
         <div className="text-right">
-          <p className="text-sm font-bold">
-            {usesPicker
-              ? (item.details.packageId ? `$${lineSubtotal.toFixed(0)}` : "TBD")
-              : formatLinePrice(item).text}
-          </p>
+          <p className="text-sm font-bold text-muted-foreground">Review</p>
         </div>
       </div>
 
@@ -1582,13 +1558,14 @@ export function AddOnDrawer({
 
 // ── BookingSummarySticky ───────────────────────────────────────────────────
 export function BookingSummarySticky({
-  items, quote, isQuoting, onCheckout, canCheckout, bottomSlot,
+  items, quote, isQuoting, onCheckout, canCheckout, bottomSlot, showPricing = true,
 }: {
   items: SelectedItem[];
   quote: QuoteResult | null;
   isQuoting: boolean;
   onCheckout: () => void;
   canCheckout: boolean;
+  showPricing?: boolean;
   /** Optional replacement for the default checkout CTA (e.g. wizard Back/Continue). */
   bottomSlot?: React.ReactNode;
 }) {
@@ -1606,25 +1583,20 @@ export function BookingSummarySticky({
       <div className="rounded-2xl border border-border bg-card p-4 space-y-3" data-testid="summary-desktop">
         <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Your booking</p>
         {items.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Add a service to see your live quote.</p>
+          <p className="text-sm text-muted-foreground">Add a service to start your booking.</p>
         ) : (
           <>
             <div className="space-y-1.5">
               {items.map(i => {
-                const lp = formatLinePrice(i);
                 return (
                   <div key={i.serviceCode} className="flex justify-between text-xs">
                     <span className="truncate">{emojiFor(i.serviceCode)} {i.label}</span>
-                    <span className="font-semibold">
-                      {lp.text}
-                      {lp.isEstimate && (
-                        <span className="ml-1 text-[9px] font-normal text-muted-foreground">(est)</span>
-                      )}
-                    </span>
+                    <span className="font-semibold text-muted-foreground">{showPricing ? formatLinePrice(i).text : "Review"}</span>
                   </div>
                 );
               })}
             </div>
+            {showPricing ? (
             <div className="border-t border-border pt-3 space-y-1">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Subtotal</span>
@@ -1644,9 +1616,14 @@ export function BookingSummarySticky({
                 <p className="text-[10px] text-muted-foreground">Final total confirmed after review</p>
               )}
             </div>
+            ) : (
+              <div className="border-t border-border pt-3">
+                <p className="text-xs text-muted-foreground">Final estimate appears on the review step.</p>
+              </div>
+            )}
             <div className="flex items-center justify-between text-[11px] text-muted-foreground">
               <span className="flex items-center gap-1"><Users className="h-3 w-3" /> Crew of {crew} recommended</span>
-              <span className="flex items-center gap-1 text-orange-400"><Coins className="h-3 w-3" /> +{tokens} JCMOVES</span>
+              {showPricing && <span className="flex items-center gap-1 text-orange-400"><Coins className="h-3 w-3" /> +{tokens} JCMOVES</span>}
             </div>
             {bottomSlot ?? (
               <Button
@@ -1677,8 +1654,8 @@ export function BookingSummarySticky({
         <div className="flex flex-col">
           <span className="text-[10px] uppercase tracking-widest text-muted-foreground">Your booking</span>
           <span className="text-sm font-bold">
-            {items.length === 0 ? "No items yet" : `${items.length} item${items.length === 1 ? "" : "s"} • $${finalTotal.toFixed(0)}`}
-            {discount > 0 && <span className="text-emerald-500 text-xs ml-1">(−${discount.toFixed(0)})</span>}
+            {items.length === 0 ? "No items yet" : showPricing ? `${items.length} item${items.length === 1 ? "" : "s"} • $${finalTotal.toFixed(0)}` : `${items.length} item${items.length === 1 ? "" : "s"} • review price at end`}
+            {showPricing && discount > 0 && <span className="text-emerald-500 text-xs ml-1">(−${discount.toFixed(0)})</span>}
           </span>
         </div>
         {collapsed ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -1686,19 +1663,15 @@ export function BookingSummarySticky({
       {!collapsed && items.length > 0 && (
         <div className="px-4 pb-2 space-y-1.5 max-h-48 overflow-y-auto">
           {items.map(i => {
-            const lp = formatLinePrice(i);
             return (
               <div key={i.serviceCode} className="flex justify-between text-xs">
                 <span className="truncate">{emojiFor(i.serviceCode)} {i.label}</span>
-                <span className="font-semibold">
-                  {lp.text}
-                  {lp.isEstimate && (
-                    <span className="ml-1 text-[9px] font-normal text-muted-foreground">(est)</span>
-                  )}
-                </span>
+                <span className="font-semibold text-muted-foreground">{showPricing ? formatLinePrice(i).text : "Review"}</span>
               </div>
             );
           })}
+          {showPricing ? (
+          <>
           <div className="flex justify-between text-xs pt-1 border-t border-border">
             <span className="text-muted-foreground">Subtotal</span>
             <span>${subtotal.toFixed(2)}</span>
@@ -1713,6 +1686,12 @@ export function BookingSummarySticky({
             <span><Users className="inline h-3 w-3" /> Crew of {crew}</span>
             <span className="text-orange-400"><Coins className="inline h-3 w-3" /> +{tokens} JCMOVES</span>
           </div>
+          </>
+          ) : (
+            <div className="text-[11px] text-muted-foreground border-t border-border pt-1">
+              Final estimate appears on the review step.
+            </div>
+          )}
         </div>
       )}
       <div className="px-4 pb-3">

@@ -561,7 +561,7 @@ const STEPS: Step[] = [
   {
     id: "specialItems",
     question: "Any heavy or specialty items?",
-    subtext: "Heavy = over 100 lbs. These items need extra crew or special equipment — a 1-person job becomes a 2-person job.",
+    subtext: "Heavy = 200 lbs or more. Standard heavy items add $100; specialty items may require a custom quote.",
     type: "multiselect",
     options: [
       "🎹 Upright Piano",
@@ -569,8 +569,8 @@ const STEPS: Step[] = [
       "🎱 Pool Table",
       "♨️ Hot Tub",
       "🔒 Heavy Safe (300 lbs+)",
-      "🏋️ Large Appliance or Fitness Equipment (100 lbs+)",
-      "📦 Other Heavy Item (100 lbs+)",
+      "🏋️ Large Appliance or Fitness Equipment (200 lbs+) +$100",
+      "📦 Other Heavy Item (200 lbs+) +$100",
       "None of these",
     ],
     show: (a) => isJunkService(a),
@@ -1323,9 +1323,9 @@ const STEPS: Step[] = [
   {
     id: "promoCode",
     question: "Got a promo code? Enter it here — or skip.",
-    subtext: "JC222 unlocks special pricing on qualifying small jobs. Leave blank to skip.",
+    subtext: "JC272 unlocks special pricing on qualifying small jobs. Leave blank to skip.",
     type: "text",
-    placeholder: "e.g. JC222",
+    placeholder: "e.g. JC272",
     optional: true,
     show: (a) => {
       const svc = getServiceLabel(a.serviceType || "");
@@ -1416,7 +1416,7 @@ function getStairContext(a: Answers) {
 function oversizedItemBaseFee(label: string): number {
   if (label.includes("Grand") || label.includes("Hot Tub")) return 600;
   if (label.includes("Upright") || label.includes("Pool Table") || label.includes("Safe")) return 400;
-  if (label.includes("Appliance") || label.includes("Fitness")) return 150;
+  if (label.includes("Appliance") || label.includes("Fitness")) return 100;
   return 100;
 }
 
@@ -1427,10 +1427,10 @@ function getOversizedItemQuote(a: Answers) {
   }
   const count = Math.max(1, numberFromText(a.oversizedItemCount, items.length));
   const { hasAnyStairs } = getStairContext(a);
-  const multiplier = hasAnyStairs ? 1.5 : 0.75;
   const base = Math.max(...items.map(oversizedItemBaseFee));
+  const multiplier = base === 100 ? 1 : (hasAnyStairs ? 1.5 : 0.75);
   const fee = Math.round(base * count * multiplier);
-  const stairNote = hasAnyStairs ? "1.5x stair handling rate" : "0.75x no-stairs handling rate";
+  const stairNote = base === 100 ? "$100 standard heavy-item add-on" : hasAnyStairs ? "1.5x stair handling rate" : "0.75x no-stairs handling rate";
   return {
     count,
     fee,
@@ -1828,7 +1828,7 @@ export function buildMovingRecommendations(
 // ─────────────────────────────────────────────
 // Moving Quote Engine
 // ─────────────────────────────────────────────
-export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatPrice = 222, distanceMiles = 0, stakingPerkPct = 0): MovingQuote {
+export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatPrice = 272, distanceMiles = 0, stakingPerkPct = 0): MovingQuote {
   const RATE = ratePerMoverHour;
   const round5 = (n: number) => Math.ceil(n / 5) * 5;
 
@@ -1853,11 +1853,11 @@ export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatP
   const hasPoolTable     = specials.includes("🎱 Pool Table");
   const hasHotTub        = specials.includes("♨️ Hot Tub");
   const hasHeavySafe     = specials.includes("🔒 Heavy Safe (300 lbs+)");
-  // 100 lbs+ items: large appliance, fitness equipment, or any other heavy item declared by customer
-  const hasHeavyAppliance = specials.includes("🏋️ Large Appliance or Fitness Equipment (100 lbs+)");
-  const hasOtherHeavy     = specials.includes("📦 Other Heavy Item (100 lbs+)");
+  // 200 lbs+ items: large appliance, fitness equipment, or any other heavy item declared by customer
+  const hasHeavyAppliance = specials.some(s => s.includes("Large Appliance") || s.includes("Fitness"));
+  const hasOtherHeavy     = specials.some(s => s.includes("Other Heavy Item"));
   const hasMajorSpecial  = hasGrandPiano || hasUprightPiano || hasPoolTable || hasHotTub;
-  // Any item over 100 lbs — turns a 1-person job into a 2-person job minimum
+  // Any 200 lb+ item turns a 1-person job into a 2-person job minimum
   const hasAnyHeavy100   = hasHeavySafe || hasHeavyAppliance || hasOtherHeavy;
 
   // Specialty item surcharges — $400 for ≤500 lbs items, $600 for 500+ lbs items (standalone)
@@ -1867,7 +1867,7 @@ export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatP
   if (hasPoolTable)     specialSurcharge += 400; // ≤500 lbs
   if (hasHotTub)        specialSurcharge += 600; // 500+ lbs
   if (hasHeavySafe)     specialSurcharge += 400; // ≤500 lbs (300+ lbs safes)
-  if (hasHeavyAppliance) specialSurcharge += 150; // 100+ lbs appliance/equipment — less than specialty
+  if (hasHeavyAppliance) specialSurcharge += 100; // 200+ lbs appliance/equipment
   if (hasOtherHeavy)    specialSurcharge += 100; // generic heavy item surcharge
   const oversizedQuote = getOversizedItemQuote(a);
   if (oversizedQuote.fee > 0) {
@@ -1922,7 +1922,7 @@ export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatP
 
   // ── Determine tier ─────────────────────────────────────────────────────────
   let tier: "tiny" | "small" | "medium" | "large";
-  // Any item over 100 lbs prevents a solo/tiny job — needs at least 2 movers
+  // Any 200 lb+ item prevents a solo/tiny job — needs at least 2 movers
   if (score === -1 && !isBoth && !hasMajorSpecial && !hasAnyHeavy100) {
     tier = "tiny";
   } else if (score <= 2) {
@@ -1934,7 +1934,7 @@ export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatP
   }
 
   // Special upgrade rules
-  // Any 100+ lb item + stairs → minimum Small (2 movers)
+  // Any 200 lb+ item + stairs → minimum Small (2 movers)
   if (tier === "tiny" && hasAnyHeavy100 && hasAnyStairs) tier = "small";
   // Load+Unload always minimum Medium
   if (isBoth && tier === "small") tier = "medium";
@@ -2005,13 +2005,13 @@ export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatP
     ? calculateMovingTravelCharge(distanceMiles).fee
     : getMovingTravelFeeForBracket(getMovingDistanceBracket(distanceMiles, a.distanceReport));
 
-  // ── JC222 promo: Small-tier 2-crew → $340 becomes $222 flat ───────────────
+  // ── JC272 promo: Small-tier 2-crew flat-rate offer ───────────────────────
   const promoCodeRaw = (a.promoCode || "").toUpperCase().trim();
-  const isJC222      = promoCodeRaw === "JC222";
+  const isJC222      = promoCodeRaw === "JC272" || promoCodeRaw === "JC222";
   const promoApplied = isJC222 && tier === "small" && crew === 2;
 
   // ── JCMOVES promo: 10% off or $20 off, whichever is greater ───────────────
-  // Applies to tiny and small tiers when JC222 isn't already active
+  // Applies to tiny and small tiers when JC272 isn't already active
   const isJCMOVES      = promoCodeRaw === "JCMOVES";
   const jcmovesBase    = promoApplied ? jc222FlatPrice : rawMin;
   const jcmovesDiscount = isJCMOVES && !promoApplied
@@ -2020,7 +2020,7 @@ export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatP
   const jcmovesApplied = jcmovesDiscount > 0;
 
   // ── Staking perk discount: auto-applied when threshold is met ────────────
-  // Only applied if no promo code is active (JC222 or JCMOVES take priority)
+  // Only applied if no promo code is active (JC272 or JCMOVES take priority)
   const stakingDiscount = stakingPerkPct > 0 && !promoApplied && !isJCMOVES
     ? Math.round(rawMin * stakingPerkPct / 100)
     : 0;
@@ -2045,7 +2045,7 @@ export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatP
     tokensEstimate,
     specialSurcharge,
     promoApplied,
-    promoCode:          isJC222 ? "JC222" : isJCMOVES ? "JCMOVES" : undefined,
+    promoCode:          isJC222 ? "JC272" : isJCMOVES ? "JCMOVES" : undefined,
     rawMinPrice:        promoApplied ? rawMin : undefined,
     travelCharge:       travelCharge || undefined,
     jcmovesApplied:     jcmovesApplied || undefined,
@@ -2144,7 +2144,7 @@ export function computeJunkQuote(a: Answers, ratePerMoverHour = 85, distanceMile
 // ─────────────────────────────────────────────
 // Compute Quote for Any Service
 // ─────────────────────────────────────────────
-function computeQuoteForAnswers(a: Answers, ratePerMoverHour = 85, jc222FlatPrice = 222, distanceMiles = 0, stakingPerkPct = 0): QuoteResult | null {
+function computeQuoteForAnswers(a: Answers, ratePerMoverHour = 85, jc222FlatPrice = 272, distanceMiles = 0, stakingPerkPct = 0): QuoteResult | null {
   const svc = getServiceLabel(a.serviceType || "");
 
   if (QUOTE_ONLY_SERVICES.includes(svc)) {
@@ -2228,7 +2228,7 @@ function computeQuoteForAnswers(a: Answers, ratePerMoverHour = 85, jc222FlatPric
 // ─────────────────────────────────────────────
 // Build Crew Packages for priceable services
 // ─────────────────────────────────────────────
-export function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMoverHour = 85, jc222FlatPrice = 222): CrewPackage[] {
+export function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMoverHour = 85, jc222FlatPrice = 272): CrewPackage[] {
   if (!q) return [];
 
   if (q.type === "junk") {
@@ -2390,7 +2390,7 @@ export function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMove
           },
         ];
       }
-      // Standard 2-crew small: show base rate + JC222 promo variant side-by-side
+      // Standard 2-crew small: show base rate + JC272 promo variant side-by-side
       const jc222Total = jc222FlatPrice + travel;
       return [
         {
@@ -2405,13 +2405,13 @@ export function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMove
         },
         {
           id: "pkg_small_jc222",
-          label: "2 Movers × 2 hrs — JC222 Promo",
-          desc: `Same crew & time at the JC222 promo rate${travel ? ` · $${jc222FlatPrice} + $${travel} travel` : ` · $${jc222FlatPrice} flat`} · limited availability`,
+          label: "2 Movers × 2 hrs — JC272 Promo",
+          desc: `Same crew & time at the JC272 promo rate · limited availability`,
           minPrice: jc222Total,
           maxPrice: jc222Total,
           crew: 2,
           hours: 2,
-          tag: `JC222 — $${jc222Total}`,
+          tag: "JC272 Promo",
         },
       ];
     }
@@ -2647,7 +2647,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
     staleTime: 5 * 60 * 1000,
   });
   const liveRate      = pricingConfig?.ratePerMoverHour ?? 85;
-  const liveJc222     = pricingConfig?.jc222Price       ?? 222;
+  const liveJc222     = pricingConfig?.jc222Price       ?? 272;
 
   // Fetch staking perk for auto-discount at quote time
   const { data: stakingPerk } = useQuery<{ stakedTotal: number; perkPercent: number; perkLabel: string }>({
@@ -2821,16 +2821,16 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
       (newAnswers as any)[stepId] = value;
     }
 
-    // When user selects the JC222 promo package, auto-inject promoCode so the
+    // When user selects the JC272 promo package, auto-inject promoCode so the
     // quote engine sees it when computing the final quote after all steps.
     if (stepId === "selectedPackage" && value === "pkg_small_jc222") {
-      newAnswers.promoCode = "JC222";
+      newAnswers.promoCode = "JC272";
     }
 
-    // Protect auto-injected JC222: if the user skips/clears the promo code step
-    // but JC222 was already set by package selection, keep it intact.
-    if (stepId === "promoCode" && (!value || value === "(none)") && answers.promoCode === "JC222") {
-      newAnswers.promoCode = "JC222";
+    // Protect auto-injected JC272: if the user skips/clears the promo code step
+    // but JC272 was already set by package selection, keep it intact.
+    if (stepId === "promoCode" && (!value || value === "(none)") && answers.promoCode === "JC272") {
+      newAnswers.promoCode = "JC272";
     }
 
     setAnswers(newAnswers);
@@ -2867,7 +2867,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
           ? `✅ JCMOVES code applied! You're saving $${disc} — we appreciate your support.`
           : `✅ JCMOVES perk noted! Discount will be reflected on your final invoice.`
         ), 200);
-      } else if (code && code !== "JC222" && code !== "(NONE)" && code !== "(none)") {
+      } else if (code && code !== "JC272" && code !== "JC222" && code !== "(NONE)" && code !== "(none)") {
         setTimeout(() => botSay("⚠️ That code didn't match any active promos — no worries, we'll proceed at the standard rate."), 200);
       }
     }
@@ -2915,8 +2915,8 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
           botSay(nextStep.question + (nextStep.subtext ? `\n\n_${nextStep.subtext}_` : ""));
         }
         setStepIdx(nextIdx);
-        // Pre-fill promoCode input when JC222 was auto-injected via package selection
-        setTextInput(nextStep.id === "promoCode" && newAnswers.promoCode === "JC222" ? "JC222" : "");
+        // Pre-fill promoCode input when JC272 was auto-injected via package selection
+        setTextInput(nextStep.id === "promoCode" && newAnswers.promoCode === "JC272" ? "JC272" : "");
         setAddressInput("");
         setMultiSel([]);
       }, 500);
@@ -3419,8 +3419,8 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
                   )}
                   {pendingQuote.type === "moving" && (pendingQuote as MovingQuote).promoApplied && (
                     <div className="mt-2 inline-flex items-center gap-1 bg-green-900/50 border border-green-500/40 rounded-full px-3 py-1">
-                      <span className="text-[11px] font-bold text-green-400">🏷️ JC222 Applied</span>
-                      <span className="text-[10px] text-green-300/80">— $300 floor → $222</span>
+                      <span className="text-[11px] font-bold text-green-400">🏷️ JC272 Applied</span>
+                      <span className="text-[10px] text-green-300/80">small-move flat rate</span>
                     </div>
                   )}
                   {(pendingQuote.type === "moving" || pendingQuote.type === "junk") && (pendingQuote as MovingQuote | JunkQuote).stakingPerkApplied && (

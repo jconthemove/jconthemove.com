@@ -416,13 +416,13 @@ const CATALOG_SEED: InsertServiceCatalogEntry[] = [
     name: "Assembly Finish",
     category: "addon",
     defaultPriceMode: "fixed",
-    defaultPrice: "275",
-    suggestedMin: "200",
-    suggestedMax: "400",
+    defaultPrice: "75",
+    suggestedMin: "75",
+    suggestedMax: "150",
     discountEligible: true,
     isAddon: true,
     sortOrder: 210,
-    description: "On-the-spot furniture & gear assembly add-on.",
+    description: "Move-day furniture assembly add-on — first 2 items included.",
   },
   {
     code: "deep_clean_turnover",
@@ -455,13 +455,13 @@ const CATALOG_SEED: InsertServiceCatalogEntry[] = [
     name: "Assembly (standalone)",
     category: "addon",
     defaultPriceMode: "fixed",
-    defaultPrice: "225",
-    suggestedMin: "200",
-    suggestedMax: "400",
+    defaultPrice: "75",
+    suggestedMin: "75",
+    suggestedMax: "150",
     discountEligible: true,
     isAddon: true,
     sortOrder: 240,
-    description: "Standalone furniture/gear assembly visit.",
+    description: "Furniture/gear assembly — first 2 items included.",
   },
 ];
 
@@ -599,6 +599,22 @@ export async function ensureBookingCatalogSeeded(): Promise<void> {
     if (backfilled > 0) {
       console.log(`✅ service_catalog labor metadata backfilled — ${backfilled} row${backfilled === 1 ? "" : "s"}`);
     }
+
+    // Pricing correction: assembly add-ons are $75 for the first two items.
+    // These two rows may already exist because the seed is normally
+    // insert-only, so patch the catalog values explicitly without touching
+    // unrelated admin-maintained services.
+    await pool.query(
+      `UPDATE service_catalog
+          SET default_price = '75',
+              suggested_min = '75',
+              suggested_max = '150',
+              description = CASE
+                WHEN code = 'assembly_finish' THEN 'Move-day furniture assembly add-on — first 2 items included.'
+                ELSE 'Furniture/gear assembly — first 2 items included.'
+              END
+        WHERE code IN ('assembly_finish', 'assembly')`,
+    );
   } catch (err) {
     console.error("[bookingCatalogSeed] service_catalog seed failed:", (err as Error).message);
   }

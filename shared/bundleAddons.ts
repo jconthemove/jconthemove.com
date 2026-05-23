@@ -41,7 +41,7 @@ export const BUNDLE_ADDONS: BundleAddon[] = [
   { id: "lawn_care",       label: "Lawn Care",       emoji: "🌿", hint: "from $50/visit",    fulfillmentType: "companion_service" },
   { id: "trash_valet",     label: "Trash Valet",     emoji: "♻️", hint: "from $25/mo",       fulfillmentType: "companion_service" },
   { id: "snow_removal",    label: "Snow Removal",    emoji: "❄️", hint: "from $40/visit",    fulfillmentType: "companion_service" },
-  { id: "assembly",        label: "Assembly",        emoji: "🔧", hint: "$35/item",          fulfillmentType: "companion_service" },
+  { id: "assembly",        label: "Assembly",        emoji: "🔧", hint: "$75 first 2 items", fulfillmentType: "companion_service" },
   {
     id: "ashley_shop",
     label: "$100 Shop Card",

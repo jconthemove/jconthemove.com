@@ -43,7 +43,7 @@ const DEFAULT_PRICING: Pricing = {
   ratePerMoverHour: PRICING_BASE.laborRatePerMoverHour,
   shortJobRate: 150,
   shortJobFull: 300,
-  jc222Price: 222,
+  jc222Price: 272,
   driveSpeedMph: 50,
   junkSmallLow: 170,
   junkSmallHigh: 200,
@@ -137,7 +137,7 @@ function getOptions(sel: Sel): Option[] {
     return [{ movers: 2 + bonus, hours: 2 }, { movers: 3 + bonus, hours: 2, tag: "Most Popular" }, { movers: 4 + bonus, hours: 2, tag: "Fastest" }];
   }
   if (sel.truckSize === "small" && sel.loadType === "loadOnly")
-    return [{ movers: 2 + bonus, hours: 2, tag: "JC222 Available" }];
+    return [{ movers: 2 + bonus, hours: 2, tag: "JC272 Available" }];
   if (sel.truckSize === "large" && sel.loadType === "loadOnly")
     return [{ movers: 2 + bonus, hours: 4 }, { movers: 3 + bonus, hours: 3, tag: "Most Popular" }, { movers: 4 + bonus, hours: 2, tag: "Fastest" }];
   if (sel.loadType === "loadUnload")
@@ -340,7 +340,7 @@ function Disclaimer({ drive, shortJob, pricing }: { drive?: DriveInfo; shortJob?
     <p className="text-xs text-slate-400 flex items-start gap-1.5">
       <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-yellow-400" />
       {shortJob
-        ? `Short job flat rate $${pricing.shortJobRate}/hr ($${pricing.shortJobFull} total). Use code JC222 for $${pricing.jc222Price}.`
+        ? `Short job flat rate $${pricing.shortJobRate}/hr ($${pricing.shortJobFull} total). Use code JC272 for $${pricing.jc222Price}.`
         : `Standard rate $${pricing.ratePerMoverHour}/mover/hr for 3–4 hr jobs.`}
       {drive ? ` Drive time at ${pricing.driveSpeedMph} mph avg.` : ""} Confirmed at booking.
     </p>
@@ -472,7 +472,7 @@ function ResultCard({ sel, pricing, compact = false }: { sel: Sel; pricing: Pric
             <div className="flex items-start justify-between mb-3">
               <div>
                 <div className="flex items-center gap-2 mb-0.5">
-                  <Badge className="bg-teal-500/30 text-teal-300 border-teal-500/50 font-mono font-bold text-sm px-2">JC222</Badge>
+                  <Badge className="bg-teal-500/30 text-teal-300 border-teal-500/50 font-mono font-bold text-sm px-2">JC272</Badge>
                   <span className="text-teal-300 text-xs font-semibold">Promo Price</span>
                 </div>
                 <p className="text-xs text-slate-400">
@@ -485,7 +485,7 @@ function ResultCard({ sel, pricing, compact = false }: { sel: Sel; pricing: Pric
                 <p className="text-emerald-600 text-xs mt-0.5">Save ${fullTotal - promoTotal}</p>
               </div>
             </div>
-            <BookNowButton label="Book Now — JC222 ($272 Promo)" href={bookUrl} promo compact={compact} />
+            <BookNowButton label="Book Now — JC272 Promo" href={bookUrl} promo compact={compact} />
           </div>
           <div className="px-4 pt-3 pb-4 bg-slate-800/40">
             <div className="flex items-start justify-between mb-3">
@@ -844,7 +844,7 @@ function AdminPricingEditor({ pricing }: { pricing: Pricing }) {
     { key: "rate_per_mover_hour", label: "Rate per mover/hr",      field: "ratePerMoverHour", prefix: "$", suffix: "/mover/hr" },
     { key: "short_job_rate",      label: "Short job flat rate",    field: "shortJobRate",     prefix: "$", suffix: "/hr" },
     { key: "short_job_full",      label: "Short job full price",   field: "shortJobFull",     prefix: "$" },
-    { key: "jc222_price",         label: "JC222 promo price",      field: "jc222Price",       prefix: "$" },
+    { key: "jc222_price",         label: "JC272 promo price",      field: "jc222Price",       prefix: "$" },
     { key: "drive_speed_mph",     label: "Drive speed average",    field: "driveSpeedMph",    suffix: " mph" },
     { key: "junk_small_low",      label: "Junk small load (low)",  field: "junkSmallLow",     prefix: "$" },
     { key: "junk_small_high",     label: "Junk small load (high)", field: "junkSmallHigh",    prefix: "$" },

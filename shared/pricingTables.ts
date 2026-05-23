@@ -91,7 +91,7 @@ export const MOVER_TRUCK_ADD_PER_HOUR = 40;
 export const MOVING_MIN_HOURS: Record<number, number> = {
   1: 2, 2: 2, 3: 2, 4: 3, 5: 4,
 };
-export const JC222_FLAT_PRICE = 222;
+export const JC222_FLAT_PRICE = 272;
 export const JC222_REGULAR_EQUIVALENT = 360;
 
 // ── Window cleaning tier display rows ────────────────────────────────────
@@ -390,4 +390,3 @@ export function formatLaborSummary(meta: { crewSize: number; laborHours: number 
   const hrWord = meta.laborHours === 1 ? "hr" : "hrs";
   return `${meta.crewSize} ${crewWord} × ${hrs} ${hrWord}`;
 }
-

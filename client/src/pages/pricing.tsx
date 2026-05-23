@@ -70,7 +70,7 @@ export default function PricingPage() {
 
   const ratePerMoverHour = pricingConfig?.ratePerMoverHour ?? 85;
   const truckAdd = pricingConfig?.truckAdd ?? 60;
-  const jc222Price = pricingConfig?.jc222Price ?? 222;
+  const jc222Price = pricingConfig?.jc222Price ?? 272;
   const shortJobFull = pricingConfig?.shortJobFull ?? 300;
 
   const movingMinHours: Record<number, number> = pricingConfig?.minHours ?? { 1: 5, 2: 4, 3: 3, 4: 2, 5: 2 };
@@ -145,13 +145,13 @@ export default function PricingPage() {
           onToggle={() => toggle("moving")}
           badge={`From $${(ratePerMoverHour * (movingMinHours[2] ?? 4)).toLocaleString()}`}
         >
-          {/* JC222 promo */}
+          {/* JC272 promo */}
           <div className="mb-4 rounded-xl border border-yellow-500/40 bg-yellow-500/10 p-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-yellow-400 flex-shrink-0" />
               <div>
-                <p className="text-sm font-bold text-yellow-300">JC222 Promo</p>
-                <p className="text-xs text-yellow-500">Small move flat rate — use code <span className="font-mono font-black">JC222</span></p>
+                <p className="text-sm font-bold text-yellow-300">JC272 Promo</p>
+                <p className="text-xs text-yellow-500">Small move flat rate — use code <span className="font-mono font-black">JC272</span></p>
               </div>
             </div>
             <div className="text-right flex-shrink-0">

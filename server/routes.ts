@@ -436,7 +436,7 @@ async function ensureJackpotsSeeded() {
         ('pricing_min_hours_5',          '2', 'Minimum hours for 5-mover crew'),
         ('pricing_short_job_rate',       '150', 'Short job flat rate ($/hr, small truck load-only)'),
         ('pricing_short_job_full',       '300', 'Short job full price before promo ($)'),
-        ('pricing_jc222_price',          '222', 'JC222 promo price for short jobs ($)'),
+        ('pricing_jc222_price',          '272', 'JC272 promo price for short jobs ($)'),
         ('pricing_drive_speed_mph',       '50', 'Average drive speed for travel time calc (mph)'),
         ('pricing_junk_small_low',       '170', 'Junk removal small load estimate low ($) — 2 mover-hour minimum'),
         ('pricing_junk_small_high',      '200', 'Junk removal small load estimate high ($)'),
@@ -444,7 +444,7 @@ async function ensureJackpotsSeeded() {
         ('pricing_junk_large_high',      '600', 'Junk removal full truckload estimate high ($)'),
         ('pricing_custom_items',         '[]',  'Custom additional items/services JSON array'),
         ('pricing_jc272_price',          '272', 'JC272 promo price for outside-10-mi jobs ($)'),
-        ('pricing_jc222_miles',          '10',  'Distance threshold in miles for JC222 vs JC272'),
+        ('pricing_jc222_miles',          '10',  'Distance threshold in miles for JC272 qualification'),
         ('pricing_jc222_minutes',        '82',  'Duration cap in minutes for JC promo qualification'),
         ('pricing_jc222_weight_limit',   '200', 'Light-item weight limit in lbs for JC promo qualification'),
         ('pricing_heavy_item_flat',      '100', 'Flat surcharge added for heavy items (400+ lbs) ($)'),
@@ -454,7 +454,7 @@ async function ensureJackpotsSeeded() {
         ('pricing_specialty_safe',       '400', 'Heavy safe (≤500 lbs) flat surcharge ($)'),
         ('pricing_specialty_pool_table', '400', 'Pool table move flat surcharge — ≤500 lbs tier ($)'),
         -- Weight tier thresholds
-        ('pricing_weight_light_max',     '200', 'Max weight (lbs) for Light tier (below = light, qualifies for JC222 promo)'),
+        ('pricing_weight_light_max',     '200', 'Max weight (lbs) for Light tier (below = light, qualifies for JC272 promo)'),
         ('pricing_weight_heavy_min',     '400', 'Min weight (lbs) for Heavy tier (at or above = heavy, 3-mover minimum)'),
         -- Access / difficulty add-on rates
         ('pricing_stairs_per_flight',     '25', 'Charge per stair flight ($)'),
@@ -484,8 +484,8 @@ async function ensureJackpotsSeeded() {
       WHERE setting_key = 'pricing_rate_per_mover_hour' AND setting_value::numeric < 85;
       UPDATE spin_config SET setting_value = '300'
       WHERE setting_key = 'pricing_short_job_full' AND setting_value::numeric > 300;
-      UPDATE spin_config SET setting_value = '222'
-      WHERE setting_key = 'pricing_jc222_price' AND setting_value::numeric > 222;
+      UPDATE spin_config SET setting_value = '272'
+      WHERE setting_key = 'pricing_jc222_price' AND setting_value::numeric < 272;
       INSERT INTO spin_config (setting_key, setting_value, description)
       VALUES ('pricing_drive_rate', '40', 'Drive time rate per mover per hour ($)')
       ON CONFLICT (setting_key) DO NOTHING;
@@ -20497,7 +20497,7 @@ Thank you for your business!
         },
         shortJobRate:       n('pricing_short_job_rate',       150),
         shortJobFull:       n('pricing_short_job_full',       300),
-        jc222Price:         n('pricing_jc222_price',          222),
+        jc222Price:         n('pricing_jc222_price',          272),
         jc272Price:         n('pricing_jc272_price',          272),
         jc222Miles:         n('pricing_jc222_miles',           10),
         jc222Minutes:       n('pricing_jc222_minutes',         82),
@@ -20620,7 +20620,7 @@ Thank you for your business!
   // Admin can override via PUT /api/admin/pricing/catalog-definitions.
   const DEFAULT_CATALOG_DEFINITIONS = {
     movingPackages: [
-      { id: "moving_jc222", movers: 2, hours: 2, label: "JC222 — Local (≤10 mi)", tag: "Promo", isPromo: true, promoKey: "jc222", durationMinutes: 82 },
+      { id: "moving_jc222", movers: 2, hours: 2, label: "JC272 — Local (≤10 mi)", tag: "Promo", isPromo: true, promoKey: "jc222", durationMinutes: 82 },
       { id: "moving_jc272", movers: 2, hours: 2, label: "JC272 — Outside 10 mi",  tag: "Promo", isPromo: true, promoKey: "jc272", durationMinutes: 82 },
       { id: "moving_heavy_light", movers: 3, hours: 2, label: "Heavy Item (≤500 lbs)", tag: "Specialty", isHeavyItem: true, heavyTier: "light" },
       { id: "moving_heavy_oversized", movers: 3, hours: 2, label: "Oversized Item (500+ lbs)", tag: "Specialty", isHeavyItem: true, heavyTier: "heavy" },

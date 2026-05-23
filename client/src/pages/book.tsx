@@ -480,7 +480,9 @@ export default function MultiServiceBookPage() {
   const shownSigRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
+    if (step !== "review") return;
     if (items.length === 0 || allBundles.length === 0) return;
+    let popupTimer: number | undefined;
     const cartCodes = new Set(items.map(i => i.serviceCode));
     const sortedCart = [...cartCodes].sort().join(",");
     // Wait until the live quote has caught up to the current cart shape.
@@ -497,14 +499,16 @@ export default function MultiServiceBookPage() {
     if (appliedCode) {
       const bundle = allBundles.find(b => b.code === appliedCode);
       if (bundle) {
-        setSuggestion({
-          mode: "auto_applied",
-          bundle,
-          savings: quote?.discountTotal ?? 0,
-        });
+        popupTimer = window.setTimeout(() => setSuggestion({
+            mode: "auto_applied",
+            bundle,
+            savings: quote?.discountTotal ?? 0,
+          }), 700);
         shownSigRef.current.add(sig);
       }
-      return;
+      return () => {
+        if (popupTimer) window.clearTimeout(popupTimer);
+      };
     }
 
     // Mode 2 — one_away: no bundle applied. Find a bundle where the cart
@@ -531,11 +535,18 @@ export default function MultiServiceBookPage() {
     if (best) {
       const missingSvc = services.find(s => s.code === best!.missingCode);
       if (missingSvc) {
-        setSuggestion({ mode: "one_away", bundle: best.bundle, missing: missingSvc });
+        popupTimer = window.setTimeout(() => setSuggestion({ mode: "one_away", bundle: best.bundle, missing: missingSvc }), 700);
         shownSigRef.current.add(sig);
       }
     }
-  }, [items, quote, allBundles, services]);
+    return () => {
+      if (popupTimer) window.clearTimeout(popupTimer);
+    };
+  }, [step, items, quote, allBundles, services]);
+
+  useEffect(() => {
+    if (step !== "review" && suggestion) setSuggestion(null);
+  }, [step, suggestion]);
 
   function handleSuggestionAccept() {
     if (!suggestion) return;
@@ -1198,6 +1209,7 @@ export default function MultiServiceBookPage() {
           isQuoting={quoteMutation.isPending}
           onCheckout={() => { /* unused in wizard mode */ }}
           canCheckout={items.length > 0}
+          showPricing={step === "review"}
           bottomSlot={wizardNav}
         />
       </div>

@@ -11,7 +11,7 @@ import { ArrowLeft, Save, RefreshCw, ExternalLink, CheckCircle, XCircle } from "
 import { Link } from "wouter";
 
 const KNOWN_ITEM_IDS = [
-  { id: "moving_2m_2h", label: "Moving: JC222 Special (2 Movers × 2h)" },
+  { id: "moving_2m_2h", label: "Moving: JC272 Special (2 Movers × 2h)" },
   { id: "moving_2m_3h", label: "Moving: 2 Movers × 3 hrs" },
   { id: "moving_2m_4h", label: "Moving: 2 Movers × 4 hrs" },
   { id: "moving_3m_3h", label: "Moving: 3 Movers × 3 hrs" },
