@@ -26,6 +26,7 @@ import { getFaucetPayService } from "./services/faucetpay";
 import { getAdvertisingService } from "./services/advertising";
 import { FAUCET_CONFIG, calculateJCMovesReward, getTierFromSpend, getTierFromPoints, LOYALTY_TIERS, TIER_POINT_AWARDS, type TierPointActivity } from "./constants";
 import { fetchZipLocation, calculateMovingPrice } from "@shared/pricing";
+import { calculateMovingTravelCharge } from "@shared/movingPricing";
 import { TRASH_VALET_TRAVEL_THRESHOLD_MILES, TRASH_VALET_OUT_OF_AREA_MINIMUM } from "@shared/trashValetPricing";
 import { calculateJumpStartQuote } from "@shared/jumpStartPricing";
 import { walletService } from "./services/wallet";
@@ -56,8 +57,8 @@ import { getAppUrl } from "./appUrl";
 const STAKING_TREASURY_USER_ID = "staking-treasury-system";
 const CHATBOT_DRIVE_BASE_LAT = 46.4539;
 const CHATBOT_DRIVE_BASE_LNG = -90.1715;
-const CHATBOT_TRAVEL_TIER_MILES = 25;
-const CHATBOT_TRAVEL_CHARGE_PER_TIER = 50;
+const CHATBOT_JUNK_TRAVEL_TIER_MILES = 25;
+const CHATBOT_JUNK_TRAVEL_CHARGE_PER_TIER = 50;
 
 function formatLoggableError(error: unknown): string {
   if (error instanceof Error) {
@@ -21383,9 +21384,10 @@ Thank you for your business!
       const submittedTravelCharge = Number.isFinite(Number(quote?.travelCharge))
         ? Math.max(0, Number(quote.travelCharge))
         : 0;
-      const verifiedTravelCharge =
-        serverVerifiedDriveMiles > 0
-          ? Math.floor(serverVerifiedDriveMiles / CHATBOT_TRAVEL_TIER_MILES) * CHATBOT_TRAVEL_CHARGE_PER_TIER
+      const verifiedTravelCharge = serviceType === "residential"
+        ? calculateMovingTravelCharge(serverVerifiedDriveMiles).fee
+        : serverVerifiedDriveMiles > 0
+          ? Math.floor(serverVerifiedDriveMiles / CHATBOT_JUNK_TRAVEL_TIER_MILES) * CHATBOT_JUNK_TRAVEL_CHARGE_PER_TIER
           : 0;
       const missingTravelCharge = Math.max(0, verifiedTravelCharge - submittedTravelCharge);
 

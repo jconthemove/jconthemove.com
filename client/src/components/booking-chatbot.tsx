@@ -16,14 +16,15 @@ import { calculateJumpStartQuote } from "@shared/jumpStartPricing";
 import { getDepositInfo } from "@shared/depositRules";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
 import { buildBookingIntakeFromChatbot, type BookingIntakeResult } from "@shared/bookingIntake";
+import { calculateMovingTravelCharge, getMovingDistanceBracketFromMiles, getMovingTravelFeeForBracket } from "@shared/movingPricing";
 
 // ─────────────────────────────────────────────
 // Service categories
 // ─────────────────────────────────────────────
 const PRICEABLE_SERVICES = ["Moving", "Junk Removal", "Trash Valet", "Window Cleaning", "Jump Start"];
 const QUOTE_ONLY_SERVICES = ["Painting", "Flooring", "Roofing", "Handyman", "Lawn Care", "Snow Removal", "Move-In/Out Cleaning", "Light Demolition"];
-const TRAVEL_CHARGE_PER_TIER = 50;  // $50 per 25-mile band from Ironwood
-const TRAVEL_TIER_MILES      = 25;  // miles per tier
+const JUNK_TRAVEL_CHARGE_PER_TIER = 50;  // $50 per 25-mile band from Ironwood
+const JUNK_TRAVEL_TIER_MILES      = 25;  // miles per tier
 
 // ─────────────────────────────────────────────
 // Types
@@ -1356,10 +1357,7 @@ export function getMovingDistanceBracket(
   distanceReport: string | undefined,
 ): "local" | "1hr" | "2hr" | "3hr" {
   if (distanceMiles > 0) {
-    if (distanceMiles <= 25) return "local";
-    if (distanceMiles <= 70) return "1hr";
-    if (distanceMiles <= 140) return "2hr";
-    return "3hr";
+    return getMovingDistanceBracketFromMiles(distanceMiles);
   }
   const r = distanceReport || "";
   if (r.includes("Local")) return "local";
@@ -1772,7 +1770,9 @@ export function buildMovingRecommendations(
     : "Studio";
   const { crew: lCrew, minHrs, maxHrs } = laborSizeMap[sizeKey];
   const laborRate = 85;
-  const travelCharge = bracket === "1hr" ? 100 : bracket === "2hr" ? 200 : bracket === "3hr" ? 300 : 0;
+  const travelCharge = distanceMiles > 0
+    ? calculateMovingTravelCharge(distanceMiles).fee
+    : getMovingTravelFeeForBracket(bracket);
   const laborMin = applyPerk(lCrew * minHrs * laborRate) + travelCharge + oversizedQuote.fee;
   const laborMax = applyPerk(lCrew * maxHrs * laborRate) + travelCharge + oversizedQuote.fee;
   const travelLabel = travelCharge > 0 ? ` + $${travelCharge} travel` : "";
@@ -1956,11 +1956,11 @@ export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatP
   const rawMin = round5(crew * minHrs * RATE) + specialSurcharge;
   const rawMax = round5(crew * maxHrs * RATE) + specialSurcharge;
 
-  // ── Travel charge: $50 per 25-mile band from Ironwood — all job sizes ──────
-  // This is a fuel/drive surcharge billed in addition to on-site labor + drive time.
-  // distanceMiles=0 means unknown/local → no charge applied
-  const travelTiers = distanceMiles > 0 ? Math.floor(distanceMiles / TRAVEL_TIER_MILES) : 0;
-  const travelCharge = travelTiers * TRAVEL_CHARGE_PER_TIER;
+  // Moving travel is one customer-facing table:
+  // local $0, ~1 hr $100, ~2 hrs $200, 3+ hrs $300 minimum/custom review.
+  const travelCharge = distanceMiles > 0
+    ? calculateMovingTravelCharge(distanceMiles).fee
+    : getMovingTravelFeeForBracket(getMovingDistanceBracket(distanceMiles, a.distanceReport));
 
   // ── JC222 promo: Small-tier 2-crew → $340 becomes $222 flat ───────────────
   const promoCodeRaw = (a.promoCode || "").toUpperCase().trim();
@@ -2062,8 +2062,8 @@ export function computeJunkQuote(a: Answers, ratePerMoverHour = 85, distanceMile
   const rawMax = r5(crew * maxHrs * RATE) + specialSurcharge;
 
   // ── Travel charge: $50 per 25-mile band from Ironwood — all job sizes ──────
-  const travelTiers = distanceMiles > 0 ? Math.floor(distanceMiles / TRAVEL_TIER_MILES) : 0;
-  const travelCharge = travelTiers * TRAVEL_CHARGE_PER_TIER;
+  const travelTiers = distanceMiles > 0 ? Math.floor(distanceMiles / JUNK_TRAVEL_TIER_MILES) : 0;
+  const travelCharge = travelTiers * JUNK_TRAVEL_CHARGE_PER_TIER;
 
   // ── JCMOVES promo: 10% off or $20 off, whichever is greater ───────────────
   const promoCodeRaw = (a.promoCode || "").toUpperCase().trim();
