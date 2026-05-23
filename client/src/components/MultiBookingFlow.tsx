@@ -555,7 +555,12 @@ const PICKER_SPECIAL_ITEMS = [
   "🎹 Upright Piano",
   "🎱 Pool Table",
   "♨️ Hot Tub",
-  "🔒 Heavy Safe (300 lbs+)",
+  "🔒 Safe (300 lbs) +$300",
+  "🔒 Safe (500 lbs) +$500",
+  "🔒 Safe (1000 lbs) +$1000",
+  "🏋️ Heavy Item (400 lbs) +$300",
+  "🏋️ Heavy Item (600 lbs) +$500",
+  "🏋️ Heavy Item (800+ lbs) +$800",
   "🏋️ Large Appliance or Fitness Equipment (200 lbs+) +$100",
   "📦 Other Heavy Item (200 lbs+) +$100",
 ];
@@ -610,6 +615,8 @@ export function MovingJunkPackagePicker({
     };
     if (isMoving) {
       a.loadType = item.details.loadType;
+      a.truckSize = item.details.truckSize;
+      a.truckSituation = item.details.truckNeeded ? "JC ON THE MOVE provides the truck" : "Customer provides truck";
       if (item.details.hasStairs) {
         a.originFloor = "2nd Floor";
         a.originElevator = "🪜 No elevator — stairs only";
@@ -617,7 +624,7 @@ export function MovingJunkPackagePicker({
     }
     return a;
   }, [isMoving, item.details.jobSize, item.details.specialItems, item.details.promoCode,
-      item.details.loadType, item.details.hasStairs]);
+      item.details.loadType, item.details.truckNeeded, item.details.truckSize, item.details.hasStairs]);
 
   const quote = useMemo(() => {
     if (!item.details.jobSize) return null;
@@ -656,7 +663,7 @@ export function MovingJunkPackagePicker({
     !!item.details.jobSize &&
     !!item.details.loadType &&
     item.details.truckNeeded != null &&
-    (!item.details.truckNeeded || !!item.details.truckSize)
+    !!item.details.truckSize
   );
   useEffect(() => {
     if (!item.details.packageId) return;
@@ -833,7 +840,7 @@ export function MovingJunkPackagePicker({
                   type="button"
                   onClick={() => patch({
                     truckNeeded: opt.value,
-                    truckSize: opt.value ? item.details.truckSize : undefined,
+                    truckSize: item.details.truckSize,
                     truckFee: opt.value ? item.details.truckFee : undefined,
                     truckBaseFee: opt.value ? item.details.truckBaseFee : undefined,
                     truckMileageFee: opt.value ? item.details.truckMileageFee : undefined,
@@ -857,9 +864,9 @@ export function MovingJunkPackagePicker({
         </div>
       )}
 
-      {isMoving && item.details.truckNeeded && (
+      {isMoving && item.details.truckNeeded != null && (
         <div>
-          <Label className="text-xs">Truck size if we need to provide the truck</Label>
+          <Label className="text-xs">Truck size</Label>
           <div className="grid grid-cols-2 gap-1.5 mt-1">
             {PICKER_TRUCK_SIZES.map((size) => {
               const active = item.details.truckSize === size;
@@ -921,11 +928,11 @@ export function MovingJunkPackagePicker({
             </p>
           ) : item.details.verifiedDriveMiles && item.details.estimatedDriveMinutes ? (
             <div className="space-y-0.5">
-              <p>~{Math.round(item.details.verifiedDriveMiles)} miles away � ~{item.details.estimatedDriveMinutes} min</p>
+              <p>~{Math.round(item.details.verifiedDriveMiles)} miles away � ~{item.details.estimatedDriveMinutes} min</p>
               {truckRental && (
                 <p className="text-sky-300">
                   JC truck includes {JC_TRUCK_INCLUDED_MILES} miles
-                  {truckRental.mileageFee > 0 ? ` � ${truckRental.extraMiles} extra miles apply` : ""}
+                  {truckRental.mileageFee > 0 ? ` � ${truckRental.extraMiles} extra miles apply` : ""}
                 </p>
               )}
             </div>

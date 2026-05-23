@@ -152,8 +152,10 @@ const MOVING_STAIR_OPTIONS = [
 const MOVING_HEAVY_OPTIONS = [
   "No oversized items",
   "200 lb item +$100",
-  "400 lb item +$250",
-  "600 lb item +$450",
+  "Pool table +$500",
+  "Safe 300 lb +$300",
+  "Safe 500 lb +$500",
+  "Safe 1000 lb +$1000",
   "800+ lb item - custom quote",
 ];
 
@@ -464,8 +466,10 @@ export default function ChatIntakeOverlay({
     if (movingHeavy && !movingHeavy.toLowerCase().includes("no oversized")) {
       details.specialItems = [movingHeavy];
       details.oversizedItemFee = movingHeavy.includes("200 lb") ? 100
-        : movingHeavy.includes("400 lb") ? 250
-          : movingHeavy.includes("600 lb") ? 450
+        : movingHeavy.includes("Pool table") ? 500
+          : movingHeavy.includes("300 lb") ? 300
+            : movingHeavy.includes("500 lb") ? 500
+              : movingHeavy.includes("1000 lb") ? 1000
             : 0;
       details.oversizedItemLabel = movingHeavy;
     }
