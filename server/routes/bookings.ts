@@ -416,6 +416,10 @@ function resolveItems(
       if (Number.isFinite(oversizedItemFee) && oversizedItemFee > 0) {
         unitPrice += oversizedItemFee;
       }
+      const selectedMovingRecTotal = Number(details.selectedMovingRecTotalMin ?? 0);
+      if (Number.isFinite(selectedMovingRecTotal) && selectedMovingRecTotal > 0) {
+        unitPrice = selectedMovingRecTotal;
+      }
     }
 
     let laborMeta = buildLaborMeta(item.serviceCode, unitPrice, item.quantity, item.details || {}, cat);

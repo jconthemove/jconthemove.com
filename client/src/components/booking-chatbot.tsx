@@ -63,6 +63,7 @@ export interface Answers {
   furniture?: string[];
   boxCount?: string;
   specialItems?: string[];
+  oversizedItemCount?: string;
   packingHelp?: string;
   truckSituation?: string;
   truckSize?: string;        // "15' truck" | "26' truck"
@@ -70,6 +71,7 @@ export interface Answers {
   selectedMovingRecLabel?: string; // e.g. "2 movers + 15' truck"
   selectedMovingRecNotes?: string; // full rate note written into job notes
   selectedMovingRecCrew?: string;
+  selectedMovingRecHours?: string;
   selectedMovingRecTotalMin?: string;
   selectedMovingRecTotalMax?: string;
   // Trash Valet fields
@@ -543,6 +545,14 @@ const STEPS: Step[] = [
       "None of these",
     ],
     show: (a) => isMovingService(a) || isJunkService(a),
+  },
+  {
+    id: "oversizedItemCount",
+    question: "How many oversized or extra-heavy items?",
+    subtext: "Quantity matters for the quote. We'll confirm the exact inventory before final booking.",
+    type: "choice",
+    options: ["1 item", "2 items", "3 items", "4+ items"],
+    show: (a) => isMovingService(a) && (a.specialItems || []).some((s) => s !== "None of these"),
   },
   {
     id: "junkLocation",
@@ -1334,6 +1344,7 @@ export interface MovingRecommendation {
   isBestMatch: boolean;
   customQuote: boolean;   // Darrell follow-up instead of instant price
   crew: number;
+  hours?: number;
   totalMin: number;
   totalMax: number;
   notes: string;          // written into job notes on submit
@@ -1358,6 +1369,50 @@ export function getMovingDistanceBracket(
   return "local";
 }
 
+function numberFromText(value: string | undefined, fallback = 0): number {
+  const parsed = Number(String(value || "").match(/\d+/)?.[0] || "");
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function getStairContext(a: Answers) {
+  const floorNum = (f: string | undefined) =>
+    ({ "Ground Floor / 1st": 1, "2nd Floor": 2, "3rd Floor": 3, "4th Floor or Higher": 4 }[f || ""] || 1);
+  const oFloor = floorNum(a.originFloor);
+  const dFloor = floorNum(a.destFloor);
+  const hasOriginStairs = oFloor >= 2 && (a.originElevator || "").includes("No elevator");
+  const hasDestStairs = dFloor >= 2 && (a.destElevator || "").includes("No elevator");
+  return {
+    hasAnyStairs: hasOriginStairs || hasDestStairs,
+    highStairFloors: (hasOriginStairs ? oFloor - 1 : 0) + (hasDestStairs ? dFloor - 1 : 0),
+  };
+}
+
+function oversizedItemBaseFee(label: string): number {
+  if (label.includes("Grand") || label.includes("Hot Tub")) return 600;
+  if (label.includes("Upright") || label.includes("Pool Table") || label.includes("Safe")) return 400;
+  if (label.includes("Appliance") || label.includes("Fitness")) return 150;
+  return 100;
+}
+
+function getOversizedItemQuote(a: Answers) {
+  const items = (a.specialItems || []).filter((s) => s !== "None of these");
+  if (!items.length) {
+    return { count: 0, fee: 0, multiplier: 0, note: "" };
+  }
+  const count = Math.max(1, numberFromText(a.oversizedItemCount, items.length));
+  const { hasAnyStairs } = getStairContext(a);
+  const multiplier = hasAnyStairs ? 1.5 : 0.75;
+  const base = Math.max(...items.map(oversizedItemBaseFee));
+  const fee = Math.round(base * count * multiplier);
+  const stairNote = hasAnyStairs ? "1.5x stair handling rate" : "0.75x no-stairs handling rate";
+  return {
+    count,
+    fee,
+    multiplier,
+    note: `${count} oversized item${count === 1 ? "" : "s"} x $${base} x ${stairNote} = $${fee}`,
+  };
+}
+
 /**
  * Build 1–3 smart recommendation cards for Moving jobs.
  * Uses bundled flat rates when JC provides a truck; falls back to labor-only rates.
@@ -1370,6 +1425,8 @@ export function buildMovingRecommendations(
   const bracket = getMovingDistanceBracket(distanceMiles, a.distanceReport);
   const isTiny = (a.jobSize || "").includes("Single item");
   const specials = (a.specialItems || []).filter(s => s !== "None of these");
+  const oversizedQuote = getOversizedItemQuote(a);
+  const { hasAnyStairs } = getStairContext(a);
   const hasMajorSpecialty = specials.some(s =>
     ["🎹 Grand Piano", "🎹 Upright Piano", "🎱 Pool Table", "♨️ Hot Tub", "🔒 Heavy Safe (300 lbs+)"].includes(s)
   );
@@ -1378,6 +1435,7 @@ export function buildMovingRecommendations(
   const applyPerk = (n: number) =>
     stakingPerkPct > 0 ? Math.round(n * (1 - stakingPerkPct / 100)) : n;
   const perkNote = stakingPerkPct > 0 ? ` (${stakingPerkPct}% loyalty perk applied)` : "";
+  const oversizedNote = oversizedQuote.fee > 0 ? ` · ${oversizedQuote.note}` : "";
 
   // ── TINY JOB PATH ──────────────────────────────────────────────────────────
   if (isTiny) {
@@ -1414,21 +1472,38 @@ export function buildMovingRecommendations(
     }
     // Tiny — no specialty
     if (bracket === "local") {
-      const promo = applyPerk(125);
-      const regular = applyPerk(150);
-      return [{
-        id: "tiny_local_promo",
-        label: "Single item — promo rate",
-        price: `$${promo} promo`,
-        priceNote: `reg. $${regular}`,
-        reason: "Local single-item move. Promo pricing while available.",
-        isBestMatch: true,
-        customQuote: false,
-        crew: 1,
-        totalMin: promo,
-        totalMax: regular,
-        notes: `Tiny local job · promo $${promo} (reg. $${regular})${perkNote}`,
-      }];
+      const twoMover = applyPerk(150);
+      const threeMover = applyPerk(200);
+      return [
+        {
+          id: "tiny_local_2mover_hour",
+          label: "1-2 items - 2 movers",
+          price: `$${twoMover}`,
+          priceNote: "1-hour local special",
+          reason: "Quick local help for one or two items with a two-person crew.",
+          isBestMatch: true,
+          customQuote: false,
+          crew: 2,
+          hours: 1,
+          totalMin: twoMover,
+          totalMax: twoMover,
+          notes: `1-2 item local special · 2 movers · 1 hour · $${twoMover}${perkNote}`,
+        },
+        {
+          id: "tiny_local_3mover_hour",
+          label: "1-2 items - 3 movers",
+          price: `$${threeMover}`,
+          priceNote: "1-hour local special",
+          reason: "A little more muscle for awkward items, tight entries, or faster handling.",
+          isBestMatch: false,
+          customQuote: false,
+          crew: 3,
+          hours: 1,
+          totalMin: threeMover,
+          totalMax: threeMover,
+          notes: `1-2 item local special · 3 movers · 1 hour · $${threeMover}${perkNote}`,
+        },
+      ];
     }
     if (bracket === "1hr") {
       const total = applyPerk(225);
@@ -1464,8 +1539,8 @@ export function buildMovingRecommendations(
   // ── JC PROVIDES TRUCK ──────────────────────────────────────────────────────
   if (truckIsJC) {
     if (bracket === "local") {
-      const opt2 = applyPerk(370);
-      const opt3 = applyPerk(450);
+      const opt2 = applyPerk(370) + oversizedQuote.fee;
+      const opt3 = applyPerk(450) + oversizedQuote.fee;
       return [
         {
           id: "local_jc_2mover_15",
@@ -1507,8 +1582,8 @@ export function buildMovingRecommendations(
     const b = bracket;
     const { rate, hrs } = tables[sz][b];
     const { rate: altRate, hrs: altHrs } = tables[altSz][b];
-    const total = applyPerk(rate * hrs);
-    const altTotal = applyPerk(altRate * altHrs);
+    const total = applyPerk(rate * hrs) + oversizedQuote.fee;
+    const altTotal = applyPerk(altRate * altHrs) + oversizedQuote.fee;
     const crew = is26 ? 3 : 2;
     const altCrew = is26 ? 2 : 3;
     const distLabel = bracket === "1hr" ? "~1 hr" : bracket === "2hr" ? "~2 hrs" : "~3+ hrs";
@@ -1546,6 +1621,146 @@ export function buildMovingRecommendations(
 
   // ── LABOR ONLY ─────────────────────────────────────────────────────────────
   // Map jobSize → crew + hours then apply $85/mover/hr + travel charge
+  const loadTypeRaw = a.loadType || "";
+  const isUnloadOnly = loadTypeRaw.includes("Unload only");
+  const isLoadOnly = loadTypeRaw.includes("Load only");
+  const isLargeLoad = is26 || (a.jobSize || "").includes("4+") || (a.homeSize || "").includes("4+");
+  const localLaborTotal = (base: number) => applyPerk(base) + oversizedQuote.fee;
+
+  if (bracket === "local" && isUnloadOnly) {
+    if (isLargeLoad) {
+      const total = localLaborTotal(750);
+      const reason = `Large 26 ft unload. Drive time and gas are extra when applicable${oversizedNote}.`;
+      return [
+        {
+          id: "unload_large_2x5",
+          label: "2 movers - 5 hours",
+          price: `$${total}`,
+          priceNote: "large local unload",
+          rateNote: "26 ft truck baseline",
+          reason,
+          isBestMatch: !hasAnyStairs,
+          customQuote: false,
+          crew: 2,
+          hours: 5,
+          totalMin: total,
+          totalMax: total,
+          notes: `Unload only · large 26 ft · 2 movers · 5 hours · local $750${perkNote}${oversizedNote}`,
+        },
+        {
+          id: "unload_large_3x3",
+          label: "3 movers - 3 hours",
+          price: `$${total}`,
+          priceNote: "large local unload",
+          rateNote: "faster crew",
+          reason,
+          isBestMatch: hasAnyStairs,
+          customQuote: false,
+          crew: 3,
+          hours: 3,
+          totalMin: total,
+          totalMax: total,
+          notes: `Unload only · large 26 ft · 3 movers · 3 hours · local $750${perkNote}${oversizedNote}`,
+        },
+        {
+          id: "unload_large_4x2",
+          label: "4 movers - 2 hours",
+          price: `$${total}`,
+          priceNote: "large local unload",
+          rateNote: "fastest crew",
+          reason,
+          isBestMatch: false,
+          customQuote: false,
+          crew: 4,
+          hours: 2,
+          totalMin: total,
+          totalMax: total,
+          notes: `Unload only · large 26 ft · 4 movers · 2 hours · local $750${perkNote}${oversizedNote}`,
+        },
+      ];
+    }
+
+    if (hasAnyStairs) {
+      const total = localLaborTotal(450);
+      return [
+        {
+          id: "unload_stairs_2x3",
+          label: "2 movers - 3 hours",
+          price: `$${total}`,
+          priceNote: "stairs minimum",
+          rateNote: "small/medium local unload",
+          reason: `Stairs add time on unload-only jobs${oversizedNote}.`,
+          isBestMatch: true,
+          customQuote: false,
+          crew: 2,
+          hours: 3,
+          totalMin: total,
+          totalMax: total,
+          notes: `Unload only · stairs · 2 movers · 3 hours · local $450 minimum${perkNote}${oversizedNote}`,
+        },
+        {
+          id: "unload_stairs_3x2",
+          label: "3 movers - 2 hours",
+          price: `$${total}`,
+          priceNote: "stairs minimum",
+          rateNote: "faster crew",
+          reason: `A third mover keeps stair carries safer and quicker${oversizedNote}.`,
+          isBestMatch: false,
+          customQuote: false,
+          crew: 3,
+          hours: 2,
+          totalMin: total,
+          totalMax: total,
+          notes: `Unload only · stairs · 3 movers · 2 hours · local $450 minimum${perkNote}${oversizedNote}`,
+        },
+      ];
+    }
+
+    const isMedium = (a.jobSize || "").includes("2") || (a.homeSize || "").includes("2") || (a.homeSize || "").includes("3");
+    const total = localLaborTotal(isMedium ? 450 : 300);
+    return [{
+      id: isMedium ? "unload_medium_local" : "unload_small_no_stairs",
+      label: isMedium ? "2 movers - 3 hours" : "2 movers - 2 hours",
+      price: `$${total}`,
+      priceNote: isMedium ? "small/medium local minimum" : "quick local unload",
+      rateNote: isMedium ? "$450 minimum" : "$300 minimum",
+      reason: isMedium
+        ? `Small/medium local unload with no stairs${oversizedNote}.`
+        : `Small no-stairs unloads can be quick when parking/access is easy${oversizedNote}.`,
+      isBestMatch: true,
+      customQuote: false,
+      crew: 2,
+      hours: isMedium ? 3 : 2,
+      totalMin: total,
+      totalMax: total,
+      notes: isMedium
+        ? `Unload only · small/medium · no stairs · 2 movers · 3 hours · local $450 minimum${perkNote}${oversizedNote}`
+        : `Unload only · small · no stairs · 2 movers · 2 hours · local $300 minimum${perkNote}${oversizedNote}`,
+    }];
+  }
+
+  if (bracket === "local" && isLoadOnly) {
+    const loadBase = isLargeLoad ? 850 : (hasAnyStairs || (a.jobSize || "").includes("2") ? 600 : 450);
+    const total = localLaborTotal(loadBase);
+    const crew = isLargeLoad || hasAnyStairs ? 3 : 2;
+    const hours = isLargeLoad ? 4 : 3;
+    return [{
+      id: "load_only_shrinkwrap_local",
+      label: `${crew} movers - ${hours} hours`,
+      price: `$${total}`,
+      priceNote: "load-only planning rate",
+      rateNote: "includes shrink-wrap handling time",
+      reason: `Loading usually takes longer than unloading because we protect and stack items for transit${oversizedNote}.`,
+      isBestMatch: true,
+      customQuote: false,
+      crew,
+      hours,
+      totalMin: total,
+      totalMax: total,
+      notes: `Load only · shrink-wrap/product handling factored · ${crew} movers · ${hours} hours · local $${loadBase}${perkNote}${oversizedNote}`,
+    }];
+  }
+
   const laborSizeMap: Record<string, { crew: number; minHrs: number; maxHrs: number }> = {
     "Studio":  { crew: 2, minHrs: 2, maxHrs: 3 },
     "2–3 bed": { crew: 2, minHrs: 3, maxHrs: 5 },
@@ -1558,8 +1773,8 @@ export function buildMovingRecommendations(
   const { crew: lCrew, minHrs, maxHrs } = laborSizeMap[sizeKey];
   const laborRate = 85;
   const travelCharge = bracket === "1hr" ? 100 : bracket === "2hr" ? 200 : bracket === "3hr" ? 300 : 0;
-  const laborMin = applyPerk(lCrew * minHrs * laborRate) + travelCharge;
-  const laborMax = applyPerk(lCrew * maxHrs * laborRate) + travelCharge;
+  const laborMin = applyPerk(lCrew * minHrs * laborRate) + travelCharge + oversizedQuote.fee;
+  const laborMax = applyPerk(lCrew * maxHrs * laborRate) + travelCharge + oversizedQuote.fee;
   const travelLabel = travelCharge > 0 ? ` + $${travelCharge} travel` : "";
   return [
     {
@@ -1623,6 +1838,10 @@ export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatP
   if (hasHeavySafe)     specialSurcharge += 400; // ≤500 lbs (300+ lbs safes)
   if (hasHeavyAppliance) specialSurcharge += 150; // 100+ lbs appliance/equipment — less than specialty
   if (hasOtherHeavy)    specialSurcharge += 100; // generic heavy item surcharge
+  const oversizedQuote = getOversizedItemQuote(a);
+  if (oversizedQuote.fee > 0) {
+    specialSurcharge = oversizedQuote.fee;
+  }
 
   // ── Furniture & box counts ─────────────────────────────────────────────────
   const furnCount = (a.furniture || []).filter(f => f !== "None of the above").length;
@@ -2749,6 +2968,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
       selectedMovingRecLabel: rec.label,
       selectedMovingRecNotes: rec.notes,
       selectedMovingRecCrew: String(rec.crew),
+      selectedMovingRecHours: rec.hours != null ? String(rec.hours) : undefined,
       selectedMovingRecTotalMin: String(rec.totalMin),
       selectedMovingRecTotalMax: String(rec.totalMax),
     }));
@@ -2892,6 +3112,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
         if (answers.selectedMovingRecNotes) {
           scopeParts.push(answers.selectedMovingRecNotes);
         }
+        if (answers.oversizedItemCount) scopeParts.push(`Oversized quantity: ${answers.oversizedItemCount}`);
         if (answers.distanceReport) scopeParts.push(`Distance: ${answers.distanceReport}`);
         if (answers.truckSituation) scopeParts.push(`Truck: ${answers.truckSituation}`);
         if (answers.truckSize) scopeParts.push(`Truck size: ${answers.truckSize}`);
