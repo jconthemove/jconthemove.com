@@ -36,11 +36,12 @@ function mapServiceCode(answers: ChatbotAnswers, serviceLabel?: string): string 
 }
 
 function mapMovingJobSize(answers: ChatbotAnswers): "small" | "medium" | "large" | undefined {
-  const raw = `${text(answers.jobSize)} ${text(answers.homeSize)} ${text(answers.selectedMovingRecLabel)}`.toLowerCase();
-  if (raw.includes("single") || raw.includes("studio") || raw.includes("1-bedroom") || raw.includes("1 bedroom")) {
+  const raw = `${text(answers.jobSize)} ${text(answers.propertyType)} ${text(answers.homeSize)} ${text(answers.selectedMovingRecLabel)}`.toLowerCase();
+  if (raw.includes("1-2 items") || raw.includes("single") || raw.includes("studio") || raw.includes("1-bedroom") || raw.includes("1 bedroom")) {
     return "small";
   }
-  if (raw.includes("4+") || raw.includes("4 bedroom") || raw.includes("full house")) return "large";
+  if (raw.includes("4+") || raw.includes("4 bedroom") || raw.includes("4 bedroom or larger") || raw.includes("full house")) return "large";
+  if (raw.includes("3 bedroom") && raw.includes("house")) return "large";
   if (raw.includes("2") || raw.includes("3")) return "medium";
   return undefined;
 }
@@ -81,6 +82,7 @@ export function buildBookingIntakeFromChatbot(
     selectedMovingRecTotalMin: numberFrom(answers.selectedMovingRecTotalMin),
     selectedMovingRecTotalMax: numberFrom(answers.selectedMovingRecTotalMax),
     oversizedItemCount: numberFrom(answers.oversizedItemCount),
+    propertyType: text(answers.propertyType) || undefined,
     specialItems: Array.isArray(answers.specialItems) ? answers.specialItems : undefined,
     notes: text(answers.notes) || undefined,
   };
@@ -101,7 +103,7 @@ export function buildBookingIntakeFromChatbot(
         : loadTypeRaw.includes("load")
           ? "load_only"
           : "local";
-    details.bedrooms = text(answers.homeSize) || text(answers.jobSize) || undefined;
+    details.bedrooms = text(answers.jobSize) || text(answers.homeSize) || undefined;
     details.stairs = includes(answers.originFloor, "2nd") || includes(answers.destFloor, "2nd") ? 1
       : includes(answers.originFloor, "3rd") || includes(answers.destFloor, "3rd") ? 2
         : includes(answers.originFloor, "4th") || includes(answers.destFloor, "4th") ? 3

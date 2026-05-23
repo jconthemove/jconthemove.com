@@ -50,6 +50,7 @@ export interface Answers {
   serviceAddress?: string;
   // Moving fields
   jobSize?: string;          // "Single item…" | "Studio or 1-bed" | "2–3 bed" | "4+ bed"
+  propertyType?: string;
   distanceReport?: string;   // self-reported distance bracket for moving
   fromZip?: string;
   toZip?: string;
@@ -379,6 +380,33 @@ const STEPS: Step[] = [
   // ── MOVING STEPS ──────────────────────────────────────────────────────────
   {
     id: "jobSize",
+    question: "Roughly how big is the moving job?",
+    subtext: "Pick the closest match. We can confirm exact inventory before final booking.",
+    type: "choice",
+    options: [
+      "1-2 items only",
+      "Studio or 1 bedroom",
+      "2 bedroom",
+      "3 bedroom",
+      "4 bedroom or larger",
+    ],
+    show: (a) => isMovingService(a),
+  },
+  {
+    id: "propertyType",
+    question: "Is it a house or apartment?",
+    subtext: "This helps with crew size, stairs, parking, and truck planning.",
+    type: "choice",
+    options: [
+      "Apartment / condo",
+      "House",
+      "Storage unit",
+      "Office / commercial",
+    ],
+    show: (a) => isMovingService(a) && !(a.jobSize || "").includes("1-2 items"),
+  },
+  {
+    id: "oldJobSize",
     question: "What are you moving?",
     subtext: "Pick the closest match — this helps us recommend the right crew.",
     type: "choice",
@@ -388,7 +416,7 @@ const STEPS: Step[] = [
       "🏠 2–3 bedroom home",
       "🏡 4+ bedroom / full house",
     ],
-    show: (a) => isMovingService(a),
+    show: () => false,
   },
   {
     id: "loadType",
@@ -401,7 +429,7 @@ const STEPS: Step[] = [
       "🔄 Both — load AND unload",
     ],
     // Tiny jobs: the "single item" framing implies both — no need for this question
-    show: (a) => isMovingService(a) && !(a.jobSize || "").includes("Single item"),
+    show: (a) => isMovingService(a) && !(a.jobSize || "").includes("1-2 items"),
   },
   {
     id: "fromZip",
@@ -545,7 +573,7 @@ const STEPS: Step[] = [
       "📦 Other Heavy Item (100 lbs+)",
       "None of these",
     ],
-    show: (a) => isMovingService(a) || isJunkService(a),
+    show: (a) => isJunkService(a),
   },
   {
     id: "oversizedItemCount",
@@ -573,7 +601,7 @@ const STEPS: Step[] = [
       "📦 Pack a few fragile items",
       "🏠 Full packing service (whole home)",
     ],
-    show: (a) => isMovingService(a) && !(a.jobSize || "").includes("Single item"),
+    show: (a) => isMovingService(a) && !(a.jobSize || "").includes("1-2 items"),
   },
   {
     id: "distanceReport",
@@ -598,7 +626,7 @@ const STEPS: Step[] = [
       "🚛 JC ON THE MOVE provides the truck",
     ],
     // Tiny jobs use flat rates — no truck question
-    show: (a) => isMovingService(a) && !(a.jobSize || "").includes("Single item"),
+    show: (a) => isMovingService(a) && !(a.jobSize || "").includes("1-2 items"),
   },
   {
     id: "truckSize",
@@ -1421,7 +1449,9 @@ export function buildMovingRecommendations(
   stakingPerkPct = 0,
 ): MovingRecommendation[] {
   const bracket = getMovingDistanceBracket(distanceMiles, a.distanceReport);
-  const isTiny = (a.jobSize || "").includes("Single item");
+  const jobSizeText = a.jobSize || "";
+  const propertyText = a.propertyType || "";
+  const isTiny = jobSizeText.includes("1-2 items") || jobSizeText.includes("Single item");
   const specials = (a.specialItems || []).filter(s => s !== "None of these");
   const oversizedQuote = getOversizedItemQuote(a);
   const { hasAnyStairs } = getStairContext(a);
@@ -1622,7 +1652,8 @@ export function buildMovingRecommendations(
   const loadTypeRaw = a.loadType || "";
   const isUnloadOnly = loadTypeRaw.includes("Unload only");
   const isLoadOnly = loadTypeRaw.includes("Load only");
-  const isLargeLoad = is26 || (a.jobSize || "").includes("4+") || (a.homeSize || "").includes("4+");
+  const isHouse = propertyText.includes("House");
+  const isLargeLoad = is26 || jobSizeText.includes("4") || (isHouse && jobSizeText.includes("3")) || (a.homeSize || "").includes("4+");
   const localLaborTotal = (base: number) => applyPerk(base) + oversizedQuote.fee;
 
   if (bracket === "local" && isUnloadOnly) {
@@ -1714,7 +1745,7 @@ export function buildMovingRecommendations(
       ];
     }
 
-    const isMedium = (a.jobSize || "").includes("2") || (a.homeSize || "").includes("2") || (a.homeSize || "").includes("3");
+    const isMedium = jobSizeText.includes("2") || jobSizeText.includes("3") || (a.homeSize || "").includes("2") || (a.homeSize || "").includes("3");
     const total = localLaborTotal(isMedium ? 450 : 300);
     return [{
       id: isMedium ? "unload_medium_local" : "unload_small_no_stairs",
@@ -1738,7 +1769,7 @@ export function buildMovingRecommendations(
   }
 
   if (bracket === "local" && isLoadOnly) {
-    const loadBase = isLargeLoad ? 850 : (hasAnyStairs || (a.jobSize || "").includes("2") ? 600 : 450);
+    const loadBase = isLargeLoad ? 850 : (hasAnyStairs || jobSizeText.includes("2") || jobSizeText.includes("3") ? 600 : 450);
     const total = localLaborTotal(loadBase);
     const crew = isLargeLoad || hasAnyStairs ? 3 : 2;
     const hours = isLargeLoad ? 4 : 3;
@@ -1764,9 +1795,9 @@ export function buildMovingRecommendations(
     "2–3 bed": { crew: 2, minHrs: 3, maxHrs: 5 },
     "4+ bed":  { crew: 3, minHrs: 4, maxHrs: 7 },
   };
-  const sizeKey = (a.jobSize || "").includes("Studio") ? "Studio"
-    : (a.jobSize || "").includes("2–3") ? "2–3 bed"
-    : (a.jobSize || "").includes("4+") ? "4+ bed"
+  const sizeKey = jobSizeText.includes("Studio") ? "Studio"
+    : jobSizeText.includes("2") || jobSizeText.includes("3") ? "2–3 bed"
+    : jobSizeText.includes("4") ? "4+ bed"
     : "Studio";
   const { crew: lCrew, minHrs, maxHrs } = laborSizeMap[sizeKey];
   const laborRate = 85;
@@ -1862,7 +1893,19 @@ export function computeMovingQuote(a: Answers, ratePerMoverHour = 85, jc222FlatP
     "4+ Bedroom House":     9,
     "Commercial / Office":  8,
   };
+  const movingJobSize = a.jobSize || "";
+  const movingPropertyType = a.propertyType || "";
+  const movingIsHouse = movingPropertyType.includes("House");
   let score = sizeScore[a.homeSize || ""] ?? 2;
+  if (movingJobSize) {
+    if (movingJobSize.includes("1-2 items")) score = -1;
+    else if (movingJobSize.includes("Studio")) score = movingIsHouse ? 2 : 1;
+    else if (movingJobSize.includes("2 bedroom")) score = movingIsHouse ? 4 : 3;
+    else if (movingJobSize.includes("3 bedroom")) score = movingIsHouse ? 7 : 5;
+    else if (movingJobSize.includes("4 bedroom")) score = movingIsHouse ? 9 : 6;
+    if (movingPropertyType.includes("Storage")) score = Math.max(score, 2);
+    if (movingPropertyType.includes("Office")) score = Math.max(score, 6);
+  }
 
   // Adjust score for complexity
   if (isBoth)             score += 2;   // Load + Unload = more work
@@ -3109,6 +3152,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
         } else if (answers.jobSize) {
           scopeParts.push(`Job size: ${answers.jobSize}`);
         }
+        if (answers.propertyType) scopeParts.push(`Property type: ${answers.propertyType}`);
         if (answers.selectedMovingRecNotes) {
           scopeParts.push(answers.selectedMovingRecNotes);
         }
