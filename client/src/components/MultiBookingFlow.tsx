@@ -253,10 +253,40 @@ export function formatLinePrice(
   return { text: `$${total.toFixed(digits)}`, isEstimate: false };
 }
 
-/** Task #218 — Returns the secondary "2 ppl × 4 hrs at $85/hr" line
- *  the wizard cart and chat card both show beneath each priced
- *  service. Returns null when the live quote did not attach a labor
- *  breakdown (e.g. fixed-price line without a labor mapping). */
+export function quoteLineForItem(quote: QuoteResult | null | undefined, item: { serviceCode: string }, idx: number) {
+  const line = quote?.items?.[idx];
+  return line?.serviceCode === item.serviceCode ? line : undefined;
+}
+
+export function formatQuoteLinePrice(
+  quote: QuoteResult | null | undefined,
+  item: { serviceCode: string; quantity: number; unitPrice: number; priceMode: string },
+  idx: number,
+  opts: { fractionDigits?: number } = {},
+): { text: string; isEstimate: boolean } {
+  const digits = opts.fractionDigits ?? 0;
+  const quoteLine = quoteLineForItem(quote, item, idx);
+  if (typeof quoteLine?.lineSubtotal === "number") {
+    return { text: `$${quoteLine.lineSubtotal.toFixed(digits)}`, isEstimate: ESTIMATE_SERVICE_CODES.has(item.serviceCode) };
+  }
+  return formatLinePrice(item, opts);
+}
+
+export function quoteCrewSize(quote: QuoteResult | null | undefined, items: SelectedItem[]): number {
+  const quotedCrew = quote?.items
+    ?.map((line) => line.laborMeta?.crewSize || 0)
+    .filter((crew) => crew > 0);
+  if (quotedCrew && quotedCrew.length > 0) return Math.max(...quotedCrew);
+  return recommendedCrewSize(items);
+}
+
+export function formatReservedCrewSubline(meta?: QuoteLaborMeta): string | null {
+  if (!meta?.crewSize || !meta?.laborHours) return null;
+  const movers = `${meta.crewSize} mover${meta.crewSize === 1 ? "" : "s"}`;
+  const hours = `${meta.laborHours} hour${meta.laborHours === 1 ? "" : "s"}`;
+  return `${movers} • ${hours} • Minimum crew reserved`;
+}
+
 export function formatLineLaborSubline(meta?: QuoteLaborMeta): string | null {
   if (!meta) return null;
   if (!meta.crewSize || meta.crewSize <= 0) return null;
@@ -1625,7 +1655,7 @@ export function BookingSummarySticky({
   const discount = quote?.discountTotal ?? 0;
   const finalTotal = quote?.finalTotal ?? subtotal - discount;
   const tokens = quote?.tokenEstimate ?? 0;
-  const crew = recommendedCrewSize(items);
+  const crew = quoteCrewSize(quote, items);
   const hasQuoteItems = items.some(i => i.priceMode !== "quote");
 
   // Desktop sticky right panel
@@ -1638,11 +1668,11 @@ export function BookingSummarySticky({
         ) : (
           <>
             <div className="space-y-1.5">
-              {items.map(i => {
+              {items.map((i, idx) => {
                 return (
                   <div key={i.serviceCode} className="flex justify-between text-xs">
                     <span className="truncate">{emojiFor(i.serviceCode)} {i.label}</span>
-                    <span className="font-semibold text-muted-foreground">{showPricing ? formatLinePrice(i).text : "Review"}</span>
+                    <span className="font-semibold text-muted-foreground">{showPricing ? formatQuoteLinePrice(quote, i, idx).text : "Review"}</span>
                   </div>
                 );
               })}
@@ -1673,7 +1703,7 @@ export function BookingSummarySticky({
               </div>
             )}
             <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-              <span className="flex items-center gap-1"><Users className="h-3 w-3" /> Crew of {crew} recommended</span>
+              {crew > 0 && <span className="flex items-center gap-1"><Users className="h-3 w-3" /> Crew reserved: {crew}</span>}
               {showPricing && <span className="flex items-center gap-1 text-orange-400"><Coins className="h-3 w-3" /> +{tokens} JCMOVES</span>}
             </div>
             {bottomSlot ?? (
@@ -1713,11 +1743,11 @@ export function BookingSummarySticky({
       </button>
       {!collapsed && items.length > 0 && (
         <div className="px-4 pb-2 space-y-1.5 max-h-48 overflow-y-auto">
-          {items.map(i => {
+          {items.map((i, idx) => {
             return (
               <div key={i.serviceCode} className="flex justify-between text-xs">
                 <span className="truncate">{emojiFor(i.serviceCode)} {i.label}</span>
-                <span className="font-semibold text-muted-foreground">{showPricing ? formatLinePrice(i).text : "Review"}</span>
+                <span className="font-semibold text-muted-foreground">{showPricing ? formatQuoteLinePrice(quote, i, idx).text : "Review"}</span>
               </div>
             );
           })}
@@ -1734,7 +1764,7 @@ export function BookingSummarySticky({
             </div>
           )}
           <div className="flex justify-between text-[11px] text-muted-foreground">
-            <span><Users className="inline h-3 w-3" /> Crew of {crew}</span>
+            {crew > 0 && <span><Users className="inline h-3 w-3" /> Crew reserved: {crew}</span>}
             <span className="text-orange-400"><Coins className="inline h-3 w-3" /> +{tokens} JCMOVES</span>
           </div>
           </>

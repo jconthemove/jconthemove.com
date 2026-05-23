@@ -7,6 +7,7 @@ import { useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft, ArrowRight, CheckCircle2, Phone, Coins, Users, Tag, Loader2, AlertCircle,
+  Shield, Star, MapPin,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,14 +25,14 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import AddressField from "@/components/AddressField";
-import BookingConfirmedTiles from "@/components/BookingConfirmedTiles";
 import type { User } from "@shared/schema";
 import {
   ServiceSelector, InlineItemConfigure, BookingSummarySticky,
   BundleSuggestionDialog, type BundleSuggestion,
   type CatalogService, type FeaturedBundle, type SelectedItem, type QuoteResult,
-  emojiFor, recommendedCrewSize, schedulingModeFor, formatLinePrice, formatLineLaborSubline,
-  formatMovingFlowSummary,
+  emojiFor, schedulingModeFor,
+  formatMovingFlowSummary, formatQuoteLinePrice, quoteLineForItem, quoteCrewSize,
+  formatReservedCrewSubline,
 } from "@/components/MultiBookingFlow";
 
 interface BundleSlots {
@@ -671,41 +672,50 @@ export default function MultiServiceBookPage() {
   // ── Confirmation screen (unchanged)
   if (confirmation) {
     const c = confirmation;
-    const finalTotal = parseFloat(c.finalTotal);
-    const discount = parseFloat(c.discountTotal);
+    const finalTotal = Number(c.quote?.finalTotal ?? c.finalTotal ?? 0);
+    const subtotal = Number(c.quote?.subtotal ?? finalTotal);
+    const discount = Number(c.quote?.discountTotal ?? c.discountTotal ?? 0);
+    const crew = quoteCrewSize(c.quote, c.items);
+    const trackUrl = c.customerEmail
+      ? `/customer-login?intent=track&email=${encodeURIComponent(c.customerEmail)}`
+      : "/customer-login?intent=track";
     return (
       <div className="min-h-screen bg-background pb-16">
         <div className="max-w-2xl mx-auto px-4 pt-8">
-          <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-6 space-y-4 text-center">
+          <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5 sm:p-6 space-y-5 text-center">
             <div className="w-16 h-16 rounded-full bg-emerald-500/15 flex items-center justify-center mx-auto">
               <CheckCircle2 className="h-9 w-9 text-emerald-500" />
             </div>
             <div>
-              <h1 className="text-2xl font-black">Booking Confirmed!</h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                We've received your request and will reach out to {c.customerPhone} to schedule.
+              <h1 className="text-2xl sm:text-3xl font-black">Move Request Locked In</h1>
+              <p className="text-sm text-muted-foreground mt-2">
+                Your crew coordinator will contact you shortly at {c.customerPhone}.
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                Fast scheduling • Local movers • Rewards earned automatically
               </p>
             </div>
-            <div className="rounded-xl bg-card border border-border p-4 text-left space-y-2">
-              <p className="text-xs uppercase tracking-widest text-muted-foreground">Your services</p>
+            <div className="grid grid-cols-3 gap-2 text-[10px] font-bold uppercase tracking-tight text-muted-foreground">
+              <span className="flex items-center justify-center gap-1"><Shield className="h-3.5 w-3.5 text-emerald-500" /> Licensed</span>
+              <span className="flex items-center justify-center gap-1"><Star className="h-3.5 w-3.5 text-yellow-500" /> 5-Star</span>
+              <span className="flex items-center justify-center gap-1"><MapPin className="h-3.5 w-3.5 text-sky-500" /> Local Crew</span>
+            </div>
+            <div className="rounded-xl bg-card border border-border p-4 text-left space-y-3">
+              <p className="text-xs uppercase tracking-widest text-muted-foreground">Service secured</p>
               {c.items.map((i, idx) => {
-                const fallbackLinePrice = formatLinePrice(i, { fractionDigits: 2 });
-                // Task #218 round-9 rev2 — match the chat card's
-                // "N people × M hrs at $85/hr" subline so the wizard's
-                // confirmation step shows the same labor breakdown the
-                // customer saw in the recommended-plan card. Use index
-                // alignment (not serviceCode find()) so duplicate lines
-                // of the same service get their own labor meta.
-                const quoteLine = c.quote.items[idx];
-                const laborMeta = quoteLine?.serviceCode === i.serviceCode ? quoteLine.laborMeta : undefined;
-                const laborSubline = formatLineLaborSubline(laborMeta);
+                const fallbackLinePrice = formatQuoteLinePrice(c.quote, i, idx, { fractionDigits: 2 });
+                // Use index alignment so duplicate lines of the same service
+                // get their own quote subtotal and reserved-crew details.
+                const quoteLine = quoteLineForItem(c.quote, i, idx);
+                const laborMeta = quoteLine?.laborMeta;
+                const laborSubline = formatReservedCrewSubline(laborMeta);
                 const movingSummary = formatMovingFlowSummary(i);
                 const resolvedLineSubtotal = typeof quoteLine?.lineSubtotal === "number"
                   ? quoteLine.lineSubtotal
                   : null;
                 return (
-                  <div key={i.serviceCode} className="flex justify-between text-sm">
-                    <span>
+                  <div key={i.serviceCode} className="flex justify-between gap-3 text-sm">
+                    <span className="min-w-0">
                       {emojiFor(i.serviceCode)} {i.label}{i.details.requestedDate ? ` • ${i.details.requestedDate}` : ""}
                       {laborSubline && (
                         <span className="block text-[10px] font-normal text-muted-foreground" data-testid={`confirm-line-labor-${i.serviceCode}`}>
@@ -718,7 +728,7 @@ export default function MultiServiceBookPage() {
                         </span>
                       )}
                     </span>
-                    <span className="font-semibold text-right">
+                    <span className="font-semibold text-right whitespace-nowrap">
                       {resolvedLineSubtotal !== null
                         ? `$${resolvedLineSubtotal.toFixed(2)}`
                         : fallbackLinePrice.text}
@@ -736,19 +746,37 @@ export default function MultiServiceBookPage() {
                 </div>
               )}
               <div className="flex justify-between text-base font-bold pt-2 border-t border-border">
-                <span>Final total</span>
+                <span>Subtotal</span>
+                <span>${subtotal.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-lg font-black pt-1">
+                <span>Total</span>
                 <span>${finalTotal.toFixed(2)}</span>
               </div>
+              <div className="rounded-lg border border-orange-500/25 bg-orange-500/10 p-3 text-sm">
+                <p className="font-black text-orange-500">
+                  You earned {c.tokenEstimate.toLocaleString()} JCMOVES Rewards
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Redeem toward future moves, junk removal, and more.
+                </p>
+              </div>
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span><Users className="inline h-3 w-3" /> Crew of {recommendedCrewSize(c.items)} recommended</span>
-                <span className="text-orange-500"><Coins className="inline h-3 w-3" /> +{c.tokenEstimate} JCMOVES</span>
+                {crew > 0 && <span><Users className="inline h-3 w-3" /> Crew reserved: {crew}</span>}
+                <span>Flat job estimate</span>
               </div>
             </div>
-            <Button className="w-full" onClick={() => setLocation("/")}>Back to Home</Button>
-            <BookingConfirmedTiles
-              serviceType={c.items[0]?.serviceCode}
-              customerEmail={c.customerEmail || undefined}
-            />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <Button className="w-full" onClick={() => setLocation(trackUrl)}>Track My Job</Button>
+              <Button className="w-full" variant="outline" onClick={() => setLocation("/book")}>Book Another Service</Button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setLocation("/")}
+              className="text-xs font-semibold text-muted-foreground hover:text-foreground"
+            >
+              Return Home
+            </button>
           </div>
         </div>
       </div>
@@ -1024,29 +1052,26 @@ export default function MultiServiceBookPage() {
               <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
                 <div>
                   <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Address</p>
-                  <p className="text-sm">{serviceAddress}</p>
+                  <p className="text-sm leading-relaxed break-words [overflow-wrap:anywhere]">{serviceAddress}</p>
                 </div>
                 <div>
                   <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Contact</p>
-                  <p className="text-sm">{contact.customerName} · {contact.customerPhone} · {contact.customerEmail}</p>
+                  <p className="text-sm leading-relaxed break-words [overflow-wrap:anywhere]">{contact.customerName} · {contact.customerPhone} · {contact.customerEmail}</p>
                 </div>
                 <div className="border-t border-border pt-3">
                   <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Services</p>
                   <div className="space-y-1.5">
                     {items.map((i, idx) => {
-                      const linePrice = formatLinePrice(i, { fractionDigits: 2 });
-                      // Task #218 round-9 rev2 — same labor subline as the
-                      // chat card. Use index alignment (not serviceCode
-                      // find()) so duplicate lines of the same service get
-                      // their own labor meta instead of all sharing the
-                      // first matching line's tuple.
-                      const quoteLine = quote?.items[idx];
-                      const laborMeta = quoteLine?.serviceCode === i.serviceCode ? quoteLine.laborMeta : undefined;
-                      const laborSubline = formatLineLaborSubline(laborMeta);
+                      const linePrice = formatQuoteLinePrice(quote, i, idx, { fractionDigits: 2 });
+                      // Use index alignment so duplicate lines of the same
+                      // service get their own quote subtotal and crew details.
+                      const quoteLine = quoteLineForItem(quote, i, idx);
+                      const laborMeta = quoteLine?.laborMeta;
+                      const laborSubline = formatReservedCrewSubline(laborMeta);
                       const movingSummary = formatMovingFlowSummary(i);
                       return (
                         <div key={i.serviceCode} className="flex justify-between text-sm">
-                          <span className="truncate pr-2">
+                          <span className="min-w-0 pr-2">
                             {emojiFor(i.serviceCode)} {i.label}
                             {i.details.requestedDate ? ` · ${i.details.requestedDate}` : i.details.callToSchedule ? " · we'll call" : ""}
                             {i.details.frequency ? ` · ${i.details.frequency}` : ""}
