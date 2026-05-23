@@ -327,7 +327,8 @@ export function PlacesAutocomplete({
           inputClassName ||
           `${baseInput} ${status === "ready" ? "pl-8" : ""}`
         }
-        autoComplete="off"
+        name="street-address"
+        autoComplete="street-address"
       />
     </div>
   );

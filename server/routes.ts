@@ -20469,7 +20469,7 @@ Thank you for your business!
   });
 
   app.get("/api/maps-config", (_req, res) => {
-    const key = process.env.GOOGLE_MAPS_API_KEY || "";
+    const key = process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_PLACES_API_KEY || "";
     res.json({ key });
   });
 
