@@ -27,9 +27,7 @@ export async function getDemandSnapshot(): Promise<DemandSnapshot> {
   const counts = await getWindowCountsByZone();
   const scored = scoreAllZones(counts);
   const zones = scored.map(z => {
-    const info = getZone
-      ? listZones().find(x => x.code === z.zoneCode)
-      : null;
+    const info = listZones().find(x => x.code === z.zoneCode) ?? null;
     return {
       ...z,
       surge: decideSurge(z),

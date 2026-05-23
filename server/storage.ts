@@ -1,8 +1,8 @@
-import { type User, type InsertUser, type UpsertUser, type Lead, type InsertLead, type Contact, type InsertContact, type Notification, type InsertNotification, type TreasuryAccount, type InsertTreasuryAccount, type FundingDeposit, type InsertFundingDeposit, type ReserveTransaction, type InsertReserveTransaction, type FaucetConfig, type InsertFaucetConfig, type FaucetClaim, type InsertFaucetClaim, type FaucetWallet, type InsertFaucetWallet, type FaucetRevenue, type InsertFaucetRevenue, type EmployeeStats, type InsertEmployeeStats, type AchievementType, type EmployeeAchievement, type InsertEmployeeAchievement, type PointTransaction, type InsertPointTransaction, type WeeklyLeaderboard, type DailyCheckin, type InsertDailyCheckin, type WalletAccount, type InsertWalletAccount, type SupportedCurrency, type InsertSupportedCurrency, type UserWallet, type InsertUserWallet, type TreasuryWallet, type InsertTreasuryWallet, type WalletTransaction, type InsertWalletTransaction, type ShopItem, type InsertShopItem, type Review, type InsertReview, type Testimonial, type InsertTestimonial, type WalletPayout, type InsertWalletPayout, type TokenConversion, type InsertTokenConversion, type TreasuryLimit, type InsertTreasuryLimit, type SquareInvoice, type InsertSquareInvoice, type SnowCustomer, type InsertSnowCustomer, type SnowServiceType, type InsertSnowServiceType, type SnowServiceLog, type InsertSnowServiceLog, type StakingTier, type Stake, type InsertStake, stakingTiers, stakes, leads, contacts, users, notifications, walletAccounts, rewards, treasuryAccounts, fundingDeposits, reserveTransactions, priceHistory, faucetConfig, faucetClaims, faucetWallets, faucetRevenue, employeeStats, achievementTypes, employeeAchievements, pointTransactions, weeklyLeaderboards, dailyCheckins, supportedCurrencies, userWallets, treasuryWallets, walletTransactions, shopItems, cashoutRequests, fraudLogs, helpRequests, miningSessions, miningClaims, treasuryWithdrawals, reviews, testimonials, walletPayouts, tokenConversions, treasuryLimits, squareInvoices, buybackFund, snowCustomers, snowServiceTypes, snowServiceLogs } from "@shared/schema";
+import { type User, type InsertUser, type UpsertUser, type Lead, type InsertLead, type Contact, type InsertContact, type Notification, type InsertNotification, type TreasuryAccount, type InsertTreasuryAccount, type FundingDeposit, type InsertFundingDeposit, type ReserveTransaction, type InsertReserveTransaction, type FaucetConfig, type InsertFaucetConfig, type FaucetClaim, type InsertFaucetClaim, type FaucetWallet, type InsertFaucetWallet, type FaucetRevenue, type InsertFaucetRevenue, type EmployeeStats, type InsertEmployeeStats, type AchievementType, type EmployeeAchievement, type InsertEmployeeAchievement, type PointTransaction, type InsertPointTransaction, type WeeklyLeaderboard, type DailyCheckin, type InsertDailyCheckin, type WalletAccount, type InsertWalletAccount, type SupportedCurrency, type InsertSupportedCurrency, type UserWallet, type InsertUserWallet, type TreasuryWallet, type InsertTreasuryWallet, type WalletTransaction, type InsertWalletTransaction, type ShopItem, type InsertShopItem, type Review, type InsertReview, type Testimonial, type InsertTestimonial, type WalletPayout, type InsertWalletPayout, type TokenConversion, type InsertTokenConversion, type TreasuryLimit, type InsertTreasuryLimit, type SquareInvoice, type InsertSquareInvoice, type SnowCustomer, type InsertSnowCustomer, type SnowServiceType, type InsertSnowServiceType, type SnowServiceLog, type InsertSnowServiceLog, type StakingTier, type Stake, type InsertStake, type InsertReward, type Reward, stakingTiers, stakes, leads, contacts, users, notifications, walletAccounts, rewards, treasuryAccounts, fundingDeposits, reserveTransactions, priceHistory, faucetConfig, faucetClaims, faucetWallets, faucetRevenue, employeeStats, achievementTypes, employeeAchievements, pointTransactions, weeklyLeaderboards, dailyCheckins, supportedCurrencies, userWallets, treasuryWallets, walletTransactions, shopItems, cashoutRequests, fraudLogs, helpRequests, miningSessions, miningClaims, treasuryWithdrawals, reviews, testimonials, walletPayouts, tokenConversions, treasuryLimits, squareInvoices, buybackFund, snowCustomers, snowServiceTypes, snowServiceLogs } from "@shared/schema";
 import { type WorkerDayBlock, type WorkerScheduleRow, type WorkerGoal, type WorkerHourOverride, workerDayBlocks, workerSchedule, workerGoals, workerHourOverrides } from "@shared/schema";
 import { type Sponsor, type InsertSponsor, sponsors } from "@shared/schema";
 import { db, type DbTransaction } from "./db";
-import { eq, desc, isNull, and, isNotNull, sql, gt, gte, inArray, not, or, lte } from "drizzle-orm";
+import { eq, desc, isNull, and, isNotNull, sql, gt, gte, inArray, not, or, lte, getTableColumns } from "drizzle-orm";
 import { TREASURY_CONFIG } from "./constants";
 import { cryptoService } from "./services/crypto";
 import { creditGenerosityFund } from "./services/generosityFund";
@@ -144,7 +144,7 @@ export interface IStorage {
   getRecentCheckIn(userId: string, sinceDate: Date): Promise<DailyCheckin | undefined>;
   createDailyCheckIn(checkin: InsertDailyCheckin): Promise<DailyCheckin>;
   createPointTransaction(transaction: InsertPointTransaction): Promise<PointTransaction>;
-  createReward(reward: InsertReward): Promise<Reward>;
+  createReward(reward: InsertReward & Partial<Reward>): Promise<Reward>;
   getEmployeeAchievements(userId: string, limit?: number): Promise<(EmployeeAchievement & { achievementType: AchievementType })[]>;
   getUserAchievement(userId: string, achievementTypeId: string): Promise<EmployeeAchievement | undefined>;
   createEmployeeAchievement(achievement: InsertEmployeeAchievement): Promise<EmployeeAchievement>;
@@ -531,7 +531,7 @@ export class DatabaseStorage implements IStorage {
       console.log(`  ✓ Nullified treasury wallet manager references for user ${userId}`);
       
       // Nullify depositedBy in funding deposits (keep deposit history)
-      await db.update(fundingDeposits).set({ depositedBy: null }).where(eq(fundingDeposits.depositedBy, userId));
+      await db.update(fundingDeposits).set({ notes: sql`COALESCE(${fundingDeposits.notes}, '') || ' | Depositor deleted'` }).where(eq(fundingDeposits.depositedBy, userId));
       console.log(`  ✓ Nullified funding deposit references for user ${userId}`);
       
       // Nullify userId in fraud logs (keep fraud history but anonymize)
@@ -1200,13 +1200,13 @@ export class DatabaseStorage implements IStorage {
   async createShopItem(item: InsertShopItem): Promise<ShopItem> {
     const [shopItem] = await db
       .insert(shopItems)
-      .values(item)
+      .values({ ...item, price: String(item.price) })
       .returning();
     return shopItem;
   }
 
   async getShopItems(filters?: { status?: string; postedBy?: string }, limit: number = 20, offset: number = 0): Promise<ShopItem[]> {
-    let query = db.select().from(shopItems);
+    let query: any = db.select().from(shopItems);
     
     const conditions = [];
     if (filters?.status) {
@@ -1955,7 +1955,7 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async createReward(reward: InsertReward): Promise<Reward> {
+  async createReward(reward: InsertReward & Partial<Reward>): Promise<Reward> {
     const [created] = await db
       .insert(rewards)
       .values(reward)
@@ -2268,7 +2268,7 @@ export class DatabaseStorage implements IStorage {
 
   async getUserWalletsWithCurrency(userId: string): Promise<(UserWallet & { currency: SupportedCurrency })[]> {
     const results = await db.select({
-      ...userWallets,
+      ...getTableColumns(userWallets),
       currency: supportedCurrencies
     })
     .from(userWallets)
@@ -2449,7 +2449,7 @@ export class DatabaseStorage implements IStorage {
     filters?: { leadId?: string; employeeId?: string; userId?: string },
     limit: number = 100
   ): Promise<Review[]> {
-    let query = db.select().from(reviews);
+    let query: any = db.select().from(reviews);
     
     const conditions = [];
     if (filters?.leadId) {

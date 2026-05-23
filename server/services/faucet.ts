@@ -64,10 +64,10 @@ export class FaucetService {
         
         // Check if user can claim (1 hour cooldown)
         const canClaim = !lastClaim || 
-          (Date.now() - new Date(lastClaim.createdAt).getTime()) >= (FAUCET_CONFIG.DEFAULT_CLAIM_INTERVAL * 1000);
+          (Date.now() - new Date(lastClaim.claimTime).getTime()) >= (FAUCET_CONFIG.DEFAULT_CLAIM_INTERVAL * 1000);
         
         const nextClaimTime = lastClaim ? 
-          new Date(new Date(lastClaim.createdAt).getTime() + (FAUCET_CONFIG.DEFAULT_CLAIM_INTERVAL * 1000)) : 
+          new Date(new Date(lastClaim.claimTime).getTime() + (FAUCET_CONFIG.DEFAULT_CLAIM_INTERVAL * 1000)) : 
           undefined;
         
         return {
@@ -75,14 +75,14 @@ export class FaucetService {
           amount,
           canClaim,
           nextClaimTime: canClaim ? undefined : nextClaimTime,
-          lastClaimTime: lastClaim ? new Date(lastClaim.createdAt) : undefined
+          lastClaimTime: lastClaim ? new Date(lastClaim.claimTime) : undefined
         };
       }));
       
       // Calculate total earnings
       const totalEarnings: { [currency: string]: string } = {};
       userWallets.forEach(wallet => {
-        totalEarnings[wallet.currency] = wallet.totalEarned;
+        totalEarnings[wallet.currency] = wallet.totalEarned ?? "0";
       });
       
       // Calculate total claims
@@ -126,7 +126,7 @@ export class FaucetService {
       const lastClaimForCurrency = recentClaims.find(claim => claim.currency === currency);
       
       if (lastClaimForCurrency) {
-        const timeSinceLastClaim = Date.now() - new Date(lastClaimForCurrency.createdAt).getTime();
+        const timeSinceLastClaim = Date.now() - new Date(lastClaimForCurrency.claimTime).getTime();
         const cooldownTime = FAUCET_CONFIG.DEFAULT_CLAIM_INTERVAL * 1000; // Convert to milliseconds
         
         if (timeSinceLastClaim < cooldownTime) {
@@ -260,7 +260,7 @@ export class FaucetService {
           payout_id,
           timestamp: Date.now()
         }
-      });
+      } as any);
       
       // Create or update user's faucet wallet
       await this.updateUserFaucetWallet(userId, currency, rewardAmount);
@@ -344,8 +344,8 @@ export class FaucetService {
       
       if (existingWallet) {
         // Update existing wallet
-        await storage.updateFaucetWallet(existingWallet.id, {
-          totalEarned: (parseFloat(existingWallet.totalEarned) + amount).toString(),
+        await storage.updateFaucetWallet(existingWallet.userId, existingWallet.currency, {
+          totalEarned: (parseFloat(existingWallet.totalEarned ?? "0") + amount).toString(),
           totalClaims: (existingWallet.totalClaims || 0) + 1,
           lastClaimTime: new Date()
         });
@@ -357,7 +357,7 @@ export class FaucetService {
           totalEarned: amount.toString(),
           totalClaims: 1,
           lastClaimTime: new Date()
-        });
+        } as any);
       }
     } catch (error) {
       console.error('Faucet wallet update error:', error);

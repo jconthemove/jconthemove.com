@@ -365,7 +365,7 @@ export default function AdminRewardShopPage() {
               className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${activeTab === tab.id ? "bg-yellow-500 text-black" : "text-muted-foreground hover:text-foreground"}`}
             >
               {tab.label}
-              {tab.count !== undefined && (
+              {"count" in tab && tab.count !== undefined && (
                 <span className={`text-xs px-1.5 py-0.5 rounded-full ${(tab as any).alert ? "bg-red-500 text-white" : "bg-card border border-border"}`}>
                   {tab.count}
                 </span>
@@ -765,13 +765,13 @@ export default function AdminRewardShopPage() {
             </div>
 
             {/* Recent Jackpot Wins */}
-            {(spinAdminData?.recentJackpotWins ?? []).length > 0 && (
+            {(((spinAdminData as any)?.recentJackpotWins ?? []) as any[]).length > 0 && (
               <div>
                 <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
                   <Trophy className="h-4 w-4 text-yellow-400" /> Recent Jackpot Wins
                 </h3>
                 <div className="space-y-2">
-                  {(spinAdminData.recentJackpotWins as any[]).map((win: any) => (
+                  {((spinAdminData as any).recentJackpotWins as any[]).map((win: any) => (
                     <div key={win.id} className="flex items-center justify-between bg-yellow-950/20 border border-yellow-500/20 rounded-lg px-3 py-2 text-xs">
                       <div>
                         <span className="font-bold text-yellow-400">{win.username || win.first_name || "User"}</span>

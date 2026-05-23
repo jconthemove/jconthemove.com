@@ -89,7 +89,7 @@ export default function CrewSchedulePage() {
   const today = new Date();
   const [viewYear, setViewYear] = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth() + 1);
-  const [viewMode, setViewMode] = useState<"settings">("settings");
+  const [viewMode, setViewMode] = useState<"settings" | "week">("settings");
   const [weekOffset, setWeekOffset] = useState(0);
   const [dayModal, setDayModal] = useState<DayModalState | null>(null);
 

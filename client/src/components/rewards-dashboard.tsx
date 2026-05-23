@@ -85,6 +85,10 @@ interface MiningStatus {
   miningSpeed: string;
   streakCount: number;
   nextStreakBonus: string;
+  fitness?: {
+    pushups: number;
+    situps: number;
+  };
 }
 
 export default function RewardsDashboard() {

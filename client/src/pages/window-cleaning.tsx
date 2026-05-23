@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
@@ -99,7 +98,7 @@ export default function WindowCleaningPage() {
           </div>
         ) : (
           <WindowCleaningBooking
-            user={user}
+            user={user ? { ...user, firstName: user.firstName ?? undefined, lastName: user.lastName ?? undefined, email: user.email ?? undefined, phoneNumber: user.phoneNumber ?? undefined } : undefined}
             onBooked={(jobId, total, email) => setBooked({ jobId, total, email })}
           />
         )}

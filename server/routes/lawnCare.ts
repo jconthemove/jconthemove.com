@@ -286,7 +286,7 @@ router.post("/quote", async (req: Request, res: Response) => {
     if (bundleDiscount.applied) {
       logBundleDiscountApplication({
         referenceTable: "lawn_care_quotes",
-        referenceId: quote.id,
+        referenceId: String(quote.id),
         serviceType: "lawn_care",
         customerEmail: data.email || null,
         customerPhone: data.phone,
@@ -391,7 +391,7 @@ router.post("/quote", async (req: Request, res: Response) => {
     if (data.email) {
       disburseServiceTokens({
         serviceType: "lawn_care",
-        referenceId: quote.id,
+        referenceId: String(quote.id),
         customerEmail: data.email,
         totalPrice: pricing.totalQuoted,
       }).catch(err => console.error("Lawn care token disburse error:", err));
@@ -932,7 +932,7 @@ router.post("/rebook", async (req: Request, res: Response) => {
     if (prev.email) {
       disburseServiceTokens({
         serviceType: "lawn_care",
-        referenceId: quote.id,
+        referenceId: String(quote.id),
         customerEmail: prev.email,
         totalPrice: pricing.totalQuoted,
       }).catch(err => console.error("Lawn care rebook token disburse error:", err));

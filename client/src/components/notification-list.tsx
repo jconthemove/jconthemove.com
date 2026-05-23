@@ -18,7 +18,7 @@ export function NotificationList({ open, onOpenChange }: NotificationListProps) 
   const queryClient = useQueryClient();
 
   // Fetch notifications
-  const { data: notificationsData, isLoading } = useQuery({
+  const { data: notificationsData, isLoading } = useQuery<{ notifications: Notification[] }>({
     queryKey: ["/api/notifications"],
     enabled: open, // Only fetch when sheet is open
   });
@@ -51,7 +51,8 @@ export function NotificationList({ open, onOpenChange }: NotificationListProps) 
     
     // Handle navigation based on notification type
     if (notification.type === 'job_assigned' || notification.type === 'job_status_change') {
-      const jobId = notification.data?.jobId;
+      const data = notification.data as { jobId?: string } | null | undefined;
+      const jobId = data?.jobId;
       if (jobId) {
         // Navigate to job details or mobile lead manager
         onOpenChange(false);

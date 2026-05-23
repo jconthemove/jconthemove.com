@@ -173,7 +173,7 @@ function DisbursementSummaryCard({ lead }: { lead: Lead }) {
           <Badge className="ml-auto bg-green-600/30 text-green-300 border-green-500/30 text-[10px]">Complete</Badge>
         </CardTitle>
         <CardDescription className="text-amber-300/60 text-xs">
-          Distributed at {new Date(lead.completionRewardedAt).toLocaleString()}
+          Distributed at {lead.completionRewardedAt ? new Date(lead.completionRewardedAt).toLocaleString() : "Unknown"}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">
@@ -457,6 +457,7 @@ export default function LeadDetailPage() {
 
   const toggleBonusMover = useMutation({
     mutationFn: async ({ memberId, isBonus }: { memberId: string; isBonus: boolean }) => {
+      if (!lead) throw new Error("Lead not loaded");
       const current: Record<string, boolean> = lead.crewBonusFlags ?? {};
       const updated = { ...current, [memberId]: isBonus };
       return await apiRequest("PATCH", `/api/leads/${params?.id}`, { crewBonusFlags: updated });
@@ -1262,7 +1263,7 @@ export default function LeadDetailPage() {
                       <Label>Requested Move Date</Label>
                       <DatePicker
                         value={form.watch("moveDate") ?? undefined}
-                        onChange={(v) => form.setValue("moveDate", v || null)}
+                        onChange={(v) => form.setValue("moveDate", v || "")}
                         placeholder="Pick a move date"
                       />
                     </div>

@@ -35,7 +35,7 @@ function getSquareClient(): SquareClient {
   });
 }
 
-function primarySquareDeliveryMethod(method: InvoiceDeliveryMethod): string {
+function primarySquareDeliveryMethod(method: InvoiceDeliveryMethod): any {
   if (method === "sms") return "SMS";
   if (method === "none") return "SHARE_MANUALLY";
   return "EMAIL";
@@ -45,7 +45,7 @@ async function applyDualDelivery(
   client: SquareClient,
   invoiceId: string,
   version: number,
-  lead: Pick<Lead, "phone">
+  lead: { phone?: string | null }
 ): Promise<void> {
   if (!lead.phone) {
     console.warn("[dual-delivery] Skipping SMS — no phone on file for lead");

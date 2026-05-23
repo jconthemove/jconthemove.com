@@ -95,9 +95,10 @@ export default function BitcoinPaymentPage() {
 
   useEffect(() => {
     if (!payment?.expiresAt) return;
+    const expiresAt = payment.expiresAt;
     const timer = setInterval(() => {
       const now = Date.now();
-      const expires = new Date(payment.expiresAt).getTime();
+      const expires = new Date(expiresAt).getTime();
       const diff = expires - now;
       if (diff <= 0) {
         setTimeLeft("Expired");

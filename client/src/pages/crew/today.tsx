@@ -580,7 +580,8 @@ export default function CrewTodayPage() {
     const newlyCompleted = myCompletedJobs.filter(j => !prevCompletedIdsRef.current.has(j.id));
     if (newlyCompleted.length > 0 && prevCompletedIdsRef.current.size > 0) {
       const job = newlyCompleted[0];
-      const est = job.estimatedTokens > 0 ? job.estimatedTokens : 100;
+      const estimatedTokens = Number((job as typeof job & { estimatedTokens?: number | string }).estimatedTokens ?? 0);
+      const est = estimatedTokens > 0 ? estimatedTokens : 100;
       setWorkerCelebration({ tokens: est });
       setTimeout(() => setWorkerCelebration(null), 4000);
     }

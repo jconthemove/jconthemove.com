@@ -25,7 +25,7 @@ export function NotificationBell({ onClick }: NotificationBellProps) {
   }, []);
 
   // Get unread notification count
-  const { data: unreadData } = useQuery({
+  const { data: unreadData } = useQuery<{ count: number }>({
     queryKey: ["/api/notifications/unread-count"],
     refetchInterval: 30000, // Check every 30 seconds
   });
