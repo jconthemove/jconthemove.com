@@ -307,7 +307,7 @@ export default function HomePage() {
         <div className="absolute inset-0 bg-gradient-to-r from-[#020915] via-[#020915]/78 to-[#020915]/25" />
         <div className="absolute inset-0 bg-gradient-to-t from-[#020915] via-transparent to-black/30" />
 
-        <div className="relative z-10 mx-auto grid max-w-6xl gap-8 px-4 py-12 md:grid-cols-[1fr_300px] md:items-center md:py-20">
+        <div className="relative z-10 mx-auto max-w-6xl px-4 py-12 md:py-20">
           <div className="max-w-3xl">
             <p className="mb-4 text-xs font-black uppercase tracking-[0.24em] text-blue-300">Local movers. Northwoods strong.</p>
             <h1 className="text-[clamp(2rem,8.2vw,4.9rem)] font-black leading-[0.94] tracking-tight md:text-7xl">
@@ -333,7 +333,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/15 bg-slate-950/80 p-4 shadow-2xl backdrop-blur-md md:p-5">
+          <div className="mt-8 rounded-2xl border border-white/15 bg-slate-950/80 p-4 shadow-2xl backdrop-blur-md md:absolute md:left-[50%] md:top-24 md:mt-0 md:w-[300px] md:p-5">
             <div className="mb-4 flex items-center gap-2">
               <span className="h-3 w-3 rounded-full bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.8)]" />
               <p className="text-lg font-black uppercase text-emerald-300">Available Now</p>
