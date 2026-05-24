@@ -1,13 +1,16 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { SiGoogle } from "react-icons/si";
+import useEmblaCarousel from "embla-carousel-react";
+import Autoplay from "embla-carousel-autoplay";
 import {
   ArrowRight,
   CalendarCheck,
+  ChevronLeft,
+  ChevronRight,
   CheckCircle2,
   Gift,
-  Images,
   MapPin,
   MessageCircle,
   Phone,
@@ -94,11 +97,35 @@ const MORE_SERVICES = [
   { label: "Painting", href: "/book?service=painting" },
 ];
 
-const JOB_PHOTOS = [
-  { label: "Moving Truck", image: heroImage },
-  { label: "Job Ready", image: badgeImage },
-  { label: "Northwoods Haul", image: haulImage },
-  { label: "Crew Work", image: crewImage },
+const STORY_SLIDES = [
+  {
+    eyebrow: "Moving",
+    title: "Protected, loaded, and handled right.",
+    text: "Furniture wrap, steady crews, and local routes planned before we arrive.",
+    image: heroImage,
+    stat: "Local & long-distance",
+  },
+  {
+    eyebrow: "Junk Removal",
+    title: "Cleanouts without the drag.",
+    text: "Trailers, muscle, and disposal help for garages, rentals, sheds, and post-move piles.",
+    image: haulImage,
+    stat: "Fast haul-away",
+  },
+  {
+    eyebrow: "Northwoods Crew",
+    title: "Real people. Real work. Real proof.",
+    text: "A local team customers can text, call, and recognize around town.",
+    image: crewImage,
+    stat: "5-star rated",
+  },
+  {
+    eyebrow: "Rewards",
+    title: "Book the job. Earn JCMOVES.",
+    text: "Every completed service can earn rewards toward future moves and add-ons.",
+    image: badgeImage,
+    stat: "Rewards included",
+  },
 ];
 
 const TRUST_ITEMS = [
@@ -120,6 +147,104 @@ function startOfDayMessage() {
   if (hour < 12) return "Morning move slots open";
   if (hour < 17) return "Same-day quotes open";
   return "Tomorrow's schedule open";
+}
+
+function VisualStoryCarousel({ onQuote }: { onQuote: () => void }) {
+  const autoplay = useRef(Autoplay({ delay: 5200, stopOnInteraction: false }));
+  const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, align: "start" }, [autoplay.current]);
+
+  const scrollPrev = useCallback(() => emblaApi?.scrollPrev(), [emblaApi]);
+  const scrollNext = useCallback(() => emblaApi?.scrollNext(), [emblaApi]);
+
+  return (
+    <section id="jobs" className="border-y border-white/10 bg-slate-950/70 px-4 py-10 md:py-12">
+      <div className="mx-auto grid max-w-6xl gap-6 md:grid-cols-[0.82fr_1.18fr] md:items-center">
+        <div>
+          <p className="text-sm font-black uppercase tracking-[0.25em] text-blue-300">Real Northwoods Jobs</p>
+          <h2 className="mt-3 text-3xl font-black leading-tight tracking-tight md:text-4xl">
+            The work tells the story.
+          </h2>
+          <p className="mt-3 max-w-md text-sm leading-relaxed text-slate-300">
+            A quick look at the jobs, crew, and care behind JC ON THE MOVE.
+          </p>
+          <div className="mt-5 flex flex-wrap gap-2 text-xs font-black uppercase tracking-wider text-slate-300">
+            <span className="rounded-full border border-white/15 px-3 py-1">Moving</span>
+            <span className="rounded-full border border-white/15 px-3 py-1">Junk</span>
+            <span className="rounded-full border border-white/15 px-3 py-1">Local Crew</span>
+          </div>
+          <Button onClick={onQuote} className="mt-6 h-11 rounded-lg bg-blue-600 px-6 font-black hover:bg-blue-500">
+            Get My Price <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="relative min-w-0">
+          <div className="overflow-hidden rounded-xl border border-white/10 bg-slate-900 shadow-2xl" ref={emblaRef}>
+            <div className="flex">
+              {STORY_SLIDES.map((slide) => (
+                <div key={slide.title} className="min-w-0 flex-[0_0_100%]">
+                  <div className="relative aspect-[4/5] overflow-hidden sm:aspect-[16/9]">
+                    <img src={slide.image} alt="" className="h-full w-full object-cover" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black via-black/35 to-transparent" />
+                    <div className="absolute left-0 right-0 top-0 flex items-center justify-between p-4">
+                      <span className="rounded-full bg-blue-600 px-3 py-1 text-xs font-black uppercase tracking-widest">
+                        {slide.eyebrow}
+                      </span>
+                      <span className="rounded-full bg-black/70 px-3 py-1 text-xs font-black uppercase tracking-widest text-slate-200">
+                        {slide.stat}
+                      </span>
+                    </div>
+                    <div className="absolute bottom-0 left-0 right-0 p-5 md:p-6">
+                      <h3 className="max-w-lg text-2xl font-black leading-tight md:text-4xl">{slide.title}</h3>
+                      <p className="mt-2 max-w-md text-sm leading-relaxed text-slate-200 md:text-base">{slide.text}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="absolute inset-y-0 left-3 hidden items-center md:flex">
+            <button
+              type="button"
+              onClick={scrollPrev}
+              aria-label="Previous job story"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/55 text-white backdrop-blur hover:bg-black/75"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="absolute inset-y-0 right-3 hidden items-center md:flex">
+            <button
+              type="button"
+              onClick={scrollNext}
+              aria-label="Next job story"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/55 text-white backdrop-blur hover:bg-black/75"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="mt-3 flex justify-center gap-3 md:hidden">
+            <button
+              type="button"
+              onClick={scrollPrev}
+              aria-label="Previous job story"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/5 text-white"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              onClick={scrollNext}
+              aria-label="Next job story"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/5 text-white"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 export default function HomePage() {
@@ -291,33 +416,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section id="jobs" className="border-y border-white/10 bg-slate-950/70 px-4 py-10 md:py-12">
-        <div className="mx-auto max-w-6xl">
-          <div className="mb-7 flex items-center justify-center gap-5">
-            <span className="h-px w-16 bg-white/20" />
-            <p className="text-sm font-black uppercase tracking-[0.25em]">Real Northwoods Jobs</p>
-            <span className="h-px w-16 bg-white/20" />
-          </div>
-          <div className="grid gap-4 md:grid-cols-4">
-            {JOB_PHOTOS.map((photo) => (
-              <div key={photo.label} className="relative h-36 overflow-hidden rounded-lg border border-white/10 bg-slate-900 md:h-40">
-                <img src={photo.image} alt={photo.label} className="h-full w-full object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/75 to-transparent" />
-                <span className="absolute bottom-3 left-3 rounded bg-black/80 px-3 py-1 text-xs font-black uppercase tracking-wider">
-                  {photo.label}
-                </span>
-              </div>
-            ))}
-          </div>
-          <div className="mt-5 text-center">
-            <Link href="/gallery">
-              <span className="inline-flex items-center rounded-lg border border-white/25 px-8 py-2 text-sm font-black uppercase tracking-widest text-slate-200 hover:bg-white/10">
-                <Images className="mr-2 h-4 w-4" /> View More Jobs
-              </span>
-            </Link>
-          </div>
-        </div>
-      </section>
+      <VisualStoryCarousel onQuote={() => openChat("Moving")} />
 
       <section id="reviews" className="px-4 py-12">
         <div className="mx-auto max-w-6xl">
