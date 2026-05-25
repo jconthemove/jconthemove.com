@@ -700,6 +700,58 @@ const MOVING_INVENTORY_OPTIONS: Array<{
   { id: "heavy_generic", label: "200 lb+ item", category: "heavy", size: "heavy", laborHours: 0.75, icon: Dumbbell },
 ];
 
+const MOVING_INVENTORY_SECTIONS: Array<{
+  id: string;
+  label: string;
+  subline: string;
+  icon: typeof Package;
+  itemIds: string[];
+}> = [
+  {
+    id: "bedroom",
+    label: "Bedroom",
+    subline: "Beds and dressers",
+    icon: Bed,
+    itemIds: ["bed_twin", "bed_queen", "bed_king", "dresser_s", "dresser_l"],
+  },
+  {
+    id: "living_room",
+    label: "Living Room",
+    subline: "Couches, chairs, stands",
+    icon: Sofa,
+    itemIds: ["sofa_2", "sofa_3", "recliner", "tv_stand", "small_tables"],
+  },
+  {
+    id: "kitchen_dining",
+    label: "Kitchen / Dining",
+    subline: "Tables, chairs, appliances",
+    icon: Armchair,
+    itemIds: ["table_m", "chairs_4", "appliance", "fridge"],
+  },
+  {
+    id: "storage_outdoor",
+    label: "Garage / Storage / Outdoor",
+    subline: "Extra spaces and patio",
+    icon: Boxes,
+    itemIds: ["garage_space", "basement_space", "patio"],
+  },
+  {
+    id: "heavy_specialty",
+    label: "Heavy / Specialty",
+    subline: "200 lb+ items and future specialty pieces",
+    icon: Dumbbell,
+    itemIds: ["heavy_generic"],
+  },
+];
+
+function defaultOpenInventorySections(path?: SelectedItem["details"]["movingPath"]): string[] {
+  if (path === "tiny_items") return ["living_room"];
+  if (path === "load_only" || path === "unload_only" || path === "load_unload") return ["bedroom", "living_room"];
+  if (path === "full_household") return ["bedroom"];
+  if (path === "heavy_specialty") return ["heavy_specialty"];
+  return ["living_room"];
+}
+
 function summarizeInventory(
   selected: NonNullable<SelectedItem["details"]["inventoryItems"]>,
   details: SelectedItem["details"],
@@ -843,6 +895,9 @@ export function MovingJunkPackagePicker({
   const showInventoryBuilder = isMoving && !!item.details.movingPath && item.details.movingPath !== "packing_assembly";
   const inventoryItems = item.details.inventoryItems || [];
   const inventorySummary = summarizeInventory(inventoryItems, item.details, rate);
+  const [openInventorySections, setOpenInventorySections] = useState<Set<string>>(
+    () => new Set(defaultOpenInventorySections(item.details.movingPath)),
+  );
   const hasCoreForRecommendation = !isMoving || (
     !!item.details.jobSize &&
     !!item.details.loadType &&
@@ -956,6 +1011,26 @@ export function MovingJunkPackagePicker({
       quoteConfidence: nextSummary.confidence,
     });
   }
+
+  function toggleInventorySection(sectionId: string) {
+    setOpenInventorySections((current) => {
+      const next = new Set(current);
+      if (next.has(sectionId)) next.delete(sectionId);
+      else next.add(sectionId);
+      return next;
+    });
+  }
+
+  function summarizeSection(itemIds: string[]) {
+    const selected = inventoryItems.filter((entry) => itemIds.includes(entry.id));
+    const count = selected.reduce((sum, entry) => sum + entry.quantity, 0);
+    const hours = selected.reduce((sum, entry) => sum + entry.quantity * entry.laborHours, 0);
+    return { count, hours: Number(hours.toFixed(2)) };
+  }
+
+  useEffect(() => {
+    setOpenInventorySections(new Set(defaultOpenInventorySections(item.details.movingPath)));
+  }, [item.details.movingPath]);
 
   useEffect(() => {
     if (!isMoving) return;
@@ -1214,55 +1289,108 @@ export function MovingJunkPackagePicker({
               </div>
             )}
           </div>
-          <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-            {MOVING_INVENTORY_OPTIONS.map((option) => {
-              const Icon = option.icon;
-              const selected = inventoryItems.find((entry) => entry.id === option.id);
-              const qty = selected?.quantity || 0;
+          <div className="mt-3 space-y-2">
+            {MOVING_INVENTORY_SECTIONS.map((section) => {
+              const SectionIcon = section.icon;
+              const isOpen = openInventorySections.has(section.id);
+              const sectionSummary = summarizeSection(section.itemIds);
+              const sectionOptions = MOVING_INVENTORY_OPTIONS.filter((option) => section.itemIds.includes(option.id));
               return (
                 <div
-                  key={option.id}
-                  className={cn(
-                    "rounded-lg border p-2",
-                    qty > 0 ? "border-emerald-500 bg-emerald-500/10" : "border-border bg-card",
-                  )}
-                  data-testid={`inventory-item-${option.id}`}
+                  key={section.id}
+                  className="overflow-hidden rounded-lg border border-border bg-card"
+                  data-testid={`inventory-section-${section.id}`}
                 >
                   <button
                     type="button"
-                    onClick={() => updateInventory(option, 1)}
-                    className="w-full text-left"
+                    onClick={() => toggleInventorySection(section.id)}
+                    className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left"
+                    aria-expanded={isOpen}
+                    data-testid={`inventory-section-toggle-${section.id}`}
                   >
-                    <span className="flex items-center gap-2">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
-                        <Icon className="h-4 w-4" />
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className={cn(
+                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+                        sectionSummary.count > 0 ? "bg-emerald-500/20 text-emerald-300" : "bg-muted text-muted-foreground",
+                      )}>
+                        <SectionIcon className="h-4 w-4" />
                       </span>
                       <span className="min-w-0">
-                        <span className="block text-xs font-bold leading-tight">{option.label}</span>
-                        <span className="block text-[9px] uppercase tracking-wide text-muted-foreground">{option.category}</span>
+                        <span className="block text-sm font-black leading-tight">{section.label}</span>
+                        <span className="block text-[10px] text-muted-foreground">{section.subline}</span>
                       </span>
                     </span>
+                    <span className="flex shrink-0 items-center gap-2">
+                      <span className={cn(
+                        "rounded-full px-2 py-1 text-[10px] font-bold",
+                        sectionSummary.count > 0 ? "bg-emerald-500/15 text-emerald-300" : "bg-muted text-muted-foreground",
+                      )}>
+                        {sectionSummary.count > 0
+                          ? `${sectionSummary.count} item${sectionSummary.count === 1 ? "" : "s"} · ${sectionSummary.hours} hrs`
+                          : "Tap to open"}
+                      </span>
+                      {isOpen ? (
+                        <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </span>
                   </button>
-                  <div className="mt-2 flex items-center justify-between gap-2">
-                    <button
-                      type="button"
-                      onClick={() => updateInventory(option, -1)}
-                      disabled={qty === 0}
-                      className="flex h-7 w-7 items-center justify-center rounded-md border border-border disabled:opacity-40"
-                      aria-label={`Remove ${option.label}`}
-                    >
-                      <Minus className="h-3.5 w-3.5" />
-                    </button>
-                    <span className="text-xs font-black">{qty}</span>
-                    <button
-                      type="button"
-                      onClick={() => updateInventory(option, 1)}
-                      className="flex h-7 w-7 items-center justify-center rounded-md border border-border"
-                      aria-label={`Add ${option.label}`}
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
+                  {isOpen && (
+                    <div className="grid grid-cols-1 gap-2 border-t border-border/70 p-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {sectionOptions.map((option) => {
+                        const Icon = option.icon;
+                        const selected = inventoryItems.find((entry) => entry.id === option.id);
+                        const qty = selected?.quantity || 0;
+                        return (
+                          <div
+                            key={option.id}
+                            className={cn(
+                              "rounded-lg border p-2",
+                              qty > 0 ? "border-emerald-500 bg-emerald-500/10" : "border-border bg-background",
+                            )}
+                            data-testid={`inventory-item-${option.id}`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => updateInventory(option, 1)}
+                              className="w-full text-left"
+                            >
+                              <span className="flex items-center gap-2">
+                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
+                                  <Icon className="h-4 w-4" />
+                                </span>
+                                <span className="min-w-0">
+                                  <span className="block text-xs font-bold leading-tight">{option.label}</span>
+                                  <span className="block text-[9px] uppercase tracking-wide text-muted-foreground">{option.category}</span>
+                                </span>
+                              </span>
+                            </button>
+                            <div className="mt-2 flex items-center justify-between gap-2">
+                              <button
+                                type="button"
+                                onClick={() => updateInventory(option, -1)}
+                                disabled={qty === 0}
+                                className="flex h-7 w-7 items-center justify-center rounded-md border border-border disabled:opacity-40"
+                                aria-label={`Remove ${option.label}`}
+                              >
+                                <Minus className="h-3.5 w-3.5" />
+                              </button>
+                              <span className="text-xs font-black">{qty}</span>
+                              <button
+                                type="button"
+                                onClick={() => updateInventory(option, 1)}
+                                className="flex h-7 w-7 items-center justify-center rounded-md border border-border"
+                                aria-label={`Add ${option.label}`}
+                              >
+                                <Plus className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })}
