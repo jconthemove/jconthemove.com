@@ -2414,6 +2414,8 @@ export function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMove
     const travelNote = travel > 0 ? ` Â· +$${travel} travel fee` : "";
 
     const is26Truck = (a.truckSize || "").includes("26");
+    const is16Truck = (a.truckSize || "").includes("16");
+    const isLoadOnly = /load only/i.test(a.loadType || "");
     const hasStairs = getStairContext(a).hasAnyStairs;
     const localPackage = (base: number) => base + sur + travel;
 
@@ -2487,17 +2489,29 @@ export function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMove
     }
 
     if (mq.tier === "medium") {
+      const standardCrewPackage = is16Truck && isLoadOnly && !hasStairs
+        ? {
+            id: "pkg_med_16_load_only",
+            label: "2 Movers x 2 hrs",
+            desc: `16 ft truck load-only minimum · local flat rate starts at $300${travelNote}`,
+            minPrice: localPackage(300),
+            maxPrice: localPackage(300),
+            crew: 2,
+            hours: 2,
+            tag: "Fast book",
+          }
+        : {
+            id: "pkg_med_a",
+            label: "2 Movers x 4 hrs",
+            desc: `Steady pace · $85/mover/hr · best for ground-floor or elevator access${travelNote}`,
+            minPrice: localPackage(is26Truck ? 600 : 450),
+            maxPrice: localPackage(is26Truck ? 600 : 450),
+            crew: 2,
+            hours: 4,
+            tag: "Fast book",
+          };
       const medPkgs: CrewPackage[] = [
-        {
-          id: "pkg_med_a",
-          label: "2 Movers x 4 hrs",
-          desc: `Steady pace Â· $85/mover/hr Â· best for ground-floor or elevator access${travelNote}`,
-          minPrice: localPackage(is26Truck ? 600 : 450),
-          maxPrice: localPackage(is26Truck ? 600 : 450),
-          crew: 2,
-          hours: 4,
-          tag: "Fast book",
-        },
+        standardCrewPackage,
         {
           id: "pkg_med_b",
           label: "3 Movers x 4 hrs",
