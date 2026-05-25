@@ -117,6 +117,22 @@ export interface SelectedItem {
     inventoryPriceMin?: number;
     inventoryPriceMax?: number;
     quoteConfidence?: "low" | "medium" | "high";
+    junkSizingMethod?: "truck_load" | "room_cleanout" | "item_by_item";
+    junkLoadTier?: "tiny" | "small" | "medium" | "large";
+    junkLoadFraction?: number;
+    junkItems?: Array<{
+      id: string;
+      label: string;
+      category: string;
+      quantity: number;
+      loadFraction: number;
+      extraFee?: number;
+      specialistReview?: boolean;
+    }>;
+    junkExtraFeeEstimate?: number;
+    junkDifficulty?: number;
+    junkConfidence?: "low" | "medium" | "high";
+    junkConstructionReview?: boolean;
     // Task #144 — Trash Valet add-on flag captured from the bundled-cart UI
     // so the admin can see the customer wants the recycling can rolled too.
     recyclingEnabled?: boolean;
@@ -779,6 +795,148 @@ function summarizeInventory(
   };
 }
 
+type JunkTier = "tiny" | "small" | "medium" | "large";
+
+const JUNK_TIER_JOB_SIZE: Record<JunkTier, string> = {
+  tiny: PICKER_HOME_SIZES[0],
+  small: PICKER_HOME_SIZES[1],
+  medium: PICKER_HOME_SIZES[3],
+  large: PICKER_HOME_SIZES[8],
+};
+
+const JUNK_TIER_LABEL: Record<JunkTier, string> = {
+  tiny: "Tiny pickup",
+  small: "Small load",
+  medium: "Medium load",
+  large: "Large load",
+};
+
+const JUNK_SIZING_METHODS: Array<{
+  id: NonNullable<SelectedItem["details"]["junkSizingMethod"]>;
+  label: string;
+  subline: string;
+  icon: typeof Package;
+}> = [
+  { id: "truck_load", label: "Truck Load", subline: "Fastest visual size", icon: Truck },
+  { id: "room_cleanout", label: "Room Cleanout", subline: "Pick the space", icon: Home },
+  { id: "item_by_item", label: "Item-by-Item", subline: "Most accurate", icon: Package },
+];
+
+const JUNK_TRUCK_LOAD_OPTIONS: Array<{
+  label: string;
+  loadFraction: number;
+  tier: JunkTier;
+}> = [
+  { label: "1 Item", loadFraction: 0.08, tier: "tiny" },
+  { label: "1/8 Load", loadFraction: 0.125, tier: "tiny" },
+  { label: "1/4 Load", loadFraction: 0.25, tier: "small" },
+  { label: "1/2 Load", loadFraction: 0.5, tier: "medium" },
+  { label: "3/4 Load", loadFraction: 0.75, tier: "large" },
+  { label: "Full Load", loadFraction: 1, tier: "large" },
+];
+
+const JUNK_ROOM_CLEANOUT_OPTIONS: Array<{
+  label: string;
+  loadFraction: number;
+  tier: JunkTier;
+}> = [
+  { label: "Single room", loadFraction: 0.25, tier: "small" },
+  { label: "Garage", loadFraction: 0.5, tier: "medium" },
+  { label: "Basement", loadFraction: 0.5, tier: "medium" },
+  { label: "Attic", loadFraction: 0.35, tier: "medium" },
+  { label: "Apartment", loadFraction: 0.5, tier: "medium" },
+  { label: "Estate / full-house", loadFraction: 1, tier: "large" },
+];
+
+const JUNK_ITEM_OPTIONS: Array<{
+  id: string;
+  label: string;
+  category: string;
+  loadFraction: number;
+  extraFee?: number;
+  specialistReview?: boolean;
+  icon: typeof Package;
+}> = [
+  { id: "junk_sofa", label: "Couch / loveseat", category: "furniture", loadFraction: 0.1, icon: Sofa },
+  { id: "junk_chair", label: "Chair / recliner", category: "furniture", loadFraction: 0.05, icon: Armchair },
+  { id: "junk_dresser", label: "Dresser / cabinet", category: "furniture", loadFraction: 0.07, icon: Package },
+  { id: "junk_table", label: "Table / desk", category: "furniture", loadFraction: 0.06, icon: Package },
+  { id: "junk_appliance", label: "Appliance", category: "appliances", loadFraction: 0.08, extraFee: 75, icon: Package },
+  { id: "junk_fridge", label: "Refrigerator / freezer", category: "appliances", loadFraction: 0.12, extraFee: 100, icon: Package },
+  { id: "junk_mattress", label: "Mattress", category: "bedding", loadFraction: 0.08, extraFee: 50, icon: Bed },
+  { id: "junk_boxspring", label: "Box spring", category: "bedding", loadFraction: 0.06, icon: Bed },
+  { id: "junk_tv", label: "TV", category: "electronics", loadFraction: 0.03, extraFee: 50, icon: Package },
+  { id: "junk_electronics", label: "Electronics", category: "electronics", loadFraction: 0.02, icon: Package },
+  { id: "junk_bags", label: "Bags / small junk", category: "small_junk", loadFraction: 0.03, icon: Boxes },
+  { id: "junk_boxes", label: "Boxes / totes", category: "small_junk", loadFraction: 0.025, icon: Boxes },
+  { id: "junk_yard", label: "Yard waste", category: "outdoor", loadFraction: 0.08, icon: Boxes },
+  { id: "junk_patio", label: "Patio furniture", category: "outdoor", loadFraction: 0.08, icon: Armchair },
+  { id: "junk_construction", label: "Construction debris", category: "construction", loadFraction: 0.15, specialistReview: true, icon: Wrench },
+  { id: "junk_special", label: "Special disposal", category: "special", loadFraction: 0.05, specialistReview: true, icon: AlertCircle },
+];
+
+const JUNK_ITEM_SECTIONS: Array<{
+  id: string;
+  label: string;
+  subline: string;
+  icon: typeof Package;
+  itemIds: string[];
+}> = [
+  { id: "furniture", label: "Furniture", subline: "Couches, chairs, dressers, tables", icon: Sofa, itemIds: ["junk_sofa", "junk_chair", "junk_dresser", "junk_table"] },
+  { id: "appliances", label: "Appliances", subline: "Fridge, freezer, large appliances", icon: Package, itemIds: ["junk_appliance", "junk_fridge"] },
+  { id: "bedding", label: "Mattresses / Bedding", subline: "Mattresses and box springs", icon: Bed, itemIds: ["junk_mattress", "junk_boxspring"] },
+  { id: "electronics", label: "TVs / Electronics", subline: "TVs and electronics", icon: Package, itemIds: ["junk_tv", "junk_electronics"] },
+  { id: "small_junk", label: "Bags / Boxes / Small Junk", subline: "Bagged junk, boxes, totes", icon: Boxes, itemIds: ["junk_bags", "junk_boxes"] },
+  { id: "outdoor", label: "Outdoor / Yard Waste", subline: "Patio sets and yard debris", icon: Armchair, itemIds: ["junk_yard", "junk_patio"] },
+  { id: "construction", label: "Construction Debris", subline: "Specialist-review surcharge", icon: Wrench, itemIds: ["junk_construction"] },
+  { id: "special", label: "Special Disposal", subline: "Anything needing extra handling", icon: AlertCircle, itemIds: ["junk_special"] },
+];
+
+function junkTierFromLoadFraction(loadFraction: number): JunkTier {
+  if (loadFraction <= 0.125) return "tiny";
+  if (loadFraction <= 0.25) return "small";
+  if (loadFraction <= 0.5) return "medium";
+  return "large";
+}
+
+function formatLoadFraction(loadFraction: number) {
+  if (loadFraction <= 0.1) return "1 item";
+  if (loadFraction <= 0.125) return "1/8 truck";
+  if (loadFraction <= 0.25) return "1/4 truck";
+  if (loadFraction <= 0.5) return "1/2 truck";
+  if (loadFraction <= 0.75) return "3/4 truck";
+  return "full truck";
+}
+
+function summarizeJunkItems(
+  selected: NonNullable<SelectedItem["details"]["junkItems"]>,
+  details: SelectedItem["details"],
+) {
+  const itemCount = selected.reduce((sum, entry) => sum + entry.quantity, 0);
+  const itemLoad = selected.reduce((sum, entry) => sum + entry.quantity * entry.loadFraction, 0);
+  const chosenLoad = Number(details.junkLoadFraction || 0);
+  const loadFraction = Math.min(1, Math.max(chosenLoad, itemLoad));
+  const extraFee = selected.reduce((sum, entry) => sum + entry.quantity * (entry.extraFee || 0), 0);
+  const specialistReview = selected.some((entry) => entry.specialistReview);
+  const constructionReview = selected.some((entry) => entry.category === "construction" || entry.specialistReview);
+  const tier = details.junkLoadTier || junkTierFromLoadFraction(loadFraction || itemLoad || chosenLoad || 0.125);
+  const difficulty = Math.min(
+    10,
+    Math.max(1, Math.ceil(loadFraction * 7 + (extraFee > 0 ? 1 : 0) + (specialistReview ? 2 : 0) + (details.hasStairs ? 1 : 0))),
+  );
+  const confidence: "low" | "medium" | "high" =
+    selected.length >= 4 ? "high" : selected.length > 0 || details.junkSizingMethod !== "item_by_item" ? "medium" : "low";
+  return {
+    itemCount,
+    loadFraction: Number((loadFraction || 0.125).toFixed(3)),
+    tier,
+    extraFee,
+    difficulty,
+    confidence,
+    constructionReview,
+  };
+}
+
 export const PICKER_SPECIAL_ITEMS = [
   "🎹 Grand Piano",
   "🎹 Upright Piano",
@@ -865,16 +1023,42 @@ export function MovingJunkPackagePicker({
 
   const packages: CrewPackage[] = useMemo(() => {
     const base = quote ? buildCrewPackages(answers, quote, rate, jc222) : [];
-    if (!truckRental) return base;
+    const pricedForJunk = !isMoving
+      ? base.map((pkg) => {
+          const extraFee = item.details.junkExtraFeeEstimate || 0;
+          const reviewBuffer = item.details.junkConstructionReview ? 150 : 0;
+          const extraNote = extraFee > 0 ? ` · extra disposal $${extraFee}` : "";
+          const reviewNote = item.details.junkConstructionReview ? " · construction debris review" : "";
+          return {
+            ...pkg,
+            desc: `${pkg.desc}${extraNote}${reviewNote}`,
+            minPrice: pkg.minPrice + extraFee,
+            maxPrice: pkg.maxPrice + extraFee + reviewBuffer,
+          };
+        })
+      : base;
+    if (!isMoving) return pricedForJunk;
+    if (!truckRental) return pricedForJunk;
     const truckNote = ` · truck rental $${truckRental.baseFee}`
       + (truckRental.mileageFee > 0 ? ` + $${truckRental.mileageFee} mileage` : "");
-    return base.map((pkg) => ({
+    return pricedForJunk.map((pkg) => ({
       ...pkg,
       desc: `${pkg.desc}${truckNote}`,
       minPrice: pkg.minPrice + truckRental.totalFee,
       maxPrice: pkg.maxPrice + truckRental.totalFee,
     }));
-  }, [quote, answers, rate, jc222, truckRental?.baseFee, truckRental?.mileageFee, truckRental?.totalFee]);
+  }, [
+    quote,
+    answers,
+    rate,
+    jc222,
+    isMoving,
+    item.details.junkExtraFeeEstimate,
+    item.details.junkConstructionReview,
+    truckRental?.baseFee,
+    truckRental?.mileageFee,
+    truckRental?.totalFee,
+  ]);
 
   // Keep the selected package in sync with the live package list. Two cases:
   //  1. The selected id no longer exists (user changed job size, load type,
@@ -895,8 +1079,13 @@ export function MovingJunkPackagePicker({
   const showInventoryBuilder = isMoving && !!item.details.movingPath && item.details.movingPath !== "packing_assembly";
   const inventoryItems = item.details.inventoryItems || [];
   const inventorySummary = summarizeInventory(inventoryItems, item.details, rate);
+  const junkItems = item.details.junkItems || [];
+  const junkSummary = summarizeJunkItems(junkItems, item.details);
   const [openInventorySections, setOpenInventorySections] = useState<Set<string>>(
     () => new Set(defaultOpenInventorySections(item.details.movingPath)),
+  );
+  const [openJunkSections, setOpenJunkSections] = useState<Set<string>>(
+    () => new Set(["furniture", "appliances"]),
   );
   const hasCoreForRecommendation = !isMoving || (
     !!item.details.jobSize &&
@@ -985,6 +1174,72 @@ export function MovingJunkPackagePicker({
     });
   }
 
+  function patchJunkQuote(next: Partial<SelectedItem["details"]>, nextItems = junkItems) {
+    const summary = summarizeJunkItems(nextItems, { ...item.details, ...next });
+    patch({
+      ...next,
+      jobSize: JUNK_TIER_JOB_SIZE[summary.tier],
+      junkLoadTier: summary.tier,
+      junkLoadFraction: summary.loadFraction,
+      junkItems: nextItems,
+      junkExtraFeeEstimate: summary.extraFee,
+      junkDifficulty: summary.difficulty,
+      junkConfidence: summary.confidence,
+      junkConstructionReview: summary.constructionReview,
+      packageId: undefined,
+      packageLabel: undefined,
+      packageTier: undefined,
+      crew: undefined,
+      hours: undefined,
+      minPrice: undefined,
+      maxPrice: undefined,
+    });
+  }
+
+  function applyJunkMethod(method: (typeof JUNK_SIZING_METHODS)[number]) {
+    const firstOpen = method.id === "truck_load"
+      ? ["furniture", "appliances"]
+      : method.id === "room_cleanout"
+        ? ["furniture", "small_junk"]
+        : ["furniture"];
+    setOpenJunkSections(new Set(firstOpen));
+    patchJunkQuote({ junkSizingMethod: method.id });
+  }
+
+  function applyJunkTruckLoad(option: (typeof JUNK_TRUCK_LOAD_OPTIONS)[number]) {
+    patchJunkQuote({
+      junkSizingMethod: "truck_load",
+      junkLoadTier: option.tier,
+      junkLoadFraction: option.loadFraction,
+    });
+  }
+
+  function applyJunkRoomCleanout(option: (typeof JUNK_ROOM_CLEANOUT_OPTIONS)[number]) {
+    patchJunkQuote({
+      junkSizingMethod: "room_cleanout",
+      junkLoadTier: option.tier,
+      junkLoadFraction: option.loadFraction,
+    });
+  }
+
+  function updateJunkItem(option: (typeof JUNK_ITEM_OPTIONS)[number], delta: number) {
+    const existing = junkItems.find((entry) => entry.id === option.id);
+    const nextQty = Math.max(0, (existing?.quantity || 0) + delta);
+    const without = junkItems.filter((entry) => entry.id !== option.id);
+    const nextItems = nextQty > 0
+      ? [...without, {
+          id: option.id,
+          label: option.label,
+          category: option.category,
+          quantity: nextQty,
+          loadFraction: option.loadFraction,
+          extraFee: option.extraFee,
+          specialistReview: option.specialistReview,
+        }]
+      : without;
+    patchJunkQuote({ junkSizingMethod: item.details.junkSizingMethod || "item_by_item" }, nextItems);
+  }
+
   function updateInventory(option: (typeof MOVING_INVENTORY_OPTIONS)[number], delta: number) {
     const existing = inventoryItems.find((entry) => entry.id === option.id);
     const nextQty = Math.max(0, (existing?.quantity || 0) + delta);
@@ -1026,6 +1281,24 @@ export function MovingJunkPackagePicker({
     const count = selected.reduce((sum, entry) => sum + entry.quantity, 0);
     const hours = selected.reduce((sum, entry) => sum + entry.quantity * entry.laborHours, 0);
     return { count, hours: Number(hours.toFixed(2)) };
+  }
+
+  function toggleJunkSection(sectionId: string) {
+    setOpenJunkSections((current) => {
+      const next = new Set(current);
+      if (next.has(sectionId)) next.delete(sectionId);
+      else next.add(sectionId);
+      return next;
+    });
+  }
+
+  function summarizeJunkSection(itemIds: string[]) {
+    const selected = junkItems.filter((entry) => itemIds.includes(entry.id));
+    const count = selected.reduce((sum, entry) => sum + entry.quantity, 0);
+    const load = selected.reduce((sum, entry) => sum + entry.quantity * entry.loadFraction, 0);
+    const extraFee = selected.reduce((sum, entry) => sum + entry.quantity * (entry.extraFee || 0), 0);
+    const needsReview = selected.some((entry) => entry.specialistReview);
+    return { count, load: Number(load.toFixed(2)), extraFee, needsReview };
   }
 
   useEffect(() => {
@@ -1134,6 +1407,243 @@ export function MovingJunkPackagePicker({
           )}
         </div>
       )}
+      {!isMoving && (
+        <div className="rounded-xl border border-border bg-background/40 p-3">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <Label className="text-xs">Junk Removal Quote Builder</Label>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">
+                Size it by truck load, room cleanout, or item-by-item details.
+              </p>
+            </div>
+            <div className="text-right text-[10px] text-muted-foreground">
+              <p className="font-black text-foreground">{JUNK_TIER_LABEL[junkSummary.tier]}</p>
+              <p>{formatLoadFraction(junkSummary.loadFraction)}</p>
+            </div>
+          </div>
+
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {JUNK_SIZING_METHODS.map((method) => {
+              const Icon = method.icon;
+              const active = item.details.junkSizingMethod === method.id;
+              return (
+                <button
+                  key={method.id}
+                  type="button"
+                  onClick={() => applyJunkMethod(method)}
+                  className={cn(
+                    "text-left rounded-lg border p-3 transition-all active:scale-[0.98]",
+                    active
+                      ? "border-blue-500 bg-blue-500/15 text-blue-100"
+                      : "border-border bg-card hover:border-blue-500/50",
+                  )}
+                  data-testid={`junk-method-${method.id}`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span className={cn(
+                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+                      active ? "bg-blue-500 text-white" : "bg-muted text-muted-foreground",
+                    )}>
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-black leading-tight">{method.label}</span>
+                      <span className="block text-[10px] text-muted-foreground">{method.subline}</span>
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {item.details.junkSizingMethod === "truck_load" && (
+            <div className="mt-3">
+              <Label className="text-xs">Truck load visual</Label>
+              <div className="mt-1.5 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                {JUNK_TRUCK_LOAD_OPTIONS.map((option) => {
+                  const active = item.details.junkLoadFraction === option.loadFraction;
+                  return (
+                    <button
+                      key={option.label}
+                      type="button"
+                      onClick={() => applyJunkTruckLoad(option)}
+                      className={cn(
+                        "rounded-md border px-2 py-2 text-xs font-bold transition-all",
+                        active
+                          ? "border-emerald-400 bg-emerald-500/20 text-emerald-300"
+                          : "border-border bg-card hover:border-foreground/30",
+                      )}
+                      data-testid={`junk-truck-load-${option.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {item.details.junkSizingMethod === "room_cleanout" && (
+            <div className="mt-3">
+              <Label className="text-xs">Room cleanout shortcut</Label>
+              <div className="mt-1.5 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                {JUNK_ROOM_CLEANOUT_OPTIONS.map((option) => {
+                  const active = item.details.junkLoadFraction === option.loadFraction && item.details.junkLoadTier === option.tier;
+                  return (
+                    <button
+                      key={option.label}
+                      type="button"
+                      onClick={() => applyJunkRoomCleanout(option)}
+                      className={cn(
+                        "rounded-md border px-2 py-2 text-xs font-bold transition-all",
+                        active
+                          ? "border-emerald-400 bg-emerald-500/20 text-emerald-300"
+                          : "border-border bg-card hover:border-foreground/30",
+                      )}
+                      data-testid={`junk-room-${option.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {item.details.junkSizingMethod && (
+            <div className="mt-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-xs">Details / extra-fee items</Label>
+                <span className="text-[10px] text-muted-foreground">
+                  Fridge +$100 · Mattress +$50 · TV +$50
+                </span>
+              </div>
+              {JUNK_ITEM_SECTIONS.map((section) => {
+                const SectionIcon = section.icon;
+                const isOpen = openJunkSections.has(section.id);
+                const sectionSummary = summarizeJunkSection(section.itemIds);
+                const sectionOptions = JUNK_ITEM_OPTIONS.filter((option) => section.itemIds.includes(option.id));
+                const summaryText = sectionSummary.count > 0
+                  ? `${sectionSummary.count} item${sectionSummary.count === 1 ? "" : "s"} · +${sectionSummary.load.toFixed(2)} load${sectionSummary.extraFee ? " · extras" : ""}${sectionSummary.needsReview ? " · review" : ""}`
+                  : "Tap to open";
+                return (
+                  <div
+                    key={section.id}
+                    className="overflow-hidden rounded-lg border border-border bg-card"
+                    data-testid={`junk-section-${section.id}`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleJunkSection(section.id)}
+                      className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left"
+                      aria-expanded={isOpen}
+                      data-testid={`junk-section-toggle-${section.id}`}
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className={cn(
+                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+                          sectionSummary.count > 0 ? "bg-emerald-500/20 text-emerald-300" : "bg-muted text-muted-foreground",
+                        )}>
+                          <SectionIcon className="h-4 w-4" />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-sm font-black leading-tight">{section.label}</span>
+                          <span className="block text-[10px] text-muted-foreground">{section.subline}</span>
+                        </span>
+                      </span>
+                      <span className="flex shrink-0 items-center gap-2">
+                        <span className={cn(
+                          "max-w-[11rem] truncate rounded-full px-2 py-1 text-[10px] font-bold",
+                          sectionSummary.count > 0 ? "bg-emerald-500/15 text-emerald-300" : "bg-muted text-muted-foreground",
+                        )}>
+                          {summaryText}
+                        </span>
+                        {isOpen ? (
+                          <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </span>
+                    </button>
+                    {isOpen && (
+                      <div className="grid grid-cols-1 gap-2 border-t border-border/70 p-2 sm:grid-cols-2 lg:grid-cols-3">
+                        {sectionOptions.map((option) => {
+                          const Icon = option.icon;
+                          const selected = junkItems.find((entry) => entry.id === option.id);
+                          const qty = selected?.quantity || 0;
+                          return (
+                            <div
+                              key={option.id}
+                              className={cn(
+                                "rounded-lg border p-2",
+                                qty > 0 ? "border-emerald-500 bg-emerald-500/10" : "border-border bg-background",
+                              )}
+                              data-testid={`junk-item-${option.id}`}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => updateJunkItem(option, 1)}
+                                className="w-full text-left"
+                              >
+                                <span className="flex items-center gap-2">
+                                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
+                                    <Icon className="h-4 w-4" />
+                                  </span>
+                                  <span className="min-w-0">
+                                    <span className="block text-xs font-bold leading-tight">{option.label}</span>
+                                    <span className="block text-[9px] uppercase tracking-wide text-muted-foreground">
+                                      {option.specialistReview ? "Specialist review" : option.extraFee ? `+$${option.extraFee} extra fee` : option.category}
+                                    </span>
+                                  </span>
+                                </span>
+                              </button>
+                              <div className="mt-2 flex items-center justify-between gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => updateJunkItem(option, -1)}
+                                  disabled={qty === 0}
+                                  className="flex h-7 w-7 items-center justify-center rounded-md border border-border disabled:opacity-40"
+                                  aria-label={`Remove ${option.label}`}
+                                >
+                                  <Minus className="h-3.5 w-3.5" />
+                                </button>
+                                <span className="text-xs font-black">{qty}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => updateJunkItem(option, 1)}
+                                  className="flex h-7 w-7 items-center justify-center rounded-md border border-border"
+                                  aria-label={`Add ${option.label}`}
+                                >
+                                  <Plus className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-3 text-xs">
+                <p className="font-black text-sky-200">
+                  {JUNK_TIER_LABEL[junkSummary.tier]} · {formatLoadFraction(junkSummary.loadFraction)}
+                  {junkSummary.extraFee > 0 ? ` · $${junkSummary.extraFee} extra fees` : ""}
+                </p>
+                <p className="mt-1 text-muted-foreground">
+                  Difficulty {junkSummary.difficulty}/10 · Confidence {junkSummary.confidence}. Specialist confirms final quote.
+                </p>
+                {junkSummary.constructionReview && (
+                  <p className="mt-1 text-amber-300">
+                    Construction debris or special disposal needs review; the high end of the range may change.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       {isMoving && onServiceAddressChange && (
         <div>
           <Label className="text-xs">
@@ -1152,6 +1662,7 @@ export function MovingJunkPackagePicker({
         </div>
       )}
 
+      {isMoving && (
       <div>
         <Label className="text-xs">{isMoving ? "How big is the move?" : "How much junk?"}</Label>
         <select
@@ -1164,6 +1675,7 @@ export function MovingJunkPackagePicker({
           {(isMoving ? FILTERED_MOVING_SIZES : PICKER_HOME_SIZES).map(s => <option key={s} value={s}>{s}</option>)}
         </select>
       </div>
+      )}
 
       {isMoving && !hideLoadChoice && (
         <div>
@@ -1524,7 +2036,7 @@ export function MovingJunkPackagePicker({
               className="h-4 w-4"
               data-testid={`pkg-stairs-${item.serviceCode}`}
             />
-            Stairs at pickup or drop-off
+            {isMoving ? "Stairs at pickup or drop-off" : "Stairs, long carry, or difficult access"}
           </label>
 
           {isMoving && (
