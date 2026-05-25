@@ -17,10 +17,9 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PlacesAutocomplete } from "@/components/places-autocomplete";
 import { cn } from "@/lib/utils";
 import {
-  X, Send, Loader2, Sparkles, ArrowRight, MessageCircle, Tag,
+  X, Send, Loader2, Sparkles, ArrowRight, MessageCircle, Tag, MapPin,
 } from "lucide-react";
 import {
   parseJobIntake, friendlyServiceLabel, bundleHintName, ADDON_CHIPS, formatLaborBreakdownLine,
@@ -902,28 +901,23 @@ export default function ChatIntakeOverlay({
             className="border-t border-slate-800 px-3 py-3 flex items-center gap-2"
           >
             {step === "ask_location" ? (
-              <PlacesAutocomplete
-                value={draft}
-                onChange={setDraft}
-                onPlaceSelect={(place) => {
-                  setDraft(place.fullAddress);
-                  setServiceLocation(place.fullAddress);
-                }}
-                onResolveAttempt={() => {
-                  const normalized = normalizeLocalAddress(draft);
-                  if (normalized && normalized !== draft) setDraft(normalized);
-                }}
-                placeholder="ZIP code or full service address"
-                autoFocus
-                className="flex-1"
-                inputClassName="w-full bg-slate-800 border border-slate-700 text-white placeholder:text-slate-500 rounded-md pl-10 pr-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/60 transition-all"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleComposerSubmit(draft);
-                  }
-                }}
-              />
+              <div className="relative flex-1">
+                <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-300" />
+                <Input
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onBlur={(e) => {
+                    const normalized = normalizeLocalAddress(e.currentTarget.value);
+                    if (normalized && normalized !== draft) setDraft(normalized);
+                  }}
+                  placeholder="ZIP code or full service address"
+                  autoFocus
+                  autoComplete="street-address"
+                  name="street-address"
+                  className="bg-slate-800 border-slate-700 pl-10 pr-3.5 text-white placeholder:text-slate-500 focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/40"
+                  data-testid="chat-location-input"
+                />
+              </div>
             ) : (
               <Input
                 value={draft}
