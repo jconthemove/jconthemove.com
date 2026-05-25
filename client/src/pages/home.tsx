@@ -275,6 +275,10 @@ export default function HomePage() {
     setChatOpen(true);
   }
 
+  function openQuoteStart(service = "moving") {
+    setLocation(`/book?mode=choose&service=${encodeURIComponent(service)}`);
+  }
+
   return (
     <div className="min-h-screen bg-[#020915] text-white">
       <nav className="sticky top-0 z-50 border-b border-white/10 bg-[#020915]/90 backdrop-blur-xl">
@@ -294,7 +298,7 @@ export default function HomePage() {
               <Phone className="h-4 w-4 text-blue-300" />
               (906) 285-9312
             </a>
-            <Button onClick={() => openChat("Moving")} className="h-10 rounded-lg bg-blue-600 px-4 text-sm font-black hover:bg-blue-500 sm:px-5">
+            <Button onClick={() => openQuoteStart("moving")} className="h-10 rounded-lg bg-blue-600 px-4 text-sm font-black hover:bg-blue-500 sm:px-5">
               <span className="sm:hidden">Price</span>
               <span className="hidden sm:inline">Get My Price</span>
             </Button>
@@ -323,7 +327,7 @@ export default function HomePage() {
               <span>Done right</span>
             </p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-              <Button onClick={() => openChat("Moving")} className="h-12 rounded-lg bg-blue-600 px-8 text-base font-black hover:bg-blue-500">
+              <Button onClick={() => openQuoteStart("moving")} className="h-12 rounded-lg bg-blue-600 px-8 text-base font-black hover:bg-blue-500">
                 Get My Price <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
               <a href="sms:+19062859312">
@@ -346,7 +350,7 @@ export default function HomePage() {
               <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-blue-300" /> Local crew</p>
               <p className="flex items-center gap-2"><Gift className="h-4 w-4 text-yellow-300" /> Earn JCMOVES rewards</p>
             </div>
-            <Button onClick={() => openChat("Moving")} className="mt-6 h-12 w-full rounded-lg bg-emerald-600 font-black hover:bg-emerald-500">
+            <Button onClick={() => openQuoteStart("moving")} className="mt-6 h-12 w-full rounded-lg bg-emerald-600 font-black hover:bg-emerald-500">
               Book Now
             </Button>
           </div>
@@ -378,7 +382,7 @@ export default function HomePage() {
               return (
                 <button
                   key={service.label}
-                  onClick={() => setLocation(service.href)}
+                  onClick={() => setLocation(service.href.replace("/book?", "/book?mode=choose&"))}
                   className={`group relative min-h-[180px] overflow-hidden rounded-lg border ${color.border} bg-slate-900 text-left shadow-xl transition-transform hover:-translate-y-1 md:min-h-[200px]`}
                 >
                   <img src={service.image} alt="" className="absolute inset-0 h-full w-full object-cover opacity-70 transition-transform duration-500 group-hover:scale-105" />
@@ -407,7 +411,7 @@ export default function HomePage() {
               {MORE_SERVICES.map((service) => (
                 <button
                   key={service.label}
-                  onClick={() => setLocation(service.href)}
+                  onClick={() => setLocation(service.href.replace("/book?", "/book?mode=choose&"))}
                   className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-slate-200 hover:border-blue-400/60 hover:bg-blue-500/10"
                 >
                   {service.label}
@@ -418,7 +422,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <VisualStoryCarousel onQuote={() => openChat("Moving")} />
+      <VisualStoryCarousel onQuote={() => openQuoteStart("moving")} />
 
       <section id="reviews" className="px-4 py-12">
         <div className="mx-auto max-w-6xl">
@@ -498,7 +502,7 @@ export default function HomePage() {
             <p className="text-3xl font-black tracking-tight">LET'S GET YOUR MOVE DONE.</p>
             <p className="mt-2 text-slate-300">Fast. Friendly. Northwoods strong.</p>
           </div>
-          <Button onClick={() => openChat("Moving")} className="h-14 rounded-lg bg-blue-600 px-10 text-base font-black hover:bg-blue-500">
+          <Button onClick={() => openQuoteStart("moving")} className="h-14 rounded-lg bg-blue-600 px-10 text-base font-black hover:bg-blue-500">
             Get My Price <ArrowRight className="ml-2 h-5 w-5" />
           </Button>
         </div>

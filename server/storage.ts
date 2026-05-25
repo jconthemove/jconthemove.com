@@ -1098,7 +1098,11 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(leads)
-      .where(and(isNull(leads.assignedToUserId), isNull(leads.archivedAt)))
+      .where(and(
+        isNull(leads.assignedToUserId),
+        isNull(leads.archivedAt),
+        inArray(leads.status, ["available", "open"]),
+      ))
       .orderBy(desc(leads.createdAt));
   }
 

@@ -7,7 +7,7 @@ import { useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft, ArrowRight, CheckCircle2, Phone, Coins, Users, Tag, Loader2, AlertCircle,
-  Shield, Star, MapPin,
+  Shield, Star, MapPin, PhoneCall, ClipboardList, Upload, Camera,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -96,6 +96,18 @@ interface CreateBookingResponse {
   quote: QuoteResult;
 }
 
+interface QuickRequestResponse {
+  success: true;
+  lead: {
+    id: string;
+    orderNumber: number;
+    displayOrderNumber: string;
+    status: string;
+  };
+}
+
+type BookingMode = "choose" | "quick" | "builder";
+
 const STEPS = ["services", "address", "configure", "contact", "safety", "review"] as const;
 type Step = (typeof STEPS)[number];
 const STEP_LABELS: Record<Step, string> = {
@@ -135,6 +147,7 @@ function itemNeedsAttention(item: SelectedItem): string | null {
   // we capture crew, hours and tier (and any JC222 flat-rate eligibility)
   // before the booking submits.
   if (item.serviceCode === "moving" || item.serviceCode === "junk_removal") {
+    if (item.serviceCode === "moving" && !item.details.movingPath) return "Pick a quote path";
     if (!item.details.jobSize)   return "Pick a job size";
     if (item.serviceCode === "moving" && !item.details.loadType) return "Pick load or unload";
     if (item.serviceCode === "moving" && item.details.truckNeeded == null) return "Tell us who provides the truck";
@@ -165,6 +178,199 @@ function itemNeedsAttention(item: SelectedItem): string | null {
   }
   if (mode === "call_only" && !item.details.callToSchedule) return "Confirm scheduling preference";
   return null;
+}
+
+function QuickRequestForm({
+  services,
+  onBuildQuote,
+  onHome,
+}: {
+  services: CatalogService[];
+  onBuildQuote: () => void;
+  onHome: () => void;
+}) {
+  const { toast } = useToast();
+  const fallbackServices = [
+    { code: "moving", name: "Moving" },
+    { code: "junk_removal", name: "Junk Removal" },
+    { code: "cleaning", name: "Cleaning" },
+    { code: "handyman", name: "Handyman" },
+    { code: "window_cleaning", name: "Window Cleaning" },
+  ];
+  const serviceOptions = services.length > 0
+    ? services.filter((svc) => !svc.isAddon).map((svc) => ({ code: svc.code, name: svc.name }))
+    : fallbackServices;
+  const [form, setForm] = useState({
+    firstName: "",
+    lastName: "",
+    phone: "",
+    serviceCode: "moving",
+    notes: "",
+  });
+  const [photoFiles, setPhotoFiles] = useState<Array<{ name: string; type: string; size: number }>>([]);
+  const [submitted, setSubmitted] = useState<QuickRequestResponse["lead"] | null>(null);
+  const canSubmit =
+    form.firstName.trim().length > 0 &&
+    form.lastName.trim().length > 0 &&
+    form.phone.replace(/\D/g, "").length >= 7 &&
+    form.serviceCode.trim().length > 0;
+
+  const submitQuick = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/leads/quick-request", {
+        ...form,
+        photos: photoFiles,
+      });
+      return res.json() as Promise<QuickRequestResponse>;
+    },
+    onSuccess: (data) => {
+      setSubmitted(data.lead);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Could not send quick request",
+        description: err.message ? err.message.slice(0, 180) : "Please try again or call us.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  if (submitted) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 pt-8">
+        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5 sm:p-6 text-center space-y-5">
+          <div className="w-16 h-16 rounded-full bg-emerald-500/15 flex items-center justify-center mx-auto">
+            <CheckCircle2 className="h-9 w-9 text-emerald-500" />
+          </div>
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-black">Quick Request Sent</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Order {submitted.displayOrderNumber} is in the quote-needed queue. A specialist will call to finish the estimate.
+            </p>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4 text-left text-sm">
+            <p className="font-black">Customer needs quote</p>
+            <p className="mt-1 text-muted-foreground">Call required · Quick request · No pricing shown yet</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <Button onClick={onBuildQuote}>Build a detailed quote</Button>
+            <Button variant="outline" onClick={onHome}>Return Home</Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-3xl mx-auto px-4 pt-8">
+      <div className="rounded-2xl border border-border bg-card p-5 sm:p-6 space-y-5">
+        <div>
+          <p className="text-xs font-black uppercase tracking-widest text-blue-500">Post a job in 60 seconds</p>
+          <h1 className="mt-2 text-2xl sm:text-3xl font-black">Have someone call me</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Send the basics now. We keep the request on file and a specialist builds the quote with you.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <Label className="text-xs">First name</Label>
+            <Input
+              value={form.firstName}
+              onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))}
+              placeholder="First name"
+              data-testid="quick-first-name"
+            />
+          </div>
+          <div>
+            <Label className="text-xs">Last name</Label>
+            <Input
+              value={form.lastName}
+              onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))}
+              placeholder="Last name"
+              data-testid="quick-last-name"
+            />
+          </div>
+          <div>
+            <Label className="text-xs">Phone number</Label>
+            <Input
+              value={form.phone}
+              onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+              placeholder="(906) 285-9312"
+              inputMode="tel"
+              data-testid="quick-phone"
+            />
+          </div>
+          <div>
+            <Label className="text-xs">Service</Label>
+            <select
+              value={form.serviceCode}
+              onChange={(e) => setForm((f) => ({ ...f, serviceCode: e.target.value }))}
+              className="mt-1 w-full h-10 rounded-md border border-border bg-background px-2 text-sm"
+              data-testid="quick-service"
+            >
+              {serviceOptions.map((svc) => (
+                <option key={svc.code} value={svc.code}>{svc.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div>
+          <Label className="text-xs">Notes (optional)</Label>
+          <Textarea
+            value={form.notes}
+            onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+            placeholder="What do you need help with? Address, timing, truck size, or anything important..."
+            rows={4}
+            data-testid="quick-notes"
+          />
+        </div>
+        <div className="rounded-xl border border-dashed border-border p-4">
+          <Label className="text-xs flex items-center gap-1">
+            <Camera className="h-3.5 w-3.5" /> Photos (optional)
+          </Label>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Add photo names to the request so the specialist knows what to ask about on the callback.
+          </p>
+          <label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-bold hover:bg-muted">
+            <Upload className="h-4 w-4" />
+            Add photos
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              className="sr-only"
+              onChange={(e) => {
+                const files = Array.from(e.target.files || []).map((file) => ({
+                  name: file.name,
+                  type: file.type,
+                  size: file.size,
+                }));
+                setPhotoFiles(files);
+              }}
+            />
+          </label>
+          {photoFiles.length > 0 && (
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              {photoFiles.length} photo{photoFiles.length === 1 ? "" : "s"} attached to request notes.
+            </p>
+          )}
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <Button
+            disabled={!canSubmit || submitQuick.isPending}
+            onClick={() => submitQuick.mutate()}
+            data-testid="quick-submit"
+          >
+            {submitQuick.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Sending...</> : "Request Callback"}
+          </Button>
+          <Button type="button" variant="outline" onClick={onBuildQuote}>
+            Build my quote instead
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function MultiServiceBookPage() {
@@ -295,6 +501,14 @@ export default function MultiServiceBookPage() {
   >(null);
   const stepIndex = (s: Step) => STEPS.indexOf(s);
   const hasMovingService = useMemo(() => items.some((item) => item.serviceCode === "moving"), [items]);
+  const [bookingMode, setBookingMode] = useState<BookingMode>(() => {
+    if (typeof window === "undefined") return "choose";
+    const sp = new URLSearchParams(window.location.search);
+    const rawMode = sp.get("mode");
+    if (rawMode === "quick") return "quick";
+    if (rawMode === "builder" || rawMode === "worker") return "builder";
+    return "choose";
+  });
 
   // ── Data
   const { data: catalogData } = useQuery<{ services: CatalogService[] }>({
@@ -427,6 +641,15 @@ export default function MultiServiceBookPage() {
 
   function addService(svc: CatalogService) {
     setItems(prev => prev.some(i => i.serviceCode === svc.code) ? prev : [...prev, makeItem(svc)]);
+  }
+  function startBuilder() {
+    setBookingMode("builder");
+    if (items.length === 0) {
+      const moving = services.find((svc) => svc.code === "moving");
+      if (moving) setItems([makeItem(moving)]);
+    }
+    setStep(items.length === 0 ? "configure" : step);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
   function removeService(code: string) {
     setItems(prev => prev.filter(i => i.serviceCode !== code));
@@ -830,6 +1053,70 @@ export default function MultiServiceBookPage() {
   }
 
   // ── Wizard
+  if (bookingMode === "quick") {
+    return (
+      <div className="min-h-screen bg-background text-foreground pb-12">
+        <div className="border-b border-border px-4 py-3 sticky top-0 bg-background/95 backdrop-blur-sm z-30">
+          <div className="max-w-6xl mx-auto flex items-center justify-between">
+            <button onClick={() => setBookingMode("choose")} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+              <ArrowLeft className="h-4 w-4" /> Options
+            </button>
+            <h1 className="font-bold text-base sm:text-lg">Quick Request</h1>
+            <a href="tel:+19062859312" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+              <Phone className="h-3.5 w-3.5" /> Call
+            </a>
+          </div>
+        </div>
+        <QuickRequestForm services={services} onBuildQuote={startBuilder} onHome={() => setLocation("/")} />
+      </div>
+    );
+  }
+
+  if (bookingMode === "choose" && !isWorker) {
+    return (
+      <div className="min-h-screen bg-background text-foreground pb-12">
+        <div className="border-b border-border px-4 py-3 sticky top-0 bg-background/95 backdrop-blur-sm z-30">
+          <div className="max-w-6xl mx-auto flex items-center justify-between">
+            <button onClick={() => setLocation("/")} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+              <ArrowLeft className="h-4 w-4" /> Home
+            </button>
+            <h1 className="font-bold text-base sm:text-lg">Get Your Quote</h1>
+            <a href="tel:+19062859312" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+              <Phone className="h-3.5 w-3.5" /> Call
+            </a>
+          </div>
+        </div>
+        <div className="max-w-5xl mx-auto px-4 pt-8">
+          <div className="mb-6 max-w-2xl">
+            <p className="text-xs font-black uppercase tracking-widest text-blue-500">Fast local booking</p>
+            <h1 className="mt-2 text-3xl sm:text-4xl font-black">How do you want to start?</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Pick the fastest path. Quick requests get a callback. Build My Quote uses guided cards, icons, and filters.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <button type="button" onClick={() => setBookingMode("quick")} className="text-left rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-5 sm:p-6 transition-all hover:border-emerald-400" data-testid="entry-quick-request">
+              <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500 text-white">
+                <PhoneCall className="h-6 w-6" />
+              </span>
+              <h2 className="mt-4 text-2xl font-black">Have someone call me</h2>
+              <p className="mt-2 text-sm text-muted-foreground">60-second request. Name, phone, service, optional notes/photos. No pricing shown until a specialist quotes it.</p>
+              <p className="mt-4 text-xs font-black uppercase tracking-wide text-emerald-500">Quick request · Call required</p>
+            </button>
+            <button type="button" onClick={startBuilder} className="text-left rounded-2xl border border-blue-500/30 bg-blue-500/10 p-5 sm:p-6 transition-all hover:border-blue-400" data-testid="entry-build-quote">
+              <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-white">
+                <ClipboardList className="h-6 w-6" />
+              </span>
+              <h2 className="mt-4 text-2xl font-black">Build my quote</h2>
+              <p className="mt-2 text-sm text-muted-foreground">Guided project paths for moving, junk, cleaning, and more. Moving starts with filtered cards before any detailed questions.</p>
+              <p className="mt-4 text-xs font-black uppercase tracking-wide text-blue-500">Filtered quote builder · Price range</p>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const stepIdx = STEPS.indexOf(step);
   const isLast = step === "review";
   const continueReason = canContinueReason();

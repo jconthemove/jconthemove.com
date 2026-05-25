@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import crypto from "crypto";
 import { getEasternDateStr, getEasternDayStart, getEasternDayEnd } from "./utils/dateUtils";
 import { storage } from "./storage";
-import { insertLeadSchema, insertContactSchema, insertCashoutRequestSchema, insertShopItemSchema, insertReviewSchema } from "@shared/schema";
+import { insertLeadSchema, insertContactSchema, insertCashoutRequestSchema, insertShopItemSchema, insertReviewSchema, formatOrderNumber } from "@shared/schema";
 import { sendEmail, generateLeadNotificationEmail, generateContactNotificationEmail, notifyAdminNewQuote, notifyAdminNewLead, notifyAdminJobCompleted, notifyEmployeeJobAvailable, sendNotificationEmail, sendBundleFollowupEmail } from "./services/email";
 import { setupAuth, isAuthenticated, isAuthenticatedAllowPending, signJwt, signRefreshToken, verifyRefreshToken } from "./auth";
 import { ipRateLimit, getClientIp } from "./lib/persistentRateLimit";
@@ -4115,6 +4115,123 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
       errorCode: context.errorCode,
     });
   }
+
+  const quickRequestSchema = z.object({
+    firstName: z.string().trim().min(1).max(80),
+    lastName: z.string().trim().min(1).max(80),
+    phone: z.string().trim().min(7).max(40),
+    serviceCode: z.string().trim().min(1).max(80),
+    notes: z.string().trim().max(2500).optional().default(""),
+    photos: z.array(z.object({
+      name: z.string().max(255),
+      type: z.string().max(100).optional().default(""),
+      size: z.number().optional().default(0),
+    })).optional().default([]),
+  });
+
+  const QUICK_REQUEST_SERVICE_MAP: Record<string, { serviceType: string; label: string }> = {
+    moving: { serviceType: "residential", label: "Moving" },
+    junk: { serviceType: "junk", label: "Junk Removal" },
+    junk_removal: { serviceType: "junk", label: "Junk Removal" },
+    cleaning: { serviceType: "cleaning", label: "Cleaning" },
+    move_cleaning: { serviceType: "cleaning", label: "Move Cleaning" },
+    window_cleaning: { serviceType: "window_cleaning", label: "Window Cleaning" },
+    handyman: { serviceType: "handyman", label: "Handyman" },
+    assembly: { serviceType: "handyman", label: "Assembly" },
+    snow_removal: { serviceType: "snow", label: "Snow Removal" },
+    lawn_care: { serviceType: "lawn", label: "Lawn Care" },
+    demolition: { serviceType: "demolition", label: "Demolition" },
+  };
+
+  app.post(
+    "/api/leads/quick-request",
+    ipRateLimit({
+      scope: "quick_request_ip",
+      windowMs: 10 * 60_000,
+      maxHits: 12,
+      message: "Too many quick requests from this network. Please wait a few minutes before trying again.",
+    }),
+    ipRateLimit({
+      scope: "quick_request_phone",
+      windowMs: 10 * 60_000,
+      maxHits: 5,
+      message: "Too many quick requests for this phone number. Please wait a few minutes before trying again.",
+      identifier: (req) => {
+        const phone = String((req.body || {}).phone || "").replace(/\D/g, "");
+        return phone ? `${getClientIp(req)}|${phone}` : getClientIp(req);
+      },
+    }),
+    async (req, res) => {
+      try {
+        const parsed = quickRequestSchema.parse(req.body);
+        const phoneDigits = parsed.phone.replace(/\D/g, "");
+        const service = QUICK_REQUEST_SERVICE_MAP[parsed.serviceCode] || {
+          serviceType: parsed.serviceCode,
+          label: parsed.serviceCode.replace(/_/g, " "),
+        };
+        const photoNames = parsed.photos.map((photo) => photo.name).filter(Boolean);
+        const details = [
+          "[QUICK REQUEST - CALL REQUIRED]",
+          "Customer needs quote",
+          `Service: ${service.label}`,
+          "Source: 60-second quick request",
+          parsed.notes ? `Notes: ${parsed.notes}` : "",
+          photoNames.length ? `Photo files mentioned: ${photoNames.join(", ")}` : "",
+        ].filter(Boolean).join("\n");
+
+        const leadData = insertLeadSchema.parse({
+          firstName: parsed.firstName,
+          lastName: parsed.lastName,
+          email: `quick-request+${phoneDigits || Date.now()}@jconthemove.local`,
+          phone: parsed.phone,
+          serviceType: service.serviceType,
+          fromAddress: "Callback requested",
+          toAddress: "",
+          moveDate: "",
+          propertySize: "quick-request",
+          details,
+          truckConfig: "quote_needed",
+          crewSize: 2,
+          photos: parsed.photos.map((photo) => ({
+            ...photo,
+            type: photo.type || "quick-request",
+            source: "quick_request",
+            timestamp: new Date().toISOString(),
+          })),
+          urgency: "normal",
+          source: "quick_request",
+        });
+
+        const lead = await storage.createLead(leadData);
+        try {
+          await notifyAdminNewLead({
+            customerName: `${parsed.firstName} ${parsed.lastName}`,
+            serviceType: service.label,
+            phone: parsed.phone,
+            email: lead.email,
+            createdBy: "Quick request",
+          });
+        } catch (notifyErr) {
+          console.error("[quick-request] admin notification failed:", (notifyErr as Error).message);
+        }
+
+        res.status(201).json({
+          success: true,
+          lead: {
+            id: lead.id,
+            orderNumber: lead.orderNumber,
+            displayOrderNumber: formatOrderNumber(lead.orderNumber),
+            status: lead.status,
+          },
+        });
+      } catch (error) {
+        return respondLeadError(res, error, {
+          route: "leads_quick_request",
+          errorCode: "QUICK_REQUEST_CREATE_FAILED",
+        });
+      }
+    }
+  );
 
   // Submit quote request
   app.post(

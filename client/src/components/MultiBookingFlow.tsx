@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   CheckCircle2, Plus, Minus, Tag, Coins, Users, ChevronUp, ChevronDown,
   Sparkles, Trash2, Pencil, AlertCircle, PhoneCall, Package, Loader2, MapPin,
+  Home, Truck, Armchair, Wrench, Dumbbell, Bed, Sofa, Boxes,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -82,6 +83,7 @@ export interface SelectedItem {
     hours?: number;
     minPrice?: number;
     maxPrice?: number;
+    movingPath?: "tiny_items" | "load_only" | "unload_only" | "load_unload" | "full_household" | "heavy_specialty" | "packing_assembly";
     jobSize?: string;
     loadType?: string;
     truckNeeded?: boolean;
@@ -100,6 +102,21 @@ export interface SelectedItem {
     verifiedDriveMiles?: number;
     estimatedDriveMinutes?: number;
     driveEstimateNote?: string;
+    inventoryItems?: Array<{
+      id: string;
+      label: string;
+      category: string;
+      size?: string;
+      quantity: number;
+      laborHours: number;
+    }>;
+    inventoryLaborHours?: number;
+    inventoryDifficulty?: number;
+    inventoryTruckRecommendation?: string;
+    inventoryCrewRecommendation?: number;
+    inventoryPriceMin?: number;
+    inventoryPriceMax?: number;
+    quoteConfidence?: "low" | "medium" | "high";
     // Task #144 — Trash Valet add-on flag captured from the bundled-cart UI
     // so the admin can see the customer wants the recycling can rolled too.
     recyclingEnabled?: boolean;
@@ -302,6 +319,10 @@ export function formatLineLaborSubline(meta?: QuoteLaborMeta): string | null {
 export function formatMovingFlowSummary(item: SelectedItem): string[] {
   if (item.serviceCode !== "moving") return [];
   const bits: string[] = [];
+  if (item.details.movingPath) {
+    const path = MOVING_PATHS.find((p) => p.id === item.details.movingPath);
+    if (path) bits.push(path.label);
+  }
   if (item.details.scope?.trim()) bits.push(item.details.scope.trim());
   if (item.details.loadType) bits.push(item.details.loadType.replace(/^.[^\w]?\s*/, ""));
   if (item.details.truckNeeded === true) {
@@ -313,6 +334,7 @@ export function formatMovingFlowSummary(item: SelectedItem): string[] {
   if (item.details.verifiedDriveMiles && item.details.estimatedDriveMinutes) {
     bits.push(`~${Math.round(item.details.verifiedDriveMiles)} mi · ~${item.details.estimatedDriveMinutes} min`);
   }
+  if (item.details.inventoryLaborHours) bits.push(`${item.details.inventoryLaborHours} inventory hrs`);
   return bits;
 }
 
@@ -575,12 +597,135 @@ const PICKER_LOAD_TYPES = [
   "Load + unload",
 ];
 
+const FILTERED_MOVING_SIZES = [
+  "1-2 Items",
+  "Studio or 1 Bedroom",
+  "2 Bedroom Apartment",
+  "2 Bedroom House",
+  "3 Bedroom House",
+  "4 Bedroom House",
+  "Commercial / Office",
+];
+
 const PICKER_TRUCK_SIZES = [
   "10 ft",
   "16 ft",
   "26 ft",
   "Custom",
 ];
+
+const MOVING_PATHS: Array<{
+  id: NonNullable<SelectedItem["details"]["movingPath"]>;
+  label: string;
+  subline: string;
+  icon: typeof Package;
+  preset: Partial<SelectedItem["details"]>;
+}> = [
+  {
+    id: "tiny_items",
+    label: "1 or 2 Items",
+    subline: "Fast minimum quote",
+    icon: Armchair,
+    preset: { jobSize: "1-2 Items", loadType: "Load + unload", truckNeeded: false, truckSize: "16 ft" },
+  },
+  {
+    id: "load_only",
+    label: "Load Only",
+    subline: "Customer truck or container",
+    icon: Truck,
+    preset: { loadType: "Load only", truckNeeded: false, truckSize: "16 ft" },
+  },
+  {
+    id: "unload_only",
+    label: "Unload Only",
+    subline: "Drop-off help",
+    icon: Boxes,
+    preset: { loadType: "Unload only", truckNeeded: false, truckSize: "16 ft" },
+  },
+  {
+    id: "load_unload",
+    label: "Load + Unload",
+    subline: "Pickup and destination",
+    icon: Truck,
+    preset: { loadType: "Load + unload", truckNeeded: false, truckSize: "26 ft" },
+  },
+  {
+    id: "full_household",
+    label: "Full Household Move",
+    subline: "Rooms, truck, crew",
+    icon: Home,
+    preset: { jobSize: "3 or 4 Bedroom House", loadType: "Load + unload", truckNeeded: true, truckSize: "26 ft" },
+  },
+  {
+    id: "heavy_specialty",
+    label: "Heavy / Specialty Item",
+    subline: "Safe, piano, pool table",
+    icon: Dumbbell,
+    preset: { jobSize: "1-2 Items", loadType: "Load + unload", truckNeeded: false, truckSize: "16 ft", heavyItemsConfirmed: false },
+  },
+  {
+    id: "packing_assembly",
+    label: "Packing / Assembly Help",
+    subline: "Wrap, pack, assemble",
+    icon: Wrench,
+    preset: { jobSize: "1-2 Items", loadType: "Load only", truckNeeded: false, truckSize: "Custom" },
+  },
+];
+
+const MOVING_INVENTORY_OPTIONS: Array<{
+  id: string;
+  label: string;
+  category: string;
+  size?: string;
+  laborHours: number;
+  icon: typeof Package;
+}> = [
+  { id: "bed_twin", label: "Twin bed", category: "beds", size: "twin", laborHours: 0.15, icon: Bed },
+  { id: "bed_queen", label: "Queen bed", category: "beds", size: "queen", laborHours: 0.25, icon: Bed },
+  { id: "bed_king", label: "King bed", category: "beds", size: "king", laborHours: 0.5, icon: Bed },
+  { id: "sofa_2", label: "2-seat couch", category: "couches", size: "small", laborHours: 0.2, icon: Sofa },
+  { id: "sofa_3", label: "3-seat couch", category: "couches", size: "medium", laborHours: 0.25, icon: Sofa },
+  { id: "recliner", label: "Recliner / chair", category: "couches", size: "oversized", laborHours: 0.2, icon: Armchair },
+  { id: "dresser_s", label: "Small dresser", category: "dressers", size: "small", laborHours: 0.2, icon: Package },
+  { id: "dresser_l", label: "Large dresser", category: "dressers", size: "large", laborHours: 0.4, icon: Package },
+  { id: "table_m", label: "Table", category: "tables", size: "medium", laborHours: 0.5, icon: Package },
+  { id: "chairs_4", label: "4 chairs", category: "tables", size: "set", laborHours: 0.4, icon: Armchair },
+  { id: "appliance", label: "Appliance", category: "appliances", size: "standard", laborHours: 0.25, icon: Package },
+  { id: "fridge", label: "Fridge / freezer", category: "appliances", size: "large", laborHours: 0.5, icon: Package },
+  { id: "tv_stand", label: "TV stand", category: "living room", size: "medium", laborHours: 0.35, icon: Package },
+  { id: "small_tables", label: "Small table", category: "living room", size: "small", laborHours: 0.15, icon: Package },
+  { id: "patio", label: "Patio furniture", category: "outside", size: "set", laborHours: 0.5, icon: Package },
+  { id: "garage_space", label: "Garage / shed", category: "extra spaces", size: "medium", laborHours: 0.75, icon: Boxes },
+  { id: "basement_space", label: "Basement / attic", category: "extra spaces", size: "medium", laborHours: 0.75, icon: Boxes },
+  { id: "heavy_generic", label: "200 lb+ item", category: "heavy", size: "heavy", laborHours: 0.75, icon: Dumbbell },
+];
+
+function summarizeInventory(
+  selected: NonNullable<SelectedItem["details"]["inventoryItems"]>,
+  details: SelectedItem["details"],
+  rate: number,
+) {
+  const baseHours = selected.reduce((sum, item) => sum + item.quantity * item.laborHours, 0);
+  const stairsFactor = details.hasStairs ? 1.2 : 1;
+  const unloadFactor = /unload only/i.test(details.loadType || "") ? 0.9 : 1;
+  const adjustedHours = Math.max(0, baseHours * stairsFactor * unloadFactor);
+  const crew = adjustedHours <= 3 ? 2 : adjustedHours <= 6 ? 3 : adjustedHours <= 10 ? 4 : 5;
+  const truck = adjustedHours <= 2.5 ? "16 ft" : adjustedHours <= 7 ? "26 ft" : "26 ft + follow-up review";
+  const difficulty = Math.min(10, Math.ceil(adjustedHours + (details.hasStairs ? 2 : 0) + selected.filter((i) => i.category === "heavy").length * 2));
+  const laborPrice = Math.ceil(adjustedHours * crew * rate);
+  const min = Math.max(150, Math.round(laborPrice * 0.85 / 25) * 25);
+  const max = Math.max(min + 75, Math.round(laborPrice * 1.15 / 25) * 25);
+  const confidence: "low" | "medium" | "high" = selected.length >= 8 ? "high" : selected.length >= 3 ? "medium" : "low";
+  return {
+    hours: Number(adjustedHours.toFixed(2)),
+    crew,
+    truck,
+    difficulty,
+    min,
+    max,
+    confidence,
+  };
+}
 
 export const PICKER_SPECIAL_ITEMS = [
   "🎹 Grand Piano",
@@ -692,6 +837,12 @@ export function MovingJunkPackagePicker({
   const [showMorePackages, setShowMorePackages] = useState(false);
   const selectedPackage = packages.find(p => p.id === item.details.packageId) || null;
   const recommendedPackage = packages[0] || null;
+  const selectedPath = MOVING_PATHS.find((path) => path.id === item.details.movingPath) || null;
+  const hideLoadChoice = isMoving && ["load_only", "unload_only", "load_unload"].includes(item.details.movingPath || "");
+  const showDropoffForPath = isMoving && ["load_unload", "full_household"].includes(item.details.movingPath || "");
+  const showInventoryBuilder = isMoving && !!item.details.movingPath && item.details.movingPath !== "packing_assembly";
+  const inventoryItems = item.details.inventoryItems || [];
+  const inventorySummary = summarizeInventory(inventoryItems, item.details, rate);
   const hasCoreForRecommendation = !isMoving || (
     !!item.details.jobSize &&
     !!item.details.loadType &&
@@ -759,6 +910,53 @@ export function MovingJunkPackagePicker({
     onChange({ ...item, details: { ...item.details, ...d } });
   }
 
+  function applyMovingPath(path: (typeof MOVING_PATHS)[number]) {
+    onChange({
+      ...item,
+      unitPrice: 0,
+      priceMode: "quote",
+      details: {
+        ...item.details,
+        ...path.preset,
+        movingPath: path.id,
+        packageId: undefined,
+        packageLabel: undefined,
+        packageTier: undefined,
+        crew: undefined,
+        hours: undefined,
+        minPrice: undefined,
+        maxPrice: undefined,
+      },
+    });
+  }
+
+  function updateInventory(option: (typeof MOVING_INVENTORY_OPTIONS)[number], delta: number) {
+    const existing = inventoryItems.find((entry) => entry.id === option.id);
+    const nextQty = Math.max(0, (existing?.quantity || 0) + delta);
+    const without = inventoryItems.filter((entry) => entry.id !== option.id);
+    const nextItems = nextQty > 0
+      ? [...without, {
+          id: option.id,
+          label: option.label,
+          category: option.category,
+          size: option.size,
+          quantity: nextQty,
+          laborHours: option.laborHours,
+        }]
+      : without;
+    const nextSummary = summarizeInventory(nextItems, item.details, rate);
+    patch({
+      inventoryItems: nextItems,
+      inventoryLaborHours: nextSummary.hours,
+      inventoryDifficulty: nextSummary.difficulty,
+      inventoryTruckRecommendation: nextSummary.truck,
+      inventoryCrewRecommendation: nextSummary.crew,
+      inventoryPriceMin: nextSummary.min,
+      inventoryPriceMax: nextSummary.max,
+      quoteConfidence: nextSummary.confidence,
+    });
+  }
+
   useEffect(() => {
     if (!isMoving) return;
     if (!canEstimateDrive) {
@@ -818,9 +1016,54 @@ export function MovingJunkPackagePicker({
 
   return (
     <div className="space-y-3" data-testid={`pkg-picker-${item.serviceCode}`}>
+      {isMoving && (
+        <div className="rounded-xl border border-border bg-background/40 p-3">
+          <Label className="text-xs">What kind of moving quote are we building?</Label>
+          <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {MOVING_PATHS.map((path) => {
+              const Icon = path.icon;
+              const active = item.details.movingPath === path.id;
+              return (
+                <button
+                  key={path.id}
+                  type="button"
+                  onClick={() => applyMovingPath(path)}
+                  className={cn(
+                    "text-left rounded-lg border p-3 transition-all active:scale-[0.98]",
+                    active
+                      ? "border-blue-500 bg-blue-500/15 text-blue-100"
+                      : "border-border bg-card hover:border-blue-500/50",
+                  )}
+                  data-testid={`moving-path-${path.id}`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span className={cn(
+                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+                      active ? "bg-blue-500 text-white" : "bg-muted text-muted-foreground",
+                    )}>
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-black leading-tight">{path.label}</span>
+                      <span className="block text-[10px] text-muted-foreground">{path.subline}</span>
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {selectedPath && (
+            <p className="mt-2 text-[11px] text-sky-300">
+              Filtered path: {selectedPath.label}. We'll only ask what matters for this job.
+            </p>
+          )}
+        </div>
+      )}
       {isMoving && onServiceAddressChange && (
         <div>
-          <Label className="text-xs">Pickup / service address</Label>
+          <Label className="text-xs">
+            {item.details.movingPath === "unload_only" ? "Unload / service address" : "Pickup / service address"}
+          </Label>
           <PlacesAutocomplete
             value={serviceAddress}
             onChange={onServiceAddressChange}
@@ -843,11 +1086,11 @@ export function MovingJunkPackagePicker({
           data-testid={`pkg-jobsize-${item.serviceCode}`}
         >
           <option value="">Pick a size…</option>
-          {PICKER_HOME_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
+          {(isMoving ? FILTERED_MOVING_SIZES : PICKER_HOME_SIZES).map(s => <option key={s} value={s}>{s}</option>)}
         </select>
       </div>
 
-      {isMoving && (
+      {isMoving && !hideLoadChoice && (
         <div>
           <Label className="text-xs">Do you need help loading, unloading, or both?</Label>
           <div className="grid grid-cols-3 gap-1.5 mt-1">
@@ -940,7 +1183,7 @@ export function MovingJunkPackagePicker({
         </div>
       )}
 
-      {needsDropoffAddress && (
+      {(needsDropoffAddress || showDropoffForPath) && (
         <div>
           <Label className="text-xs">Drop-off address</Label>
           <Input
@@ -952,6 +1195,88 @@ export function MovingJunkPackagePicker({
           <p className="mt-1 text-[10px] text-muted-foreground">
             We use this with the verified pickup address to estimate drive time.
           </p>
+        </div>
+      )}
+
+      {showInventoryBuilder && (
+        <div className="rounded-xl border border-border bg-background/40 p-3">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <Label className="text-xs">Visual inventory builder</Label>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">
+                Tap items to build labor hours, difficulty, crew, and truck recommendation.
+              </p>
+            </div>
+            {inventoryItems.length > 0 && (
+              <div className="text-right text-[10px] text-muted-foreground">
+                <p className="font-black text-foreground">{inventorySummary.hours} hrs</p>
+                <p>{inventorySummary.crew} movers</p>
+              </div>
+            )}
+          </div>
+          <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+            {MOVING_INVENTORY_OPTIONS.map((option) => {
+              const Icon = option.icon;
+              const selected = inventoryItems.find((entry) => entry.id === option.id);
+              const qty = selected?.quantity || 0;
+              return (
+                <div
+                  key={option.id}
+                  className={cn(
+                    "rounded-lg border p-2",
+                    qty > 0 ? "border-emerald-500 bg-emerald-500/10" : "border-border bg-card",
+                  )}
+                  data-testid={`inventory-item-${option.id}`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => updateInventory(option, 1)}
+                    className="w-full text-left"
+                  >
+                    <span className="flex items-center gap-2">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-xs font-bold leading-tight">{option.label}</span>
+                        <span className="block text-[9px] uppercase tracking-wide text-muted-foreground">{option.category}</span>
+                      </span>
+                    </span>
+                  </button>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => updateInventory(option, -1)}
+                      disabled={qty === 0}
+                      className="flex h-7 w-7 items-center justify-center rounded-md border border-border disabled:opacity-40"
+                      aria-label={`Remove ${option.label}`}
+                    >
+                      <Minus className="h-3.5 w-3.5" />
+                    </button>
+                    <span className="text-xs font-black">{qty}</span>
+                    <button
+                      type="button"
+                      onClick={() => updateInventory(option, 1)}
+                      className="flex h-7 w-7 items-center justify-center rounded-md border border-border"
+                      aria-label={`Add ${option.label}`}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {inventoryItems.length > 0 && (
+            <div className="mt-3 rounded-lg border border-sky-500/30 bg-sky-500/10 p-3 text-xs">
+              <p className="font-black text-sky-200">
+                Quote range: ${inventorySummary.min}-${inventorySummary.max} · {inventorySummary.crew} movers · {inventorySummary.truck}
+              </p>
+              <p className="mt-1 text-muted-foreground">
+                Difficulty {inventorySummary.difficulty}/10 · Confidence {inventorySummary.confidence}. Specialist confirms final quote before scheduling.
+              </p>
+            </div>
+          )}
         </div>
       )}
 
