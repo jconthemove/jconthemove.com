@@ -45,9 +45,11 @@ interface Testimonial {
 }
 
 const FALLBACK_TESTIMONIALS: Testimonial[] = [
-  { id: "f1", reviewerName: "Sarah M.", rating: 5, content: "JC and his crew were amazing. Fast, professional, and careful with our home.", serviceType: "Moving", sourcePlatform: "google", featured: true },
-  { id: "f2", reviewerName: "Tom R.", rating: 5, content: "Best junk removal service we've used. Fair pricing and super friendly.", serviceType: "Junk Removal", sourcePlatform: null, featured: true },
-  { id: "f3", reviewerName: "Ashley K.", rating: 5, content: "They showed up on time, worked hard, and got the job done right.", serviceType: "Moving", sourcePlatform: null, featured: true },
+  { id: "g1", reviewerName: "Susan Connor", rating: 5, content: "Needed big, heavy items moved through narrow doors. The crew handled it and was friendly.", serviceType: "Heavy item move", sourcePlatform: "Google", featured: true },
+  { id: "g2", reviewerName: "Nathan Appel", rating: 5, content: "Right on time, professional, and careful with an 800-pound safe and a large armoire.", serviceType: "Safe moving", sourcePlatform: "Google", featured: true },
+  { id: "g3", reviewerName: "Keith Ferrell", rating: 5, content: "Helped unload a 26-foot U-Haul in the rain and put everything where it needed to go.", serviceType: "Unload help", sourcePlatform: "Google", featured: true },
+  { id: "g4", reviewerName: "Jessica Beckman", rating: 5, content: "Efficient, quick, and highly recommended for moving help.", serviceType: "Moving help", sourcePlatform: "Google", featured: true },
+  { id: "g5", reviewerName: "Drea Dree", rating: 5, content: "Fast, efficient, affordable, and made a stressful move much easier.", serviceType: "Move + junk help", sourcePlatform: "5-star web review", featured: true },
 ];
 
 const HERO_IMAGE = heroImage;
@@ -255,12 +257,12 @@ export default function HomePage() {
   const [availabilityLine, setAvailabilityLine] = useState(startOfDayMessage());
 
   const { data: liveTestimonials } = useQuery<Testimonial[]>({
-    queryKey: ["/api/testimonials?status=published&featured=true&limit=3"],
+    queryKey: ["/api/testimonials?status=published&featured=true&limit=5"],
     staleTime: 5 * 60 * 1000,
   });
 
-  const displayTestimonials = liveTestimonials?.length
-    ? liveTestimonials.slice(0, 3)
+  const displayTestimonials = liveTestimonials && liveTestimonials.length >= 5
+    ? liveTestimonials.slice(0, 5)
     : FALLBACK_TESTIMONIALS;
 
   useEffect(() => {
@@ -425,14 +427,15 @@ export default function HomePage() {
             <p className="text-sm font-black uppercase tracking-[0.25em]">5-Star Northwoods Service</p>
             <span className="h-px w-16 bg-white/20" />
           </div>
-          <div className="grid gap-4 md:grid-cols-[210px_1fr_1fr_1fr]">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div className="rounded-lg border border-white/10 bg-slate-900/80 p-5 text-center">
               <SiGoogle className="mx-auto mb-2 h-9 w-9 text-blue-300" />
               <p className="text-xl font-black">Google</p>
               <div className="my-2 flex justify-center gap-0.5">
                 {Array.from({ length: 5 }).map((_, i) => <Star key={i} className="h-4 w-4 fill-yellow-400 text-yellow-400" />)}
               </div>
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-400">5.0 Rating</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-400">5-Star Review Picks</p>
+              <p className="mt-2 text-xs text-slate-500">47 Google reviews</p>
             </div>
             {displayTestimonials.map((review) => (
               <div key={review.id} className="rounded-lg border border-white/10 bg-slate-900/80 p-5">
@@ -443,7 +446,10 @@ export default function HomePage() {
                   </div>
                 </div>
                 <p className="text-sm leading-relaxed text-slate-200">{review.content}</p>
-                {review.serviceType && <p className="mt-4 text-xs font-bold text-slate-500">{review.serviceType}</p>}
+                <div className="mt-4 flex flex-wrap items-center gap-2 text-xs font-bold text-slate-500">
+                  {review.serviceType && <span>{review.serviceType}</span>}
+                  {review.sourcePlatform && <span className="rounded-full border border-white/10 px-2 py-0.5">{review.sourcePlatform}</span>}
+                </div>
               </div>
             ))}
           </div>
