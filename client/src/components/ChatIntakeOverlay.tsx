@@ -126,9 +126,10 @@ interface FeaturedBundle {
 }
 
 const SIZE_OPTIONS = [
-  { label: "Small (1–2 items / studio)", value: "small" },
-  { label: "Medium (apartment / 2-bed)", value: "medium" },
-  { label: "Large (full house / 3+ bed)", value: "large" },
+  { label: "1 or 2 items", value: "small" },
+  { label: "Studio or 1 bedroom", value: "small" },
+  { label: "2 bedroom apartment or house", value: "medium" },
+  { label: "3 or 4 bedroom house", value: "large" },
 ];
 
 const TIMING_OPTIONS = [
