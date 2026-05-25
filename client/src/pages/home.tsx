@@ -524,9 +524,11 @@ export default function HomePage() {
             <p className="mb-3 text-sm font-black uppercase tracking-widest">Service Area</p>
             <div className="space-y-2 text-sm text-slate-400">
               <p>Ironwood, MI</p>
-              <p>Hurley, WI</p>
-              <p>Wakefield, MI</p>
-              <p>Bessemer, MI</p>
+              <p>Ashland, WI</p>
+              <p>Iron River, MI</p>
+              <p>Houghton, MI</p>
+              <p>Mellen, Minocqua, Mercer &amp; Phelps, WI</p>
+              <p>Nearby Northern Wisconsin Northwoods areas</p>
             </div>
           </div>
           <div>
