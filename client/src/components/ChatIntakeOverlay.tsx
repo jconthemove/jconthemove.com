@@ -159,6 +159,20 @@ const MOVING_HEAVY_OPTIONS = [
   "800+ lb item - custom quote",
 ];
 
+const SERVICE_AREA_LOCATIONS = [
+  { city: "Ironwood", state: "MI", zip: "49938", aliases: ["ironwood", "49938"] },
+  { city: "Ashland", state: "WI", zip: "54806", aliases: ["ashland", "54806"] },
+  { city: "Iron River", state: "MI", zip: "49935", aliases: ["iron river", "49935"] },
+  { city: "Houghton", state: "MI", zip: "49931", aliases: ["houghton", "49931"] },
+  { city: "Hurley", state: "WI", zip: "54534", aliases: ["hurley", "54534"] },
+  { city: "Bessemer", state: "MI", zip: "49911", aliases: ["bessemer", "49911"] },
+  { city: "Wakefield", state: "MI", zip: "49968", aliases: ["wakefield", "49968"] },
+  { city: "Mellen", state: "WI", zip: "54546", aliases: ["mellen", "54546"] },
+  { city: "Minocqua", state: "WI", zip: "54548", aliases: ["minocqua", "54548"] },
+  { city: "Mercer", state: "WI", zip: "54547", aliases: ["mercer", "54547"] },
+  { city: "Phelps", state: "WI", zip: "54554", aliases: ["phelps", "54554"] },
+];
+
 function shouldAskSize(services: string[]): boolean {
   return services.some((c) =>
     ["moving", "junk_removal", "cleaning", "demolition"].includes(c),
@@ -194,16 +208,47 @@ function buildBookUrl(
 function normalizeLocalAddress(input: string): string {
   const trimmed = input.trim().replace(/\s+/g, " ");
   if (!trimmed) return "";
-  if (/\b(mi|wi|ironwood|hurley|bessemer|wakefield|marenisco|ashland)\b/i.test(trimmed)) {
+  const lower = trimmed.toLowerCase();
+  const matchedArea = SERVICE_AREA_LOCATIONS.find((area) =>
+    area.aliases.some((alias) => lower.includes(alias)),
+  );
+  const exactZipArea = SERVICE_AREA_LOCATIONS.find((area) => area.zip === trimmed);
+  if (exactZipArea) return `${exactZipArea.city}, ${exactZipArea.state} ${exactZipArea.zip}`;
+  if (matchedArea && lower === matchedArea.city.toLowerCase()) {
+    return `${matchedArea.city}, ${matchedArea.state} ${matchedArea.zip}`;
+  }
+  if (/\b(mi|wi)\b/i.test(trimmed)) {
     return trimmed;
   }
   if (/^\d+\s+/.test(trimmed)) {
-    return `${trimmed}, Ironwood, MI 49938`;
+    const area = matchedArea || SERVICE_AREA_LOCATIONS[0];
+    return `${trimmed}, ${area.city}, ${area.state} ${area.zip}`;
   }
   if (/^\d{5}(-\d{4})?$/.test(trimmed)) {
     return trimmed;
   }
+  if (matchedArea) return `${matchedArea.city}, ${matchedArea.state} ${matchedArea.zip}`;
   return trimmed;
+}
+
+function getAddressSuggestions(input: string): string[] {
+  const trimmed = input.trim().replace(/\s+/g, " ");
+  if (!trimmed) {
+    return ["Ironwood, MI 49938", "Ashland, WI 54806", "Hurley, WI 54534"];
+  }
+  const lower = trimmed.toLowerCase();
+  const matchedAreas = SERVICE_AREA_LOCATIONS.filter((area) =>
+    area.aliases.some((alias) => alias.includes(lower) || lower.includes(alias)),
+  );
+  const suggestions = new Set<string>();
+  if (/^\d+\s+/.test(trimmed)) suggestions.add(normalizeLocalAddress(trimmed));
+  for (const area of matchedAreas) suggestions.add(`${area.city}, ${area.state} ${area.zip}`);
+  if (!matchedAreas.length && trimmed.length >= 3 && !/^\d+\s+/.test(trimmed)) {
+    for (const area of SERVICE_AREA_LOCATIONS.filter((area) => area.city.toLowerCase().startsWith(lower)).slice(0, 3)) {
+      suggestions.add(`${area.city}, ${area.state} ${area.zip}`);
+    }
+  }
+  return Array.from(suggestions).filter(Boolean).slice(0, 3);
 }
 
 export interface ChatIntakeOverlayProps {
@@ -234,6 +279,10 @@ export default function ChatIntakeOverlay({
   const [addons, setAddons] = useState<string[]>([]);
   const [timing, setTiming] = useState<string | undefined>(undefined);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const addressSuggestions = useMemo(
+    () => (step === "ask_location" ? getAddressSuggestions(draft) : []),
+    [draft, step],
+  );
 
   // Reset every time the overlay opens so re-opens don't show stale chat.
   useEffect(() => {
@@ -917,6 +966,22 @@ export default function ChatIntakeOverlay({
                   className="bg-slate-800 border-slate-700 pl-10 pr-3.5 text-white placeholder:text-slate-500 focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/40"
                   data-testid="chat-location-input"
                 />
+                {addressSuggestions.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {addressSuggestions.map((suggestion) => (
+                      <button
+                        key={suggestion}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => handleComposerSubmit(suggestion)}
+                        className="rounded-full border border-blue-400/30 bg-blue-500/10 px-2.5 py-1 text-left text-[11px] font-bold text-blue-100 hover:border-blue-300/70 hover:bg-blue-500/20"
+                        data-testid={`chat-address-suggestion-${suggestion.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+                      >
+                        Use {suggestion}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : (
               <Input
