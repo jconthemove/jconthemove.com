@@ -20466,6 +20466,86 @@ Thank you for your business!
   // ── Live Crew Status (customer-facing, no auth required) ───────────────────
   // Returns a readiness badge driven by real crew availability + today's job load.
   // Status keys: ready | limited | high_demand | scheduling_ahead
+  app.get("/api/utility/verify-address", ipRateLimit({
+    scope: "verify_address_ip",
+    windowMs: 5 * 60_000,
+    maxHits: 80,
+    message: "Too many address checks. Try again in a few minutes.",
+  }), async (req, res) => {
+    const address = String(req.query.address || "").trim();
+    if (address.length < 6) {
+      return res.json({ verified: false, reason: "Address is too short" });
+    }
+
+    const componentValue = (
+      components: Array<{ long_name: string; short_name: string; types: string[] }>,
+      type: string,
+      short = false,
+    ) => {
+      const match = components.find((component) => component.types.includes(type));
+      return match ? (short ? match.short_name : match.long_name) : "";
+    };
+
+    try {
+      const googleKey = process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_PLACES_API_KEY || "";
+      if (googleKey) {
+        const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&components=country:US&key=${googleKey}`;
+        const response = await fetch(url);
+        if (response.ok) {
+          const data = await response.json() as {
+            status: string;
+            results?: Array<{
+              formatted_address?: string;
+              address_components?: Array<{ long_name: string; short_name: string; types: string[] }>;
+            }>;
+          };
+          const place = data.results?.[0];
+          const components = place?.address_components || [];
+          const has = (type: string) => components.some((component) => component.types.includes(type));
+          if (data.status === "OK" && place?.formatted_address && has("route")) {
+            const city = componentValue(components, "locality") || componentValue(components, "sublocality");
+            const state = componentValue(components, "administrative_area_level_1", true);
+            const zip = componentValue(components, "postal_code");
+            return res.json({
+              verified: Boolean(city && state && zip),
+              provider: "google",
+              fullAddress: place.formatted_address,
+              city,
+              state,
+              zip,
+            });
+          }
+        }
+      }
+
+      const fallbackUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1&addressdetails=1&countrycodes=us`;
+      const fallback = await fetch(fallbackUrl, {
+        headers: { "User-Agent": "JCOnTheMove/1.0 contact@jconthemove.com" },
+      });
+      if (fallback.ok) {
+        const data = await fallback.json() as Array<{
+          display_name?: string;
+          address?: { city?: string; town?: string; village?: string; state?: string; postcode?: string };
+        }>;
+        const place = data[0];
+        if (place?.display_name) {
+          return res.json({
+            verified: true,
+            provider: "openstreetmap",
+            fullAddress: place.display_name,
+            city: place.address?.city || place.address?.town || place.address?.village || "",
+            state: place.address?.state || "",
+            zip: place.address?.postcode || "",
+          });
+        }
+      }
+
+      return res.json({ verified: false, reason: "Address not found" });
+    } catch (error) {
+      return res.json({ verified: false, reason: error instanceof Error ? error.message : "Address check failed" });
+    }
+  });
+
   app.get("/api/crew-status", async (_req, res) => {
     try {
       // All approved employees/admins with their duty-window fields
@@ -20585,7 +20665,11 @@ Thank you for your business!
     }
   });
 
-  app.get("/api/maps-config", (_req, res) => {
+  app.get("/api/maps-config", (req, res) => {
+    const referrer = String(req.get("referer") || req.get("referrer") || "");
+    if (/\/book(?:\?|$|\/)/i.test(referrer)) {
+      return res.json({ key: "", disabled: true });
+    }
     const key = process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_PLACES_API_KEY || "";
     res.json({ key });
   });

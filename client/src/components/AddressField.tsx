@@ -83,6 +83,7 @@ export default function AddressField({
   // input value drifts away from this, we treat the address as no-longer-
   // resolved and re-open the manual fields.
   const resolvedValueRef = useRef<string>("");
+  const verifyRequestRef = useRef<number>(0);
 
   useEffect(() => {
     // Drift detection isn't gated by `resolved` because the onChange handler
@@ -166,6 +167,28 @@ export default function AddressField({
     return false;
   }
 
+  async function verifyTypedAddress(raw: string) {
+    const trimmed = raw.trim();
+    if (trimmed.length < 6) return false;
+    const requestId = verifyRequestRef.current + 1;
+    verifyRequestRef.current = requestId;
+    try {
+      const response = await fetch(`/api/utility/verify-address?address=${encodeURIComponent(trimmed)}`);
+      if (!response.ok || verifyRequestRef.current !== requestId) return false;
+      const data = await response.json() as Partial<PlaceResult> & { verified?: boolean };
+      if (!data.verified || !data.fullAddress) return false;
+      handlePlace({
+        fullAddress: data.fullAddress,
+        city: data.city || "",
+        state: data.state || "",
+        zip: data.zip || "",
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   const inputs = theme === "zinc"
     ? "w-full rounded-md border border-zinc-700 bg-zinc-800 text-white placeholder:text-zinc-500 px-3.5 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-orange-500/40 focus:border-orange-500/60 transition-all"
     : "w-full rounded-md border border-slate-700 bg-slate-800 text-white placeholder:text-slate-500 px-3.5 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500/60 transition-all";
@@ -198,6 +221,12 @@ export default function AddressField({
         // address by hand — required for the green pill UX to be honest.
         onResolveAttempt={(success) => {
           const locallyResolved = !success && disableGoogle ? tryLocalResolve(value) : false;
+          if (!success && disableGoogle && value.trim().length > 0) {
+            void verifyTypedAddress(value).then((verified) => {
+              if (!verified && !locallyResolved && showManualFields) setManualOpen(true);
+            });
+            return;
+          }
           if (!success && !locallyResolved && showManualFields && value.trim().length > 0) {
             setManualOpen(true);
           }

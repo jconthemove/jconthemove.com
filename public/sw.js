@@ -1,5 +1,5 @@
 // Service Worker for JC ON THE MOVE Mobile App
-const CACHE_NAME = 'jc-mobile-v1.1.0';
+const CACHE_NAME = 'jc-mobile-v1.1.1';
 const OFFLINE_URL = '/offline.html';
 
 // Resources to cache for offline functionality
@@ -17,14 +17,18 @@ const API_CACHE_PATTERNS = [
   /^\/api\/contacts/
 ];
 
-// Cache-first resources (JS, CSS, images, fonts, etc.)
+// Cache-first resources (images and fonts only). JS/CSS must stay network-first
+// so booking-flow fixes are not trapped behind an old service-worker cache.
 const CACHE_FIRST_PATTERNS = [
-  /\.(?:js|mjs)$/,
-  /\.css$/,
-  /\/assets\//,
   /\.(?:png|jpg|jpeg|svg|gif|webp|ico)$/,
   /\.(?:woff|woff2|ttf|eot)$/,
   /^https:\/\/fonts\./
+];
+
+const NETWORK_FIRST_STATIC_PATTERNS = [
+  /\.(?:js|mjs)$/,
+  /\.css$/,
+  /\/assets\/.*\.(?:js|mjs|css)$/
 ];
 
 // Install event - cache essential resources
@@ -99,6 +103,11 @@ self.addEventListener('fetch', (event) => {
   // Static assets - Cache first with network fallback  
   if (CACHE_FIRST_PATTERNS.some(pattern => pattern.test(url.pathname))) {
     event.respondWith(cacheFirstStrategy(request));
+    return;
+  }
+
+  if (NETWORK_FIRST_STATIC_PATTERNS.some(pattern => pattern.test(url.pathname))) {
+    event.respondWith(networkFirstStrategy(request));
     return;
   }
 
