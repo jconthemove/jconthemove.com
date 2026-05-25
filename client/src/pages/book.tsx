@@ -1279,6 +1279,7 @@ export default function MultiServiceBookPage() {
                     onServiceAddressChange={setServiceAddress}
                     onChange={updateItem}
                     onRemove={() => removeService(item.serviceCode)}
+                    onRequestContinue={goNext}
                     warning={itemNeedsAttention(item)}
                   />
                 ))}

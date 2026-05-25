@@ -2073,7 +2073,7 @@ export function MovingJunkPackagePicker({
 // inside the service card. Used by the wizard's "configure" step so users
 // can edit every field without opening a modal/drawer.
 export function InlineItemConfigure({
-  item, onChange, onRemove, warning, serviceAddress, onServiceAddressChange,
+  item, onChange, onRemove, warning, serviceAddress, onServiceAddressChange, onRequestContinue,
 }: {
   item: SelectedItem;
   onChange: (next: SelectedItem) => void;
@@ -2081,8 +2081,10 @@ export function InlineItemConfigure({
   warning?: string | null;
   serviceAddress?: string;
   onServiceAddressChange?: (value: string) => void;
+  onRequestContinue?: () => void;
 }) {
   const usesPicker = usesPackagePicker(item.serviceCode);
+  const isMoving = item.serviceCode === "moving";
   const mode = schedulingModeFor(item.serviceCode);
   const showQty = item.priceMode === "hourly" || item.priceMode === "per_unit";
   const lineSubtotal = item.quantity * item.unitPrice;
@@ -2119,6 +2121,45 @@ export function InlineItemConfigure({
           serviceAddress={serviceAddress || ""}
           onServiceAddressChange={onServiceAddressChange}
         />
+      )}
+
+      {usesPicker && isMoving && (
+        <div
+          className={cn(
+            "rounded-xl border p-3 sm:p-4",
+            warning
+              ? "border-amber-500/40 bg-amber-500/10"
+              : "border-emerald-500/40 bg-emerald-500/10",
+          )}
+          data-testid="moving-card-confirmation"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-black text-foreground">
+                {warning ? "Finish this moving quote" : "Moving job ready for review"}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {warning
+                  ? warning
+                  : `${item.details.packageLabel || "Crew reserved"} · ${item.details.loadType || "Moving help"} · final estimate appears on review.`}
+              </p>
+            </div>
+            <Button
+              type="button"
+              onClick={onRequestContinue}
+              disabled={!!warning || !onRequestContinue}
+              className="w-full sm:w-auto shrink-0"
+              data-testid="moving-inline-continue"
+            >
+              Continue to contact
+            </Button>
+          </div>
+          {!warning && (
+            <p className="mt-2 text-[11px] text-emerald-300">
+              Next we’ll grab your name and phone, then you’ll confirm the request.
+            </p>
+          )}
+        </div>
       )}
 
       {/* Qty (hourly / per_unit only). Hidden when the package picker drives
