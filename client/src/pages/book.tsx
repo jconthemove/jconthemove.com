@@ -1258,6 +1258,7 @@ export default function MultiServiceBookPage() {
                 placeholder="123 Main St, Ironwood, MI"
                 theme="zinc"
                 hint="Pick a suggestion or just keep typing — we'll confirm the city, state, and ZIP automatically."
+                disableGoogle
                 data-testid="address-field-multi"
               />
             </section>

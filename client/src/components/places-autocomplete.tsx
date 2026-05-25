@@ -75,6 +75,8 @@ interface PlacesAutocompleteProps {
    *  parent reveal a manual City / State / ZIP fallback whenever a typed or
    *  autofilled address can't be resolved into a complete street address. */
   onResolveAttempt?: (success: boolean) => void;
+  /** Keeps typing fully local for flows where Google Maps has proven brittle. */
+  disableGoogle?: boolean;
 }
 
 let mapsApiKey: string | null = null;
@@ -184,6 +186,7 @@ export function PlacesAutocomplete({
   onKeyDown,
   resolveOnBlur = true,
   onResolveAttempt,
+  disableGoogle = false,
 }: PlacesAutocompleteProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const autocompleteRef = useRef<GAutocomplete | null>(null);
@@ -198,6 +201,10 @@ export function PlacesAutocomplete({
 
   useEffect(() => {
     ensureAutofillAnimationCss();
+    if (disableGoogle) {
+      setStatus("idle");
+      return;
+    }
     let cancelled = false;
     setStatus("loading");
 

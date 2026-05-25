@@ -48,6 +48,8 @@ interface AddressFieldProps {
   hint?: React.ReactNode;
   /** Inline error from the parent form (e.g. react-hook-form). */
   error?: string;
+  /** Disable Google Places and use fast typed-address parsing only. */
+  disableGoogle?: boolean;
   "data-testid"?: string;
 }
 
@@ -67,6 +69,7 @@ export default function AddressField({
   theme = "slate",
   hint,
   error,
+  disableGoogle = false,
   "data-testid": dataTestId,
 }: AddressFieldProps) {
   // True after a Places suggestion or a geocode-on-blur successfully resolved
@@ -111,6 +114,58 @@ export default function AddressField({
     onResolved?.(place);
   }
 
+  function parseTypedAddress(raw: string): PlaceResult | null {
+    const trimmed = raw.trim().replace(/\s+/g, " ");
+    if (trimmed.length < 6) return null;
+    const zipMatch = trimmed.match(/\b(\d{5})(?:-\d{4})?\b/);
+    const stateZipMatch = trimmed.match(/\b([A-Z]{2})\s+(\d{5})(?:-\d{4})?\b/i);
+    const cityStateZipMatch = trimmed.match(/,\s*([^,]+?)\s*,?\s*([A-Z]{2})\s+(\d{5})(?:-\d{4})?\s*$/i);
+    if (cityStateZipMatch) {
+      return {
+        fullAddress: trimmed,
+        city: cityStateZipMatch[1].trim(),
+        state: cityStateZipMatch[2].toUpperCase(),
+        zip: cityStateZipMatch[3],
+      };
+    }
+    if (stateZipMatch) {
+      const beforeState = trimmed.slice(0, stateZipMatch.index).replace(/,\s*$/, "");
+      const city = beforeState.split(",").map((part) => part.trim()).filter(Boolean).pop() || "";
+      return {
+        fullAddress: trimmed,
+        city,
+        state: stateZipMatch[1].toUpperCase(),
+        zip: stateZipMatch[2],
+      };
+    }
+    if (zipMatch) {
+      return {
+        fullAddress: trimmed,
+        city,
+        state,
+        zip: zipMatch[1],
+      };
+    }
+    return null;
+  }
+
+  function tryLocalResolve(raw: string) {
+    const parsed = parseTypedAddress(raw);
+    if (!parsed || (!parsed.city && !parsed.state && !parsed.zip)) return false;
+    if (parsed.city) onCityChange(parsed.city);
+    if (parsed.state) onStateChange(parsed.state);
+    if (parsed.zip) onZipChange(parsed.zip);
+    if (parsed.city && parsed.state && parsed.zip) {
+      resolvedValueRef.current = parsed.fullAddress;
+      setResolved(true);
+      setManualOpen(false);
+      onResolved?.(parsed);
+      return true;
+    }
+    if (showManualFields) setManualOpen(true);
+    return false;
+  }
+
   const inputs = theme === "zinc"
     ? "w-full rounded-md border border-zinc-700 bg-zinc-800 text-white placeholder:text-zinc-500 px-3.5 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-orange-500/40 focus:border-orange-500/60 transition-all"
     : "w-full rounded-md border border-slate-700 bg-slate-800 text-white placeholder:text-slate-500 px-3.5 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500/60 transition-all";
@@ -130,6 +185,7 @@ export default function AddressField({
         value={value}
         onChange={(v) => {
           onChange(v);
+          if (disableGoogle) tryLocalResolve(v);
           if (resolved && v !== resolvedValueRef.current) {
             setResolved(false);
             if (showManualFields) setManualOpen(true);
@@ -141,12 +197,15 @@ export default function AddressField({
         // manual City / State / ZIP inputs so the customer can finish the
         // address by hand — required for the green pill UX to be honest.
         onResolveAttempt={(success) => {
-          if (!success && showManualFields && value.trim().length > 0) {
+          const locallyResolved = !success && disableGoogle ? tryLocalResolve(value) : false;
+          if (!success && !locallyResolved && showManualFields && value.trim().length > 0) {
             setManualOpen(true);
           }
         }}
         placeholder={placeholder}
         inputClassName={inputClassName || inputs}
+        disableGoogle={disableGoogle}
+        resolveOnBlur={!disableGoogle}
       />
 
       {error && <p className="text-red-400 text-xs mt-1">{error}</p>}
