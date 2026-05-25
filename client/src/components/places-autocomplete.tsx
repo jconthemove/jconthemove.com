@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { MapPin, Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 // ─── Minimal local Google Maps types ───────────────────────────────────────
 // We don't take a dependency on `@types/google.maps` for this single
@@ -323,10 +324,7 @@ export function PlacesAutocomplete({
         }}
         placeholder={status === "loading" ? "Loading maps…" : placeholder}
         autoFocus={autoFocus}
-        className={
-          inputClassName ||
-          `${baseInput} ${status === "ready" ? "pl-8" : ""}`
-        }
+        className={cn(inputClassName || baseInput, status === "ready" && "pl-9")}
         name="street-address"
         autoComplete="street-address"
       />
