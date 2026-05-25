@@ -31,7 +31,7 @@ import junkImage from "@assets/FB_IMG_1690476073966_1764946176032.jpg";
 import badgeImage from "@assets/FB_IMG_1675268829327_1758501643307.jpg";
 import haulImage from "@assets/IMG_20220810_125649554_HDR_1758501643329.jpg";
 import crewImage from "@assets/FB_IMG_1690476036804_1764946176026.jpg";
-import handymanImage from "@assets/stock_images/professional_moving__5a83198e.jpg";
+import handymanImage from "@assets/handyman-drill-unsplash.jpg";
 import windowImage from "@assets/window-cleaning-squeegee-unsplash.jpg";
 
 interface Testimonial {
