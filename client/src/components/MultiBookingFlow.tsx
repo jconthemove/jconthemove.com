@@ -94,6 +94,7 @@ export interface SelectedItem {
     truckExtraMileRate?: number;
     hasStairs?: boolean;
     specialItems?: string[];
+    heavyItemsConfirmed?: boolean;
     promoCode?: string;
     dropoffAddress?: string;
     verifiedDriveMiles?: number;
@@ -581,7 +582,7 @@ const PICKER_TRUCK_SIZES = [
   "Custom",
 ];
 
-const PICKER_SPECIAL_ITEMS = [
+export const PICKER_SPECIAL_ITEMS = [
   "🎹 Grand Piano",
   "🎹 Upright Piano",
   "🎱 Pool Table",
@@ -1072,34 +1073,6 @@ export function MovingJunkPackagePicker({
             />
             Stairs at pickup or drop-off
           </label>
-
-          <div>
-            <Label className="text-xs">Heavy / special items</Label>
-            <div className="flex flex-wrap gap-1.5 mt-1">
-              {PICKER_SPECIAL_ITEMS.map(label => {
-                const active = (item.details.specialItems || []).includes(label);
-                return (
-                  <button
-                    key={label}
-                    type="button"
-                    onClick={() => toggleSpecial(label)}
-                    className={cn(
-                      "text-[11px] px-2 py-1 rounded-full border transition-all",
-                      active
-                        ? "border-orange-400 bg-orange-500/20 text-orange-300"
-                        : "border-border bg-card hover:border-foreground/30",
-                    )}
-                    data-testid={`pkg-special-${item.serviceCode}-${label.slice(2, 6).trim()}`}
-                  >
-                    {shortSpecialLabel(label)}
-                  </button>
-                );
-              })}
-            </div>
-            <p className="mt-1 text-[10px] text-muted-foreground">
-              Standard 200 lb+ heavy items add $100. Specialty items are confirmed after review.
-            </p>
-          </div>
 
           {isMoving && (
             <div>

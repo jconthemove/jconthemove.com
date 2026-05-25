@@ -32,7 +32,7 @@ import {
   type CatalogService, type FeaturedBundle, type SelectedItem, type QuoteResult,
   emojiFor, schedulingModeFor,
   formatMovingFlowSummary, formatQuoteLinePrice, quoteLineForItem, quoteCrewSize,
-  formatReservedCrewSubline,
+  formatReservedCrewSubline, PICKER_SPECIAL_ITEMS,
 } from "@/components/MultiBookingFlow";
 
 interface BundleSlots {
@@ -96,15 +96,39 @@ interface CreateBookingResponse {
   quote: QuoteResult;
 }
 
-const STEPS = ["services", "address", "configure", "contact", "review"] as const;
+const STEPS = ["services", "address", "configure", "contact", "safety", "review"] as const;
 type Step = (typeof STEPS)[number];
 const STEP_LABELS: Record<Step, string> = {
   services: "Pick services",
   address: "Service address",
   configure: "Configure each service",
   contact: "Contact info",
+  safety: "Safety check",
   review: "Review & confirm",
 };
+
+function shortHeavyLabel(label: string) {
+  if (/grand piano/i.test(label)) return "Grand piano";
+  if (/upright piano/i.test(label)) return "Upright piano";
+  if (/pool table/i.test(label)) return "Pool table";
+  if (/hot tub/i.test(label)) return "Hot tub";
+  if (/1000/.test(label)) return "Safe 1000 lbs";
+  if (/500/.test(label)) return "Safe 500 lbs";
+  if (/safe/i.test(label)) return "Safe 300 lbs";
+  if (/800\+/.test(label)) return "800+ lb item";
+  if (/600/.test(label)) return "600 lb item";
+  if (/400/.test(label)) return "400 lb item";
+  if (/appliance|fitness/i.test(label)) return "Appliance";
+  return "Other 200 lb+";
+}
+
+function safetyNeedsAttention(item: SelectedItem): string | null {
+  if (item.serviceCode !== "moving") return null;
+  if (!item.details.heavyItemsConfirmed) {
+    return "Confirm heavy/special items before review";
+  }
+  return null;
+}
 
 function itemNeedsAttention(item: SelectedItem): string | null {
   // Task #141: Moving / Junk Removal must pass through the package picker so
@@ -410,6 +434,16 @@ export default function MultiServiceBookPage() {
   function updateItem(next: SelectedItem) {
     setItems(prev => prev.map(i => i.serviceCode === next.serviceCode ? next : i));
   }
+  function patchItemDetails(serviceCode: string, details: Partial<SelectedItem["details"]>) {
+    setItems(prev => prev.map(i => i.serviceCode === serviceCode
+      ? { ...i, details: { ...i.details, ...details } }
+      : i));
+  }
+  function toggleSafetySpecial(item: SelectedItem, label: string) {
+    const cur = item.details.specialItems || [];
+    const next = cur.includes(label) ? cur.filter(s => s !== label) : [...cur, label];
+    patchItemDetails(item.serviceCode, { specialItems: next, heavyItemsConfirmed: true });
+  }
 
   // Task #207 — Resolve URL prefill against the live catalog the moment
   // the catalog query lands. Codes that don't exist in the catalog are
@@ -653,6 +687,12 @@ export default function MultiServiceBookPage() {
       if (!email) return "Enter your email so we can confirm";
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "Enter a valid email address";
     }
+    if (stepIndex(step) >= stepIndex("safety")) {
+      for (const item of items) {
+        const w = safetyNeedsAttention(item);
+        if (w) return `${item.label}: ${w.toLowerCase()}`;
+      }
+    }
     return null;
   }
 
@@ -660,12 +700,18 @@ export default function MultiServiceBookPage() {
     const reason = canContinueReason();
     if (reason) return;
     const idx = STEPS.indexOf(step);
-    if (idx < STEPS.length - 1) setStep(STEPS[idx + 1]);
+    if (idx < STEPS.length - 1) {
+      const nextStep = STEPS[idx + 1];
+      setStep(nextStep === "safety" && !hasMovingService ? "review" : nextStep);
+    }
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
   function goBack() {
     const idx = STEPS.indexOf(step);
-    if (idx > 0) setStep(STEPS[idx - 1]);
+    if (idx > 0) {
+      const prevStep = STEPS[idx - 1];
+      setStep(prevStep === "safety" && !hasMovingService ? "contact" : prevStep);
+    }
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -1038,6 +1084,85 @@ export default function MultiServiceBookPage() {
                     </div>
                   </div>
                 )}
+              </div>
+            </section>
+          )}
+
+          {/* Step 5 — Safety check */}
+          {step === "safety" && (
+            <section data-testid="step-safety">
+              <header className="mb-3">
+                <h2 className="text-xl font-black">Safety check</h2>
+                <p className="text-sm text-muted-foreground">
+                  Before final review, confirm there are no seriously heavy items or select them now so we send the right crew.
+                </p>
+              </header>
+              <div className="space-y-3">
+                {items.filter(item => item.serviceCode === "moving").map(item => {
+                  const selected = item.details.specialItems || [];
+                  const hasSelectedHeavy = selected.length > 0;
+                  return (
+                    <div key={item.serviceCode} className="rounded-2xl border border-border bg-card p-4 space-y-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-black">{emojiFor(item.serviceCode)} {item.label}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            200 lb+ items, safes, pianos, pool tables, hot tubs, and large appliances must be marked for billing and safe handling.
+                          </p>
+                        </div>
+                        {item.details.heavyItemsConfirmed && (
+                          <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => patchItemDetails(item.serviceCode, {
+                          specialItems: [],
+                          heavyItemsConfirmed: true,
+                        })}
+                        className={`w-full rounded-xl border px-3 py-3 text-left text-sm font-semibold transition-all ${
+                          item.details.heavyItemsConfirmed && !hasSelectedHeavy
+                            ? "border-emerald-500 bg-emerald-500/10 text-emerald-300"
+                            : "border-border bg-background hover:border-emerald-500/40"
+                        }`}
+                        data-testid={`safety-no-heavy-${item.serviceCode}`}
+                      >
+                        No seriously heavy or specialty items on this project
+                        <span className="block text-xs font-normal text-muted-foreground mt-0.5">
+                          Standard furniture and boxes only.
+                        </span>
+                      </button>
+
+                      <div>
+                        <Label className="text-xs">Select heavy / specialty items billed extra</Label>
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {PICKER_SPECIAL_ITEMS.map(label => {
+                            const active = selected.includes(label);
+                            return (
+                              <button
+                                key={label}
+                                type="button"
+                                onClick={() => toggleSafetySpecial(item, label)}
+                                className={`text-[11px] px-2.5 py-1.5 rounded-full border transition-all ${
+                                  active
+                                    ? "border-orange-400 bg-orange-500/20 text-orange-300"
+                                    : "border-border bg-background hover:border-orange-500/40"
+                                }`}
+                                data-testid={`safety-heavy-${item.serviceCode}-${shortHeavyLabel(label).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+                              >
+                                {shortHeavyLabel(label)}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <p className="mt-2 text-[11px] text-muted-foreground">
+                          Standard 200 lb+ items add $100. Specialty items and very heavy safes/pool tables are billed at the shown heavy-item rate and confirmed by the crew coordinator.
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </section>
           )}
