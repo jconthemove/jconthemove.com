@@ -7,6 +7,17 @@ function getJwtSecret(): string {
   return process.env.JWT_SECRET || process.env.SESSION_SECRET || "jcmoves-jwt-fallback-secret";
 }
 
+function getSessionSecret(): string {
+  if (process.env.SESSION_SECRET) {
+    return process.env.SESSION_SECRET;
+  }
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("SESSION_SECRET must be set in production.");
+  }
+  console.warn("[session] SESSION_SECRET is not set; using a development-only fallback secret.");
+  return "jcmoves-dev-session-secret";
+}
+
 export function getSession() {
   const sessionTtl = 90 * 24 * 60 * 60 * 1000; // 90 days (3 months)
   const pgStore = connectPg(session);
@@ -21,7 +32,7 @@ export function getSession() {
   
   return session({
     name: 'jc.sid',
-    secret: process.env.SESSION_SECRET!,
+    secret: getSessionSecret(),
     store: sessionStore,
     resave: false,
     saveUninitialized: false,

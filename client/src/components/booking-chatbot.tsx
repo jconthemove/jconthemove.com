@@ -624,7 +624,7 @@ const STEPS: Step[] = [
   {
     id: "truckSituation",
     question: "Do you have a moving truck?",
-    subtext: "Our rental includes 30 miles. Extra A-to-B miles are billed at $5/mi after that.",
+    subtext: "Our rental includes 50 miles. Extra A-to-B miles are billed at $5/mi after that.",
     type: "choice",
     options: [
       "ðŸš— I'll bring my own truck (or rental)",
@@ -2493,7 +2493,7 @@ export function buildCrewPackages(a: Answers, q: QuoteResult | null, ratePerMove
         ? {
             id: "pkg_med_16_load_only",
             label: "2 Movers x 2 hrs",
-            desc: `16 ft truck load-only minimum · local flat rate starts at $300${travelNote}`,
+            desc: `15 ft truck load-only minimum · local flat rate starts at ${travelNote}`,
             minPrice: localPackage(300),
             maxPrice: localPackage(300),
             crew: 2,

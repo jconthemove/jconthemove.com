@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Calendar as CalendarIcon, BookOpen, Store, Star, Camera, MapPin, Phone, Mail, Plus, Settings, Award, User, Snowflake, Coins, Loader2, Trash2, CheckCircle2, XCircle, Bell } from "lucide-react";
+import { Calendar as CalendarIcon, BookOpen, Store, Star, Camera, MapPin, Phone, Mail, Plus, Settings, Award, User, Snowflake, Coins, Loader2, Trash2, CheckCircle2, XCircle, Bell, Clock } from "lucide-react";
 import { Link } from "wouter";
 import { useState, useEffect } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -30,6 +30,11 @@ interface Lead {
   createdByUserId?: string;
   tokenAllocation?: string;
   basePrice?: string;
+  totalPrice?: string;
+  arrivalWindow?: string;
+  confirmedFromAddress?: string;
+  confirmedToAddress?: string;
+  crewSize?: number;
   crewMembers?: string[];
 }
 
@@ -64,6 +69,12 @@ export default function EmployeeHomePage() {
   const [tokenAllocation, setTokenAllocation] = useState("");
   const [basePrice, setBasePrice] = useState("");
   const [selectedCrewMembers, setSelectedCrewMembers] = useState<string[]>([]);
+  const [convertDate, setConvertDate] = useState("");
+  const [convertArrivalWindow, setConvertArrivalWindow] = useState("");
+  const [convertCrewSize, setConvertCrewSize] = useState("2");
+  const [convertFromAddress, setConvertFromAddress] = useState("");
+  const [convertToAddress, setConvertToAddress] = useState("");
+  const [convertNotes, setConvertNotes] = useState("");
   const scripture = getDailyScripture();
   const { toast } = useToast();
 
@@ -272,6 +283,30 @@ export default function EmployeeHomePage() {
     },
   });
 
+  const convertToJobMutation = useMutation({
+    mutationFn: async (data: { jobId: string; payload: any }) => {
+      const res = await apiRequest("POST", `/api/leads/${data.jobId}/convert-to-job`, data.payload);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads/available"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads/my-jobs"] });
+      toast({
+        title: "Lead converted",
+        description: "The job is now available for scheduling and crew assignment.",
+      });
+      setIsManageDialogOpen(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Conversion failed",
+        description: error?.message || "Could not convert this lead to a job.",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Handle date click
   const handleDateClick = (date: Date) => {
     setSelectedDate(date);
@@ -284,6 +319,12 @@ export default function EmployeeHomePage() {
     setTokenAllocation(job.tokenAllocation || "");
     setBasePrice(job.basePrice || "");
     setSelectedCrewMembers(job.crewMembers || []);
+    setConvertDate(job.confirmedDate || job.moveDate || "");
+    setConvertArrivalWindow(job.arrivalWindow || "");
+    setConvertCrewSize(String(job.crewSize || 2));
+    setConvertFromAddress(job.confirmedFromAddress || job.fromAddress || "");
+    setConvertToAddress(job.confirmedToAddress || job.toAddress || "");
+    setConvertNotes(job.details || "");
     setIsManageDialogOpen(true);
   };
 
@@ -297,6 +338,28 @@ export default function EmployeeHomePage() {
         tokenAllocation: tokenAllocation || undefined,
         basePrice: basePrice || undefined,
         crewMembers: selectedCrewMembers,
+      },
+    });
+  };
+
+  const canUseConvertPanel = (status: string) => {
+    return ["new", "quote_requested", "contacted", "quoted", "chatbot_pending"].includes(status);
+  };
+
+  const handleConvertToJob = () => {
+    if (!selectedJob) return;
+    convertToJobMutation.mutate({
+      jobId: selectedJob.id,
+      payload: {
+        basePrice,
+        tokenAllocation: tokenAllocation || undefined,
+        confirmedDate: convertDate,
+        arrivalWindow: convertArrivalWindow || undefined,
+        crewSize: convertCrewSize || "2",
+        crewMembers: selectedCrewMembers,
+        confirmedFromAddress: convertFromAddress || undefined,
+        confirmedToAddress: convertToAddress || undefined,
+        quoteNotes: convertNotes || undefined,
       },
     });
   };
@@ -1113,6 +1176,117 @@ export default function EmployeeHomePage() {
                       Employees will earn bonuses from this pool based on performance
                     </p>
                   </div>
+
+                  {canUseConvertPanel(selectedJob.status) && (
+                    <div className="space-y-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h4 className="font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+                            <CheckCircle2 className="h-4 w-4" />
+                            Convert to Job
+                          </h4>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Confirm price, date, start time, and crew in one save.
+                          </p>
+                        </div>
+                        <Badge variant="secondary">Available next</Badge>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <Label htmlFor="convert-date" className="flex items-center gap-1">
+                            <CalendarIcon className="h-3 w-3" />
+                            Date
+                          </Label>
+                          <Input
+                            id="convert-date"
+                            type="date"
+                            value={convertDate}
+                            onChange={(e) => setConvertDate(e.target.value)}
+                            data-testid="input-convert-date"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="convert-arrival-window" className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            Start Time
+                          </Label>
+                          <select
+                            id="convert-arrival-window"
+                            value={convertArrivalWindow}
+                            onChange={(e) => setConvertArrivalWindow(e.target.value)}
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            data-testid="select-convert-start-time"
+                          >
+                            <option value="">Pick time</option>
+                            <option value="7:00 AM">7:00 AM</option>
+                            <option value="8:00 AM">8:00 AM</option>
+                            <option value="9:00 AM">9:00 AM</option>
+                            <option value="10:00 AM">10:00 AM</option>
+                            <option value="11:00 AM">11:00 AM</option>
+                            <option value="12:00 PM">12:00 PM</option>
+                            <option value="1:00 PM">1:00 PM</option>
+                            <option value="2:00 PM">2:00 PM</option>
+                            <option value="3:00 PM">3:00 PM</option>
+                            <option value="Flexible">Flexible</option>
+                          </select>
+                        </div>
+                        <div>
+                          <Label htmlFor="convert-crew-size">Crew Needed</Label>
+                          <Input
+                            id="convert-crew-size"
+                            type="number"
+                            min="1"
+                            max="12"
+                            value={convertCrewSize}
+                            onChange={(e) => setConvertCrewSize(e.target.value)}
+                            data-testid="input-convert-crew-size"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <Label htmlFor="convert-from-address">Pickup Address</Label>
+                          <Input
+                            id="convert-from-address"
+                            value={convertFromAddress}
+                            onChange={(e) => setConvertFromAddress(e.target.value)}
+                            data-testid="input-convert-from-address"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="convert-to-address">Drop-off Address</Label>
+                          <Input
+                            id="convert-to-address"
+                            value={convertToAddress}
+                            onChange={(e) => setConvertToAddress(e.target.value)}
+                            data-testid="input-convert-to-address"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="convert-notes">Job Notes</Label>
+                        <Textarea
+                          id="convert-notes"
+                          value={convertNotes}
+                          onChange={(e) => setConvertNotes(e.target.value)}
+                          rows={3}
+                          data-testid="textarea-convert-notes"
+                        />
+                      </div>
+
+                      <Button
+                        onClick={handleConvertToJob}
+                        disabled={convertToJobMutation.isPending || !basePrice || !convertDate}
+                        className="w-full bg-emerald-600 hover:bg-emerald-700"
+                        data-testid="button-convert-to-job"
+                      >
+                        {convertToJobMutation.isPending ? "Converting..." : "Convert to Available Job"}
+                      </Button>
+                    </div>
+                  )}
 
                   {/* Crew Assignment */}
                   <div className="space-y-3 mt-4">

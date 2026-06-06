@@ -12,6 +12,8 @@ import { Router, Request, Response } from "express";
 import { eq, and, asc, desc, or, inArray, ilike, gte, lte, sql } from "drizzle-orm";
 import { disburseBookingTokens, loadBookingRewardSettings } from "../services/disburseBookingTokens";
 import { computeBookingReward } from "../services/bookingPricing";
+import { notifyAdminNewQuote } from "../services/email";
+import { smsService } from "../services/sms";
 import { ZodError, z } from "zod";
 import { db, pool } from "../db";
 import { storage } from "../storage";
@@ -32,6 +34,10 @@ import {
   bundleDefinitions,
   bundleSettingsAuditLog,
   serviceCatalog,
+  users,
+  workerProfiles,
+  quoteApprovals,
+  quoteAttributions,
   bookingQuoteRequestSchema,
   bookingCreateRequestSchema,
   type ServiceCatalogEntry,
@@ -60,6 +66,31 @@ import { quoteByLaborHours, LABOR_RATE_PER_HOUR, quoteMovingFromTable } from "@s
 const SMALL_MOVE_SPECIAL_PRICE = 300;
 
 const router = Router();
+
+const WORKER_TIERS = ["worker", "bronze", "silver", "gold", "platinum"] as const;
+type WorkerTier = typeof WORKER_TIERS[number];
+const tierRank: Record<WorkerTier, number> = { worker: 0, bronze: 1, silver: 2, gold: 3, platinum: 4 };
+
+function normalizeWorkerTier(value: unknown, role?: string | null): WorkerTier {
+  const raw = String(value || "").toLowerCase();
+  if (WORKER_TIERS.includes(raw as WorkerTier)) return raw as WorkerTier;
+  if (role === "admin" || role === "business_owner") return "platinum";
+  return "worker";
+}
+
+async function getRequestUser(req: Request) {
+  const userId = (req as any).user?.id || (req.session as any)?.userId || null;
+  if (!userId) return null;
+  const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  return user || null;
+}
+
+async function getAuthorityForUser(user: any) {
+  if (!user) return { tier: "worker" as WorkerTier, rank: 0 };
+  const [profile] = await db.select().from(workerProfiles).where(eq(workerProfiles.userId, user.id)).limit(1);
+  const tier = normalizeWorkerTier(profile?.authorityTier, user.role);
+  return { tier, rank: tierRank[tier], profile };
+}
 
 function toBundleLike(row: BundleDefinition): BundleDefinitionLike {
   // serviceComboJson is stored as jsonb<string[]> — defensively coerce in
@@ -874,6 +905,24 @@ router.post("/bookings", async (req: Request, res: Response) => {
       }
     }
 
+    const requestUser = await getRequestUser(req);
+    const requestAuthority = await getAuthorityForUser(requestUser);
+    const isWorkerCreated = body.source === "crew_add_job";
+    if (isWorkerCreated && !requestUser) {
+      return res.status(401).json({
+        error: "Authentication required",
+        message: "Sign in as a worker to add quotes or jobs.",
+      });
+    }
+    if (isWorkerCreated && requestAuthority.rank < tierRank.bronze) {
+      return res.status(403).json({
+        error: "Worker authority required",
+        message: "Bronze or higher authority is required to post customer quote requests.",
+      });
+    }
+    const requiresQuoteApproval = isWorkerCreated && requestAuthority.tier === "silver";
+    const bookingStatus = requiresQuoteApproval ? "pending_quote_approval" : "quote";
+
     // Task #163 — guarantee every numeric column persists as a finite
     // 2-decimal string. A non-finite quantity / unitPrice / lineSubtotal
     // (NaN, Infinity, undefined) used to crash `.toFixed(2)` and bubble
@@ -903,7 +952,7 @@ router.post("/bookings", async (req: Request, res: Response) => {
           rewardFlatBonusSnapshot: Math.round(settings.flatBonus),
           rewardEarnRateSnapshot: (Number.isFinite(settings.earnRate) ? settings.earnRate : 0).toFixed(4),
           rewardBonusMultiplierSnapshot: money(appliedMultiplier),
-          status: "quote",
+          status: bookingStatus,
           source: body.source || "api",
         })
         .returning();
@@ -925,6 +974,43 @@ router.post("/bookings", async (req: Request, res: Response) => {
       }
       return created;
     });
+
+    if (requestUser) {
+      try {
+        await db.insert(quoteAttributions).values({
+          bookingId: booking.id,
+          userId: requestUser.id,
+          attributionType: requiresQuoteApproval ? "silver_quote_builder" : isWorkerCreated ? "worker_quote_builder" : "customer_quote_request",
+          promoCode: requestUser.referralCode || null,
+          metadata: {
+            source: body.source || "api",
+            authorityTier: requestAuthority.tier,
+            quoteTotal: quote.finalTotal,
+            crewSummary: quote.items.map((item) => item.laborMeta).filter(Boolean),
+          },
+        });
+        if (isWorkerCreated) {
+          await pool.query(`
+            INSERT INTO worker_profiles (user_id, authority_tier, leads_posted_count, updated_at)
+            VALUES ($1, $2, 1, NOW())
+            ON CONFLICT (user_id) DO UPDATE
+            SET leads_posted_count = worker_profiles.leads_posted_count + 1,
+                updated_at = NOW()
+          `, [requestUser.id, requestAuthority.tier]);
+        }
+        if (requiresQuoteApproval) {
+          await db.insert(quoteApprovals).values({
+            bookingId: booking.id,
+            submittedByUserId: requestUser.id,
+            approvalRole: "silver_submission",
+            status: "pending",
+            notes: "Silver quote draft requires Darrell or 2 Gold approvals.",
+          });
+        }
+      } catch (attrErr) {
+        console.error("[bookings] worker attribution failed:", attrErr instanceof Error ? attrErr.message : attrErr);
+      }
+    }
 
     // Task #131 — reward disbursement intentionally NOT fired here. Newly
     // created bookings start in `status: "quote"`; rewards must only be
@@ -988,6 +1074,36 @@ router.post("/bookings", async (req: Request, res: Response) => {
           message: r.reason || "Wallet/token settlement failed — booking was rolled back.",
         });
       }
+    }
+
+    try {
+      const primaryService = persistInputs[0]?.serviceLabel || persistInputs[0]?.serviceCode || "Multi-service booking";
+      const serviceSummary = persistInputs
+        .map((item) => item.serviceLabel || item.serviceCode)
+        .filter(Boolean)
+        .join(", ");
+      const customerName = body.customerName || "Customer";
+      const moveDate = persistInputs
+        .map((item) => (item.details as any)?.date || (item.details as any)?.moveDate)
+        .find(Boolean);
+
+      await Promise.allSettled([
+        notifyAdminNewQuote({
+          customerName,
+          serviceType: serviceSummary || primaryService,
+          phone: body.customerPhone,
+          email: body.customerEmail || undefined,
+          moveDate,
+        }),
+        smsService.notifyNewQuote({
+          customerName,
+          serviceType: serviceSummary || primaryService,
+          phone: body.customerPhone,
+          moveDate,
+        }),
+      ]);
+    } catch (notifyErr) {
+      console.error("[bookings] admin notification failed:", notifyErr instanceof Error ? notifyErr.message : notifyErr);
     }
 
     return res.status(201).json({ success: true, booking, quote, walletPay });
@@ -1332,6 +1448,54 @@ router.post(
     } catch (err) {
       console.error("[admin/bookings/confirm] error:", err);
       return res.status(500).json({ error: "Failed to confirm booking" });
+    }
+  },
+);
+
+router.post(
+  "/workers/quote-approvals/bookings/:id/approve",
+  isAuthenticated,
+  async (req: any, res: Response) => {
+    try {
+      const user = await getRequestUser(req);
+      if (!user) return res.status(401).json({ message: "Not authenticated" });
+      const authority = await getAuthorityForUser(user);
+      const ownerApproval = user.role === "admin" || user.role === "business_owner" || user.email === "upmichiganstatemovers@gmail.com";
+      if (!ownerApproval && authority.rank < tierRank.gold) {
+        return res.status(403).json({ message: "Gold or Platinum authority required" });
+      }
+      const [parent] = await db.select().from(bookings).where(eq(bookings.id, req.params.id)).limit(1);
+      if (!parent) return res.status(404).json({ message: "Booking not found" });
+
+      const approvalRole = ownerApproval ? "owner_approval" : "gold_vote";
+      await db.insert(quoteApprovals).values({
+        bookingId: parent.id,
+        approvedByUserId: user.id,
+        approvalRole,
+        status: "approved",
+        notes: typeof req.body?.notes === "string" ? req.body.notes.slice(0, 1000) : null,
+      });
+
+      const [voteRow] = await db.select({ count: sql<number>`count(distinct ${quoteApprovals.approvedByUserId})::int` })
+        .from(quoteApprovals)
+        .where(and(eq(quoteApprovals.bookingId, parent.id), eq(quoteApprovals.status, "approved"), eq(quoteApprovals.approvalRole, "gold_vote")));
+      const goldVotes = Number(voteRow?.count || 0);
+      const approved = ownerApproval || goldVotes >= 2;
+      if (approved) {
+        await db.update(bookings)
+          .set({ status: "quote" })
+          .where(eq(bookings.id, parent.id));
+      }
+      await db.insert(quoteAttributions).values({
+        bookingId: parent.id,
+        userId: user.id,
+        attributionType: approved ? "quote_approver" : "gold_vote",
+        metadata: { approved, goldVotes },
+      });
+      res.json({ success: true, approved, goldVotes });
+    } catch (err) {
+      console.error("[worker booking approval] error:", err);
+      res.status(500).json({ message: "Failed to approve quote" });
     }
   },
 );

@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   CheckCircle2, Plus, Minus, Tag, Coins, Users, ChevronUp, ChevronDown,
   Sparkles, Trash2, Pencil, AlertCircle, PhoneCall, Package, Loader2, MapPin,
-  Home, Truck, Armchair, Wrench, Dumbbell, Bed, Sofa, Boxes,
+  Home, Truck, Armchair, Wrench, Dumbbell, Bed, Sofa, Boxes, Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -69,6 +69,7 @@ export interface SelectedItem {
   priceMode: "fixed" | "hourly" | "per_unit" | "quote";
   details: {
     requestedDate?: string;
+    requestedStartTime?: string;
     frequency?: string;
     callToSchedule?: boolean;
     notes?: string;
@@ -350,8 +351,113 @@ export function formatMovingFlowSummary(item: SelectedItem): string[] {
   if (item.details.verifiedDriveMiles && item.details.estimatedDriveMinutes) {
     bits.push(`~${Math.round(item.details.verifiedDriveMiles)} mi · ~${item.details.estimatedDriveMinutes} min`);
   }
-  if (item.details.inventoryLaborHours) bits.push(`${item.details.inventoryLaborHours} inventory hrs`);
   return bits;
+}
+
+const START_TIME_OPTIONS = [
+  { value: "07:00", label: "7 AM" },
+  { value: "08:00", label: "8 AM" },
+  { value: "09:00", label: "9 AM" },
+  { value: "10:00", label: "10 AM" },
+  { value: "11:00", label: "11 AM" },
+  { value: "12:00", label: "Noon" },
+  { value: "13:00", label: "1 PM" },
+  { value: "14:00", label: "2 PM" },
+  { value: "15:00", label: "3 PM" },
+  { value: "16:00", label: "4 PM" },
+  { value: "flexible", label: "Flexible" },
+];
+
+export function formatStartTime(value?: string): string {
+  if (!value) return "";
+  if (value === "flexible") return "Flexible start";
+  const [hourRaw, minuteRaw = "00"] = value.split(":");
+  const hour = Number(hourRaw);
+  if (!Number.isFinite(hour)) return value;
+  const suffix = hour >= 12 ? "PM" : "AM";
+  const hour12 = hour % 12 || 12;
+  return `${hour12}:${minuteRaw.padStart(2, "0")} ${suffix}`;
+}
+
+export function formatRequestedSchedule(details: SelectedItem["details"]): string {
+  return [
+    details.requestedDate,
+    details.requestedStartTime ? formatStartTime(details.requestedStartTime) : "",
+  ].filter(Boolean).join(" • ");
+}
+
+function PreferredScheduleFields({
+  date,
+  startTime,
+  onChange,
+  dateLabel = "Preferred date",
+  timeLabel = "Preferred start time",
+  dateTestId,
+  timeTestId,
+}: {
+  date?: string;
+  startTime?: string;
+  onChange: (next: { requestedDate?: string; requestedStartTime?: string }) => void;
+  dateLabel?: string;
+  timeLabel?: string;
+  dateTestId?: string;
+  timeTestId?: string;
+}) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <Label className="text-xs">{dateLabel}</Label>
+        <DatePicker
+          value={date}
+          onChange={(v) => onChange({ requestedDate: v || undefined, requestedStartTime: startTime })}
+          placeholder="Pick a date"
+          testId={dateTestId}
+        />
+      </div>
+      <div>
+        <Label className="text-xs flex items-center gap-1.5">
+          <Clock className="h-3 w-3" /> {timeLabel}
+        </Label>
+        <div className="mt-1 grid grid-cols-4 sm:grid-cols-6 gap-1.5" data-testid={timeTestId ? `${timeTestId}-chips` : undefined}>
+          {START_TIME_OPTIONS.map((opt) => {
+            const active = startTime === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => onChange({ requestedDate: date, requestedStartTime: opt.value })}
+                className={cn(
+                  "h-8 rounded-md border text-[11px] font-semibold transition-all",
+                  active
+                    ? "border-sky-400 bg-sky-500/20 text-sky-200"
+                    : "border-border bg-background hover:border-sky-500/50",
+                )}
+                data-testid={timeTestId ? `${timeTestId}-${opt.value}` : undefined}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          <Input
+            type="time"
+            value={startTime && startTime !== "flexible" ? startTime : ""}
+            onChange={(e) => onChange({ requestedDate: date, requestedStartTime: e.target.value || undefined })}
+            className="h-9"
+            data-testid={timeTestId}
+          />
+          <button
+            type="button"
+            onClick={() => onChange({ requestedDate: date, requestedStartTime: undefined })}
+            className="h-9 px-3 rounded-md border border-border text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:bg-muted"
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ── ServiceSelector ────────────────────────────────────────────────────────
@@ -530,7 +636,7 @@ export function ServiceItemEditor({
           <p className="font-semibold text-sm truncate">{item.label}</p>
           <p className="text-[11px] text-muted-foreground">
             Price shown on review
-            {item.details.requestedDate ? ` • ${item.details.requestedDate}` : ""}
+            {formatRequestedSchedule(item.details) ? ` • ${formatRequestedSchedule(item.details)}` : ""}
           </p>
         </div>
         <div className="text-right">
@@ -624,8 +730,7 @@ const FILTERED_MOVING_SIZES = [
 ];
 
 const PICKER_TRUCK_SIZES = [
-  "10 ft",
-  "16 ft",
+  "15 ft",
   "26 ft",
   "Custom",
 ];
@@ -642,21 +747,21 @@ const MOVING_PATHS: Array<{
     label: "1 or 2 Items",
     subline: "Fast minimum quote",
     icon: Armchair,
-    preset: { jobSize: "1-2 Items", loadType: "Load + unload", truckNeeded: false, truckSize: "16 ft" },
+    preset: { jobSize: "1-2 Items", loadType: "Load + unload", truckNeeded: false, truckSize: "15 ft" },
   },
   {
     id: "load_only",
     label: "Load Only",
     subline: "Customer truck or container",
     icon: Truck,
-    preset: { loadType: "Load only", truckNeeded: false, truckSize: "16 ft" },
+    preset: { loadType: "Load only", truckNeeded: false, truckSize: "15 ft" },
   },
   {
     id: "unload_only",
     label: "Unload Only",
     subline: "Drop-off help",
     icon: Boxes,
-    preset: { loadType: "Unload only", truckNeeded: false, truckSize: "16 ft" },
+    preset: { loadType: "Unload only", truckNeeded: false, truckSize: "15 ft" },
   },
   {
     id: "load_unload",
@@ -677,7 +782,7 @@ const MOVING_PATHS: Array<{
     label: "Heavy / Specialty Item",
     subline: "Safe, piano, pool table",
     icon: Dumbbell,
-    preset: { jobSize: "1-2 Items", loadType: "Load + unload", truckNeeded: false, truckSize: "16 ft", heavyItemsConfirmed: false },
+    preset: { jobSize: "1-2 Items", loadType: "Load + unload", truckNeeded: false, truckSize: "15 ft", heavyItemsConfirmed: false },
   },
   {
     id: "packing_assembly",
@@ -695,15 +800,16 @@ const MOVING_INVENTORY_OPTIONS: Array<{
   size?: string;
   laborHours: number;
   icon: typeof Package;
+  visual?: "bed_twin" | "bed_queen" | "bed_king" | "dresser_small" | "dresser_large";
 }> = [
-  { id: "bed_twin", label: "Twin bed", category: "beds", size: "twin", laborHours: 0.15, icon: Bed },
-  { id: "bed_queen", label: "Queen bed", category: "beds", size: "queen", laborHours: 0.25, icon: Bed },
-  { id: "bed_king", label: "King bed", category: "beds", size: "king", laborHours: 0.5, icon: Bed },
+  { id: "bed_twin", label: "Twin bed", category: "beds", size: "twin", laborHours: 0.15, icon: Bed, visual: "bed_twin" },
+  { id: "bed_queen", label: "Queen bed", category: "beds", size: "queen", laborHours: 0.25, icon: Bed, visual: "bed_queen" },
+  { id: "bed_king", label: "King bed", category: "beds", size: "king", laborHours: 0.5, icon: Bed, visual: "bed_king" },
   { id: "sofa_2", label: "2-seat couch", category: "couches", size: "small", laborHours: 0.2, icon: Sofa },
   { id: "sofa_3", label: "3-seat couch", category: "couches", size: "medium", laborHours: 0.25, icon: Sofa },
   { id: "recliner", label: "Recliner / chair", category: "couches", size: "oversized", laborHours: 0.2, icon: Armchair },
-  { id: "dresser_s", label: "Small dresser", category: "dressers", size: "small", laborHours: 0.2, icon: Package },
-  { id: "dresser_l", label: "Large dresser", category: "dressers", size: "large", laborHours: 0.4, icon: Package },
+  { id: "dresser_s", label: "Small dresser", category: "dressers", size: "small", laborHours: 0.2, icon: Package, visual: "dresser_small" },
+  { id: "dresser_l", label: "Large dresser", category: "dressers", size: "large", laborHours: 0.4, icon: Package, visual: "dresser_large" },
   { id: "table_m", label: "Table", category: "tables", size: "medium", laborHours: 0.5, icon: Package },
   { id: "chairs_4", label: "4 chairs", category: "tables", size: "set", laborHours: 0.4, icon: Armchair },
   { id: "appliance", label: "Appliance", category: "appliances", size: "standard", laborHours: 0.25, icon: Package },
@@ -715,6 +821,53 @@ const MOVING_INVENTORY_OPTIONS: Array<{
   { id: "basement_space", label: "Basement / attic", category: "extra spaces", size: "medium", laborHours: 0.75, icon: Boxes },
   { id: "heavy_generic", label: "200 lb+ item", category: "heavy", size: "heavy", laborHours: 0.75, icon: Dumbbell },
 ];
+
+function InventoryItemVisual({
+  option,
+}: {
+  option: (typeof MOVING_INVENTORY_OPTIONS)[number];
+}) {
+  const Icon = option.icon;
+  if (!option.visual) return <Icon className="h-4 w-4" />;
+
+  if (option.visual.startsWith("bed_")) {
+    const width = option.visual === "bed_twin" ? 17 : option.visual === "bed_queen" ? 23 : 29;
+    return (
+      <svg viewBox="0 0 36 24" className="h-6 w-8" aria-label={`${option.label} size visual`} role="img">
+        <rect x="3" y="8" width={width} height="11" rx="2" className="fill-current opacity-20" />
+        <rect x="3" y="8" width={width} height="11" rx="2" className="stroke-current fill-transparent" strokeWidth="1.8" />
+        <rect x="5" y="10" width={Math.max(5, width * 0.28)} height="7" rx="1.2" className="fill-current opacity-45" />
+        <path d="M3 6v15M31 19v2" className="stroke-current" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  const isLarge = option.visual === "dresser_large";
+  return (
+    <svg viewBox="0 0 36 24" className="h-6 w-8" aria-label={`${option.label} size visual`} role="img">
+      <rect
+        x={isLarge ? 4 : 9}
+        y={isLarge ? 4 : 7}
+        width={isLarge ? 28 : 18}
+        height={isLarge ? 16 : 12}
+        rx="2"
+        className="stroke-current fill-current opacity-20"
+        strokeWidth="1.8"
+      />
+      {[0, 1, 2].map((row) => (
+        <path
+          key={row}
+          d={`M${isLarge ? 7 : 12} ${isLarge ? 8 + row * 4 : 10 + row * 3}h${isLarge ? 22 : 12}`}
+          className="stroke-current opacity-70"
+          strokeWidth="1.3"
+          strokeLinecap="round"
+        />
+      ))}
+      <circle cx={isLarge ? 16 : 17} cy={isLarge ? 10 : 11.5} r="0.8" className="fill-current" />
+      <circle cx={isLarge ? 20 : 19} cy={isLarge ? 14 : 14.5} r="0.8" className="fill-current" />
+    </svg>
+  );
+}
 
 const MOVING_INVENTORY_SECTIONS: Array<{
   id: string;
@@ -778,7 +931,7 @@ function summarizeInventory(
   const unloadFactor = /unload only/i.test(details.loadType || "") ? 0.9 : 1;
   const adjustedHours = Math.max(0, baseHours * stairsFactor * unloadFactor);
   const crew = adjustedHours <= 3 ? 2 : adjustedHours <= 6 ? 3 : adjustedHours <= 10 ? 4 : 5;
-  const truck = adjustedHours <= 2.5 ? "16 ft" : adjustedHours <= 7 ? "26 ft" : "26 ft + follow-up review";
+  const truck = adjustedHours <= 2.5 ? "15 ft" : adjustedHours <= 7 ? "26 ft" : "26 ft + follow-up review";
   const difficulty = Math.min(10, Math.ceil(adjustedHours + (details.hasStairs ? 2 : 0) + selected.filter((i) => i.category === "heavy").length * 2));
   const laborPrice = Math.ceil(adjustedHours * crew * rate);
   const min = Math.max(150, Math.round(laborPrice * 0.85 / 25) * 25);
@@ -989,7 +1142,7 @@ export function MovingJunkPackagePicker({
 
   const verifiedDriveMiles = driveEstimateQuery.data?.miles ?? Number(item.details.verifiedDriveMiles ?? 0);
   const truckRental = isMoving && item.details.truckNeeded
-    ? calculateJcTruckRentalFee(verifiedDriveMiles, verifiedDriveMiles > JC_TRUCK_INCLUDED_MILES)
+    ? calculateJcTruckRentalFee(verifiedDriveMiles, verifiedDriveMiles > JC_TRUCK_INCLUDED_MILES, item.details.truckSize)
     : null;
 
   // Build an Answers shape from the persisted details so the chatbot's
@@ -1023,6 +1176,64 @@ export function MovingJunkPackagePicker({
 
   const packages: CrewPackage[] = useMemo(() => {
     const base = quote ? buildCrewPackages(answers, quote, rate, jc222) : [];
+    if (isMoving && quote) {
+      const movingQuote = quote as any;
+      const surcharge = Number(movingQuote.specialSurcharge || 0);
+      const travel = Number(movingQuote.travelCharge || 0);
+      const packageNote = travel > 0 ? ` · +$${travel} travel` : "";
+      const standardMovingPackages: CrewPackage[] = [
+        {
+          id: "pkg_move_1_local_light",
+          label: "Package 1 · Local loading, unloading, or delivery",
+          desc: `Ironwood local light job · 4-6 labor hours · load, unload, or single-item delivery${packageNote}`,
+          minPrice: 200 + surcharge + travel,
+          maxPrice: 300 + surcharge + travel,
+          crew: 2,
+          hours: 3,
+          tag: "Quick quote",
+        },
+        {
+          id: "pkg_move_2_load_unload",
+          label: "Package 2 · Loading + unloading or bigger job",
+          desc: `Most local moves · 6-8 labor hours · good for load + unload or a larger local job${packageNote}`,
+          minPrice: 300 + surcharge + travel,
+          maxPrice: 450 + surcharge + travel,
+          crew: 2,
+          hours: 4,
+          tag: "Most common",
+        },
+        {
+          id: "pkg_move_3_two_movers_day",
+          label: "Package 3 · 2 movers for the day",
+          desc: `2 movers · 7 hours each · 14 labor hours total${packageNote}`,
+          minPrice: 1100 + surcharge + travel,
+          maxPrice: 1100 + surcharge + travel,
+          crew: 2,
+          hours: 7,
+          tag: "Day crew",
+        },
+        {
+          id: "pkg_move_4_four_movers_day",
+          label: "Package 4 · 4 movers for the day",
+          desc: `4-mover power crew · fixed full-day package for large jobs${packageNote}`,
+          minPrice: 1900 + surcharge + travel,
+          maxPrice: 1900 + surcharge + travel,
+          crew: 4,
+          hours: 6,
+          tag: "Large job",
+        },
+      ];
+      const movingBase = standardMovingPackages.filter(pkg => !pkg.crew || pkg.crew >= movingQuote.crew);
+      if (!truckRental) return movingBase;
+      const truckNote = ` · truck rental $${truckRental.baseFee}`
+        + (truckRental.mileageFee > 0 ? ` + $${truckRental.mileageFee} mileage` : "");
+      return movingBase.map((pkg) => ({
+        ...pkg,
+        desc: `${pkg.desc}${truckNote}`,
+        minPrice: pkg.minPrice + truckRental.totalFee,
+        maxPrice: pkg.maxPrice + truckRental.totalFee,
+      }));
+    }
     const pricedForJunk = !isMoving
       ? base.map((pkg) => {
           const extraFee = item.details.junkExtraFeeEstimate || 0;
@@ -1095,6 +1306,7 @@ export function MovingJunkPackagePicker({
   );
   useEffect(() => {
     if (!item.details.packageId) return;
+    if (item.details.packageId === "visual_inventory_estimate") return;
     const current = packages.find(p => p.id === item.details.packageId);
     if (!current) {
       onChange({
@@ -1125,11 +1337,10 @@ export function MovingJunkPackagePicker({
   }, [item.details.packageId, recommendedPackage?.id, hasCoreForRecommendation]);
 
   function applyPackage(pkg: CrewPackage) {
-    const mid = Math.round((pkg.minPrice + pkg.maxPrice) / 2);
     onChange({
       ...item,
       quantity: 1,
-      unitPrice: mid,
+      unitPrice: Math.round(pkg.minPrice),
       priceMode: "fixed",
       details: {
         ...item.details,
@@ -1255,7 +1466,13 @@ export function MovingJunkPackagePicker({
         }]
       : without;
     const nextSummary = summarizeInventory(nextItems, item.details, rate);
-    patch({
+    onChange({
+      ...item,
+      quantity: 1,
+      unitPrice: nextItems.length > 0 ? Math.round(nextSummary.min) : 0,
+      priceMode: nextItems.length > 0 ? "fixed" : "quote",
+      details: {
+        ...item.details,
       inventoryItems: nextItems,
       inventoryLaborHours: nextSummary.hours,
       inventoryDifficulty: nextSummary.difficulty,
@@ -1264,6 +1481,14 @@ export function MovingJunkPackagePicker({
       inventoryPriceMin: nextSummary.min,
       inventoryPriceMax: nextSummary.max,
       quoteConfidence: nextSummary.confidence,
+      packageId: nextItems.length > 0 ? "visual_inventory_estimate" : undefined,
+      packageLabel: nextItems.length > 0 ? "Visual inventory estimate" : undefined,
+      packageTier: nextItems.length > 0 ? "inventory" : undefined,
+      crew: nextItems.length > 0 ? nextSummary.crew : undefined,
+      hours: nextItems.length > 0 ? nextSummary.hours : undefined,
+      minPrice: nextItems.length > 0 ? nextSummary.min : undefined,
+      maxPrice: nextItems.length > 0 ? nextSummary.max : undefined,
+      },
     });
   }
 
@@ -1632,7 +1857,7 @@ export function MovingJunkPackagePicker({
                   {junkSummary.extraFee > 0 ? ` · $${junkSummary.extraFee} extra fees` : ""}
                 </p>
                 <p className="mt-1 text-muted-foreground">
-                  Difficulty {junkSummary.difficulty}/10 · Confidence {junkSummary.confidence}. Specialist confirms final quote.
+                  Specialist confirms final quote.
                 </p>
                 {junkSummary.constructionReview && (
                   <p className="mt-1 text-amber-300">
@@ -1789,14 +2014,16 @@ export function MovingJunkPackagePicker({
         <div className="rounded-xl border border-border bg-background/40 p-3">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <Label className="text-xs">Visual inventory builder</Label>
+              <Label className="text-xs">Build your moving story</Label>
               <p className="mt-0.5 text-[10px] text-muted-foreground">
-                Tap items to build labor hours, difficulty, crew, and truck recommendation.
+                Start with the main rooms and tap what is moving. We will turn the story into the right crew and truck setup.
               </p>
             </div>
             {inventoryItems.length > 0 && (
               <div className="text-right text-[10px] text-muted-foreground">
-                <p className="font-black text-foreground">{inventorySummary.hours} hrs</p>
+                <p className="font-black text-foreground">
+                  {inventoryItems.reduce((sum, entry) => sum + entry.quantity, 0)} item{inventoryItems.reduce((sum, entry) => sum + entry.quantity, 0) === 1 ? "" : "s"}
+                </p>
                 <p>{inventorySummary.crew} movers</p>
               </div>
             )}
@@ -1838,7 +2065,7 @@ export function MovingJunkPackagePicker({
                         sectionSummary.count > 0 ? "bg-emerald-500/15 text-emerald-300" : "bg-muted text-muted-foreground",
                       )}>
                         {sectionSummary.count > 0
-                          ? `${sectionSummary.count} item${sectionSummary.count === 1 ? "" : "s"} · ${sectionSummary.hours} hrs`
+                          ? `${sectionSummary.count} item${sectionSummary.count === 1 ? "" : "s"} selected`
                           : "Tap to open"}
                       </span>
                       {isOpen ? (
@@ -1851,7 +2078,6 @@ export function MovingJunkPackagePicker({
                   {isOpen && (
                     <div className="grid grid-cols-1 gap-2 border-t border-border/70 p-2 sm:grid-cols-2 lg:grid-cols-3">
                       {sectionOptions.map((option) => {
-                        const Icon = option.icon;
                         const selected = inventoryItems.find((entry) => entry.id === option.id);
                         const qty = selected?.quantity || 0;
                         return (
@@ -1869,8 +2095,8 @@ export function MovingJunkPackagePicker({
                               className="w-full text-left"
                             >
                               <span className="flex items-center gap-2">
-                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
-                                  <Icon className="h-4 w-4" />
+                                <span className="flex h-9 w-10 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                                  <InventoryItemVisual option={option} />
                                 </span>
                                 <span className="min-w-0">
                                   <span className="block text-xs font-bold leading-tight">{option.label}</span>
@@ -1913,21 +2139,21 @@ export function MovingJunkPackagePicker({
                 Quote range: ${inventorySummary.min}-${inventorySummary.max} · {inventorySummary.crew} movers · {inventorySummary.truck}
               </p>
               <p className="mt-1 text-muted-foreground">
-                Difficulty {inventorySummary.difficulty}/10 · Confidence {inventorySummary.confidence}. Specialist confirms final quote before scheduling.
+                Specialist confirms final quote before scheduling.
               </p>
             </div>
           )}
         </div>
       )}
 
-      <div>
-        <Label className="text-xs">Preferred date</Label>
-        <DatePicker
-          value={item.details.requestedDate}
-          onChange={(v) => patch({ requestedDate: v || undefined })}
-          placeholder="Pick a date"
-        />
-      </div>
+      <PreferredScheduleFields
+        date={item.details.requestedDate}
+        startTime={item.details.requestedStartTime}
+        onChange={patch}
+        dateLabel="Preferred date"
+        dateTestId={`pkg-date-${item.serviceCode}`}
+        timeTestId={`pkg-start-time-${item.serviceCode}`}
+      />
 
       {isMoving && (
         <div className="text-[11px] text-muted-foreground flex items-start gap-1.5">
@@ -1968,6 +2194,27 @@ export function MovingJunkPackagePicker({
           <p className="mt-2 text-xs text-muted-foreground">
             No standard packages available. Darrell will confirm the right setup.
           </p>
+        ) : item.details.packageId === "visual_inventory_estimate" ? (
+          <div className="mt-1.5 rounded-xl border border-emerald-500 bg-emerald-500/10 p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm font-bold">Inventory estimate saved</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  {item.details.crew || inventorySummary.crew} movers recommended from the items selected.
+                </p>
+              </div>
+              <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+            </div>
+            {packages.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowMorePackages((v) => !v)}
+                className="mt-2 text-[11px] font-semibold text-sky-300 hover:text-sky-200"
+              >
+                {showMorePackages ? "Hide crew options" : "Choose a different crew setup"}
+              </button>
+            )}
+          </div>
         ) : selectedPackage ? (
           <div className="mt-1.5 rounded-xl border border-emerald-500 bg-emerald-500/10 p-3">
             <div className="flex items-start justify-between gap-2">
@@ -2196,14 +2443,14 @@ export function InlineItemConfigure({
         </div>
       ) : (
         <>
-          <div>
-            <Label className="text-xs">Preferred start date</Label>
-            <DatePicker
-              value={item.details.requestedDate}
-              onChange={(v) => onChange({ ...item, details: { ...item.details, requestedDate: v || undefined } })}
-              placeholder="Pick a date"
-            />
-          </div>
+          <PreferredScheduleFields
+            date={item.details.requestedDate}
+            startTime={item.details.requestedStartTime}
+            onChange={(next) => onChange({ ...item, details: { ...item.details, ...next } })}
+            dateLabel="Preferred start date"
+            dateTestId={`inline-date-${item.serviceCode}`}
+            timeTestId={`inline-start-time-${item.serviceCode}`}
+          />
           {mode === "date_freq" && freqOptions.length > 0 && (
             <div>
               <Label className="text-xs">Frequency</Label>
@@ -2541,14 +2788,14 @@ export function AddOnDrawer({
             </div>
           ) : (
             <>
-              <div>
-                <Label className="text-xs">Preferred start date</Label>
-                <DatePicker
-                  value={draft.details.requestedDate}
-                  onChange={(v) => setDraft({ ...draft, details: { ...draft.details, requestedDate: v || undefined } })}
-                  placeholder="Pick a date"
-                />
-              </div>
+              <PreferredScheduleFields
+                date={draft.details.requestedDate}
+                startTime={draft.details.requestedStartTime}
+                onChange={(next) => setDraft({ ...draft, details: { ...draft.details, ...next } })}
+                dateLabel="Preferred start date"
+                dateTestId="drawer-date"
+                timeTestId="drawer-start-time"
+              />
               {mode === "date_freq" && freqOptions.length > 0 && (
                 <div>
                   <Label className="text-xs">Frequency</Label>
@@ -2649,8 +2896,13 @@ export function BookingSummarySticky({
             <div className="space-y-1.5">
               {items.map((i, idx) => {
                 return (
-                  <div key={i.serviceCode} className="flex justify-between text-xs">
-                    <span className="truncate">{emojiFor(i.serviceCode)} {i.label}</span>
+                  <div key={i.serviceCode} className="flex justify-between gap-2 text-xs">
+                    <span className="min-w-0">
+                      <span className="block truncate">{emojiFor(i.serviceCode)} {i.label}</span>
+                      {formatRequestedSchedule(i.details) && (
+                        <span className="block truncate text-[10px] text-muted-foreground">{formatRequestedSchedule(i.details)}</span>
+                      )}
+                    </span>
                     <span className="font-semibold text-muted-foreground">{showPricing ? formatQuoteLinePrice(quote, i, idx).text : "Review"}</span>
                   </div>
                 );
@@ -2678,7 +2930,7 @@ export function BookingSummarySticky({
             </div>
             ) : (
               <div className="border-t border-border pt-3">
-                <p className="text-xs text-muted-foreground">Final estimate appears on the review step.</p>
+                <p className="text-xs text-muted-foreground">Quote details are saved for specialist approval before final pricing.</p>
               </div>
             )}
             <div className="flex items-center justify-between text-[11px] text-muted-foreground">
@@ -2724,8 +2976,13 @@ export function BookingSummarySticky({
         <div className="px-4 pb-2 space-y-1.5 max-h-48 overflow-y-auto">
           {items.map((i, idx) => {
             return (
-              <div key={i.serviceCode} className="flex justify-between text-xs">
-                <span className="truncate">{emojiFor(i.serviceCode)} {i.label}</span>
+              <div key={i.serviceCode} className="flex justify-between gap-2 text-xs">
+                <span className="min-w-0">
+                  <span className="block truncate">{emojiFor(i.serviceCode)} {i.label}</span>
+                  {formatRequestedSchedule(i.details) && (
+                    <span className="block truncate text-[10px] text-muted-foreground">{formatRequestedSchedule(i.details)}</span>
+                  )}
+                </span>
                 <span className="font-semibold text-muted-foreground">{showPricing ? formatQuoteLinePrice(quote, i, idx).text : "Review"}</span>
               </div>
             );
@@ -2749,7 +3006,7 @@ export function BookingSummarySticky({
           </>
           ) : (
             <div className="text-[11px] text-muted-foreground border-t border-border pt-1">
-              Final estimate appears on the review step.
+              Specialist approval before final pricing.
             </div>
           )}
         </div>

@@ -1688,7 +1688,7 @@ export default function AdminTreasuryPage() {
                     <ol className="list-decimal list-inside space-y-1 pl-2">
                       <li>Create a new Solana wallet or use an existing one</li>
                       <li>Transfer JCMOVES tokens to the wallet</li>
-                      <li>Add the private key to Replit Secrets as <code className="bg-slate-800 px-1 py-0.5 rounded text-orange-300">TREASURY_WALLET_PRIVATE_KEY</code></li>
+                      <li>Add the private key to your server environment as <code className="bg-slate-800 px-1 py-0.5 rounded text-orange-300">TREASURY_WALLET_PRIVATE_KEY</code></li>
                       <li>Restart the application to apply changes</li>
                     </ol>
                   </div>

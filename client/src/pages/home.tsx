@@ -283,10 +283,24 @@ export default function HomePage() {
     <div className="min-h-screen bg-[#020915] text-white">
       <nav className="sticky top-0 z-50 border-b border-white/10 bg-[#020915]/90 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-          <button onClick={() => setLocation("/")} className="text-left">
-            <p className="text-xl font-black leading-none tracking-tight">JC ON THE MOVE</p>
-            <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.28em] text-slate-400">Northwoods moving & more</p>
-          </button>
+          <Link
+            href="/login"
+            aria-label="Open JC ON THE MOVE login"
+            title="Team and customer login"
+            className="group flex items-center gap-3 rounded-lg text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020915]"
+          >
+            <span
+              aria-hidden="true"
+              className="relative hidden h-9 w-9 shrink-0 rounded-full border border-white/45 bg-white/10 shadow-[0_0_22px_rgba(255,255,255,0.12)] transition group-hover:bg-white/18 sm:block"
+            >
+              <span className="absolute left-1/2 top-1/2 h-5 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white" />
+              <span className="absolute left-1/2 top-1/2 h-1 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white" />
+            </span>
+            <span>
+              <span className="block text-xl font-black leading-none tracking-tight transition group-hover:text-blue-100">JC ON THE MOVE</span>
+              <span className="mt-1 block text-[10px] font-bold uppercase tracking-[0.28em] text-slate-400 transition group-hover:text-slate-200">Northwoods moving & more</span>
+            </span>
+          </Link>
           <div className="hidden items-center gap-8 text-sm font-semibold text-slate-200 md:flex">
             <a href="#services" className="hover:text-white">Services</a>
             <a href="#jobs" className="hover:text-white">Jobs</a>
@@ -298,6 +312,11 @@ export default function HomePage() {
               <Phone className="h-4 w-4 text-blue-300" />
               (906) 285-9312
             </a>
+            <Link href="/login">
+              <Button variant="outline" className="hidden h-10 rounded-lg border-white/20 bg-white/5 px-4 text-sm font-black text-white hover:bg-white/10 hover:text-white sm:inline-flex">
+                Login
+              </Button>
+            </Link>
             <Button onClick={() => openQuoteStart("moving")} className="h-10 rounded-lg bg-blue-600 px-4 text-sm font-black hover:bg-blue-500 sm:px-5">
               <span className="sm:hidden">Price</span>
               <span className="hidden sm:inline">Get My Price</span>
@@ -486,7 +505,7 @@ export default function HomePage() {
             <div className="rounded-lg border border-blue-400/30 bg-blue-600/10 p-5">
               <p className="text-sm font-black uppercase tracking-widest text-blue-200">Ready to earn?</p>
               <p className="mt-3 text-sm text-slate-300">Create your free account and start earning today.</p>
-              <Link href="/rewards">
+              <Link href="/login?mode=register&intent=rewards&redirect=/rewards">
                 <Button className="mt-5 w-full rounded-lg bg-blue-600 font-black hover:bg-blue-500">Join JCMOVES</Button>
               </Link>
             </div>

@@ -34,11 +34,8 @@ interface SystemConfig {
     };
   };
   authentication: {
-    replit: {
-      domains: 'configured' | 'missing';
-      cluster: 'configured' | 'missing';
-      devDomain: 'configured' | 'missing';
-    };
+    sessionSecret: 'configured' | 'missing';
+    type: string;
   };
   crypto: {
     moonshot: {
@@ -341,16 +338,16 @@ export default function AdminDashboard() {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="flex justify-between items-center">
-                      <span>Replit Domains</span>
-                      {getStatusBadge(systemConfig?.authentication.replit.domains || 'unknown')}
+                      <span>Session Secret</span>
+                      {getStatusBadge(systemConfig?.authentication.sessionSecret || 'unknown')}
                     </div>
                     <div className="flex justify-between items-center">
-                      <span>Replit Cluster</span>
-                      {getStatusBadge(systemConfig?.authentication.replit.cluster || 'unknown')}
+                      <span>Login Type</span>
+                      <Badge variant="outline">{systemConfig?.authentication.type || 'local'}</Badge>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span>Dev Domain</span>
-                      {getStatusBadge(systemConfig?.authentication.replit.devDomain || 'unknown')}
+                      <span>Google Login</span>
+                      {getStatusBadge(systemConfig?.authentication.type?.includes('google') ? 'configured' : 'optional')}
                     </div>
                   </CardContent>
                 </Card>

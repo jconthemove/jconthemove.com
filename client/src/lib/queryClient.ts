@@ -1,11 +1,11 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
-const PRODUCTION_URL = "https://task-marketplace-upmichiganstate.replit.app";
+const NATIVE_API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
 export function getApiBase(): string {
   if (typeof window === "undefined") return "";
   const isCapacitor = (window as any).Capacitor?.isNativePlatform?.() === true;
-  if (isCapacitor) return PRODUCTION_URL;
+  if (isCapacitor) return NATIVE_API_BASE_URL;
   return "";
 }
 

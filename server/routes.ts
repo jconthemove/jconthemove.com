@@ -21,7 +21,7 @@ import { z } from "zod";
 import { EncryptionService } from "./services/encryption";
 import { eq, desc, sql, and, gte, lte, or, ilike, inArray, isNull } from 'drizzle-orm';
 import { db, pool } from './db';
-import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, treasuryAccounts, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, giftCards, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens, promoCodes, reviews, rewardCategories, rewardItems, rewardRedemptions, buybackFund, laborQuotes, jobTradeRequests } from '@shared/schema';
+import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, treasuryAccounts, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, giftCards, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens, promoCodes, reviews, rewardCategories, rewardItems, rewardRedemptions, buybackFund, laborQuotes, jobTradeRequests, workerProfiles, quoteApprovals, quoteAttributions } from '@shared/schema';
 import { getFaucetPayService } from "./services/faucetpay";
 import { getAdvertisingService } from "./services/advertising";
 import { FAUCET_CONFIG, calculateJCMovesReward, getTierFromSpend, getTierFromPoints, LOYALTY_TIERS, TIER_POINT_AWARDS, type TierPointActivity } from "./constants";
@@ -36,7 +36,6 @@ import { crewSuggestionService } from "./services/crew-suggestions";
 import { ObjectStorageService } from "./objectStorage";
 import { solanaTransferService } from "./services/solana-transfer";
 import { jupiterSwapService, SUPPORTED_TOKENS } from "./services/jupiter-swap";
-// smsService import removed — all notifications use email
 import { ensureMomsAccount } from "./services/generosityFund";
 import { dispatchGenericJob } from "./services/dispatchGeneric";
 import { grantLotteryTicketsForActivity } from "./services/disburse-job-tokens";
@@ -53,6 +52,7 @@ import aiBookingRouter from "./routes/aiBooking";
 import { ensureBookingCatalogSeeded } from "./services/bookingCatalogSeed";
 import { getWeeklyCrewRuleForDate, normalizeCrewName } from "@shared/weeklyCrewSchedule";
 import { getAppUrl } from "./appUrl";
+import { smsService } from "./services/sms";
 
 const STAKING_TREASURY_USER_ID = "staking-treasury-system";
 const CHATBOT_DRIVE_BASE_LAT = 46.4539;
@@ -777,6 +777,84 @@ function saveLoginSession(req: Request, user: typeof users.$inferSelect): Promis
   });
 }
 
+function getGoogleOAuthConfig(_req?: Request) {
+  const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
+  const redirectUri = process.env.GOOGLE_OAUTH_REDIRECT_URI || `${getAppUrl()}/api/auth/google/callback`;
+
+  if (!clientId || !clientSecret) {
+    return null;
+  }
+
+  return { clientId, clientSecret, redirectUri };
+}
+
+function authRedirectPath(user: typeof users.$inferSelect): string {
+  if (user.status === "pending" || user.status === "pending_approval") return "/pending-approval";
+  if (user.role === "admin" || user.role === "business_owner") return "/control";
+  if (user.role === "employee") return "/crew";
+  return "/";
+}
+
+async function findOrCreateGoogleUser(profile: {
+  email: string;
+  givenName?: string | null;
+  familyName?: string | null;
+  picture?: string | null;
+}) {
+  const email = profile.email.trim().toLowerCase();
+  const [existing] = await db.select().from(users).where(sql`lower(${users.email}) = ${email}`).limit(1);
+
+  if (existing) {
+    const [updated] = await db
+      .update(users)
+      .set({
+        firstName: existing.firstName || profile.givenName || null,
+        lastName: existing.lastName || profile.familyName || null,
+        profileImageUrl: existing.profileImageUrl || profile.picture || null,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, existing.id))
+      .returning();
+    return { user: updated || existing, created: false };
+  }
+
+  const referralCode = `CUST-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
+  const isOwner = email === "upmichiganstatemovers@gmail.com";
+  const [created] = await db.insert(users).values({
+    email,
+    firstName: profile.givenName || email.split("@")[0],
+    lastName: profile.familyName || "",
+    profileImageUrl: profile.picture || null,
+    role: isOwner ? "business_owner" : "customer",
+    status: "active",
+    isApproved: true,
+    referralCode,
+    rewardsEnrolled: true,
+    tosAccepted: true,
+    tosAcceptedAt: new Date(),
+  }).returning();
+
+  try {
+    await storage.createWalletAccount({ userId: created.id });
+    const welcomeBonus = 250;
+    await storage.creditWalletTokens(created.id, welcomeBonus);
+    await db.insert(rewards).values({
+      userId: created.id,
+      rewardType: "signup_bonus",
+      tokenAmount: welcomeBonus.toFixed(8),
+      cashValue: (welcomeBonus * 0.01).toFixed(2),
+      status: "confirmed",
+      metadata: { reason: "New Google customer welcome bonus" },
+    });
+    await awardTierPoints(created.id, "signup");
+  } catch (bonusErr) {
+    console.error("Google signup welcome bonus error (non-blocking):", bonusErr);
+  }
+
+  return { user: created, created: true };
+}
+
 export async function registerRoutes(app: Express, httpServer: Server = createServer(app)): Promise<Server> {
   // Schema migration: create lawn_care_quotes and lawn_care_plans tables
   try {
@@ -933,6 +1011,52 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
     console.log('users auth/profile columns ready');
   } catch (migErr) {
     console.error('users auth/profile migration error (non-fatal):', migErr);
+  }
+
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS worker_profiles (
+        user_id VARCHAR PRIMARY KEY REFERENCES users(id),
+        authority_tier TEXT NOT NULL DEFAULT 'worker',
+        promo_code VARCHAR UNIQUE,
+        leads_posted_count INTEGER NOT NULL DEFAULT 0,
+        silver_completed_jobs_count INTEGER NOT NULL DEFAULT 0,
+        gold_eligible_at TIMESTAMP,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS quote_approvals (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        lead_id VARCHAR REFERENCES leads(id),
+        booking_id VARCHAR,
+        submitted_by_user_id VARCHAR REFERENCES users(id),
+        approved_by_user_id VARCHAR REFERENCES users(id),
+        approval_role TEXT NOT NULL DEFAULT 'gold_vote',
+        status TEXT NOT NULL DEFAULT 'pending',
+        notes TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_quote_approvals_lead ON quote_approvals(lead_id);
+      CREATE INDEX IF NOT EXISTS idx_quote_approvals_booking ON quote_approvals(booking_id);
+      CREATE INDEX IF NOT EXISTS idx_quote_approvals_status ON quote_approvals(status);
+      CREATE TABLE IF NOT EXISTS quote_attributions (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        lead_id VARCHAR REFERENCES leads(id),
+        booking_id VARCHAR,
+        user_id VARCHAR REFERENCES users(id),
+        attribution_type TEXT NOT NULL,
+        promo_code TEXT,
+        metadata JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_quote_attributions_lead ON quote_attributions(lead_id);
+      CREATE INDEX IF NOT EXISTS idx_quote_attributions_booking ON quote_attributions(booking_id);
+      CREATE INDEX IF NOT EXISTS idx_quote_attributions_user ON quote_attributions(user_id);
+    `);
+    console.log('worker authority and quote approval tables ready');
+  } catch (migErr) {
+    console.error('worker authority migration error (non-fatal):', migErr);
   }
 
   // Schema migration: account recovery depends on this table before it can
@@ -1845,7 +1969,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
     });
   }
 
-  // Public objects serving endpoint (from javascript_object_storage integration)
+  // Public objects serving endpoint (Google Cloud Storage)
   // Serves files from object storage public directories
   app.get("/public-objects/:filePath(*)", async (req, res) => {
     const filePath = req.params.filePath;
@@ -1918,6 +2042,112 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
   });
 
   // Employee Email/Password Authentication Endpoints (Public - No auth required)
+
+  app.get("/api/auth/google", (req, res) => {
+    const config = getGoogleOAuthConfig(req);
+    if (!config) {
+      return res.status(503).json({
+        error: "Google login is not configured",
+        requiredEnv: ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],
+      });
+    }
+
+    const state = crypto.randomBytes(24).toString("hex");
+    (req.session as any).googleOAuthState = state;
+    (req.session as any).googleOAuthRedirectTo =
+      typeof req.query.redirect === "string" && req.query.redirect.startsWith("/")
+        ? req.query.redirect
+        : null;
+
+    const params = new URLSearchParams({
+      client_id: config.clientId,
+      redirect_uri: config.redirectUri,
+      response_type: "code",
+      scope: "openid email profile",
+      state,
+      prompt: "select_account",
+    });
+
+    req.session.save((err) => {
+      if (err) {
+        console.error("Google OAuth state save failed:", err);
+        return res.status(500).json({ error: "Could not start Google login" });
+      }
+      return res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+    });
+  });
+
+  app.get("/api/auth/google/callback", async (req, res) => {
+    try {
+      const config = getGoogleOAuthConfig(req);
+      if (!config) {
+        return res.redirect("/login?error=google_not_configured");
+      }
+
+      const code = typeof req.query.code === "string" ? req.query.code : "";
+      const state = typeof req.query.state === "string" ? req.query.state : "";
+      const expectedState = (req.session as any).googleOAuthState;
+      const requestedRedirect = (req.session as any).googleOAuthRedirectTo;
+      delete (req.session as any).googleOAuthState;
+      delete (req.session as any).googleOAuthRedirectTo;
+
+      if (!code || !state || !expectedState || state !== expectedState) {
+        return res.redirect("/login?error=google_state");
+      }
+
+      const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          code,
+          client_id: config.clientId,
+          client_secret: config.clientSecret,
+          redirect_uri: config.redirectUri,
+          grant_type: "authorization_code",
+        }),
+      });
+      const tokenData = await tokenRes.json() as {
+        access_token?: string;
+        error?: string;
+        error_description?: string;
+      };
+
+      if (!tokenRes.ok || !tokenData.access_token) {
+        console.error("Google OAuth token exchange failed:", tokenData.error_description || tokenData.error);
+        return res.redirect("/login?error=google_token");
+      }
+
+      const profileRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+        headers: { Authorization: `Bearer ${tokenData.access_token}` },
+      });
+      const profile = await profileRes.json() as {
+        email?: string;
+        email_verified?: boolean;
+        given_name?: string;
+        family_name?: string;
+        picture?: string;
+      };
+
+      if (!profileRes.ok || !profile.email || profile.email_verified !== true) {
+        console.error("Google OAuth profile verification failed:", profile);
+        return res.redirect("/login?error=google_email");
+      }
+
+      const { user } = await findOrCreateGoogleUser({
+        email: profile.email,
+        givenName: profile.given_name,
+        familyName: profile.family_name,
+        picture: profile.picture,
+      });
+
+      await saveLoginSession(req, user);
+      const fallback = authRedirectPath(user);
+      return res.redirect(requestedRedirect || fallback);
+    } catch (error) {
+      console.error("Google OAuth callback error:", error);
+      return res.redirect("/login?error=google_login_failed");
+    }
+  });
   
   // Employee Registration
   const employeeRegisterSchema = z.object({
@@ -1970,9 +2200,9 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
 
       let newUser;
 
-      // If user exists but has no password (Replit Auth migration), update their account
+      // If user exists but has no password (OAuth-only account), update their account
       if (existingUser.length > 0 && !existingUser[0].passwordHash) {
-        console.log(`🔄 Migrating Replit Auth account to email/password: ${data.email}`);
+        console.log(`Migrating OAuth-only account to email/password: ${data.email}`);
         
         const [updatedUser] = await db
           .update(users)
@@ -4202,17 +4432,105 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
           source: "quick_request",
         });
 
-        const lead = await storage.createLead(leadData);
+        let lead = await storage.createLead(leadData);
+        if (lead.status !== "quote_requested") {
+          const [quoteRequestedLead] = await db.update(leads)
+            .set({ status: "quote_requested" as any })
+            .where(eq(leads.id, lead.id))
+            .returning();
+          if (quoteRequestedLead) lead = quoteRequestedLead;
+        }
+        const creatorUserId = (req.session as any)?.userId || req.user?.id || null;
+        if (creatorUserId) {
+          try {
+            const { rows: creatorRows } = await pool.query<{ role: string | null; authority_tier: string | null }>(`
+              SELECT u.role, wp.authority_tier
+              FROM users u
+              LEFT JOIN worker_profiles wp ON wp.user_id = u.id
+              WHERE u.id = $1
+              LIMIT 1
+            `, [creatorUserId]);
+            const creatorRole = creatorRows[0]?.role || "";
+            const creatorTier = (creatorRows[0]?.authority_tier || (creatorRole === "admin" || creatorRole === "business_owner" ? "platinum" : "worker")).toLowerCase();
+            const canCreditQuickLead =
+              creatorRole === "admin" ||
+              creatorRole === "business_owner" ||
+              ["bronze", "silver", "gold", "platinum"].includes(creatorTier);
+            if (canCreditQuickLead) {
+              await db.update(leads)
+                .set({ createdByUserId: creatorUserId })
+                .where(eq(leads.id, lead.id));
+              await db.insert(quoteAttributions).values({
+                leadId: lead.id,
+                userId: creatorUserId,
+                attributionType: "quick_request_creator",
+                metadata: { source: "quick_request", serviceCode: parsed.serviceCode },
+              });
+              await pool.query(`
+                INSERT INTO worker_profiles (user_id, authority_tier, leads_posted_count, updated_at)
+                VALUES ($1, $2, 1, NOW())
+                ON CONFLICT (user_id) DO UPDATE
+                SET leads_posted_count = worker_profiles.leads_posted_count + 1,
+                    updated_at = NOW()
+              `, [creatorUserId, creatorTier]);
+            }
+          } catch (attrErr) {
+            console.error("[quick-request] worker attribution failed:", (attrErr as Error).message);
+          }
+        }
         try {
-          await notifyAdminNewLead({
+          const adminEmailSent = await notifyAdminNewLead({
             customerName: `${parsed.firstName} ${parsed.lastName}`,
             serviceType: service.label,
             phone: parsed.phone,
             email: lead.email,
             createdBy: "Quick request",
           });
+          if (!adminEmailSent) {
+            console.warn("[quick-request] admin email notification was not sent; check Gmail/SendGrid env vars");
+          }
         } catch (notifyErr) {
           console.error("[quick-request] admin notification failed:", (notifyErr as Error).message);
+        }
+        if (process.env.ADMIN_PHONE_NUMBER) {
+          try {
+            const smsResult = await smsService.notifyNewLead({
+              customerName: `${parsed.firstName} ${parsed.lastName}`,
+              serviceType: service.label,
+              phone: parsed.phone,
+              createdBy: "Quick request",
+            });
+            if (!smsResult.success) {
+              console.warn(`[quick-request] admin SMS notification was not sent: ${smsResult.error || "unknown error"}`);
+            }
+          } catch (notifyErr) {
+            console.error("[quick-request] admin SMS notification failed:", notifyErr instanceof Error ? notifyErr.message : notifyErr);
+          }
+        }
+        try {
+          const { notificationService } = await import("./services/notification");
+          const opsUsers = (await storage.getAllUsers()).filter((user) =>
+            ["employee", "admin", "business_owner"].includes(user.role || "") &&
+            user.notificationsEnabled !== false
+          );
+          for (const user of opsUsers) {
+            await notificationService.sendNotification({
+              userId: user.id,
+              type: "system_alert",
+              title: "New Quick Request",
+              message: `${parsed.firstName} ${parsed.lastName} needs a ${service.label} quote. Call ${parsed.phone}.`,
+              data: {
+                type: "quick_request",
+                leadId: lead.id,
+                orderNumber: lead.orderNumber,
+                displayOrderNumber: formatOrderNumber(lead.orderNumber),
+                serviceCode: parsed.serviceCode,
+                serviceType: service.serviceType,
+              },
+            });
+          }
+        } catch (notifyErr) {
+          console.error("[quick-request] in-app notification failed:", (notifyErr as Error).message);
         }
 
         res.status(201).json({
@@ -4703,6 +5021,160 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
   };
 
   // POST /api/jobs/:id/accept — crew member locks their slot on the job
+  const WORKER_TIERS = ["worker", "bronze", "silver", "gold", "platinum"] as const;
+  type WorkerTier = typeof WORKER_TIERS[number];
+  const tierRank: Record<WorkerTier, number> = { worker: 0, bronze: 1, silver: 2, gold: 3, platinum: 4 };
+  const normalizeWorkerTier = (value: unknown, role?: string | null): WorkerTier => {
+    const raw = String(value || "").toLowerCase();
+    if (WORKER_TIERS.includes(raw as WorkerTier)) return raw as WorkerTier;
+    if (role === "admin" || role === "business_owner") return "platinum";
+    return "worker";
+  };
+  const getWorkerAuthority = async (user: any) => {
+    const [profile] = await db.select().from(workerProfiles).where(eq(workerProfiles.userId, user.id)).limit(1);
+    if (profile) {
+      const tier = normalizeWorkerTier(profile.authorityTier, user.role);
+      return { ...profile, authorityTier: tier, rank: tierRank[tier] };
+    }
+    const tier = normalizeWorkerTier(null, user.role);
+    try {
+      await db.insert(workerProfiles).values({
+        userId: user.id,
+        authorityTier: tier,
+        promoCode: user.referralCode || null,
+      }).onConflictDoNothing();
+    } catch {
+      // Non-fatal: the authority response can still be derived from role.
+    }
+    return {
+      userId: user.id,
+      authorityTier: tier,
+      promoCode: user.referralCode || null,
+      leadsPostedCount: 0,
+      silverCompletedJobsCount: 0,
+      goldEligibleAt: null,
+      rank: tierRank[tier],
+    };
+  };
+  const userCanApproveQuotes = async (user: any) => {
+    if (!user) return false;
+    if (user.role === "admin" || user.role === "business_owner" || user.email === "upmichiganstatemovers@gmail.com") return true;
+    const authority = await getWorkerAuthority(user);
+    return authority.rank >= tierRank.gold;
+  };
+
+  app.get("/api/workers/me/authority", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const user = req.currentUser;
+      const authority = await getWorkerAuthority(user);
+      const [createdLeadCount] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(leads)
+        .where(eq(leads.createdByUserId, user.id));
+      const [completedLeadCount] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(leads)
+        .where(and(eq(leads.createdByUserId, user.id), eq(leads.status, "completed")));
+      if (authority.authorityTier === "silver" && Number(completedLeadCount?.count || 0) >= 100) {
+        await db.update(workerProfiles)
+          .set({ authorityTier: "gold", silverCompletedJobsCount: Number(completedLeadCount.count), goldEligibleAt: new Date(), updatedAt: new Date() })
+          .where(eq(workerProfiles.userId, user.id));
+        authority.authorityTier = "gold";
+        authority.rank = tierRank.gold;
+        authority.goldEligibleAt = new Date();
+      }
+      res.json({
+        user: {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          firstName: user.firstName,
+          lastName: user.lastName,
+        },
+        authority: {
+          tier: authority.authorityTier,
+          promoCode: authority.promoCode || user.referralCode || null,
+          leadsPostedCount: Number(createdLeadCount?.count || authority.leadsPostedCount || 0),
+          silverCompletedJobsCount: Number(completedLeadCount?.count || authority.silverCompletedJobsCount || 0),
+          goldEligibleAt: authority.goldEligibleAt,
+          canPostLead: authority.rank >= tierRank.bronze,
+          canBuildQuote: authority.rank >= tierRank.silver,
+          canApproveQuote: authority.rank >= tierRank.gold,
+          canManageOps: authority.rank >= tierRank.platinum,
+        },
+      });
+    } catch (error) {
+      console.error("worker authority error:", error);
+      res.status(500).json({ message: "Failed to load worker authority" });
+    }
+  });
+
+  app.get("/api/workers/quote-approvals", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const user = req.currentUser;
+      const canApprove = await userCanApproveQuotes(user);
+      if (!canApprove) return res.status(403).json({ message: "Gold or Platinum authority required" });
+      const rows = await db.select().from(leads)
+        .where(inArray(leads.status, ["pending_quote_approval", "chatbot_pending", "quote_requested"]))
+        .orderBy(desc(leads.createdAt))
+        .limit(100);
+      res.json({ leads: rows });
+    } catch (error) {
+      console.error("worker quote approvals load error:", error);
+      res.status(500).json({ message: "Failed to load quote approvals" });
+    }
+  });
+
+  app.post("/api/workers/quote-approvals/leads/:id/approve", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const user = req.currentUser;
+      const canApprove = await userCanApproveQuotes(user);
+      if (!canApprove) return res.status(403).json({ message: "Gold or Platinum authority required" });
+      const notes = typeof req.body?.notes === "string" ? req.body.notes.slice(0, 1000) : null;
+      const [lead] = await db.select().from(leads).where(eq(leads.id, req.params.id)).limit(1);
+      if (!lead) return res.status(404).json({ message: "Lead not found" });
+
+      const approvalRole = user.role === "admin" || user.role === "business_owner" || user.email === "upmichiganstatemovers@gmail.com"
+        ? "owner_approval"
+        : "gold_vote";
+      await db.insert(quoteApprovals).values({
+        leadId: lead.id,
+        submittedByUserId: lead.createdByUserId || null,
+        approvedByUserId: user.id,
+        approvalRole,
+        status: "approved",
+        notes,
+      });
+
+      const [voteRow] = await db.select({ count: sql<number>`count(distinct ${quoteApprovals.approvedByUserId})::int` })
+        .from(quoteApprovals)
+        .where(and(eq(quoteApprovals.leadId, lead.id), eq(quoteApprovals.status, "approved"), eq(quoteApprovals.approvalRole, "gold_vote")));
+      const goldVotes = Number(voteRow?.count || 0);
+      const approved = approvalRole === "owner_approval" || goldVotes >= 2;
+
+      if (approved) {
+        await db.update(leads)
+          .set({ status: "quote_requested" as any, lastQuoteUpdatedAt: new Date() })
+          .where(eq(leads.id, lead.id));
+        try {
+          await writeLeadHistory(lead.id, lead.status, "quote_requested", user.id, "Quote approved by worker authority");
+        } catch (histErr) {
+          console.error("[lead_history] worker quote approval history failed:", histErr);
+        }
+      }
+
+      await db.insert(quoteAttributions).values({
+        leadId: lead.id,
+        userId: user.id,
+        attributionType: approved ? "quote_approver" : "gold_vote",
+        metadata: { approved, notes },
+      });
+
+      res.json({ success: true, approved, goldVotes });
+    } catch (error) {
+      console.error("worker quote approval error:", error);
+      res.status(500).json({ message: "Failed to approve quote" });
+    }
+  });
+
   app.post("/api/jobs/:id/accept", isAuthenticated, requireEmployee, async (req: any, res) => {
     try {
       const leadId = req.params.id;
@@ -6282,6 +6754,111 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
     );
   }
 
+  const convertLeadToJobSchema = z.object({
+    basePrice: z.coerce.number().positive("Base price is required"),
+    totalPrice: z.coerce.number().positive().optional(),
+    tokenAllocation: z.coerce.number().min(0).optional(),
+    confirmedDate: z.string().trim().min(1, "Confirmed date is required"),
+    arrivalWindow: z.string().trim().max(80).optional(),
+    crewSize: z.coerce.number().int().min(1).max(12).default(2),
+    crewMembers: z.array(z.string()).default([]),
+    confirmedFromAddress: z.string().trim().max(500).optional(),
+    confirmedToAddress: z.string().trim().max(500).optional(),
+    quoteNotes: z.string().trim().max(2000).optional(),
+  });
+
+  app.post("/api/leads/:id/convert-to-job", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const user = req.currentUser;
+      const authority = await getWorkerAuthority(user);
+      const canConvert = user?.role === "admin"
+        || user?.role === "business_owner"
+        || user?.email === "upmichiganstatemovers@gmail.com"
+        || authority.rank >= tierRank.silver;
+
+      if (!canConvert) {
+        return res.status(403).json({ error: "Silver worker authority or owner/admin access is required to convert leads to jobs." });
+      }
+
+      const parsed = convertLeadToJobSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid conversion details", details: parsed.error.flatten() });
+      }
+
+      const existingLead = await storage.getLead(id);
+      if (!existingLead) return res.status(404).json({ error: "Lead not found" });
+
+      const convertibleStatuses = new Set(["new", "quote_requested", "contacted", "quoted", "chatbot_pending"]);
+      if (!convertibleStatuses.has(existingLead.status)) {
+        return res.status(400).json({ error: `Lead status '${existingLead.status}' cannot be converted to an available job.` });
+      }
+
+      const data = parsed.data;
+      const money = (value: number) => value.toFixed(2);
+      const updateData: Record<string, any> = {
+        status: "available",
+        basePrice: money(data.basePrice),
+        totalPrice: money(data.totalPrice ?? data.basePrice),
+        confirmedDate: data.confirmedDate,
+        arrivalWindow: data.arrivalWindow || null,
+        crewSize: data.crewSize,
+        crewMembers: data.crewMembers,
+        confirmedFromAddress: data.confirmedFromAddress || existingLead.fromAddress,
+        confirmedToAddress: data.confirmedToAddress || existingLead.toAddress || null,
+        lastQuoteUpdatedAt: new Date(),
+      };
+
+      if (data.tokenAllocation !== undefined) {
+        updateData.tokenAllocation = String(data.tokenAllocation);
+      }
+      if (data.quoteNotes) {
+        updateData.quoteNotes = data.quoteNotes;
+      }
+
+      const [updatedLead] = await db.update(leads).set(updateData).where(eq(leads.id, id)).returning();
+      if (!updatedLead) return res.status(404).json({ error: "Lead not found" });
+
+      await writeLeadHistory(id, existingLead.status, "available", user?.id ?? null, "Converted to available job from employee dashboard");
+
+      try {
+        const { notificationService } = await import("./services/notification");
+        await notificationService.notifyAllEmployees(
+          "New Job Available",
+          `${updatedLead.serviceType} job available for ${updatedLead.firstName} ${updatedLead.lastName}`,
+          { jobId: updatedLead.id, type: "job_available" }
+        );
+        const employees = await storage.getEmployees();
+        const customerName = `${updatedLead.firstName || ""} ${updatedLead.lastName || ""}`.trim() || "Customer";
+        const jobData = {
+          customerName,
+          serviceType: updatedLead.serviceType || "service",
+          moveDate: updatedLead.confirmedDate || updatedLead.moveDate || undefined,
+          tokensReward: updatedLead.tokenAllocation ? Number(updatedLead.tokenAllocation) : undefined,
+        };
+        await Promise.allSettled(
+          employees.flatMap((employee) => {
+            const sends: Promise<unknown>[] = [];
+            if (employee.email) {
+              sends.push(notifyEmployeeJobAvailable(employee.email, jobData));
+            }
+            if ((employee as any).phoneNumber) {
+              sends.push(smsService.notifyJobAvailable((employee as any).phoneNumber, jobData));
+            }
+            return sends;
+          }),
+        );
+      } catch (notifyError) {
+        console.error("Failed to notify employees after lead conversion:", notifyError);
+      }
+
+      res.json(updatedLead);
+    } catch (error) {
+      console.error("Error converting lead to job:", error);
+      res.status(500).json({ error: "Failed to convert lead to job" });
+    }
+  });
+
   // GET lead history
   app.get("/api/leads/:id/history", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
@@ -6730,7 +7307,7 @@ Thank you for your business!
         const review = reviewMap[l.id];
         const stages = {
           quoteRequested: { done: true, at: l.createdAt },
-          contacted: { done: l.status !== 'quote_requested', at: null },
+          contacted: { done: !['new', 'quote_requested'].includes(l.status), at: null },
           assigned: { done: !!l.assignedToUserId, at: null },
           completed: { done: l.status === 'completed', at: null },
           reviewSent: { done: !!l.reviewRequestSentAt, at: l.reviewRequestSentAt },
@@ -12651,7 +13228,7 @@ Thank you for your business!
     }
   });
 
-  // Test SendGrid email service (admin only)
+  // Test configured email service (admin only)
   app.get("/api/admin/test-email", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
       const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
@@ -12660,8 +13237,8 @@ Thank you for your business!
         to: companyEmail,
         from: companyEmail,
         subject: "✅ JC ON THE MOVE SendGrid Test",
-        text: "This is a test email from your Replit backend. SendGrid is working!",
-        html: "<h2>JC ON THE MOVE 🚛</h2><p>This is a test email from your Replit app. SendGrid is working!</p><p>Sent at: " + new Date().toLocaleString() + "</p>",
+        text: "This is a test email from your JC ON THE MOVE backend. Email notifications are working.",
+        html: "<h2>JC ON THE MOVE</h2><p>Email notifications are working.</p><p>Sent at: " + new Date().toLocaleString() + "</p>",
       });
 
       if (emailSuccess) {
@@ -12849,7 +13426,7 @@ Thank you for your business!
         },
         authentication: {
           sessionSecret: process.env.SESSION_SECRET ? 'configured' : 'missing',
-          type: 'email/password'
+          type: getGoogleOAuthConfig(req) ? 'email/password + google' : 'email/password'
         },
         crypto: {
           moonshot: {
@@ -17490,7 +18067,7 @@ Thank you for your business!
             <h3 style="color: #facc15; margin-top: 0;">Booking Summary</h3>
             <p><strong>Crew:</strong> ${parsedMovers} Mover${parsedMovers > 1 ? "s" : ""}</p>
             <p><strong>Hours booked:</strong> ${pricing.billableHours} hrs</p>
-            ${safeAddOns.truck ? `<p><strong>Truck:</strong> Included (${safeTruckSize === "large" ? "Large" : "16ft"})</p>` : ""}
+            ${safeAddOns.truck ? `<p><strong>Truck:</strong> Included (${safeTruckSize === "large" ? "Large" : "15ft"})</p>` : ""}
             <p><strong>Full total:</strong> $${pricing.grandTotal}</p>
             <p><strong>Deposit paid:</strong> $${depositAmount} (30%)</p>
             <p><strong>Balance due on move day:</strong> $${Math.round((pricing.grandTotal - depositAmount) * 100) / 100}</p>
@@ -20729,7 +21306,7 @@ Thank you for your business!
         localMilesMax:              n('pricing_local_miles_max',               10),
         regionalMilesMax:           n('pricing_regional_miles_max',            50),
         regionalSurchargePerMile:   n('pricing_regional_surcharge_per_mile',    1),
-        longDistanceRatePerMile:    n('pricing_long_distance_rate_per_mile',    4),
+        longDistanceRatePerMile:    n('pricing_long_distance_rate_per_mile',    5),
         longDistanceMinMiles:       n('pricing_long_distance_min_miles',      100),
         // Fuel surcharge
         fuelSurchargeFlat:     n('pricing_fuel_surcharge_flat',      0),
@@ -21762,6 +22339,17 @@ Thank you for your business!
         });
       } catch (_) {}
 
+      try {
+        await smsService.notifyNewQuote({
+          customerName: name,
+          serviceType: svcRaw,
+          phone,
+          moveDate: moveDateStr,
+        });
+      } catch (notifyErr) {
+        console.error("[chatbot-quote] admin SMS notification failed:", notifyErr instanceof Error ? notifyErr.message : notifyErr);
+      }
+
       res.json({
         leadId: lead.id,
         message: "Quote submitted for review",
@@ -21787,9 +22375,9 @@ Thank you for your business!
   app.get("/api/admin/chatbot-quotes", isAuthenticated, async (req: any, res) => {
     try {
       const user = await storage.getUser((req.session as any).userId);
-      if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
+      if (!user || !(await userCanApproveQuotes(user))) return res.status(403).json({ error: "Unauthorized" });
       const rows = await db.select().from(leads)
-        .where(eq(leads.status, "chatbot_pending" as any))
+        .where(inArray(leads.status, ["chatbot_pending", "pending_quote_approval"] as any))
         .orderBy(desc(leads.createdAt))
         .limit(100);
       res.json(rows);
@@ -21801,9 +22389,20 @@ Thank you for your business!
   app.patch("/api/admin/chatbot-quotes/:id/approve", isAuthenticated, async (req: any, res) => {
     try {
       const user = await storage.getUser((req.session as any).userId);
-      if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
+      if (!user || !(await userCanApproveQuotes(user))) return res.status(403).json({ error: "Unauthorized" });
       const { basePrice, totalPrice, quoteNotes } = req.body;
       const [currentLead] = await db.select().from(leads).where(eq(leads.id, req.params.id));
+      const approvalRole = user.role === "admin" || user.role === "business_owner" || user.email === "upmichiganstatemovers@gmail.com"
+        ? "owner_approval"
+        : "gold_vote";
+      await db.insert(quoteApprovals).values({
+        leadId: req.params.id,
+        submittedByUserId: currentLead?.createdByUserId || null,
+        approvedByUserId: user.id,
+        approvalRole,
+        status: "approved",
+        notes: quoteNotes || null,
+      });
       await db.update(leads)
         .set({
           status: "quote_requested" as any,
@@ -21827,7 +22426,7 @@ Thank you for your business!
   app.patch("/api/admin/chatbot-quotes/:id/dismiss", isAuthenticated, async (req: any, res) => {
     try {
       const user = await storage.getUser((req.session as any).userId);
-      if (!user || !["admin", "business_owner"].includes(user.role || "")) return res.status(403).json({ error: "Unauthorized" });
+      if (!user || !(await userCanApproveQuotes(user))) return res.status(403).json({ error: "Unauthorized" });
       const [currentLead] = await db.select().from(leads).where(eq(leads.id, req.params.id));
       await db.update(leads).set({ status: "dismissed" as any }).where(eq(leads.id, req.params.id));
       try {

@@ -83,8 +83,17 @@ export async function sendEmail(params: EmailParams): Promise<boolean> {
   }
 }
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'upmichiganstatemovers@gmail.com';
-const FROM_EMAIL = process.env.COMPANY_EMAIL || 'michigankid906@gmail.com';
+const ADMIN_EMAIL =
+  process.env.ADMIN_EMAIL ||
+  process.env.NOTIFICATION_EMAIL ||
+  process.env.COMPANY_EMAIL ||
+  'upmichiganstatemovers@gmail.com';
+const FROM_EMAIL =
+  process.env.FROM_EMAIL ||
+  process.env.SENDGRID_FROM_EMAIL ||
+  process.env.COMPANY_EMAIL ||
+  process.env.GMAIL_USER ||
+  'michigankid906@gmail.com';
 
 export async function notifyAdminNewQuote(data: {
   customerName: string;

@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient, storeTokens, clearTokens, getApiBase } from "@/lib/queryClient";
 import { WelcomeModal } from "@/components/welcome-modal";
 import { Loader2, LogIn, Lock, Mail, User, UserPlus, Phone, Coins, Truck } from "lucide-react";
+import { SiGoogle } from "react-icons/si";
 
 function roleDestination(role: string, status: string): string {
   if (status === "pending" || status === "pending_approval") return "/pending-approval";
@@ -18,20 +19,30 @@ function roleDestination(role: string, status: string): string {
   return "/";
 }
 
+function sanitizeRedirectPath(path: string | null): string {
+  if (!path || !path.startsWith("/") || path.startsWith("//")) return "";
+  return path;
+}
+
 export default function LoginPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   // Task #116: read ?email=&intent= so post-booking deep links from
   // BookingConfirmedTiles pre-fill the email and tailor the header copy.
-  const { prefillEmail, intent } = useMemo(() => {
-    if (typeof window === "undefined") return { prefillEmail: "", intent: "" };
+  const { prefillEmail, intent, initialMode, redirectPath } = useMemo(() => {
+    if (typeof window === "undefined") {
+      return { prefillEmail: "", intent: "", initialMode: "login" as const, redirectPath: "" };
+    }
     const params = new URLSearchParams(window.location.search);
+    const requestedMode = params.get("mode") === "register" ? "register" : "login";
     return {
       prefillEmail: params.get("email") || "",
       intent: params.get("intent") || "",
+      initialMode: params.get("email") || requestedMode === "register" ? "register" as const : "login" as const,
+      redirectPath: sanitizeRedirectPath(params.get("redirect")),
     };
   }, []);
-  const [mode, setMode] = useState<"login" | "register">(prefillEmail ? "register" : "login");
+  const [mode, setMode] = useState<"login" | "register">(initialMode);
   const [showWelcome, setShowWelcome] = useState(false);
   const [welcomeFirstName, setWelcomeFirstName] = useState("");
   const [form, setForm] = useState({
@@ -95,7 +106,8 @@ export default function LoginPage() {
       } else {
         toast({ title: "Welcome back!", description: `Signed in as ${data.user.firstName || data.user.email}` });
       }
-      setLocation(roleDestination(data.user.role, data.user.status));
+      const defaultDestination = roleDestination(data.user.role, data.user.status);
+      setLocation(data.user.role === "customer" && redirectPath ? redirectPath : defaultDestination);
     },
     onError: (e: any) => {
       clearTokens();
@@ -154,7 +166,7 @@ export default function LoginPage() {
         setShowWelcome(true);
       } else {
         toast({ title: "Account created!", description: `Welcome, ${data.user.firstName}!` });
-        setLocation("/");
+        setLocation(data.user?.role === "customer" && redirectPath ? redirectPath : "/");
       }
     },
     onError: (e: any) => toast({ title: "Registration failed", description: e.message || "Could not create account.", variant: "destructive" }),
@@ -167,13 +179,19 @@ export default function LoginPage() {
     mode === "login" ? loginMutation.mutate() : registerMutation.mutate();
   };
 
+  const handleGoogleLogin = () => {
+    const base = getApiBase();
+    const redirect = `${window.location.pathname}${window.location.search}`;
+    window.location.href = `${base}/api/auth/google?redirect=${encodeURIComponent(redirect)}`;
+  };
+
   return (
     <>
       <WelcomeModal
         open={showWelcome}
         firstName={welcomeFirstName}
         bonus={250}
-        onClose={() => { setShowWelcome(false); setLocation("/"); }}
+        onClose={() => { setShowWelcome(false); setLocation(redirectPath || "/"); }}
       />
 
       <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center p-4">
@@ -193,18 +211,42 @@ export default function LoginPage() {
               <CardTitle className="text-xl text-white" data-testid="text-login-title">
                 {intent === "track"
                   ? (mode === "login" ? "Sign in to track your booking" : "Track your booking")
-                  : (mode === "login" ? "Sign In" : "Create Account")}
+                  : intent === "rewards"
+                    ? (mode === "login" ? "Sign in to JCMOVES" : "Create your free JCMOVES account")
+                    : (mode === "login" ? "Sign In" : "Create Account")}
               </CardTitle>
               <CardDescription className="text-slate-400">
                 {intent === "track"
                   ? "We'll link your new account to the email you just used so you can pause, skip, or re-book anytime."
-                  : mode === "login"
+                  : intent === "rewards"
+                    ? "Join free, earn JCMOVES on completed jobs, and track your rewards in one place."
+                    : mode === "login"
                     ? "Customers, crew & admins — one place to sign in"
                     : "New customers — create your free account"}
               </CardDescription>
             </CardHeader>
 
             <CardContent>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full mb-4 border-slate-600 bg-slate-800 text-white hover:bg-slate-700 hover:text-white"
+                onClick={handleGoogleLogin}
+                data-testid="button-google-login"
+              >
+                <SiGoogle className="mr-2 h-4 w-4" />
+                Continue with Google
+              </Button>
+
+              <div className="relative mb-4">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t border-slate-700" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-slate-900 px-2 text-slate-500">or use email</span>
+                </div>
+              </div>
+
               <form onSubmit={handleSubmit} className="space-y-4">
 
                 {/* Register-only fields */}

@@ -12,12 +12,12 @@ while true; do
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo ""
 
-  npm run dev
+  npm start
   EXIT_CODE=$?
 
   # Exit code 0  = clean shutdown (no restart needed)
   # Exit code 130 = SIGINT (Ctrl+C)
-  # Exit code 143 = SIGTERM (Replit workflow stop)
+  # Exit code 143 = SIGTERM
   if [ "$EXIT_CODE" -eq 0 ] || [ "$EXIT_CODE" -eq 130 ] || [ "$EXIT_CODE" -eq 143 ]; then
     echo ""
     echo "✅ Application stopped cleanly (exit code: $EXIT_CODE). Not restarting."

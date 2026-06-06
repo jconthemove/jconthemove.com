@@ -6,10 +6,12 @@ export const MOVING_TRAVEL_ONE_HOUR_FEE = 100;
 export const MOVING_TRAVEL_TWO_HOUR_FEE = 200;
 export const MOVING_TRAVEL_THREE_HOUR_MINIMUM_FEE = 300;
 
-export const JC_TRUCK_LOCAL_RENTAL_FEE = 150;
-export const JC_TRUCK_OUT_OF_TOWN_RENTAL_FEE = 300;
-export const JC_TRUCK_FAR_OUT_OF_TOWN_RENTAL_FEE = 450;
-export const JC_TRUCK_INCLUDED_MILES = 30;
+export const JC_TRUCK_15_FT_RENTAL_FEE = 500;
+export const JC_TRUCK_26_FT_RENTAL_FEE = 1000;
+export const JC_TRUCK_LOCAL_RENTAL_FEE = JC_TRUCK_15_FT_RENTAL_FEE;
+export const JC_TRUCK_OUT_OF_TOWN_RENTAL_FEE = JC_TRUCK_15_FT_RENTAL_FEE;
+export const JC_TRUCK_FAR_OUT_OF_TOWN_RENTAL_FEE = JC_TRUCK_26_FT_RENTAL_FEE;
+export const JC_TRUCK_INCLUDED_MILES = 50;
 export const JC_TRUCK_EXTRA_MILE_RATE = 5;
 
 export type MovingDistanceBracket = "local" | "1hr" | "2hr" | "3hr";
@@ -45,14 +47,13 @@ export function calculateMovingTravelCharge(distanceMiles?: number | null) {
   };
 }
 
-export function calculateJcTruckRentalFee(distanceMiles?: number | null, outOfTown = false) {
+export function calculateJcTruckRentalFee(distanceMiles?: number | null, outOfTown = false, truckSize?: string | null) {
   const miles = Number(distanceMiles ?? 0);
   const safeMiles = Number.isFinite(miles) && miles > 0 ? miles : 0;
-  const baseFee = outOfTown || safeMiles > JC_TRUCK_INCLUDED_MILES
-    ? safeMiles > MOVING_ONE_HOUR_MILES_MAX
-      ? JC_TRUCK_FAR_OUT_OF_TOWN_RENTAL_FEE
-      : JC_TRUCK_OUT_OF_TOWN_RENTAL_FEE
-    : JC_TRUCK_LOCAL_RENTAL_FEE;
+  const normalizedTruckSize = String(truckSize || "").toLowerCase();
+  const baseFee = normalizedTruckSize.includes("26")
+    ? JC_TRUCK_26_FT_RENTAL_FEE
+    : JC_TRUCK_15_FT_RENTAL_FEE;
   const extraMiles = Math.max(0, Math.ceil(safeMiles - JC_TRUCK_INCLUDED_MILES));
   const mileageFee = extraMiles * JC_TRUCK_EXTRA_MILE_RATE;
   return {

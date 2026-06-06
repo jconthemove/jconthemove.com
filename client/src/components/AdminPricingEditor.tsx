@@ -207,7 +207,7 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
       local_miles_max:             String(pricing.localMilesMax             ?? 10),
       regional_miles_max:          String(pricing.regionalMilesMax          ?? 50),
       regional_surcharge_per_mile: String(pricing.regionalSurchargePerMile  ?? 1),
-      long_distance_rate_per_mile: String(pricing.longDistanceRatePerMile   ?? 4),
+      long_distance_rate_per_mile: String(pricing.longDistanceRatePerMile   ?? 5),
       long_distance_min_miles:     String(pricing.longDistanceMinMiles      ?? 100),
       fuel_surcharge_flat:      String(pricing.fuelSurchargeFlat     ?? 0),
       fuel_surcharge_min_miles: String(pricing.fuelSurchargeMinMiles ?? 30),
@@ -370,7 +370,7 @@ export function AdminPricingEditor({ alwaysOpen = false }: { alwaysOpen?: boolea
           {/* ── Truck Options ── */}
           <Section icon={<Truck className="h-3.5 w-3.5" />} title="Truck Options (Flat Rates)" color="text-cyan-300">
             <div className="grid grid-cols-2 gap-2">
-              <Field label="Small Truck flat rate ($)" hint="16 ft — default $300">
+              <Field label="Small Truck flat rate ($)" hint="15 ft — default $500">
                 <Input type="number" value={draft.truck_small_flat}
                   onChange={e => set("truck_small_flat", e.target.value)} className={inp} />
               </Field>

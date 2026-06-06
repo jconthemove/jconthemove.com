@@ -14,7 +14,11 @@ import {
   Trophy,
   Settings,
   Eye,
-  EyeOff
+  EyeOff,
+  UserPlus,
+  FileText,
+  ShieldCheck,
+  Briefcase
 } from "lucide-react";
 import { Link } from "wouter";
 import { useState } from "react";
@@ -55,6 +59,19 @@ interface Lead {
   crewMembers?: string[];
 }
 
+interface WorkerAuthorityResponse {
+  authority: {
+    tier: "worker" | "bronze" | "silver" | "gold" | "platinum";
+    promoCode?: string | null;
+    leadsPostedCount: number;
+    silverCompletedJobsCount: number;
+    canPostLead: boolean;
+    canBuildQuote: boolean;
+    canApproveQuote: boolean;
+    canManageOps: boolean;
+  };
+}
+
 export default function EmployeeDashboard() {
   const [dashboardSettings, setDashboardSettings] = useState({
     showBalance: true,
@@ -77,6 +94,10 @@ export default function EmployeeDashboard() {
     queryKey: ["/api/rewards/wallet"],
   });
 
+  const { data: workerAuthority } = useQuery<WorkerAuthorityResponse>({
+    queryKey: ["/api/workers/me/authority"],
+  });
+
   const { data: myJobs = [], isLoading: jobsLoading } = useQuery<Lead[]>({
     queryKey: ["/api/leads/my-jobs"],
   });
@@ -96,6 +117,7 @@ export default function EmployeeDashboard() {
   const tokenBalance = parseFloat(walletData?.tokenBalance || "0");
   const totalEarned = parseFloat(walletData?.totalEarned || "0");
   const pendingTokens = parseFloat(walletData?.pendingTokens || "0");
+  const authority = workerAuthority?.authority;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 p-4 md:p-8">
@@ -173,6 +195,79 @@ export default function EmployeeDashboard() {
                 {dashboardSettings.showReviews ? <Eye className="h-4 w-4 mr-1" /> : <EyeOff className="h-4 w-4 mr-1" />}
                 Customer Reviews
               </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-slate-900/80 border-blue-500/30" data-testid="card-work-hub">
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <CardTitle className="text-xl text-white flex items-center gap-2">
+                  <Briefcase className="h-5 w-5 text-blue-400" />
+                  Work Hub
+                </CardTitle>
+                <CardDescription>
+                  One place to post leads, build quotes, review approvals, and work current jobs.
+                </CardDescription>
+              </div>
+              <Badge className="w-fit uppercase tracking-wide bg-blue-600/20 text-blue-200 border border-blue-500/40">
+                {authority?.tier || "worker"}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <Link href="/book?mode=quick&worker=1">
+                <Button variant="outline" className="w-full h-auto justify-start p-4 border-slate-700 bg-slate-950/40" disabled={authority ? !authority.canPostLead : false}>
+                  <UserPlus className="h-5 w-5 mr-3 text-emerald-400" />
+                  <span className="text-left">
+                    <span className="block font-bold">Post quick lead</span>
+                    <span className="block text-xs text-slate-400">Bronze: name, phone, service, notes/photos</span>
+                  </span>
+                </Button>
+              </Link>
+              <Link href="/book?mode=builder&worker=1">
+                <Button variant="outline" className="w-full h-auto justify-start p-4 border-slate-700 bg-slate-950/40" disabled={authority ? !authority.canBuildQuote : false}>
+                  <FileText className="h-5 w-5 mr-3 text-orange-400" />
+                  <span className="text-left">
+                    <span className="block font-bold">Build quote</span>
+                    <span className="block text-xs text-slate-400">Silver: walk customer through details</span>
+                  </span>
+                </Button>
+              </Link>
+              <Link href={authority?.canApproveQuote ? "/admin/quote-review" : "/employee/dashboard"}>
+                <Button variant="outline" className="w-full h-auto justify-start p-4 border-slate-700 bg-slate-950/40" disabled={authority ? !authority.canApproveQuote : false}>
+                  <ShieldCheck className="h-5 w-5 mr-3 text-yellow-400" />
+                  <span className="text-left">
+                    <span className="block font-bold">Approve quotes</span>
+                    <span className="block text-xs text-slate-400">Gold votes or Platinum/Darrell approval</span>
+                  </span>
+                </Button>
+              </Link>
+              <Link href="/crew/jobs">
+                <Button variant="outline" className="w-full h-auto justify-start p-4 border-slate-700 bg-slate-950/40">
+                  <Target className="h-5 w-5 mr-3 text-blue-400" />
+                  <span className="text-left">
+                    <span className="block font-bold">Work jobs</span>
+                    <span className="block text-xs text-slate-400">Accept, start, and complete assigned work</span>
+                  </span>
+                </Button>
+              </Link>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+              <div className="rounded-xl border border-slate-700 bg-slate-950/40 p-3">
+                <p className="text-slate-400 text-xs uppercase tracking-wide">Promo / referral</p>
+                <p className="text-white font-bold">{authority?.promoCode || "Assigned by admin"}</p>
+              </div>
+              <div className="rounded-xl border border-slate-700 bg-slate-950/40 p-3">
+                <p className="text-slate-400 text-xs uppercase tracking-wide">Leads posted</p>
+                <p className="text-white font-bold">{authority?.leadsPostedCount ?? 0}</p>
+              </div>
+              <div className="rounded-xl border border-slate-700 bg-slate-950/40 p-3">
+                <p className="text-slate-400 text-xs uppercase tracking-wide">Gold progress</p>
+                <p className="text-white font-bold">{authority?.silverCompletedJobsCount ?? 0} / 100 completed</p>
+              </div>
             </div>
           </CardContent>
         </Card>

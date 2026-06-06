@@ -5,6 +5,7 @@ import path from "path";
 import fs from "fs";
 import cors from "cors";
 import type { InsertRewardItem } from "@shared/schema";
+import { assertRequiredEnvOrExit } from "./services/envValidation";
 
 function log(message: string) {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -32,6 +33,8 @@ process.on("unhandledRejection", (reason) => {
   process.exit(1);
 });
 
+assertRequiredEnvOrExit();
+
 const app = express();
 
 app.set("trust proxy", 1);
@@ -48,7 +51,13 @@ app.get("/health", (_req, res) => {
   });
 });
 
-// CORS configuration for mobile app
+// CORS configuration for web and mobile clients.
+const configuredOrigins = [
+  process.env.APP_URL,
+  process.env.PUBLIC_APP_URL,
+  process.env.VITE_API_BASE_URL,
+].filter(Boolean) as string[];
+
 const allowedOrigins = [
   'https://jconthemove.com',
   'https://www.jconthemove.com',
@@ -56,6 +65,7 @@ const allowedOrigins = [
   'http://localhost',
   'http://localhost:5000',
   'http://localhost:8100',
+  ...configuredOrigins,
 ];
 
 app.use(cors({
@@ -65,7 +75,10 @@ app.use(cors({
     if (allowedOrigins.some((allowed) => origin.startsWith(allowed))) {
       return callback(null, true);
     }
-    return callback(null, true); // Allow all for now to debug
+    if (process.env.NODE_ENV !== "production") {
+      return callback(null, true);
+    }
+    return callback(new Error(`CORS origin not allowed: ${origin}`));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -137,10 +150,6 @@ server.listen(port, '0.0.0.0', () => {
 
 (async () => {
   try {
-    // Task #175 — Refuse to boot when required payment env vars are missing.
-    const { assertPaymentEnvOrExit } = await import('./services/envValidation');
-    assertPaymentEnvOrExit();
-
     // Task #175 — Self-healing payment columns on leads. Additive only;
     // safe to run on every boot.
     (async () => {

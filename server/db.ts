@@ -5,13 +5,19 @@ import * as schema from "@shared/schema";
 
 neonConfig.webSocketConstructor = ws;
 
-if (!process.env.DATABASE_URL) {
+const databaseUrl = process.env.DATABASE_URL || "postgres://postgres:postgres@localhost:5432/jconthemove";
+
+if (!process.env.DATABASE_URL && process.env.NODE_ENV === "production") {
   throw new Error(
     "DATABASE_URL must be set. Did you forget to provision a database?",
   );
 }
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+if (!process.env.DATABASE_URL) {
+  console.warn("[db] DATABASE_URL is not set; using local development default postgres://postgres:postgres@localhost:5432/jconthemove");
+}
+
+export const pool = new Pool({ connectionString: databaseUrl });
 
 pool.on('error', (err) => {
   console.error('Database pool error (connection will be replaced):', err.message);

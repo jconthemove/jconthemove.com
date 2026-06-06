@@ -1,22 +1,37 @@
-// Task #175 — Required env-var gate for payment surfaces.
-//
-// Called from server/index.ts before registerRoutes. Refuses to boot when
-// any required payment env var is missing so a fresh deploy can never
-// silently lose Square card flow or BTC verification.
+// Production env-var gates. Development stays permissive so local UI and
+// non-payment work can continue without every external credential present.
 
 interface EnvCheck {
   name: string;
   required: boolean;
-  /** Why we need it — printed in the error so the operator knows what to set. */
   purpose: string;
 }
 
+const CORE_ENV: EnvCheck[] = [
+  { name: "DATABASE_URL", required: true, purpose: "PostgreSQL database connection" },
+  { name: "SESSION_SECRET", required: true, purpose: "session cookies and JWT signing fallback" },
+];
+
 const PAYMENT_ENV: EnvCheck[] = [
-  { name: "SQUARE_ACCESS_TOKEN", required: true,  purpose: "Square card invoicing + customer search" },
-  { name: "SQUARE_ENVIRONMENT",  required: true,  purpose: "Square sandbox vs production switch" },
-  { name: "BTC_WALLET_ADDRESS",  required: false, purpose: "Bitcoin payment auto-verify sweep + customer pay-with-BTC display" },
-  { name: "TWILIO_ACCOUNT_SID",  required: false, purpose: "Square invoice SMS delivery + crew dispatch SMS" },
-  { name: "TWILIO_AUTH_TOKEN",   required: false, purpose: "Twilio API auth — paired with TWILIO_ACCOUNT_SID" },
+  { name: "SQUARE_ACCESS_TOKEN", required: true, purpose: "Square card invoicing + customer search" },
+  { name: "SQUARE_ENVIRONMENT", required: true, purpose: "Square sandbox vs production switch" },
+  { name: "BTC_WALLET_ADDRESS", required: false, purpose: "Bitcoin payment auto-verify sweep + customer pay-with-BTC display" },
+  { name: "ADMIN_EMAIL", required: false, purpose: "admin quote/lead notification recipient; falls back to COMPANY_EMAIL" },
+  { name: "COMPANY_EMAIL", required: false, purpose: "company sender/recipient fallback for transactional email" },
+  { name: "GMAIL_USER", required: false, purpose: "Gmail sender address for free email notifications" },
+  { name: "GMAIL_APP_PASSWORD", required: false, purpose: "Gmail app password for SMTP email notifications" },
+  { name: "SENDGRID_API_KEY", required: false, purpose: "SendGrid fallback email delivery when Gmail OAuth is not configured" },
+  { name: "GOOGLE_OAUTH_CLIENT_ID", required: false, purpose: "Google login OAuth client ID" },
+  { name: "GOOGLE_OAUTH_CLIENT_SECRET", required: false, purpose: "Google login OAuth client secret" },
+  { name: "GOOGLE_OAUTH_REDIRECT_URI", required: false, purpose: "Google login callback URL; defaults to APP_URL/api/auth/google/callback" },
+  { name: "GOOGLE_APPLICATION_CREDENTIALS", required: false, purpose: "Google Cloud service-account file for object storage" },
+  { name: "GOOGLE_APPLICATION_CREDENTIALS_JSON", required: false, purpose: "Google Cloud service-account JSON for object storage" },
+  { name: "GOOGLE_CLOUD_PROJECT_ID", required: false, purpose: "Google Cloud project ID for storage" },
+  { name: "ADMIN_PHONE_NUMBER", required: false, purpose: "admin SMS notification recipient" },
+  { name: "TWILIO_ACCOUNT_SID", required: false, purpose: "Twilio SMS account for admin/crew notifications" },
+  { name: "TWILIO_AUTH_TOKEN", required: false, purpose: "Twilio API auth paired with TWILIO_ACCOUNT_SID" },
+  { name: "TWILIO_PHONE_NUMBER", required: false, purpose: "Twilio sender phone number; alternatively use TWILIO_MESSAGING_SERVICE_SID" },
+  { name: "TWILIO_MESSAGING_SERVICE_SID", required: false, purpose: "Twilio sender messaging service; alternatively use TWILIO_PHONE_NUMBER" },
 ];
 
 export interface EnvValidationResult {
@@ -26,13 +41,14 @@ export interface EnvValidationResult {
   details: Array<{ name: string; required: boolean; purpose: string; present: boolean }>;
 }
 
-export function validatePaymentEnv(): EnvValidationResult {
-  const details = PAYMENT_ENV.map((c) => {
-    const present = !!(process.env[c.name] && String(process.env[c.name]).trim());
-    return { ...c, present };
+function validateEnv(checks: EnvCheck[]): EnvValidationResult {
+  const details = checks.map((check) => {
+    const present = !!(process.env[check.name] && String(process.env[check.name]).trim());
+    return { ...check, present };
   });
-  const missingRequired = details.filter((d) => d.required && !d.present).map((d) => d.name);
-  const missingOptional = details.filter((d) => !d.required && !d.present).map((d) => d.name);
+  const missingRequired = details.filter((detail) => detail.required && !detail.present).map((detail) => detail.name);
+  const missingOptional = details.filter((detail) => !detail.required && !detail.present).map((detail) => detail.name);
+
   return {
     ok: missingRequired.length === 0,
     missingRequired,
@@ -41,30 +57,39 @@ export function validatePaymentEnv(): EnvValidationResult {
   };
 }
 
-/**
- * Call from server/index.ts. Logs every check, lists what's missing, and
- * warns when any REQUIRED var is unset. Strict readiness checks surface the
- * missing configuration without preventing platform liveness probes from
- * reaching the app.
- */
-export function assertPaymentEnvOrExit(): void {
+export function validatePaymentEnv(): EnvValidationResult {
+  return validateEnv(PAYMENT_ENV);
+}
+
+export function validateRequiredEnv(): EnvValidationResult {
+  return validateEnv([...CORE_ENV, ...PAYMENT_ENV]);
+}
+
+export function assertRequiredEnvOrExit(): void {
+  const result = validateRequiredEnv();
+
   if (process.env.NODE_ENV !== "production") {
-    console.log("[env-check] non-production environment detected; payment env vars are optional for local development.");
+    const missing = result.details.filter((detail) => !detail.present);
+    if (missing.length > 0) {
+      console.warn("[env-check] non-production environment detected; missing env vars are allowed for local development:");
+      for (const detail of missing) {
+        console.warn(`  - ${detail.name} (${detail.required ? "production required" : "optional"}) - ${detail.purpose}`);
+      }
+    }
     return;
   }
 
-  const result = validatePaymentEnv();
-  // eslint-disable-next-line no-console
-  console.log("[env-check] payment surface env vars:");
-  for (const d of result.details) {
-    const tag = d.present ? "✅" : (d.required ? "❌" : "⚠️ ");
-    // eslint-disable-next-line no-console
-    console.log(`  ${tag} ${d.name} (${d.required ? "required" : "optional"}) — ${d.purpose}`);
+  console.log("[env-check] production env vars:");
+  for (const detail of result.details) {
+    const tag = detail.present ? "OK" : detail.required ? "MISSING" : "OPTIONAL";
+    console.log(`  ${tag} ${detail.name} (${detail.required ? "required" : "optional"}) - ${detail.purpose}`);
   }
+
   if (!result.ok) {
-    const list = result.missingRequired.map((n) => `  • ${n}`).join("\n");
-    const msg = `\n[env-check] payment features are not ready - missing required payment env vars:\n${list}\n\nSet these in your production environment and restart.`;
-    // eslint-disable-next-line no-console
-    console.warn(msg);
+    const list = result.missingRequired.map((name) => `  - ${name}`).join("\n");
+    console.error(`\n[env-check] production startup blocked; missing required env vars:\n${list}\n\nSet these in your production environment and restart.`);
+    process.exit(1);
   }
 }
+
+export const assertPaymentEnvOrExit = assertRequiredEnvOrExit;

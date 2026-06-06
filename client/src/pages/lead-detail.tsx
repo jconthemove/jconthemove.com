@@ -1515,8 +1515,23 @@ export default function LeadDetailPage() {
                   </div>
 
                   {/* Arrival window — time dropdown */}
+                  <div className="rounded-xl border border-sky-500/25 bg-sky-500/10 p-3">
+                    <div className="flex items-start gap-2">
+                      <RefreshCw className="h-4 w-4 text-sky-400 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-sm font-black text-sky-200">Schedule & Reschedule</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Update the date or start window any time, then save the plan.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
                   <div>
-                    <Label className="text-sm font-semibold mb-1 block">Arrival Window</Label>
+                    <Label className="text-sm font-semibold mb-1 flex items-center gap-1.5">
+                      <Clock className="h-3.5 w-3.5 text-sky-400" />
+                      Start Time / Arrival Window
+                    </Label>
                     <Select value={planArrivalWindow} onValueChange={setPlanArrivalWindow}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select arrival window" />
@@ -1538,7 +1553,10 @@ export default function LeadDetailPage() {
 
                   {/* Confirmed date — date picker */}
                   <div>
-                    <Label className="text-sm font-semibold mb-1 block">Confirmed Date</Label>
+                    <Label className="text-sm font-semibold mb-1 flex items-center gap-1.5">
+                      <Calendar className="h-3.5 w-3.5 text-sky-400" />
+                      Confirmed / Reschedule Date
+                    </Label>
                     <DatePicker
                       value={planConfirmedDate}
                       onChange={setPlanConfirmedDate}
@@ -1556,7 +1574,7 @@ export default function LeadDetailPage() {
                     ) : planApplied ? (
                       <><CheckCircle className="h-4 w-4 mr-2" /> Plan Saved!</>
                     ) : (
-                      <><CheckCircle className="h-4 w-4 mr-2" /> Apply Plan</>
+                      <><CheckCircle className="h-4 w-4 mr-2" /> Save Schedule & Plan</>
                     )}
                   </Button>
                 </CardContent>

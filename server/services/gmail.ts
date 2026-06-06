@@ -1,8 +1,19 @@
-// Gmail integration. Railway/production uses explicit OAuth env vars; the
-// Replit Google Mail connector remains as a fallback for old environments.
+// Gmail integration. Production uses explicit env vars only:
+// - GMAIL_USER + GMAIL_APP_PASSWORD for SMTP, or
+// - GMAIL_CLIENT_ID + GMAIL_CLIENT_SECRET + GMAIL_REFRESH_TOKEN for OAuth.
 import { google } from 'googleapis';
+import tls from 'tls';
 
-let connectionSettings: any;
+function getEnvGmailSmtpCredentials() {
+  const user = process.env.GMAIL_USER || process.env.COMPANY_EMAIL || process.env.FROM_EMAIL;
+  const appPassword = process.env.GMAIL_APP_PASSWORD || process.env.GOOGLE_APP_PASSWORD;
+
+  if (!user || !appPassword) {
+    return null;
+  }
+
+  return { user, appPassword };
+}
 
 function getEnvGmailCredentials() {
   const clientId = process.env.GMAIL_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
@@ -39,37 +50,7 @@ async function getAccessToken() {
     throw new Error('Gmail OAuth refresh token did not return an access token');
   }
 
-  if (connectionSettings && connectionSettings.settings.expires_at && new Date(connectionSettings.settings.expires_at).getTime() > Date.now()) {
-    return connectionSettings.settings.access_token;
-  }
-  
-  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
-  const xReplitToken = process.env.REPL_IDENTITY 
-    ? 'repl ' + process.env.REPL_IDENTITY 
-    : process.env.WEB_REPL_RENEWAL 
-    ? 'depl ' + process.env.WEB_REPL_RENEWAL 
-    : null;
-
-  if (!xReplitToken) {
-    throw new Error('X_REPLIT_TOKEN not found for repl/depl');
-  }
-
-  connectionSettings = await fetch(
-    'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=google-mail',
-    {
-      headers: {
-        'Accept': 'application/json',
-        'X_REPLIT_TOKEN': xReplitToken
-      }
-    }
-  ).then(res => res.json()).then(data => data.items?.[0]);
-
-  const accessToken = connectionSettings?.settings?.access_token || connectionSettings.settings?.oauth?.credentials?.access_token;
-
-  if (!connectionSettings || !accessToken) {
-    throw new Error('Gmail not connected');
-  }
-  return accessToken;
+  throw new Error('Gmail OAuth env vars are not configured');
 }
 
 async function getUncachableGmailClient() {
@@ -114,6 +95,126 @@ function buildRawEmail(to: string, from: string, subject: string, html?: string,
   return Buffer.from(rawMessage).toString('base64url');
 }
 
+function buildSmtpEmail(to: string, from: string, subject: string, html?: string, text?: string): string {
+  const boundary = 'boundary_' + Date.now();
+  const lines = [
+    `From: JC ON THE MOVE <${from}>`,
+    `To: ${to}`,
+    `Subject: ${encodeSubject(subject)}`,
+    'MIME-Version: 1.0',
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/plain; charset="UTF-8"',
+    '',
+    text || (html ? html.replace(/<[^>]*>/g, '') : ''),
+    `--${boundary}`,
+    'Content-Type: text/html; charset="UTF-8"',
+    '',
+    html || text || '',
+    `--${boundary}--`,
+    '',
+  ];
+
+  return lines.join('\r\n');
+}
+
+function escapeSmtpData(message: string): string {
+  return message
+    .split(/\r?\n/)
+    .map((line) => line.startsWith('.') ? `.${line}` : line)
+    .join('\r\n');
+}
+
+async function sendSmtpCommand(socket: tls.TLSSocket, command: string | null, expectedCodes: number[]): Promise<string> {
+  if (command !== null) {
+    socket.write(command + '\r\n');
+  }
+
+  return await new Promise((resolve, reject) => {
+    let buffer = '';
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error(`SMTP timeout waiting for ${expectedCodes.join('/')}`));
+    }, 20_000);
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      socket.off('data', onData);
+      socket.off('error', onError);
+    };
+
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+
+    const onData = (chunk: Buffer) => {
+      buffer += chunk.toString('utf8');
+      const lines = buffer.split(/\r?\n/).filter(Boolean);
+      const last = lines[lines.length - 1];
+      if (!last || !/^\d{3} /.test(last)) return;
+
+      const code = Number(last.slice(0, 3));
+      cleanup();
+      if (expectedCodes.includes(code)) {
+        resolve(buffer);
+      } else {
+        reject(new Error(`SMTP command failed. Expected ${expectedCodes.join('/')} but got: ${buffer.trim()}`));
+      }
+    };
+
+    socket.on('data', onData);
+    socket.on('error', onError);
+  });
+}
+
+async function sendGmailSmtpEmail(params: {
+  to: string;
+  from: string;
+  subject: string;
+  text?: string;
+  html?: string;
+}): Promise<boolean> {
+  const credentials = getEnvGmailSmtpCredentials();
+  if (!credentials) return false;
+
+  const socket = tls.connect({
+    host: process.env.GMAIL_SMTP_HOST || 'smtp.gmail.com',
+    port: Number(process.env.GMAIL_SMTP_PORT || 465),
+    servername: process.env.GMAIL_SMTP_HOST || 'smtp.gmail.com',
+  });
+
+  try {
+    await sendSmtpCommand(socket, null, [220]);
+    await sendSmtpCommand(socket, 'EHLO jconthemove.com', [250]);
+    await sendSmtpCommand(socket, 'AUTH LOGIN', [334]);
+    await sendSmtpCommand(socket, Buffer.from(credentials.user).toString('base64'), [334]);
+    await sendSmtpCommand(socket, Buffer.from(credentials.appPassword).toString('base64'), [235]);
+    await sendSmtpCommand(socket, `MAIL FROM:<${credentials.user}>`, [250]);
+    await sendSmtpCommand(socket, `RCPT TO:<${params.to}>`, [250, 251]);
+    await sendSmtpCommand(socket, 'DATA', [354]);
+
+    const raw = buildSmtpEmail(
+      params.to,
+      credentials.user,
+      params.subject,
+      params.html,
+      params.text,
+    );
+    await sendSmtpCommand(socket, `${escapeSmtpData(raw)}\r\n.`, [250]);
+    await sendSmtpCommand(socket, 'QUIT', [221]);
+
+    console.log(`Gmail SMTP: Email accepted from=${credentials.user} to=${params.to} subject="${params.subject}"`);
+    return true;
+  } catch (error: any) {
+    console.error('Gmail SMTP send error:', error?.message || error);
+    return false;
+  } finally {
+    socket.destroy();
+  }
+}
+
 export async function sendGmailEmail(params: {
   to: string;
   from: string;
@@ -121,6 +222,11 @@ export async function sendGmailEmail(params: {
   text?: string;
   html?: string;
 }): Promise<boolean> {
+  const smtpCredentials = getEnvGmailSmtpCredentials();
+  if (smtpCredentials) {
+    return sendGmailSmtpEmail(params);
+  }
+
   try {
     const gmail = await getUncachableGmailClient();
     const envCredentials = getEnvGmailCredentials();
@@ -145,6 +251,7 @@ export async function sendGmailEmail(params: {
 
 export async function isGmailAvailable(): Promise<boolean> {
   try {
+    if (getEnvGmailSmtpCredentials()) return true;
     if (getEnvGmailCredentials()) return true;
     await getAccessToken();
     return true;

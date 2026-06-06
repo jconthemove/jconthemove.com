@@ -783,7 +783,7 @@ function Router() {
       {/* Public site (original marketing page) */}
       <Route path="/home">{() => <PublicHomePage />}</Route>
 
-      {/* Public Authentication Routes - No Replit account needed! */}
+      {/* Public authentication routes */}
       <Route path="/employee-register" component={EmployeeRegister} />
       <Route path="/login" component={LoginPage} />
       <Route path="/employee-login" component={LoginPage} />
@@ -855,7 +855,7 @@ function Router() {
       <Route path="/admin/btc-payments" component={AdminBtcPaymentsPage} />
       <Route path="/staking" component={StakingPage} />
       <Route path="/admin/quote-review">
-        <RouteGuard allowedRoles={['admin', 'business_owner']}>
+        <RouteGuard allowedRoles={['admin', 'employee', 'business_owner']}>
           <AdminQuoteReviewPage />
         </RouteGuard>
       </Route>

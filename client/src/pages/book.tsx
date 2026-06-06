@@ -32,7 +32,7 @@ import {
   type CatalogService, type FeaturedBundle, type SelectedItem, type QuoteResult,
   emojiFor, schedulingModeFor,
   formatMovingFlowSummary, formatQuoteLinePrice, quoteLineForItem, quoteCrewSize,
-  formatReservedCrewSubline, PICKER_SPECIAL_ITEMS,
+  formatRequestedSchedule, PICKER_SPECIAL_ITEMS,
 } from "@/components/MultiBookingFlow";
 
 interface BundleSlots {
@@ -155,8 +155,15 @@ function itemNeedsAttention(item: SelectedItem): string | null {
     if (item.serviceCode === "moving" && /both|load \+ unload/i.test(item.details.loadType || "") && !item.details.dropoffAddress?.trim()) {
       return "Enter the drop-off address";
     }
-    if (!item.details.packageId) return "Pick a crew package";
+    const hasInventoryEstimate =
+      item.serviceCode === "moving" &&
+      !!item.details.inventoryItems?.length &&
+      !!item.details.inventoryCrewRecommendation &&
+      item.details.inventoryPriceMin != null &&
+      item.details.inventoryPriceMax != null;
+    if (!item.details.packageId && !hasInventoryEstimate) return "Pick a crew package";
     if (!item.details.requestedDate) return "Date required";
+    if (!item.details.requestedStartTime) return "Start time required";
     return null;
   }
   // Task #146 — Trash Valet runs as a recurring subscription, not a single
@@ -501,6 +508,10 @@ export default function MultiServiceBookPage() {
   >(null);
   const stepIndex = (s: Step) => STEPS.indexOf(s);
   const hasMovingService = useMemo(() => items.some((item) => item.serviceCode === "moving"), [items]);
+  const hasApprovalOnlyQuoteItems = useMemo(
+    () => items.some((item) => item.serviceCode === "moving" || item.serviceCode === "junk_removal"),
+    [items],
+  );
   const [bookingMode, setBookingMode] = useState<BookingMode>(() => {
     if (typeof window === "undefined") return "choose";
     const sp = new URLSearchParams(window.location.search);
@@ -945,6 +956,7 @@ export default function MultiServiceBookPage() {
     const subtotal = Number(c.quote?.subtotal ?? finalTotal);
     const discount = Number(c.quote?.discountTotal ?? c.discountTotal ?? 0);
     const crew = quoteCrewSize(c.quote, c.items);
+    const approvalOnlyConfirmation = c.items.some((item) => item.serviceCode === "moving" || item.serviceCode === "junk_removal");
     const trackUrl = c.customerEmail
       ? `/customer-login?intent=track&email=${encodeURIComponent(c.customerEmail)}`
       : "/customer-login?intent=track";
@@ -976,8 +988,6 @@ export default function MultiServiceBookPage() {
                 // Use index alignment so duplicate lines of the same service
                 // get their own quote subtotal and reserved-crew details.
                 const quoteLine = quoteLineForItem(c.quote, i, idx);
-                const laborMeta = quoteLine?.laborMeta;
-                const laborSubline = formatReservedCrewSubline(laborMeta);
                 const movingSummary = formatMovingFlowSummary(i);
                 const resolvedLineSubtotal = typeof quoteLine?.lineSubtotal === "number"
                   ? quoteLine.lineSubtotal
@@ -985,12 +995,7 @@ export default function MultiServiceBookPage() {
                 return (
                   <div key={i.serviceCode} className="flex justify-between gap-3 text-sm">
                     <span className="min-w-0">
-                      {emojiFor(i.serviceCode)} {i.label}{i.details.requestedDate ? ` • ${i.details.requestedDate}` : ""}
-                      {laborSubline && (
-                        <span className="block text-[10px] font-normal text-muted-foreground" data-testid={`confirm-line-labor-${i.serviceCode}`}>
-                          {laborSubline}
-                        </span>
-                      )}
+                      {emojiFor(i.serviceCode)} {i.label}{formatRequestedSchedule(i.details) ? ` • ${formatRequestedSchedule(i.details)}` : ""}
                       {movingSummary.length > 0 && (
                         <span className="block text-[10px] font-normal text-muted-foreground" data-testid={`confirm-line-moving-${i.serviceCode}`}>
                           {movingSummary.join(" · ")}
@@ -998,41 +1003,51 @@ export default function MultiServiceBookPage() {
                       )}
                     </span>
                     <span className="font-semibold text-right whitespace-nowrap">
-                      {resolvedLineSubtotal !== null
+                      {approvalOnlyConfirmation
+                        ? "Quote review"
+                        : resolvedLineSubtotal !== null
                         ? `$${resolvedLineSubtotal.toFixed(2)}`
                         : fallbackLinePrice.text}
-                      {fallbackLinePrice.isEstimate && (
+                      {(approvalOnlyConfirmation || fallbackLinePrice.isEstimate) && (
                         <span className="block text-[10px] font-normal text-muted-foreground">estimate · crew confirms</span>
                       )}
                     </span>
                   </div>
                 );
               })}
-              {discount > 0 && c.quote.bundleApplied && (
+              {!approvalOnlyConfirmation && discount > 0 && c.quote.bundleApplied && (
                 <div className="flex justify-between text-sm text-emerald-500 pt-1 border-t border-border">
                   <span className="flex items-center gap-1"><Tag className="h-3 w-3" /> {c.quote.bundleApplied.name}</span>
                   <span>−${discount.toFixed(2)}</span>
                 </div>
               )}
-              <div className="flex justify-between text-base font-bold pt-2 border-t border-border">
+              {!approvalOnlyConfirmation && <div className="flex justify-between text-base font-bold pt-2 border-t border-border">
                 <span>Subtotal</span>
                 <span>${subtotal.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-lg font-black pt-1">
+              </div>}
+              {!approvalOnlyConfirmation && <div className="flex justify-between text-lg font-black pt-1">
                 <span>Total</span>
                 <span>${finalTotal.toFixed(2)}</span>
-              </div>
-              <div className="rounded-lg border border-orange-500/25 bg-orange-500/10 p-3 text-sm">
+              </div>}
+              {approvalOnlyConfirmation && (
+                <div className="rounded-lg border border-blue-500/25 bg-blue-500/10 p-3 text-sm">
+                  <p className="font-black text-blue-300">Quote being reviewed</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Your details are locked in. A specialist confirms the final quote before scheduling.
+                  </p>
+                </div>
+              )}
+              {!approvalOnlyConfirmation && <div className="rounded-lg border border-orange-500/25 bg-orange-500/10 p-3 text-sm">
                 <p className="font-black text-orange-500">
                   You earned {c.tokenEstimate.toLocaleString()} JCMOVES Rewards
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Redeem toward future moves, junk removal, and more.
                 </p>
-              </div>
+              </div>}
               <div className="flex justify-between text-xs text-muted-foreground">
                 {crew > 0 && <span><Users className="inline h-3 w-3" /> Crew reserved: {crew}</span>}
-                <span>Flat job estimate</span>
+                <span>{approvalOnlyConfirmation ? "Specialist confirmation" : "Flat job estimate"}</span>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -1477,23 +1492,17 @@ export default function MultiServiceBookPage() {
                   <div className="space-y-1.5">
                     {items.map((i, idx) => {
                       const linePrice = formatQuoteLinePrice(quote, i, idx, { fractionDigits: 2 });
+                      const approvalOnlyLine = i.serviceCode === "moving" || i.serviceCode === "junk_removal";
                       // Use index alignment so duplicate lines of the same
                       // service get their own quote subtotal and crew details.
                       const quoteLine = quoteLineForItem(quote, i, idx);
-                      const laborMeta = quoteLine?.laborMeta;
-                      const laborSubline = formatReservedCrewSubline(laborMeta);
                       const movingSummary = formatMovingFlowSummary(i);
                       return (
                         <div key={i.serviceCode} className="flex justify-between text-sm">
                           <span className="min-w-0 pr-2">
                             {emojiFor(i.serviceCode)} {i.label}
-                            {i.details.requestedDate ? ` · ${i.details.requestedDate}` : i.details.callToSchedule ? " · we'll call" : ""}
+                            {formatRequestedSchedule(i.details) ? ` · ${formatRequestedSchedule(i.details)}` : i.details.callToSchedule ? " · we'll call" : ""}
                             {i.details.frequency ? ` · ${i.details.frequency}` : ""}
-                            {laborSubline && (
-                              <span className="block text-[10px] font-normal text-muted-foreground" data-testid={`review-line-labor-${i.serviceCode}`}>
-                                {laborSubline}
-                              </span>
-                            )}
                             {movingSummary.length > 0 && (
                               <span className="block text-[10px] font-normal text-muted-foreground" data-testid={`review-line-moving-${i.serviceCode}`}>
                                 {movingSummary.join(" · ")}
@@ -1501,8 +1510,8 @@ export default function MultiServiceBookPage() {
                             )}
                           </span>
                           <span className="font-semibold whitespace-nowrap text-right">
-                            {linePrice.text}
-                            {linePrice.isEstimate && (
+                            {approvalOnlyLine ? "Quote review" : linePrice.text}
+                            {(approvalOnlyLine || linePrice.isEstimate) && (
                               <span className="block text-[10px] font-normal text-muted-foreground">estimate · crew confirms</span>
                             )}
                           </span>
@@ -1511,7 +1520,7 @@ export default function MultiServiceBookPage() {
                     })}
                   </div>
                 </div>
-                {quote && (
+                {quote && !hasApprovalOnlyQuoteItems && (
                   <div className="border-t border-border pt-3 space-y-1">
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Subtotal</span>
@@ -1540,10 +1549,20 @@ export default function MultiServiceBookPage() {
                     </p>
                   </div>
                 )}
+                {hasApprovalOnlyQuoteItems && (
+                  <div className="border-t border-border pt-3">
+                    <div className="rounded-xl border border-blue-500/25 bg-blue-500/10 p-3">
+                      <p className="text-sm font-black text-blue-300">Quote being reviewed</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        We saved the inventory and scheduling details. A specialist confirms the final price before scheduling.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Task #181 — Wallet & JCMOVES token redemption */}
-              {user && walletData && (() => {
+              {user && walletData && !hasApprovalOnlyQuoteItems && (() => {
                 const subtotalForCap = quote?.subtotal ?? 0;
                 const tierCap = subtotalForCap > 0
                   ? maxTokensForSubtotal(subtotalForCap, customerTier)
@@ -1649,7 +1668,7 @@ export default function MultiServiceBookPage() {
           isQuoting={quoteMutation.isPending}
           onCheckout={() => { /* unused in wizard mode */ }}
           canCheckout={items.length > 0}
-          showPricing={step === "review"}
+          showPricing={step === "review" && !hasApprovalOnlyQuoteItems}
           bottomSlot={wizardNav}
         />
       </div>

@@ -30,25 +30,54 @@ Set these before running `npm start` in production:
 - `SQUARE_ACCESS_TOKEN`
 - `SQUARE_ENVIRONMENT` (`sandbox` or `production`)
 
-> In production, startup intentionally fails fast when required payment env vars are missing.
+> In production, startup intentionally fails fast when any required env var is missing.
 
 ### Optional in development
 
-In development (`npm run dev`), payment env vars are optional so local work can continue without live payment credentials.
+In development (`npm run dev`), these env vars are optional at startup so local UI and non-payment work can continue without live production credentials. Database-backed routes still need a reachable PostgreSQL database once they are used.
 
 ### Optional feature env vars
 
 Set these only if those features are enabled in your environment:
 
 - `BTC_WALLET_ADDRESS`
+- `ADMIN_EMAIL` or `NOTIFICATION_EMAIL` (admin quote/lead alert recipient)
+- `COMPANY_EMAIL` or `FROM_EMAIL` (verified sender address for transactional email)
+- `GMAIL_USER` and `GMAIL_APP_PASSWORD` for Gmail SMTP notifications
+- `GOOGLE_OAUTH_CLIENT_ID`
+- `GOOGLE_OAUTH_CLIENT_SECRET`
+- `GOOGLE_OAUTH_REDIRECT_URI` (usually `https://your-domain.com/api/auth/google/callback`)
+- `GOOGLE_APPLICATION_CREDENTIALS` or `GOOGLE_APPLICATION_CREDENTIALS_JSON` if using Google Cloud Storage uploads
+- `GOOGLE_CLOUD_PROJECT_ID` if using Google Cloud Storage
 - `TWILIO_ACCOUNT_SID`
 - `TWILIO_AUTH_TOKEN`
+- `TWILIO_PHONE_NUMBER` or `TWILIO_MESSAGING_SERVICE_SID`
+- `ADMIN_PHONE_NUMBER`
 - `SENDGRID_API_KEY`
-- `COMPANY_EMAIL`
+- Gmail OAuth env vars (`GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`, `GMAIL_USER`) if using OAuth instead of a Gmail app password
+- `VITE_API_BASE_URL` (required for native/Capacitor builds that cannot use same-origin API calls)
 - `VITE_SOLANA_RPC_URL`
 - `TREASURY_WALLET_PRIVATE_KEY`
 - `TREASURY_WALLET_PUBLIC_KEY`
 - `MOONSHOT_TOKEN_ADDRESS`
+
+### Google login setup
+
+Create an OAuth Web Client in Google Cloud Console and add this authorized redirect URI:
+
+```text
+https://your-domain.com/api/auth/google/callback
+```
+
+Then set:
+
+```bash
+GOOGLE_OAUTH_CLIENT_ID=...
+GOOGLE_OAUTH_CLIENT_SECRET=...
+GOOGLE_OAUTH_REDIRECT_URI=https://your-domain.com/api/auth/google/callback
+```
+
+Google login creates/reuses local `users` records. Roles and approval status stay in your database, so existing admins, crew, and customers keep their current access.
 
 ---
 
@@ -154,7 +183,7 @@ npm ci
 ```
 
 ### App refuses to boot in production
-Check startup logs for missing required env vars (`SQUARE_ACCESS_TOKEN`, `SQUARE_ENVIRONMENT`, etc.) and set them in your host environment.
+Check startup logs for missing required env vars (`DATABASE_URL`, `SESSION_SECRET`, `SQUARE_ACCESS_TOKEN`, `SQUARE_ENVIRONMENT`, etc.) and set them in your host environment.
 
 ### App boots but no DB connectivity
 Validate `DATABASE_URL`, DB firewall/security groups, and SSL requirements for your provider.

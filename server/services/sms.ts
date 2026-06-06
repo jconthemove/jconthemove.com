@@ -1,51 +1,4 @@
-import twilio from 'twilio';
-
-let connectionSettings: any;
-
-async function getCredentials() {
-  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
-  const xReplitToken = process.env.REPL_IDENTITY 
-    ? 'repl ' + process.env.REPL_IDENTITY 
-    : process.env.WEB_REPL_RENEWAL 
-    ? 'depl ' + process.env.WEB_REPL_RENEWAL 
-    : null;
-
-  if (!xReplitToken) {
-    throw new Error('X_REPLIT_TOKEN not found for repl/depl');
-  }
-
-  connectionSettings = await fetch(
-    'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=twilio',
-    {
-      headers: {
-        'Accept': 'application/json',
-        'X_REPLIT_TOKEN': xReplitToken
-      }
-    }
-  ).then(res => res.json()).then(data => data.items?.[0]);
-
-  if (!connectionSettings || (!connectionSettings.settings.account_sid || !connectionSettings.settings.api_key || !connectionSettings.settings.api_key_secret)) {
-    throw new Error('Twilio not connected');
-  }
-  return {
-    accountSid: connectionSettings.settings.account_sid,
-    apiKey: connectionSettings.settings.api_key,
-    apiKeySecret: connectionSettings.settings.api_key_secret,
-    phoneNumber: connectionSettings.settings.phone_number
-  };
-}
-
-async function getTwilioClient() {
-  const { accountSid, apiKey, apiKeySecret } = await getCredentials();
-  return twilio(apiKey, apiKeySecret, {
-    accountSid: accountSid
-  });
-}
-
-async function getTwilioFromPhoneNumber() {
-  const { phoneNumber } = await getCredentials();
-  return phoneNumber;
-}
+import twilio from "twilio";
 
 export interface SMSResult {
   success: boolean;
@@ -53,21 +6,55 @@ export interface SMSResult {
   error?: string;
 }
 
+const ADMIN_PHONE = process.env.ADMIN_PHONE_NUMBER;
+const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
+const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+const TWILIO_API_KEY = process.env.TWILIO_API_KEY;
+const TWILIO_API_KEY_SECRET = process.env.TWILIO_API_KEY_SECRET;
+const TWILIO_FROM_NUMBER = process.env.TWILIO_PHONE_NUMBER || process.env.TWILIO_FROM_NUMBER;
+const TWILIO_MESSAGING_SERVICE_SID = process.env.TWILIO_MESSAGING_SERVICE_SID;
+
 function formatPhoneNumber(phone: string): string {
-  const digits = phone.replace(/\D/g, '');
-  if (digits.startsWith('1') && digits.length === 11) {
-    return '+' + digits;
+  const digits = phone.replace(/\D/g, "");
+  if (digits.startsWith("1") && digits.length === 11) {
+    return `+${digits}`;
   }
   if (digits.length === 10) {
-    return '+1' + digits;
+    return `+1${digits}`;
   }
-  if (phone.startsWith('+')) {
+  if (phone.startsWith("+")) {
     return phone;
   }
-  return '+1' + digits;
+  return `+1${digits}`;
 }
 
-const ADMIN_PHONE = process.env.ADMIN_PHONE_NUMBER;
+function getTwilioClient() {
+  if (!TWILIO_ACCOUNT_SID) {
+    throw new Error("TWILIO_ACCOUNT_SID is not configured");
+  }
+
+  if (TWILIO_API_KEY && TWILIO_API_KEY_SECRET) {
+    return twilio(TWILIO_API_KEY, TWILIO_API_KEY_SECRET, {
+      accountSid: TWILIO_ACCOUNT_SID,
+    });
+  }
+
+  if (!TWILIO_AUTH_TOKEN) {
+    throw new Error("TWILIO_AUTH_TOKEN is not configured");
+  }
+
+  return twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
+}
+
+function senderPayload() {
+  if (TWILIO_MESSAGING_SERVICE_SID) {
+    return { messagingServiceSid: TWILIO_MESSAGING_SERVICE_SID };
+  }
+  if (TWILIO_FROM_NUMBER) {
+    return { from: TWILIO_FROM_NUMBER };
+  }
+  throw new Error("TWILIO_PHONE_NUMBER or TWILIO_MESSAGING_SERVICE_SID is not configured");
+}
 
 export class SMSService {
   private initialized = false;
@@ -75,38 +62,35 @@ export class SMSService {
 
   async initialize(): Promise<boolean> {
     try {
-      await getTwilioClient();
+      getTwilioClient();
+      senderPayload();
       this.initialized = true;
-      console.log('✅ Twilio SMS service initialized successfully');
+      this.initError = null;
+      console.log("[sms] Twilio SMS service initialized successfully");
       return true;
     } catch (error) {
-      this.initError = error instanceof Error ? error.message : 'Unknown error';
-      console.warn(`⚠️ SMS service not available: ${this.initError}`);
+      this.initialized = false;
+      this.initError = error instanceof Error ? error.message : "Unknown error";
+      console.warn(`[sms] SMS service not available: ${this.initError}`);
       return false;
     }
   }
 
   async sendSMS(to: string, message: string): Promise<SMSResult> {
     try {
-      const client = await getTwilioClient();
-      const fromNumber = await getTwilioFromPhoneNumber();
-
-      if (!fromNumber) {
-        return { success: false, error: 'No Twilio phone number configured' };
-      }
-
+      const client = getTwilioClient();
       const formattedTo = formatPhoneNumber(to);
       const result = await client.messages.create({
         body: message,
-        from: fromNumber,
-        to: formattedTo
+        to: formattedTo,
+        ...senderPayload(),
       });
 
-      console.log(`📱 SMS sent to ${to}: ${result.sid}`);
+      console.log(`[sms] SMS sent to ${to}: ${result.sid}`);
       return { success: true, messageSid: result.sid };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown SMS error';
-      console.error(`❌ SMS failed to ${to}:`, errorMessage);
+      const errorMessage = error instanceof Error ? error.message : "Unknown SMS error";
+      console.error(`[sms] SMS failed to ${to}:`, errorMessage);
       return { success: false, error: errorMessage };
     }
   }
@@ -118,12 +102,11 @@ export class SMSService {
     moveDate?: string;
   }): Promise<SMSResult> {
     if (!ADMIN_PHONE) {
-      console.warn('ADMIN_PHONE_NUMBER not set, skipping SMS notification');
-      return { success: false, error: 'Admin phone number not configured' };
+      console.warn("[sms] ADMIN_PHONE_NUMBER not set, skipping SMS notification");
+      return { success: false, error: "Admin phone number not configured" };
     }
 
-    const message = `🚚 NEW QUOTE REQUEST\n\nCustomer: ${leadData.customerName}\nService: ${leadData.serviceType}\nPhone: ${leadData.phone || 'Not provided'}\nMove Date: ${leadData.moveDate || 'Not specified'}\n\nCheck the dashboard for details.`;
-
+    const message = `NEW QUOTE REQUEST\n\nCustomer: ${leadData.customerName}\nService: ${leadData.serviceType}\nPhone: ${leadData.phone || "Not provided"}\nMove Date: ${leadData.moveDate || "Not specified"}\n\nCheck the dashboard for details.`;
     return this.sendSMS(ADMIN_PHONE, message);
   }
 
@@ -133,12 +116,11 @@ export class SMSService {
     completedBy?: string;
   }): Promise<SMSResult> {
     if (!ADMIN_PHONE) {
-      console.warn('ADMIN_PHONE_NUMBER not set, skipping SMS notification');
-      return { success: false, error: 'Admin phone number not configured' };
+      console.warn("[sms] ADMIN_PHONE_NUMBER not set, skipping SMS notification");
+      return { success: false, error: "Admin phone number not configured" };
     }
 
-    const message = `✅ JOB COMPLETED\n\nCustomer: ${jobData.customerName}\nService: ${jobData.serviceType}${jobData.completedBy ? `\nCompleted by: ${jobData.completedBy}` : ''}\n\nJob marked as complete.`;
-
+    const message = `JOB COMPLETED\n\nCustomer: ${jobData.customerName}\nService: ${jobData.serviceType}${jobData.completedBy ? `\nCompleted by: ${jobData.completedBy}` : ""}\n\nJob marked as complete.`;
     return this.sendSMS(ADMIN_PHONE, message);
   }
 
@@ -148,8 +130,7 @@ export class SMSService {
     moveDate?: string;
     tokensReward?: number;
   }): Promise<SMSResult> {
-    const message = `🚚 NEW JOB AVAILABLE\n\nCustomer: ${jobData.customerName}\nService: ${jobData.serviceType}\nDate: ${jobData.moveDate || 'TBD'}${jobData.tokensReward ? `\nReward: ${jobData.tokensReward.toLocaleString()} JCMOVES` : ''}\n\nOpen the app to claim this job!`;
-
+    const message = `NEW JOB AVAILABLE\n\nCustomer: ${jobData.customerName}\nService: ${jobData.serviceType}\nDate: ${jobData.moveDate || "TBD"}${jobData.tokensReward ? `\nReward: ${jobData.tokensReward.toLocaleString()} JCMOVES` : ""}\n\nOpen the app to claim this job.`;
     return this.sendSMS(employeePhone, message);
   }
 
@@ -160,12 +141,11 @@ export class SMSService {
     createdBy?: string;
   }): Promise<SMSResult> {
     if (!ADMIN_PHONE) {
-      console.warn('ADMIN_PHONE_NUMBER not set, skipping SMS notification');
-      return { success: false, error: 'Admin phone number not configured' };
+      console.warn("[sms] ADMIN_PHONE_NUMBER not set, skipping SMS notification");
+      return { success: false, error: "Admin phone number not configured" };
     }
 
-    const message = `📋 NEW LEAD CREATED\n\nCustomer: ${leadData.customerName}\nService: ${leadData.serviceType}\nPhone: ${leadData.phone || 'Not provided'}${leadData.createdBy ? `\nCreated by: ${leadData.createdBy}` : ''}\n\nCheck the dashboard to review.`;
-
+    const message = `NEW LEAD CREATED\n\nCustomer: ${leadData.customerName}\nService: ${leadData.serviceType}\nPhone: ${leadData.phone || "Not provided"}${leadData.createdBy ? `\nCreated by: ${leadData.createdBy}` : ""}\n\nCheck the dashboard to review.`;
     return this.sendSMS(ADMIN_PHONE, message);
   }
 

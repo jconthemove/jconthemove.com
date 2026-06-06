@@ -181,8 +181,7 @@ export const contacts = pgTable("contacts", {
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
 
-// Session storage table.
-// (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
+// Session storage table used by the local Express session store.
 export const sessions = pgTable(
   "sessions",
   {
@@ -193,13 +192,12 @@ export const sessions = pgTable(
   (table) => [index("IDX_session_expire").on(table.expire)],
 );
 
-// User storage table.
-// (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
+// User storage table used by local email/password and Google OAuth login.
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: varchar("email").unique(),
   username: varchar("username").unique(), // Optional unique username for display instead of email
-  passwordHash: varchar("password_hash"), // For employee email/password authentication (null for Replit Auth users)
+  passwordHash: varchar("password_hash"), // Null for Google OAuth-only users
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   phoneNumber: varchar("phone_number"), // Phone contact for employees/customers
@@ -248,6 +246,49 @@ export const notifications = pgTable("notifications", {
   read: boolean("read").default(false),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
+
+export const workerProfiles = pgTable("worker_profiles", {
+  userId: varchar("user_id").primaryKey().references(() => users.id),
+  authorityTier: text("authority_tier").notNull().default("worker"),
+  promoCode: varchar("promo_code").unique(),
+  leadsPostedCount: integer("leads_posted_count").notNull().default(0),
+  silverCompletedJobsCount: integer("silver_completed_jobs_count").notNull().default(0),
+  goldEligibleAt: timestamp("gold_eligible_at"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export const quoteApprovals = pgTable("quote_approvals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  leadId: varchar("lead_id").references(() => leads.id),
+  bookingId: varchar("booking_id"),
+  submittedByUserId: varchar("submitted_by_user_id").references(() => users.id),
+  approvedByUserId: varchar("approved_by_user_id").references(() => users.id),
+  approvalRole: text("approval_role").notNull().default("gold_vote"),
+  status: text("status").notNull().default("pending"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_quote_approvals_lead").on(table.leadId),
+  index("idx_quote_approvals_booking").on(table.bookingId),
+  index("idx_quote_approvals_status").on(table.status),
+]);
+
+export const quoteAttributions = pgTable("quote_attributions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  leadId: varchar("lead_id").references(() => leads.id),
+  bookingId: varchar("booking_id"),
+  userId: varchar("user_id").references(() => users.id),
+  attributionType: text("attribution_type").notNull(),
+  promoCode: text("promo_code"),
+  metadata: jsonb("metadata").default("{}"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_quote_attributions_lead").on(table.leadId),
+  index("idx_quote_attributions_booking").on(table.bookingId),
+  index("idx_quote_attributions_user").on(table.userId),
+]);
 
 // Rewards system tables
 export const rewards = pgTable("rewards", {
