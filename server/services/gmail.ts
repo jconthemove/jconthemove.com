@@ -17,8 +17,8 @@ function getEnvGmailSmtpCredentials() {
 }
 
 function getEnvGmailCredentials() {
-  const clientId = process.env.GMAIL_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GMAIL_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
+  const clientId = process.env.GMAIL_CLIENT_ID || process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GMAIL_CLIENT_SECRET || process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
   const refreshToken = process.env.GMAIL_REFRESH_TOKEN || process.env.GOOGLE_REFRESH_TOKEN;
   const user = process.env.GMAIL_USER || process.env.COMPANY_EMAIL || process.env.FROM_EMAIL;
 
@@ -253,6 +253,34 @@ async function sendGmailSmtpEmail(params: {
   }
 }
 
+async function sendGmailApiEmail(params: {
+  to: string;
+  from: string;
+  subject: string;
+  text?: string;
+  html?: string;
+}): Promise<boolean> {
+  try {
+    const gmail = await getUncachableGmailClient();
+    const envCredentials = getEnvGmailCredentials();
+    const configuredFrom = envCredentials?.user || params.from;
+    const profile = await gmail.users.getProfile({ userId: 'me' });
+    const from = profile.data.emailAddress || configuredFrom;
+    const raw = buildRawEmail(params.to, from, params.subject, params.html, params.text);
+
+    const response = await gmail.users.messages.send({
+      userId: 'me',
+      requestBody: { raw },
+    });
+
+    console.log(`Gmail API: Email accepted id=${response.data.id || 'unknown'} from=${from} to=${params.to} subject="${params.subject}"`);
+    return true;
+  } catch (error: any) {
+    console.error('Gmail API send error:', error?.message || error);
+    return false;
+  }
+}
+
 export async function sendGmailEmail(params: {
   to: string;
   from: string;
@@ -262,7 +290,15 @@ export async function sendGmailEmail(params: {
 }): Promise<boolean> {
   const smtpCredentials = getEnvGmailSmtpCredentials();
   if (smtpCredentials) {
-    return sendGmailSmtpEmail(params);
+    const sentBySmtp = await sendGmailSmtpEmail(params);
+    if (sentBySmtp) return true;
+
+    if (getEnvGmailCredentials()) {
+      console.warn('Gmail SMTP failed; trying Gmail API OAuth fallback...');
+      return sendGmailApiEmail(params);
+    }
+
+    return false;
   }
 
   try {
