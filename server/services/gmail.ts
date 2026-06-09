@@ -2,6 +2,7 @@
 // - GMAIL_USER + GMAIL_APP_PASSWORD for SMTP, or
 // - GMAIL_CLIENT_ID + GMAIL_CLIENT_SECRET + GMAIL_REFRESH_TOKEN for OAuth.
 import { google } from 'googleapis';
+import net from 'net';
 import tls from 'tls';
 
 function getEnvGmailSmtpCredentials() {
@@ -126,7 +127,9 @@ function escapeSmtpData(message: string): string {
     .join('\r\n');
 }
 
-async function sendSmtpCommand(socket: tls.TLSSocket, command: string | null, expectedCodes: number[]): Promise<string> {
+type SmtpSocket = net.Socket | tls.TLSSocket;
+
+async function sendSmtpCommand(socket: SmtpSocket, command: string | null, expectedCodes: number[]): Promise<string> {
   if (command !== null) {
     socket.write(command + '\r\n');
   }
@@ -169,6 +172,44 @@ async function sendSmtpCommand(socket: tls.TLSSocket, command: string | null, ex
   });
 }
 
+async function connectSmtpSocket(host: string, port: number): Promise<SmtpSocket> {
+  if (port === 587) {
+    const plainSocket = net.connect({ host, port });
+    await sendSmtpCommand(plainSocket, null, [220]);
+    await sendSmtpCommand(plainSocket, 'EHLO jconthemove.com', [250]);
+    await sendSmtpCommand(plainSocket, 'STARTTLS', [220]);
+
+    const secureSocket = tls.connect({
+      socket: plainSocket,
+      servername: host,
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('SMTP STARTTLS handshake timeout')), 20_000);
+      secureSocket.once('secureConnect', () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+      secureSocket.once('error', (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+    });
+
+    await sendSmtpCommand(secureSocket, 'EHLO jconthemove.com', [250]);
+    return secureSocket;
+  }
+
+  const secureSocket = tls.connect({
+    host,
+    port,
+    servername: host,
+  });
+  await sendSmtpCommand(secureSocket, null, [220]);
+  await sendSmtpCommand(secureSocket, 'EHLO jconthemove.com', [250]);
+  return secureSocket;
+}
+
 async function sendGmailSmtpEmail(params: {
   to: string;
   from: string;
@@ -179,15 +220,12 @@ async function sendGmailSmtpEmail(params: {
   const credentials = getEnvGmailSmtpCredentials();
   if (!credentials) return false;
 
-  const socket = tls.connect({
-    host: process.env.GMAIL_SMTP_HOST || 'smtp.gmail.com',
-    port: Number(process.env.GMAIL_SMTP_PORT || 465),
-    servername: process.env.GMAIL_SMTP_HOST || 'smtp.gmail.com',
-  });
+  const host = process.env.GMAIL_SMTP_HOST || 'smtp.gmail.com';
+  const port = Number(process.env.GMAIL_SMTP_PORT || 465);
+  let socket: SmtpSocket | null = null;
 
   try {
-    await sendSmtpCommand(socket, null, [220]);
-    await sendSmtpCommand(socket, 'EHLO jconthemove.com', [250]);
+    socket = await connectSmtpSocket(host, port);
     await sendSmtpCommand(socket, 'AUTH LOGIN', [334]);
     await sendSmtpCommand(socket, Buffer.from(credentials.user).toString('base64'), [334]);
     await sendSmtpCommand(socket, Buffer.from(credentials.appPassword).toString('base64'), [235]);
@@ -211,7 +249,7 @@ async function sendGmailSmtpEmail(params: {
     console.error('Gmail SMTP send error:', error?.message || error);
     return false;
   } finally {
-    socket.destroy();
+    socket?.destroy();
   }
 }
 
