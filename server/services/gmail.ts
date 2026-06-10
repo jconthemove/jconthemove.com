@@ -269,8 +269,7 @@ async function sendGmailApiEmail(params: {
     const gmail = await getUncachableGmailClient();
     const envCredentials = getEnvGmailCredentials();
     const configuredFrom = envCredentials?.user || params.from;
-    const profile = await gmail.users.getProfile({ userId: 'me' });
-    const from = profile.data.emailAddress || configuredFrom;
+    const from = configuredFrom;
     const raw = buildRawEmail(params.to, from, params.subject, params.html, params.text);
 
     const response = await gmail.users.messages.send({
@@ -318,8 +317,7 @@ export async function sendGmailEmail(params: {
     const gmail = await getUncachableGmailClient();
     const envCredentials = getEnvGmailCredentials();
     const configuredFrom = envCredentials?.user || params.from;
-    const profile = await gmail.users.getProfile({ userId: 'me' });
-    const from = profile.data.emailAddress || configuredFrom;
+    const from = configuredFrom;
     const raw = buildRawEmail(params.to, from, params.subject, params.html, params.text);
     
     const response = await gmail.users.messages.send({
