@@ -1,0 +1,12 @@
+node_modules
+dist
+.git
+.local
+backups
+exports
+android
+*.log
+*.tar.gz
+android-base64.txt
+android-project.tar.gz
+jconthemove-android.tar.gz
