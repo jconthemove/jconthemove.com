@@ -4,6 +4,7 @@ import {
   LayoutDashboard, Radio, Briefcase, Users, Wallet, Sliders, ChevronRight, LogOut,
   Menu, X, ShoppingBag, Settings, Handshake, BarChart2, CalendarDays,
   Bitcoin, FileBarChart, CreditCard, Coins, Banknote, Rocket, AlertTriangle,
+  ClipboardList,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest, clearTokens, queryClient } from "@/lib/queryClient";
@@ -53,6 +54,7 @@ function LeadFunnelOutageBanner() {
 //   "Closet" = everything else, still reachable but tucked away.
 // Keep this list in sync with the routes wired in client/src/App.tsx.
 const DAILY = [
+  { label: "Ops Board", icon: ClipboardList, path: "/admin/ops-board" },
   { label: "Dispatch", icon: Radio, path: "/admin/dispatch" },
   { label: "Jobs", icon: Briefcase, path: "/admin/jobs" },
   { label: "Pricing", icon: Sliders, path: "/admin/pricing" },

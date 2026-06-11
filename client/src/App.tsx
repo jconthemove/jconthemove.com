@@ -107,6 +107,7 @@ const CrewJobsNewPage = lazy(() => import("@/pages/crew/jobs"));
 const CrewSchedulePage = lazy(() => import("@/pages/crew/schedule"));
 const CrewEarningsPage = lazy(() => import("@/pages/crew/earnings"));
 const AdminOverviewPage = lazy(() => import("@/pages/admin/overview"));
+const AdminOpsBoardPage = lazy(() => import("@/pages/admin/ops-board"));
 const AdminJobsPage = lazy(() => import("@/pages/admin/jobs"));
 const AdminPeoplePage = lazy(() => import("@/pages/admin/people"));
 const AdminFinancePage = lazy(() => import("@/pages/admin/finance"));
@@ -491,8 +492,9 @@ function AuthenticatedApp() {
           <NotificationPrompt />
           <AdminLayout>
             <Switch>
-              <Route path="/admin"><Redirect to="/admin/dispatch" /></Route>
+              <Route path="/admin"><Redirect to="/admin/ops-board" /></Route>
               <Route path="/admin/overview"><AdminOverviewPage /></Route>
+              <Route path="/admin/ops-board"><AdminOpsBoardPage /></Route>
               <Route path="/admin/dispatch"><AdminDispatchPage /></Route>
               <Route path="/admin/jobs"><AdminJobsPage /></Route>
               <Route path="/admin/people"><AdminPeoplePage /></Route>

@@ -1,0 +1,757 @@
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
+import {
+  Archive,
+  CalendarDays,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  DollarSign,
+  Filter,
+  Loader2,
+  MapPin,
+  Package,
+  Phone,
+  Search,
+  Sparkles,
+  Truck,
+  Users,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Textarea } from "@/components/ui/textarea";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import type { User } from "@shared/schema";
+
+type Lead = {
+  id: string;
+  orderNumber?: number | null;
+  firstName: string;
+  lastName: string;
+  email?: string | null;
+  phone?: string | null;
+  serviceType: string;
+  fromAddress?: string | null;
+  toAddress?: string | null;
+  moveDate?: string | null;
+  confirmedDate?: string | null;
+  arrivalWindow?: string | null;
+  crewSize?: number | null;
+  crewMembers?: string[] | null;
+  confirmedHours?: number | null;
+  status: string;
+  totalPrice?: string | number | null;
+  basePrice?: string | number | null;
+  details?: string | null;
+  quoteNotes?: string | null;
+  selectedPackageId?: string | null;
+  truckConfig?: string | null;
+  archivedAt?: string | null;
+  createdAt?: string | null;
+};
+
+type PackageOption = {
+  id: string;
+  name: string;
+  range: string;
+  base: number;
+  crewSize: number;
+  jobHours: number;
+  laborHours: string;
+  description: string;
+};
+
+const PACKAGES: PackageOption[] = [
+  {
+    id: "pkg_1_local_load_delivery",
+    name: "Package 1",
+    range: "$200-300",
+    base: 250,
+    crewSize: 2,
+    jobHours: 3,
+    laborHours: "4-6 labor hrs",
+    description: "Loading, unloading, or single item delivery local to Ironwood.",
+  },
+  {
+    id: "pkg_2_load_unload_big",
+    name: "Package 2",
+    range: "$300-450",
+    base: 375,
+    crewSize: 2,
+    jobHours: 4,
+    laborHours: "6-8 labor hrs",
+    description: "Loading and unloading, or a larger local job.",
+  },
+  {
+    id: "pkg_3_two_movers_day",
+    name: "Package 3",
+    range: "$1,100",
+    base: 1100,
+    crewSize: 2,
+    jobHours: 7,
+    laborHours: "14 labor hrs",
+    description: "Two movers for the day.",
+  },
+  {
+    id: "pkg_4_four_movers_day",
+    name: "Package 4",
+    range: "$1,900",
+    base: 1900,
+    crewSize: 4,
+    jobHours: 7,
+    laborHours: "28 labor hrs",
+    description: "Four movers for the day.",
+  },
+];
+
+const SERVICE_LABELS: Record<string, string> = {
+  moving: "Moving",
+  residential: "Residential Move",
+  commercial: "Commercial Move",
+  labor: "Labor",
+  delivery: "Delivery",
+  junk: "Junk Removal",
+  junk_removal: "Junk Removal",
+  cleaning: "Cleaning",
+  handyman: "Handyman",
+  window_cleaning: "Window Cleaning",
+  lawn_care: "Lawn Care",
+  snow_removal: "Snow Removal",
+};
+
+const SERVICE_ICON: Record<string, string> = {
+  moving: "MV",
+  residential: "MV",
+  commercial: "CO",
+  labor: "LB",
+  delivery: "DL",
+  junk: "JK",
+  junk_removal: "JK",
+  cleaning: "CL",
+  handyman: "HM",
+  window_cleaning: "WN",
+  lawn_care: "LC",
+  snow_removal: "SN",
+};
+
+const QUOTE_STACK_STATUSES = new Set(["new", "contacted", "quote_requested", "quoted", "chatbot_pending"]);
+const ASSIGNED_STATUSES = new Set(["available", "confirmed", "accepted", "in_progress", "completed"]);
+
+function formatMoney(value?: string | number | null) {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n) || n <= 0) return "Quote needed";
+  return `$${Math.round(n).toLocaleString()}`;
+}
+
+function formatOrder(lead: Lead) {
+  return lead.orderNumber ? `JC-${lead.orderNumber}` : "No order";
+}
+
+function dateOnly(value?: string | null) {
+  if (!value) return "";
+  return value.includes("T") ? value.slice(0, 10) : value;
+}
+
+function displayDate(value?: string | null) {
+  const key = dateOnly(value);
+  if (!key) return "Choose date";
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric", weekday: "short" });
+}
+
+function monthKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function getMonthDays(anchor: Date) {
+  const year = anchor.getFullYear();
+  const month = anchor.getMonth();
+  const first = new Date(year, month, 1);
+  const start = new Date(first);
+  start.setDate(1 - first.getDay());
+  return Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    return d;
+  });
+}
+
+function cityFrom(address?: string | null) {
+  if (!address) return "No address";
+  const parts = address.split(",").map((part) => part.trim()).filter(Boolean);
+  return parts.length >= 2 ? parts[parts.length - 2] : parts[0];
+}
+
+function isAssigned(lead: Lead) {
+  return ASSIGNED_STATUSES.has(lead.status) || !!dateOnly(lead.confirmedDate) || (lead.crewMembers?.length || 0) > 0;
+}
+
+function TradingJobCard({ lead, compact = false, onOpen }: { lead: Lead; compact?: boolean; onOpen: (lead: Lead) => void }) {
+  const crewCount = lead.crewMembers?.length || 0;
+  const needed = lead.crewSize || 2;
+  const service = SERVICE_LABELS[lead.serviceType] || lead.serviceType;
+  const date = lead.confirmedDate || lead.moveDate || null;
+
+  return (
+    <button
+      onClick={() => onOpen(lead)}
+      className={`group w-full text-left rounded-[8px] border border-slate-700 bg-slate-900 shadow-sm transition hover:border-blue-400/70 hover:bg-slate-800 ${
+        compact ? "p-2" : "p-3"
+      }`}
+    >
+      <div className="rounded-[6px] border border-slate-700 bg-gradient-to-br from-slate-950 to-slate-800 p-2">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="grid h-10 w-10 place-items-center rounded-[6px] bg-slate-800 text-xl ring-1 ring-slate-600">
+              {SERVICE_ICON[lead.serviceType] || "JOB"}
+            </div>
+            <div className="min-w-0">
+              <div className="text-[10px] uppercase tracking-wider text-slate-500">{formatOrder(lead)}</div>
+              <div className="truncate text-sm font-black text-white">{service}</div>
+            </div>
+          </div>
+          <Badge className="border-orange-400/30 bg-orange-500/15 text-orange-200">
+            {formatMoney(lead.totalPrice || lead.basePrice)}
+          </Badge>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+          <div className="rounded-[6px] bg-slate-950/70 p-2">
+            <div className="text-slate-500">Date</div>
+            <div className="font-semibold text-slate-100">{displayDate(date)}</div>
+          </div>
+          <div className="rounded-[6px] bg-slate-950/70 p-2">
+            <div className="text-slate-500">Crew</div>
+            <div className={crewCount >= needed ? "font-semibold text-green-300" : "font-semibold text-yellow-300"}>
+              {crewCount}/{needed} movers
+            </div>
+          </div>
+        </div>
+
+        {!compact && (
+          <>
+            <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
+              <Clock className="h-3.5 w-3.5" />
+              <span>{lead.confirmedHours ? `${lead.confirmedHours} hrs` : "Hours TBD"}</span>
+              <MapPin className="ml-1 h-3.5 w-3.5" />
+              <span className="truncate">{cityFrom(lead.fromAddress)}</span>
+            </div>
+            <p className="mt-2 line-clamp-2 min-h-[2.5rem] text-xs leading-5 text-slate-300">
+              {lead.details || lead.quoteNotes || "Open the fast quote drawer to choose package, crew, truck, and add-ons."}
+            </p>
+          </>
+        )}
+      </div>
+      <div className="mt-2 flex items-center justify-between px-1 text-[10px] uppercase tracking-wider text-slate-500">
+        <span>JC ON THE MOVE</span>
+        <span>{lead.status.replaceAll("_", " ")}</span>
+      </div>
+    </button>
+  );
+}
+
+function Stepper({ value, onChange, min = 0, max = 999 }: { value: number; onChange: (value: number) => void; min?: number; max?: number }) {
+  return (
+    <div className="flex items-center rounded-[8px] border border-slate-700 bg-slate-950">
+      <button className="h-9 w-9 text-slate-300 hover:text-white" onClick={() => onChange(Math.max(min, value - 1))}>-</button>
+      <div className="w-12 text-center text-sm font-bold text-white">{value}</div>
+      <button className="h-9 w-9 text-slate-300 hover:text-white" onClick={() => onChange(Math.min(max, value + 1))}>+</button>
+    </div>
+  );
+}
+
+function FastQuoteDrawer({ lead, employees, open, onClose }: { lead: Lead | null; employees: User[]; open: boolean; onClose: () => void }) {
+  const { toast } = useToast();
+  const [selectedPackageId, setSelectedPackageId] = useState(PACKAGES[0].id);
+  const [date, setDate] = useState("");
+  const [arrivalWindow, setArrivalWindow] = useState("Morning");
+  const [crewSize, setCrewSize] = useState(2);
+  const [crewMembers, setCrewMembers] = useState<string[]>([]);
+  const [travelMiles, setTravelMiles] = useState(0);
+  const [truck, setTruck] = useState<"none" | "15ft" | "26ft">("none");
+  const [truckMiles, setTruckMiles] = useState(0);
+  const [extraMovers, setExtraMovers] = useState(0);
+  const [blankets, setBlankets] = useState(false);
+  const [shrinkwrap, setShrinkwrap] = useState(false);
+  const [notes, setNotes] = useState("");
+  const [, setLocation] = useLocation();
+
+  const selectedPackage = PACKAGES.find((pkg) => pkg.id === selectedPackageId) || PACKAGES[0];
+  const truckBase = truck === "15ft" ? 500 : truck === "26ft" ? 1000 : 0;
+  const truckOverageMiles = truck === "none" ? 0 : Math.max(0, truckMiles - 50);
+  const truckOverage = truckOverageMiles * 5;
+  const travel = travelMiles * 5;
+  const addons = extraMovers * 500 + (blankets ? 99 : 0) + (shrinkwrap ? 99 : 0);
+  const total = selectedPackage.base + truckBase + truckOverage + travel + addons;
+
+  const convertMutation = useMutation({
+    mutationFn: async () => {
+      if (!lead) throw new Error("No lead selected");
+      if (!date) throw new Error("Choose a date first");
+      const quoteNotes = [
+        `${selectedPackage.name}: ${selectedPackage.description}`,
+        `Truck: ${truck === "none" ? "No rental truck" : truck === "15ft" ? "15 ft rental truck" : "26 ft rental truck"}`,
+        truck !== "none" ? `Truck mileage: ${truckMiles} miles, ${truckOverageMiles} over included 50 at $5/mile` : "",
+        travelMiles ? `Mover travel: ${travelMiles} miles at $5/mile` : "",
+        extraMovers ? `Extra movers: ${extraMovers}` : "",
+        blankets ? "We supply moving blankets: $99" : "",
+        shrinkwrap ? "We supply shrinkwrap: $99" : "",
+        notes.trim(),
+      ].filter(Boolean).join("\n");
+
+      const response = await apiRequest("POST", `/api/leads/${lead.id}/convert-to-job`, {
+        basePrice: selectedPackage.base,
+        totalPrice: total,
+        confirmedDate: date,
+        arrivalWindow,
+        crewSize,
+        crewMembers,
+        confirmedFromAddress: lead.fromAddress || "",
+        confirmedToAddress: lead.toAddress || "",
+        quoteNotes,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      toast({ title: "Job quoted", description: `${formatOrder(lead!)} is now on the assigned board.` });
+      onClose();
+    },
+    onError: (error: Error) => {
+      toast({ title: "Quote failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  function toggleCrew(id: string) {
+    setCrewMembers((current) => current.includes(id) ? current.filter((x) => x !== id) : [...current, id]);
+  }
+
+  function resetFromLead(nextLead: Lead | null) {
+    if (!nextLead) return;
+    const pkg = PACKAGES.find((item) => item.id === nextLead.selectedPackageId) || PACKAGES[0];
+    setSelectedPackageId(pkg.id);
+    setDate(dateOnly(nextLead.confirmedDate || nextLead.moveDate));
+    setCrewSize(nextLead.crewSize || pkg.crewSize);
+    setCrewMembers(Array.isArray(nextLead.crewMembers) ? nextLead.crewMembers : []);
+    setArrivalWindow(nextLead.arrivalWindow || "Morning");
+    setNotes(nextLead.quoteNotes || "");
+  }
+
+  useEffect(() => {
+    if (open) resetFromLead(lead);
+  }, [lead?.id, open]);
+
+  return (
+    <Sheet open={open} onOpenChange={(value) => {
+      if (!value) onClose();
+    }}>
+      <SheetContent side="right" className="w-full overflow-y-auto border-slate-800 bg-slate-950 text-white sm:max-w-xl">
+        <SheetHeader className="border-b border-slate-800 pb-4">
+          <SheetTitle className="text-white">Fast Quote</SheetTitle>
+          <div className="text-sm text-slate-400">
+            {lead ? `${formatOrder(lead)} - ${lead.firstName} ${lead.lastName}` : "Select a lead"}
+          </div>
+        </SheetHeader>
+
+        {lead && (
+          <div className="space-y-5 py-5">
+            <div>
+              <Label className="text-xs uppercase tracking-wider text-slate-500">Base Package</Label>
+              <div className="mt-2 grid gap-2">
+                {PACKAGES.map((pkg) => (
+                  <button
+                    key={pkg.id}
+                    onClick={() => {
+                      setSelectedPackageId(pkg.id);
+                      setCrewSize(pkg.crewSize + extraMovers);
+                    }}
+                    className={`rounded-[8px] border p-3 text-left transition ${
+                      selectedPackageId === pkg.id ? "border-blue-400 bg-blue-500/15" : "border-slate-700 bg-slate-900 hover:border-slate-500"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="font-black text-white">{pkg.name}</div>
+                      <div className="text-sm font-bold text-blue-200">{pkg.range}</div>
+                    </div>
+                    <div className="mt-1 text-xs text-slate-400">{pkg.laborHours} - {pkg.description}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <Label className="text-xs uppercase tracking-wider text-slate-500">Date</Label>
+                <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-2 border-slate-700 bg-slate-900 text-white" />
+              </div>
+              <div>
+                <Label className="text-xs uppercase tracking-wider text-slate-500">Window</Label>
+                <Select value={arrivalWindow} onValueChange={setArrivalWindow}>
+                  <SelectTrigger className="mt-2 border-slate-700 bg-slate-900 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Morning">Morning</SelectItem>
+                    <SelectItem value="Afternoon">Afternoon</SelectItem>
+                    <SelectItem value="Evening">Evening</SelectItem>
+                    <SelectItem value="Customer callback needed">Customer callback needed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <Label className="text-xs uppercase tracking-wider text-slate-500">Mover Count</Label>
+                <div className="mt-2"><Stepper value={crewSize} min={1} max={8} onChange={setCrewSize} /></div>
+              </div>
+              <div>
+                <Label className="text-xs uppercase tracking-wider text-slate-500">Extra Movers</Label>
+                <div className="mt-2"><Stepper value={extraMovers} min={0} max={4} onChange={(value) => {
+                  setExtraMovers(value);
+                  setCrewSize(selectedPackage.crewSize + value);
+                }} /></div>
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-xs uppercase tracking-wider text-slate-500">Crew</Label>
+              <div className="mt-2 grid max-h-40 gap-2 overflow-y-auto rounded-[8px] border border-slate-800 bg-slate-900 p-2">
+                {employees.length === 0 ? (
+                  <div className="px-2 py-4 text-sm text-slate-500">No employees loaded</div>
+                ) : employees.map((employee) => (
+                  <label key={employee.id} className="flex items-center gap-2 rounded-[6px] px-2 py-1.5 text-sm text-slate-200 hover:bg-slate-800">
+                    <Checkbox checked={crewMembers.includes(employee.id)} onCheckedChange={() => toggleCrew(employee.id)} />
+                    <span>{employee.firstName || "Crew"} {employee.lastName || ""}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="sm:col-span-1">
+                <Label className="text-xs uppercase tracking-wider text-slate-500">Truck</Label>
+                <Select value={truck} onValueChange={(value) => setTruck(value as "none" | "15ft" | "26ft")}>
+                  <SelectTrigger className="mt-2 border-slate-700 bg-slate-900 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No truck</SelectItem>
+                    <SelectItem value="15ft">15 ft - $500</SelectItem>
+                    <SelectItem value="26ft">26 ft - $1000</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs uppercase tracking-wider text-slate-500">Truck Miles</Label>
+                <Input type="number" min={0} value={truckMiles} onChange={(e) => setTruckMiles(Number(e.target.value || 0))} className="mt-2 border-slate-700 bg-slate-900 text-white" />
+              </div>
+              <div>
+                <Label className="text-xs uppercase tracking-wider text-slate-500">Travel Miles</Label>
+                <Input type="number" min={0} value={travelMiles} onChange={(e) => setTravelMiles(Number(e.target.value || 0))} className="mt-2 border-slate-700 bg-slate-900 text-white" />
+              </div>
+            </div>
+
+            <div className="grid gap-2 rounded-[8px] border border-slate-800 bg-slate-900 p-3">
+              <label className="flex items-center gap-2 text-sm text-slate-200">
+                <Checkbox checked={blankets} onCheckedChange={(value) => setBlankets(Boolean(value))} />
+                We supply blankets - $99
+              </label>
+              <label className="flex items-center gap-2 text-sm text-slate-200">
+                <Checkbox checked={shrinkwrap} onCheckedChange={(value) => setShrinkwrap(Boolean(value))} />
+                We supply shrinkwrap - $99
+              </label>
+            </div>
+
+            <div>
+              <Label className="text-xs uppercase tracking-wider text-slate-500">Job Description / Quote Notes</Label>
+              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="mt-2 min-h-24 border-slate-700 bg-slate-900 text-white" />
+            </div>
+
+            <div className="rounded-[8px] border border-emerald-500/30 bg-emerald-500/10 p-4">
+              <div className="grid gap-2 text-sm">
+                <div className="flex justify-between"><span className="text-slate-300">Package</span><span className="font-semibold text-white">${selectedPackage.base}</span></div>
+                <div className="flex justify-between"><span className="text-slate-300">Truck</span><span className="font-semibold text-white">${truckBase + truckOverage}</span></div>
+                <div className="flex justify-between"><span className="text-slate-300">Mover travel</span><span className="font-semibold text-white">${travel}</span></div>
+                <div className="flex justify-between"><span className="text-slate-300">Add-ons</span><span className="font-semibold text-white">${addons}</span></div>
+                <div className="mt-2 flex justify-between border-t border-emerald-400/20 pt-3 text-lg">
+                  <span className="font-black text-white">Quote Total</span>
+                  <span className="font-black text-emerald-300">${total.toLocaleString()}</span>
+                </div>
+                <div className="text-xs text-emerald-200/70">Truck includes 50 miles, then $5/mile. Mover travel is $5/mile.</div>
+              </div>
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Button onClick={() => convertMutation.mutate()} disabled={convertMutation.isPending} className="bg-blue-600 hover:bg-blue-500">
+                {convertMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
+                Quote & Assign
+              </Button>
+              <Button variant="outline" className="border-slate-700 text-slate-200" onClick={() => setLocation(`/lead/${lead.id}`)}>
+                Open Full Lead
+              </Button>
+            </div>
+          </div>
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+export default function OpsBoardPage() {
+  const [search, setSearch] = useState("");
+  const [service, setService] = useState("all");
+  const [view, setView] = useState<"stack" | "month">("stack");
+  const [month, setMonth] = useState(() => new Date());
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const { data: leads = [], isLoading } = useQuery<Lead[]>({
+    queryKey: ["/api/leads"],
+    refetchInterval: 30_000,
+    staleTime: 0,
+  });
+
+  const { data: employees = [] } = useQuery<User[]>({
+    queryKey: ["/api/employees"],
+  });
+
+  const activeLeads = useMemo(() => leads.filter((lead) => !lead.archivedAt && lead.status !== "cancelled"), [leads]);
+  const serviceOptions = useMemo(() => Array.from(new Set(activeLeads.map((lead) => lead.serviceType).filter(Boolean))).sort(), [activeLeads]);
+
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return activeLeads.filter((lead) => {
+      if (service !== "all" && lead.serviceType !== service) return false;
+      if (!term) return true;
+      return [
+        lead.firstName,
+        lead.lastName,
+        lead.phone,
+        lead.email,
+        lead.fromAddress,
+        formatOrder(lead),
+        lead.details,
+      ].some((value) => String(value || "").toLowerCase().includes(term));
+    });
+  }, [activeLeads, search, service]);
+
+  const quoteStack = filtered.filter((lead) => QUOTE_STACK_STATUSES.has(lead.status) && !isAssigned(lead));
+  const assignedJobs = filtered.filter(isAssigned);
+  const needsCrew = assignedJobs.filter((lead) => (lead.crewMembers?.length || 0) < (lead.crewSize || 2));
+  const monthDays = getMonthDays(month);
+  const currentMonthKey = monthKey(month);
+  const jobsByDate = assignedJobs.reduce<Record<string, Lead[]>>((acc, lead) => {
+    const key = dateOnly(lead.confirmedDate || lead.moveDate);
+    if (!key) return acc;
+    acc[key] ||= [];
+    acc[key].push(lead);
+    return acc;
+  }, {});
+
+  function openDrawer(lead: Lead) {
+    setSelectedLead(lead);
+    setDrawerOpen(true);
+  }
+
+  function shiftMonth(delta: number) {
+    setMonth((current) => new Date(current.getFullYear(), current.getMonth() + delta, 1));
+  }
+
+  return (
+    <div className="mx-auto max-w-7xl px-4 pb-10 pt-6">
+      <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div>
+          <div className="inline-flex items-center gap-2 rounded-full border border-blue-400/30 bg-blue-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-blue-200">
+            <Sparkles className="h-3.5 w-3.5" />
+            Ops Quote Board
+          </div>
+          <h1 className="mt-3 text-3xl font-black text-white">Quote Stack & Assigned Jobs</h1>
+          <p className="mt-1 max-w-2xl text-sm text-slate-400">
+            Turn quote requests into clean job cards, adjust packages in under a minute, and keep the month view honest.
+          </p>
+        </div>
+        <div className="grid grid-cols-3 gap-2 md:w-[420px]">
+          <div className="rounded-[8px] border border-orange-500/25 bg-orange-500/10 p-3 text-center">
+            <div className="text-2xl font-black text-orange-200">{quoteStack.length}</div>
+            <div className="text-[10px] uppercase tracking-wider text-orange-200/70">Need Quote</div>
+          </div>
+          <div className="rounded-[8px] border border-blue-500/25 bg-blue-500/10 p-3 text-center">
+            <div className="text-2xl font-black text-blue-200">{assignedJobs.length}</div>
+            <div className="text-[10px] uppercase tracking-wider text-blue-200/70">Assigned</div>
+          </div>
+          <div className="rounded-[8px] border border-yellow-500/25 bg-yellow-500/10 p-3 text-center">
+            <div className="text-2xl font-black text-yellow-200">{needsCrew.length}</div>
+            <div className="text-[10px] uppercase tracking-wider text-yellow-200/70">Need Crew</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-5 grid gap-3 rounded-[8px] border border-slate-800 bg-slate-900/70 p-3 md:grid-cols-[1fr_180px_220px]">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+          <Input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search name, phone, order, city, notes"
+            className="pl-9 border-slate-700 bg-slate-950 text-white"
+          />
+        </div>
+        <Select value={service} onValueChange={setService}>
+          <SelectTrigger className="border-slate-700 bg-slate-950 text-white">
+            <Filter className="mr-2 h-4 w-4 text-slate-500" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All services</SelectItem>
+            {serviceOptions.map((option) => (
+              <SelectItem key={option} value={option}>{SERVICE_LABELS[option] || option}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="grid grid-cols-2 rounded-[8px] border border-slate-700 bg-slate-950 p-1">
+          <button
+            onClick={() => setView("stack")}
+            className={`rounded-[6px] px-3 py-2 text-sm font-semibold ${view === "stack" ? "bg-blue-600 text-white" : "text-slate-400"}`}
+          >
+            Stack
+          </button>
+          <button
+            onClick={() => setView("month")}
+            className={`rounded-[6px] px-3 py-2 text-sm font-semibold ${view === "month" ? "bg-blue-600 text-white" : "text-slate-400"}`}
+          >
+            Month
+          </button>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="grid min-h-[360px] place-items-center text-slate-400">
+          <Loader2 className="mb-3 h-8 w-8 animate-spin text-blue-300" />
+          Loading jobs
+        </div>
+      ) : view === "stack" ? (
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,420px)_1fr]">
+          <section>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="flex items-center gap-2 text-lg font-black text-white">
+                <Archive className="h-5 w-5 text-orange-300" />
+                Quote Stack
+              </h2>
+              <Badge className="border-orange-400/30 bg-orange-500/15 text-orange-200">{quoteStack.length}</Badge>
+            </div>
+            <div className="grid gap-3">
+              {quoteStack.length === 0 ? (
+                <div className="rounded-[8px] border border-slate-800 bg-slate-900 p-8 text-center text-sm text-slate-500">No quote requests in this filter.</div>
+              ) : quoteStack.map((lead) => (
+                <TradingJobCard key={lead.id} lead={lead} onOpen={openDrawer} />
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="flex items-center gap-2 text-lg font-black text-white">
+                <CalendarDays className="h-5 w-5 text-blue-300" />
+                Assigned Jobs
+              </h2>
+              <Badge className="border-blue-400/30 bg-blue-500/15 text-blue-200">{assignedJobs.length}</Badge>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {assignedJobs.length === 0 ? (
+                <div className="rounded-[8px] border border-slate-800 bg-slate-900 p-8 text-center text-sm text-slate-500 md:col-span-2 xl:col-span-3">No assigned jobs in this filter.</div>
+              ) : assignedJobs.map((lead) => (
+                <TradingJobCard key={lead.id} lead={lead} onOpen={openDrawer} />
+              ))}
+            </div>
+          </section>
+        </div>
+      ) : (
+        <section className="rounded-[8px] border border-slate-800 bg-slate-900/70 p-3">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-black text-white">
+                {month.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+              </h2>
+              <p className="text-sm text-slate-500">Assigned jobs by confirmed date</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="icon" className="border-slate-700 text-slate-200" onClick={() => shiftMonth(-1)}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" className="border-slate-700 text-slate-200" onClick={() => setMonth(new Date())}>Today</Button>
+              <Button variant="outline" size="icon" className="border-slate-700 text-slate-200" onClick={() => shiftMonth(1)}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-7 gap-px overflow-hidden rounded-[8px] border border-slate-800 bg-slate-800">
+            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+              <div key={day} className="bg-slate-950 px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                {day}
+              </div>
+            ))}
+            {monthDays.map((day) => {
+              const key = dateOnly(day.toISOString());
+              const dayJobs = jobsByDate[key] || [];
+              const muted = monthKey(day) !== currentMonthKey;
+              const today = key === dateOnly(new Date().toISOString());
+              return (
+                <div key={key} className={`min-h-32 bg-slate-950 p-2 ${muted ? "opacity-45" : ""} ${today ? "ring-1 ring-inset ring-blue-400" : ""}`}>
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className={`text-xs font-bold ${today ? "text-blue-200" : "text-slate-400"}`}>{day.getDate()}</span>
+                    {dayJobs.length > 0 && <span className="rounded-full bg-blue-500/20 px-1.5 text-[10px] text-blue-200">{dayJobs.length}</span>}
+                  </div>
+                  <div className="space-y-1.5">
+                    {dayJobs.slice(0, 3).map((lead) => (
+                      <TradingJobCard key={lead.id} lead={lead} compact onOpen={openDrawer} />
+                    ))}
+                    {dayJobs.length > 3 && (
+                      <div className="rounded-[6px] bg-slate-900 px-2 py-1 text-center text-[10px] text-slate-400">+{dayJobs.length - 3} more</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      <div className="mt-6 grid gap-3 md:grid-cols-4">
+        {[
+          { icon: Package, label: "Package Rules", value: "4 base packages" },
+          { icon: Truck, label: "Truck Rate", value: "$500 / $1000 + $5/mi" },
+          { icon: MapPin, label: "Mover Travel", value: "$5 per mile" },
+          { icon: DollarSign, label: "Fast Add-ons", value: "$500 mover - $99 supplies" },
+        ].map((item) => (
+          <div key={item.label} className="flex items-center gap-3 rounded-[8px] border border-slate-800 bg-slate-900/70 p-3">
+            <item.icon className="h-5 w-5 text-blue-300" />
+            <div>
+              <div className="text-xs text-slate-500">{item.label}</div>
+              <div className="text-sm font-bold text-white">{item.value}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <FastQuoteDrawer
+        lead={selectedLead}
+        employees={employees}
+        open={drawerOpen}
+        onClose={() => {
+          setDrawerOpen(false);
+          setSelectedLead(null);
+        }}
+      />
+    </div>
+  );
+}

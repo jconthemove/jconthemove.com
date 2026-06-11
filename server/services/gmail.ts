@@ -317,11 +317,6 @@ export async function sendGmailEmail(params: {
     const sentByApi = await sendGmailApiEmail(params);
     if (sentByApi) return true;
 
-    if (getEnvGmailSmtpCredentials()) {
-      console.warn('Gmail API failed; trying Gmail SMTP fallback...');
-      return sendGmailSmtpEmail(params);
-    }
-
     return false;
   }
 

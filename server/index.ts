@@ -39,6 +39,13 @@ const app = express();
 
 app.set("trust proxy", 1);
 
+app.use((req, res, next) => {
+  if (process.env.NODE_ENV === "production" && req.hostname === "jconthemove.com") {
+    return res.redirect(301, `https://www.jconthemove.com${req.originalUrl}`);
+  }
+  next();
+});
+
 // Railway and other platforms need a fast liveness endpoint while the app
 // finishes heavier route/bootstrap work.
 app.get("/health", (_req, res) => {
