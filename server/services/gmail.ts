@@ -77,11 +77,21 @@ function encodeSubject(subject: string): string {
   return `=?UTF-8?B?${Buffer.from(subject, 'utf-8').toString('base64')}?=`;
 }
 
+function normalizeEmailAddress(value: string): string {
+  const trimmed = String(value || '').trim();
+  const angleMatch = trimmed.match(/<([^<>@\s]+@[^<>\s]+)>/);
+  if (angleMatch) return angleMatch[1].trim();
+
+  return trimmed.replace(/^["']+|["']+$/g, '').trim();
+}
+
 function buildRawEmail(to: string, from: string, subject: string, html?: string, text?: string): string {
   const boundary = 'boundary_' + Date.now();
+  const normalizedTo = normalizeEmailAddress(to);
+  const normalizedFrom = normalizeEmailAddress(from);
   const lines = [
-    `From: JC ON THE MOVE <${from}>`,
-    `To: ${to}`,
+    `From: JC ON THE MOVE <${normalizedFrom}>`,
+    `To: ${normalizedTo}`,
     `Subject: ${encodeSubject(subject)}`,
     'MIME-Version: 1.0',
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
@@ -103,9 +113,11 @@ function buildRawEmail(to: string, from: string, subject: string, html?: string,
 
 function buildSmtpEmail(to: string, from: string, subject: string, html?: string, text?: string): string {
   const boundary = 'boundary_' + Date.now();
+  const normalizedTo = normalizeEmailAddress(to);
+  const normalizedFrom = normalizeEmailAddress(from);
   const lines = [
-    `From: JC ON THE MOVE <${from}>`,
-    `To: ${to}`,
+    `From: JC ON THE MOVE <${normalizedFrom}>`,
+    `To: ${normalizedTo}`,
     `Subject: ${encodeSubject(subject)}`,
     'MIME-Version: 1.0',
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
@@ -231,16 +243,18 @@ async function sendGmailSmtpEmail(params: {
 
   try {
     socket = await connectSmtpSocket(host, port);
+    const to = normalizeEmailAddress(params.to);
+    const from = normalizeEmailAddress(credentials.user);
     await sendSmtpCommand(socket, 'AUTH LOGIN', [334]);
     await sendSmtpCommand(socket, Buffer.from(credentials.user).toString('base64'), [334]);
     await sendSmtpCommand(socket, Buffer.from(credentials.appPassword).toString('base64'), [235]);
-    await sendSmtpCommand(socket, `MAIL FROM:<${credentials.user}>`, [250]);
-    await sendSmtpCommand(socket, `RCPT TO:<${params.to}>`, [250, 251]);
+    await sendSmtpCommand(socket, `MAIL FROM:<${from}>`, [250]);
+    await sendSmtpCommand(socket, `RCPT TO:<${to}>`, [250, 251]);
     await sendSmtpCommand(socket, 'DATA', [354]);
 
     const raw = buildSmtpEmail(
-      params.to,
-      credentials.user,
+      to,
+      from,
       params.subject,
       params.html,
       params.text,
@@ -248,7 +262,7 @@ async function sendGmailSmtpEmail(params: {
     await sendSmtpCommand(socket, `${escapeSmtpData(raw)}\r\n.`, [250]);
     await sendSmtpCommand(socket, 'QUIT', [221]);
 
-    console.log(`Gmail SMTP: Email accepted from=${credentials.user} to=${params.to} subject="${params.subject}"`);
+    console.log(`Gmail SMTP: Email accepted from=${from} to=${to} subject="${params.subject}"`);
     return true;
   } catch (error: any) {
     console.error('Gmail SMTP send error:', error?.message || error);
@@ -269,15 +283,16 @@ async function sendGmailApiEmail(params: {
     const gmail = await getUncachableGmailClient();
     const envCredentials = getEnvGmailCredentials();
     const configuredFrom = envCredentials?.user || params.from;
-    const from = configuredFrom;
-    const raw = buildRawEmail(params.to, from, params.subject, params.html, params.text);
+    const from = normalizeEmailAddress(configuredFrom);
+    const to = normalizeEmailAddress(params.to);
+    const raw = buildRawEmail(to, from, params.subject, params.html, params.text);
 
     const response = await gmail.users.messages.send({
       userId: 'me',
       requestBody: { raw },
     });
 
-    console.log(`Gmail API: Email accepted id=${response.data.id || 'unknown'} from=${from} to=${params.to} subject="${params.subject}"`);
+    console.log(`Gmail API: Email accepted id=${response.data.id || 'unknown'} from=${from} to=${to} subject="${params.subject}"`);
     return true;
   } catch (error: any) {
     const envCredentials = getEnvGmailCredentials();
@@ -317,16 +332,17 @@ export async function sendGmailEmail(params: {
     const gmail = await getUncachableGmailClient();
     const envCredentials = getEnvGmailCredentials();
     const configuredFrom = envCredentials?.user || params.from;
-    const from = configuredFrom;
-    const raw = buildRawEmail(params.to, from, params.subject, params.html, params.text);
+    const from = normalizeEmailAddress(configuredFrom);
+    const to = normalizeEmailAddress(params.to);
+    const raw = buildRawEmail(to, from, params.subject, params.html, params.text);
     
     const response = await gmail.users.messages.send({
       userId: 'me',
       requestBody: { raw },
     });
     
-    console.log(`📧 Gmail: Email sent to ${params.to} - "${params.subject}"`);
-    console.log(`Gmail: Email accepted by API id=${response.data.id || 'unknown'} from=${from} to=${params.to} subject="${params.subject}"`);
+    console.log(`Gmail: Email sent to ${to} - "${params.subject}"`);
+    console.log(`Gmail: Email accepted by API id=${response.data.id || 'unknown'} from=${from} to=${to} subject="${params.subject}"`);
     return true;
   } catch (error: any) {
     console.error('Gmail send error:', error?.message || error);
