@@ -1,4 +1,4 @@
-const CACHE_NAME = 'jcmove-v2';
+const CACHE_NAME = 'jcmove-v3';
 const STATIC_ASSETS = ['/', '/manifest.json'];
 
 self.addEventListener('install', (event) => {
@@ -21,6 +21,17 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
   if (url.pathname.startsWith('/api/')) return;
+
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).catch(async () => {
+        const cache = await caches.open(CACHE_NAME);
+        return (await cache.match('/')) || Response.error();
+      })
+    );
+    return;
+  }
+
   event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
 });
 
