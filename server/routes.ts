@@ -796,6 +796,16 @@ function authRedirectPath(user: typeof users.$inferSelect): string {
   return "/";
 }
 
+function isAuthRedirectPath(path: unknown): path is string {
+  if (typeof path !== "string") return false;
+  try {
+    const pathname = new URL(path, "https://app.local").pathname;
+    return pathname === "/login" || pathname === "/customer-login" || pathname === "/employee-login";
+  } catch {
+    return false;
+  }
+}
+
 async function findOrCreateGoogleUser(profile: {
   email: string;
   givenName?: string | null;
@@ -2142,7 +2152,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
 
       await saveLoginSession(req, user);
       const fallback = authRedirectPath(user);
-      return res.redirect(requestedRedirect || fallback);
+      return res.redirect(requestedRedirect && !isAuthRedirectPath(requestedRedirect) ? requestedRedirect : fallback);
     } catch (error) {
       console.error("Google OAuth callback error:", error);
       return res.redirect("/login?error=google_login_failed");

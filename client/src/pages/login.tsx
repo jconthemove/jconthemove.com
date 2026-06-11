@@ -181,8 +181,10 @@ export default function LoginPage() {
 
   const handleGoogleLogin = () => {
     const base = getApiBase();
-    const redirect = `${window.location.pathname}${window.location.search}`;
-    window.location.href = `${base}/api/auth/google?redirect=${encodeURIComponent(redirect)}`;
+    const params = new URLSearchParams();
+    if (redirectPath) params.set("redirect", redirectPath);
+    const query = params.toString();
+    window.location.href = `${base}/api/auth/google${query ? `?${query}` : ""}`;
   };
 
   return (
