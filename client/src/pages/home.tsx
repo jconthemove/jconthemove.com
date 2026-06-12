@@ -282,12 +282,12 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-[#020915] text-white">
       <nav className="sticky top-0 z-50 border-b border-white/10 bg-[#020915]/90 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4">
           <Link
             href="/login"
             aria-label="Open JC ON THE MOVE login"
             title="Team and customer login"
-            className="group flex items-center gap-3 rounded-lg text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020915]"
+            className="group flex min-w-0 items-center gap-3 rounded-lg text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#020915]"
           >
             <span
               aria-hidden="true"
@@ -296,9 +296,9 @@ export default function HomePage() {
               <span className="absolute left-1/2 top-1/2 h-5 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white" />
               <span className="absolute left-1/2 top-1/2 h-1 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white" />
             </span>
-            <span>
-              <span className="block text-xl font-black leading-none tracking-tight transition group-hover:text-blue-100">JC ON THE MOVE</span>
-              <span className="mt-1 block text-[10px] font-bold uppercase tracking-[0.28em] text-slate-400 transition group-hover:text-slate-200">Northwoods moving & more</span>
+            <span className="min-w-0">
+              <span className="block truncate text-lg font-black leading-none tracking-tight transition group-hover:text-blue-100 sm:text-xl">JC ON THE MOVE</span>
+              <span className="mt-1 block truncate text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 transition group-hover:text-slate-200 sm:text-[10px] sm:tracking-[0.28em]">Northwoods moving & more</span>
             </span>
           </Link>
           <div className="hidden items-center gap-8 text-sm font-semibold text-slate-200 md:flex">
@@ -307,17 +307,18 @@ export default function HomePage() {
             <a href="#reviews" className="hover:text-white">Reviews</a>
             <a href="#rewards" className="hover:text-white">Rewards</a>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             <a href="tel:+19062859312" className="hidden items-center gap-2 text-sm font-bold text-white sm:flex">
               <Phone className="h-4 w-4 text-blue-300" />
               (906) 285-9312
             </a>
             <Link href="/login">
-              <Button variant="outline" className="hidden h-10 rounded-lg border-white/20 bg-white/5 px-4 text-sm font-black text-white hover:bg-white/10 hover:text-white sm:inline-flex">
-                Login
+              <Button variant="outline" className="h-10 rounded-lg border-white/20 bg-white/5 px-3 text-sm font-black text-white hover:bg-white/10 hover:text-white sm:px-4">
+                <span className="sm:hidden">Login</span>
+                <span className="hidden sm:inline">Login</span>
               </Button>
             </Link>
-            <Button onClick={() => openQuoteStart("moving")} className="h-10 rounded-lg bg-blue-600 px-4 text-sm font-black hover:bg-blue-500 sm:px-5">
+            <Button onClick={() => openQuoteStart("moving")} className="h-10 rounded-lg bg-blue-600 px-3 text-sm font-black hover:bg-blue-500 sm:px-5">
               <span className="sm:hidden">Price</span>
               <span className="hidden sm:inline">Get My Price</span>
             </Button>
