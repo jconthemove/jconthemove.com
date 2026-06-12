@@ -355,7 +355,7 @@ async function linkEmployeePromoCodes() {
       { code: 'TIMTHEMOVER', email: 'timothymewbourn3@gmail.com' },
     ];
     for (const { code, email } of knownLinks) {
-      const [user] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
+      const user = await findUserByEmail(email);
       if (!user) continue;
       // Always update — ensures link is correct even if re-seeded
       await db.update(promoCodes).set({ referralUserId: user.id }).where(eq(promoCodes.code, code));
@@ -760,6 +760,22 @@ function authPayload(user: typeof users.$inferSelect, extra: Record<string, unkn
   };
 }
 
+function normalizeEmailInput(value: unknown): string {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function userEmailMatches(normalizedEmail: string) {
+  return sql`lower(trim(coalesce(${users.email}, ''))) = ${normalizedEmail}`;
+}
+
+async function findUserByEmail(email: unknown): Promise<typeof users.$inferSelect | null> {
+  const normalizedEmail = normalizeEmailInput(email);
+  if (!normalizedEmail) return null;
+
+  const [user] = await db.select().from(users).where(userEmailMatches(normalizedEmail)).limit(1);
+  return user || null;
+}
+
 function saveLoginSession(req: Request, user: typeof users.$inferSelect): Promise<void> {
   return new Promise((resolve, reject) => {
     if (!req.session) {
@@ -813,7 +829,7 @@ async function findOrCreateGoogleUser(profile: {
   picture?: string | null;
 }) {
   const email = profile.email.trim().toLowerCase();
-  const [existing] = await db.select().from(users).where(sql`lower(${users.email}) = ${email}`).limit(1);
+  const existing = await findUserByEmail(email);
 
   if (existing) {
     const [updated] = await db
@@ -2199,11 +2215,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
       }
 
       // Check if email already exists
-      const existingUser = await db
-        .select()
-        .from(users)
-        .where(eq(users.email, data.email))
-        .limit(1);
+      const existingUser = await findUserByEmail(data.email);
 
       // Hash password with bcrypt (10 rounds = good security/performance balance)
       const passwordHash = await bcrypt.hash(data.password, 10);
@@ -2211,7 +2223,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
       let newUser;
 
       // If user exists but has no password (OAuth-only account), update their account
-      if (existingUser.length > 0 && !existingUser[0].passwordHash) {
+      if (existingUser && !existingUser.passwordHash) {
         console.log(`Migrating OAuth-only account to email/password: ${data.email}`);
         
         const [updatedUser] = await db
@@ -2221,15 +2233,15 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
             firstName: data.firstName,
             lastName: data.lastName,
             phoneNumber: data.phoneNumber,
-            dateOfBirth: data.dateOfBirth || existingUser[0].dateOfBirth,
-            tosAccepted: data.tosAccepted ?? existingUser[0].tosAccepted,
-            tosAcceptedAt: data.tosAccepted && !existingUser[0].tosAccepted ? new Date() : existingUser[0].tosAcceptedAt,
+            dateOfBirth: data.dateOfBirth || existingUser.dateOfBirth,
+            tosAccepted: data.tosAccepted ?? existingUser.tosAccepted,
+            tosAcceptedAt: data.tosAccepted && !existingUser.tosAccepted ? new Date() : existingUser.tosAcceptedAt,
           })
-          .where(eq(users.id, existingUser[0].id))
+          .where(eq(users.id, existingUser.id))
           .returning();
         
         newUser = updatedUser;
-      } else if (existingUser.length > 0) {
+      } else if (existingUser) {
         // User exists and already has a password
         return res.status(400).json({ error: "Email already registered" });
       } else {
@@ -2356,12 +2368,8 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
     try {
       const data = employeeLoginSchema.parse(req.body);
 
-      // Find user by email
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.email, data.email))
-        .limit(1);
+      // Find user by normalized email so imported casing/spacing cannot block login.
+      const user = await findUserByEmail(data.email);
 
       if (!user || !user.passwordHash) {
         return res.status(401).json({ error: "Invalid email or password" });
@@ -2397,8 +2405,8 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
       const { email, password } = req.body;
       if (!email || !password) return res.status(400).json({ error: "Email and password are required" });
 
-      const normalizedEmail = email.trim().toLowerCase();
-      const [user] = await db.select().from(users).where(eq(users.email, normalizedEmail)).limit(1);
+      const normalizedEmail = normalizeEmailInput(email);
+      const user = await findUserByEmail(normalizedEmail);
       if (!user) {
         console.warn(`[LOGIN_DIAG] user not found for email=${normalizedEmail}`);
         return res.status(401).json({ error: "Invalid email or password" });
@@ -2465,7 +2473,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
       const { email, password } = req.body;
       if (!email || !password) return res.status(400).json({ error: "Email and password are required" });
 
-      const [user] = await db.select().from(users).where(eq(users.email, email.trim().toLowerCase())).limit(1);
+      const user = await findUserByEmail(email);
       if (!user || !user.passwordHash) return res.status(401).json({ error: "Invalid email or password" });
 
       const match = await bcrypt.compare(password, user.passwordHash);
@@ -2592,16 +2600,12 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
       }
 
       // Check if email already exists
-      const existingUser = await db
-        .select()
-        .from(users)
-        .where(eq(users.email, data.email))
-        .limit(1);
+      const existingUser = await findUserByEmail(data.email);
 
       const passwordHash = await bcrypt.hash(data.password, 10);
       let newUser;
 
-      if (existingUser.length > 0 && !existingUser[0].passwordHash) {
+      if (existingUser && !existingUser.passwordHash) {
         // Upgrade existing customer account (from quote submission)
         const [updatedUser] = await db
           .update(users)
@@ -2609,15 +2613,15 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
             passwordHash,
             firstName: data.firstName,
             lastName: data.lastName,
-            phoneNumber: data.phoneNumber || existingUser[0].phoneNumber,
-            dateOfBirth: data.dateOfBirth || existingUser[0].dateOfBirth,
-            tosAccepted: data.tosAccepted ?? existingUser[0].tosAccepted,
-            tosAcceptedAt: data.tosAccepted && !existingUser[0].tosAccepted ? new Date() : existingUser[0].tosAcceptedAt,
+            phoneNumber: data.phoneNumber || existingUser.phoneNumber,
+            dateOfBirth: data.dateOfBirth || existingUser.dateOfBirth,
+            tosAccepted: data.tosAccepted ?? existingUser.tosAccepted,
+            tosAcceptedAt: data.tosAccepted && !existingUser.tosAccepted ? new Date() : existingUser.tosAcceptedAt,
           })
-          .where(eq(users.id, existingUser[0].id))
+          .where(eq(users.id, existingUser.id))
           .returning();
         newUser = updatedUser;
-      } else if (existingUser.length > 0) {
+      } else if (existingUser) {
         return res.status(400).json({ error: "Email already registered. Please sign in." });
       } else {
         // Create new customer account
@@ -2832,11 +2836,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
     try {
       const data = employeeLoginSchema.parse(req.body);
 
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.email, data.email))
-        .limit(1);
+      const user = await findUserByEmail(data.email);
 
       if (!user || !user.passwordHash) {
         return res.status(401).json({ error: "Invalid email or password. If you haven't created an account yet, please sign up first." });
@@ -2886,15 +2886,14 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
       if (!contact || typeof contact !== 'string' || contact.trim().length < 4) {
         return res.status(400).json({ error: "Please provide a valid email address or phone number." });
       }
-      const value = contact.trim().toLowerCase();
+      const value = normalizeEmailInput(contact);
       const isPhone = /^[\d\s\-\+\(\)]{7,}$/.test(contact.trim());
       const method = isPhone ? 'sms' : 'email';
 
       // Find user by email or phone
       let matchedUser = null;
       if (method === 'email') {
-        const [u] = await db.select().from(users).where(sql`lower(${users.email}) = ${value}`).limit(1);
-        matchedUser = u || null;
+        matchedUser = await findUserByEmail(value);
       } else {
         const normalized = contact.trim().replace(/[\s\-\(\)]/g, '');
         const allUsers = await db.select().from(users).where(sql`phone_number IS NOT NULL`);
@@ -3062,11 +3061,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
     try {
       const data = employeeLoginSchema.parse(req.body);
 
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.email, data.email))
-        .limit(1);
+      const user = await findUserByEmail(data.email);
 
       if (!user || !user.passwordHash) {
         return res.status(401).json({ error: "Invalid email or password. If you haven't created an account yet, please sign up first." });
@@ -3137,11 +3132,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
       }
 
       // Check if user already exists
-      const [existingUser] = await db
-        .select()
-        .from(users)
-        .where(eq(users.email, data.email))
-        .limit(1);
+      const existingUser = await findUserByEmail(data.email);
 
       if (existingUser) {
         return res.status(400).json({ error: "An account with this email already exists" });
