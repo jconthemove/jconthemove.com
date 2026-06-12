@@ -1,4 +1,5 @@
 import { Pool, neonConfig } from '@neondatabase/serverless';
+import crypto from "crypto";
 import { drizzle } from 'drizzle-orm/neon-serverless';
 import ws from "ws";
 import * as schema from "@shared/schema";
@@ -15,6 +16,15 @@ if (!process.env.DATABASE_URL && process.env.NODE_ENV === "production") {
 
 if (!process.env.DATABASE_URL) {
   console.warn("[db] DATABASE_URL is not set; using local development default postgres://postgres:postgres@localhost:5432/jconthemove");
+}
+
+try {
+  const parsed = new URL(databaseUrl);
+  const fingerprint = crypto.createHash("sha256").update(databaseUrl).digest("hex").slice(0, 12);
+  console.log(`[db] DATABASE_URL fingerprint=${fingerprint} host=${parsed.hostname} database=${parsed.pathname.replace(/^\//, "") || "(default)"}`);
+} catch {
+  const fingerprint = crypto.createHash("sha256").update(databaseUrl).digest("hex").slice(0, 12);
+  console.log(`[db] DATABASE_URL fingerprint=${fingerprint} host=(unparseable) database=(unparseable)`);
 }
 
 export const pool = new Pool({ connectionString: databaseUrl });
