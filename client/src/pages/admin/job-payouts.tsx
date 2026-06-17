@@ -1,0 +1,479 @@
+import { useMemo, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Calculator, CheckCircle2, Coins, Loader2, Save, Search } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import type { User } from "@shared/schema";
+import type { ProfitSharePayoutPreview, ProfitShareRole } from "@shared/jobPayout";
+
+type PayoutJob = {
+  id: string;
+  orderNumber?: number | string | null;
+  firstName: string;
+  lastName: string;
+  serviceType: string;
+  status: string;
+  totalPrice?: string | null;
+  basePrice?: string | null;
+  confirmedHours?: number | null;
+  payout?: {
+    status: string;
+    netJobProfit: string;
+    profitPerLaborHour: string;
+  } | null;
+};
+
+type ReferralPartner = {
+  id: string;
+  name: string;
+  isActive: boolean;
+};
+
+type Settings = Record<string, string | number | boolean | null>;
+
+type AssignmentDraft = {
+  workerId: string;
+  roleOnJob: ProfitShareRole;
+  hourlyRate: number;
+  hoursWorked: number;
+  bonusWeight: number;
+};
+
+const ROLE_LABELS: Record<ProfitShareRole, string> = {
+  lead_mover: "Lead Mover",
+  mover: "Mover",
+  helper: "Helper",
+};
+
+const roleOptions: ProfitShareRole[] = ["lead_mover", "mover", "helper"];
+
+function money(value: unknown) {
+  const n = typeof value === "number" ? value : Number.parseFloat(String(value ?? "0"));
+  return n.toLocaleString(undefined, { style: "currency", currency: "USD" });
+}
+
+function percent(value: unknown) {
+  const n = typeof value === "number" ? value : Number.parseFloat(String(value ?? "0"));
+  return `${(n * 100).toFixed(1)}%`;
+}
+
+function numberValue(value: unknown, fallback = 0) {
+  const n = typeof value === "number" ? value : Number.parseFloat(String(value ?? ""));
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function employeeName(user: User) {
+  return [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || user.email || "Worker";
+}
+
+export default function AdminJobPayoutsPage() {
+  const { toast } = useToast();
+  const [selectedJobId, setSelectedJobId] = useState<string>("");
+  const [search, setSearch] = useState("");
+  const [grossRevenue, setGrossRevenue] = useState<number>(0);
+  const [dumpFees, setDumpFees] = useState<number>(0);
+  const [otherExpenses, setOtherExpenses] = useState<number>(0);
+  const [referralPartnerId, setReferralPartnerId] = useState<string>("");
+  const [overrideReason, setOverrideReason] = useState("");
+  const [assignments, setAssignments] = useState<AssignmentDraft[]>([]);
+
+  const { data: settings } = useQuery<Settings>({ queryKey: ["/api/admin/job-payouts/settings"] });
+  const { data: jobs = [] } = useQuery<PayoutJob[]>({ queryKey: ["/api/admin/job-payouts/jobs"] });
+  const { data: employees = [] } = useQuery<User[]>({ queryKey: ["/api/employees"] });
+  const { data: referralPartners = [] } = useQuery<ReferralPartner[]>({ queryKey: ["/api/admin/job-payouts/referral-partners"] });
+
+  const selectedJob = jobs.find((job) => job.id === selectedJobId) || null;
+
+  const previewBody = {
+    grossRevenue: grossRevenue || numberValue(selectedJob?.totalPrice || selectedJob?.basePrice),
+    dumpFees,
+    otherExpenses,
+    referralPartnerId: referralPartnerId || null,
+  };
+
+  const previewQueryKey = selectedJobId
+    ? ["/api/admin/job-payouts/jobs", selectedJobId, "preview", previewBody]
+    : ["/api/admin/job-payouts/idle"];
+
+  const { data: preview, isFetching: previewLoading } = useQuery<ProfitSharePayoutPreview>({
+    queryKey: previewQueryKey,
+    enabled: !!selectedJobId,
+    queryFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/job-payouts/jobs/${selectedJobId}/preview`, previewBody);
+      return res.json();
+    },
+  });
+
+  const filteredJobs = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return jobs;
+    return jobs.filter((job) =>
+      `${job.firstName} ${job.lastName} ${job.serviceType} ${job.status}`.toLowerCase().includes(q),
+    );
+  }, [jobs, search]);
+
+  const seedAssignmentsFromPreview = () => {
+    if (!preview) return;
+    setAssignments(preview.workerPayouts.map((worker) => ({
+      workerId: worker.workerId,
+      roleOnJob: worker.roleOnJob,
+      hourlyRate: worker.hourlyRate,
+      hoursWorked: worker.hoursWorked,
+      bonusWeight: worker.bonusWeight,
+    })));
+  };
+
+  const settingsMutation = useMutation({
+    mutationFn: async (updates: Record<string, number>) => {
+      const res = await apiRequest("PATCH", "/api/admin/job-payouts/settings", updates);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/job-payouts/settings"] });
+      queryClient.invalidateQueries({ queryKey: previewQueryKey });
+      toast({ title: "Payout settings saved" });
+    },
+    onError: (error: Error) => toast({ title: "Save failed", description: error.message, variant: "destructive" }),
+  });
+
+  const assignmentMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/job-payouts/jobs/${selectedJobId}/assignments`, {
+        ...previewBody,
+        assignments,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: previewQueryKey });
+      toast({ title: "Assignments saved" });
+    },
+    onError: (error: Error) => toast({ title: "Save failed", description: error.message, variant: "destructive" }),
+  });
+
+  const finalizeMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/job-payouts/jobs/${selectedJobId}/finalize`, {
+        ...previewBody,
+        adminOverrideReason: overrideReason,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/job-payouts/jobs"] });
+      queryClient.invalidateQueries({ queryKey: previewQueryKey });
+      toast({ title: "Payout finalized", description: "Worker payout records are now pending manual payment." });
+    },
+    onError: (error: Error) => toast({ title: "Finalize blocked", description: error.message, variant: "destructive" }),
+  });
+
+  const rewardsMutation = useMutation({
+    mutationFn: async (calculationId: string) => {
+      const res = await apiRequest("POST", `/api/admin/job-payouts/calculations/${calculationId}/issue-rewards`, {});
+      return res.json();
+    },
+    onSuccess: (data) => toast({ title: "Rewards issued", description: `${data.issuedCount || 0} worker reward credits issued.` }),
+    onError: (error: Error) => toast({ title: "Rewards failed", description: error.message, variant: "destructive" }),
+  });
+
+  const defaultHours = selectedJob?.confirmedHours || 4;
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
+        <Card className="bg-slate-900/50 border-slate-700/60">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-white text-base flex items-center gap-2">
+              <Search className="h-4 w-4 text-blue-300" /> Jobs
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search jobs" />
+            <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
+              {filteredJobs.map((job) => {
+                const selected = job.id === selectedJobId;
+                return (
+                  <button
+                    key={job.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedJobId(job.id);
+                      setGrossRevenue(numberValue(job.totalPrice || job.basePrice));
+                      setDumpFees(0);
+                      setOtherExpenses(0);
+                      setReferralPartnerId("");
+                      setAssignments([]);
+                    }}
+                    className={`w-full text-left rounded-lg border p-3 transition-colors ${selected ? "border-blue-400 bg-blue-500/10" : "border-slate-700 bg-slate-800/40 hover:border-slate-500"}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-bold text-white">{job.firstName} {job.lastName}</p>
+                        <p className="text-xs text-slate-400 capitalize">{job.serviceType} · {job.status.replace(/_/g, " ")}</p>
+                      </div>
+                      <p className="text-sm font-black text-emerald-300">{money(job.totalPrice || job.basePrice)}</p>
+                    </div>
+                    {job.payout && (
+                      <p className="mt-2 text-[11px] text-slate-400">
+                        Payout {job.payout.status} · P/L hour {money(job.payout.profitPerLaborHour)}
+                      </p>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="space-y-4">
+          <Card className="bg-slate-900/50 border-slate-700/60">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-white text-base flex items-center gap-2">
+                <Calculator className="h-4 w-4 text-emerald-300" /> Payout Calculator
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!selectedJob ? (
+                <p className="text-sm text-slate-400">Select a job to preview payout math.</p>
+              ) : (
+                <>
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <label className="space-y-1">
+                      <span className="text-xs text-slate-400">Gross revenue</span>
+                      <Input type="number" value={grossRevenue} onChange={(e) => setGrossRevenue(numberValue(e.target.value))} />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs text-slate-400">Dump fees</span>
+                      <Input type="number" value={dumpFees} onChange={(e) => setDumpFees(numberValue(e.target.value))} />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs text-slate-400">Other expenses</span>
+                      <Input type="number" value={otherExpenses} onChange={(e) => setOtherExpenses(numberValue(e.target.value))} />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs text-slate-400">Referral partner</span>
+                      <select
+                        className="h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-white"
+                        value={referralPartnerId}
+                        onChange={(e) => setReferralPartnerId(e.target.value)}
+                      >
+                        <option value="">None</option>
+                        {referralPartners.filter((p) => p.isActive).map((partner) => (
+                          <option key={partner.id} value={partner.id}>{partner.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  {previewLoading || !preview ? (
+                    <div className="flex items-center gap-2 text-sm text-slate-400">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Calculating
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid gap-3 md:grid-cols-4">
+                        <Metric label="Gross" value={money(preview.grossRevenue)} />
+                        <Metric label="Net job profit" value={money(preview.netJobProfit)} accent={preview.netJobProfit >= 0 ? "green" : "red"} />
+                        <Metric label="Profit / labor hour" value={money(preview.profitPerLaborHour)} accent="blue" />
+                        <Metric label="Margin" value={percent(preview.profitMarginPct)} />
+                        <Metric label="Labor" value={money(preview.guaranteedLaborTotal)} />
+                        <Metric label="Reserves/expenses" value={money(preview.totalExpensesAndReserves)} />
+                        <Metric label="Crew bonus pool" value={money(preview.crewBonusPool)} />
+                        <Metric label="Company profit" value={money(preview.companyProfit)} />
+                        <Metric label="Referral" value={money(preview.referralPayout)} />
+                        <Metric label="Growth fund" value={money(preview.growthFund)} />
+                        <Metric label="Labor hours" value={preview.totalLaborHours.toFixed(2)} />
+                        <Metric label="Processing" value={money(preview.processingFees)} />
+                      </div>
+
+                      {preview.notes.length > 0 && (
+                        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
+                          {preview.notes.join(" ")}
+                        </div>
+                      )}
+
+                      <div className="flex flex-wrap gap-2">
+                        <Button variant="outline" onClick={seedAssignmentsFromPreview}>
+                          Load workers
+                        </Button>
+                        <Button onClick={() => assignmentMutation.mutate()} disabled={!assignments.length || assignmentMutation.isPending}>
+                          {assignmentMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                          Save workers
+                        </Button>
+                        <Button onClick={() => finalizeMutation.mutate()} disabled={finalizeMutation.isPending}>
+                          {finalizeMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
+                          Finalize
+                        </Button>
+                      </div>
+
+                      {preview.adminOverrideRequired && (
+                        <label className="block space-y-1">
+                          <span className="text-xs text-amber-300">Admin override reason required for zero/loss jobs</span>
+                          <Input value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} placeholder="Explain why payout is approved" />
+                        </label>
+                      )}
+
+                      <WorkerEditor
+                        employees={employees}
+                        assignments={assignments}
+                        setAssignments={setAssignments}
+                        defaultHours={defaultHours}
+                        preview={preview}
+                      />
+                    </>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="bg-slate-900/50 border-slate-700/60">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-white text-base">Default Rules</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {settings && (
+                <div className="grid gap-3 md:grid-cols-4">
+                  {[
+                    ["fuelReservePct", "Fuel %"],
+                    ["vehicleReservePct", "Vehicle %"],
+                    ["insuranceReservePct", "Insurance %"],
+                    ["processingFeePct", "Processing %"],
+                    ["companyProfitPct", "Company %"],
+                    ["crewBonusPct", "Crew bonus %"],
+                    ["referralPct", "Referral %"],
+                    ["growthFundPct", "Growth %"],
+                    ["leadMoverHourlyRate", "Lead rate"],
+                    ["moverHourlyRate", "Mover rate"],
+                    ["helperHourlyRate", "Helper rate"],
+                    ["rewardPointsPerDollarEarned", "JCMOVES / $"],
+                  ].map(([key, label]) => (
+                    <label key={key} className="space-y-1">
+                      <span className="text-xs text-slate-400">{label}</span>
+                      <Input
+                        type="number"
+                        step="0.0001"
+                        defaultValue={String(key.endsWith("Pct") ? numberValue(settings[key]) * 100 : settings[key] ?? "")}
+                        onBlur={(e) => {
+                          const raw = numberValue(e.target.value);
+                          const value = key.endsWith("Pct") ? raw / 100 : raw;
+                          if (Number.isFinite(value)) settingsMutation.mutate({ [key]: value });
+                        }}
+                      />
+                    </label>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Metric({ label, value, accent }: { label: string; value: string; accent?: "green" | "red" | "blue" }) {
+  const color = accent === "green" ? "text-emerald-300" : accent === "red" ? "text-red-300" : accent === "blue" ? "text-blue-300" : "text-white";
+  return (
+    <div className="rounded-lg border border-slate-700/70 bg-slate-950/50 p-3">
+      <p className="text-[10px] uppercase tracking-wide text-slate-500">{label}</p>
+      <p className={`mt-1 text-lg font-black ${color}`}>{value}</p>
+    </div>
+  );
+}
+
+function WorkerEditor({
+  employees,
+  assignments,
+  setAssignments,
+  defaultHours,
+  preview,
+}: {
+  employees: User[];
+  assignments: AssignmentDraft[];
+  setAssignments: (next: AssignmentDraft[]) => void;
+  defaultHours: number;
+  preview: ProfitSharePayoutPreview;
+}) {
+  const addWorker = () => {
+    const unused = employees.find((employee) => !assignments.some((a) => a.workerId === employee.id));
+    if (!unused) return;
+    setAssignments([
+      ...assignments,
+      { workerId: unused.id, roleOnJob: assignments.length === 0 ? "lead_mover" : "mover", hourlyRate: assignments.length === 0 ? 30 : 25, hoursWorked: defaultHours, bonusWeight: assignments.length === 0 ? 60 : 40 },
+    ]);
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-bold text-white">Worker payouts</h3>
+        <Button size="sm" variant="outline" onClick={addWorker}>Add worker</Button>
+      </div>
+
+      <div className="space-y-2">
+        {(assignments.length ? assignments : preview.workerPayouts).map((assignment, index) => {
+          const employee = employees.find((item) => item.id === assignment.workerId);
+          const payout = preview.workerPayouts.find((item) => item.workerId === assignment.workerId);
+          const draft = assignments[index] || assignment;
+
+          return (
+            <div key={`${assignment.workerId}-${index}`} className="grid gap-2 rounded-lg border border-slate-700/70 bg-slate-950/40 p-3 md:grid-cols-[1.4fr_1fr_0.8fr_0.8fr_0.8fr_1fr]">
+              <select
+                className="h-10 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-white"
+                value={draft.workerId}
+                onChange={(e) => {
+                  const next = [...assignments];
+                  next[index] = { ...draft, workerId: e.target.value };
+                  setAssignments(next);
+                }}
+              >
+                {employees.map((item) => <option key={item.id} value={item.id}>{employeeName(item)}</option>)}
+              </select>
+              <select
+                className="h-10 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-white"
+                value={draft.roleOnJob}
+                onChange={(e) => {
+                  const role = e.target.value as ProfitShareRole;
+                  const next = [...assignments];
+                  next[index] = { ...draft, roleOnJob: role, hourlyRate: role === "lead_mover" ? 30 : role === "helper" ? 20 : 25 };
+                  setAssignments(next);
+                }}
+              >
+                {roleOptions.map((role) => <option key={role} value={role}>{ROLE_LABELS[role]}</option>)}
+              </select>
+              <Input type="number" value={draft.hourlyRate} onChange={(e) => {
+                const next = [...assignments];
+                next[index] = { ...draft, hourlyRate: numberValue(e.target.value) };
+                setAssignments(next);
+              }} />
+              <Input type="number" value={draft.hoursWorked} onChange={(e) => {
+                const next = [...assignments];
+                next[index] = { ...draft, hoursWorked: numberValue(e.target.value) };
+                setAssignments(next);
+              }} />
+              <Input type="number" value={draft.bonusWeight} onChange={(e) => {
+                const next = [...assignments];
+                next[index] = { ...draft, bonusWeight: numberValue(e.target.value) };
+                setAssignments(next);
+              }} />
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs text-slate-500">Total</p>
+                  <p className="text-sm font-black text-emerald-300">{money(payout?.totalPay || 0)}</p>
+                </div>
+                <Badge variant="outline" className="border-purple-400/40 text-purple-200">
+                  <Coins className="h-3 w-3 mr-1" /> {numberValue(payout?.jcmovesRewardAmount).toFixed(0)}
+                </Badge>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

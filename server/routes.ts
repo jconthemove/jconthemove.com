@@ -21,7 +21,8 @@ import { z } from "zod";
 import { EncryptionService } from "./services/encryption";
 import { eq, desc, sql, and, gte, lte, or, ilike, inArray, isNull } from 'drizzle-orm';
 import { db, pool } from './db';
-import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, treasuryAccounts, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, giftCards, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens, promoCodes, reviews, rewardCategories, rewardItems, rewardRedemptions, buybackFund, laborQuotes, jobTradeRequests, workerProfiles, quoteApprovals, quoteAttributions } from '@shared/schema';
+import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, treasuryAccounts, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, giftCards, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens, promoCodes, reviews, rewardCategories, rewardItems, rewardRedemptions, buybackFund, laborQuotes, jobTradeRequests, workerProfiles, quoteApprovals, quoteAttributions, marketingReps, marketingCallEvents, insertMarketingRepSchema, jobPayoutSettings, referralPartners, jobAssignments, jobPayoutCalculations, jobWorkerPayouts } from '@shared/schema';
+import { DEFAULT_MARKETING_REPS } from '@shared/marketingNetwork';
 import { getFaucetPayService } from "./services/faucetpay";
 import { getAdvertisingService } from "./services/advertising";
 import { FAUCET_CONFIG, calculateJCMovesReward, getTierFromSpend, getTierFromPoints, LOYALTY_TIERS, TIER_POINT_AWARDS, type TierPointActivity } from "./constants";
@@ -42,6 +43,8 @@ import { grantLotteryTicketsForActivity } from "./services/disburse-job-tokens";
 import { getDepositInfo, extractZip } from "@shared/depositRules";
 import { MIN_REDEMPTION_TOKENS, REDEMPTION_INCREMENT, roundToIncrement, validateRedemption, tokensToDollars } from "@shared/tokenRedemptionRules";
 import { buildLeadJobPayoutPreview } from "./services/jobPayoutEngine";
+import { calculateProfitSharingPayout, defaultBonusWeightsForCrew, defaultHourlyRateForRole, normalizeProfitShareSettings } from "./services/profitSharingPayoutEngine";
+import type { ProfitShareRole, ProfitShareWorkerInput } from "@shared/jobPayout";
 import { QUOTE_HELPER_MESSAGE_LIMIT, summarizeQuoteRequest } from "./services/geminiQuoteHelper";
 import lawnCareRouter from "./routes/lawnCare";
 import serviceRebookRouter from "./routes/serviceRebookReminders";
@@ -367,6 +370,66 @@ async function linkEmployeePromoCodes() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+async function seedMarketingNetwork() {
+  try {
+    for (const rep of DEFAULT_MARKETING_REPS) {
+      await db.insert(promoCodes).values({
+        code: rep.promoCode,
+        description: `${rep.brandName} marketing network code - 10% off JC ON THE MOVE services`,
+        discountPercent: "10.00",
+        discountPercentJewelry: "0.00",
+        rewardTokens: "0.00",
+        referralRewardTokens: "0.00",
+        isActive: true,
+      }).onConflictDoUpdate({
+        target: promoCodes.code,
+        set: {
+          description: `${rep.brandName} marketing network code - 10% off JC ON THE MOVE services`,
+          discountPercent: "10.00",
+          isActive: true,
+          updatedAt: new Date(),
+        },
+      });
+
+      await db.insert(marketingReps).values({
+        slug: rep.slug,
+        displayName: rep.displayName,
+        brandName: rep.brandName,
+        tagline: rep.tagline,
+        promoCode: rep.promoCode,
+        serviceFocus: rep.serviceFocus,
+        territory: rep.territory,
+        audience: rep.audience,
+        ctaLabel: rep.ctaLabel,
+        phoneNumber: rep.phoneNumber,
+        contentStrategy: rep.contentStrategy,
+        isActive: true,
+        sortOrder: rep.sortOrder,
+      }).onConflictDoUpdate({
+        target: marketingReps.slug,
+        set: {
+          displayName: rep.displayName,
+          brandName: rep.brandName,
+          tagline: rep.tagline,
+          promoCode: rep.promoCode,
+          serviceFocus: rep.serviceFocus,
+          territory: rep.territory,
+          audience: rep.audience,
+          ctaLabel: rep.ctaLabel,
+          phoneNumber: rep.phoneNumber,
+          contentStrategy: rep.contentStrategy,
+          isActive: true,
+          sortOrder: rep.sortOrder,
+          updatedAt: new Date(),
+        },
+      });
+    }
+    console.log("marketing network reps ready");
+  } catch (err) {
+    console.error("Failed to seed marketing network:", err);
+  }
+}
+
 // Bundle follow-up promo code generator
 // ─────────────────────────────────────────────────────────────────────────────
 async function generateBundleFollowupCode(
@@ -1025,6 +1088,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
         ADD COLUMN IF NOT EXISTS capabilities TEXT[] DEFAULT ARRAY[]::TEXT[],
         ADD COLUMN IF NOT EXISTS is_driver BOOLEAN DEFAULT false,
         ADD COLUMN IF NOT EXISTS accepted_job_types TEXT[] DEFAULT ARRAY['moving','junk','snow','handyman','labor','cleaning','demolition']::TEXT[],
+        ADD COLUMN IF NOT EXISTS stripe_account_id TEXT,
         ADD COLUMN IF NOT EXISTS dispatch_decline_count INTEGER NOT NULL DEFAULT 0,
         ADD COLUMN IF NOT EXISTS dispatch_last_declined_at TIMESTAMP,
         ADD COLUMN IF NOT EXISTS rewards_enrolled BOOLEAN NOT NULL DEFAULT false,
@@ -1079,6 +1143,40 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
       CREATE INDEX IF NOT EXISTS idx_quote_attributions_lead ON quote_attributions(lead_id);
       CREATE INDEX IF NOT EXISTS idx_quote_attributions_booking ON quote_attributions(booking_id);
       CREATE INDEX IF NOT EXISTS idx_quote_attributions_user ON quote_attributions(user_id);
+      CREATE TABLE IF NOT EXISTS marketing_reps (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        slug TEXT NOT NULL UNIQUE,
+        display_name TEXT NOT NULL,
+        brand_name TEXT NOT NULL,
+        tagline TEXT NOT NULL DEFAULT '',
+        promo_code TEXT NOT NULL,
+        service_focus TEXT[] DEFAULT ARRAY[]::TEXT[],
+        territory TEXT NOT NULL DEFAULT '',
+        audience TEXT NOT NULL DEFAULT '',
+        cta_label TEXT NOT NULL DEFAULT 'Get Quote',
+        phone_number TEXT NOT NULL DEFAULT '19062859312',
+        content_strategy JSONB DEFAULT '{}'::jsonb,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        sort_order INTEGER NOT NULL DEFAULT 100,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_marketing_reps_slug ON marketing_reps(slug);
+      CREATE INDEX IF NOT EXISTS idx_marketing_reps_active ON marketing_reps(is_active, sort_order);
+      CREATE INDEX IF NOT EXISTS idx_marketing_reps_promo ON marketing_reps(promo_code);
+      CREATE TABLE IF NOT EXISTS marketing_call_events (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        rep_id VARCHAR REFERENCES marketing_reps(id) ON DELETE SET NULL,
+        rep_slug TEXT NOT NULL,
+        promo_code TEXT NOT NULL,
+        source_path TEXT,
+        phone_number TEXT,
+        referrer TEXT,
+        user_agent TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_marketing_calls_rep ON marketing_call_events(rep_slug, created_at);
+      CREATE INDEX IF NOT EXISTS idx_marketing_calls_promo ON marketing_call_events(promo_code);
     `);
     console.log('worker authority and quote approval tables ready');
   } catch (migErr) {
@@ -1145,6 +1243,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
   try {
     await pool.query(`
       ALTER TABLE users ADD COLUMN IF NOT EXISTS accepted_job_types text[] DEFAULT ARRAY['moving','junk','snow','handyman','labor','cleaning','demolition']::text[];
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_account_id TEXT;
     `);
     console.log('✅ accepted_job_types column ready');
   } catch (migErr) {
@@ -1152,6 +1251,123 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
   }
 
   // Task #173 — dispatch decline tracking columns on users
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS job_payout_settings (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        name TEXT NOT NULL DEFAULT 'default',
+        is_default BOOLEAN NOT NULL DEFAULT true,
+        fuel_reserve_pct DECIMAL(6,4) NOT NULL DEFAULT 0.0500,
+        vehicle_reserve_pct DECIMAL(6,4) NOT NULL DEFAULT 0.0500,
+        insurance_reserve_pct DECIMAL(6,4) NOT NULL DEFAULT 0.0250,
+        processing_fee_pct DECIMAL(6,4) NOT NULL DEFAULT 0.0300,
+        company_profit_pct DECIMAL(6,4) NOT NULL DEFAULT 0.7000,
+        crew_bonus_pct DECIMAL(6,4) NOT NULL DEFAULT 0.2000,
+        referral_pct DECIMAL(6,4) NOT NULL DEFAULT 0.0500,
+        growth_fund_pct DECIMAL(6,4) NOT NULL DEFAULT 0.0500,
+        lead_mover_hourly_rate DECIMAL(10,2) NOT NULL DEFAULT 30.00,
+        mover_hourly_rate DECIMAL(10,2) NOT NULL DEFAULT 25.00,
+        helper_hourly_rate DECIMAL(10,2) NOT NULL DEFAULT 20.00,
+        reward_points_per_dollar_earned DECIMAL(10,4) NOT NULL DEFAULT 1.0000,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_job_payout_settings_default ON job_payout_settings(is_default);
+
+      CREATE TABLE IF NOT EXISTS referral_partners (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        name TEXT NOT NULL,
+        phone TEXT,
+        email TEXT,
+        referral_code TEXT UNIQUE,
+        default_commission_type TEXT NOT NULL DEFAULT 'percent',
+        default_commission_value DECIMAL(10,4) NOT NULL DEFAULT 0.0500,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        stripe_account_id TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_referral_partners_active ON referral_partners(is_active);
+      CREATE INDEX IF NOT EXISTS idx_referral_partners_code ON referral_partners(referral_code);
+
+      CREATE TABLE IF NOT EXISTS job_assignments (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        lead_id VARCHAR NOT NULL REFERENCES leads(id),
+        worker_id VARCHAR NOT NULL REFERENCES users(id),
+        role_on_job TEXT NOT NULL DEFAULT 'mover',
+        hourly_rate DECIMAL(10,2) NOT NULL,
+        hours_worked DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        bonus_weight DECIMAL(10,4) NOT NULL DEFAULT 0.0000,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        CONSTRAINT uq_job_assignment_worker UNIQUE (lead_id, worker_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_job_assignments_lead ON job_assignments(lead_id);
+      CREATE INDEX IF NOT EXISTS idx_job_assignments_worker ON job_assignments(worker_id);
+
+      CREATE TABLE IF NOT EXISTS job_payout_calculations (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        lead_id VARCHAR NOT NULL REFERENCES leads(id),
+        status TEXT NOT NULL DEFAULT 'preview',
+        gross_revenue DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        fuel_reserve DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        vehicle_reserve DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        insurance_reserve DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        processing_fees DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        dump_fees DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        other_expenses DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        guaranteed_labor_total DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        net_job_profit DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        company_profit DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        crew_bonus_pool DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        referral_payout DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        growth_fund DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        profit_margin_pct DECIMAL(10,4) NOT NULL DEFAULT 0.0000,
+        profit_per_labor_hour DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        total_labor_hours DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        referral_partner_id VARCHAR REFERENCES referral_partners(id),
+        finalized_by_user_id VARCHAR REFERENCES users(id),
+        finalized_at TIMESTAMP,
+        admin_override_required BOOLEAN NOT NULL DEFAULT false,
+        admin_override_reason TEXT,
+        settings_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb,
+        calculation_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_job_payout_calculations_lead ON job_payout_calculations(lead_id);
+      CREATE INDEX IF NOT EXISTS idx_job_payout_calculations_status ON job_payout_calculations(status);
+
+      CREATE TABLE IF NOT EXISTS job_worker_payouts (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        calculation_id VARCHAR REFERENCES job_payout_calculations(id),
+        lead_id VARCHAR NOT NULL REFERENCES leads(id),
+        worker_id VARCHAR NOT NULL REFERENCES users(id),
+        role_on_job TEXT NOT NULL DEFAULT 'mover',
+        hours_worked DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        hourly_pay DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        bonus_pay DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        total_pay DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        payout_status TEXT NOT NULL DEFAULT 'manual_pending',
+        stripe_transfer_id TEXT,
+        jcmoves_reward_amount DECIMAL(18,8) NOT NULL DEFAULT 0.00000000,
+        rewards_issued_at TIMESTAMP,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_job_worker_payouts_lead ON job_worker_payouts(lead_id);
+      CREATE INDEX IF NOT EXISTS idx_job_worker_payouts_worker ON job_worker_payouts(worker_id);
+      CREATE INDEX IF NOT EXISTS idx_job_worker_payouts_status ON job_worker_payouts(payout_status);
+
+      INSERT INTO job_payout_settings (name, is_default)
+      SELECT 'default', true
+      WHERE NOT EXISTS (SELECT 1 FROM job_payout_settings WHERE is_default = true);
+    `);
+    console.log('job payout system tables ready');
+  } catch (migErr) {
+    console.error('job payout system migration error (non-fatal):', migErr);
+  }
+
   try {
     await pool.query(`
       ALTER TABLE users ADD COLUMN IF NOT EXISTS dispatch_decline_count INTEGER NOT NULL DEFAULT 0;
@@ -1674,6 +1890,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
   await ensureRewardSettingsSeeded();
   await seedDefaultPromoCodes();
   await linkEmployeePromoCodes();
+  await seedMarketingNetwork();
   await ensureJackpotsSeeded();
 
   // Ensure the 600 JCMOVES Flash Sale spin pack exists in the reward catalog
@@ -6745,6 +6962,10 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
     "available":      "in_progress",
     "accepted":       "in_progress",  // crew-full accepted jobs progress to in_progress
     "in_progress":    "completed",
+    "completed":      "customer_approved",
+    "customer_approved": "payout_calculated",
+    "payout_calculated": "payout_sent",
+    "payout_sent":    "closed",
   };
 
   // Helper: write a lead_history row
@@ -6886,7 +7107,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
       const { status, note } = req.body;
       const actorId = (req.session as any)?.userId ?? req.user?.id ?? null;
 
-      const VALID_LEAD_STATUSES = ["new", "contacted", "quoted", "confirmed", "available", "accepted", "in_progress", "completed", "cancelled", "quote_requested"];
+      const VALID_LEAD_STATUSES = ["new", "contacted", "quoted", "confirmed", "available", "accepted", "in_progress", "completed", "customer_approved", "payout_calculated", "payout_sent", "closed", "cancelled", "quote_requested"];
       if (!status || !VALID_LEAD_STATUSES.includes(status)) {
         return res.status(400).json({ error: `Invalid status. Must be one of: ${VALID_LEAD_STATUSES.join(", ")}` });
       }
@@ -6913,7 +7134,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
       const { status } = req.body;
       const actorId = (req.session as any)?.userId ?? req.user?.id ?? null;
 
-      const VALID_LEAD_STATUSES = ["new", "contacted", "quoted", "confirmed", "available", "accepted", "in_progress", "completed", "cancelled", "quote_requested"];
+      const VALID_LEAD_STATUSES = ["new", "contacted", "quoted", "confirmed", "available", "accepted", "in_progress", "completed", "customer_approved", "payout_calculated", "payout_sent", "closed", "cancelled", "quote_requested"];
       if (!status || !VALID_LEAD_STATUSES.includes(status)) {
         return res.status(400).json({ error: `Invalid status. Must be one of: ${VALID_LEAD_STATUSES.join(", ")}` });
       }
@@ -12194,6 +12415,432 @@ Thank you for your business!
     }
   });
 
+  function numberFrom(value: unknown, fallback = 0): number {
+    const n = typeof value === "number" ? value : Number.parseFloat(String(value ?? ""));
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  function dbMoney(value: number): string {
+    return (Math.round((value + Number.EPSILON) * 100) / 100).toFixed(2);
+  }
+
+  function dbRatio(value: number): string {
+    return (Math.round((value + Number.EPSILON) * 10000) / 10000).toFixed(4);
+  }
+
+  function fullUserName(user: any): string {
+    return [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim() || user?.email || "Worker";
+  }
+
+  function normalizePayoutRole(value: unknown): ProfitShareRole {
+    const role = String(value || "").toLowerCase();
+    if (role === "lead_mover" || role === "lead" || role === "driver") return "lead_mover";
+    if (role === "helper") return "helper";
+    return "mover";
+  }
+
+  function rowToProfitShareSettings(row: any) {
+    return normalizeProfitShareSettings({
+      fuelReservePct: numberFrom(row?.fuelReservePct ?? row?.fuel_reserve_pct, 0.05),
+      vehicleReservePct: numberFrom(row?.vehicleReservePct ?? row?.vehicle_reserve_pct, 0.05),
+      insuranceReservePct: numberFrom(row?.insuranceReservePct ?? row?.insurance_reserve_pct, 0.025),
+      processingFeePct: numberFrom(row?.processingFeePct ?? row?.processing_fee_pct, 0.03),
+      companyProfitPct: numberFrom(row?.companyProfitPct ?? row?.company_profit_pct, 0.7),
+      crewBonusPct: numberFrom(row?.crewBonusPct ?? row?.crew_bonus_pct, 0.2),
+      referralPct: numberFrom(row?.referralPct ?? row?.referral_pct, 0.05),
+      growthFundPct: numberFrom(row?.growthFundPct ?? row?.growth_fund_pct, 0.05),
+      leadMoverHourlyRate: numberFrom(row?.leadMoverHourlyRate ?? row?.lead_mover_hourly_rate, 30),
+      moverHourlyRate: numberFrom(row?.moverHourlyRate ?? row?.mover_hourly_rate, 25),
+      helperHourlyRate: numberFrom(row?.helperHourlyRate ?? row?.helper_hourly_rate, 20),
+      rewardPointsPerDollarEarned: numberFrom(row?.rewardPointsPerDollarEarned ?? row?.reward_points_per_dollar_earned, 1),
+    });
+  }
+
+  async function getDefaultPayoutSettings() {
+    const [settings] = await db.select().from(jobPayoutSettings).where(eq(jobPayoutSettings.isDefault, true)).limit(1);
+    if (settings) return settings;
+    const [created] = await db.insert(jobPayoutSettings).values({ name: "default", isDefault: true }).returning();
+    return created;
+  }
+
+  async function buildProfitSharePreviewForLead(leadId: string, overrides: Record<string, unknown> = {}) {
+    const lead = await storage.getLead(leadId);
+    if (!lead) throw Object.assign(new Error("Lead not found"), { status: 404 });
+
+    const settingsRow = await getDefaultPayoutSettings();
+    const settings = rowToProfitShareSettings(settingsRow);
+    const grossRevenue = numberFrom(overrides.grossRevenue, numberFrom(lead.totalPrice || lead.basePrice, 0));
+    const dumpFees = numberFrom(overrides.dumpFees, 0);
+    const otherExpenses = numberFrom(overrides.otherExpenses, 0);
+    const referralPartnerId = typeof overrides.referralPartnerId === "string" && overrides.referralPartnerId ? overrides.referralPartnerId : null;
+    const referralPartnerRows = referralPartnerId
+      ? await db.select().from(referralPartners).where(eq(referralPartners.id, referralPartnerId)).limit(1)
+      : [];
+    const referralPartner = referralPartnerRows[0] || null;
+
+    const assignmentRows = await db
+      .select({
+        id: jobAssignments.id,
+        workerId: jobAssignments.workerId,
+        roleOnJob: jobAssignments.roleOnJob,
+        hourlyRate: jobAssignments.hourlyRate,
+        hoursWorked: jobAssignments.hoursWorked,
+        bonusWeight: jobAssignments.bonusWeight,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        email: users.email,
+        stripeAccountId: users.stripeAccountId,
+      })
+      .from(jobAssignments)
+      .leftJoin(users, eq(jobAssignments.workerId, users.id))
+      .where(eq(jobAssignments.leadId, leadId));
+
+    let workers: ProfitShareWorkerInput[] = assignmentRows.map((row) => ({
+      assignmentId: row.id,
+      workerId: row.workerId,
+      workerName: fullUserName(row),
+      roleOnJob: normalizePayoutRole(row.roleOnJob),
+      hourlyRate: numberFrom(row.hourlyRate),
+      hoursWorked: numberFrom(row.hoursWorked),
+      bonusWeight: numberFrom(row.bonusWeight),
+      stripeAccountId: row.stripeAccountId || null,
+    }));
+
+    if (workers.length === 0) {
+      const crewIds = Array.from(new Set([lead.assignedToUserId, ...(lead.crewMembers || [])].filter(Boolean))) as string[];
+      const crewUsers = crewIds.length > 0 ? await db.select().from(users).where(inArray(users.id, crewIds)) : [];
+      const roles = crewUsers.map((_, idx) => idx === 0 ? "lead_mover" as ProfitShareRole : "mover" as ProfitShareRole);
+      const weights = defaultBonusWeightsForCrew(roles);
+      const hours = numberFrom(lead.confirmedHours, 4);
+      workers = crewUsers.map((user, idx) => ({
+        assignmentId: null,
+        workerId: user.id,
+        workerName: fullUserName(user),
+        roleOnJob: roles[idx],
+        hourlyRate: defaultHourlyRateForRole(roles[idx], settings),
+        hoursWorked: hours,
+        bonusWeight: weights[idx] || 0,
+        stripeAccountId: user.stripeAccountId || null,
+      }));
+    }
+
+    return calculateProfitSharingPayout({
+      jobId: lead.id,
+      customerName: `${lead.firstName || ""} ${lead.lastName || ""}`.trim() || "Customer",
+      jobType: lead.serviceType || "job",
+      status: lead.status,
+      grossRevenue,
+      dumpFees,
+      otherExpenses,
+      referralPartnerId: referralPartner?.id || null,
+      referralPartnerName: referralPartner?.name || null,
+      workers,
+      settings,
+    });
+  }
+
+  app.get("/api/admin/job-payouts/settings", isAuthenticated, requireBusinessOwner, async (_req, res) => {
+    try {
+      res.json(await getDefaultPayoutSettings());
+    } catch (error) {
+      console.error("Error loading payout settings:", error);
+      res.status(500).json({ error: "Failed to load payout settings" });
+    }
+  });
+
+  app.patch("/api/admin/job-payouts/settings", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const current = await getDefaultPayoutSettings();
+      const body = req.body || {};
+      const updates: Record<string, string | boolean | Date> = { updatedAt: new Date() };
+      for (const [key, column] of [
+        ["fuelReservePct", "fuelReservePct"],
+        ["vehicleReservePct", "vehicleReservePct"],
+        ["insuranceReservePct", "insuranceReservePct"],
+        ["processingFeePct", "processingFeePct"],
+        ["companyProfitPct", "companyProfitPct"],
+        ["crewBonusPct", "crewBonusPct"],
+        ["referralPct", "referralPct"],
+        ["growthFundPct", "growthFundPct"],
+        ["leadMoverHourlyRate", "leadMoverHourlyRate"],
+        ["moverHourlyRate", "moverHourlyRate"],
+        ["helperHourlyRate", "helperHourlyRate"],
+        ["rewardPointsPerDollarEarned", "rewardPointsPerDollarEarned"],
+      ] as const) {
+        if (body[key] !== undefined) {
+          updates[column] = key.endsWith("Pct") || key === "rewardPointsPerDollarEarned"
+            ? dbRatio(numberFrom(body[key]))
+            : dbMoney(numberFrom(body[key]));
+        }
+      }
+      const [updated] = await db.update(jobPayoutSettings).set(updates).where(eq(jobPayoutSettings.id, current.id)).returning();
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating payout settings:", error);
+      res.status(500).json({ error: "Failed to update payout settings" });
+    }
+  });
+
+  app.get("/api/admin/job-payouts/referral-partners", isAuthenticated, requireBusinessOwner, async (_req, res) => {
+    try {
+      const rows = await db.select().from(referralPartners).orderBy(desc(referralPartners.createdAt));
+      res.json(rows);
+    } catch (error) {
+      console.error("Error loading referral partners:", error);
+      res.status(500).json({ error: "Failed to load referral partners" });
+    }
+  });
+
+  app.post("/api/admin/job-payouts/referral-partners", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const body = req.body || {};
+      if (!String(body.name || "").trim()) return res.status(400).json({ error: "name is required" });
+      const [created] = await db.insert(referralPartners).values({
+        name: String(body.name).trim(),
+        phone: body.phone ? String(body.phone) : null,
+        email: body.email ? String(body.email) : null,
+        referralCode: body.referralCode ? String(body.referralCode) : null,
+        defaultCommissionType: body.defaultCommissionType || "percent",
+        defaultCommissionValue: dbRatio(numberFrom(body.defaultCommissionValue, 0.05)),
+        isActive: body.isActive !== false,
+        stripeAccountId: body.stripeAccountId ? String(body.stripeAccountId) : null,
+      }).returning();
+      res.json(created);
+    } catch (error) {
+      console.error("Error creating referral partner:", error);
+      res.status(500).json({ error: "Failed to create referral partner" });
+    }
+  });
+
+  app.get("/api/admin/job-payouts/jobs", isAuthenticated, requireBusinessOwner, async (_req, res) => {
+    try {
+      const rows = await db
+        .select({
+          id: leads.id,
+          orderNumber: leads.orderNumber,
+          firstName: leads.firstName,
+          lastName: leads.lastName,
+          serviceType: leads.serviceType,
+          status: leads.status,
+          totalPrice: leads.totalPrice,
+          basePrice: leads.basePrice,
+          confirmedHours: leads.confirmedHours,
+          moveDate: leads.moveDate,
+          confirmedDate: leads.confirmedDate,
+          createdAt: leads.createdAt,
+        })
+        .from(leads)
+        .where(sql`${leads.archivedAt} IS NULL AND ${leads.status} NOT IN ('cancelled', 'quote_requested', 'new', 'contacted')`)
+        .orderBy(desc(leads.createdAt))
+        .limit(100);
+
+      const calculationRows = await db
+        .select({
+          leadId: jobPayoutCalculations.leadId,
+          status: jobPayoutCalculations.status,
+          netJobProfit: jobPayoutCalculations.netJobProfit,
+          profitPerLaborHour: jobPayoutCalculations.profitPerLaborHour,
+          createdAt: jobPayoutCalculations.createdAt,
+        })
+        .from(jobPayoutCalculations)
+        .orderBy(desc(jobPayoutCalculations.createdAt));
+      const latestByLead = new Map<string, any>();
+      for (const row of calculationRows) if (!latestByLead.has(row.leadId)) latestByLead.set(row.leadId, row);
+
+      res.json(rows.map((row) => ({ ...row, payout: latestByLead.get(row.id) || null })));
+    } catch (error) {
+      console.error("Error loading payout jobs:", error);
+      res.status(500).json({ error: "Failed to load payout jobs" });
+    }
+  });
+
+  app.post("/api/admin/job-payouts/jobs/:id/assignments", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const lead = await storage.getLead(req.params.id);
+      if (!lead) return res.status(404).json({ error: "Lead not found" });
+      const assignments = Array.isArray(req.body?.assignments) ? req.body.assignments : [];
+      if (assignments.length === 0) return res.status(400).json({ error: "assignments[] is required" });
+
+      const values = assignments.map((item: any) => ({
+        leadId: lead.id,
+        workerId: String(item.workerId),
+        roleOnJob: normalizePayoutRole(item.roleOnJob),
+        hourlyRate: dbMoney(numberFrom(item.hourlyRate)),
+        hoursWorked: dbMoney(numberFrom(item.hoursWorked)),
+        bonusWeight: dbRatio(numberFrom(item.bonusWeight)),
+        updatedAt: new Date(),
+      }));
+      for (const value of values) {
+        await db.insert(jobAssignments).values(value).onConflictDoUpdate({
+          target: [jobAssignments.leadId, jobAssignments.workerId],
+          set: {
+            roleOnJob: value.roleOnJob,
+            hourlyRate: value.hourlyRate,
+            hoursWorked: value.hoursWorked,
+            bonusWeight: value.bonusWeight,
+            updatedAt: value.updatedAt,
+          },
+        });
+      }
+      res.json(await buildProfitSharePreviewForLead(lead.id, req.body || {}));
+    } catch (error: any) {
+      console.error("Error saving payout assignments:", error);
+      res.status(error.status || 500).json({ error: error.message || "Failed to save payout assignments" });
+    }
+  });
+
+  app.post("/api/admin/job-payouts/jobs/:id/preview", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      res.json(await buildProfitSharePreviewForLead(req.params.id, req.body || {}));
+    } catch (error: any) {
+      console.error("Error building profit sharing preview:", error);
+      res.status(error.status || 500).json({ error: error.message || "Failed to build payout preview" });
+    }
+  });
+
+  app.post("/api/admin/job-payouts/jobs/:id/finalize", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const lead = await storage.getLead(req.params.id);
+      if (!lead) return res.status(404).json({ error: "Lead not found" });
+      if (lead.status !== "customer_approved") {
+        return res.status(409).json({ error: "Job must be Customer Approved before payout can be finalized." });
+      }
+
+      const preview = await buildProfitSharePreviewForLead(req.params.id, req.body || {});
+      const overrideReason = String(req.body?.adminOverrideReason || "").trim();
+      if (preview.adminOverrideRequired && !overrideReason) {
+        return res.status(409).json({ error: "Loss or zero-profit jobs require an admin override reason before finalizing." });
+      }
+
+      const [calculation] = await db.insert(jobPayoutCalculations).values({
+        leadId: preview.jobId,
+        status: "calculated",
+        grossRevenue: dbMoney(preview.grossRevenue),
+        fuelReserve: dbMoney(preview.fuelReserve),
+        vehicleReserve: dbMoney(preview.vehicleReserve),
+        insuranceReserve: dbMoney(preview.insuranceReserve),
+        processingFees: dbMoney(preview.processingFees),
+        dumpFees: dbMoney(preview.dumpFees),
+        otherExpenses: dbMoney(preview.otherExpenses),
+        guaranteedLaborTotal: dbMoney(preview.guaranteedLaborTotal),
+        netJobProfit: dbMoney(preview.netJobProfit),
+        companyProfit: dbMoney(preview.companyProfit),
+        crewBonusPool: dbMoney(preview.crewBonusPool),
+        referralPayout: dbMoney(preview.referralPayout),
+        growthFund: dbMoney(preview.growthFund),
+        profitMarginPct: dbRatio(preview.profitMarginPct),
+        profitPerLaborHour: dbMoney(preview.profitPerLaborHour),
+        totalLaborHours: dbMoney(preview.totalLaborHours),
+        referralPartnerId: preview.referralPartnerId,
+        finalizedByUserId: req.currentUser?.id || null,
+        finalizedAt: new Date(),
+        adminOverrideRequired: preview.adminOverrideRequired,
+        adminOverrideReason: overrideReason || null,
+        settingsSnapshot: preview.settingsSnapshot,
+        calculationSnapshot: preview,
+      }).returning();
+
+      if (preview.workerPayouts.length > 0) {
+        await db.insert(jobWorkerPayouts).values(preview.workerPayouts.map((worker) => ({
+          calculationId: calculation.id,
+          leadId: preview.jobId,
+          workerId: worker.workerId,
+          roleOnJob: worker.roleOnJob,
+          hoursWorked: dbMoney(worker.hoursWorked),
+          hourlyPay: dbMoney(worker.hourlyPay),
+          bonusPay: dbMoney(worker.bonusPay),
+          totalPay: dbMoney(worker.totalPay),
+          payoutStatus: "manual_pending",
+          jcmovesRewardAmount: worker.jcmovesRewardAmount.toFixed(8),
+        })));
+      }
+
+      await storage.updateLeadStatus(preview.jobId, "payout_calculated");
+      await writeLeadHistory(preview.jobId, lead.status, "payout_calculated", req.currentUser?.id || null, "Profit sharing payout calculated");
+      res.json({ calculation, preview });
+    } catch (error: any) {
+      console.error("Error finalizing profit sharing payout:", error);
+      res.status(error.status || 500).json({ error: error.message || "Failed to finalize payout" });
+    }
+  });
+
+  app.patch("/api/admin/job-payouts/worker-payouts/:id/status", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const status = String(req.body?.status || "");
+      const allowed = new Set(["manual_pending", "manual_paid", "stripe_pending", "stripe_paid", "failed"]);
+      if (!allowed.has(status)) return res.status(400).json({ error: "Invalid payout status" });
+      const [updated] = await db.update(jobWorkerPayouts).set({
+        payoutStatus: status,
+        stripeTransferId: req.body?.stripeTransferId ? String(req.body.stripeTransferId) : undefined,
+        updatedAt: new Date(),
+      }).where(eq(jobWorkerPayouts.id, req.params.id)).returning();
+      if (!updated) return res.status(404).json({ error: "Payout not found" });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating worker payout status:", error);
+      res.status(500).json({ error: "Failed to update payout status" });
+    }
+  });
+
+  app.post("/api/admin/job-payouts/calculations/:id/issue-rewards", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const payouts = await db.select().from(jobWorkerPayouts).where(eq(jobWorkerPayouts.calculationId, req.params.id));
+      if (payouts.length === 0) return res.status(404).json({ error: "Calculation payouts not found" });
+      const issued: any[] = [];
+      for (const payout of payouts) {
+        if (payout.rewardsIssuedAt) continue;
+        const tokenAmount = numberFrom(payout.jcmovesRewardAmount);
+        if (tokenAmount <= 0) continue;
+        await storage.creditWalletTokens(payout.workerId, tokenAmount, {
+          rewardType: "worker_cash_payout_reward",
+          referenceId: payout.id,
+          cashValue: payout.totalPay || "0.00",
+          status: "confirmed",
+          metadata: { source: "job_profit_sharing", leadId: payout.leadId, calculationId: req.params.id },
+        });
+        const [updated] = await db.update(jobWorkerPayouts).set({
+          rewardsIssuedAt: new Date(),
+          updatedAt: new Date(),
+        }).where(eq(jobWorkerPayouts.id, payout.id)).returning();
+        issued.push(updated);
+      }
+      res.json({ issuedCount: issued.length, issued });
+    } catch (error) {
+      console.error("Error issuing worker payout rewards:", error);
+      res.status(500).json({ error: "Failed to issue rewards" });
+    }
+  });
+
+  app.get("/api/crew/payouts", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const rows = await db
+        .select({
+          id: jobWorkerPayouts.id,
+          leadId: jobWorkerPayouts.leadId,
+          hoursWorked: jobWorkerPayouts.hoursWorked,
+          hourlyPay: jobWorkerPayouts.hourlyPay,
+          bonusPay: jobWorkerPayouts.bonusPay,
+          totalPay: jobWorkerPayouts.totalPay,
+          payoutStatus: jobWorkerPayouts.payoutStatus,
+          jcmovesRewardAmount: jobWorkerPayouts.jcmovesRewardAmount,
+          rewardsIssuedAt: jobWorkerPayouts.rewardsIssuedAt,
+          createdAt: jobWorkerPayouts.createdAt,
+          firstName: leads.firstName,
+          lastName: leads.lastName,
+          serviceType: leads.serviceType,
+        })
+        .from(jobWorkerPayouts)
+        .leftJoin(leads, eq(jobWorkerPayouts.leadId, leads.id))
+        .where(eq(jobWorkerPayouts.workerId, req.currentUser.id))
+        .orderBy(desc(jobWorkerPayouts.createdAt))
+        .limit(100);
+      res.json(rows);
+    } catch (error) {
+      console.error("Error loading crew payouts:", error);
+      res.status(500).json({ error: "Failed to load payouts" });
+    }
+  });
+
   app.get("/api/admin/jobs/:id/payout-preview", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
       const { id } = req.params;
@@ -14678,6 +15325,220 @@ Thank you for your business!
     } catch (error) {
       console.error("Error funding treasury from wallet:", error);
       res.status(500).json({ error: "Failed to fund treasury" });
+    }
+  });
+
+  // ============ MARKETING NETWORK ENDPOINTS ============
+
+  const marketingRepInputSchema = z.object({
+    slug: z.string().min(2).max(64),
+    displayName: z.string().min(1).max(120),
+    brandName: z.string().min(1).max(160),
+    tagline: z.string().max(240).default(""),
+    promoCode: z.string().min(2).max(50),
+    serviceFocus: z.array(z.string().min(1).max(120)).default([]),
+    territory: z.string().max(300).default(""),
+    audience: z.string().max(300).default(""),
+    ctaLabel: z.string().min(1).max(80).default("Get Quote"),
+    phoneNumber: z.string().min(7).max(30).default("19062859312"),
+    contentStrategy: z.object({
+      facebookPersonality: z.string().optional(),
+      weeklyPrompts: z.array(z.string()).optional(),
+    }).default({}),
+    isActive: z.boolean().default(true),
+    sortOrder: z.number().int().default(100),
+  });
+
+  function normalizeMarketingRepInput(input: unknown) {
+    const parsed = marketingRepInputSchema.parse(input);
+    return insertMarketingRepSchema.parse({
+      ...parsed,
+      slug: parsed.slug.toLowerCase().trim().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, ""),
+      promoCode: parsed.promoCode.toUpperCase().trim(),
+    });
+  }
+
+  app.get("/api/marketing-network/reps", async (_req, res) => {
+    try {
+      const reps = await db.select().from(marketingReps)
+        .where(eq(marketingReps.isActive, true))
+        .orderBy(marketingReps.sortOrder, marketingReps.displayName);
+      res.json(reps);
+    } catch (error: any) {
+      console.error("Error fetching marketing reps:", error);
+      res.status(500).json({ error: "Failed to fetch marketing reps" });
+    }
+  });
+
+  app.get("/api/marketing-network/reps/:slug", async (req, res) => {
+    try {
+      const slug = String(req.params.slug || "").toLowerCase().trim();
+      const [rep] = await db.select().from(marketingReps)
+        .where(and(eq(marketingReps.slug, slug), eq(marketingReps.isActive, true)))
+        .limit(1);
+      if (!rep) return res.status(404).json({ error: "Marketing rep not found" });
+      res.json(rep);
+    } catch (error: any) {
+      console.error("Error fetching marketing rep:", error);
+      res.status(500).json({ error: "Failed to fetch marketing rep" });
+    }
+  });
+
+  app.post("/api/marketing-network/call", async (req: any, res) => {
+    try {
+      const { slug, sourcePath } = z.object({
+        slug: z.string().min(1).max(64),
+        sourcePath: z.string().max(300).optional(),
+      }).parse(req.body);
+      const [rep] = await db.select().from(marketingReps)
+        .where(and(eq(marketingReps.slug, slug.toLowerCase().trim()), eq(marketingReps.isActive, true)))
+        .limit(1);
+      if (!rep) return res.status(404).json({ error: "Marketing rep not found" });
+      await db.insert(marketingCallEvents).values({
+        repId: rep.id,
+        repSlug: rep.slug,
+        promoCode: rep.promoCode,
+        sourcePath: sourcePath || req.headers.referer || null,
+        phoneNumber: rep.phoneNumber,
+        referrer: req.headers.referer || null,
+        userAgent: req.headers["user-agent"] || null,
+      });
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error tracking marketing call:", error);
+      res.status(400).json({ error: error.message || "Failed to track call" });
+    }
+  });
+
+  app.get("/api/admin/marketing-network/reps", isAuthenticated, requireBusinessOwner, async (_req, res) => {
+    try {
+      const reps = await db.select().from(marketingReps)
+        .orderBy(marketingReps.sortOrder, marketingReps.displayName);
+      res.json(reps);
+    } catch (error: any) {
+      console.error("Error fetching admin marketing reps:", error);
+      res.status(500).json({ error: "Failed to fetch marketing reps" });
+    }
+  });
+
+  app.post("/api/admin/marketing-network/reps", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const data = normalizeMarketingRepInput(req.body);
+      await db.insert(promoCodes).values({
+        code: data.promoCode,
+        description: `${data.brandName} marketing network code - service discount`,
+        discountPercent: "10.00",
+        discountPercentJewelry: "0.00",
+        rewardTokens: "0.00",
+        referralRewardTokens: "0.00",
+        isActive: true,
+      }).onConflictDoNothing();
+      const [created] = await db.insert(marketingReps).values(data).returning();
+      res.json(created);
+    } catch (error: any) {
+      console.error("Error creating marketing rep:", error);
+      res.status(400).json({ error: error.message || "Failed to create marketing rep" });
+    }
+  });
+
+  app.patch("/api/admin/marketing-network/reps/:id", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const data = normalizeMarketingRepInput(req.body);
+      const [updated] = await db.update(marketingReps)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(marketingReps.id, req.params.id))
+        .returning();
+      if (!updated) return res.status(404).json({ error: "Marketing rep not found" });
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error updating marketing rep:", error);
+      res.status(400).json({ error: error.message || "Failed to update marketing rep" });
+    }
+  });
+
+  app.get("/api/admin/marketing-network/stats", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const repId = String(req.query.repId || "");
+      const serviceType = String(req.query.serviceType || "");
+      const status = String(req.query.status || "");
+      const from = String(req.query.from || "");
+      const to = String(req.query.to || "");
+
+      const repWhere = repId ? [eq(marketingReps.id, repId)] : [];
+      const reps = repWhere.length
+        ? await db.select().from(marketingReps).where(and(...repWhere)).orderBy(marketingReps.sortOrder)
+        : await db.select().from(marketingReps).orderBy(marketingReps.sortOrder, marketingReps.displayName);
+
+      const rows = [];
+      for (const rep of reps) {
+        const callParams: unknown[] = [rep.promoCode];
+        let callWhere = "UPPER(promo_code) = UPPER($1)";
+        if (from) { callParams.push(from); callWhere += ` AND created_at >= $${callParams.length}`; }
+        if (to) { callParams.push(to); callWhere += ` AND created_at <= $${callParams.length}`; }
+        const callsResult = await pool.query(`SELECT COUNT(*)::int AS calls FROM marketing_call_events WHERE ${callWhere}`, callParams);
+
+        const leadParams: unknown[] = [rep.promoCode];
+        let leadWhere = "UPPER(promo_code) = UPPER($1)";
+        if (serviceType) { leadParams.push(serviceType); leadWhere += ` AND service_type = $${leadParams.length}`; }
+        let leadStatusCondition = "status IN ('booked','confirmed','assigned','available','in_progress','completed')";
+        if (status) {
+          leadParams.push(status);
+          leadWhere += ` AND status = $${leadParams.length}`;
+          leadStatusCondition = `status = $${leadParams.length}`;
+        }
+        if (from) { leadParams.push(from); leadWhere += ` AND created_at >= $${leadParams.length}`; }
+        if (to) { leadParams.push(to); leadWhere += ` AND created_at <= $${leadParams.length}`; }
+        const leadStats = await pool.query(`
+          SELECT
+            COUNT(*)::int AS estimates,
+            COUNT(*) FILTER (WHERE ${leadStatusCondition})::int AS booked,
+            COALESCE(SUM(CASE WHEN ${leadStatusCondition} THEN COALESCE(total_price::numeric, base_price::numeric, 0) ELSE 0 END), 0)::float AS revenue
+          FROM leads
+          WHERE ${leadWhere}
+        `, leadParams);
+
+        const bookingParams: unknown[] = [rep.promoCode];
+        let bookingWhere = "UPPER(qa.promo_code) = UPPER($1)";
+        if (status) { bookingParams.push(status); bookingWhere += ` AND b.status = $${bookingParams.length}`; }
+        if (from) { bookingParams.push(from); bookingWhere += ` AND b.created_at >= $${bookingParams.length}`; }
+        if (to) { bookingParams.push(to); bookingWhere += ` AND b.created_at <= $${bookingParams.length}`; }
+        const bookingBookedCondition = status ? `b.status = $2` : "b.status IN ('booked','in_progress','completed')";
+        const bookingStats = await pool.query(`
+          SELECT
+            COUNT(DISTINCT b.id)::int AS estimates,
+            COUNT(DISTINCT b.id) FILTER (WHERE ${bookingBookedCondition})::int AS booked,
+            COALESCE(SUM(CASE WHEN ${bookingBookedCondition} THEN b.final_total::numeric ELSE 0 END), 0)::float AS revenue
+          FROM bookings b
+          INNER JOIN quote_attributions qa ON qa.booking_id = b.id
+          WHERE ${bookingWhere}
+        `, bookingParams);
+
+        const calls = Number(callsResult.rows[0]?.calls || 0);
+        const estimates = Number(leadStats.rows[0]?.estimates || 0) + Number(bookingStats.rows[0]?.estimates || 0);
+        const booked = Number(leadStats.rows[0]?.booked || 0) + Number(bookingStats.rows[0]?.booked || 0);
+        const revenue = Number(leadStats.rows[0]?.revenue || 0) + Number(bookingStats.rows[0]?.revenue || 0);
+
+        rows.push({
+          rep,
+          calls,
+          estimates,
+          booked,
+          revenue,
+          split: {
+            referralSource: revenue * 0.10,
+            crewLaborLow: revenue * 0.35,
+            crewLaborHigh: revenue * 0.45,
+            truckFuel: revenue * 0.10,
+            marketingFund: revenue * 0.05,
+            companyProfitLow: revenue * 0.30,
+            companyProfitHigh: revenue * 0.40,
+          },
+        });
+      }
+      res.json({ reps: rows });
+    } catch (error: any) {
+      console.error("Error fetching marketing network stats:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch marketing network stats" });
     }
   });
 

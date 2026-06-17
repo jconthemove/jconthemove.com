@@ -94,3 +94,98 @@ export type JobPayoutPreview = {
   };
   notes: string[];
 };
+
+export type ProfitShareRole = "lead_mover" | "mover" | "helper";
+export type ProfitSharePayoutStatus = "preview" | "calculated" | "manual_pending" | "manual_paid" | "stripe_pending" | "stripe_paid" | "failed";
+
+export type ProfitShareSettings = {
+  fuelReservePct: number;
+  vehicleReservePct: number;
+  insuranceReservePct: number;
+  processingFeePct: number;
+  companyProfitPct: number;
+  crewBonusPct: number;
+  referralPct: number;
+  growthFundPct: number;
+  leadMoverHourlyRate: number;
+  moverHourlyRate: number;
+  helperHourlyRate: number;
+  rewardPointsPerDollarEarned: number;
+};
+
+export const DEFAULT_PROFIT_SHARE_SETTINGS: ProfitShareSettings = {
+  fuelReservePct: 0.05,
+  vehicleReservePct: 0.05,
+  insuranceReservePct: 0.025,
+  processingFeePct: 0.03,
+  companyProfitPct: 0.7,
+  crewBonusPct: 0.2,
+  referralPct: 0.05,
+  growthFundPct: 0.05,
+  leadMoverHourlyRate: 30,
+  moverHourlyRate: 25,
+  helperHourlyRate: 20,
+  rewardPointsPerDollarEarned: 1,
+};
+
+export type ProfitShareWorkerInput = {
+  assignmentId?: string | null;
+  workerId: string;
+  workerName: string;
+  roleOnJob: ProfitShareRole;
+  hourlyRate: number;
+  hoursWorked: number;
+  bonusWeight: number;
+  stripeAccountId?: string | null;
+};
+
+export type ProfitShareJobInput = {
+  jobId: string;
+  customerName: string;
+  jobType: string;
+  status: string;
+  grossRevenue: number;
+  dumpFees: number;
+  otherExpenses: number;
+  referralPartnerId?: string | null;
+  referralPartnerName?: string | null;
+  workers: ProfitShareWorkerInput[];
+  settings: ProfitShareSettings;
+};
+
+export type ProfitShareWorkerPayout = ProfitShareWorkerInput & {
+  hourlyPay: number;
+  bonusPay: number;
+  totalPay: number;
+  jcmovesRewardAmount: number;
+};
+
+export type ProfitSharePayoutPreview = {
+  jobId: string;
+  customerName: string;
+  jobType: string;
+  status: string;
+  grossRevenue: number;
+  guaranteedLaborTotal: number;
+  fuelReserve: number;
+  vehicleReserve: number;
+  insuranceReserve: number;
+  processingFees: number;
+  dumpFees: number;
+  otherExpenses: number;
+  totalExpensesAndReserves: number;
+  netJobProfit: number;
+  companyProfit: number;
+  crewBonusPool: number;
+  referralPayout: number;
+  growthFund: number;
+  totalLaborHours: number;
+  profitMarginPct: number;
+  profitPerLaborHour: number;
+  referralPartnerId: string | null;
+  referralPartnerName: string | null;
+  adminOverrideRequired: boolean;
+  workerPayouts: ProfitShareWorkerPayout[];
+  notes: string[];
+  settingsSnapshot: ProfitShareSettings;
+};

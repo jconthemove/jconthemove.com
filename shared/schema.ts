@@ -222,6 +222,7 @@ export const users = pgTable("users", {
   capabilities: text("capabilities").array().default(sql`ARRAY[]::text[]`), // Capability flags: 'mover','driver','truck_small','truck_large','trailer_small','trailer_large','uhaul'
   isDriver: boolean("is_driver").default(false), // Whether this employee can drive the truck
   acceptedJobTypes: text("accepted_job_types").array().default(sql`ARRAY['moving','junk','snow','handyman','labor','cleaning','demolition']::text[]`), // Job types this worker will accept
+  stripeAccountId: text("stripe_account_id"),
   // Task #173 — dispatch decline tracking. Admin visibility into chronic
   // decliners. Incremented atomically on POST /api/crew/jobs/:id/decline
   // and surfaced via /api/admin/crew/decline-counts.
@@ -288,6 +289,117 @@ export const quoteAttributions = pgTable("quote_attributions", {
   index("idx_quote_attributions_lead").on(table.leadId),
   index("idx_quote_attributions_booking").on(table.bookingId),
   index("idx_quote_attributions_user").on(table.userId),
+]);
+
+export const jobPayoutSettings = pgTable("job_payout_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().default("default"),
+  isDefault: boolean("is_default").notNull().default(true),
+  fuelReservePct: decimal("fuel_reserve_pct", { precision: 6, scale: 4 }).notNull().default("0.0500"),
+  vehicleReservePct: decimal("vehicle_reserve_pct", { precision: 6, scale: 4 }).notNull().default("0.0500"),
+  insuranceReservePct: decimal("insurance_reserve_pct", { precision: 6, scale: 4 }).notNull().default("0.0250"),
+  processingFeePct: decimal("processing_fee_pct", { precision: 6, scale: 4 }).notNull().default("0.0300"),
+  companyProfitPct: decimal("company_profit_pct", { precision: 6, scale: 4 }).notNull().default("0.7000"),
+  crewBonusPct: decimal("crew_bonus_pct", { precision: 6, scale: 4 }).notNull().default("0.2000"),
+  referralPct: decimal("referral_pct", { precision: 6, scale: 4 }).notNull().default("0.0500"),
+  growthFundPct: decimal("growth_fund_pct", { precision: 6, scale: 4 }).notNull().default("0.0500"),
+  leadMoverHourlyRate: decimal("lead_mover_hourly_rate", { precision: 10, scale: 2 }).notNull().default("30.00"),
+  moverHourlyRate: decimal("mover_hourly_rate", { precision: 10, scale: 2 }).notNull().default("25.00"),
+  helperHourlyRate: decimal("helper_hourly_rate", { precision: 10, scale: 2 }).notNull().default("20.00"),
+  rewardPointsPerDollarEarned: decimal("reward_points_per_dollar_earned", { precision: 10, scale: 4 }).notNull().default("1.0000"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_job_payout_settings_default").on(table.isDefault),
+]);
+
+export const referralPartners = pgTable("referral_partners", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  phone: text("phone"),
+  email: text("email"),
+  referralCode: text("referral_code").unique(),
+  defaultCommissionType: text("default_commission_type").notNull().default("percent"),
+  defaultCommissionValue: decimal("default_commission_value", { precision: 10, scale: 4 }).notNull().default("0.0500"),
+  isActive: boolean("is_active").notNull().default(true),
+  stripeAccountId: text("stripe_account_id"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_referral_partners_active").on(table.isActive),
+  index("idx_referral_partners_code").on(table.referralCode),
+]);
+
+export const jobAssignments = pgTable("job_assignments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  leadId: varchar("lead_id").notNull().references(() => leads.id),
+  workerId: varchar("worker_id").notNull().references(() => users.id),
+  roleOnJob: text("role_on_job").notNull().default("mover"),
+  hourlyRate: decimal("hourly_rate", { precision: 10, scale: 2 }).notNull(),
+  hoursWorked: decimal("hours_worked", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  bonusWeight: decimal("bonus_weight", { precision: 10, scale: 4 }).notNull().default("0.0000"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_job_assignments_lead").on(table.leadId),
+  index("idx_job_assignments_worker").on(table.workerId),
+  uniqueIndex("uq_job_assignment_worker").on(table.leadId, table.workerId),
+]);
+
+export const jobPayoutCalculations = pgTable("job_payout_calculations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  leadId: varchar("lead_id").notNull().references(() => leads.id),
+  status: text("status").notNull().default("preview"),
+  grossRevenue: decimal("gross_revenue", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  fuelReserve: decimal("fuel_reserve", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  vehicleReserve: decimal("vehicle_reserve", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  insuranceReserve: decimal("insurance_reserve", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  processingFees: decimal("processing_fees", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  dumpFees: decimal("dump_fees", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  otherExpenses: decimal("other_expenses", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  guaranteedLaborTotal: decimal("guaranteed_labor_total", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  netJobProfit: decimal("net_job_profit", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  companyProfit: decimal("company_profit", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  crewBonusPool: decimal("crew_bonus_pool", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  referralPayout: decimal("referral_payout", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  growthFund: decimal("growth_fund", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  profitMarginPct: decimal("profit_margin_pct", { precision: 10, scale: 4 }).notNull().default("0.0000"),
+  profitPerLaborHour: decimal("profit_per_labor_hour", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  totalLaborHours: decimal("total_labor_hours", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  referralPartnerId: varchar("referral_partner_id").references(() => referralPartners.id),
+  finalizedByUserId: varchar("finalized_by_user_id").references(() => users.id),
+  finalizedAt: timestamp("finalized_at"),
+  adminOverrideRequired: boolean("admin_override_required").notNull().default(false),
+  adminOverrideReason: text("admin_override_reason"),
+  settingsSnapshot: jsonb("settings_snapshot").notNull().default("{}"),
+  calculationSnapshot: jsonb("calculation_snapshot").notNull().default("{}"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_job_payout_calculations_lead").on(table.leadId),
+  index("idx_job_payout_calculations_status").on(table.status),
+]);
+
+export const jobWorkerPayouts = pgTable("job_worker_payouts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  calculationId: varchar("calculation_id").references(() => jobPayoutCalculations.id),
+  leadId: varchar("lead_id").notNull().references(() => leads.id),
+  workerId: varchar("worker_id").notNull().references(() => users.id),
+  roleOnJob: text("role_on_job").notNull().default("mover"),
+  hoursWorked: decimal("hours_worked", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  hourlyPay: decimal("hourly_pay", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  bonusPay: decimal("bonus_pay", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  totalPay: decimal("total_pay", { precision: 10, scale: 2 }).notNull().default("0.00"),
+  payoutStatus: text("payout_status").notNull().default("manual_pending"),
+  stripeTransferId: text("stripe_transfer_id"),
+  jcmovesRewardAmount: decimal("jcmoves_reward_amount", { precision: 18, scale: 8 }).notNull().default("0.00000000"),
+  rewardsIssuedAt: timestamp("rewards_issued_at"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_job_worker_payouts_lead").on(table.leadId),
+  index("idx_job_worker_payouts_worker").on(table.workerId),
+  index("idx_job_worker_payouts_status").on(table.payoutStatus),
 ]);
 
 // Rewards system tables
@@ -819,6 +931,43 @@ export type Contact = typeof contacts.$inferSelect;
 export const insertNotificationSchema = createInsertSchema(notifications);
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type Notification = typeof notifications.$inferSelect;
+
+export const insertJobPayoutSettingsSchema = createInsertSchema(jobPayoutSettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export const insertReferralPartnerSchema = createInsertSchema(referralPartners).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export const insertJobAssignmentSchema = createInsertSchema(jobAssignments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export const insertJobPayoutCalculationSchema = createInsertSchema(jobPayoutCalculations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export const insertJobWorkerPayoutSchema = createInsertSchema(jobWorkerPayouts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type JobPayoutSettings = typeof jobPayoutSettings.$inferSelect;
+export type InsertJobPayoutSettings = z.infer<typeof insertJobPayoutSettingsSchema>;
+export type ReferralPartner = typeof referralPartners.$inferSelect;
+export type InsertReferralPartner = z.infer<typeof insertReferralPartnerSchema>;
+export type JobAssignment = typeof jobAssignments.$inferSelect;
+export type InsertJobAssignment = z.infer<typeof insertJobAssignmentSchema>;
+export type JobPayoutCalculation = typeof jobPayoutCalculations.$inferSelect;
+export type InsertJobPayoutCalculation = z.infer<typeof insertJobPayoutCalculationSchema>;
+export type JobWorkerPayout = typeof jobWorkerPayouts.$inferSelect;
+export type InsertJobWorkerPayout = z.infer<typeof insertJobWorkerPayoutSchema>;
 
 // Push subscription schema
 export const pushSubscriptionSchema = z.object({
@@ -1863,6 +2012,63 @@ export const insertPromoCodeSchema = createInsertSchema(promoCodes).omit({
 
 export type PromoCode = typeof promoCodes.$inferSelect;
 export type InsertPromoCode = z.infer<typeof insertPromoCodeSchema>;
+
+// Marketing network reps and call-click attribution. Promo codes remain the
+// primary booking attribution key; call events fill the top of the funnel.
+export const marketingReps = pgTable("marketing_reps", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  slug: text("slug").notNull().unique(),
+  displayName: text("display_name").notNull(),
+  brandName: text("brand_name").notNull(),
+  tagline: text("tagline").notNull().default(""),
+  promoCode: text("promo_code").notNull(),
+  serviceFocus: text("service_focus").array().default(sql`ARRAY[]::text[]`),
+  territory: text("territory").notNull().default(""),
+  audience: text("audience").notNull().default(""),
+  ctaLabel: text("cta_label").notNull().default("Get Quote"),
+  phoneNumber: text("phone_number").notNull().default("19062859312"),
+  contentStrategy: jsonb("content_strategy").$type<{
+    facebookPersonality?: string;
+    weeklyPrompts?: string[];
+  }>().default(sql`'{}'::jsonb`),
+  isActive: boolean("is_active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(100),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_marketing_reps_slug").on(table.slug),
+  index("idx_marketing_reps_active").on(table.isActive, table.sortOrder),
+  index("idx_marketing_reps_promo").on(table.promoCode),
+]);
+
+export const marketingCallEvents = pgTable("marketing_call_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  repId: varchar("rep_id").references(() => marketingReps.id, { onDelete: "set null" }),
+  repSlug: text("rep_slug").notNull(),
+  promoCode: text("promo_code").notNull(),
+  sourcePath: text("source_path"),
+  phoneNumber: text("phone_number"),
+  referrer: text("referrer"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("idx_marketing_calls_rep").on(table.repSlug, table.createdAt),
+  index("idx_marketing_calls_promo").on(table.promoCode),
+]);
+
+export const insertMarketingRepSchema = createInsertSchema(marketingReps).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export const insertMarketingCallEventSchema = createInsertSchema(marketingCallEvents).omit({
+  id: true,
+  createdAt: true,
+});
+export type MarketingRep = typeof marketingReps.$inferSelect;
+export type InsertMarketingRep = z.infer<typeof insertMarketingRepSchema>;
+export type MarketingCallEvent = typeof marketingCallEvents.$inferSelect;
+export type InsertMarketingCallEvent = z.infer<typeof insertMarketingCallEventSchema>;
 
 // ── JCMOVES Rewards Marketplace ─────────────────────────────────────────────
 export const rewardCategories = pgTable("reward_categories", {

@@ -118,6 +118,7 @@ const AdminDispatchPage = lazy(() => import("@/pages/admin/dispatch"));
 const AdminSponsorsPage = lazy(() => import("@/pages/admin/sponsors"));
 const AdminAnalyticsPage = lazy(() => import("@/pages/admin/analytics"));
 const AdminBookingAnalyticsPage = lazy(() => import("@/pages/admin/booking-analytics"));
+const AdminMarketingNetworkPage = lazy(() => import("@/pages/admin/marketing-network"));
 const AdminPaymentsPage = lazy(() => import("@/pages/admin/AdminPaymentsPage"));
 const AdminWalletLedgerPage = lazy(() => import("@/pages/admin/AdminWalletLedgerPage"));
 const AdminCashoutsPage = lazy(() => import("@/pages/admin/AdminCashoutsPage"));
@@ -131,6 +132,7 @@ const RoofingPage = lazy(() => import("@/pages/roofing"));
 const DemolitionPage = lazy(() => import("@/pages/demolition"));
 const PricingPage = lazy(() => import("@/pages/pricing"));
 const HubPage = lazy(() => import("@/pages/hub"));
+const MarketingRepPage = lazy(() => import("@/pages/marketing-rep"));
 
 // Thin fallback shown while a lazy page chunk is downloading
 function PageLoader() {
@@ -505,6 +507,7 @@ function AuthenticatedApp() {
               <Route path="/admin/sponsors"><AdminSponsorsPage /></Route>
               <Route path="/admin/analytics"><AdminAnalyticsPage /></Route>
               <Route path="/admin/booking-analytics"><AdminBookingAnalyticsPage /></Route>
+              <Route path="/admin/marketing-network"><AdminMarketingNetworkPage /></Route>
               <Route path="/admin/payments"><AdminPaymentsPage /></Route>
               <Route path="/admin/wallet-ledger"><AdminWalletLedgerPage /></Route>
               <Route path="/admin/cashouts"><AdminCashoutsPage /></Route>
@@ -734,6 +737,13 @@ const PUBLIC_PATH_PREFIXES = [
   "/",
   "/get-started",
   "/home",
+  "/network",
+  "/rep",
+  "/matt",
+  "/troy",
+  "/evan",
+  "/bill",
+  "/darrell",
   "/employee-register",
   "/login",
   "/employee-login",
@@ -784,6 +794,13 @@ function Router() {
 
       {/* Public site (original marketing page) */}
       <Route path="/home">{() => <PublicHomePage />}</Route>
+      <Route path="/network/:slug" component={MarketingRepPage} />
+      <Route path="/rep/:slug" component={MarketingRepPage} />
+      <Route path="/matt"><Redirect to="/network/matt" /></Route>
+      <Route path="/troy"><Redirect to="/network/troy" /></Route>
+      <Route path="/evan"><Redirect to="/network/evan" /></Route>
+      <Route path="/bill"><Redirect to="/network/bill" /></Route>
+      <Route path="/darrell"><Redirect to="/network/darrell" /></Route>
 
       {/* Public authentication routes */}
       <Route path="/employee-register" component={EmployeeRegister} />

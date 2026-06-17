@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Radio, Briefcase, Users, Wallet, Sliders, ChevronRight, LogOut,
   Menu, X, ShoppingBag, Settings, Handshake, BarChart2, CalendarDays,
   Bitcoin, FileBarChart, CreditCard, Coins, Banknote, Rocket, AlertTriangle,
-  ClipboardList,
+  ClipboardList, Megaphone,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest, clearTokens, queryClient } from "@/lib/queryClient";
@@ -67,6 +67,7 @@ const CLOSET = [
   { label: "Marketplace", icon: ShoppingBag, path: "/admin/marketplace" },
   { label: "System", icon: Settings, path: "/admin/system" },
   { label: "Sponsors", icon: Handshake, path: "/admin/sponsors" },
+  { label: "Marketing Network", icon: Megaphone, path: "/admin/marketing-network" },
   { label: "Analytics", icon: BarChart2, path: "/admin/analytics" },
   { label: "Booking Analytics", icon: FileBarChart, path: "/admin/booking-analytics" },
   { label: "Schedule", icon: CalendarDays, path: "/admin/schedule" },
