@@ -79,7 +79,7 @@ export default function EmployeeLogin() {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="john.doe@example.com"
+                  placeholder="Email you use for work"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="pl-9 bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
@@ -96,7 +96,7 @@ export default function EmployeeLogin() {
                 <Input
                   id="password"
                   type="password"
-                  placeholder="••••••••"
+                  placeholder="Password"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="pl-9 bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"

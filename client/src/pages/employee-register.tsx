@@ -148,7 +148,7 @@ export default function EmployeeRegister() {
                   <User className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                   <Input
                     id="firstName"
-                    placeholder="John"
+                    placeholder="First name"
                     value={formData.firstName}
                     onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
                     className="pl-9 bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
@@ -163,7 +163,7 @@ export default function EmployeeRegister() {
                   <User className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                   <Input
                     id="lastName"
-                    placeholder="Doe"
+                    placeholder="Last name"
                     value={formData.lastName}
                     onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                     className="pl-9 bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
@@ -181,7 +181,7 @@ export default function EmployeeRegister() {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="john.doe@example.com"
+                  placeholder="Email you use for work"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="pl-9 bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
@@ -198,7 +198,7 @@ export default function EmployeeRegister() {
                 <Input
                   id="phoneNumber"
                   type="tel"
-                  placeholder="(517) 202-5454"
+                  placeholder="Best phone number"
                   value={formData.phoneNumber}
                   onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
                   className="pl-9 bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
