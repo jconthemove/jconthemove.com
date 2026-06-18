@@ -153,11 +153,16 @@ const SERVICE_CODE_ALIASES: Record<string, string> = {
   labor: "labor",
   delivery: "delivery",
   deliveries: "delivery",
+  other: "custom",
+  custom: "custom",
+  "something-else": "custom",
+  justask: "custom",
+  "just-ask": "custom",
 };
 
 function normalizeServiceCodeParam(value: string): string {
   const normalized = value.trim().toLowerCase();
-  return SERVICE_CODE_ALIASES[normalized] ?? normalized;
+  return SERVICE_CODE_ALIASES[normalized] ?? normalized.replace(/-/g, "_");
 }
 
 const STEPS = ["services", "address", "configure", "contact", "safety", "review"] as const;
@@ -287,16 +292,17 @@ function QuickRequestForm({
     { code: "demolition", name: "Demolition" },
     { code: "roofing", name: "Roofing" },
     { code: "painting", name: "Painting" },
-    { code: "other", name: "Something Else" },
+    { code: "custom", name: "Something Else" },
   ];
   const serviceOptions = services.length > 0
     ? services.filter((svc) => !svc.isAddon).map((svc) => ({ code: svc.code, name: svc.name }))
     : fallbackServices;
+  const normalizedInitialServiceCode = normalizeServiceCodeParam(initialServiceCode || "");
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
     phone: "",
-    serviceCode: serviceOptions.some((svc) => svc.code === initialServiceCode) ? initialServiceCode! : "moving",
+    serviceCode: serviceOptions.some((svc) => svc.code === normalizedInitialServiceCode) ? normalizedInitialServiceCode : "moving",
     notes: "",
   });
   const [photoFiles, setPhotoFiles] = useState<QuickRequestPhoto[]>([]);

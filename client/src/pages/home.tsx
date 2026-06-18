@@ -67,7 +67,7 @@ const VISUAL_SERVICES = [
   {
     label: "Junk Removal",
     sub: "Cleanouts, hauling, disposal",
-    href: "/book?mode=quick&service=junk",
+    href: "/book?mode=quick&service=junk_removal",
     image: loadedTrailerImage,
     icon: Trash2,
     color: "orange",
@@ -83,7 +83,7 @@ const VISUAL_SERVICES = [
   {
     label: "Cleanup / Labor",
     sub: "Move-outs, garages, extra hands",
-    href: "/book?mode=quick&service=cleanup-labor",
+    href: "/book?mode=quick&service=cleaning",
     image: trailerRampImage,
     icon: Sparkles,
     color: "violet",
@@ -92,8 +92,8 @@ const VISUAL_SERVICES = [
 
 const MORE_SERVICES = [
   { label: "Handyman", href: "/book?mode=quick&service=handyman" },
-  { label: "Window Cleaning", href: "/book?mode=quick&service=window" },
-  { label: "Snow", href: "/book?mode=quick&service=snow" },
+  { label: "Window Cleaning", href: "/book?mode=quick&service=window_cleaning" },
+  { label: "Snow", href: "/book?mode=quick&service=snow_removal" },
   { label: "Lawn", href: "/book/lawn-care" },
   { label: "Demolition", href: "/book?mode=quick&service=demolition" },
   { label: "Roofing", href: "/book?mode=quick&service=roofing" },
@@ -453,7 +453,7 @@ export default function HomePage() {
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row md:flex-col">
-              <Button onClick={() => setLocation("/book?mode=quick&service=other")} className="h-11 rounded-lg bg-emerald-600 px-5 font-black hover:bg-emerald-500">
+              <Button onClick={() => setLocation("/book?mode=quick&service=custom")} className="h-11 rounded-lg bg-emerald-600 px-5 font-black hover:bg-emerald-500">
                 Just Ask
               </Button>
               <a href="sms:+19062859312">
