@@ -266,17 +266,21 @@ function QuickRequestForm({
   onBuildQuote,
   onHome,
   attribution,
+  initialServiceCode,
 }: {
   services: CatalogService[];
   onBuildQuote: () => void;
   onHome: () => void;
   attribution: { promoCode: string; referralSlug: string };
+  initialServiceCode?: string;
 }) {
   const { toast } = useToast();
   const fallbackServices = [
     { code: "moving", name: "Moving" },
     { code: "junk_removal", name: "Junk Removal" },
+    { code: "delivery", name: "Delivery" },
     { code: "cleaning", name: "Cleaning" },
+    { code: "labor", name: "Labor" },
     { code: "handyman", name: "Handyman" },
     { code: "window_cleaning", name: "Window Cleaning" },
   ];
@@ -287,7 +291,7 @@ function QuickRequestForm({
     firstName: "",
     lastName: "",
     phone: "",
-    serviceCode: "moving",
+    serviceCode: serviceOptions.some((svc) => svc.code === initialServiceCode) ? initialServiceCode! : "moving",
     notes: "",
   });
   const [photoFiles, setPhotoFiles] = useState<QuickRequestPhoto[]>([]);
@@ -1235,7 +1239,13 @@ export default function MultiServiceBookPage() {
             </a>
           </div>
         </div>
-        <QuickRequestForm services={services} onBuildQuote={startBuilder} onHome={() => setLocation("/")} attribution={attribution} />
+        <QuickRequestForm
+          services={services}
+          onBuildQuote={startBuilder}
+          onHome={() => setLocation("/")}
+          attribution={attribution}
+          initialServiceCode={urlPrefill.codes[0]}
+        />
       </div>
     );
   }

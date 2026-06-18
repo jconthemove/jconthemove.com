@@ -25,6 +25,29 @@ type MarketingRep = {
   };
 };
 
+const coreServiceLinks = [
+  {
+    label: "Moving",
+    service: "moving",
+    note: "Apartments, houses, loading, unloading, and local moves",
+  },
+  {
+    label: "Junk Removal",
+    service: "junk-removal",
+    note: "Cleanouts, furniture, trash piles, and haul-away jobs",
+  },
+  {
+    label: "Delivery",
+    service: "delivery",
+    note: "Store pickups, furniture delivery, and local hauling",
+  },
+  {
+    label: "Cleanup / Labor",
+    service: "cleanup-labor",
+    note: "Extra hands for garages, yards, events, and jobsite cleanup",
+  },
+];
+
 function formatPhone(raw: string) {
   const digits = raw.replace(/\D/g, "");
   if (digits.length === 11 && digits.startsWith("1")) {
@@ -49,6 +72,10 @@ export default function MarketingRepPage() {
   const callHref = rep ? `tel:+${rep.phoneNumber.replace(/\D/g, "")}` : "#";
   const quoteHref = rep ? `/book?mode=quick&promo=${encodeURIComponent(rep.promoCode)}&rep=${encodeURIComponent(rep.slug)}` : "/book";
   const builderHref = rep ? `/book?mode=builder&promo=${encodeURIComponent(rep.promoCode)}&rep=${encodeURIComponent(rep.slug)}` : "/book";
+  const serviceHref = (service: string) =>
+    rep
+      ? `/book?mode=quick&service=${encodeURIComponent(service)}&promo=${encodeURIComponent(rep.promoCode)}&rep=${encodeURIComponent(rep.slug)}`
+      : `/book?mode=quick&service=${encodeURIComponent(service)}`;
   const shareUrl = rep ? `${window.location.origin}/network/${rep.slug}` : "";
   const qrImageUrl = shareUrl ? `https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=8&data=${encodeURIComponent(shareUrl)}` : "";
   const shareText = rep ? `${rep.displayName} with JC ON THE MOVE can help book moving, junk removal, delivery, cleanup, and labor work. Use code ${rep.promoCode}: ${shareUrl}` : "";
@@ -249,6 +276,45 @@ export default function MarketingRepPage() {
           <div className="rounded-lg border border-white/10 bg-white/[0.03] p-4">
             <p className="text-xs text-zinc-500 uppercase font-bold flex items-center gap-2"><Share2 className="h-3.5 w-3.5" /> This week&apos;s post idea</p>
             <p className="mt-2 text-sm text-zinc-200 leading-relaxed">{weeklyPrompts[0] || rep.contentStrategy?.facebookPersonality}</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="border-t border-white/10 bg-white text-zinc-950 px-4 py-10">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.22em] text-emerald-700 font-black">Book By Service</p>
+              <h2 className="mt-2 text-2xl font-black">Send customers to the right request fast.</h2>
+            </div>
+            <Link href={quoteHref}>
+              <Button className="w-full sm:w-auto bg-zinc-950 text-white hover:bg-zinc-800">
+                Request General Callback
+              </Button>
+            </Link>
+          </div>
+
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {coreServiceLinks.map((service) => (
+              <Link key={service.service} href={serviceHref(service.service)}>
+                <Card className="h-full border-zinc-200 bg-zinc-50 transition hover:border-emerald-500 hover:bg-emerald-50">
+                  <CardContent className="p-4">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-md bg-emerald-100 text-emerald-700">
+                      <Truck className="h-4 w-4" />
+                    </div>
+                    <p className="mt-3 text-base font-black text-zinc-950">{service.label}</p>
+                    <p className="mt-1 text-sm leading-relaxed text-zinc-600">{service.note}</p>
+                    <p className="mt-4 text-xs font-black uppercase tracking-wider text-emerald-700">
+                      Use {rep.promoCode}
+                    </p>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+
+          <div className="mt-5 rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-600">
+            These links keep {rep.displayName}&apos;s code attached all the way into the booking request, so admin can track leads, booked jobs, revenue, and future referral payouts.
           </div>
         </div>
       </section>
