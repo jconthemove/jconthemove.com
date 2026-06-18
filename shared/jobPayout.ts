@@ -11,8 +11,8 @@ export type JobPayoutSplit = {
 export const DEFAULT_JOB_PAYOUT_SPLIT: JobPayoutSplit = {
   laborPool: 0.45,
   ownerAdmin: 0.10,
-  companyProfit: 0.25,
-  referralPool: 0.07,
+  companyProfit: 0.27,
+  referralPool: 0.05,
   equipmentPool: 0.08,
   mealCultureFund: 0.03,
   reserveFund: 0.02,

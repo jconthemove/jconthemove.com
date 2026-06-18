@@ -525,7 +525,10 @@ export default function AdminDispatchPage() {
       <Dialog open={!!payoutLeadId} onOpenChange={(open) => !open && setPayoutLeadId(null)}>
         <DialogContent className="max-w-3xl border-slate-800 bg-slate-950 text-white">
           <DialogHeader>
-            <DialogTitle>Job Payout Engine</DialogTitle>
+            <DialogTitle>Quick Payout Estimate</DialogTitle>
+            <p className="text-sm text-slate-400">
+              Dispatch uses this for same-day crew planning. Final profit-share payouts are calculated in Admin Job Payouts and cannot be finalized until Customer Approved.
+            </p>
           </DialogHeader>
 
           {payoutLoading || !payoutPreview ? (
@@ -545,7 +548,7 @@ export default function AdminDispatchPage() {
               <div className="grid gap-3 md:grid-cols-2">
                 <Card className="border-slate-800 bg-slate-900/50">
                   <CardContent className="p-4 space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Pools</p>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Dispatch Estimate Pools</p>
                     {[
                       ["Labor Pool", payoutPreview.pools.laborPool],
                       ["Owner/Admin", payoutPreview.pools.ownerAdminPool],
@@ -640,6 +643,7 @@ export default function AdminDispatchPage() {
               </Card>
 
               <div className="space-y-1 text-xs text-slate-400">
+                <p>Use Admin Job Payouts for gross revenue, reserves, guaranteed hourly pay, net profit, profit per labor hour, crew bonus, referral payout, and final payout status.</p>
                 {payoutPreview.notes.map((note) => (
                   <p key={note}>{note}</p>
                 ))}
