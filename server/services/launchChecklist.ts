@@ -11,6 +11,7 @@ import { classifyPayment } from "./paymentClassifier";
 import { computeBookingQuote } from "./bookingPricing";
 import { validateRedemption, tokensToDollars } from "../../shared/tokenRedemptionRules";
 import { isDispatchable } from "../dispatch/isDispatchable";
+import { getAppUrl } from "../appUrl";
 
 export type ScenarioId =
   | "env_required"
@@ -23,6 +24,8 @@ export type ScenarioId =
   | "deposit_gating"
   | "wallet_table"
   | "btc_sweep_alive"
+  | "public_app_url"
+  | "admin_access_ready"
   | "public_booking_catalog"
   | "quick_request_notifications"
   | "profit_share_settings"
@@ -160,6 +163,47 @@ const SCENARIOS: Scenario[] = [
         return { ok: false, detail: "sweep disabled — BTC_WALLET_ADDRESS not set" };
       }
       return { ok: true, detail: "sweep ticks every 2 min from server/index.ts" };
+    },
+  },
+  {
+    id: "public_app_url",
+    label: "Public app URL points to the launch domain",
+    run: async () => {
+      const appUrl = getAppUrl();
+      try {
+        const parsed = new URL(appUrl);
+        const host = parsed.hostname.toLowerCase();
+        const configured = !!(process.env.APP_URL?.trim() || process.env.RENDER_EXTERNAL_URL?.trim());
+        const isLocal = host === "localhost" || host === "127.0.0.1" || host.endsWith(".local");
+        if (parsed.protocol !== "https:") {
+          return { ok: false, detail: `${appUrl} is not HTTPS` };
+        }
+        if (isLocal) {
+          return { ok: false, detail: `${appUrl} is local-only; set APP_URL or RENDER_EXTERNAL_URL before launch` };
+        }
+        return {
+          ok: true,
+          detail: `${appUrl}${configured ? "" : " (using fallback launch domain)"}`,
+        };
+      } catch {
+        return { ok: false, detail: `invalid app URL: ${appUrl}` };
+      }
+    },
+  },
+  {
+    id: "admin_access_ready",
+    label: "Admin/business-owner access account exists",
+    run: async () => {
+      const { rows } = await pool.query<{ count: number }>(`
+        SELECT COUNT(*)::int AS count
+        FROM users
+        WHERE role IN ('admin', 'business_owner')
+          AND COALESCE(status, 'approved') = 'approved'
+      `);
+      const count = rows[0]?.count ?? 0;
+      return count > 0
+        ? { ok: true, detail: `${count} approved admin/business-owner account(s)` }
+        : { ok: false, detail: "no approved admin or business-owner account found" };
     },
   },
   {
