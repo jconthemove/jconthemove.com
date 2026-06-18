@@ -4675,6 +4675,19 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
                   : eq(marketingReps.slug, referralSlug))
                 .limit(1);
               if (rep) {
+                const [ownedPromo] = await db.select({ referralUserId: promoCodes.referralUserId })
+                  .from(promoCodes)
+                  .where(eq(promoCodes.code, rep.promoCode))
+                  .limit(1);
+                if (ownedPromo?.referralUserId) {
+                  repUserId = ownedPromo.referralUserId;
+                } else {
+                  const [workerProfile] = await db.select({ userId: workerProfiles.userId })
+                    .from(workerProfiles)
+                    .where(eq(workerProfiles.promoCode, rep.promoCode))
+                    .limit(1);
+                  repUserId = workerProfile?.userId || null;
+                }
                 await db.insert(quoteAttributions).values({
                   leadId: lead.id,
                   userId: repUserId,
@@ -4792,6 +4805,10 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
             orderNumber: lead.orderNumber,
             displayOrderNumber: formatOrderNumber(lead.orderNumber),
             status: lead.status,
+            serviceLabel: service.label,
+            photoCount: parsed.photos.length,
+            promoCode: normalizedPromoCode || null,
+            referralSlug: referralSlug || null,
           },
         });
       } catch (error) {

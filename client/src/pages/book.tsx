@@ -103,6 +103,10 @@ interface QuickRequestResponse {
     orderNumber: number;
     displayOrderNumber: string;
     status: string;
+    serviceLabel?: string;
+    photoCount?: number;
+    promoCode?: string | null;
+    referralSlug?: string | null;
   };
 }
 
@@ -248,6 +252,7 @@ function QuickRequestForm({
   });
 
   if (submitted) {
+    const photoCount = submitted.photoCount || 0;
     return (
       <div className="max-w-2xl mx-auto px-4 pt-8">
         <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5 sm:p-6 text-center space-y-5">
@@ -257,14 +262,38 @@ function QuickRequestForm({
           <div>
             <h1 className="text-2xl sm:text-3xl font-black">Quick Request Sent</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Order {submitted.displayOrderNumber} is in the quote-needed queue. A coordinator will call or text you shortly to confirm the details.
+              Order {submitted.displayOrderNumber} is in the quote-needed queue. A coordinator will call or text you shortly at {form.phone} to confirm the details.
             </p>
           </div>
-          <div className="rounded-xl border border-border bg-card p-4 text-left text-sm">
-            <p className="font-black">Customer needs quote</p>
-            <p className="mt-1 text-muted-foreground">Call required · Quick request · No pricing shown yet</p>
+          <div className="grid gap-2 text-left text-sm sm:grid-cols-2">
+            <div className="rounded-xl border border-border bg-card p-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Request</p>
+              <p className="mt-1 font-black">{submitted.serviceLabel || "Service"} quote needed</p>
+              <p className="mt-1 text-muted-foreground">Call required. No pricing shown yet.</p>
+            </div>
+            <div className="rounded-xl border border-border bg-card p-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Photos</p>
+              <p className="mt-1 font-black">{photoCount > 0 ? `${photoCount} attached` : "No photos attached"}</p>
+              <p className="mt-1 text-muted-foreground">{photoCount > 0 ? "We will review them before calling." : "You can text photos when we follow up."}</p>
+            </div>
+          </div>
+          {(submitted.promoCode || submitted.referralSlug) && (
+            <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-3 text-left text-xs text-emerald-700 dark:text-emerald-300">
+              {submitted.promoCode && <p className="font-black">Referral code {submitted.promoCode} attached</p>}
+              {submitted.referralSlug && <p className="mt-1">Rep page: {submitted.referralSlug}</p>}
+            </div>
+          )}
+          <div className="rounded-xl border border-blue-500/25 bg-blue-500/10 p-3 text-left text-xs text-blue-700 dark:text-blue-300">
+            <p className="font-black">Need faster help?</p>
+            <p className="mt-1">Call or text now and mention order {submitted.displayOrderNumber}.</p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <a href="tel:+19062859312">
+              <Button className="w-full">Call Now</Button>
+            </a>
+            <a href={`sms:+19062859312?&body=${encodeURIComponent(`Hi JC ON THE MOVE, I just submitted quick request ${submitted.displayOrderNumber}.`)}`}>
+              <Button className="w-full" variant="outline">Text Backup</Button>
+            </a>
             <Button onClick={onBuildQuote}>Build a detailed quote</Button>
             <Button variant="outline" onClick={onHome}>Return Home</Button>
           </div>
@@ -368,7 +397,7 @@ function QuickRequestForm({
           </label>
           {photoFiles.length > 0 && (
             <p className="mt-2 text-[11px] text-muted-foreground">
-              {photoFiles.length} photo{photoFiles.length === 1 ? "" : "s"} attached to request notes.
+              {photoFiles.length} photo{photoFiles.length === 1 ? "" : "s"} attached. We will review them before calling.
             </p>
           )}
         </div>
