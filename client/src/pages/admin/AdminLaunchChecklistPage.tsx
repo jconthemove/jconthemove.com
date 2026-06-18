@@ -1,5 +1,5 @@
-// Task #175 — Admin "Launch Checklist" page (closet).
-// One-click probe of every payment surface — env, Square, BTC, pricing,
+// Task #175 - Admin "Launch Checklist" page (closet).
+// One-click probe of every payment surface: env, Square, BTC, pricing,
 // token rules, classifier, deposit gate, wallet, sweep. Operator runs it
 // before publishing the deploy and watches each row turn green.
 
@@ -51,18 +51,18 @@ export default function AdminLaunchChecklistPage() {
           disabled={busyAll || isLoading}
           className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium disabled:opacity-50"
         >
-          {busyAll ? <span className="inline-flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Running…</span> : "Run all"}
+          {busyAll ? <span className="inline-flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Running...</span> : "Run all"}
         </button>
         {scenarios.length > 0 && (
           <span className={`text-sm ${allOk ? "text-emerald-400" : "text-slate-400"}`}>
-            {Object.keys(results).length} / {scenarios.length} run · {Object.values(results).filter(r => r.ok).length} green
+            {Object.keys(results).length} / {scenarios.length} run - {Object.values(results).filter(r => r.ok).length} green
           </span>
         )}
       </div>
 
       <div className="bg-slate-900/60 border border-slate-800 rounded-2xl divide-y divide-slate-800">
         {isLoading ? (
-          <div className="p-8 text-center text-slate-400">Loading scenarios…</div>
+          <div className="p-8 text-center text-slate-400">Loading scenarios...</div>
         ) : (
           scenarios.map((s) => {
             const r = results[s.id];
@@ -77,7 +77,7 @@ export default function AdminLaunchChecklistPage() {
                   <div className="text-white font-medium">{s.label}</div>
                   {r && (
                     <div className={`mt-1 text-xs ${r.ok ? "text-emerald-300/80" : "text-rose-300/90"}`}>
-                      {r.detail} <span className="text-slate-500">· {r.ms}ms</span>
+                      {r.detail} <span className="text-slate-500">- {r.ms}ms</span>
                     </div>
                   )}
                 </div>

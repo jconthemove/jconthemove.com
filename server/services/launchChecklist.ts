@@ -1,4 +1,4 @@
-// Task #175 — Launch checklist runner.
+// Task #175 - Launch checklist runner.
 //
 // Each scenario is a self-contained probe that exercises one payment
 // surface end-to-end and reports green/red. Wired to a single admin page
@@ -73,7 +73,7 @@ const SCENARIOS: Scenario[] = [
     run: async () => {
       const addr = process.env.BTC_WALLET_ADDRESS;
       if (!addr) return { ok: false, detail: "BTC_WALLET_ADDRESS not set" };
-      return { ok: true, detail: `address=${addr.slice(0, 8)}…${addr.slice(-6)}` };
+      return { ok: true, detail: `address=${addr.slice(0, 8)}...${addr.slice(-6)}` };
     },
   },
   {
@@ -99,7 +99,7 @@ const SCENARIOS: Scenario[] = [
       if (!happyPath.valid) return { ok: false, detail: `happy path rejected: ${happyPath.message}` };
       return {
         ok: true,
-        detail: `1000 JCMOVES → $${tokensToDollars(happyPath.effectiveTokens).toFixed(2)} discount`,
+        detail: `1000 JCMOVES -> $${tokensToDollars(happyPath.effectiveTokens).toFixed(2)} discount`,
       };
     },
   },
@@ -160,7 +160,7 @@ const SCENARIOS: Scenario[] = [
     label: "BTC auto-verify sweep configured to run",
     run: async () => {
       if (!process.env.BTC_WALLET_ADDRESS) {
-        return { ok: false, detail: "sweep disabled — BTC_WALLET_ADDRESS not set" };
+        return { ok: false, detail: "sweep disabled - BTC_WALLET_ADDRESS not set" };
       }
       return { ok: true, detail: "sweep ticks every 2 min from server/index.ts" };
     },
