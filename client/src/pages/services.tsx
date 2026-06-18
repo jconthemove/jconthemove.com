@@ -226,13 +226,13 @@ export default function ServicesPage() {
 
           <div className="text-center mb-8">
             <Badge className="bg-blue-500/20 text-blue-300 border border-blue-500/30 mb-4 text-xs font-semibold px-3 py-1">
-              ✔ Licensed · Insured · 5-Star Rated
+              Licensed - Insured - 5-Star Rated
             </Badge>
             <h1 className="text-4xl md:text-5xl font-black text-white mb-3 leading-tight">
               Book Your <span className="text-blue-400">Moving Crew</span>
             </h1>
             <p className="text-lg text-slate-300 mb-8 max-w-xl mx-auto">
-              Pick your crew size, choose your services, and get an instant price estimate — no hidden fees.
+              Pick your crew size, choose your services, and get an instant price estimate - no hidden fees.
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <Button
@@ -287,7 +287,7 @@ export default function ServicesPage() {
                   className="flex flex-col items-center p-3 rounded-xl bg-slate-900 border border-slate-700 hover:border-blue-500/60 hover:bg-slate-800 transition-all group"
                 >
                   <span className="text-sm font-semibold text-white group-hover:text-blue-300">{label}</span>
-                  <span className="text-xs text-slate-500 mt-0.5">→ {crew} Movers</span>
+                  <span className="text-xs text-slate-500 mt-0.5">{crew} Movers</span>
                 </button>
               ))}
             </div>
@@ -351,7 +351,7 @@ export default function ServicesPage() {
                   {meta.popular && (
                     <div className="absolute top-3 right-3">
                       <Badge className="bg-orange-500 text-white border-0 text-[10px] font-bold px-2 py-0.5 shadow-lg">
-                        ⭐ MOST POPULAR
+                        MOST POPULAR
                       </Badge>
                     </div>
                   )}
@@ -794,7 +794,7 @@ export default function ServicesPage() {
             <h3 className="text-base font-black text-white">Half Day Special Package</h3>
           </div>
           <p className="text-slate-300 text-sm mb-3">
-            5 movers · 3 hours · travel included — perfect for large homes or tight deadlines.
+            5 movers - 3 hours - travel included - perfect for large homes or tight deadlines.
           </p>
           <div className="flex items-end gap-3 mb-4">
             <div>
@@ -802,13 +802,13 @@ export default function ServicesPage() {
               <p className="text-3xl font-black text-orange-400">$1,020</p>
               <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
                 <Bitcoin className="h-3 w-3 text-orange-400" />
-                with Bitcoin payment · <span className="text-orange-400 font-bold">15% off</span>
+                with Bitcoin payment - <span className="text-orange-400 font-bold">15% off</span>
               </p>
             </div>
             <div className="ml-auto text-right">
               <div className="inline-flex flex-col gap-1 text-[11px]">
-                <span className="bg-green-500/20 text-green-300 border border-green-500/30 rounded-full px-2 py-0.5">⚡ Book Now -5%</span>
-                <span className="bg-orange-500/20 text-orange-300 border border-orange-500/30 rounded-full px-2 py-0.5">₿ Bitcoin -10%</span>
+                <span className="bg-green-500/20 text-green-300 border border-green-500/30 rounded-full px-2 py-0.5">Book Now -5%</span>
+                <span className="bg-orange-500/20 text-orange-300 border border-orange-500/30 rounded-full px-2 py-0.5">Bitcoin -10%</span>
               </div>
             </div>
           </div>
@@ -824,12 +824,12 @@ export default function ServicesPage() {
           <h2 className="text-2xl font-black text-white mb-4">Other Services</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {[
-              { href: "/book?mode=quick&service=junk_removal", label: "Junk Removal", color: "from-orange-600 to-orange-800", emoji: "🗑️" },
-              { href: "/snow-removal",               label: "Snow Removal",       color: "from-cyan-700 to-blue-800",       emoji: "❄️" },
-              { href: "/book?mode=quick&service=cleaning", label: "Move-In Cleaning", color: "from-green-700 to-green-900", emoji: "✨" },
-              { href: "/book?mode=quick&service=handyman", label: "Handyman", color: "from-amber-700 to-amber-900", emoji: "🔧" },
-              { href: "/book?mode=quick&service=demolition", label: "Light Demo", color: "from-red-700 to-red-900", emoji: "⚒️" },
-              { href: "/book?mode=quick&service=flooring", label: "Flooring", color: "from-stone-700 to-stone-900", emoji: "🪵" },
+              { href: "/book?mode=quick&service=junk_removal", label: "Junk Removal", color: "from-orange-600 to-orange-800", emoji: "JR" },
+              { href: "/snow-removal",               label: "Snow Removal",       color: "from-cyan-700 to-blue-800",       emoji: "SN" },
+              { href: "/book?mode=quick&service=cleaning", label: "Move-In Cleaning", color: "from-green-700 to-green-900", emoji: "CL" },
+              { href: "/book?mode=quick&service=handyman", label: "Handyman", color: "from-amber-700 to-amber-900", emoji: "HM" },
+              { href: "/book?mode=quick&service=demolition", label: "Light Demo", color: "from-red-700 to-red-900", emoji: "LD" },
+              { href: "/book?mode=quick&service=flooring", label: "Flooring", color: "from-stone-700 to-stone-900", emoji: "FL" },
             ].map(({ href, label, color, emoji }) => (
               <Link key={href} href={href}>
                 <div className={`bg-gradient-to-br ${color} rounded-xl p-4 text-center cursor-pointer hover:scale-[1.03] transition-all border border-white/10`}>
@@ -873,7 +873,7 @@ export default function ServicesPage() {
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link href="/book?mode=builder&service=moving">
               <Button size="lg" className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-black border-0 shadow-lg shadow-orange-500/25">
-                Book Now — Free Quote <ChevronRight className="ml-1 h-5 w-5" />
+                Book Now - Free Quote <ChevronRight className="ml-1 h-5 w-5" />
               </Button>
             </Link>
             <a href="tel:+19062859312">

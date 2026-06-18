@@ -46,7 +46,7 @@ import {
 } from "@shared/pricingTables";
 const JUNK_PACKAGES = JUNK_TIERS.map((t, i) => ({
   label: t.label,
-  desc: `${t.loadFraction} · ${t.weightCap}`,
+  desc: `${t.loadFraction} - ${t.weightCap}`,
   low: t.price,
   high: t.price,
   popular: i === 2, // Medium remains the highlighted option
@@ -89,9 +89,9 @@ export default function PricingPage() {
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
           <div>
             <h1 className="text-xl font-black text-white">Pricing &amp; Services</h1>
-            <p className="text-slate-400 text-xs mt-0.5">Transparent rates — no hidden fees</p>
+            <p className="text-slate-400 text-xs mt-0.5">Transparent rates - no hidden fees</p>
           </div>
-          <a href="tel:+12312341234">
+          <a href="tel:+19062859312">
             <Button variant="outline" size="sm" className="border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 gap-1.5">
               <Phone className="h-3.5 w-3.5" /> Call Us
             </Button>
@@ -126,7 +126,7 @@ export default function PricingPage() {
         <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/25">
           <Tag className="h-3.5 w-3.5 text-emerald-400 flex-shrink-0" />
           <p className="text-xs text-emerald-300 font-medium">
-            Bundle 2+ services and save — ask about combo pricing when you book.
+            Bundle 2+ services and save - ask about combo pricing when you book.
           </p>
         </div>
 
@@ -557,9 +557,9 @@ export default function PricingPage() {
         <div className="rounded-2xl border border-slate-700/50 bg-slate-800/20 px-5 py-4 mt-2">
           <p className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Payment &amp; Deposit Policy</p>
           <p className="text-slate-500 text-xs leading-relaxed">
-            <span className="text-slate-400">Estimate visits</span> — Handyman and out-of-area Painting/Flooring/Roofing estimates require a $50–$100 non-refundable deposit, credited toward your project if you book within 6 months.{" "}
-            <span className="text-slate-400">Job-start</span> — Flooring, Painting, and Roofing jobs require a 50% deposit when the crew arrives; remainder is due on completion.{" "}
-            <span className="text-slate-400">All other services</span> — Payment is due on completion; no deposit required.
+            <span className="text-slate-400">Estimate visits</span> - Handyman and out-of-area Painting/Flooring/Roofing estimates require a $50-$100 non-refundable deposit, credited toward your project if you book within 6 months.{" "}
+            <span className="text-slate-400">Job-start</span> - Flooring, Painting, and Roofing jobs require a 50% deposit when the crew arrives; remainder is due on completion.{" "}
+            <span className="text-slate-400">All other services</span> - Payment is due on completion; no deposit required.
           </p>
         </div>
 
@@ -578,7 +578,7 @@ export default function PricingPage() {
                 <DollarSign className="h-4 w-4 mr-1.5" /> Get Instant Quote
               </Button>
             </Link>
-            <a href="tel:+12312341234">
+            <a href="tel:+19062859312">
               <Button variant="outline" className="border-slate-600 text-white hover:bg-slate-800 font-bold w-full sm:w-auto">
                 <Phone className="h-4 w-4 mr-1.5" /> Call Darrell
               </Button>
@@ -662,7 +662,7 @@ function QuoteOnlyNote({ color }: { color: string }) {
     <div className="flex items-start gap-2 bg-slate-900/60 border border-slate-700 rounded-xl p-3 text-xs text-slate-400">
       <Info className={cn("h-3.5 w-3.5 flex-shrink-0 mt-0.5", color)} />
       <span>
-        Pricing varies by project scope. Tap <span className="text-white font-semibold">Get Quote</span> or call us — we'll give you a free, no-pressure estimate within 24 hours.
+        Pricing varies by project scope. Tap <span className="text-white font-semibold">Get Quote</span> or call us - we'll give you a free, no-pressure estimate within 24 hours.
       </span>
     </div>
   );
