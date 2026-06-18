@@ -41,6 +41,12 @@ interface Stake {
   tier: { id: string; name: string; minAmount: string; apr: string; lockupDays: number; color: string };
 }
 
+interface MarketingRep {
+  slug: string;
+  displayName: string;
+  promoCode: string;
+}
+
 const REWARD_LABELS: Record<string, string> = {
   mining: "Mining Reward",
   daily_checkin: "Daily Check-in",
@@ -86,13 +92,19 @@ export default function CrewEarningsPage() {
   const { data: miningStatus } = useQuery<MiningStatus>({ queryKey: ["/api/mining/status"], refetchInterval: 15000, refetchIntervalInBackground: false, retry: 1 });
   const { data: rewardsHistory } = useQuery<RewardHistory[]>({ queryKey: ["/api/rewards/history"] });
   const { data: stakes = [] } = useQuery<Stake[]>({ queryKey: ["/api/staking/my-stakes"], retry: 1 });
+  const { data: marketingReps = [] } = useQuery<MarketingRep[]>({ queryKey: ["/api/marketing-network/reps"], retry: 1 });
 
   const userCapabilities: string[] = user?.capabilities ?? [];
   const referralCode = (user as any)?.referralCode || "";
-  const referralSlug = (user as any)?.firstName ? String((user as any).firstName).toLowerCase().replace(/[^a-z0-9]+/g, "-") : "";
-  const referralLink = referralSlug
-    ? `${window.location.origin}/network/${referralSlug}`
-    : `${window.location.origin}/book${referralCode ? `?promo=${encodeURIComponent(referralCode)}` : ""}`;
+  const workerName = `${(user as any)?.firstName || ""} ${(user as any)?.lastName || ""}`.trim().toLowerCase();
+  const marketingRep = marketingReps.find((rep) => {
+    if (referralCode && rep.promoCode.toUpperCase() === referralCode.toUpperCase()) return true;
+    return workerName.length > 0 && rep.displayName.toLowerCase() === workerName;
+  });
+  const referralLink = marketingRep
+    ? `${window.location.origin}/network/${marketingRep.slug}`
+    : `${window.location.origin}/book${referralCode ? `?promo=${encodeURIComponent(referralCode)}` : "?mode=quick"}`;
+  const referralDestination = marketingRep ? "Verified rep page" : "Booking link";
 
   useEffect(() => {
     if (!miningStatus?.currentSession) { setAnimatedTokens(0); return; }
@@ -158,19 +170,24 @@ export default function CrewEarningsPage() {
             <p className="text-xs font-black uppercase tracking-widest text-emerald-300">Worker marketing link</p>
             <h2 className="mt-1 text-lg font-black text-white">Share your JC ON THE MOVE booking page</h2>
             <p className="mt-1 text-xs leading-relaxed text-slate-300">
-              Send this link to customers. Jobs can be tracked back to your code or rep page so referrals, revenue, and future bonuses stay visible.
+              Send this link to customers. Jobs can be tracked back to your code so referrals, revenue, and future bonuses stay visible.
             </p>
           </div>
           <Share2 className="h-5 w-5 shrink-0 text-emerald-300" />
         </div>
         <div className="mt-3 rounded-lg border border-white/10 bg-slate-950/50 p-3">
           <p className="break-all font-mono text-xs text-slate-200">{referralLink}</p>
+          <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">{referralDestination}</p>
           {referralCode && <p className="mt-2 text-[11px] font-bold uppercase tracking-widest text-emerald-300">Code: {referralCode}</p>}
         </div>
         <button
           type="button"
           className="mt-3 inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-black text-slate-950 hover:bg-emerald-400"
-          onClick={() => navigator.clipboard?.writeText(referralLink).catch(() => {})}
+          onClick={() => {
+            navigator.clipboard?.writeText(referralLink)
+              .then(() => toast({ title: "Referral link copied", description: referralDestination }))
+              .catch(() => toast({ title: "Copy failed", description: "Long-press the link to copy it.", variant: "destructive" }));
+          }}
         >
           <LinkIcon className="h-3.5 w-3.5" /> Copy link
         </button>
