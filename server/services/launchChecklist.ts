@@ -28,6 +28,8 @@ export type ScenarioId =
   | "admin_access_ready"
   | "public_booking_catalog"
   | "quick_request_notifications"
+  | "quick_request_storage"
+  | "marketing_rep_pages"
   | "profit_share_settings"
   | "payout_safety_gate";
 
@@ -243,6 +245,89 @@ const SCENARIOS: Scenario[] = [
       return channels.length > 0
         ? { ok: true, detail: `available: ${channels.join(", ")}` }
         : { ok: false, detail: "no email or admin SMS channel is fully configured" };
+    },
+  },
+  {
+    id: "quick_request_storage",
+    label: "Quick request photo + referral storage ready",
+    run: async () => {
+      const { rows } = await pool.query<{ column_name: string }>(`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'leads'
+          AND column_name IN ('source', 'promo_code', 'photos', 'order_number')
+      `);
+      const columns = new Set(rows.map((row) => row.column_name));
+      const required = ["source", "promo_code", "photos", "order_number"];
+      const missing = required.filter((name) => !columns.has(name));
+      return missing.length === 0
+        ? { ok: true, detail: "leads table can store source, referral code, photos, and order number" }
+        : { ok: false, detail: `missing lead columns: ${missing.join(", ")}` };
+    },
+  },
+  {
+    id: "marketing_rep_pages",
+    label: "Worker marketing rep pages are share-ready",
+    run: async () => {
+      const { rows } = await pool.query<{
+        id: string;
+        slug: string | null;
+        promo_code: string | null;
+        display_name: string | null;
+        promo_exists: boolean;
+      }>(`
+        SELECT mr.id, mr.slug, mr.promo_code, mr.display_name,
+               EXISTS (
+                 SELECT 1
+                 FROM promo_codes pc
+                 WHERE UPPER(pc.code) = UPPER(mr.promo_code)
+                   AND pc.is_active = true
+               ) AS promo_exists
+        FROM marketing_reps mr
+        WHERE mr.is_active = true
+      `);
+
+      if (rows.length === 0) {
+        return { ok: false, detail: "no active marketing reps found; create at least one rep page before worker marketing" };
+      }
+
+      const badRows = rows.filter((row) => {
+        const slugOk = !!row.slug && /^[a-z0-9-]+$/.test(row.slug);
+        const promoOk = !!row.promo_code && row.promo_exists;
+        return !slugOk || !promoOk;
+      });
+      if (badRows.length > 0) {
+        return {
+          ok: false,
+          detail: `${badRows.length} active rep page(s) missing a clean slug or active promo code`,
+        };
+      }
+
+      const slugCounts = new Map<string, number>();
+      const promoCounts = new Map<string, number>();
+      for (const row of rows) {
+        const slug = String(row.slug || "").toLowerCase();
+        const promo = String(row.promo_code || "").toUpperCase();
+        slugCounts.set(slug, (slugCounts.get(slug) || 0) + 1);
+        promoCounts.set(promo, (promoCounts.get(promo) || 0) + 1);
+      }
+      const duplicateSlugs = [...slugCounts.entries()].filter(([, count]) => count > 1).map(([slug]) => slug);
+      const duplicatePromos = [...promoCounts.entries()].filter(([, count]) => count > 1).map(([promo]) => promo);
+      if (duplicateSlugs.length || duplicatePromos.length) {
+        return {
+          ok: false,
+          detail: [
+            duplicateSlugs.length ? `duplicate slugs: ${duplicateSlugs.join(", ")}` : "",
+            duplicatePromos.length ? `duplicate promo codes: ${duplicatePromos.join(", ")}` : "",
+          ].filter(Boolean).join("; "),
+        };
+      }
+
+      return {
+        ok: true,
+        detail: `${rows.length} active rep page(s) have clean slugs and active promo codes`,
+      };
     },
   },
   {
