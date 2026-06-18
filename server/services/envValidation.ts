@@ -65,11 +65,16 @@ export function validateRequiredEnv(): EnvValidationResult {
   return validateEnv([...CORE_ENV, ...PAYMENT_ENV]);
 }
 
+export function validateStartupEnv(): EnvValidationResult {
+  return validateEnv(CORE_ENV);
+}
+
 export function assertRequiredEnvOrExit(): void {
-  const result = validateRequiredEnv();
+  const startupResult = validateStartupEnv();
+  const fullResult = validateRequiredEnv();
 
   if (process.env.NODE_ENV !== "production") {
-    const missing = result.details.filter((detail) => !detail.present);
+    const missing = fullResult.details.filter((detail) => !detail.present);
     if (missing.length > 0) {
       console.warn("[env-check] non-production environment detected; missing env vars are allowed for local development:");
       for (const detail of missing) {
@@ -79,14 +84,19 @@ export function assertRequiredEnvOrExit(): void {
     return;
   }
 
-  console.log("[env-check] production env vars:");
-  for (const detail of result.details) {
-    const tag = detail.present ? "OK" : detail.required ? "MISSING" : "OPTIONAL";
-    console.log(`  ${tag} ${detail.name} (${detail.required ? "required" : "optional"}) - ${detail.purpose}`);
+  console.log("[env-check] production startup env vars:");
+  for (const detail of startupResult.details) {
+    const tag = detail.present ? "OK" : "MISSING";
+    console.log(`  ${tag} ${detail.name} (startup required) - ${detail.purpose}`);
   }
 
-  if (!result.ok) {
-    const list = result.missingRequired.map((name) => `  - ${name}`).join("\n");
+  const paymentMissing = validatePaymentEnv().missingRequired;
+  if (paymentMissing.length > 0) {
+    console.warn(`[env-check] payment env incomplete; service will boot, but payment launch checks will fail until set: ${paymentMissing.join(", ")}`);
+  }
+
+  if (!startupResult.ok) {
+    const list = startupResult.missingRequired.map((name) => `  - ${name}`).join("\n");
     console.error(`\n[env-check] production startup blocked; missing required env vars:\n${list}\n\nSet these in your production environment and restart.`);
     process.exit(1);
   }
