@@ -4600,7 +4600,10 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
     moving: { serviceType: "residential", label: "Moving" },
     junk: { serviceType: "junk", label: "Junk Removal" },
     junk_removal: { serviceType: "junk", label: "Junk Removal" },
+    delivery: { serviceType: "delivery", label: "Delivery" },
     cleaning: { serviceType: "cleaning", label: "Cleaning" },
+    labor: { serviceType: "labor", label: "Labor" },
+    other: { serviceType: "other", label: "Something Else" },
     move_cleaning: { serviceType: "cleaning", label: "Move Cleaning" },
     window_cleaning: { serviceType: "window_cleaning", label: "Window Cleaning" },
     handyman: { serviceType: "handyman", label: "Handyman" },
@@ -4608,6 +4611,8 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
     snow_removal: { serviceType: "snow", label: "Snow Removal" },
     lawn_care: { serviceType: "lawn", label: "Lawn Care" },
     demolition: { serviceType: "demolition", label: "Demolition" },
+    roofing: { serviceType: "roofing", label: "Roofing" },
+    painting: { serviceType: "painting", label: "Painting" },
   };
 
   app.post(

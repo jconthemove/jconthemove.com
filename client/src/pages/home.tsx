@@ -59,7 +59,7 @@ const VISUAL_SERVICES = [
   {
     label: "Moving",
     sub: "Homes, apartments, offices",
-    href: "/book?service=moving",
+    href: "/book?mode=quick&service=moving",
     image: packedTruckImage,
     icon: Truck,
     color: "blue",
@@ -67,7 +67,7 @@ const VISUAL_SERVICES = [
   {
     label: "Junk Removal",
     sub: "Cleanouts, hauling, disposal",
-    href: "/book?service=junk",
+    href: "/book?mode=quick&service=junk",
     image: loadedTrailerImage,
     icon: Trash2,
     color: "orange",
@@ -75,7 +75,7 @@ const VISUAL_SERVICES = [
   {
     label: "Delivery",
     sub: "Furniture, appliances, store pickups",
-    href: "/book?service=delivery",
+    href: "/book?mode=quick&service=delivery",
     image: dollyBoxesImage,
     icon: Truck,
     color: "emerald",
@@ -83,7 +83,7 @@ const VISUAL_SERVICES = [
   {
     label: "Cleanup / Labor",
     sub: "Move-outs, garages, extra hands",
-    href: "/book?service=cleaning",
+    href: "/book?mode=quick&service=cleanup-labor",
     image: trailerRampImage,
     icon: Sparkles,
     color: "violet",
@@ -91,13 +91,13 @@ const VISUAL_SERVICES = [
 ];
 
 const MORE_SERVICES = [
-  { label: "Handyman", href: "/book?service=handyman" },
-  { label: "Window Cleaning", href: "/book?service=window" },
-  { label: "Snow", href: "/book?service=snow" },
+  { label: "Handyman", href: "/book?mode=quick&service=handyman" },
+  { label: "Window Cleaning", href: "/book?mode=quick&service=window" },
+  { label: "Snow", href: "/book?mode=quick&service=snow" },
   { label: "Lawn", href: "/book/lawn-care" },
-  { label: "Demolition", href: "/book?service=demolition" },
-  { label: "Roofing", href: "/book?service=roofing" },
-  { label: "Painting", href: "/book?service=painting" },
+  { label: "Demolition", href: "/book?mode=quick&service=demolition" },
+  { label: "Roofing", href: "/book?mode=quick&service=roofing" },
+  { label: "Painting", href: "/book?mode=quick&service=painting" },
 ];
 
 const STORY_SLIDES = [
@@ -407,7 +407,7 @@ export default function HomePage() {
               return (
                 <button
                   key={service.label}
-                  onClick={() => setLocation(service.href.replace("/book?", "/book?mode=choose&"))}
+                  onClick={() => setLocation(service.href)}
                   className={`group relative min-h-[180px] overflow-hidden rounded-lg border ${color.border} bg-slate-900 text-left shadow-xl transition-transform hover:-translate-y-1 md:min-h-[200px]`}
                 >
                   <img src={service.image} alt="" className="absolute inset-0 h-full w-full object-cover opacity-70 transition-transform duration-500 group-hover:scale-105" />
@@ -436,7 +436,7 @@ export default function HomePage() {
               {MORE_SERVICES.map((service) => (
                 <button
                   key={service.label}
-                  onClick={() => setLocation(service.href.replace("/book?", "/book?mode=choose&"))}
+                  onClick={() => setLocation(service.href)}
                   className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-slate-200 hover:border-blue-400/60 hover:bg-blue-500/10"
                 >
                   {service.label}

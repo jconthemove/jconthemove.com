@@ -283,6 +283,11 @@ function QuickRequestForm({
     { code: "labor", name: "Labor" },
     { code: "handyman", name: "Handyman" },
     { code: "window_cleaning", name: "Window Cleaning" },
+    { code: "snow_removal", name: "Snow Removal" },
+    { code: "demolition", name: "Demolition" },
+    { code: "roofing", name: "Roofing" },
+    { code: "painting", name: "Painting" },
+    { code: "other", name: "Something Else" },
   ];
   const serviceOptions = services.length > 0
     ? services.filter((svc) => !svc.isAddon).map((svc) => ({ code: svc.code, name: svc.name }))
