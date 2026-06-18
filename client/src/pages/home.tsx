@@ -594,7 +594,7 @@ export default function HomePage() {
           <div>
             <p className="text-4xl font-black leading-none">JC</p>
             <p className="mt-1 text-lg font-black">ON THE MOVE</p>
-            <p className="mt-3 max-w-xs text-sm text-slate-400">Northwoods moving, junk removal, handyman help, and local service work.</p>
+            <p className="mt-3 max-w-xs text-sm text-slate-400">Northwoods moving, junk removal, delivery, cleanup, labor, and local service work.</p>
           </div>
           <div>
             <p className="mb-3 text-sm font-black uppercase tracking-widest">Services</p>
@@ -627,7 +627,7 @@ export default function HomePage() {
           </div>
         </div>
         <p className="mx-auto mt-10 max-w-6xl border-t border-white/10 pt-5 text-center text-xs text-slate-600">
-          © {new Date().getFullYear()} JC On The Move. All rights reserved.
+          &copy; {new Date().getFullYear()} JC On The Move. All rights reserved.
         </p>
       </footer>
 
