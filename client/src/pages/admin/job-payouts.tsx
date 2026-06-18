@@ -9,7 +9,24 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { User } from "@shared/schema";
 import { canFinalizeProfitSharePayout } from "@shared/jobPayout";
-import type { ProfitSharePayoutPreview, ProfitShareRole } from "@shared/jobPayout";
+import type { ProfitSharePayoutPreview, ProfitSharePayoutStatus, ProfitShareRole } from "@shared/jobPayout";
+
+type AdminWorkerPayout = {
+  id: string;
+  workerId: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+  roleOnJob: ProfitShareRole;
+  hoursWorked: string;
+  hourlyPay: string;
+  bonusPay: string;
+  totalPay: string;
+  payoutStatus: ProfitSharePayoutStatus;
+  stripeTransferId?: string | null;
+  jcmovesRewardAmount: string;
+  rewardsIssuedAt?: string | null;
+};
 
 type PayoutJob = {
   id: string;
@@ -22,9 +39,11 @@ type PayoutJob = {
   basePrice?: string | null;
   confirmedHours?: number | null;
   payout?: {
+    id: string;
     status: string;
     netJobProfit: string;
     profitPerLaborHour: string;
+    workerPayouts?: AdminWorkerPayout[];
   } | null;
 };
 
@@ -51,6 +70,7 @@ const ROLE_LABELS: Record<ProfitShareRole, string> = {
 };
 
 const roleOptions: ProfitShareRole[] = ["lead_mover", "mover", "helper"];
+const payoutStatusOptions: ProfitSharePayoutStatus[] = ["manual_pending", "manual_paid", "stripe_pending", "stripe_paid", "failed"];
 
 function money(value: unknown) {
   const n = typeof value === "number" ? value : Number.parseFloat(String(value ?? "0"));
@@ -182,7 +202,20 @@ export default function AdminJobPayoutsPage() {
     onError: (error: Error) => toast({ title: "Rewards failed", description: error.message, variant: "destructive" }),
   });
 
+  const payoutStatusMutation = useMutation({
+    mutationFn: async ({ payoutId, status }: { payoutId: string; status: ProfitSharePayoutStatus }) => {
+      const res = await apiRequest("PATCH", `/api/admin/job-payouts/worker-payouts/${payoutId}/status`, { status });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/job-payouts/jobs"] });
+      toast({ title: "Payout status updated" });
+    },
+    onError: (error: Error) => toast({ title: "Status update failed", description: error.message, variant: "destructive" }),
+  });
+
   const defaultHours = selectedJob?.confirmedHours || 4;
+  const finalizedWorkerPayouts = selectedJob?.payout?.workerPayouts || [];
 
   const exportPayoutReport = () => {
     if (!preview || !selectedJob) return;
@@ -208,6 +241,7 @@ export default function AdminJobPayoutsPage() {
       ["Worker", "Role", "Hours", "Hourly Pay", "Bonus Pay", "Total Pay", "JCMOVES", "Manual Payout Status"],
       ...preview.workerPayouts.map((payout) => {
         const employee = employees.find((item) => item.id === payout.workerId);
+        const finalizedPayout = finalizedWorkerPayouts.find((item) => item.workerId === payout.workerId);
         return [
           employee ? employeeName(employee) : payout.workerId,
           ROLE_LABELS[payout.roleOnJob],
@@ -216,7 +250,7 @@ export default function AdminJobPayoutsPage() {
           payout.bonusPay,
           payout.totalPay,
           payout.jcmovesRewardAmount,
-          selectedJob.payout?.status === "calculated" ? "manual_pending" : "",
+          finalizedPayout?.payoutStatus || "",
         ];
       }),
     ];
@@ -405,6 +439,12 @@ export default function AdminJobPayoutsPage() {
                         defaultHours={defaultHours}
                         preview={preview}
                       />
+
+                      <FinalizedPayoutStatusPanel
+                        payouts={finalizedWorkerPayouts}
+                        isUpdating={payoutStatusMutation.isPending}
+                        onStatusChange={(payoutId, status) => payoutStatusMutation.mutate({ payoutId, status })}
+                      />
                     </>
                   )}
                 </>
@@ -463,6 +503,76 @@ function Metric({ label, value, accent }: { label: string; value: string; accent
     <div className="rounded-lg border border-slate-700/70 bg-slate-950/50 p-3">
       <p className="text-[10px] uppercase tracking-wide text-slate-500">{label}</p>
       <p className={`mt-1 text-lg font-black ${color}`}>{value}</p>
+    </div>
+  );
+}
+
+function payoutWorkerName(payout: AdminWorkerPayout) {
+  return [payout.firstName, payout.lastName].filter(Boolean).join(" ").trim() || payout.email || payout.workerId;
+}
+
+function statusLabel(status: string) {
+  return status.replace(/_/g, " ");
+}
+
+function FinalizedPayoutStatusPanel({
+  payouts,
+  isUpdating,
+  onStatusChange,
+}: {
+  payouts: AdminWorkerPayout[];
+  isUpdating: boolean;
+  onStatusChange: (payoutId: string, status: ProfitSharePayoutStatus) => void;
+}) {
+  if (payouts.length === 0) return null;
+
+  return (
+    <div className="space-y-3 rounded-lg border border-slate-700/70 bg-slate-950/40 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-bold text-white">Manual payout status</h3>
+          <p className="text-xs text-slate-400">Track payroll manually now; Stripe states are ready for later automation.</p>
+        </div>
+        <Badge variant="outline" className="border-blue-400/40 text-blue-200">
+          {payouts.length} record{payouts.length === 1 ? "" : "s"}
+        </Badge>
+      </div>
+      <div className="space-y-2">
+        {payouts.map((payout) => (
+          <div
+            key={payout.id}
+            className="grid gap-2 rounded-md border border-slate-800 bg-slate-900/60 p-3 md:grid-cols-[1.4fr_0.8fr_0.8fr_0.9fr_1fr]"
+          >
+            <div>
+              <p className="text-sm font-semibold text-white">{payoutWorkerName(payout)}</p>
+              <p className="text-xs text-slate-500">{ROLE_LABELS[payout.roleOnJob] || payout.roleOnJob}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">Hours</p>
+              <p className="text-sm text-slate-200">{numberValue(payout.hoursWorked).toFixed(2)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">Total</p>
+              <p className="text-sm font-black text-emerald-300">{money(payout.totalPay)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">JCMOVES</p>
+              <p className="text-sm text-purple-200">{numberValue(payout.jcmovesRewardAmount).toFixed(0)}</p>
+            </div>
+            <select
+              className="h-10 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm capitalize text-white"
+              value={payout.payoutStatus}
+              disabled={isUpdating}
+              onChange={(event) => onStatusChange(payout.id, event.target.value as ProfitSharePayoutStatus)}
+              aria-label={`Payout status for ${payoutWorkerName(payout)}`}
+            >
+              {payoutStatusOptions.map((status) => (
+                <option key={status} value={status}>{statusLabel(status)}</option>
+              ))}
+            </select>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

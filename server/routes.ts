@@ -12708,6 +12708,7 @@ Thank you for your business!
       const calculationRows = await db
         .select({
           leadId: jobPayoutCalculations.leadId,
+          id: jobPayoutCalculations.id,
           status: jobPayoutCalculations.status,
           netJobProfit: jobPayoutCalculations.netJobProfit,
           profitPerLaborHour: jobPayoutCalculations.profitPerLaborHour,
@@ -12718,7 +12719,49 @@ Thank you for your business!
       const latestByLead = new Map<string, any>();
       for (const row of calculationRows) if (!latestByLead.has(row.leadId)) latestByLead.set(row.leadId, row);
 
-      res.json(rows.map((row) => ({ ...row, payout: latestByLead.get(row.id) || null })));
+      const latestCalculationIds = Array.from(latestByLead.values()).map((row) => row.id).filter(Boolean);
+      const payoutsByCalculation = new Map<string, any[]>();
+      if (latestCalculationIds.length > 0) {
+        const payoutRows = await db
+          .select({
+            id: jobWorkerPayouts.id,
+            calculationId: jobWorkerPayouts.calculationId,
+            leadId: jobWorkerPayouts.leadId,
+            workerId: jobWorkerPayouts.workerId,
+            roleOnJob: jobWorkerPayouts.roleOnJob,
+            hoursWorked: jobWorkerPayouts.hoursWorked,
+            hourlyPay: jobWorkerPayouts.hourlyPay,
+            bonusPay: jobWorkerPayouts.bonusPay,
+            totalPay: jobWorkerPayouts.totalPay,
+            payoutStatus: jobWorkerPayouts.payoutStatus,
+            stripeTransferId: jobWorkerPayouts.stripeTransferId,
+            jcmovesRewardAmount: jobWorkerPayouts.jcmovesRewardAmount,
+            rewardsIssuedAt: jobWorkerPayouts.rewardsIssuedAt,
+            createdAt: jobWorkerPayouts.createdAt,
+            firstName: users.firstName,
+            lastName: users.lastName,
+            email: users.email,
+          })
+          .from(jobWorkerPayouts)
+          .leftJoin(users, eq(jobWorkerPayouts.workerId, users.id))
+          .where(inArray(jobWorkerPayouts.calculationId, latestCalculationIds))
+          .orderBy(desc(jobWorkerPayouts.createdAt));
+
+        for (const payout of payoutRows) {
+          if (!payout.calculationId) continue;
+          const list = payoutsByCalculation.get(payout.calculationId) || [];
+          list.push(payout);
+          payoutsByCalculation.set(payout.calculationId, list);
+        }
+      }
+
+      res.json(rows.map((row) => {
+        const payout = latestByLead.get(row.id) || null;
+        return {
+          ...row,
+          payout: payout ? { ...payout, workerPayouts: payoutsByCalculation.get(payout.id) || [] } : null,
+        };
+      }));
     } catch (error) {
       console.error("Error loading payout jobs:", error);
       res.status(500).json({ error: "Failed to load payout jobs" });
