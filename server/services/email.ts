@@ -121,6 +121,7 @@ export async function notifyAdminNewLead(data: {
   phone?: string;
   email?: string;
   createdBy?: string;
+  mediaLink?: string;
 }): Promise<boolean> {
   const html = `
     <h2>📋 New Lead Created — JC ON THE MOVE</h2>
@@ -129,9 +130,10 @@ export async function notifyAdminNewLead(data: {
     <p><strong>Phone:</strong> ${data.phone || 'Not provided'}</p>
     ${data.email ? `<p><strong>Email:</strong> ${data.email}</p>` : ''}
     ${data.createdBy ? `<p><strong>Created By:</strong> ${data.createdBy}</p>` : ''}
+    ${data.mediaLink ? `<p><strong>Customer Media:</strong> <a href="${data.mediaLink}">${data.mediaLink}</a></p>` : ''}
     <p>Check the dashboard to review.</p>
   `;
-  const text = `NEW LEAD CREATED\n\nCustomer: ${data.customerName}\nService: ${data.serviceType}\nPhone: ${data.phone || 'Not provided'}${data.email ? `\nEmail: ${data.email}` : ''}${data.createdBy ? `\nCreated by: ${data.createdBy}` : ''}\n\nCheck the dashboard to review.`;
+  const text = `NEW LEAD CREATED\n\nCustomer: ${data.customerName}\nService: ${data.serviceType}\nPhone: ${data.phone || 'Not provided'}${data.email ? `\nEmail: ${data.email}` : ''}${data.createdBy ? `\nCreated by: ${data.createdBy}` : ''}${data.mediaLink ? `\nCustomer media: ${data.mediaLink}` : ''}\n\nCheck the dashboard to review.`;
   return sendEmail({ to: ADMIN_EMAIL, from: FROM_EMAIL, subject: `New Lead Created — ${data.customerName} (${data.serviceType})`, html, text });
 }
 

@@ -4783,6 +4783,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
             phone: parsed.phone,
             email: lead.email,
             createdBy: "Quick request",
+            mediaLink: parsed.mediaLink || undefined,
           });
           if (!adminEmailSent) {
             console.warn("[quick-request] admin email notification was not sent; check Gmail/SendGrid env vars");
@@ -4797,6 +4798,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
               serviceType: service.label,
               phone: parsed.phone,
               createdBy: "Quick request",
+              hasMediaLink: !!parsed.mediaLink,
             });
             if (!smsResult.success) {
               console.warn(`[quick-request] admin SMS notification was not sent: ${smsResult.error || "unknown error"}`);
@@ -4816,7 +4818,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
               userId: user.id,
               type: "system_alert",
               title: "New Quick Request",
-              message: `${parsed.firstName} ${parsed.lastName} needs a ${service.label} quote. Call ${parsed.phone}.`,
+              message: `${parsed.firstName} ${parsed.lastName} needs a ${service.label} quote. Call ${parsed.phone}.${parsed.mediaLink ? " Customer media link included." : ""}`,
               data: {
                 type: "quick_request",
                 leadId: lead.id,
@@ -4824,6 +4826,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
                 displayOrderNumber: formatOrderNumber(lead.orderNumber),
                 serviceCode: parsed.serviceCode,
                 serviceType: service.serviceType,
+                mediaLink: parsed.mediaLink || null,
               },
             });
           }
