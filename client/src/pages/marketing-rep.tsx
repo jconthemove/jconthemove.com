@@ -46,6 +46,11 @@ const coreServiceLinks = [
     service: "cleaning",
     note: "Extra hands for garages, yards, events, and jobsite cleanup",
   },
+  {
+    label: "Just Ask",
+    service: "custom",
+    note: "Odd jobs, storage, labor requests, and anything that needs a custom quote",
+  },
 ];
 
 function formatPhone(raw: string) {
@@ -315,7 +320,7 @@ export default function MarketingRepPage() {
             </Link>
           </div>
 
-          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             {coreServiceLinks.map((service) => (
               <Link key={service.service} href={serviceHref(service.service)}>
                 <Card className="h-full border-zinc-200 bg-zinc-50 transition hover:border-emerald-500 hover:bg-emerald-50">

@@ -2168,11 +2168,11 @@ export function MovingJunkPackagePicker({
             </p>
           ) : item.details.verifiedDriveMiles && item.details.estimatedDriveMinutes ? (
             <div className="space-y-0.5">
-              <p>~{Math.round(item.details.verifiedDriveMiles)} miles away � ~{item.details.estimatedDriveMinutes} min</p>
+              <p>~{Math.round(item.details.verifiedDriveMiles)} miles away - ~{item.details.estimatedDriveMinutes} min</p>
               {truckRental && (
                 <p className="text-sky-300">
                   JC truck includes {JC_TRUCK_INCLUDED_MILES} miles
-                  {truckRental.mileageFee > 0 ? ` � ${truckRental.extraMiles} extra miles apply` : ""}
+                  {truckRental.mileageFee > 0 ? ` - ${truckRental.extraMiles} extra miles apply` : ""}
                 </p>
               )}
             </div>
