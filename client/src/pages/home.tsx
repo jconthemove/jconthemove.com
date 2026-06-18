@@ -372,7 +372,7 @@ export default function HomePage() {
             <p className="mb-4 text-sm font-semibold text-white">{availabilityLine}</p>
             <div className="space-y-3 text-sm text-slate-200">
               <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-blue-300" /> Quick callback or guided quote</p>
-              <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-blue-300" /> Upload photos and notes</p>
+              <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-blue-300" /> Photos, videos, or album links</p>
               <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-blue-300" /> Local crew confirmation</p>
             </div>
             <Button onClick={() => setLocation("/book?mode=quick&service=moving")} className="mt-6 h-12 w-full rounded-lg bg-emerald-600 font-black hover:bg-emerald-500">
@@ -449,7 +449,7 @@ export default function HomePage() {
               <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-300">Need something else?</p>
               <h2 className="mt-2 text-2xl font-black tracking-tight md:text-3xl">Just ask. If it needs moved, hauled, delivered, cleaned, or handled, we can quote it.</h2>
               <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-300">
-                Send a quick request with notes or photos. A coordinator will confirm what is possible, what crew is needed, and the next open time.
+                Send a quick request with notes, photos, videos, or an album link. A coordinator will confirm what is possible, what crew is needed, and the next open time.
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row md:flex-col">
@@ -476,7 +476,7 @@ export default function HomePage() {
             {[
               { title: "Choose", text: "Pick moving, junk removal, delivery, cleanup, or labor help.", icon: Truck },
               { title: "Request", text: "Use quick callback or build a detailed quote with guided cards.", icon: PhoneCall },
-              { title: "Show", text: "Add photos, address, timing, and notes so we send the right crew.", icon: CalendarCheck },
+              { title: "Show", text: "Add photos, videos, an album link, address, timing, and notes so we send the right crew.", icon: CalendarCheck },
               { title: "Confirm", text: "We review, schedule, complete the job, then rewards can apply.", icon: CheckCircle2 },
             ].map(({ title, text, icon: Icon }) => (
               <div key={title} className="rounded-lg border border-slate-200 bg-slate-50 p-5">
