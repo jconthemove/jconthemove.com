@@ -47,6 +47,22 @@ interface MarketingRep {
   promoCode: string;
 }
 
+interface CrewPayout {
+  id: string;
+  leadId: string;
+  hoursWorked: string;
+  hourlyPay: string;
+  bonusPay: string;
+  totalPay: string;
+  payoutStatus: string;
+  jcmovesRewardAmount: string;
+  rewardsIssuedAt?: string | null;
+  createdAt: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  serviceType?: string | null;
+}
+
 const REWARD_LABELS: Record<string, string> = {
   mining: "Mining Reward",
   daily_checkin: "Daily Check-in",
@@ -62,6 +78,15 @@ const REWARD_LABELS: Record<string, string> = {
 
 function formatTokens(n: number) {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function money(value: unknown) {
+  const n = typeof value === "number" ? value : Number.parseFloat(String(value ?? "0"));
+  return n.toLocaleString(undefined, { style: "currency", currency: "USD" });
+}
+
+function payoutStatusLabel(status: string) {
+  return status.replace(/_/g, " ");
 }
 
 function daysRemaining(endsAt: string) {
@@ -93,6 +118,7 @@ export default function CrewEarningsPage() {
   const { data: rewardsHistory } = useQuery<RewardHistory[]>({ queryKey: ["/api/rewards/history"] });
   const { data: stakes = [] } = useQuery<Stake[]>({ queryKey: ["/api/staking/my-stakes"], retry: 1 });
   const { data: marketingReps = [] } = useQuery<MarketingRep[]>({ queryKey: ["/api/marketing-network/reps"], retry: 1 });
+  const { data: crewPayouts = [] } = useQuery<CrewPayout[]>({ queryKey: ["/api/crew/payouts"], retry: 1 });
 
   const userCapabilities: string[] = user?.capabilities ?? [];
   const referralCode = (user as any)?.referralCode || "";
@@ -156,6 +182,13 @@ export default function CrewEarningsPage() {
   const activeStakes = stakes.filter((s: Stake) => s.status === "active");
   const history: RewardHistory[] = Array.isArray(rewardsHistory) ? rewardsHistory : [];
   const recentHistory = history.slice(0, 20);
+  const cashPayouts = Array.isArray(crewPayouts) ? crewPayouts : [];
+  const pendingCashPay = cashPayouts
+    .filter((payout) => payout.payoutStatus === "manual_pending" || payout.payoutStatus === "stripe_pending")
+    .reduce((sum, payout) => sum + parseFloat(payout.totalPay || "0"), 0);
+  const paidCashPay = cashPayouts
+    .filter((payout) => payout.payoutStatus === "manual_paid" || payout.payoutStatus === "stripe_paid")
+    .reduce((sum, payout) => sum + parseFloat(payout.totalPay || "0"), 0);
 
   return (
     <div className="max-w-2xl mx-auto px-4 pt-6 space-y-5">
@@ -231,6 +264,85 @@ export default function CrewEarningsPage() {
           </div>
         </Link>
       </div>
+
+      {/* Cash payout visibility */}
+      <Card className="border-emerald-500/20 bg-emerald-950/20">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-white flex items-center gap-2 text-base">
+            <Coins className="h-4 w-4 text-emerald-300" /> Cash Payouts
+          </CardTitle>
+          <CardDescription className="text-slate-400 text-xs">
+            Hourly pay, profit-share bonus, and manual payout status
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-amber-300">Pending</p>
+              <p className="mt-1 text-xl font-black text-white">{money(pendingCashPay)}</p>
+            </div>
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-300">Paid</p>
+              <p className="mt-1 text-xl font-black text-white">{money(paidCashPay)}</p>
+            </div>
+          </div>
+
+          {cashPayouts.length === 0 ? (
+            <p className="rounded-lg border border-slate-700/40 bg-slate-900/40 p-3 text-sm text-slate-400">
+              No finalized cash payout records yet.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {cashPayouts.slice(0, 8).map((payout) => {
+                const statusIsPaid = payout.payoutStatus === "manual_paid" || payout.payoutStatus === "stripe_paid";
+                const statusIsFailed = payout.payoutStatus === "failed";
+                const customer = [payout.firstName, payout.lastName].filter(Boolean).join(" ").trim() || "Job";
+                return (
+                  <div key={payout.id} className="rounded-xl border border-slate-700/40 bg-slate-900/50 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold text-white">{customer}</p>
+                        <p className="text-xs capitalize text-slate-400">{(payout.serviceType || "job").replace(/_/g, " ")}</p>
+                      </div>
+                      <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold capitalize ${
+                        statusIsPaid
+                          ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
+                          : statusIsFailed
+                          ? "border-red-500/40 bg-red-500/15 text-red-300"
+                          : "border-amber-500/40 bg-amber-500/15 text-amber-300"
+                      }`}>
+                        {payoutStatusLabel(payout.payoutStatus)}
+                      </span>
+                    </div>
+                    <div className="mt-3 grid grid-cols-4 gap-2 text-center">
+                      <div>
+                        <p className="text-[10px] text-slate-500">Hours</p>
+                        <p className="text-sm font-bold text-slate-200">{parseFloat(payout.hoursWorked || "0").toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-slate-500">Hourly</p>
+                        <p className="text-sm font-bold text-blue-300">{money(payout.hourlyPay)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-slate-500">Bonus</p>
+                        <p className="text-sm font-bold text-purple-300">{money(payout.bonusPay)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-slate-500">Total</p>
+                        <p className="text-sm font-black text-emerald-300">{money(payout.totalPay)}</p>
+                      </div>
+                    </div>
+                    <p className="mt-2 text-[10px] text-slate-500">
+                      JCMOVES reward estimate: {parseFloat(payout.jcmovesRewardAmount || "0").toFixed(0)}
+                      {payout.rewardsIssuedAt ? ` · rewards issued ${new Date(payout.rewardsIssuedAt).toLocaleDateString()}` : ""}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Mining Section */}
       <Card className="border-orange-500/20 bg-orange-950/20">
