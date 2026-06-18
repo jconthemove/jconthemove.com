@@ -15554,15 +15554,19 @@ Thank you for your business!
         if (status) { bookingParams.push(status); bookingWhere += ` AND b.status = $${bookingParams.length}`; }
         if (from) { bookingParams.push(from); bookingWhere += ` AND b.created_at >= $${bookingParams.length}`; }
         if (to) { bookingParams.push(to); bookingWhere += ` AND b.created_at <= $${bookingParams.length}`; }
-        const bookingBookedCondition = status ? `b.status = $2` : "b.status IN ('booked','in_progress','completed')";
+        const bookingBookedCondition = status ? `status = $2` : "status IN ('booked','in_progress','completed')";
         const bookingStats = await pool.query(`
+          WITH attributed_bookings AS (
+            SELECT DISTINCT b.id, b.status, b.final_total
+            FROM bookings b
+            INNER JOIN quote_attributions qa ON qa.booking_id = b.id
+            WHERE ${bookingWhere}
+          )
           SELECT
-            COUNT(DISTINCT b.id)::int AS estimates,
-            COUNT(DISTINCT b.id) FILTER (WHERE ${bookingBookedCondition})::int AS booked,
-            COALESCE(SUM(CASE WHEN ${bookingBookedCondition} THEN b.final_total::numeric ELSE 0 END), 0)::float AS revenue
-          FROM bookings b
-          INNER JOIN quote_attributions qa ON qa.booking_id = b.id
-          WHERE ${bookingWhere}
+            COUNT(*)::int AS estimates,
+            COUNT(*) FILTER (WHERE ${bookingBookedCondition})::int AS booked,
+            COALESCE(SUM(CASE WHEN ${bookingBookedCondition} THEN final_total::numeric ELSE 0 END), 0)::float AS revenue
+          FROM attributed_bookings
         `, bookingParams);
 
         const calls = Number(callsResult.rows[0]?.calls || 0);
