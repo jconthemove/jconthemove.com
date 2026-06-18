@@ -371,7 +371,7 @@ function QuickRequestForm({
       `Service: ${submitted.serviceLabel || form.serviceCode}.`,
       `Phone: ${form.phone}.`,
       `Photos attached: ${photoCount}.`,
-      photoCount === 0 ? "I can text photos if needed." : "",
+      photoCount === 0 ? "I can text photos, a video, or an album link if needed." : "I can text more photos, a video, or an album link if needed.",
     ].filter(Boolean).join(" ");
     return (
       <div className="max-w-2xl mx-auto px-4 pt-8">
@@ -394,7 +394,7 @@ function QuickRequestForm({
             <div className="rounded-xl border border-border bg-card p-4">
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Photos</p>
               <p className="mt-1 font-black">{photoCount > 0 ? `${photoCount} attached` : "No photos attached"}</p>
-              <p className="mt-1 text-muted-foreground">{photoCount > 0 ? "We will review them before calling." : "You can text photos when we follow up."}</p>
+              <p className="mt-1 text-muted-foreground">{photoCount > 0 ? "We will review them before calling. You can text more photos, videos, or an album link." : "You can text photos, videos, or an album link when we follow up."}</p>
             </div>
           </div>
           {(submitted.promoCode || submitted.referralSlug) && (
@@ -405,14 +405,14 @@ function QuickRequestForm({
           )}
           <div className="rounded-xl border border-blue-500/25 bg-blue-500/10 p-3 text-left text-xs text-blue-700 dark:text-blue-300">
             <p className="font-black">Need faster help?</p>
-            <p className="mt-1">Call or text now and mention order {submitted.displayOrderNumber}.</p>
+            <p className="mt-1">Call or text now and mention order {submitted.displayOrderNumber}. Add a Google Photos album or video link if it helps explain the job.</p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <a href="tel:+19062859312">
               <Button className="w-full">Call Now</Button>
             </a>
             <a href={`sms:+19062859312?&body=${encodeURIComponent(smsFollowUpText)}`}>
-              <Button className="w-full" variant="outline">Text Details</Button>
+              <Button className="w-full" variant="outline">Text Details / Album</Button>
             </a>
             <Button type="button" variant="outline" onClick={() => copyQuickRequestDetails(submitted)}>
               <Copy className="mr-2 h-4 w-4" />
