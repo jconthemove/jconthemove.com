@@ -4,7 +4,7 @@ import { ArrowLeft, CalendarCheck, CheckCircle2, Copy, Phone, QrCode, Share2, Ta
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiRequest } from "@/lib/queryClient";
-import heroImage from "@assets/IMG_20220818_061221927_HDR_1758501643284.jpg";
+import heroImage from "@assets/google_movers/crew-ramp.jpg";
 
 type MarketingRep = {
   id: string;

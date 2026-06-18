@@ -24,12 +24,15 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ChatIntakeOverlay from "@/components/ChatIntakeOverlay";
-import heroImage from "@assets/IMG_20220818_061221927_HDR_1758501643284.jpg";
-import ctaImage from "@assets/IMG_20220919_093840705_HDR_1758501643298.jpg";
-import junkImage from "@assets/FB_IMG_1690476073966_1764946176032.jpg";
-import badgeImage from "@assets/FB_IMG_1675268829327_1758501643307.jpg";
-import haulImage from "@assets/IMG_20220810_125649554_HDR_1758501643329.jpg";
-import crewImage from "@assets/FB_IMG_1690476036804_1764946176026.jpg";
+import brandedTruckImage from "@assets/google_movers/branded-truck.jpg";
+import crewRampImage from "@assets/google_movers/crew-ramp.jpg";
+import dollyBoxesImage from "@assets/google_movers/dolly-boxes.jpg";
+import loadedTrailerImage from "@assets/google_movers/loaded-trailer.jpg";
+import packedTruckImage from "@assets/google_movers/packed-truck.jpg";
+import shirtBackImage from "@assets/google_movers/shirt-back.jpg";
+import trailerRampImage from "@assets/google_movers/trailer-ramp.jpg";
+import truckTrailerYardImage from "@assets/google_movers/truck-trailer-yard.jpg";
+import wrappedItemImage from "@assets/google_movers/wrapped-item.jpg";
 
 interface Testimonial {
   id: string;
@@ -49,15 +52,15 @@ const FALLBACK_TESTIMONIALS: Testimonial[] = [
   { id: "g5", reviewerName: "Drea Dree", rating: 5, content: "Fast, efficient, affordable, and made a stressful move much easier.", serviceType: "Move + junk help", sourcePlatform: "5-star web review", featured: true },
 ];
 
-const HERO_IMAGE = heroImage;
-const CTA_IMAGE = ctaImage;
+const HERO_IMAGE = brandedTruckImage;
+const CTA_IMAGE = truckTrailerYardImage;
 
 const VISUAL_SERVICES = [
   {
     label: "Moving",
     sub: "Homes, apartments, offices",
     href: "/book?service=moving",
-    image: heroImage,
+    image: packedTruckImage,
     icon: Truck,
     color: "blue",
   },
@@ -65,7 +68,7 @@ const VISUAL_SERVICES = [
     label: "Junk Removal",
     sub: "Cleanouts, hauling, disposal",
     href: "/book?service=junk",
-    image: junkImage,
+    image: loadedTrailerImage,
     icon: Trash2,
     color: "orange",
   },
@@ -73,7 +76,7 @@ const VISUAL_SERVICES = [
     label: "Delivery",
     sub: "Furniture, appliances, store pickups",
     href: "/book?service=delivery",
-    image: haulImage,
+    image: dollyBoxesImage,
     icon: Truck,
     color: "emerald",
   },
@@ -81,7 +84,7 @@ const VISUAL_SERVICES = [
     label: "Cleanup / Labor",
     sub: "Move-outs, garages, extra hands",
     href: "/book?service=cleaning",
-    image: crewImage,
+    image: trailerRampImage,
     icon: Sparkles,
     color: "violet",
   },
@@ -102,28 +105,28 @@ const STORY_SLIDES = [
     eyebrow: "Moving",
     title: "Protected, loaded, and handled right.",
     text: "Furniture wrap, steady crews, and local routes planned before we arrive.",
-    image: heroImage,
+    image: wrappedItemImage,
     stat: "Local & long-distance",
   },
   {
     eyebrow: "Junk Removal",
     title: "Cleanouts without the drag.",
     text: "Trailers, muscle, and disposal help for garages, rentals, sheds, and post-move piles.",
-    image: haulImage,
+    image: loadedTrailerImage,
     stat: "Fast haul-away",
   },
   {
     eyebrow: "Northwoods Crew",
     title: "Real people. Real work. Real proof.",
     text: "A local team customers can text, call, and recognize around town.",
-    image: crewImage,
+    image: crewRampImage,
     stat: "5-star rated",
   },
   {
     eyebrow: "Rewards",
     title: "Book the job. Earn JCMOVES.",
     text: "Every completed service can earn rewards toward future moves and add-ons.",
-    image: badgeImage,
+    image: shirtBackImage,
     stat: "Rewards included",
   },
 ];
