@@ -1574,7 +1574,7 @@ export default function MultiServiceBookPage() {
             </section>
           )}
 
-          {/* Step 4 — Contact info */}
+          {/* Step 4 - Contact info */}
           {step === "contact" && (
             <section data-testid="step-contact">
               <header className="mb-3">
@@ -1587,7 +1587,7 @@ export default function MultiServiceBookPage() {
                   <Input
                     value={contact.customerName}
                     onChange={(e) => setContact(c => ({ ...c, customerName: e.target.value }))}
-                    placeholder="Jane Smith"
+                    placeholder="Your full name"
                     data-testid="contact-name"
                   />
                 </div>
@@ -1598,7 +1598,7 @@ export default function MultiServiceBookPage() {
                       type="tel"
                       value={contact.customerPhone}
                       onChange={(e) => setContact(c => ({ ...c, customerPhone: e.target.value }))}
-                      placeholder="(906) 555-0123"
+                      placeholder="Best phone number"
                       data-testid="contact-phone"
                     />
                   </div>
@@ -1608,7 +1608,7 @@ export default function MultiServiceBookPage() {
                       type="email"
                       value={contact.customerEmail}
                       onChange={(e) => setContact(c => ({ ...c, customerEmail: e.target.value }))}
-                      placeholder="jane@example.com"
+                      placeholder="Best email address"
                       data-testid="contact-email"
                     />
                   </div>
