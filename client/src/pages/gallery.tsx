@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import Header from "@/components/header";
+import { ArrowRight, ExternalLink, Images, MessageCircle } from "lucide-react";
+import { Link } from "wouter";
 
 import img1 from "@assets/20201208_140539_1764946073180.jpg";
 import img2 from "@assets/20210116_135907_HDR_1764946073182.jpg";
@@ -58,6 +60,8 @@ const allImages = [
   img31, img32, img33, img34, img35, img36, img37, img38, img39, img40,
   img41, img42, img43, img44, img45, img46, img47, img48, img49, img50,
 ];
+
+const GOOGLE_MOVERS_ALBUM_URL = "https://photos.app.goo.gl/taQBHTwyP1z7DjXQA";
 
 const numTiles = Math.ceil(allImages.length / 4);
 const tiles: string[][] = [];
@@ -136,37 +140,87 @@ function GalleryTile({ images, index }: { images: string[]; index: number }) {
 
 export default function GalleryPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
+    <div className="min-h-screen bg-[#020915] text-white">
       <Header />
       
-      <main className="container mx-auto px-4 py-8">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
-            Our Work Gallery
-          </h1>
-          <p className="text-lg text-slate-300 max-w-2xl mx-auto">
-            Take a look at our team in action! From residential moves to commercial relocations, 
-            we handle every job with care and professionalism.
-          </p>
+      <main className="mx-auto max-w-7xl px-4 py-8 md:py-12">
+        <div className="mb-8 grid gap-5 md:grid-cols-[1.15fr_0.85fr] md:items-end">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.24em] text-blue-300">Real JC ON THE MOVE work</p>
+            <h1 className="mt-3 text-4xl font-black leading-tight tracking-tight text-white md:text-6xl">
+              Movers, trucks, trailers, and jobs in motion.
+            </h1>
+            <p className="mt-4 max-w-2xl text-base leading-relaxed text-slate-300 md:text-lg">
+              Use this page as proof for customers, workers, and referral partners. These are real moving, hauling, delivery, and local labor jobs handled by JC ON THE MOVE.
+            </p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+            <div className="flex items-start gap-3">
+              <Images className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" />
+              <div>
+                <p className="text-sm font-black text-white">Have photos or videos for your job?</p>
+                <p className="mt-1 text-xs leading-relaxed text-slate-400">
+                  Send a quick request and attach photos, videos, or a Google Photos album link so the crew can quote faster.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              <Link href="/book?mode=quick&service=moving">
+                <button className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-black text-white hover:bg-blue-500">
+                  Request Quote <ArrowRight className="h-4 w-4" />
+                </button>
+              </Link>
+              <a
+                href="sms:+19062859312"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-white/20 bg-white/5 px-4 text-sm font-black text-white hover:bg-white/10"
+              >
+                <MessageCircle className="h-4 w-4" /> Text Us
+              </a>
+            </div>
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+        <div className="mb-6 flex flex-col gap-3 rounded-xl border border-blue-500/25 bg-blue-500/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-black text-blue-100">Full movers album</p>
+            <p className="mt-1 text-xs text-blue-200/80">Open the shared Google Photos album for more job photos and videos.</p>
+          </div>
+          <a
+            href={GOOGLE_MOVERS_ALBUM_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-blue-300/30 bg-blue-600 px-4 text-sm font-black text-white hover:bg-blue-500"
+          >
+            Open Album <ExternalLink className="h-4 w-4" />
+          </a>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
           {tiles.map((tileImages, index) => (
             <GalleryTile key={index} images={tileImages} index={index} />
           ))}
         </div>
 
-        <div className="mt-12 text-center">
-          <p className="text-slate-400">
-            Want to see your move featured here? Book with us today!
+        <div className="mt-12 rounded-2xl border border-white/10 bg-white/[0.04] p-5 text-center md:p-7">
+          <p className="text-xl font-black text-white">Need moving, junk removal, delivery, cleanup, or labor help?</p>
+          <p className="mx-auto mt-2 max-w-2xl text-sm leading-relaxed text-slate-400">
+            Choose the service, add notes and media, then JC ON THE MOVE will confirm the crew, timing, and next step.
           </p>
-          <a
-            href="/services"
-            className="inline-block mt-4 px-6 py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-full font-semibold hover:from-orange-600 hover:to-orange-700 transition-all shadow-lg"
-            data-testid="link-get-quote"
-          >
-            Get a Free Quote
-          </a>
+          <div className="mt-5 flex flex-col justify-center gap-3 sm:flex-row">
+            <Link href="/book?mode=quick&service=moving">
+              <button
+                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-6 text-base font-black text-white hover:bg-emerald-500 sm:w-auto"
+                data-testid="link-get-quote"
+              >
+                Request A Callback <ArrowRight className="h-5 w-5" />
+              </button>
+            </Link>
+            <Link href="/book?mode=builder&service=moving">
+              <button className="inline-flex h-12 w-full items-center justify-center rounded-lg border border-white/20 bg-white/5 px-6 text-base font-black text-white hover:bg-white/10 sm:w-auto">
+                Build Detailed Quote
+              </button>
+            </Link>
+          </div>
         </div>
       </main>
     </div>
