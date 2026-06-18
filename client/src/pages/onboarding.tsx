@@ -108,7 +108,7 @@ export default function OnboardingPage() {
                 <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-zinc-400" />
                 <input
                   type="text"
-                  placeholder="John Smith"
+                  placeholder="Your full name"
                   required
                   value={form.fullName}
                   onChange={e => set("fullName", e.target.value)}
@@ -123,7 +123,7 @@ export default function OnboardingPage() {
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-zinc-400" />
                 <input
                   type="email"
-                  placeholder="john@example.com"
+                  placeholder="Best email address"
                   required
                   value={form.email}
                   onChange={e => set("email", e.target.value)}
@@ -140,7 +140,7 @@ export default function OnboardingPage() {
                 <Phone className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-zinc-400" />
                 <input
                   type="tel"
-                  placeholder="(906) 555-0100"
+                  placeholder="Best phone number"
                   value={form.phone}
                   onChange={e => set("phone", e.target.value)}
                   className="w-full h-13 pl-12 pr-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder:text-zinc-400 text-base focus:outline-none focus:ring-2 focus:ring-jc-orange/30 focus:border-jc-orange transition-all"

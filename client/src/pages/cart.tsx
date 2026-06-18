@@ -665,21 +665,21 @@ export default function CartPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-white">First Name *</Label>
-                  <Input value={form.firstName} onChange={(e) => updateField("firstName", e.target.value)} placeholder="John" className="bg-slate-700 border-slate-600 text-white" required />
+                  <Input value={form.firstName} onChange={(e) => updateField("firstName", e.target.value)} placeholder="First name" className="bg-slate-700 border-slate-600 text-white" required />
                 </div>
                 <div>
                   <Label className="text-white">Last Name *</Label>
-                  <Input value={form.lastName} onChange={(e) => updateField("lastName", e.target.value)} placeholder="Doe" className="bg-slate-700 border-slate-600 text-white" required />
+                  <Input value={form.lastName} onChange={(e) => updateField("lastName", e.target.value)} placeholder="Last name" className="bg-slate-700 border-slate-600 text-white" required />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-white">Email *</Label>
-                  <Input type="email" value={form.email} onChange={(e) => updateField("email", e.target.value)} placeholder="john@example.com" className="bg-slate-700 border-slate-600 text-white" required />
+                  <Input type="email" value={form.email} onChange={(e) => updateField("email", e.target.value)} placeholder="Best email address" className="bg-slate-700 border-slate-600 text-white" required />
                 </div>
                 <div>
                   <Label className="text-white">Phone *</Label>
-                  <Input type="tel" value={form.phone} onChange={(e) => updateField("phone", e.target.value)} placeholder="(906) 555-1234" className="bg-slate-700 border-slate-600 text-white" required />
+                  <Input type="tel" value={form.phone} onChange={(e) => updateField("phone", e.target.value)} placeholder="Best phone number" className="bg-slate-700 border-slate-600 text-white" required />
                 </div>
               </div>
 

@@ -286,7 +286,7 @@ export default function SponsorsPage() {
                   </div>
                   <div>
                     <Label className="text-white text-sm">Contact Name *</Label>
-                    <Input value={form.contactName} onChange={(e) => updateField("contactName", e.target.value)} placeholder="John Doe" className="bg-slate-700 border-slate-600 text-white mt-1" />
+                    <Input value={form.contactName} onChange={(e) => updateField("contactName", e.target.value)} placeholder="Best contact name" className="bg-slate-700 border-slate-600 text-white mt-1" />
                   </div>
                   <div>
                     <Label className="text-white text-sm">Email *</Label>
@@ -294,17 +294,17 @@ export default function SponsorsPage() {
                   </div>
                   <div>
                     <Label className="text-white text-sm">Phone *</Label>
-                    <Input type="tel" value={form.phone} onChange={(e) => updateField("phone", e.target.value)} placeholder="(906) 555-1234" className="bg-slate-700 border-slate-600 text-white mt-1" />
+                    <Input type="tel" value={form.phone} onChange={(e) => updateField("phone", e.target.value)} placeholder="Best phone number" className="bg-slate-700 border-slate-600 text-white mt-1" />
                   </div>
                   <div>
                     <Label className="text-white text-sm">Website (optional)</Label>
-                    <Input value={form.website} onChange={(e) => updateField("website", e.target.value)} placeholder="https://yourbusiness.com" className="bg-slate-700 border-slate-600 text-white mt-1" />
+                    <Input value={form.website} onChange={(e) => updateField("website", e.target.value)} placeholder="Business website URL" className="bg-slate-700 border-slate-600 text-white mt-1" />
                   </div>
 
                   {/* Logo Upload */}
                   <div>
                     <Label className="text-white text-sm">Business Logo (optional)</Label>
-                    <p className="text-xs text-slate-400 mb-2">Upload your logo — we'll display it on your sponsor card.</p>
+                    <p className="text-xs text-slate-400 mb-2">Upload your logo - we'll display it on your sponsor card.</p>
                     {!logoFile ? (
                       <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed border-slate-600 rounded-lg cursor-pointer hover:border-yellow-500/60 hover:bg-slate-700/40 transition-colors">
                         <Upload className="h-5 w-5 text-slate-400 mb-1" />

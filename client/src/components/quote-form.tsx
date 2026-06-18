@@ -154,7 +154,7 @@ export default function QuoteForm() {
                   <Input
                     id="email"
                     type="email"
-                    placeholder="your@email.com"
+                    placeholder="Best email address"
                     {...form.register("email")}
                     data-testid="input-email"
                   />

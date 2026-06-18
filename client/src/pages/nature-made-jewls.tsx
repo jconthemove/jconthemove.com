@@ -1363,15 +1363,15 @@ export default function AshleyShop() {
       <Dialog open={customOrderOpen} onOpenChange={setCustomOrderOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="font-serif text-stone-800">🎁 Request a Custom Order</DialogTitle>
+            <DialogTitle className="font-serif text-stone-800">Request a Custom Order</DialogTitle>
           </DialogHeader>
-          <p className="text-stone-500 text-sm -mt-2">Describe what you'd love — Ashley will reach out to discuss the details and pricing.</p>
+          <p className="text-stone-500 text-sm -mt-2">Describe what you'd love - Ashley will reach out to discuss the details and pricing.</p>
           <form onSubmit={handleCustomOrderSubmit} className="space-y-4">
-            <div><Label>Your Name *</Label><Input required value={customOrderForm.name} onChange={(e) => setCustomOrderForm({ ...customOrderForm, name: e.target.value })} placeholder="Jane Smith" /></div>
-            <div><Label>What would you like? *</Label><Textarea required value={customOrderForm.description} onChange={(e) => setCustomOrderForm({ ...customOrderForm, description: e.target.value })} placeholder="Describe the piece — style, size, occasion..." rows={4} /></div>
+            <div><Label>Your Name *</Label><Input required value={customOrderForm.name} onChange={(e) => setCustomOrderForm({ ...customOrderForm, name: e.target.value })} placeholder="Your full name" /></div>
+            <div><Label>What would you like? *</Label><Textarea required value={customOrderForm.description} onChange={(e) => setCustomOrderForm({ ...customOrderForm, description: e.target.value })} placeholder="Describe the piece - style, size, occasion..." rows={4} /></div>
             <div><Label>Preferred Materials</Label><Input value={customOrderForm.materials} onChange={(e) => setCustomOrderForm({ ...customOrderForm, materials: e.target.value })} placeholder="e.g. copper wire, rose quartz, sterling silver..." /></div>
-            <div><Label>Budget Range</Label><Input value={customOrderForm.budget} onChange={(e) => setCustomOrderForm({ ...customOrderForm, budget: e.target.value })} placeholder="e.g. $25–$75" /></div>
-            <div><Label>Contact (email or phone) *</Label><Input required value={customOrderForm.contact} onChange={(e) => setCustomOrderForm({ ...customOrderForm, contact: e.target.value })} placeholder="your@email.com or (906) 555-1234" /></div>
+            <div><Label>Budget Range</Label><Input value={customOrderForm.budget} onChange={(e) => setCustomOrderForm({ ...customOrderForm, budget: e.target.value })} placeholder="e.g. $25-$75" /></div>
+            <div><Label>Contact (email or phone) *</Label><Input required value={customOrderForm.contact} onChange={(e) => setCustomOrderForm({ ...customOrderForm, contact: e.target.value })} placeholder="Best email or phone number" /></div>
             <Button type="submit" disabled={customOrderSubmitting} className="w-full bg-rose-500 hover:bg-rose-600">
               {customOrderSubmitting ? "Sending..." : "Send Request"}
             </Button>

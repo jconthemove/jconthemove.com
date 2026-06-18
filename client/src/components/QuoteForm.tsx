@@ -294,7 +294,7 @@ export default function QuoteForm({
               <Input
                 id="email"
                 type="email"
-                placeholder={isEmployee ? "customer@email.com" : "your@email.com"}
+                placeholder={isEmployee ? "Customer email address" : "Best email address"}
                 className={inputClasses}
                 {...form.register("email")}
                 data-testid="input-email"

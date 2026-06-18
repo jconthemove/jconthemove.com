@@ -274,15 +274,15 @@ function JobLookupScreen({ onSelect }: { onSelect: (jobId: string, token?: strin
               Find Your Job
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              Enter your phone number, email address, or job ID — we'll pull up your job.
+              Enter your phone number, email address, or job ID - we'll pull up your job.
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Lookup hints */}
             <div className="grid grid-cols-3 gap-2 text-center">
               {[
-                { icon: Phone, label: "Phone", example: "906-285-…" },
-                { icon: Mail, label: "Email", example: "your@email.com" },
+                { icon: Phone, label: "Phone", example: "Best phone" },
+                { icon: Mail, label: "Email", example: "Best email" },
                 { icon: Hash, label: "Job ID", example: "abc12345" },
               ].map(({ icon: Icon, label, example }) => (
                 <div key={label} className="rounded-lg border border-border bg-muted/40 px-2 py-2">
