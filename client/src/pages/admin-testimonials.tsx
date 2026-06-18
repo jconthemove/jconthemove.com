@@ -596,7 +596,7 @@ export default function AdminTestimonialsPage() {
                   <FormItem>
                     <FormLabel>Reviewer Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="John S." {...field} data-testid="input-reviewer-name" />
+                      <Input placeholder="Reviewer name" {...field} data-testid="input-reviewer-name" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -628,7 +628,7 @@ export default function AdminTestimonialsPage() {
                     <FormLabel>Review Content</FormLabel>
                     <FormControl>
                       <Textarea 
-                        placeholder="Paste the review text here..."
+                        placeholder="Paste the review text here"
                         className="min-h-[100px]"
                         {...field}
                         data-testid="textarea-review-content"

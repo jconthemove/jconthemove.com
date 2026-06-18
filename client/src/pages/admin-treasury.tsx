@@ -1296,7 +1296,7 @@ export default function AdminTreasuryPage() {
                     <Input
                       value={invoiceForm.name}
                       onChange={(e) => setInvoiceForm({ ...invoiceForm, name: e.target.value })}
-                      placeholder="John Smith"
+                      placeholder="Customer full name"
                       className="bg-slate-900/50 border-slate-700"
                       data-testid="input-invoice-name"
                     />
@@ -1307,7 +1307,7 @@ export default function AdminTreasuryPage() {
                       type="email"
                       value={invoiceForm.email}
                       onChange={(e) => setInvoiceForm({ ...invoiceForm, email: e.target.value })}
-                      placeholder="customer@email.com"
+                      placeholder="Customer email address"
                       className="bg-slate-900/50 border-slate-700"
                       data-testid="input-invoice-email"
                     />
@@ -1317,7 +1317,7 @@ export default function AdminTreasuryPage() {
                     <Input
                       value={invoiceForm.phone}
                       onChange={(e) => setInvoiceForm({ ...invoiceForm, phone: e.target.value })}
-                      placeholder="555-123-4567"
+                      placeholder="Customer phone number"
                       className="bg-slate-900/50 border-slate-700"
                       data-testid="input-invoice-phone"
                     />

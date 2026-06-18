@@ -380,7 +380,7 @@ export default function ReviewsPage() {
                   <FormItem>
                     <FormLabel>Your Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="John Smith" {...field} data-testid="input-reviewer-name" />
+                      <Input placeholder="Your full name" {...field} data-testid="input-reviewer-name" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -441,7 +441,7 @@ export default function ReviewsPage() {
                     <FormLabel>Your Review</FormLabel>
                     <FormControl>
                       <Textarea 
-                        placeholder="Tell us about your experience..."
+                        placeholder="Tell us about your experience"
                         className="min-h-[120px]"
                         {...field}
                         data-testid="textarea-review-content"

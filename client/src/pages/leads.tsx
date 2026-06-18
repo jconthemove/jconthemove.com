@@ -687,7 +687,7 @@ export default function LeadsPage() {
                         <Label htmlFor="firstName" className="text-slate-300">Customer First Name *</Label>
                         <Input
                           id="firstName"
-                          placeholder="John"
+                          placeholder="Customer first name"
                           className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
                           {...form.register("firstName")}
                           data-testid="input-first-name"
@@ -700,7 +700,7 @@ export default function LeadsPage() {
                         <Label htmlFor="lastName" className="text-slate-300">Customer Last Name *</Label>
                         <Input
                           id="lastName"
-                          placeholder="Doe"
+                          placeholder="Customer last name"
                           className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
                           {...form.register("lastName")}
                           data-testid="input-last-name"
@@ -717,7 +717,7 @@ export default function LeadsPage() {
                         <Input
                           id="email"
                           type="email"
-                          placeholder="customer@email.com"
+                          placeholder="Customer email address"
                           className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
                           {...form.register("email")}
                           data-testid="input-email"
@@ -731,7 +731,7 @@ export default function LeadsPage() {
                         <Input
                           id="phone"
                           type="tel"
-                          placeholder="(555) 123-4567"
+                          placeholder="Customer phone number"
                           className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
                           {...form.register("phone")}
                           data-testid="input-phone"
@@ -793,7 +793,7 @@ export default function LeadsPage() {
                       <Label htmlFor="details" className="text-slate-300">Additional Details</Label>
                       <Textarea
                         id="details"
-                        placeholder="Any special requirements, items to move, or important notes..."
+                        placeholder="Any special requirements, items to move, or important notes"
                         rows={4}
                         className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
                         {...form.register("details")}
