@@ -7,7 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
   Coins, Zap, Clock, TrendingUp, Loader2, Lock, Link as LinkIcon, Share2, MessageCircle,
-  Dumbbell, Truck, KeyRound, Wrench
+  Dumbbell, Truck, KeyRound, Wrench, Copy
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Link } from "wouter";
@@ -138,6 +138,13 @@ export default function CrewEarningsPage() {
     `Book with JC ON THE MOVE here: ${referralLink}`,
     referralCode ? `Use code ${referralCode}.` : "",
   ].filter(Boolean).join(" ");
+  const readyToPostText = [
+    "Need fast local help?",
+    "JC ON THE MOVE can help with moving, junk removal, delivery, cleanup, and labor work.",
+    "Request a callback, add photos or a video/album link, and the crew will confirm the job details.",
+    referralCode ? `Use my code ${referralCode}.` : "",
+    referralLink,
+  ].filter(Boolean).join("\n\n");
   const referralSmsHref = `sms:?&body=${encodeURIComponent(referralShareText)}`;
 
   useEffect(() => {
@@ -239,6 +246,17 @@ export default function CrewEarningsPage() {
           >
             <MessageCircle className="h-3.5 w-3.5" /> Text link
           </a>
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 rounded-lg border border-blue-500/40 bg-blue-500/10 px-3 py-2 text-xs font-black text-blue-200 hover:bg-blue-500/20"
+            onClick={() => {
+              navigator.clipboard?.writeText(readyToPostText)
+                .then(() => toast({ title: "Ready-to-post text copied", description: "Paste it into Facebook, text, or a local group." }))
+                .catch(() => toast({ title: "Copy failed", description: "Long-press the text or share the link instead.", variant: "destructive" }));
+            }}
+          >
+            <Copy className="h-3.5 w-3.5" /> Copy post
+          </button>
         </div>
       </div>
 
