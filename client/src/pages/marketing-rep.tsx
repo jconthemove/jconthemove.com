@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "wouter";
 import { ArrowLeft, CalendarCheck, CheckCircle2, Copy, Phone, QrCode, Share2, Tag, Truck, Users } from "lucide-react";
@@ -38,6 +39,7 @@ function formatPhone(raw: string) {
 export default function MarketingRepPage() {
   const params = useParams<{ slug: string }>();
   const slug = params.slug || "";
+  const [copied, setCopied] = useState(false);
 
   const { data: rep, isLoading } = useQuery<MarketingRep>({
     queryKey: [`/api/marketing-network/reps/${slug}`],
@@ -48,6 +50,9 @@ export default function MarketingRepPage() {
   const quoteHref = rep ? `/book?mode=quick&promo=${encodeURIComponent(rep.promoCode)}&rep=${encodeURIComponent(rep.slug)}` : "/book";
   const builderHref = rep ? `/book?mode=builder&promo=${encodeURIComponent(rep.promoCode)}&rep=${encodeURIComponent(rep.slug)}` : "/book";
   const shareUrl = rep ? `${window.location.origin}/network/${rep.slug}` : "";
+  const qrImageUrl = shareUrl ? `https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=8&data=${encodeURIComponent(shareUrl)}` : "";
+  const shareText = rep ? `${rep.displayName} with JC ON THE MOVE can help book moving, junk removal, delivery, cleanup, and labor work. Use code ${rep.promoCode}: ${shareUrl}` : "";
+  const smsShareHref = rep ? `sms:?&body=${encodeURIComponent(shareText)}` : "#";
 
   async function trackCall() {
     if (!rep) return;
@@ -65,9 +70,28 @@ export default function MarketingRepPage() {
     if (!shareUrl) return;
     try {
       await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
     } catch {
       // Clipboard may be blocked in some browsers; the visible URL still works.
     }
+  }
+
+  async function sharePage() {
+    if (!rep || !shareUrl) return;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: rep.brandName,
+          text: shareText,
+          url: shareUrl,
+        });
+        return;
+      } catch {
+        // Fall back to copying when the native share sheet is unavailable or cancelled.
+      }
+    }
+    await copyShareLink();
   }
 
   if (isLoading) {
@@ -167,14 +191,43 @@ export default function MarketingRepPage() {
                   <p className="text-xs font-black uppercase tracking-widest text-zinc-400">Shareable link</p>
                   <p className="mt-2 break-all font-mono text-xs text-zinc-200">{shareUrl}</p>
                   <div className="mt-3 grid grid-cols-2 gap-2">
+                    <Button type="button" size="sm" className="bg-emerald-500 text-zinc-950 hover:bg-emerald-400" onClick={sharePage}>
+                      <Share2 className="mr-2 h-3.5 w-3.5" /> Share
+                    </Button>
+                    <a href={smsShareHref}>
+                      <Button type="button" size="sm" variant="outline" className="w-full border-white/20 bg-white/5 text-white hover:bg-white/10">
+                        Text Link
+                      </Button>
+                    </a>
                     <Button type="button" size="sm" variant="outline" className="border-white/20 bg-white/5 text-white hover:bg-white/10" onClick={copyShareLink}>
-                      <Copy className="mr-2 h-3.5 w-3.5" /> Copy
+                      <Copy className="mr-2 h-3.5 w-3.5" /> {copied ? "Copied" : "Copy"}
                     </Button>
                     <Link href={quoteHref}>
                       <Button size="sm" className="w-full bg-blue-600 hover:bg-blue-500">
                         <QrCode className="mr-2 h-3.5 w-3.5" /> Book
                       </Button>
                     </Link>
+                  </div>
+                </div>
+                <div className="mt-4 rounded-lg border border-amber-300/30 bg-amber-300/10 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-amber-200">Referral Card</p>
+                      <p className="mt-2 text-lg font-black text-white">{rep.displayName}</p>
+                      <p className="text-xs text-zinc-300">JC ON THE MOVE verified rep</p>
+                    </div>
+                    <div className="rounded-md border border-white/15 bg-white p-2 text-center text-zinc-950">
+                      {qrImageUrl ? (
+                        <img src={qrImageUrl} alt={`QR code for ${rep.displayName}`} className="h-16 w-16" />
+                      ) : (
+                        <QrCode className="mx-auto h-8 w-8" />
+                      )}
+                      <p className="mt-1 text-[9px] font-black uppercase tracking-wide">Scan</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-[1fr_auto] items-end gap-3">
+                    <p className="min-w-0 break-all font-mono text-[11px] text-zinc-200">{shareUrl}</p>
+                    <div className="rounded-md bg-zinc-950 px-2.5 py-1.5 text-xs font-black text-amber-200">{rep.promoCode}</div>
                   </div>
                 </div>
               </CardContent>
