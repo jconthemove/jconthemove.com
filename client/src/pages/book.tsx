@@ -499,7 +499,7 @@ function QuickRequestForm({
             <Camera className="h-3.5 w-3.5" /> Photos (optional)
           </Label>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            Show us what needs moved, removed, delivered, or cleaned. Photos help us send the right crew and avoid surprise pricing.
+            Show us what needs moved, removed, delivered, or cleaned. Photos help us send the right crew and avoid surprise pricing. If you have a video or full album, submit the request and text the link after.
           </p>
           <label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-bold hover:bg-muted">
             <Upload className="h-4 w-4" />
@@ -1333,7 +1333,7 @@ export default function MultiServiceBookPage() {
               </span>
               <h2 className="mt-4 text-2xl font-black">Have someone call me</h2>
               <p className="mt-2 text-sm text-muted-foreground">60-second request. Name, phone, service, optional notes/photos. No pricing shown until a specialist quotes it.</p>
-              <p className="mt-4 text-xs font-black uppercase tracking-wide text-emerald-500">Quick request · Call required</p>
+              <p className="mt-4 text-xs font-black uppercase tracking-wide text-emerald-500">Quick request - call required</p>
             </button>
             <button type="button" onClick={startBuilder} className="text-left rounded-2xl border border-blue-500/30 bg-blue-500/10 p-5 sm:p-6 transition-all hover:border-blue-400" data-testid="entry-build-quote">
               <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-white">
@@ -1341,7 +1341,7 @@ export default function MultiServiceBookPage() {
               </span>
               <h2 className="mt-4 text-2xl font-black">Build my quote</h2>
               <p className="mt-2 text-sm text-muted-foreground">Guided project paths for moving, junk, cleaning, and more. Moving starts with filtered cards before any detailed questions.</p>
-              <p className="mt-4 text-xs font-black uppercase tracking-wide text-blue-500">Filtered quote builder · Price range</p>
+              <p className="mt-4 text-xs font-black uppercase tracking-wide text-blue-500">Filtered quote builder - price range</p>
             </button>
           </div>
         </div>
