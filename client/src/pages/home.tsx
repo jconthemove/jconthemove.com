@@ -441,6 +441,25 @@ export default function HomePage() {
               ))}
             </div>
           )}
+          <div className="mx-auto mt-8 grid max-w-5xl gap-4 rounded-xl border border-white/15 bg-white/[0.05] p-5 md:grid-cols-[1fr_auto] md:items-center md:p-6">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-300">Need something else?</p>
+              <h2 className="mt-2 text-2xl font-black tracking-tight md:text-3xl">Just ask. If it needs moved, hauled, delivered, cleaned, or handled, we can quote it.</h2>
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-300">
+                Send a quick request with notes or photos. A coordinator will confirm what is possible, what crew is needed, and the next open time.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row md:flex-col">
+              <Button onClick={() => setLocation("/book?mode=quick&service=other")} className="h-11 rounded-lg bg-emerald-600 px-5 font-black hover:bg-emerald-500">
+                Just Ask
+              </Button>
+              <a href="sms:+19062859312">
+                <Button variant="outline" className="h-11 w-full rounded-lg border-white/25 bg-white/5 px-5 font-black text-white hover:bg-white/10">
+                  Text Us
+                </Button>
+              </a>
+            </div>
+          </div>
         </div>
       </section>
 
