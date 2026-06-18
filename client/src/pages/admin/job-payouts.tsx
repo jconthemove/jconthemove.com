@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { User } from "@shared/schema";
+import { canFinalizeProfitSharePayout } from "@shared/jobPayout";
 import type { ProfitSharePayoutPreview, ProfitShareRole } from "@shared/jobPayout";
 
 type PayoutJob = {
@@ -87,6 +88,7 @@ export default function AdminJobPayoutsPage() {
   const { data: referralPartners = [] } = useQuery<ReferralPartner[]>({ queryKey: ["/api/admin/job-payouts/referral-partners"] });
 
   const selectedJob = jobs.find((job) => job.id === selectedJobId) || null;
+  const selectedJobCanFinalize = canFinalizeProfitSharePayout(selectedJob?.status);
 
   const previewBody = {
     grossRevenue: grossRevenue || numberValue(selectedJob?.totalPrice || selectedJob?.basePrice),
@@ -354,10 +356,32 @@ export default function AdminJobPayoutsPage() {
                           {assignmentMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
                           Save workers
                         </Button>
-                        <Button onClick={() => finalizeMutation.mutate()} disabled={finalizeMutation.isPending}>
+                        <Button
+                          onClick={() => finalizeMutation.mutate()}
+                          disabled={!selectedJobCanFinalize || finalizeMutation.isPending}
+                          title={selectedJobCanFinalize ? "Finalize payout records" : "Job must be Customer Approved before finalizing payout records"}
+                        >
                           {finalizeMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
                           Finalize
                         </Button>
+                      </div>
+
+                      <div className={`rounded-lg border p-3 text-sm ${selectedJobCanFinalize ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-100" : "border-amber-500/30 bg-amber-500/10 text-amber-100"}`}>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="outline" className={selectedJobCanFinalize ? "border-emerald-400/50 text-emerald-200" : "border-amber-400/50 text-amber-200"}>
+                            {selectedJobCanFinalize ? "Customer Approved" : "Preview Only"}
+                          </Badge>
+                          <span className="font-semibold">
+                            {selectedJobCanFinalize
+                              ? "This job can be finalized into manual payout records."
+                              : "Finalize is locked until Job Status = Customer Approved."}
+                          </span>
+                        </div>
+                        {!selectedJobCanFinalize && (
+                          <p className="mt-1 text-xs opacity-85">
+                            Current status: {selectedJob.status.replace(/_/g, " ")}. Calculations can be previewed, exported, and adjusted before approval.
+                          </p>
+                        )}
                       </div>
 
                       {preview.adminOverrideRequired && (
