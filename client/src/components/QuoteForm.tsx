@@ -310,7 +310,7 @@ export default function QuoteForm({
               <Input
                 id="phone"
                 type="tel"
-                placeholder="(555) 123-4567"
+                placeholder="(906) 285-9312"
                 className={inputClasses}
                 {...form.register("phone")}
                 data-testid="input-phone"
@@ -484,7 +484,7 @@ export default function QuoteForm({
       {showRewardsInfo && (
         <div className="mx-6 mb-6 p-4 bg-gradient-to-r from-blue-500/10 to-orange-500/10 border border-blue-500/30 rounded-xl">
           <h3 className="font-bold mb-2 text-slate-100 flex items-center gap-2">
-            <span className="text-orange-400">💰</span> Earn Rewards
+            <span className="text-orange-400">$</span> Earn Rewards
           </h3>
           <p className="text-sm text-slate-400">
             When jobs you create are confirmed and completed, you'll earn JCMOVES tokens as a reward for bringing in business!
@@ -496,7 +496,7 @@ export default function QuoteForm({
         <div className="mx-6 mb-6 rounded-xl overflow-hidden border border-orange-500/25"
           style={{ background: "linear-gradient(135deg,#0c0a09 0%,#1a1000 60%,#0c0a09 100%)" }}>
           <div className="px-4 pt-3 pb-1 flex items-center gap-2 border-b border-orange-500/15">
-            <span className="text-base">🏆</span>
+            <span className="text-base text-yellow-400 font-black">J</span>
             <span className="text-sm font-black text-white tracking-tight">Earn JCMOVES on This Service</span>
           </div>
           <div className="px-4 py-3 space-y-2">
@@ -505,7 +505,7 @@ export default function QuoteForm({
               <span className="text-sm text-orange-300/80 font-medium">JCMOVES per $1 spent</span>
             </div>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Every dollar you spend on moving, junk removal, or any service earns JCMOVES tokens — redeemable for discounts, Quantum Spin prizes, and lottery tickets. Free to join.
+              Every dollar you spend on moving, junk removal, or any service earns JCMOVES tokens - redeemable for discounts, Quantum Spin prizes, and lottery tickets. Free to join.
             </p>
             <div className="flex flex-wrap gap-1.5 pt-1">
               {["10% off coupons", "Quantum Spin prizes", "Lottery tickets", "Cash-back credits"].map(b => (
@@ -516,7 +516,7 @@ export default function QuoteForm({
               href="/login"
               className="mt-2 flex items-center justify-center gap-2 w-full py-2 rounded-lg bg-orange-500/15 border border-orange-500/30 text-orange-400 text-xs font-bold hover:bg-orange-500/25 transition-colors"
             >
-              <span>Create a free account to start earning →</span>
+              <span>Create a free account to start earning</span>
             </a>
           </div>
         </div>

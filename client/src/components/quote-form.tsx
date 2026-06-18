@@ -167,7 +167,7 @@ export default function QuoteForm() {
                   <Input
                     id="phone"
                     type="tel"
-                    placeholder="(555) 123-4567"
+                    placeholder="(906) 285-9312"
                     {...form.register("phone")}
                     data-testid="input-phone"
                   />
