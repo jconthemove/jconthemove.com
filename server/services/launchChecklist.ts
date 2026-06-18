@@ -249,20 +249,20 @@ const SCENARIOS: Scenario[] = [
   },
   {
     id: "quick_request_storage",
-    label: "Quick request photo + referral storage ready",
+    label: "Quick request photo + attribution storage ready",
     run: async () => {
       const { rows } = await pool.query<{ column_name: string }>(`
         SELECT column_name
         FROM information_schema.columns
         WHERE table_schema = 'public'
           AND table_name = 'leads'
-          AND column_name IN ('source', 'promo_code', 'photos', 'order_number')
+          AND column_name IN ('source', 'promo_code', 'photos', 'order_number', 'details')
       `);
       const columns = new Set(rows.map((row) => row.column_name));
-      const required = ["source", "promo_code", "photos", "order_number"];
+      const required = ["source", "promo_code", "photos", "order_number", "details"];
       const missing = required.filter((name) => !columns.has(name));
       return missing.length === 0
-        ? { ok: true, detail: "leads table can store source, referral code, photos, and order number" }
+        ? { ok: true, detail: "leads table can store source, promo code, rep slug metadata, photos, and order number" }
         : { ok: false, detail: `missing lead columns: ${missing.join(", ")}` };
     },
   },
