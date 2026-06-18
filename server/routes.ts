@@ -4571,6 +4571,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
     phone: z.string().trim().min(7).max(40),
     serviceCode: z.string().trim().min(1).max(80),
     notes: z.string().trim().max(2500).optional().default(""),
+    mediaLink: z.string().trim().max(1000).optional().default(""),
     promoCode: z.string().trim().max(50).optional().default(""),
     referralSlug: z.string().trim().max(80).optional().default(""),
     photos: z.array(z.object({
@@ -4657,6 +4658,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
           "Source: 60-second quick request",
           normalizedPromoCode ? `Referral code: ${normalizedPromoCode}` : "",
           referralSlug ? `Rep page: ${referralSlug}` : "",
+          parsed.mediaLink ? `Photo/video/album link: ${parsed.mediaLink}` : "",
           parsed.notes ? `Notes: ${parsed.notes}` : "",
           photoNames.length ? `Photo files mentioned: ${photoNames.join(", ")}` : "",
         ].filter(Boolean).join("\n");

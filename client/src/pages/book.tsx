@@ -307,6 +307,7 @@ function QuickRequestForm({
     phone: "",
     serviceCode: serviceOptions.some((svc) => svc.code === normalizedInitialServiceCode) ? normalizedInitialServiceCode : "moving",
     notes: "",
+    mediaLink: "",
   });
   const [photoFiles, setPhotoFiles] = useState<QuickRequestPhoto[]>([]);
   const [photoReading, setPhotoReading] = useState(false);
@@ -349,6 +350,7 @@ function QuickRequestForm({
       `Photos: ${lead.photoCount || 0}`,
       lead.promoCode ? `Referral code: ${lead.promoCode}` : "",
       lead.referralSlug ? `Rep page: ${lead.referralSlug}` : "",
+      form.mediaLink.trim() ? `Photo/video/album link: ${form.mediaLink.trim()}` : "",
       form.notes.trim() ? `Notes: ${form.notes.trim()}` : "",
     ].filter(Boolean);
 
@@ -371,6 +373,7 @@ function QuickRequestForm({
       `Service: ${submitted.serviceLabel || form.serviceCode}.`,
       `Phone: ${form.phone}.`,
       `Photos attached: ${photoCount}.`,
+      form.mediaLink.trim() ? `Media link: ${form.mediaLink.trim()}.` : "",
       photoCount === 0 ? "I can text photos, a video, or an album link if needed." : "I can text more photos, a video, or an album link if needed.",
     ].filter(Boolean).join(" ");
     return (
@@ -405,7 +408,7 @@ function QuickRequestForm({
           )}
           <div className="rounded-xl border border-blue-500/25 bg-blue-500/10 p-3 text-left text-xs text-blue-700 dark:text-blue-300">
             <p className="font-black">Need faster help?</p>
-            <p className="mt-1">Call or text now and mention order {submitted.displayOrderNumber}. Add a Google Photos album or video link if it helps explain the job.</p>
+            <p className="mt-1">Call or text now and mention order {submitted.displayOrderNumber}. {form.mediaLink.trim() ? "Your photo/video link is attached to the request." : "Add a Google Photos album or video link if it helps explain the job."}</p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <a href="tel:+19062859312">
@@ -494,12 +497,25 @@ function QuickRequestForm({
             data-testid="quick-notes"
           />
         </div>
+        <div>
+          <Label className="text-xs">Photo, video, or album link (optional)</Label>
+          <Input
+            value={form.mediaLink}
+            onChange={(e) => setForm((f) => ({ ...f, mediaLink: e.target.value }))}
+            placeholder="Paste a Google Photos album, video, or shared folder link"
+            inputMode="url"
+            data-testid="quick-media-link"
+          />
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Best for full room walkthroughs, larger videos, or more photos than the upload box allows.
+          </p>
+        </div>
         <div className="rounded-xl border border-dashed border-border p-4">
           <Label className="text-xs flex items-center gap-1">
             <Camera className="h-3.5 w-3.5" /> Photos (optional)
           </Label>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            Show us what needs moved, removed, delivered, or cleaned. Photos help us send the right crew and avoid surprise pricing. If you have a video or full album, submit the request and text the link after.
+            Show us what needs moved, removed, delivered, or cleaned. Photos help us send the right crew and avoid surprise pricing. For videos or full albums, paste the link above.
           </p>
           <label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-bold hover:bg-muted">
             <Upload className="h-4 w-4" />
