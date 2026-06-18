@@ -622,7 +622,7 @@ export default function BookLawnCare() {
           </StepWrap>
         )}
 
-        {/* Step 6 — Contact Info */}
+        {/* Step 6 - Contact Info */}
         {step === 6 && (
           <StepWrap
             title="Your contact info"
@@ -636,17 +636,17 @@ export default function BookLawnCare() {
             <div className="space-y-4">
               <div>
                 <label className="text-slate-400 text-sm mb-1 block">Full name *</label>
-                <Input {...form.register("customerName")} placeholder="Jane Smith" className="bg-slate-800 border-slate-700 text-white" />
+                <Input {...form.register("customerName")} placeholder="Your full name" className="bg-slate-800 border-slate-700 text-white" />
                 {form.formState.errors.customerName && <p className="text-red-400 text-xs mt-1">{form.formState.errors.customerName.message}</p>}
               </div>
               <div>
                 <label className="text-slate-400 text-sm mb-1 block">Phone *</label>
-                <Input {...form.register("phone")} placeholder="(555) 000-0000" type="tel" className="bg-slate-800 border-slate-700 text-white" />
+                <Input {...form.register("phone")} placeholder="Best phone number" type="tel" className="bg-slate-800 border-slate-700 text-white" />
                 {form.formState.errors.phone && <p className="text-red-400 text-xs mt-1">{form.formState.errors.phone.message}</p>}
               </div>
               <div>
                 <label className="text-slate-400 text-sm mb-1 block">Email (optional)</label>
-                <Input {...form.register("email")} placeholder="jane@email.com" type="email" className="bg-slate-800 border-slate-700 text-white" />
+                <Input {...form.register("email")} placeholder="Best email address" type="email" className="bg-slate-800 border-slate-700 text-white" />
               </div>
               <div>
                 <label className="text-slate-400 text-sm mb-1 block">Service address *</label>
@@ -774,7 +774,7 @@ function RebookPanel({
           <Input
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            placeholder="(555) 000-0000"
+            placeholder="Phone from your last booking"
             type="tel"
             data-testid="rebook-phone-input"
             className="bg-slate-800 border-slate-700 text-white"
