@@ -4575,8 +4575,25 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
     photos: z.array(z.object({
       name: z.string().max(255),
       type: z.string().max(100).optional().default(""),
+      mimeType: z.string().max(100).optional().default(""),
       size: z.number().optional().default(0),
-    })).optional().default([]),
+      url: z.string().max(4_500_000).optional().default(""),
+    }).superRefine((photo, ctx) => {
+      if (photo.url && !photo.url.startsWith("data:image/")) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["url"],
+          message: "Quick request photos must be image data URLs.",
+        });
+      }
+      if ((photo.size || 0) > 3 * 1024 * 1024) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["size"],
+          message: "Quick request photos must be 3 MB or smaller.",
+        });
+      }
+    })).max(5).optional().default([]),
   });
 
   const QUICK_REQUEST_SERVICE_MAP: Record<string, { serviceType: string; label: string }> = {
@@ -4647,8 +4664,11 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
           truckConfig: "quote_needed",
           crewSize: 2,
           photos: parsed.photos.map((photo) => ({
-            ...photo,
-            type: photo.type || "quick-request",
+            url: photo.url || "",
+            name: photo.name,
+            mimeType: photo.mimeType || photo.type || "image/*",
+            type: photo.type || photo.mimeType || "image/*",
+            size: photo.size || 0,
             source: "quick_request",
             timestamp: new Date().toISOString(),
           })),

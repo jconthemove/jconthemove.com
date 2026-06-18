@@ -112,6 +112,17 @@ interface QuickRequestResponse {
 
 type BookingMode = "choose" | "quick" | "builder";
 
+type QuickRequestPhoto = {
+  name: string;
+  type: string;
+  mimeType: string;
+  size: number;
+  url: string;
+};
+
+const QUICK_REQUEST_MAX_PHOTOS = 5;
+const QUICK_REQUEST_MAX_PHOTO_BYTES = 3 * 1024 * 1024;
+
 const STEPS = ["services", "address", "configure", "contact", "safety", "review"] as const;
 type Step = (typeof STEPS)[number];
 const STEP_LABELS: Record<Step, string> = {
@@ -136,6 +147,28 @@ function shortHeavyLabel(label: string) {
   if (/400/.test(label)) return "400 lb item";
   if (/appliance|fitness/i.test(label)) return "Appliance";
   return "Other 200 lb+";
+}
+
+function readQuickRequestPhoto(file: File): Promise<QuickRequestPhoto> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = typeof reader.result === "string" ? reader.result : "";
+      if (!url.startsWith("data:image/")) {
+        reject(new Error(`${file.name} could not be read as an image.`));
+        return;
+      }
+      resolve({
+        name: file.name,
+        type: file.type || "image/*",
+        mimeType: file.type || "image/*",
+        size: file.size,
+        url,
+      });
+    };
+    reader.onerror = () => reject(new Error(`${file.name} could not be read.`));
+    reader.readAsDataURL(file);
+  });
 }
 
 function safetyNeedsAttention(item: SelectedItem): string | null {
@@ -220,7 +253,8 @@ function QuickRequestForm({
     serviceCode: "moving",
     notes: "",
   });
-  const [photoFiles, setPhotoFiles] = useState<Array<{ name: string; type: string; size: number }>>([]);
+  const [photoFiles, setPhotoFiles] = useState<QuickRequestPhoto[]>([]);
+  const [photoReading, setPhotoReading] = useState(false);
   const [submitted, setSubmitted] = useState<QuickRequestResponse["lead"] | null>(null);
   const canSubmit =
     form.firstName.trim().length > 0 &&
@@ -379,31 +413,79 @@ function QuickRequestForm({
           </p>
           <label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-bold hover:bg-muted">
             <Upload className="h-4 w-4" />
-            Add photos
+            {photoReading ? "Reading photos..." : "Add photos"}
             <input
               type="file"
               accept="image/*"
               multiple
               className="sr-only"
-              onChange={(e) => {
-                const files = Array.from(e.target.files || []).map((file) => ({
-                  name: file.name,
-                  type: file.type,
-                  size: file.size,
-                }));
-                setPhotoFiles(files);
+              disabled={photoReading}
+              onChange={async (e) => {
+                const files = Array.from(e.target.files || []);
+                if (!files.length) return;
+                const imageFiles = files.filter((file) => file.type.startsWith("image/"));
+                if (imageFiles.length !== files.length) {
+                  toast({
+                    title: "Images only",
+                    description: "Quick requests can include JPG, PNG, HEIC, or other image files.",
+                    variant: "destructive",
+                  });
+                }
+                const accepted = imageFiles.slice(0, QUICK_REQUEST_MAX_PHOTOS);
+                if (imageFiles.length > QUICK_REQUEST_MAX_PHOTOS) {
+                  toast({
+                    title: "Photo limit",
+                    description: `Attach up to ${QUICK_REQUEST_MAX_PHOTOS} photos to keep the callback request fast.`,
+                    variant: "destructive",
+                  });
+                }
+                const oversized = accepted.find((file) => file.size > QUICK_REQUEST_MAX_PHOTO_BYTES);
+                if (oversized) {
+                  toast({
+                    title: "Photo too large",
+                    description: `${oversized.name} is over 3 MB. Send larger photos by text after submitting.`,
+                    variant: "destructive",
+                  });
+                  e.currentTarget.value = "";
+                  return;
+                }
+                setPhotoReading(true);
+                try {
+                  setPhotoFiles(await Promise.all(accepted.map(readQuickRequestPhoto)));
+                } catch (error) {
+                  toast({
+                    title: "Could not read photos",
+                    description: error instanceof Error ? error.message : "Please try different photos.",
+                    variant: "destructive",
+                  });
+                } finally {
+                  setPhotoReading(false);
+                  e.currentTarget.value = "";
+                }
               }}
             />
           </label>
           {photoFiles.length > 0 && (
-            <p className="mt-2 text-[11px] text-muted-foreground">
-              {photoFiles.length} photo{photoFiles.length === 1 ? "" : "s"} attached. We will review them before calling.
-            </p>
+            <div className="mt-3 space-y-2">
+              <div className="grid grid-cols-5 gap-2">
+                {photoFiles.map((photo) => (
+                  <img
+                    key={`${photo.name}-${photo.size}`}
+                    src={photo.url}
+                    alt={photo.name}
+                    className="aspect-square w-full rounded-md border border-border object-cover"
+                  />
+                ))}
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {photoFiles.length} photo{photoFiles.length === 1 ? "" : "s"} attached. We will review them before calling.
+              </p>
+            </div>
           )}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <Button
-            disabled={!canSubmit || submitQuick.isPending}
+            disabled={!canSubmit || submitQuick.isPending || photoReading}
             onClick={() => submitQuick.mutate()}
             data-testid="quick-submit"
           >
