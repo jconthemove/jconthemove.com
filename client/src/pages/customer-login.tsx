@@ -157,7 +157,7 @@ export default function CustomerLogin() {
                     <Input
                       id="firstName"
                       type="text"
-                      placeholder="John"
+                      placeholder="First name"
                       value={formData.firstName}
                       onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
                       className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
@@ -170,7 +170,7 @@ export default function CustomerLogin() {
                     <Input
                       id="lastName"
                       type="text"
-                      placeholder="Doe"
+                      placeholder="Last name"
                       value={formData.lastName}
                       onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                       className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
@@ -221,7 +221,7 @@ export default function CustomerLogin() {
                 <Input
                   id="password"
                   type="password"
-                  placeholder={mode === 'register' ? 'At least 8 characters' : '••••••••'}
+                  placeholder={mode === 'register' ? 'At least 8 characters' : 'Password'}
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="pl-9 bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"

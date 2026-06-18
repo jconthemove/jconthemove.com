@@ -258,7 +258,7 @@ export default function LoginPage() {
                       <div className="space-y-1.5">
                         <Label className="text-slate-300 text-sm">First Name</Label>
                         <Input
-                          type="text" placeholder="John" required
+                          type="text" placeholder="First name" required
                           value={form.firstName} onChange={e => set("firstName", e.target.value)}
                           className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500"
                         />
@@ -266,7 +266,7 @@ export default function LoginPage() {
                       <div className="space-y-1.5">
                         <Label className="text-slate-300 text-sm">Last Name</Label>
                         <Input
-                          type="text" placeholder="Doe" required
+                          type="text" placeholder="Last name" required
                           value={form.lastName} onChange={e => set("lastName", e.target.value)}
                           className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500"
                         />
@@ -306,7 +306,7 @@ export default function LoginPage() {
                     <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
                     <Input
                       type="password"
-                      placeholder={mode === "register" ? "At least 8 characters" : "••••••••"}
+                      placeholder={mode === "register" ? "At least 8 characters" : "Password"}
                       required minLength={mode === "register" ? 8 : undefined}
                       value={form.password} onChange={e => set("password", e.target.value)}
                       className="pl-9 bg-slate-800 border-slate-600 text-white placeholder:text-slate-500"
