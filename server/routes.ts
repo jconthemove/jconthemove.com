@@ -6729,9 +6729,54 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
   app.get("/api/leads", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
       console.log('📋 Fetching all leads...');
-      const leads = await storage.getLeads();
-      console.log(`📋 Found ${leads.length} leads`);
-      res.json(leads);
+      const leadRows = await storage.getLeads();
+      console.log(`📋 Found ${leadRows.length} leads`);
+      const leadIds = leadRows.map((lead) => lead.id).filter(Boolean);
+      const attributionByLead = new Map<string, {
+        attributionType: string;
+        promoCode: string | null;
+        referralSlug: string | null;
+        repName: string | null;
+        source: string | null;
+        createdAt: Date;
+      }>();
+
+      if (leadIds.length > 0) {
+        const attributionRows = await db
+          .select()
+          .from(quoteAttributions)
+          .where(inArray(quoteAttributions.leadId, leadIds))
+          .orderBy(desc(quoteAttributions.createdAt));
+
+        const promoCodesForReps = Array.from(new Set(
+          attributionRows
+            .map((row) => row.promoCode)
+            .filter((code): code is string => !!code),
+        ));
+        const repRows = promoCodesForReps.length > 0
+          ? await db.select().from(marketingReps).where(inArray(marketingReps.promoCode, promoCodesForReps))
+          : [];
+        const repByPromo = new Map(repRows.map((rep) => [rep.promoCode, rep]));
+
+        for (const row of attributionRows) {
+          if (!row.leadId || attributionByLead.has(row.leadId)) continue;
+          const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata as Record<string, unknown> : {};
+          const rep = row.promoCode ? repByPromo.get(row.promoCode) : undefined;
+          attributionByLead.set(row.leadId, {
+            attributionType: row.attributionType,
+            promoCode: row.promoCode || null,
+            referralSlug: typeof metadata.referralSlug === "string" ? metadata.referralSlug : rep?.slug || null,
+            repName: rep?.displayName || null,
+            source: typeof metadata.source === "string" ? metadata.source : null,
+            createdAt: row.createdAt,
+          });
+        }
+      }
+
+      res.json(leadRows.map((lead) => ({
+        ...lead,
+        attribution: attributionByLead.get(lead.id) || null,
+      })));
     } catch (error) {
       console.error("Error fetching leads:", error);
       res.status(500).json({ error: "Failed to fetch leads" });
@@ -25696,3 +25741,4 @@ async function checkAndRunLotteryDraws() {
   // Also ensure fresh open rounds exist after draws
   await ensureActiveLotteryRounds();
 }
+

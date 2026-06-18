@@ -80,6 +80,14 @@ type Lead = {
   dispatchNotes?: string;
   source?: string | null;
   promoCode?: string | null;
+  attribution?: {
+    attributionType: string;
+    promoCode: string | null;
+    referralSlug: string | null;
+    repName: string | null;
+    source: string | null;
+    createdAt: string;
+  } | null;
   photos?: Array<{ url?: string; mimeType?: string; name?: string; source?: string; timestamp?: string }>;
   reviewToken?: string;
   archivedAt?: string | null;
@@ -121,6 +129,12 @@ function leadPhotoCount(lead: Lead): number {
   return Array.isArray(lead.photos) ? lead.photos.length : 0;
 }
 
+function leadAttributionLabel(lead: Lead): string | null {
+  const attribution = lead.attribution;
+  if (!attribution) return null;
+  return attribution.repName || attribution.referralSlug || attribution.promoCode || null;
+}
+
 function AdminJobCard({ lead, onClick, employees }: {
   lead: Lead;
   onClick: () => void;
@@ -142,6 +156,7 @@ function AdminJobCard({ lead, onClick, employees }: {
   const hasPremiums = lead.hasHotTub || lead.hasPiano || lead.hasHeavySafe || lead.hasPoolTable;
   const quickRequest = isQuickRequestLead(lead);
   const photoCount = leadPhotoCount(lead);
+  const attributionLabel = leadAttributionLabel(lead);
 
   return (
     <Card
@@ -218,6 +233,12 @@ function AdminJobCard({ lead, onClick, employees }: {
                 <span className="text-xs text-amber-300 flex items-center gap-1">
                   <Tag className="h-3 w-3" />
                   {lead.promoCode}
+                </span>
+              )}
+              {attributionLabel && (
+                <span className="text-xs text-emerald-300 flex items-center gap-1">
+                  <UserCheck className="h-3 w-3" />
+                  Rep: {attributionLabel}
                 </span>
               )}
             </div>
@@ -479,6 +500,7 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
   const displayBasePrice = basePrice || lead.basePrice;
   const quickRequest = isQuickRequestLead(lead);
   const photos = Array.isArray(lead.photos) ? lead.photos : [];
+  const attribution = lead.attribution;
 
   return (
     <Sheet open={open} onOpenChange={v => !v && onClose()}>
@@ -522,6 +544,18 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
             <POSRow label="Date" value={formatDateShort(effectiveDate)} />
             {lead.arrivalWindow && <POSRow label="Arrival" value={lead.arrivalWindow} />}
             {lead.promoCode && <POSRow label="Referral Code" value={<span className="font-mono text-amber-300">{lead.promoCode}</span>} />}
+            {attribution && (
+              <POSRow
+                label="Attribution"
+                value={
+                  <span className="text-right text-xs">
+                    <span className="block text-emerald-300">{attribution.repName || attribution.referralSlug || "Marketing rep"}</span>
+                    <span className="block font-mono text-amber-300">{attribution.promoCode || lead.promoCode || "No code"}</span>
+                    {attribution.source && <span className="block text-slate-500">{attribution.source.replace(/_/g, " ")}</span>}
+                  </span>
+                }
+              />
+            )}
             {photos.length > 0 && <POSRow label="Photos" value={`${photos.length} attached`} />}
             {lead.fromAddress && <POSRow label="From" value={<span className="text-xs text-right max-w-[200px] block">{lead.fromAddress}</span>} />}
             {lead.toAddress && <POSRow label="To" value={<span className="text-xs text-right max-w-[200px] block">{lead.toAddress}</span>} />}
