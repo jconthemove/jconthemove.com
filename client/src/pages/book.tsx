@@ -7,7 +7,7 @@ import { useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft, ArrowRight, CheckCircle2, Phone, Coins, Users, Tag, Loader2, AlertCircle,
-  Shield, Star, MapPin, PhoneCall, ClipboardList, Upload, Camera,
+  Shield, Star, MapPin, PhoneCall, ClipboardList, Upload, Camera, Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -331,6 +331,30 @@ function QuickRequestForm({
     },
   });
 
+  async function copyQuickRequestDetails(lead: QuickRequestResponse["lead"]) {
+    const lines = [
+      `JC ON THE MOVE quick request ${lead.displayOrderNumber}`,
+      `Customer: ${form.firstName.trim()} ${form.lastName.trim()}`.trim(),
+      `Phone: ${form.phone}`,
+      `Service: ${lead.serviceLabel || form.serviceCode}`,
+      `Photos: ${lead.photoCount || 0}`,
+      lead.promoCode ? `Referral code: ${lead.promoCode}` : "",
+      lead.referralSlug ? `Rep page: ${lead.referralSlug}` : "",
+      form.notes.trim() ? `Notes: ${form.notes.trim()}` : "",
+    ].filter(Boolean);
+
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+      toast({ title: "Request details copied", description: lead.displayOrderNumber });
+    } catch {
+      toast({
+        title: "Copy failed",
+        description: "Use the order number when you call or text.",
+        variant: "destructive",
+      });
+    }
+  }
+
   if (submitted) {
     const photoCount = submitted.photoCount || 0;
     return (
@@ -374,6 +398,10 @@ function QuickRequestForm({
             <a href={`sms:+19062859312?&body=${encodeURIComponent(`Hi JC ON THE MOVE, I just submitted quick request ${submitted.displayOrderNumber}.`)}`}>
               <Button className="w-full" variant="outline">Text Backup</Button>
             </a>
+            <Button type="button" variant="outline" onClick={() => copyQuickRequestDetails(submitted)}>
+              <Copy className="mr-2 h-4 w-4" />
+              Copy Details
+            </Button>
             <Button onClick={onBuildQuote}>Build a detailed quote</Button>
             <Button variant="outline" onClick={onHome}>Return Home</Button>
           </div>
