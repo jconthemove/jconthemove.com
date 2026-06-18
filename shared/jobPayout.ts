@@ -98,6 +98,12 @@ export type JobPayoutPreview = {
 export type ProfitShareRole = "lead_mover" | "mover" | "helper";
 export type ProfitSharePayoutStatus = "preview" | "calculated" | "manual_pending" | "manual_paid" | "stripe_pending" | "stripe_paid" | "failed";
 
+export const CUSTOMER_APPROVED_PAYOUT_STATUS = "customer_approved";
+
+export function canFinalizeProfitSharePayout(status: string | null | undefined): boolean {
+  return String(status || "").toLowerCase() === CUSTOMER_APPROVED_PAYOUT_STATUS;
+}
+
 export type ProfitShareSettings = {
   fuelReservePct: number;
   vehicleReservePct: number;

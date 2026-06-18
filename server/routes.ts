@@ -44,7 +44,7 @@ import { getDepositInfo, extractZip } from "@shared/depositRules";
 import { MIN_REDEMPTION_TOKENS, REDEMPTION_INCREMENT, roundToIncrement, validateRedemption, tokensToDollars } from "@shared/tokenRedemptionRules";
 import { buildLeadJobPayoutPreview } from "./services/jobPayoutEngine";
 import { calculateProfitSharingPayout, defaultBonusWeightsForCrew, defaultHourlyRateForRole, normalizeProfitShareSettings } from "./services/profitSharingPayoutEngine";
-import type { ProfitShareRole, ProfitShareWorkerInput } from "@shared/jobPayout";
+import { canFinalizeProfitSharePayout, type ProfitShareRole, type ProfitShareWorkerInput } from "@shared/jobPayout";
 import { QUOTE_HELPER_MESSAGE_LIMIT, summarizeQuoteRequest } from "./services/geminiQuoteHelper";
 import lawnCareRouter from "./routes/lawnCare";
 import serviceRebookRouter from "./routes/serviceRebookReminders";
@@ -12753,7 +12753,7 @@ Thank you for your business!
     try {
       const lead = await storage.getLead(req.params.id);
       if (!lead) return res.status(404).json({ error: "Lead not found" });
-      if (lead.status !== "customer_approved") {
+      if (!canFinalizeProfitSharePayout(lead.status)) {
         return res.status(409).json({ error: "Job must be Customer Approved before payout can be finalized." });
       }
 
