@@ -50,7 +50,7 @@ export default function AdminLaunchChecklistPage() {
       `Generated: ${new Date().toLocaleString()}`,
       `Status: ${summary.allOk ? "READY" : "NOT READY"}`,
       `Results: ${summary.green} green, ${summary.red} failed, ${summary.notRun} not run, ${summary.total} total`,
-      "Coverage: payments, booking funnel, quick requests, worker rep pages, profit share, payout safety",
+      "Coverage: payments, booking funnel, quick requests with photos/media links, worker rep pages, profit share, payout safety",
       "",
       ...scenarios.map((s) => {
         const r = results[s.id];
@@ -94,7 +94,7 @@ export default function AdminLaunchChecklistPage() {
             <h1 className="text-2xl font-bold text-white">Launch Checklist</h1>
           </div>
           <p className="text-slate-400 text-sm max-w-3xl">
-            Run every launch probe and confirm all rows are green before publishing a deploy or driving marketing traffic. This covers payments, the booking funnel, quick-request photos and attribution, worker rep pages, profit-share defaults, and payout safety.
+            Run every launch probe and confirm all rows are green before publishing a deploy or driving marketing traffic. This covers payments, the booking funnel, quick-request photos, media links and attribution, worker rep pages, profit-share defaults, and payout safety.
           </p>
         </div>
         <button

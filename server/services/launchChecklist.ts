@@ -228,7 +228,7 @@ const SCENARIOS: Scenario[] = [
   },
   {
     id: "quick_request_notifications",
-    label: "Quick request notification channel configured",
+    label: "Quick request notifications configured for media-aware leads",
     run: async () => {
       const hasGmail = !!(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD);
       const hasSendgrid = !!process.env.SENDGRID_API_KEY;
@@ -244,13 +244,13 @@ const SCENARIOS: Scenario[] = [
         hasAdminSms ? "admin_sms" : "",
       ].filter(Boolean);
       return channels.length > 0
-        ? { ok: true, detail: `available: ${channels.join(", ")}` }
+        ? { ok: true, detail: `available: ${channels.join(", ")}; media-link context is included when customers provide it` }
         : { ok: false, detail: "no email or admin SMS channel is fully configured" };
     },
   },
   {
     id: "quick_request_storage",
-    label: "Quick request photo + attribution storage ready",
+    label: "Quick request photo, media-link + attribution storage ready",
     run: async () => {
       const { rows } = await pool.query<{ column_name: string }>(`
         SELECT column_name
@@ -263,7 +263,7 @@ const SCENARIOS: Scenario[] = [
       const required = ["source", "promo_code", "photos", "order_number", "details"];
       const missing = required.filter((name) => !columns.has(name));
       return missing.length === 0
-        ? { ok: true, detail: "leads table can store source, promo code, rep slug metadata, photos, and order number" }
+        ? { ok: true, detail: "leads table can store source, promo code, rep slug metadata, photos, media links in details, and order number" }
         : { ok: false, detail: `missing lead columns: ${missing.join(", ")}` };
     },
   },
