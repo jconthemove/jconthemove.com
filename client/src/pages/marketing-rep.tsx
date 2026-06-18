@@ -77,7 +77,7 @@ export default function MarketingRepPage() {
       ? `/book?mode=quick&service=${encodeURIComponent(service)}&promo=${encodeURIComponent(rep.promoCode)}&rep=${encodeURIComponent(rep.slug)}`
       : `/book?mode=quick&service=${encodeURIComponent(service)}`;
   const shareUrl = rep ? `${window.location.origin}/network/${rep.slug}` : "";
-  const qrImageUrl = shareUrl ? `https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=8&data=${encodeURIComponent(shareUrl)}` : "";
+  const qrImageUrl = rep ? `/api/marketing-network/reps/${encodeURIComponent(rep.slug)}/qr.svg` : "";
   const shareText = rep ? `${rep.displayName} with JC ON THE MOVE can help book moving, junk removal, delivery, cleanup, and labor work. Use code ${rep.promoCode}: ${shareUrl}` : "";
   const smsShareHref = rep ? `sms:?&body=${encodeURIComponent(shareText)}` : "#";
 

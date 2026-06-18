@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
+import { createRequire } from "module";
 import crypto from "crypto";
 import { getEasternDateStr, getEasternDayStart, getEasternDayEnd } from "./utils/dateUtils";
 import { storage } from "./storage";
@@ -15545,6 +15546,43 @@ Thank you for your business!
     } catch (error: any) {
       console.error("Error fetching marketing rep:", error);
       res.status(500).json({ error: "Failed to fetch marketing rep" });
+    }
+  });
+
+  app.get("/api/marketing-network/reps/:slug/qr.svg", async (req, res) => {
+    try {
+      const slug = String(req.params.slug || "").toLowerCase().trim();
+      const [rep] = await db.select({ slug: marketingReps.slug }).from(marketingReps)
+        .where(and(eq(marketingReps.slug, slug), eq(marketingReps.isActive, true)))
+        .limit(1);
+      if (!rep) return res.status(404).type("text/plain").send("Marketing rep not found");
+
+      const require = createRequire(import.meta.url);
+      const QRCode = require("qrcode") as {
+        toString: (text: string, options: Record<string, unknown>) => Promise<string>;
+      };
+      const baseUrl = `${req.protocol}://${req.get("host")}`;
+      const shareUrl = `${baseUrl}/network/${rep.slug}`;
+      const svg = await QRCode.toString(shareUrl, {
+        type: "svg",
+        margin: 2,
+        width: 160,
+        color: {
+          dark: "#09090b",
+          light: "#ffffff",
+        },
+      });
+
+      res
+        .status(200)
+        .set({
+          "Content-Type": "image/svg+xml; charset=utf-8",
+          "Cache-Control": "public, max-age=3600",
+        })
+        .send(svg);
+    } catch (error: any) {
+      console.error("Error generating marketing rep QR:", error);
+      res.status(500).type("text/plain").send("Failed to generate QR code");
     }
   });
 
