@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
-  Coins, Zap, Clock, TrendingUp, Loader2, Lock, Link as LinkIcon, Share2
+  Coins, Zap, Clock, TrendingUp, Loader2, Lock, Link as LinkIcon, Share2, MessageCircle
 } from "lucide-react";
 import { Link } from "wouter";
 import { useState, useEffect, useMemo } from "react";
@@ -131,6 +131,12 @@ export default function CrewEarningsPage() {
     ? `${window.location.origin}/network/${marketingRep.slug}`
     : `${window.location.origin}/book${referralCode ? `?promo=${encodeURIComponent(referralCode)}` : "?mode=quick"}`;
   const referralDestination = marketingRep ? "Verified rep page" : "Booking link";
+  const referralShareText = [
+    "Need moving, junk removal, delivery, cleanup, or labor help?",
+    `Book with JC ON THE MOVE here: ${referralLink}`,
+    referralCode ? `Use code ${referralCode}.` : "",
+  ].filter(Boolean).join(" ");
+  const referralSmsHref = `sms:?&body=${encodeURIComponent(referralShareText)}`;
 
   useEffect(() => {
     if (!miningStatus?.currentSession) { setAnimatedTokens(0); return; }
@@ -213,17 +219,25 @@ export default function CrewEarningsPage() {
           <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">{referralDestination}</p>
           {referralCode && <p className="mt-2 text-[11px] font-bold uppercase tracking-widest text-emerald-300">Code: {referralCode}</p>}
         </div>
-        <button
-          type="button"
-          className="mt-3 inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-black text-slate-950 hover:bg-emerald-400"
-          onClick={() => {
-            navigator.clipboard?.writeText(referralLink)
-              .then(() => toast({ title: "Referral link copied", description: referralDestination }))
-              .catch(() => toast({ title: "Copy failed", description: "Long-press the link to copy it.", variant: "destructive" }));
-          }}
-        >
-          <LinkIcon className="h-3.5 w-3.5" /> Copy link
-        </button>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-black text-slate-950 hover:bg-emerald-400"
+            onClick={() => {
+              navigator.clipboard?.writeText(referralLink)
+                .then(() => toast({ title: "Referral link copied", description: referralDestination }))
+                .catch(() => toast({ title: "Copy failed", description: "Long-press the link to copy it.", variant: "destructive" }));
+            }}
+          >
+            <LinkIcon className="h-3.5 w-3.5" /> Copy link
+          </button>
+          <a
+            href={referralSmsHref}
+            className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/40 bg-slate-950/40 px-3 py-2 text-xs font-black text-emerald-200 hover:bg-emerald-500/10"
+          >
+            <MessageCircle className="h-3.5 w-3.5" /> Text link
+          </a>
+        </div>
       </div>
 
       {/* Crew Capabilities (read-only) */}
