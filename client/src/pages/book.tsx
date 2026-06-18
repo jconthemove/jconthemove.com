@@ -363,6 +363,13 @@ function QuickRequestForm({
 
   if (submitted) {
     const photoCount = submitted.photoCount || 0;
+    const smsFollowUpText = [
+      `Hi JC ON THE MOVE, I just submitted quick request ${submitted.displayOrderNumber}.`,
+      `Service: ${submitted.serviceLabel || form.serviceCode}.`,
+      `Phone: ${form.phone}.`,
+      `Photos attached: ${photoCount}.`,
+      photoCount === 0 ? "I can text photos if needed." : "",
+    ].filter(Boolean).join(" ");
     return (
       <div className="max-w-2xl mx-auto px-4 pt-8">
         <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5 sm:p-6 text-center space-y-5">
@@ -401,8 +408,8 @@ function QuickRequestForm({
             <a href="tel:+19062859312">
               <Button className="w-full">Call Now</Button>
             </a>
-            <a href={`sms:+19062859312?&body=${encodeURIComponent(`Hi JC ON THE MOVE, I just submitted quick request ${submitted.displayOrderNumber}.`)}`}>
-              <Button className="w-full" variant="outline">Text Backup</Button>
+            <a href={`sms:+19062859312?&body=${encodeURIComponent(smsFollowUpText)}`}>
+              <Button className="w-full" variant="outline">Text Details</Button>
             </a>
             <Button type="button" variant="outline" onClick={() => copyQuickRequestDetails(submitted)}>
               <Copy className="mr-2 h-4 w-4" />
