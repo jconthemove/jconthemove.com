@@ -310,6 +310,7 @@ export default function HomePage() {
           <div className="hidden items-center gap-8 text-sm font-semibold text-slate-200 md:flex">
             <a href="#services" className="hover:text-white">Services</a>
             <a href="#jobs" className="hover:text-white">Jobs</a>
+            <Link href="/gallery" className="hover:text-white">Gallery</Link>
             <a href="#reviews" className="hover:text-white">Reviews</a>
             <a href="#rewards" className="hover:text-white">Rewards</a>
           </div>
@@ -598,10 +599,11 @@ export default function HomePage() {
           <div>
             <p className="mb-3 text-sm font-black uppercase tracking-widest">Services</p>
             <div className="space-y-2 text-sm text-slate-400">
-              <p>Moving</p>
-              <p>Junk Removal</p>
-              <p>Handyman</p>
-              <p>Window Cleaning</p>
+              <Link href="/book?mode=quick&service=moving" className="block hover:text-white">Moving</Link>
+              <Link href="/book?mode=quick&service=junk_removal" className="block hover:text-white">Junk Removal</Link>
+              <Link href="/book?mode=quick&service=delivery" className="block hover:text-white">Delivery</Link>
+              <Link href="/book?mode=quick&service=cleaning" className="block hover:text-white">Cleanup / Labor</Link>
+              <Link href="/book?mode=quick&service=custom" className="block hover:text-white">Just Ask</Link>
             </div>
           </div>
           <div>
