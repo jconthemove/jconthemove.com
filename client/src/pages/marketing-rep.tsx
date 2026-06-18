@@ -68,6 +68,7 @@ export default function MarketingRepPage() {
   const params = useParams<{ slug: string }>();
   const slug = params.slug || "";
   const [copied, setCopied] = useState(false);
+  const [postCopied, setPostCopied] = useState(false);
 
   const { data: rep, isLoading } = useQuery<MarketingRep>({
     queryKey: [`/api/marketing-network/reps/${slug}`],
@@ -106,6 +107,23 @@ export default function MarketingRepPage() {
       window.setTimeout(() => setCopied(false), 1600);
     } catch {
       // Clipboard may be blocked in some browsers; the visible URL still works.
+    }
+  }
+
+  async function copyPostText() {
+    if (!rep || !shareUrl) return;
+    const postText = [
+      `${rep.displayName} with JC ON THE MOVE can help book fast local help for moving, junk removal, delivery, cleanup, and labor work.`,
+      rep.tagline,
+      `Request a callback, add photos or a video/album link, and use code ${rep.promoCode}.`,
+      shareUrl,
+    ].filter(Boolean).join("\n\n");
+    try {
+      await navigator.clipboard.writeText(postText);
+      setPostCopied(true);
+      window.setTimeout(() => setPostCopied(false), 1600);
+    } catch {
+      // Clipboard may be blocked in some browsers; sharing still works.
     }
   }
 
@@ -302,6 +320,10 @@ export default function MarketingRepPage() {
           <div className="rounded-lg border border-white/10 bg-white/[0.03] p-4">
             <p className="text-xs text-zinc-500 uppercase font-bold flex items-center gap-2"><Share2 className="h-3.5 w-3.5" /> This week&apos;s post idea</p>
             <p className="mt-2 text-sm text-zinc-200 leading-relaxed">{weeklyPrompts[0] || rep.contentStrategy?.facebookPersonality}</p>
+            <Button type="button" size="sm" variant="outline" className="mt-4 w-full border-white/20 bg-white/5 text-white hover:bg-white/10" onClick={copyPostText}>
+              <Copy className="mr-2 h-3.5 w-3.5" />
+              {postCopied ? "Post Copied" : "Copy Ready-To-Post Text"}
+            </Button>
           </div>
         </div>
       </section>
