@@ -16,6 +16,7 @@ import { getAppUrl } from "../appUrl";
 
 export type ScenarioId =
   | "env_required"
+  | "database_readiness"
   | "square_configured"
   | "btc_address_configured"
   | "pricing_engine"
@@ -58,6 +59,19 @@ const SCENARIOS: Scenario[] = [
       return r.ok
         ? { ok: true, detail: `all ${r.details.length} checks present (${r.missingOptional.length} optional unset)` }
         : { ok: false, detail: `missing required: ${r.missingRequired.join(", ")}` };
+    },
+  },
+  {
+    id: "database_readiness",
+    label: "Database readiness probe can reach Postgres",
+    run: async () => {
+      const { rows } = await pool.query<{ database_name: string; server_time: string }>(`
+        SELECT current_database() AS database_name, NOW()::text AS server_time
+      `);
+      const row = rows[0];
+      return row?.database_name
+        ? { ok: true, detail: `connected to ${row.database_name} at ${row.server_time}` }
+        : { ok: false, detail: "Postgres responded without database metadata" };
     },
   },
   {
