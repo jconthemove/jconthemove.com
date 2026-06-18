@@ -373,7 +373,7 @@ export default function CrewEarningsPage() {
                     </div>
                     <p className="mt-2 text-[10px] text-slate-500">
                       JCMOVES reward estimate: {parseFloat(payout.jcmovesRewardAmount || "0").toFixed(0)}
-                      {payout.rewardsIssuedAt ? ` · rewards issued ${new Date(payout.rewardsIssuedAt).toLocaleDateString()}` : ""}
+                      {payout.rewardsIssuedAt ? ` - rewards issued ${new Date(payout.rewardsIssuedAt).toLocaleDateString()}` : ""}
                     </p>
                   </div>
                 );
@@ -389,7 +389,7 @@ export default function CrewEarningsPage() {
           <CardTitle className="text-white flex items-center gap-2 text-base">
             <Zap className="h-4 w-4 text-orange-400" /> Daily Mining
           </CardTitle>
-          <CardDescription className="text-slate-400 text-xs">Earn passive tokens every day — claim up to 3 times</CardDescription>
+          <CardDescription className="text-slate-400 text-xs">Earn passive tokens every day - claim up to 3 times</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg border border-white/5">
@@ -473,7 +473,7 @@ export default function CrewEarningsPage() {
                 <div className="flex items-center justify-between mb-1.5">
                   <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${tier.badge}`}>{tier.label}</span>
                   <span className="text-[10px] text-slate-400">{(tier.threshold / 1000).toFixed(0)}k JCMOVES locked</span>
-                  {unlocked && <span className="text-green-400 text-[10px] font-bold">✓ UNLOCKED</span>}
+                  {unlocked && <span className="text-green-400 text-[10px] font-bold">UNLOCKED</span>}
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {tier.perks.map(p => (
