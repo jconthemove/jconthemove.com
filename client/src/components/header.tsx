@@ -53,6 +53,10 @@ export default function Header() {
   const isEmployee = user?.role === 'employee' || user?.role === 'admin';
   const isCustomer = user?.role === 'customer';
   const isAdmin = hasAdminAccess || user?.role === 'business_owner';
+  const publicNavLinkClass = "rounded-lg border border-slate-300/20 bg-slate-950/70 px-4 py-2 text-sm font-bold text-white transition-colors hover:border-blue-300/50 hover:bg-blue-950/60";
+  const publicNavPrimaryClass = "rounded-lg bg-blue-600 px-4 py-2 text-sm font-black text-white transition-colors hover:bg-blue-500";
+  const publicMobileLinkClass = "rounded-lg border border-slate-300/20 bg-slate-950/70 px-4 py-2.5 text-center text-sm font-bold text-white transition-colors hover:border-blue-300/50 hover:bg-blue-950/60";
+  const publicMobilePrimaryClass = "rounded-lg bg-blue-600 px-4 py-2.5 text-center text-sm font-black text-white transition-colors hover:bg-blue-500";
 
   return (
     <header className="bg-background shadow-sm border-b border-border sticky top-0 z-50">
@@ -176,35 +180,31 @@ export default function Header() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => scrollToSection("home")}
-                    className="text-white hover:opacity-90 px-5 py-2 rounded-full text-sm font-medium transition-all"
-                    style={{ backgroundColor: '#800000' }}
+                    className={publicNavLinkClass}
                     data-testid="button-home"
                   >
                     Home
                   </button>
                   <Link
                     href="/gallery"
-                    className="text-white hover:opacity-90 px-5 py-2 rounded-full text-sm font-medium transition-all"
-                    style={{ backgroundColor: '#800000' }}
+                    className={publicNavLinkClass}
                     data-testid="button-gallery"
                   >
-                    Gallery
-                  </Link>
-                  <Link
-                    href="/pricing"
-                    className="text-white hover:opacity-90 px-5 py-2 rounded-full text-sm font-medium transition-all"
-                    style={{ backgroundColor: '#800000' }}
-                    data-testid="button-pricing"
-                  >
-                    Pricing
+                    Work Photos
                   </Link>
                   <Link
                     href="/services"
-                    className="text-white hover:opacity-90 px-5 py-2 rounded-full text-sm font-medium transition-all"
-                    style={{ backgroundColor: '#800000' }}
+                    className={publicNavLinkClass}
                     data-testid="button-quotes-services"
                   >
-                    Moving Shop
+                    Services
+                  </Link>
+                  <Link
+                    href="/book?mode=quick&service=moving"
+                    className={publicNavPrimaryClass}
+                    data-testid="button-public-book"
+                  >
+                    Book Now
                   </Link>
                 </div>
               )}
@@ -249,8 +249,7 @@ export default function Header() {
                 ) : (
                   <Link 
                     href="/login" 
-                    className="text-white hover:opacity-90 px-5 py-2 rounded-full text-sm font-medium transition-all"
-                    style={{ backgroundColor: '#800000' }}
+                    className="rounded-lg border border-emerald-400/30 bg-emerald-600/15 px-4 py-2 text-sm font-black text-emerald-100 transition-colors hover:bg-emerald-600/25"
                     data-testid="button-employee-login"
                   >
                     JC CREW HQ
@@ -400,44 +399,39 @@ export default function Header() {
                 <div className="flex flex-col gap-2">
                   <button
                     onClick={() => scrollToSection("home")}
-                    className="text-white hover:opacity-90 px-6 py-2.5 rounded-full text-sm font-medium transition-all text-center"
-                    style={{ backgroundColor: '#800000' }}
+                    className={publicMobileLinkClass}
                     data-testid="button-mobile-home"
                   >
                     Home
                   </button>
                   <Link
                     href="/gallery"
-                    className="text-white hover:opacity-90 px-6 py-2.5 rounded-full text-sm font-medium transition-all text-center"
-                    style={{ backgroundColor: '#800000' }}
+                    className={publicMobileLinkClass}
                     data-testid="button-mobile-gallery"
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    Gallery
-                  </Link>
-                  <Link
-                    href="/pricing"
-                    className="text-white hover:opacity-90 px-6 py-2.5 rounded-full text-sm font-medium transition-all text-center"
-                    style={{ backgroundColor: '#800000' }}
-                    data-testid="button-mobile-pricing"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    Pricing
+                    Work Photos
                   </Link>
                   <Link
                     href="/services"
-                    className="text-white hover:opacity-90 px-6 py-2.5 rounded-full text-sm font-medium transition-all text-center"
-                    style={{ backgroundColor: '#800000' }}
+                    className={publicMobileLinkClass}
                     data-testid="button-mobile-quotes-services"
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    Moving Shop
+                    Services
+                  </Link>
+                  <Link
+                    href="/book?mode=quick&service=moving"
+                    className={publicMobilePrimaryClass}
+                    data-testid="button-mobile-public-book"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    Book Now
                   </Link>
                   <div className="border-t border-border my-2" />
                   <Link 
                     href="/login" 
-                    className="text-white hover:opacity-90 px-6 py-2.5 rounded-full text-sm font-medium transition-all text-center"
-                    style={{ backgroundColor: '#800000' }}
+                    className="rounded-lg border border-emerald-400/30 bg-emerald-600/15 px-4 py-2.5 text-center text-sm font-black text-emerald-100 transition-colors hover:bg-emerald-600/25"
                     data-testid="button-mobile-employee-login"
                     onClick={() => setMobileMenuOpen(false)}
                   >
