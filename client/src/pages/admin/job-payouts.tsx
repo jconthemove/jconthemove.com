@@ -188,9 +188,13 @@ export default function AdminJobPayoutsPage() {
     if (!preview || !selectedJob) return;
     const rows = [
       ["Job", `${selectedJob.firstName} ${selectedJob.lastName}`],
+      ["Order Number", selectedJob.orderNumber || ""],
       ["Status", selectedJob.status],
+      ["Payout Gate", selectedJobCanFinalize ? "Customer Approved - finalizable" : "Preview only - awaiting Customer Approved"],
+      ["Existing Payout Status", selectedJob.payout?.status || "not finalized"],
       ["Gross Revenue", preview.grossRevenue],
       ["Guaranteed Labor", preview.guaranteedLaborTotal],
+      ["Total Labor Hours", preview.totalLaborHours],
       ["Total Expenses And Reserves", preview.totalExpensesAndReserves],
       ["Net Job Profit", preview.netJobProfit],
       ["Profit Per Labor Hour", preview.profitPerLaborHour],
@@ -198,8 +202,10 @@ export default function AdminJobPayoutsPage() {
       ["Crew Bonus Pool", preview.crewBonusPool],
       ["Referral Payout", preview.referralPayout],
       ["Growth Fund", preview.growthFund],
+      ["Admin Override Required", preview.adminOverrideRequired ? "yes" : "no"],
+      ["Referral Partner", preview.referralPartnerName || ""],
       [],
-      ["Worker", "Role", "Hours", "Hourly Pay", "Bonus Pay", "Total Pay", "JCMOVES"],
+      ["Worker", "Role", "Hours", "Hourly Pay", "Bonus Pay", "Total Pay", "JCMOVES", "Manual Payout Status"],
       ...preview.workerPayouts.map((payout) => {
         const employee = employees.find((item) => item.id === payout.workerId);
         return [
@@ -210,6 +216,7 @@ export default function AdminJobPayoutsPage() {
           payout.bonusPay,
           payout.totalPay,
           payout.jcmovesRewardAmount,
+          selectedJob.payout?.status === "calculated" ? "manual_pending" : "",
         ];
       }),
     ];
