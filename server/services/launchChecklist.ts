@@ -7,6 +7,8 @@
 // turn green before publishing.
 
 import { pool } from "../db";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { validatePaymentEnv } from "./envValidation";
 import { classifyPayment } from "./paymentClassifier";
 import { computeBookingQuote } from "./bookingPricing";
@@ -27,6 +29,7 @@ export type ScenarioId =
   | "wallet_table"
   | "btc_sweep_alive"
   | "public_app_url"
+  | "public_conversion_routes"
   | "admin_access_ready"
   | "public_booking_catalog"
   | "quick_request_notifications"
@@ -205,6 +208,33 @@ const SCENARIOS: Scenario[] = [
       } catch {
         return { ok: false, detail: `invalid app URL: ${appUrl}` };
       }
+    },
+  },
+  {
+    id: "public_conversion_routes",
+    label: "Public customer and worker marketing routes are mounted",
+    run: async () => {
+      const appSource = readFileSync(path.resolve(process.cwd(), "client/src/App.tsx"), "utf8");
+      const requiredRoutes = [
+        ["/", '<Route path="/">'],
+        ["/book", '<Route path="/book" component={MultiServiceBookPage} />'],
+        ["/services", '<Route path="/services" component={ServicesPage} />'],
+        ["/pricing", '<Route path="/pricing" component={PricingPage} />'],
+        ["/gallery", '<Route path="/gallery" component={GalleryPage} />'],
+        ["/reviews", '<Route path="/reviews" component={ReviewsPage} />'],
+        ["/network/:slug", '<Route path="/network/:slug" component={MarketingRepPage} />'],
+        ["/rep/:slug", '<Route path="/rep/:slug" component={MarketingRepPage} />'],
+        ["/lawn-care", '<Route path="/lawn-care" component={LawnCarePage} />'],
+        ["/cleaning", '<Route path="/cleaning" component={MoveOutCleaningPage} />'],
+        ["/window-cleaning", '<Route path="/window-cleaning" component={WindowCleaningPage} />'],
+        ["/snow-removal", '<Route path="/snow-removal" component={SnowRemovalPublicPage} />'],
+        ["/roofing", '<Route path="/roofing" component={RoofingPage} />'],
+        ["/demolition", '<Route path="/demolition" component={DemolitionPage} />'],
+      ] as const;
+      const missing = requiredRoutes.filter(([, routeSource]) => !appSource.includes(routeSource)).map(([pathName]) => pathName);
+      return missing.length === 0
+        ? { ok: true, detail: `${requiredRoutes.length} public conversion and worker marketing routes mounted` }
+        : { ok: false, detail: `missing public route(s): ${missing.join(", ")}` };
     },
   },
   {
