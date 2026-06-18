@@ -13,6 +13,7 @@
     "build:server": "esbuild server/index.ts --platform=node --target=node20 --format=esm --bundle --packages=external --alias:@shared=./shared --outdir=dist",
     "start": "cross-env NODE_ENV=production node dist/index.js",
     "check": "cross-env NODE_OPTIONS=--max-old-space-size=8192 tsc --incremental false",
+    "test:server": "node scripts/run-server-tests.mjs",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
