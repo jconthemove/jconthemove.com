@@ -83,7 +83,7 @@ export default function MarketingRepPage() {
       : `/book?mode=quick&service=${encodeURIComponent(service)}`;
   const shareUrl = rep ? `${window.location.origin}/network/${rep.slug}` : "";
   const qrImageUrl = rep ? `/api/marketing-network/reps/${encodeURIComponent(rep.slug)}/qr.svg` : "";
-  const shareText = rep ? `${rep.displayName} with JC ON THE MOVE can help book moving, junk removal, delivery, cleanup, and labor work. Use code ${rep.promoCode}: ${shareUrl}` : "";
+  const shareText = rep ? `${rep.displayName} with JC ON THE MOVE can help book moving, junk removal, delivery, cleanup, and labor work. Add photos, videos, or an album link so the crew can quote faster. Use code ${rep.promoCode}: ${shareUrl}` : "";
   const smsShareHref = rep ? `sms:?&body=${encodeURIComponent(shareText)}` : "#";
 
   async function trackCall() {
@@ -297,7 +297,7 @@ export default function MarketingRepPage() {
           </div>
           <p className="text-zinc-400 leading-relaxed">
             {rep.displayName} can share this page anywhere: Facebook, text, QR cards, flyers, and repeat-customer follow-ups.
-            Every request uses code {rep.promoCode}, so leads, booked jobs, revenue, and commission can be measured in admin.
+            Customers can add photos, videos, or an album link after requesting a callback. Every request uses code {rep.promoCode}, so leads, booked jobs, revenue, and commission can be measured in admin.
           </p>
           <div className="rounded-lg border border-white/10 bg-white/[0.03] p-4">
             <p className="text-xs text-zinc-500 uppercase font-bold flex items-center gap-2"><Share2 className="h-3.5 w-3.5" /> This week&apos;s post idea</p>
@@ -362,7 +362,7 @@ export default function MarketingRepPage() {
         <div className="marketing-rep-print-main">
           <div>
             <p className="marketing-rep-print-copy">
-              Fast local help for moving, junk removal, delivery, cleanup, and labor work. Scan the code or use the link to request a callback with {rep.displayName}.
+              Fast local help for moving, junk removal, delivery, cleanup, and labor work. Scan the code or use the link to request a callback with {rep.displayName}. Add photos, videos, or an album link so the crew can quote faster.
             </p>
             <div className="marketing-rep-print-services">
               {coreServiceLinks.map((service) => (
