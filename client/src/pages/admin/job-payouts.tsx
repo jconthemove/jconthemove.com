@@ -280,9 +280,12 @@ export default function AdminJobPayoutsPage() {
       const res = await apiRequest("PATCH", `/api/admin/job-payouts/worker-payouts/${payoutId}/status`, { status });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: AdminWorkerPayout & { jcmovesAutomation?: { issued?: boolean; reason?: string } }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/job-payouts/jobs"] });
-      toast({ title: "Payout status updated" });
+      toast({
+        title: data.jcmovesAutomation?.issued ? "Payout status updated + rewards issued" : "Payout status updated",
+        description: data.jcmovesAutomation?.reason,
+      });
     },
     onError: (error: Error) => toast({ title: "Status update failed", description: error.message, variant: "destructive" }),
   });
@@ -616,7 +619,7 @@ function FinalizedPayoutStatusPanel({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="text-sm font-bold text-white">Manual payout status</h3>
-          <p className="text-xs text-slate-400">Track payroll manually now; Stripe states are ready for later automation.</p>
+          <p className="text-xs text-slate-400">Mark manual or Stripe payouts paid to issue the worker&apos;s JCMOVES reward automatically.</p>
         </div>
         <Badge variant="outline" className="border-blue-400/40 text-blue-200">
           {payouts.length} record{payouts.length === 1 ? "" : "s"}

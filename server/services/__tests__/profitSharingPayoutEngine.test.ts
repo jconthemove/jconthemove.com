@@ -7,7 +7,7 @@
 //   bash scripts/run-server-tests.sh
 
 import assert from "node:assert/strict";
-import { canFinalizeProfitSharePayout } from "../../../shared/jobPayout";
+import { canFinalizeProfitSharePayout, shouldIssueJcmovesRewardForPayoutStatus } from "../../../shared/jobPayout";
 import type { ProfitShareJobInput, ProfitShareRole } from "../../../shared/jobPayout";
 import {
   calculateProfitSharingPayout,
@@ -174,6 +174,16 @@ test("payout finalization is blocked until status is Customer Approved", () => {
   assert.equal(canFinalizeProfitSharePayout("payout_calculated"), false);
   assert.equal(canFinalizeProfitSharePayout("payout_sent"), false);
   assert.equal(canFinalizeProfitSharePayout(null), false);
+});
+
+test("JCMOVES payout rewards issue only after worker cash payout is paid", () => {
+  assert.equal(shouldIssueJcmovesRewardForPayoutStatus("manual_paid"), true);
+  assert.equal(shouldIssueJcmovesRewardForPayoutStatus("stripe_paid"), true);
+  assert.equal(shouldIssueJcmovesRewardForPayoutStatus("manual_pending"), false);
+  assert.equal(shouldIssueJcmovesRewardForPayoutStatus("stripe_pending"), false);
+  assert.equal(shouldIssueJcmovesRewardForPayoutStatus("failed"), false);
+  assert.equal(shouldIssueJcmovesRewardForPayoutStatus("calculated"), false);
+  assert.equal(shouldIssueJcmovesRewardForPayoutStatus(null), false);
 });
 
 console.log(`\n${passed} profit-share payout test(s) passed.`);

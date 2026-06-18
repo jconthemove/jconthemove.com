@@ -45,7 +45,7 @@ import { getDepositInfo, extractZip } from "@shared/depositRules";
 import { MIN_REDEMPTION_TOKENS, REDEMPTION_INCREMENT, roundToIncrement, validateRedemption, tokensToDollars } from "@shared/tokenRedemptionRules";
 import { buildLeadJobPayoutPreview } from "./services/jobPayoutEngine";
 import { calculateProfitSharingPayout, defaultBonusWeightsForCrew, defaultHourlyRateForRole, normalizeProfitShareSettings } from "./services/profitSharingPayoutEngine";
-import { canFinalizeProfitSharePayout, type ProfitShareRole, type ProfitShareWorkerInput } from "@shared/jobPayout";
+import { canFinalizeProfitSharePayout, shouldIssueJcmovesRewardForPayoutStatus, type ProfitShareRole, type ProfitShareWorkerInput } from "@shared/jobPayout";
 import { QUOTE_HELPER_MESSAGE_LIMIT, summarizeQuoteRequest } from "./services/geminiQuoteHelper";
 import lawnCareRouter from "./routes/lawnCare";
 import serviceRebookRouter from "./routes/serviceRebookReminders";
@@ -12723,6 +12723,57 @@ Thank you for your business!
     }
   });
 
+  async function issueJcmovesForWorkerPayout(payout: typeof jobWorkerPayouts.$inferSelect) {
+    if (payout.rewardsIssuedAt) return null;
+    const tokenAmount = numberFrom(payout.jcmovesRewardAmount);
+    if (tokenAmount <= 0) return null;
+
+    const existingReward = await db
+      .select({ id: rewards.id })
+      .from(rewards)
+      .where(and(
+        eq(rewards.userId, payout.workerId),
+        eq(rewards.rewardType, "worker_cash_payout_reward"),
+        eq(rewards.referenceId, payout.id),
+      ))
+      .limit(1);
+
+    if (existingReward.length > 0) {
+      const [updated] = await db.update(jobWorkerPayouts).set({
+        rewardsIssuedAt: new Date(),
+        updatedAt: new Date(),
+      }).where(eq(jobWorkerPayouts.id, payout.id)).returning();
+      return updated ? { payout: updated, credited: false } : null;
+    }
+
+    await storage.creditWalletTokens(payout.workerId, tokenAmount, {
+      rewardType: "worker_cash_payout_reward",
+      referenceId: payout.id,
+      cashValue: payout.totalPay || "0.00",
+      status: "confirmed",
+      metadata: {
+        source: "job_profit_sharing",
+        automation: "payout_status_paid",
+        leadId: payout.leadId,
+        calculationId: payout.calculationId,
+        payoutStatus: payout.payoutStatus,
+      },
+    });
+
+    const [updated] = await db.update(jobWorkerPayouts).set({
+      rewardsIssuedAt: new Date(),
+      updatedAt: new Date(),
+    }).where(eq(jobWorkerPayouts.id, payout.id)).returning();
+
+    return updated ? { payout: updated, credited: true } : null;
+  }
+
+  async function maybeIssueJcmovesForPaidWorkerPayout(payout: typeof jobWorkerPayouts.$inferSelect) {
+    return shouldIssueJcmovesRewardForPayoutStatus(payout.payoutStatus)
+      ? issueJcmovesForWorkerPayout(payout)
+      : null;
+  }
+
   app.post("/api/admin/job-payouts/referral-partners", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
     try {
       const body = req.body || {};
@@ -12950,7 +13001,23 @@ Thank you for your business!
         updatedAt: new Date(),
       }).where(eq(jobWorkerPayouts.id, req.params.id)).returning();
       if (!updated) return res.status(404).json({ error: "Payout not found" });
-      res.json(updated);
+      const rewardIssued = await maybeIssueJcmovesForPaidWorkerPayout(updated);
+      res.json({
+        ...updated,
+        rewardsIssuedAt: rewardIssued?.payout.rewardsIssuedAt ?? updated.rewardsIssuedAt,
+        jcmovesAutomation: {
+          issued: !!rewardIssued?.credited,
+          reason: rewardIssued
+            ? rewardIssued.credited
+              ? "JCMOVES reward issued after payout was marked paid."
+              : "JCMOVES reward was already issued."
+            : updated.rewardsIssuedAt
+              ? "JCMOVES reward was already issued."
+              : shouldIssueJcmovesRewardForPayoutStatus(status)
+                ? "No JCMOVES reward amount was available to issue."
+                : "JCMOVES rewards issue automatically when payout status is marked paid.",
+        },
+      });
     } catch (error) {
       console.error("Error updating worker payout status:", error);
       res.status(500).json({ error: "Failed to update payout status" });
@@ -12963,21 +13030,8 @@ Thank you for your business!
       if (payouts.length === 0) return res.status(404).json({ error: "Calculation payouts not found" });
       const issued: any[] = [];
       for (const payout of payouts) {
-        if (payout.rewardsIssuedAt) continue;
-        const tokenAmount = numberFrom(payout.jcmovesRewardAmount);
-        if (tokenAmount <= 0) continue;
-        await storage.creditWalletTokens(payout.workerId, tokenAmount, {
-          rewardType: "worker_cash_payout_reward",
-          referenceId: payout.id,
-          cashValue: payout.totalPay || "0.00",
-          status: "confirmed",
-          metadata: { source: "job_profit_sharing", leadId: payout.leadId, calculationId: req.params.id },
-        });
-        const [updated] = await db.update(jobWorkerPayouts).set({
-          rewardsIssuedAt: new Date(),
-          updatedAt: new Date(),
-        }).where(eq(jobWorkerPayouts.id, payout.id)).returning();
-        issued.push(updated);
+        const issuedPayout = await issueJcmovesForWorkerPayout(payout);
+        if (issuedPayout) issued.push(issuedPayout.payout);
       }
       res.json({ issuedCount: issued.length, issued });
     } catch (error) {
