@@ -42,7 +42,7 @@ export default function AdminLaunchChecklistPage() {
         <h1 className="text-2xl font-bold text-white">Launch Checklist</h1>
       </div>
       <p className="text-slate-400 mb-6 text-sm">
-        Run every probe and confirm all rows are green before publishing a deploy.
+        Run every launch probe and confirm all rows are green before publishing a deploy or driving marketing traffic.
       </p>
 
       <div className="flex items-center gap-3 mb-4">
