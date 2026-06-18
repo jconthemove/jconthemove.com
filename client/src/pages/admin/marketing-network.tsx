@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BarChart3, CalendarDays, Edit3, Eye, Megaphone, Phone, Plus, Save, Tag, Users } from "lucide-react";
+import { BarChart3, CalendarDays, DollarSign, Edit3, Eye, Megaphone, Phone, Plus, Save, Tag, Users } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -77,6 +77,10 @@ function ratio(value: number) {
   return value > 0 ? `${value.toFixed(1)}x` : "0.0x";
 }
 
+function percent(value: number) {
+  return Number.isFinite(value) ? `${value.toFixed(1)}%` : "0.0%";
+}
+
 function weekNumber() {
   const start = new Date(new Date().getFullYear(), 0, 1);
   const diff = Date.now() - start.getTime();
@@ -120,6 +124,8 @@ export default function AdminMarketingNetworkPage() {
   }), { calls: 0, estimates: 0, booked: 0, revenue: 0, commissionPaid: 0 }), [stats]);
 
   const totalRoi = totals.commissionPaid > 0 ? totals.revenue / totals.commissionPaid : 0;
+  const totalConversionRate = totals.estimates > 0 ? (totals.booked / totals.estimates) * 100 : 0;
+  const averageBookedRevenue = totals.booked > 0 ? totals.revenue / totals.booked : 0;
 
   const saveRep = useMutation({
     mutationFn: async () => {
@@ -198,12 +204,14 @@ export default function AdminMarketingNetworkPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
           {[
             { label: "Calls", value: totals.calls, icon: Phone, color: "text-sky-300" },
             { label: "Leads Generated", value: totals.estimates, icon: Users, color: "text-violet-300" },
             { label: "Booked Jobs", value: totals.booked, icon: CalendarDays, color: "text-emerald-300" },
+            { label: "Lead Conversion", value: percent(totalConversionRate), icon: BarChart3, color: "text-blue-300" },
             { label: "Revenue Generated", value: money(totals.revenue), icon: BarChart3, color: "text-amber-300" },
+            { label: "Avg Booked Job", value: money(averageBookedRevenue), icon: DollarSign, color: "text-green-300" },
             { label: "Commission Paid", value: money(totals.commissionPaid), icon: Tag, color: "text-rose-300" },
             { label: "ROI", value: ratio(totalRoi), icon: BarChart3, color: "text-lime-300" },
           ].map((item) => (
@@ -233,7 +241,10 @@ export default function AdminMarketingNetworkPage() {
             </Card>
 
             <div className="grid lg:grid-cols-2 gap-4">
-              {isLoading ? <p className="text-zinc-400">Loading marketing stats...</p> : stats.map(row => (
+              {isLoading ? <p className="text-zinc-400">Loading marketing stats...</p> : stats.map(row => {
+                const conversionRate = row.estimates > 0 ? (row.booked / row.estimates) * 100 : 0;
+                const averageRevenue = row.booked > 0 ? row.revenue / row.booked : 0;
+                return (
                 <Card key={row.rep.id} className="bg-white/[0.04] border-white/10">
                   <CardHeader className="pb-2">
                     <CardTitle className="flex items-center justify-between gap-3">
@@ -242,11 +253,13 @@ export default function AdminMarketingNetworkPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-center">
+                    <div className="grid grid-cols-2 md:grid-cols-7 gap-2 text-center">
                       <div><p className="text-xl font-black text-sky-300">{row.calls}</p><p className="text-[11px] text-zinc-500">Calls</p></div>
                       <div><p className="text-xl font-black text-violet-300">{row.estimates}</p><p className="text-[11px] text-zinc-500">Leads</p></div>
                       <div><p className="text-xl font-black text-emerald-300">{row.booked}</p><p className="text-[11px] text-zinc-500">Booked</p></div>
+                      <div><p className="text-xl font-black text-blue-300">{percent(conversionRate)}</p><p className="text-[11px] text-zinc-500">Convert</p></div>
                       <div><p className="text-xl font-black text-amber-300">{money(row.revenue)}</p><p className="text-[11px] text-zinc-500">Revenue</p></div>
+                      <div><p className="text-xl font-black text-green-300">{money(averageRevenue)}</p><p className="text-[11px] text-zinc-500">Avg Job</p></div>
                       <div><p className="text-xl font-black text-lime-300">{ratio(row.roi)}</p><p className="text-[11px] text-zinc-500">ROI</p></div>
                     </div>
                     <div className="rounded-lg bg-zinc-900/70 border border-white/10 p-3 text-sm space-y-1">
@@ -263,7 +276,8 @@ export default function AdminMarketingNetworkPage() {
                     </div>
                   </CardContent>
                 </Card>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
