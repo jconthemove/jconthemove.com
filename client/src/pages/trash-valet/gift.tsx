@@ -137,7 +137,7 @@ function ServiceBlock({
             className="mt-1"
             inputClassName="w-full rounded-md border border-zinc-700 bg-zinc-800 text-white placeholder:text-zinc-500 px-3 py-2 text-sm mt-1 focus:outline-none focus:ring-2 focus:ring-orange-500/40 focus:border-orange-500/60 transition-all"
           />
-          <p className="text-[10px] text-zinc-600 mt-1">Pick a suggestion — city, state, and ZIP fill in automatically.</p>
+          <p className="text-[10px] text-zinc-600 mt-1">Pick a suggestion - city, state, and ZIP fill in automatically.</p>
           {addressFromAutocomplete && !showAddressDetails && (service.city || service.zip) && (
             <AddressSummaryPill
               city={service.city}
@@ -245,12 +245,12 @@ function ServiceBlock({
         {/* Mini price breakdown */}
         <div className="bg-zinc-800 rounded-xl p-3 space-y-1.5 text-xs">
           <div className="flex justify-between text-zinc-400">
-            <span>🗑️ {quote.billableCans} can{quote.billableCans !== 1 ? "s" : ""} weekly</span>
+            <span className="flex items-center gap-1"><Trash2 className="h-3.5 w-3.5" /> {quote.billableCans} can{quote.billableCans !== 1 ? "s" : ""} weekly</span>
             <span className="text-white">${quote.weeklyTrashCost.toFixed(2)}/wk</span>
           </div>
           {service.recyclingEnabled && (
             <div className="flex justify-between text-green-400">
-              <span>♻️ Recycling bi-weekly</span>
+              <span className="flex items-center gap-1"><Recycle className="h-3.5 w-3.5" /> Recycling bi-weekly</span>
               <span>${quote.weeklyRecyclingCost.toFixed(2)}/event</span>
             </div>
           )}
@@ -266,7 +266,7 @@ function ServiceBlock({
           </div>
           {isYearly && (
             <div className="flex justify-between text-blue-400">
-              <span className="flex items-center gap-1">🎉 Yearly (1 month free)</span>
+              <span className="flex items-center gap-1">Yearly (1 month free)</span>
               <span>${yearlyEffective.toFixed(2)}/mo</span>
             </div>
           )}
@@ -355,7 +355,7 @@ export default function TrashValetGiftPage() {
             </div>
             <div>
               <p className="font-extrabold text-white text-base leading-tight">Gift Plans Confirmed!</p>
-              <p className="text-xs text-yellow-300 mt-0.5">Both subscriptions are saved — we'll reach out to each address.</p>
+              <p className="text-xs text-yellow-300 mt-0.5">Both subscriptions are saved - we'll reach out to each address.</p>
             </div>
           </div>
 
@@ -381,7 +381,7 @@ export default function TrashValetGiftPage() {
 
             {/* Gift plan */}
             <div className="rounded-xl bg-zinc-800/60 border border-yellow-500/30 px-4 py-3">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-yellow-400 mb-2">Gift Plan — {giftRecipientName || "Gift Recipient"}</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-yellow-400 mb-2">Gift Plan - {giftRecipientName || "Gift Recipient"}</p>
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between">
                   <span className="text-zinc-400">Address</span>
@@ -408,7 +408,7 @@ export default function TrashValetGiftPage() {
               <div className="space-y-2">
                 {[
                   "We'll contact you to confirm billing and first pickup dates for both addresses",
-                  "Cans go out the night before — we bring them back after pickup",
+                  "Cans go out the night before - we bring them back after pickup",
                   "You'll receive Square invoices monthly for both plans",
                 ].map((step, i) => (
                   <div key={i} className="flex items-start gap-2.5">
@@ -451,26 +451,26 @@ export default function TrashValetGiftPage() {
               <Gift className="h-5 w-5 text-yellow-400" />
               Gift a Trash Valet Plan
             </h1>
-            <p className="text-zinc-500 text-xs">Two addresses · 1 month free yearly · 10% off both</p>
+            <p className="text-zinc-500 text-xs">Two addresses - 1 month free yearly - 10% off both</p>
           </div>
         </div>
 
         {/* Discount banner */}
         <div className="rounded-2xl bg-gradient-to-r from-yellow-900/40 to-orange-900/40 border border-yellow-500/30 px-4 py-4 space-y-2">
           <div className="flex items-center gap-3">
-            <div className="text-3xl">🎁</div>
+            <Gift className="h-8 w-8 text-yellow-300" />
             <div>
-              <p className="font-black text-yellow-300 text-base">GIFT A PLAN — BEST DEAL</p>
+              <p className="font-black text-yellow-300 text-base">GIFT A PLAN - BEST DEAL</p>
               <p className="text-zinc-300 text-xs mt-0.5">Keep one for yourself, gift one to a neighbor</p>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2 pt-1">
             <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl px-3 py-2 text-center">
-              <p className="text-blue-300 font-bold text-xs">🎉 Yearly Plan</p>
+              <p className="text-blue-300 font-bold text-xs">Yearly Plan</p>
               <p className="text-white text-[10px] mt-0.5">1 month free<br />(11 billed, 12 service)</p>
             </div>
             <div className="bg-green-500/10 border border-green-500/20 rounded-xl px-3 py-2 text-center">
-              <p className="text-green-300 font-bold text-xs">🏷️ Gift Discount</p>
+              <p className="text-green-300 font-bold text-xs">Gift Discount</p>
               <p className="text-white text-[10px] mt-0.5">10% off every month<br />on top of yearly rate</p>
             </div>
           </div>
@@ -489,7 +489,7 @@ export default function TrashValetGiftPage() {
                 <Input
                   value={contact.name}
                   onChange={e => setContact(c => ({ ...c, name: e.target.value }))}
-                  placeholder="Jane Smith"
+                  placeholder="Your full name"
                   className="bg-zinc-800 border-zinc-700 text-white mt-1"
                   required
                 />
@@ -499,7 +499,7 @@ export default function TrashValetGiftPage() {
                 <Input
                   value={contact.phone}
                   onChange={e => setContact(c => ({ ...c, phone: e.target.value }))}
-                  placeholder="(906) 555-0123"
+                  placeholder="Best phone number"
                   type="tel"
                   className="bg-zinc-800 border-zinc-700 text-white mt-1"
                   required
@@ -510,7 +510,7 @@ export default function TrashValetGiftPage() {
                 <Input
                   value={contact.email}
                   onChange={e => setContact(c => ({ ...c, email: e.target.value }))}
-                  placeholder="jane@example.com"
+                  placeholder="Best email address"
                   type="email"
                   className="bg-zinc-800 border-zinc-700 text-white mt-1"
                 />
@@ -570,7 +570,7 @@ export default function TrashValetGiftPage() {
           <Card className="bg-zinc-900 border-yellow-500/20">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm text-yellow-300 flex items-center gap-1.5">
-                <Tag className="h-4 w-4" /> Combined Total — Yearly + 10% Gift Off
+                <Tag className="h-4 w-4" /> Combined Total - Yearly + 10% Gift Off
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
@@ -586,7 +586,7 @@ export default function TrashValetGiftPage() {
                 <span className="text-white">Total monthly</span>
                 <span className="text-green-400 text-base">${(yourDiscounted + giftDiscounted).toFixed(2)}/mo</span>
               </div>
-              <p className="text-[10px] text-zinc-500 text-center">Yearly plan: 11 months billed, 12 months service — 10% gift discount on top</p>
+              <p className="text-[10px] text-zinc-500 text-center">Yearly plan: 11 months billed, 12 months service - 10% gift discount on top</p>
               <p className="text-[10px] text-zinc-500 text-center">Billed separately per address via Square invoice</p>
             </CardContent>
           </Card>
@@ -596,7 +596,7 @@ export default function TrashValetGiftPage() {
             disabled={giftMutation.isPending}
             className="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-black text-base py-6"
           >
-            {giftMutation.isPending ? "Booking Both Plans…" : `Gift a Plan — $${(yourDiscounted + giftDiscounted).toFixed(2)}/mo combined`}
+            {giftMutation.isPending ? "Booking Both Plans..." : `Gift a Plan - $${(yourDiscounted + giftDiscounted).toFixed(2)}/mo combined`}
           </Button>
 
           <p className="text-center text-zinc-600 text-xs">

@@ -140,7 +140,7 @@ export default function PromoHalfDayPage() {
         <div className="relative mb-6 rounded-2xl overflow-hidden shadow-2xl border-2 border-yellow-400/50">
           <div className="absolute top-4 left-4 z-10">
             <span className="bg-yellow-500 text-black font-extrabold text-sm px-4 py-1.5 rounded-full shadow-lg uppercase tracking-wider animate-pulse">
-              Best Value — Monthly Special
+              Best Value - Monthly Special
             </span>
           </div>
           <img
@@ -172,7 +172,7 @@ export default function PromoHalfDayPage() {
                 <>
                   <p className="text-slate-400 text-sm line-through">${basePrice}</p>
                   <p className="text-orange-400 font-black text-xl">${btcPrice}</p>
-                  <p className="text-orange-300 text-xs">₿ Bitcoin · 15% off</p>
+                  <p className="text-orange-300 text-xs">Bitcoin - 15% off</p>
                 </>
               ) : (
                 <>
@@ -195,10 +195,10 @@ export default function PromoHalfDayPage() {
         >
           <span className="flex items-center gap-2 font-bold">
             <Bitcoin className="h-4 w-4" />
-            Pay with Bitcoin — Save 15% (${basePrice - btcPrice} off)
+            Pay with Bitcoin - Save 15% (${basePrice - btcPrice} off)
           </span>
           <span className={`text-xs font-black px-2.5 py-1 rounded-full ${payWithBtc ? "bg-orange-500 text-white" : "bg-orange-500/30 text-orange-300"}`}>
-            {payWithBtc ? "✓ Selected" : "Tap to select"}
+            {payWithBtc ? "Selected" : "Tap to select"}
           </span>
         </button>
 
@@ -340,7 +340,7 @@ export default function PromoHalfDayPage() {
                   </div>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between text-slate-300">
-                      <span>Half Day Move (5 Movers · 3 hrs)</span>
+                      <span>Half Day Move (5 Movers - 3 hrs)</span>
                       <span className="font-medium">
                         {payWithBtc ? (
                           <>
@@ -406,7 +406,7 @@ export default function PromoHalfDayPage() {
                   <Input
                     value={form.firstName}
                     onChange={(e) => updateField("firstName", e.target.value)}
-                    placeholder="John"
+                    placeholder="First name"
                     className="bg-slate-700 border-slate-600 text-white"
                     required
                   />
@@ -416,7 +416,7 @@ export default function PromoHalfDayPage() {
                   <Input
                     value={form.lastName}
                     onChange={(e) => updateField("lastName", e.target.value)}
-                    placeholder="Doe"
+                    placeholder="Last name"
                     className="bg-slate-700 border-slate-600 text-white"
                     required
                   />
@@ -430,7 +430,7 @@ export default function PromoHalfDayPage() {
                     type="email"
                     value={form.email}
                     onChange={(e) => updateField("email", e.target.value)}
-                    placeholder="john@example.com"
+                    placeholder="Best email address"
                     className="bg-slate-700 border-slate-600 text-white"
                     required
                   />
@@ -441,7 +441,7 @@ export default function PromoHalfDayPage() {
                     type="tel"
                     value={form.phone}
                     onChange={(e) => updateField("phone", e.target.value)}
-                    placeholder="(906) 555-1234"
+                    placeholder="Best phone number"
                     className="bg-slate-700 border-slate-600 text-white"
                     required
                   />
@@ -570,7 +570,7 @@ export default function PromoHalfDayPage() {
                   } else {
                     addToCart({
                       id: promoCartId,
-                      name: `Half Day Package — 5 Movers · 3 Hours${payWithBtc ? " (₿ BTC -15%)" : ""}`,
+                      name: `Half Day Package - 5 Movers - 3 Hours${payWithBtc ? " (BTC -15%)" : ""}`,
                       price: serviceBase,
                       image: promoImage,
                       type: "promo",
@@ -580,9 +580,9 @@ export default function PromoHalfDayPage() {
                 }}
               >
                 {promoInCart ? (
-                  <><Check className="h-4 w-4 mr-2" /> In Cart{cartCount > 1 ? " — 10% Bundle!" : ""}</>
+                  <><Check className="h-4 w-4 mr-2" /> In Cart{cartCount > 1 ? " - 10% Bundle!" : ""}</>
                 ) : (
-                  <><ShoppingCart className="h-4 w-4 mr-2" /> Add to Cart{cartCount > 0 ? " — Save 10%" : " Instead"}</>
+                  <><ShoppingCart className="h-4 w-4 mr-2" /> Add to Cart{cartCount > 0 ? " - Save 10%" : " Instead"}</>
                 )}
               </Button>
 

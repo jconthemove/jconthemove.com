@@ -120,7 +120,7 @@ export default function TrashValetBookPage() {
     },
   });
 
-  // Task #115 — make sure each scheduled bundle add-on has the minimum info
+  // Task #115 - make sure each scheduled bundle add-on has the minimum info
   // we need (date for date_only, date+frequency for date_freq) before we let
   // the customer submit. Otherwise we'd silently create companion leads with
   // no start date and end up calling them anyway.
@@ -210,8 +210,8 @@ export default function TrashValetBookPage() {
               <div className="space-y-2">
                 {[
                   "We contact you to confirm your first pickup and set up billing",
-                  "Cans go out the night before your service day — we bring them back after",
-                  "You'll receive a Square invoice monthly — pay to keep service active ✅",
+                  "Cans go out the night before your service day - we bring them back after",
+                  "You'll receive a Square invoice monthly - pay to keep service active",
                 ].map((step, i) => (
                   <div key={i} className="flex items-start gap-2.5">
                     <span className="w-5 h-5 rounded-full bg-teal-500/20 text-teal-400 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
@@ -250,7 +250,7 @@ export default function TrashValetBookPage() {
           </button>
           <div>
             <h1 className="text-xl font-black">Book Trash Valet</h1>
-            <p className="text-zinc-500 text-xs">Weekly curbside service — we bring them out &amp; back</p>
+            <p className="text-zinc-500 text-xs">Weekly curbside service - we bring them out and back</p>
           </div>
         </div>
 
@@ -267,7 +267,7 @@ export default function TrashValetBookPage() {
                 <Input
                   value={form.customerName}
                   onChange={(e) => setField("customerName", e.target.value)}
-                  placeholder="Jane Smith"
+                  placeholder="Your full name"
                   className="bg-zinc-800 border-zinc-700 text-white mt-1"
                   required
                 />
@@ -277,7 +277,7 @@ export default function TrashValetBookPage() {
                 <Input
                   value={form.phone}
                   onChange={(e) => setField("phone", e.target.value)}
-                  placeholder="(906) 555-0123"
+                  placeholder="Best phone number"
                   type="tel"
                   className="bg-zinc-800 border-zinc-700 text-white mt-1"
                   required
@@ -288,7 +288,7 @@ export default function TrashValetBookPage() {
                 <Input
                   value={form.email}
                   onChange={(e) => setField("email", e.target.value)}
-                  placeholder="jane@example.com"
+                  placeholder="Best email address"
                   type="email"
                   className="bg-zinc-800 border-zinc-700 text-white mt-1"
                 />
@@ -296,7 +296,7 @@ export default function TrashValetBookPage() {
             </CardContent>
           </Card>
 
-          {/* Address — single-field autocomplete fills city/state/zip behind the scenes */}
+          {/* Address - single-field autocomplete fills city/state/zip behind the scenes */}
           <Card className="bg-zinc-900 border-zinc-800">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm text-zinc-300">Service Address *</CardTitle>
@@ -314,7 +314,7 @@ export default function TrashValetBookPage() {
                 onResolved={(place) => setField("address", place.fullAddress)}
                 placeholder="123 Main St, Ironwood, MI"
                 theme="zinc"
-                hint="Pick from the suggestions — we'll fill in the city, state, and ZIP automatically."
+                hint="Pick from the suggestions - we'll fill in the city, state, and ZIP automatically."
                 data-testid="address-field-trash"
               />
             </CardContent>
@@ -455,11 +455,11 @@ export default function TrashValetBookPage() {
             <CardContent className="space-y-2 text-sm">
               {/* Trash service line */}
               <div className="flex justify-between text-zinc-400">
-                <span className="flex items-center gap-1">🗑️ Trash — {quote.billableCans} can{quote.billableCans !== 1 ? "s" : ""} weekly</span>
+                <span className="flex items-center gap-1"><Trash2 className="h-3.5 w-3.5" /> Trash - {quote.billableCans} can{quote.billableCans !== 1 ? "s" : ""} weekly</span>
                 <span className="text-white">${quote.weeklyTrashCost.toFixed(2)}/wk</span>
               </div>
               <div className="flex justify-between text-zinc-500 text-xs">
-                <span>× 52 ÷ 12 months</span>
+                <span>x 52 / 12 months</span>
                 <span>${quote.projectedMonthlyTrash.toFixed(2)}/mo</span>
               </div>
 
@@ -467,11 +467,11 @@ export default function TrashValetBookPage() {
               {form.recyclingEnabled && (
                 <>
                   <div className="flex justify-between text-green-400 pt-1">
-                    <span className="flex items-center gap-1">♻️ Recycling — {quote.billableCans} can{quote.billableCans !== 1 ? "s" : ""} bi-weekly</span>
+                    <span className="flex items-center gap-1"><Recycle className="h-3.5 w-3.5" /> Recycling - {quote.billableCans} can{quote.billableCans !== 1 ? "s" : ""} bi-weekly</span>
                     <span>${quote.weeklyRecyclingCost.toFixed(2)}/event</span>
                   </div>
                   <div className="flex justify-between text-zinc-500 text-xs">
-                    <span>× 26 ÷ 12 months</span>
+                    <span>x 26 / 12 months</span>
                     <span>${quote.projectedMonthlyRecycling.toFixed(2)}/mo</span>
                   </div>
                 </>
@@ -491,8 +491,8 @@ export default function TrashValetBookPage() {
               )}
               {form.seniorDiscount && (
                 <div className="flex justify-between text-blue-400 text-xs">
-                  <span>🏅 Senior discount</span>
-                  <span>−$5.00/mo</span>
+                  <span className="flex items-center gap-1"><CheckCircle className="h-3.5 w-3.5" /> Senior discount</span>
+                  <span>-$5.00/mo</span>
                 </div>
               )}
               <div className="border-t border-zinc-800 pt-2 flex justify-between font-bold items-center">
@@ -505,7 +505,7 @@ export default function TrashValetBookPage() {
                 </div>
               </div>
               {form.planType === "yearly" && (
-                <p className="text-xs text-zinc-400">Yearly plan: 11 months billed, 12 months of service — save 1 month free</p>
+                <p className="text-xs text-zinc-400">Yearly plan: 11 months billed, 12 months of service - save 1 month free</p>
               )}
             </CardContent>
           </Card>
@@ -513,9 +513,9 @@ export default function TrashValetBookPage() {
           {/* Senior discount banner */}
           <div className="rounded-xl bg-blue-950/60 border border-blue-500/30 px-4 py-3">
             <div className="flex items-center gap-3 mb-2">
-              <span className="text-xl shrink-0">🏅</span>
+              <CheckCircle className="h-5 w-5 text-blue-300 shrink-0" />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-blue-300">Senior Discount — $5/month off</p>
+                <p className="text-sm font-bold text-blue-300">Senior Discount - $5/month off</p>
                 <p className="text-xs text-zinc-400">Age 65+? Toggle below and your discount will be automatically applied.</p>
               </div>
             </div>
@@ -526,7 +526,7 @@ export default function TrashValetBookPage() {
                 onCheckedChange={(v) => setField("seniorDiscount", v)}
               />
               <Label htmlFor="seniorDiscount" className="text-sm text-zinc-300 cursor-pointer">
-                I qualify for the senior discount (age 65+){form.seniorDiscount && <span className="ml-2 text-blue-300 font-semibold">— $5/mo off applied ✓</span>}
+                I qualify for the senior discount (age 65+){form.seniorDiscount && <span className="ml-2 text-blue-300 font-semibold">- $5/mo off applied</span>}
               </Label>
             </div>
           </div>
@@ -552,7 +552,7 @@ export default function TrashValetBookPage() {
             onChange={setBundleAddons}
           />
 
-          {/* Per-add-on scheduling — only renders when at least one
+          {/* Per-add-on scheduling - only renders when at least one
               schedulable bundle add-on is selected. */}
           <BundleServiceScheduler
             bundleAddons={bundleAddons}
@@ -564,10 +564,10 @@ export default function TrashValetBookPage() {
           {bundleAddons.includes("ashley_shop") && (
             <div className="rounded-xl bg-pink-950/40 border border-pink-500/30 px-4 py-3">
               <p className="text-sm font-bold text-pink-300 flex items-center gap-2">
-                <span>🛍️</span> $100 Shop Card on your first invoice
+                <span>Shop</span> $100 Shop Card on your first invoice
               </p>
               <div className="text-[11px] text-zinc-300 mt-1.5 space-y-0.5">
-                <p>Charged once: <span className="font-semibold text-pink-200">{bundleAddons.length > 1 ? "$90.00" : "$100.00"}</span> {bundleAddons.length > 1 && <span className="text-zinc-500">($100 − 10% bundle discount)</span>}</p>
+                <p>Charged once: <span className="font-semibold text-pink-200">{bundleAddons.length > 1 ? "$90.00" : "$100.00"}</span> {bundleAddons.length > 1 && <span className="text-zinc-500">($100 - 10% bundle discount)</span>}</p>
                 <p className="text-zinc-500">Redeemable as JCMOVES USD on Ashley's Shop. Code is emailed to you and lives in your account.</p>
               </div>
             </div>
@@ -578,7 +578,7 @@ export default function TrashValetBookPage() {
             disabled={bookMutation.isPending}
             className="w-full bg-orange-500 hover:bg-orange-400 text-white font-black text-base py-6"
           >
-            {bookMutation.isPending ? "Booking…" : `Start Service — $${displayMonthly.toFixed(2)}/mo${bundleAddons.includes("ashley_shop") ? ` + ${bundleAddons.length > 1 ? "$90" : "$100"} Shop Card` : ""}`}
+            {bookMutation.isPending ? "Booking..." : `Start Service - $${displayMonthly.toFixed(2)}/mo${bundleAddons.includes("ashley_shop") ? ` + ${bundleAddons.length > 1 ? "$90" : "$100"} Shop Card` : ""}`}
           </Button>
 
           <p className="text-center text-zinc-600 text-xs">

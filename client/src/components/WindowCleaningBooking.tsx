@@ -30,12 +30,12 @@ interface WindowCleaningBookingProps {
 }
 
 const ADDON_SERVICES = [
-  { id: "junk_removal",  label: "Junk Removal",   emoji: "🗑️" },
-  { id: "trash_valet",   label: "Trash Valet",     emoji: "♻️" },
-  { id: "lawn_care",     label: "Lawn Care",        emoji: "🌿" },
-  { id: "moving",        label: "Moving Help",      emoji: "📦" },
-  { id: "snow_removal",  label: "Snow Removal",     emoji: "❄️" },
-  { id: "handyman",      label: "Handyman",         emoji: "🔧" },
+  { id: "junk_removal",  label: "Junk Removal",   emoji: "JR" },
+  { id: "trash_valet",   label: "Trash Valet",     emoji: "TV" },
+  { id: "lawn_care",     label: "Lawn Care",        emoji: "LC" },
+  { id: "moving",        label: "Moving Help",      emoji: "MH" },
+  { id: "snow_removal",  label: "Snow Removal",     emoji: "SR" },
+  { id: "handyman",      label: "Handyman",         emoji: "HM" },
 ] as const;
 
 export default function WindowCleaningBooking({ user, onBooked }: WindowCleaningBookingProps) {
@@ -162,7 +162,7 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
             type="button"
             onClick={() => onChange(Math.max(min, value - 1))}
             className="w-8 h-8 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300 hover:bg-zinc-700 active:scale-90 font-bold text-lg leading-none"
-          >−</button>
+          >-</button>
           <span className="text-white font-bold w-5 text-center">{value}</span>
           <button
             type="button"
@@ -181,8 +181,8 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-4">
         <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Window Count</p>
         <Counter label="Standard Windows" value={standardWindows} onChange={setStandardWindows} />
-        <Counter label="Large Windows (2× panes)" value={largeWindows} onChange={setLargeWindows} />
-        <Counter label="Ladder Windows (2× rate)" value={ladderWindows} onChange={setLadderWindows} />
+        <Counter label="Large Windows (2x panes)" value={largeWindows} onChange={setLargeWindows} />
+        <Counter label="Ladder Windows (2x rate)" value={ladderWindows} onChange={setLadderWindows} />
       </div>
 
       {/* Options Section */}
@@ -253,7 +253,7 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
         </div>
       </div>
 
-      {/* Add-On Services — 10% off + up to $50 off bundle discount */}
+      {/* Add-On Services - 10% off + up to $50 off bundle discount */}
       <div className={`rounded-2xl p-4 space-y-3 border transition-all ${
         addonSelected
           ? "bg-green-900/20 border-green-500/40"
@@ -264,11 +264,11 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
             <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
               <Plus className="h-3 w-3" /> Add a Service
             </p>
-            <p className="text-[11px] text-zinc-500 mt-0.5">Add another service — save 10% + up to $50 off on windows</p>
+            <p className="text-[11px] text-zinc-500 mt-0.5">Add another service - save 10% + up to $50 off on windows</p>
           </div>
           {addonSelected && (
             <span className="bg-green-500/20 text-green-300 text-[10px] font-bold px-2 py-1 rounded-full border border-green-500/30">
-              10% off · up to $50 off
+              10% off - up to $50 off
             </span>
           )}
         </div>
@@ -287,9 +287,9 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
                     : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300"
                 }`}
               >
-                <span className="text-lg leading-none">{svc.emoji}</span>
+                <span className="text-[10px] font-black tracking-wide leading-none">{svc.emoji}</span>
                 <span className="text-[10px] font-semibold leading-tight">{svc.label}</span>
-                {active && <span className="text-[9px] text-green-400 font-bold">✓ Added</span>}
+                {active && <span className="text-[9px] text-green-400 font-bold">Added</span>}
               </button>
             );
           })}
@@ -297,7 +297,7 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
 
         {addonSelected && (
           <p className="text-[11px] text-green-400 text-center">
-            🎉 10% off + up to $50 off windows applied! We'll quote your {selectedAddons.length > 1 ? "add-ons" : "add-on"} separately.
+            10% off + up to $50 off windows applied. We'll quote your {selectedAddons.length > 1 ? "add-ons" : "add-on"} separately.
           </p>
         )}
       </div>
@@ -329,7 +329,7 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
             )}
             {quote.breakdown.ladderPanes > 0 && (
               <div className="flex justify-between">
-                <span>Ladder panes ({quote.breakdown.ladderPanes} × 2×)</span>
+                <span>Ladder panes ({quote.breakdown.ladderPanes} x 2x)</span>
                 <span>${(quote.breakdown.ladderPanes * 10).toFixed(2)}</span>
               </div>
             )}
@@ -349,9 +349,9 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
           <div className="flex items-center justify-between text-green-400">
             <span className="text-sm flex items-center gap-1">
               <CheckCircle2 className="h-3.5 w-3.5" />
-              CLEANWINDOWS (−{quote.promoDiscountPercent}%)
+              CLEANWINDOWS (-{quote.promoDiscountPercent}%)
             </span>
-            <span className="font-bold">−${quote.promoDiscountAmount.toFixed(2)}</span>
+            <span className="font-bold">-${quote.promoDiscountAmount.toFixed(2)}</span>
           </div>
         )}
 
@@ -359,9 +359,9 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
           <div className="flex items-center justify-between text-green-400">
             <span className="text-sm flex items-center gap-1">
               <CheckCircle2 className="h-3.5 w-3.5" />
-              Bundle add-on discount (−10%)
+              Bundle add-on discount (-10%)
             </span>
-            <span className="font-bold">−${quote.addonDiscountAmount.toFixed(2)}</span>
+            <span className="font-bold">-${quote.addonDiscountAmount.toFixed(2)}</span>
           </div>
         )}
 
@@ -377,7 +377,7 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
           <span className="text-white font-black text-2xl">${adjustedTotal.toFixed(2)}</span>
         </div>
 
-        <p className="text-zinc-600 text-[10px]">$5/pane · 4-window minimum · Ladder access billed at 2× rate</p>
+        <p className="text-zinc-600 text-[10px]">$5/pane - 4-window minimum - Ladder access billed at 2x rate</p>
       </div>
 
       {/* Promo Code */}
@@ -415,7 +415,7 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
           </p>
         )}
         {isApril && !quote.promoApplied && (
-          <p className="text-orange-400 text-xs font-medium">🎉 Enter CLEANWINDOWS for 10% off — April special!</p>
+          <p className="text-orange-400 text-xs font-medium">Enter CLEANWINDOWS for 10% off - April special.</p>
         )}
       </div>
 
@@ -429,7 +429,7 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
               type="text"
               value={firstName}
               onChange={e => setFirstName(e.target.value)}
-              placeholder="Jane"
+              placeholder="First name"
               className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500 transition-colors"
             />
           </div>
@@ -439,7 +439,7 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
               type="text"
               value={lastName}
               onChange={e => setLastName(e.target.value)}
-              placeholder="Smith"
+              placeholder="Last name"
               className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500 transition-colors"
             />
           </div>
@@ -450,7 +450,7 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
             type="tel"
             value={phone}
             onChange={e => setPhone(e.target.value)}
-            placeholder="(906) 555-0100"
+            placeholder="Best phone number"
             className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500 transition-colors"
           />
         </div>
@@ -460,7 +460,7 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
             type="email"
             value={email}
             onChange={e => setEmail(e.target.value)}
-            placeholder="jane@example.com"
+            placeholder="Best email address"
             className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500 transition-colors"
           />
         </div>
@@ -485,7 +485,7 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
         {book.isPending ? (
           <Loader2 className="h-5 w-5 animate-spin" />
         ) : (
-          <>🪟 Book Now · ${adjustedTotal.toFixed(2)}{addonSelected ? " + add-ons" : ""}</>
+          <>Book Now - ${adjustedTotal.toFixed(2)}{addonSelected ? " + add-ons" : ""}</>
         )}
       </button>
       {addonSelected && (
@@ -493,7 +493,7 @@ export default function WindowCleaningBooking({ user, onBooked }: WindowCleaning
           Your selected add-on{selectedAddons.length > 1 ? "s" : ""} ({selectedAddons.map(id => ADDON_SERVICES.find(s => s.id === id)?.label).join(", ")}) will be quoted separately.
         </p>
       )}
-      <p className="text-center text-xs text-zinc-600">⚡ Most jobs booked in under 30 seconds</p>
+      <p className="text-center text-xs text-zinc-600">Most jobs booked in under 30 seconds</p>
     </div>
   );
 }
