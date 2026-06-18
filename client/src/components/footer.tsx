@@ -30,7 +30,7 @@ export default function Footer() {
               <li><a href="/services" className="hover:text-background transition-colors" data-testid="link-residential">Residential Moving</a></li>
               <li><a href="/services" className="hover:text-background transition-colors" data-testid="link-commercial">Commercial Moving</a></li>
               <li><a href="/services" className="hover:text-background transition-colors" data-testid="link-junk">Junk Removal</a></li>
-              <li><a href="/quote?service=storage" className="hover:text-background transition-colors" data-testid="link-storage">Storage Solutions</a></li>
+              <li><a href="/book?mode=quick&service=custom" className="hover:text-background transition-colors" data-testid="link-storage">Storage Solutions</a></li>
             </ul>
           </div>
           

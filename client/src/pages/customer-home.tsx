@@ -317,8 +317,8 @@ export default function CustomerHomePage() {
               [
                 { key: "residential",    onClick: () => setExpanded("moving"),                badge: undefined,                                                    badgeColor: undefined   },
                 { key: "junk",           onClick: () => setExpanded("junk"),                  badge: undefined,                                                    badgeColor: undefined   },
-                { key: "labor",          onClick: () => setLocation("/book?service=moving"),  badge: undefined,                                                    badgeColor: undefined   },
-                { key: "snow",           onClick: () => setLocation("/book?service=snow"),    badge: undefined,                                                    badgeColor: undefined   },
+                { key: "labor",          onClick: () => setLocation("/book?service=labor"),   badge: undefined,                                                    badgeColor: undefined   },
+                { key: "snow",           onClick: () => setLocation("/book?service=snow_removal"), badge: undefined,                                               badgeColor: undefined   },
                 { key: "window_cleaning",onClick: () => setLocation("/window-cleaning"),      badge: isApril ? "April Special — 20% Off" : undefined,              badgeColor: "orange" as const },
                 { key: "trash_valet",    onClick: () => setLocation("/trash-valet"),          badge: trashSub ? "Active" : undefined,                              badgeColor: "green"  as const },
                 { key: "painting",       onClick: () => setLocation("/book?service=painting"),badge: undefined,                                                    badgeColor: undefined   },

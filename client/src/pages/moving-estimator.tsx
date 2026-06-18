@@ -365,7 +365,7 @@ function BookNowButton({ label, href, promo = false, compact = false }: { label:
 
 function ResultCard({ sel, pricing, compact = false }: { sel: Sel; pricing: Pricing; compact?: boolean }) {
   const drive = sel.driveInfo;
-  const bookUrl = "/book?service=residential";
+  const bookUrl = "/book?service=moving";
 
   if (sel.service === "junk") {
     const isSmall = sel.junkSize === "small";
@@ -396,7 +396,7 @@ function ResultCard({ sel, pricing, compact = false }: { sel: Sel; pricing: Pric
             </>}
           </div>
           <div className="px-4 pb-4">
-            <BookNowButton label="Book Junk Removal" href="/book?service=junk" compact={compact} />
+            <BookNowButton label="Book Junk Removal" href="/book?service=junk_removal" compact={compact} />
           </div>
         </div>
         {pricing.junkAddons.length > 0 && (

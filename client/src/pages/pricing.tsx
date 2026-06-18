@@ -217,7 +217,7 @@ export default function PricingPage() {
           color="text-orange-400"
           bg="bg-orange-500/10"
           border="border-orange-500/30"
-          bookHref="/book?service=junk"
+          bookHref="/book?service=junk_removal"
           bookLabel="Get Junk Quote"
           isOpen={activeSection === "junk"}
           onToggle={() => toggle("junk")}
@@ -393,7 +393,7 @@ export default function PricingPage() {
           color="text-cyan-400"
           bg="bg-cyan-500/10"
           border="border-cyan-500/30"
-          bookHref="/book?service=snow"
+          bookHref="/book?service=snow_removal"
           bookLabel="Get Snow Quote"
           isOpen={activeSection === "snow"}
           onToggle={() => toggle("snow")}

@@ -173,8 +173,8 @@ export default function ServicesPage() {
   const estHigh = selectedCrew ? hourlyRate * (minHours + 2) + addOnTotal : 0;
 
   const bookUrl = selectedCrew
-    ? `/quote?service=residential&crew=${selectedCrew}&type=${serviceType}`
-    : `/quote?service=residential`;
+    ? `/book?mode=builder&service=moving&step=configure&crew=${selectedCrew}&type=${serviceType}`
+    : `/book?mode=builder&service=moving`;
 
   // ── Job time & crew recommendation ──────────────────────────────────────
   const estimatedJobHours = useMemo(() => {
@@ -838,12 +838,12 @@ export default function ServicesPage() {
           <h2 className="text-2xl font-black text-white mb-4">Other Services</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {[
-              { href: "/quote?service=junk",         label: "Junk Removal",       color: "from-orange-600 to-orange-800",   emoji: "🗑️" },
+              { href: "/book?mode=quick&service=junk_removal", label: "Junk Removal", color: "from-orange-600 to-orange-800", emoji: "🗑️" },
               { href: "/snow-removal",               label: "Snow Removal",       color: "from-cyan-700 to-blue-800",       emoji: "❄️" },
-              { href: "/quote?service=cleaning",     label: "Move-In Cleaning",   color: "from-green-700 to-green-900",     emoji: "✨" },
-              { href: "/quote?service=handyman",     label: "Handyman",           color: "from-amber-700 to-amber-900",     emoji: "🔧" },
-              { href: "/quote?service=demolition",   label: "Light Demo",         color: "from-red-700 to-red-900",         emoji: "⚒️" },
-              { href: "/quote?service=flooring",     label: "Flooring",           color: "from-stone-700 to-stone-900",     emoji: "🪵" },
+              { href: "/book?mode=quick&service=cleaning", label: "Move-In Cleaning", color: "from-green-700 to-green-900", emoji: "✨" },
+              { href: "/book?mode=quick&service=handyman", label: "Handyman", color: "from-amber-700 to-amber-900", emoji: "🔧" },
+              { href: "/book?mode=quick&service=demolition", label: "Light Demo", color: "from-red-700 to-red-900", emoji: "⚒️" },
+              { href: "/book?mode=quick&service=flooring", label: "Flooring", color: "from-stone-700 to-stone-900", emoji: "🪵" },
             ].map(({ href, label, color, emoji }) => (
               <Link key={href} href={href}>
                 <div className={`bg-gradient-to-br ${color} rounded-xl p-4 text-center cursor-pointer hover:scale-[1.03] transition-all border border-white/10`}>
@@ -885,7 +885,7 @@ export default function ServicesPage() {
           <h2 className="text-2xl font-black text-white mb-2">Ready to Move?</h2>
           <p className="text-slate-400 mb-6">Book your crew in under 2 minutes. We'll confirm within the hour.</p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link href="/quote?service=residential">
+            <Link href="/book?mode=builder&service=moving">
               <Button size="lg" className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-black border-0 shadow-lg shadow-orange-500/25">
                 Book Now — Free Quote <ChevronRight className="ml-1 h-5 w-5" />
               </Button>
