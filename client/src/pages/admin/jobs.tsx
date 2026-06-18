@@ -158,6 +158,7 @@ function AdminJobCard({ lead, onClick, employees }: {
   const quickRequest = isQuickRequestLead(lead);
   const photoCount = leadPhotoCount(lead);
   const attributionLabel = leadAttributionLabel(lead);
+  const customerMediaLink = extractCustomerMediaLink(lead.details);
 
   return (
     <Card
@@ -228,6 +229,12 @@ function AdminJobCard({ lead, onClick, employees }: {
                 <span className="text-xs text-blue-300 flex items-center gap-1">
                   <Image className="h-3 w-3" />
                   {photoCount} photo{photoCount === 1 ? "" : "s"}
+                </span>
+              )}
+              {customerMediaLink && (
+                <span className="text-xs text-blue-300 flex items-center gap-1">
+                  <ExternalLink className="h-3 w-3" />
+                  Media link
                 </span>
               )}
               {lead.promoCode && (
@@ -1083,7 +1090,8 @@ export default function AdminJobsPage() {
       `${l.firstName} ${l.lastName}`.toLowerCase().includes(q) ||
       l.phone?.includes(q) ||
       l.email?.toLowerCase().includes(q) ||
-      l.serviceType?.toLowerCase().includes(q)
+      l.serviceType?.toLowerCase().includes(q) ||
+      l.details?.toLowerCase().includes(q)
     );
   }, [leads, search]);
 
