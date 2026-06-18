@@ -168,6 +168,18 @@ function normalizeServiceCodeParam(value: string): string {
   return SERVICE_CODE_ALIASES[normalized] ?? normalized.replace(/-/g, "_");
 }
 
+function formatAttributionSummary(attribution: { promoCode: string; referralSlug: string }) {
+  const parts: string[] = [];
+  if (attribution.promoCode) parts.push(`Referral code ${attribution.promoCode}`);
+  if (attribution.referralSlug) {
+    const repName = attribution.referralSlug
+      .replace(/[-_]+/g, " ")
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+    parts.push(`Rep page ${repName}`);
+  }
+  return parts.length > 0 ? `${parts.join(" - ")} attached` : "";
+}
+
 const STEPS = ["services", "address", "configure", "contact", "safety", "review"] as const;
 type Step = (typeof STEPS)[number];
 const STEP_LABELS: Record<Step, string> = {
@@ -317,6 +329,7 @@ function QuickRequestForm({
     form.lastName.trim().length > 0 &&
     form.phone.replace(/\D/g, "").length >= 7 &&
     form.serviceCode.trim().length > 0;
+  const attributionSummary = formatAttributionSummary(attribution);
 
   const submitQuick = useMutation({
     mutationFn: async () => {
@@ -438,9 +451,9 @@ function QuickRequestForm({
           <p className="mt-2 text-sm text-muted-foreground">
             Send the basics now. A coordinator reviews the job, calls or texts you, and finishes the quote with you.
           </p>
-          {attribution.promoCode && (
+          {attributionSummary && (
             <p className="mt-3 inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-black text-emerald-600 dark:text-emerald-300">
-              Referral code {attribution.promoCode} attached
+              {attributionSummary}
             </p>
           )}
         </div>
@@ -691,6 +704,7 @@ export default function MultiServiceBookPage() {
       referralSlug: (sp.get("rep") || sp.get("ref") || "").trim().toLowerCase(),
     };
   }, []);
+  const attributionSummary = formatAttributionSummary(attribution);
 
   const [step, setStep] = useState<Step>("services");
   const [items, setItems] = useState<SelectedItem[]>([]);
@@ -1360,9 +1374,9 @@ export default function MultiServiceBookPage() {
             <p className="mt-2 text-sm text-muted-foreground">
               Pick the fastest path. Request a callback in 60 seconds or build a detailed quote with address, schedule, photos, and job scope.
             </p>
-            {attribution.promoCode && (
+            {attributionSummary && (
               <p className="mt-3 inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-black text-emerald-600 dark:text-emerald-300">
-                Referral code {attribution.promoCode} attached
+                {attributionSummary}
               </p>
             )}
           </div>
