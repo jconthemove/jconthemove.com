@@ -13,10 +13,11 @@ import {
   MapPin, Calendar, Loader2, Phone, Mail, Users, DollarSign, Bitcoin,
   CheckCircle2, Clock, Send, Star, ArrowLeftRight, ChevronRight,
   Coins, Search, Truck, Minus, Plus, RefreshCw, Receipt, UserCheck,
-  UserX, XCircle, Check, X, Image, Tag
+  UserX, XCircle, Check, X, Image, Tag, ExternalLink
 } from "lucide-react";
 import type { User } from "@shared/schema";
 import { PaymentStatusPill } from "@/components/PaymentStatusPill";
+import { extractCustomerMediaLink } from "@/lib/lead-details";
 
 const SERVICE_ICONS: Record<string, string> = {
   residential: "🚛", commercial: "🏢", junk: "🗑️", snow: "❄️",
@@ -501,6 +502,7 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
   const quickRequest = isQuickRequestLead(lead);
   const photos = Array.isArray(lead.photos) ? lead.photos : [];
   const attribution = lead.attribution;
+  const customerMediaLink = extractCustomerMediaLink(lead.details);
 
   return (
     <Sheet open={open} onOpenChange={v => !v && onClose()}>
@@ -557,6 +559,21 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
               />
             )}
             {photos.length > 0 && <POSRow label="Photos" value={`${photos.length} attached`} />}
+            {customerMediaLink && (
+              <POSRow
+                label="Media Link"
+                value={
+                  <a
+                    href={customerMediaLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-blue-300 hover:text-blue-200"
+                  >
+                    Open <ExternalLink className="h-3 w-3" />
+                  </a>
+                }
+              />
+            )}
             {lead.fromAddress && <POSRow label="From" value={<span className="text-xs text-right max-w-[200px] block">{lead.fromAddress}</span>} />}
             {lead.toAddress && <POSRow label="To" value={<span className="text-xs text-right max-w-[200px] block">{lead.toAddress}</span>} />}
           </div>
@@ -984,6 +1001,22 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
             <div className="bg-slate-800/40 rounded-xl p-3">
               <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Quote Notes</p>
               <p className="text-sm text-slate-300">{lead.quoteNotes}</p>
+            </div>
+          )}
+          {customerMediaLink && (
+            <div className="bg-blue-500/10 border border-blue-500/25 rounded-xl p-3">
+              <p className="text-[10px] text-blue-300 uppercase tracking-wide mb-2 flex items-center gap-1">
+                <ExternalLink className="h-3 w-3" /> Customer Media
+              </p>
+              <a
+                href={customerMediaLink}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex max-w-full items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-500"
+              >
+                <span className="truncate">Open photos/video/album link</span>
+                <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+              </a>
             </div>
           )}
           {photos.length > 0 && (
