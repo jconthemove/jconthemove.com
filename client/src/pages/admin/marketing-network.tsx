@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BarChart3, CalendarDays, DollarSign, Download, Edit3, Eye, Megaphone, Phone, Plus, Save, Tag, Users } from "lucide-react";
+import { BarChart3, CalendarDays, Copy, DollarSign, Download, Edit3, Eye, Megaphone, Phone, Plus, Save, Tag, Users } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -148,6 +148,21 @@ export default function AdminMarketingNetworkPage() {
   const totalConversionRate = totals.estimates > 0 ? (totals.booked / totals.estimates) * 100 : 0;
   const averageBookedRevenue = totals.booked > 0 ? totals.revenue / totals.booked : 0;
 
+  function repPublicUrl(rep: MarketingRep) {
+    if (typeof window === "undefined") return `/network/${rep.slug}`;
+    return `${window.location.origin}/network/${rep.slug}`;
+  }
+
+  async function copyRepLink(rep: MarketingRep) {
+    const url = repPublicUrl(rep);
+    try {
+      await navigator.clipboard.writeText(url);
+      toast({ title: "Rep link copied", description: rep.displayName });
+    } catch {
+      toast({ title: "Copy failed", description: url, variant: "destructive" });
+    }
+  }
+
   function exportPerformanceCsv() {
     const rows = stats.map(row => {
       const conversionRate = row.estimates > 0 ? (row.booked / row.estimates) * 100 : 0;
@@ -156,6 +171,7 @@ export default function AdminMarketingNetworkPage() {
         row.rep.displayName,
         row.rep.brandName,
         row.rep.slug,
+        repPublicUrl(row.rep),
         row.rep.promoCode,
         row.rep.territory,
         row.rep.serviceFocus?.join(" | ") || "",
@@ -182,6 +198,7 @@ export default function AdminMarketingNetworkPage() {
         "Rep Name",
         "Brand Name",
         "Slug",
+        "Public Link",
         "Promo Code",
         "Territory",
         "Service Focus",
@@ -354,6 +371,7 @@ export default function AdminMarketingNetworkPage() {
                     </div>
                     <div className="flex gap-2">
                       <Link href={`/network/${row.rep.slug}`}><Button size="sm" variant="outline"><Eye className="h-4 w-4 mr-1" />Page</Button></Link>
+                      <Button size="sm" variant="outline" onClick={() => copyRepLink(row.rep)}><Copy className="h-4 w-4 mr-1" />Copy Link</Button>
                       <Button size="sm" variant="outline" onClick={() => startEdit(row.rep)}><Edit3 className="h-4 w-4 mr-1" />Edit</Button>
                     </div>
                   </CardContent>
@@ -449,6 +467,7 @@ export default function AdminMarketingNetworkPage() {
                     </div>
                     <div className="flex gap-2">
                       <Link href={`/network/${rep.slug}`}><Button size="sm" variant="outline">View</Button></Link>
+                      <Button size="sm" variant="outline" onClick={() => copyRepLink(rep)}>Copy Link</Button>
                       <Button size="sm" onClick={() => startEdit(rep)}>Edit</Button>
                     </div>
                   </CardContent>
