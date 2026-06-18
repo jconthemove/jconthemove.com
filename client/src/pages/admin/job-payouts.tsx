@@ -91,6 +91,17 @@ function employeeName(user: User) {
   return [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || user.email || "Worker";
 }
 
+function downloadCsv(filename: string, rows: unknown[][]) {
+  const csv = rows.map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function AdminJobPayoutsPage() {
   const { toast } = useToast();
   const [selectedJobId, setSelectedJobId] = useState<string>("");
@@ -137,6 +148,48 @@ export default function AdminJobPayoutsPage() {
       `${job.firstName} ${job.lastName} ${job.serviceType} ${job.status}`.toLowerCase().includes(q),
     );
   }, [jobs, search]);
+
+  const exportVisibleJobsReport = () => {
+    const rows = [
+      [
+        "Order Number",
+        "Customer",
+        "Service",
+        "Job Status",
+        "Gross Revenue",
+        "Payout Status",
+        "Net Job Profit",
+        "Profit Per Labor Hour",
+        "Worker Payout Records",
+        "Manual Paid",
+        "Manual Pending",
+        "Stripe Pending",
+        "Stripe Paid",
+        "Failed",
+      ],
+      ...filteredJobs.map((job) => {
+        const payouts = job.payout?.workerPayouts || [];
+        const countByStatus = (status: ProfitSharePayoutStatus) => payouts.filter((payout) => payout.payoutStatus === status).length;
+        return [
+          job.orderNumber || "",
+          `${job.firstName} ${job.lastName}`.trim(),
+          job.serviceType.replace(/_/g, " "),
+          job.status.replace(/_/g, " "),
+          numberValue(job.totalPrice || job.basePrice).toFixed(2),
+          job.payout?.status || "not finalized",
+          job.payout?.netJobProfit || "",
+          job.payout?.profitPerLaborHour || "",
+          payouts.length,
+          countByStatus("manual_paid"),
+          countByStatus("manual_pending"),
+          countByStatus("stripe_pending"),
+          countByStatus("stripe_paid"),
+          countByStatus("failed"),
+        ];
+      }),
+    ];
+    downloadCsv(`jc-payout-queue-${new Date().toISOString().slice(0, 10)}.csv`, rows);
+  };
 
   const seedAssignmentsFromPreview = () => {
     if (!preview) return;
@@ -254,14 +307,7 @@ export default function AdminJobPayoutsPage() {
         ];
       }),
     ];
-    const csv = rows.map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `jc-job-payout-${selectedJob.id}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadCsv(`jc-job-payout-${selectedJob.id}.csv`, rows);
   };
 
   return (
@@ -276,9 +322,21 @@ export default function AdminJobPayoutsPage() {
       <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
         <Card className="bg-slate-900/50 border-slate-700/60">
           <CardHeader className="pb-3">
-            <CardTitle className="text-white text-base flex items-center gap-2">
-              <Search className="h-4 w-4 text-blue-300" /> Jobs
-            </CardTitle>
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="text-white text-base flex items-center gap-2">
+                <Search className="h-4 w-4 text-blue-300" /> Jobs
+              </CardTitle>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={exportVisibleJobsReport}
+                disabled={filteredJobs.length === 0}
+              >
+                <Download className="h-3.5 w-3.5 mr-1.5" />
+                Export
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-3">
             <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search jobs" />
@@ -302,13 +360,13 @@ export default function AdminJobPayoutsPage() {
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <p className="text-sm font-bold text-white">{job.firstName} {job.lastName}</p>
-                        <p className="text-xs text-slate-400 capitalize">{job.serviceType} · {job.status.replace(/_/g, " ")}</p>
+                        <p className="text-xs text-slate-400 capitalize">{job.serviceType} - {job.status.replace(/_/g, " ")}</p>
                       </div>
                       <p className="text-sm font-black text-emerald-300">{money(job.totalPrice || job.basePrice)}</p>
                     </div>
                     {job.payout && (
                       <p className="mt-2 text-[11px] text-slate-400">
-                        Payout {job.payout.status} · P/L hour {money(job.payout.profitPerLaborHour)}
+                        Payout {job.payout.status} - P/L hour {money(job.payout.profitPerLaborHour)}
                       </p>
                     )}
                   </button>
