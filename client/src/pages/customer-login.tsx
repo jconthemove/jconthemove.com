@@ -186,7 +186,7 @@ export default function CustomerLogin() {
                     <Input
                       id="phoneNumber"
                       type="tel"
-                      placeholder="(555) 123-4567"
+                      placeholder="Best phone number"
                       value={formData.phoneNumber}
                       onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
                       className="pl-9 bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
@@ -204,7 +204,7 @@ export default function CustomerLogin() {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="your.email@example.com"
+                  placeholder="Email you use for bookings"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="pl-9 bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"

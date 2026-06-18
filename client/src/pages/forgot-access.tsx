@@ -151,7 +151,7 @@ export default function ForgotAccessPage() {
                     <Input
                       id="contact"
                       type="text"
-                      placeholder="you@email.com  or  (906) 555-1234"
+                      placeholder="Email or phone on your account"
                       value={contact}
                       onChange={e => setContact(e.target.value)}
                       className="pl-10"

@@ -277,7 +277,7 @@ export default function LoginPage() {
                       <div className="relative">
                         <Phone className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
                         <Input
-                          type="tel" placeholder="(555) 123-4567"
+                          type="tel" placeholder="Best phone number"
                           value={form.phoneNumber} onChange={e => set("phoneNumber", e.target.value)}
                           className="pl-9 bg-slate-800 border-slate-600 text-white placeholder:text-slate-500"
                         />
@@ -292,7 +292,7 @@ export default function LoginPage() {
                   <div className="relative">
                     <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
                     <Input
-                      type="email" placeholder="you@example.com" required
+                      type="email" placeholder="Email you use for bookings" required
                       value={form.email} onChange={e => set("email", e.target.value)}
                       className="pl-9 bg-slate-800 border-slate-600 text-white placeholder:text-slate-500"
                     />
