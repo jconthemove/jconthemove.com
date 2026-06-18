@@ -1,9 +1,10 @@
 // Task #175 - Launch checklist runner.
 //
-// Each scenario is a self-contained probe that exercises one payment
-// surface end-to-end and reports green/red. Wired to a single admin page
-// at /admin/launch-checklist; an operator clicks "Run" and watches each
-// row turn green before publishing.
+// Each scenario is a self-contained probe for one launch-critical surface:
+// payments, pricing, public booking, quick requests, worker rep pages,
+// profit-share defaults, or payout safety. Wired to a single admin page at
+// /admin/launch-checklist; an operator clicks "Run" and watches each row
+// turn green before publishing.
 
 import { pool } from "../db";
 import { validatePaymentEnv } from "./envValidation";
