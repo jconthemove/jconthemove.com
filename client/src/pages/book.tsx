@@ -1182,6 +1182,9 @@ export default function MultiServiceBookPage() {
     const trackUrl = c.customerEmail
       ? `/customer-login?intent=track&email=${encodeURIComponent(c.customerEmail)}`
       : "/customer-login?intent=track";
+    const bookingReference = c.id ? `JOB-${c.id.slice(0, 8).toUpperCase()}` : "JOB REQUEST";
+    const supportMessage = `Hi JC ON THE MOVE, I just submitted ${bookingReference}. Can you confirm the next step?`;
+    const supportSmsHref = `sms:+19062859312?&body=${encodeURIComponent(supportMessage)}`;
     return (
       <div className="min-h-screen bg-background pb-16">
         <div className="max-w-2xl mx-auto px-4 pt-8">
@@ -1196,6 +1199,13 @@ export default function MultiServiceBookPage() {
               </p>
               <p className="text-xs text-muted-foreground mt-2">
                 Fast scheduling • Local crew • Rewards earned automatically
+              </p>
+            </div>
+            <div className="rounded-xl border border-border bg-card p-4 text-left">
+              <p className="text-xs uppercase tracking-widest text-muted-foreground">Booking reference</p>
+              <p className="mt-1 text-2xl font-black tracking-normal">{bookingReference}</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Mention this reference if you call or text before your coordinator reaches out.
               </p>
             </div>
             <div className="grid grid-cols-3 gap-2 text-[10px] font-bold uppercase tracking-tight text-muted-foreground">
@@ -1275,6 +1285,20 @@ export default function MultiServiceBookPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <Button className="w-full" onClick={() => setLocation(trackUrl)}>Track My Job</Button>
               <Button className="w-full" variant="outline" onClick={() => setLocation("/book")}>Book Another Service</Button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <Button className="w-full" variant="outline" asChild>
+                <a href="tel:+19062859312">
+                  <PhoneCall className="mr-2 h-4 w-4" />
+                  Call JC
+                </a>
+              </Button>
+              <Button className="w-full" variant="outline" asChild>
+                <a href={supportSmsHref}>
+                  <Phone className="mr-2 h-4 w-4" />
+                  Text Reference
+                </a>
+              </Button>
             </div>
             <button
               type="button"
