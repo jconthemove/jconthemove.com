@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
-  Coins, Zap, Clock, TrendingUp, Loader2, Lock, Link as LinkIcon, Share2, MessageCircle
+  Coins, Zap, Clock, TrendingUp, Loader2, Lock, Link as LinkIcon, Share2, MessageCircle,
+  Dumbbell, Truck, KeyRound, Wrench
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Link } from "wouter";
 import { useState, useEffect, useMemo } from "react";
 import { notificationService } from "@/lib/notifications";
@@ -98,14 +100,14 @@ function pendingStakeRewards(stake: Stake) {
   return parseFloat(stake.amount) * parseFloat(stake.dailyRate) * daysSince;
 }
 
-const ALL_CAPABILITIES: { key: string; label: string; emoji: string }[] = [
-  { key: "mover", label: "Mover", emoji: "💪" },
-  { key: "driver", label: "Driver", emoji: "🚛" },
-  { key: "truck_small", label: "Truck (Small)", emoji: "🚐" },
-  { key: "truck_large", label: "Truck (Large)", emoji: "🚚" },
-  { key: "trailer_small", label: "Trailer (Small)", emoji: "🏕️" },
-  { key: "trailer_large", label: "Trailer (Large)", emoji: "🏗️" },
-  { key: "uhaul", label: "Uhaul Access", emoji: "🔑" },
+const ALL_CAPABILITIES: { key: string; label: string; icon: LucideIcon }[] = [
+  { key: "mover", label: "Mover", icon: Dumbbell },
+  { key: "driver", label: "Driver", icon: Truck },
+  { key: "truck_small", label: "Truck (Small)", icon: Truck },
+  { key: "truck_large", label: "Truck (Large)", icon: Truck },
+  { key: "trailer_small", label: "Trailer (Small)", icon: Truck },
+  { key: "trailer_large", label: "Trailer (Large)", icon: Truck },
+  { key: "uhaul", label: "U-Haul Access", icon: KeyRound },
 ];
 
 export default function CrewEarningsPage() {
@@ -243,13 +245,18 @@ export default function CrewEarningsPage() {
       {/* Crew Capabilities (read-only) */}
       {userCapabilities.length > 0 && (
         <div className="rounded-2xl bg-slate-800/40 border border-slate-700/30 p-4">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">🛠️ Your Capabilities</p>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+            <Wrench className="h-3.5 w-3.5" /> Your Capabilities
+          </p>
           <div className="flex flex-wrap gap-2">
-            {ALL_CAPABILITIES.filter(cap => userCapabilities.includes(cap.key)).map(cap => (
-              <span key={cap.key} className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-600/20 border border-blue-500/30 text-blue-300 text-xs font-semibold">
-                {cap.emoji} {cap.label}
-              </span>
-            ))}
+            {ALL_CAPABILITIES.filter(cap => userCapabilities.includes(cap.key)).map(cap => {
+              const Icon = cap.icon;
+              return (
+                <span key={cap.key} className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-600/20 border border-blue-500/30 text-blue-300 text-xs font-semibold">
+                  <Icon className="h-3.5 w-3.5" /> {cap.label}
+                </span>
+              );
+            })}
           </div>
         </div>
       )}
@@ -260,21 +267,21 @@ export default function CrewEarningsPage() {
           <div className="bg-slate-800/60 border border-purple-500/30 rounded-xl p-3 text-center cursor-pointer hover:bg-purple-950/30 hover:border-purple-500/50 transition-colors group">
             <p className="text-base font-black text-purple-400">{formatTokens(tokenBalance)}</p>
             <p className="text-slate-500 text-xs">Balance</p>
-            <p className="text-purple-500 text-[9px] mt-0.5 group-hover:text-purple-400">Spend →</p>
+            <p className="text-purple-500 text-[9px] mt-0.5 group-hover:text-purple-400">Spend</p>
           </div>
         </Link>
         <a href="#history">
           <div className="bg-slate-800/60 border border-green-500/20 rounded-xl p-3 text-center cursor-pointer hover:bg-green-950/20 hover:border-green-500/40 transition-colors group">
             <p className="text-base font-black text-green-400">{formatTokens(totalEarned)}</p>
             <p className="text-slate-500 text-xs">Total Earned</p>
-            <p className="text-green-600 text-[9px] mt-0.5 group-hover:text-green-400">History →</p>
+            <p className="text-green-600 text-[9px] mt-0.5 group-hover:text-green-400">History</p>
           </div>
         </a>
         <Link href="/staking">
           <div className="bg-slate-800/60 border border-blue-500/20 rounded-xl p-3 text-center cursor-pointer hover:bg-blue-950/20 hover:border-blue-500/40 transition-colors group">
             <p className="text-base font-black text-blue-400">{activeStakes.length}</p>
             <p className="text-slate-500 text-xs">Stakes</p>
-            <p className="text-blue-600 text-[9px] mt-0.5 group-hover:text-blue-400">Manage →</p>
+            <p className="text-blue-600 text-[9px] mt-0.5 group-hover:text-blue-400">Manage</p>
           </div>
         </Link>
       </div>
@@ -430,7 +437,7 @@ export default function CrewEarningsPage() {
             <span className="font-bold text-white text-sm">Token Staking Perks</span>
           </div>
           <Link href="/staking">
-            <span className="text-blue-400 text-xs hover:text-blue-300">Manage →</span>
+            <span className="text-blue-400 text-xs hover:text-blue-300">Manage</span>
           </Link>
         </div>
         <p className="text-slate-400 text-xs">Lock JCMOVES to unlock service discounts, worker job bonuses, and premium platform access.</p>
