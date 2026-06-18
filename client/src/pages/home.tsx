@@ -14,13 +14,12 @@ import {
   MapPin,
   MessageCircle,
   Phone,
+  PhoneCall,
   Shield,
   Sparkles,
-  SprayCan,
   Star,
   Trash2,
   Truck,
-  Wrench,
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -31,8 +30,6 @@ import junkImage from "@assets/FB_IMG_1690476073966_1764946176032.jpg";
 import badgeImage from "@assets/FB_IMG_1675268829327_1758501643307.jpg";
 import haulImage from "@assets/IMG_20220810_125649554_HDR_1758501643329.jpg";
 import crewImage from "@assets/FB_IMG_1690476036804_1764946176026.jpg";
-import handymanImage from "@assets/handyman-drill-unsplash.jpg";
-import windowImage from "@assets/window-cleaning-squeegee-unsplash.jpg";
 
 interface Testimonial {
   id: string;
@@ -58,7 +55,7 @@ const CTA_IMAGE = ctaImage;
 const VISUAL_SERVICES = [
   {
     label: "Moving",
-    sub: "Home, apartment, office",
+    sub: "Homes, apartments, offices",
     href: "/book?service=moving",
     image: heroImage,
     icon: Truck,
@@ -73,25 +70,26 @@ const VISUAL_SERVICES = [
     color: "orange",
   },
   {
-    label: "Handyman",
-    sub: "Repairs, assembly, odd jobs",
-    href: "/book?service=handyman",
-    image: handymanImage,
-    icon: Wrench,
+    label: "Delivery",
+    sub: "Furniture, appliances, store pickups",
+    href: "/book?service=delivery",
+    image: haulImage,
+    icon: Truck,
     color: "emerald",
   },
   {
-    label: "Window Cleaning",
-    sub: "Streak-free shine",
-    href: "/book?service=window",
-    image: windowImage,
-    icon: SprayCan,
+    label: "Cleanup / Labor",
+    sub: "Move-outs, garages, extra hands",
+    href: "/book?service=cleaning",
+    image: crewImage,
+    icon: Sparkles,
     color: "violet",
   },
 ];
 
 const MORE_SERVICES = [
-  { label: "Cleaning", href: "/book?service=cleaning" },
+  { label: "Handyman", href: "/book?service=handyman" },
+  { label: "Window Cleaning", href: "/book?service=window" },
   { label: "Snow", href: "/book?service=snow" },
   { label: "Lawn", href: "/book/lawn-care" },
   { label: "Demolition", href: "/book?service=demolition" },
@@ -342,13 +340,17 @@ export default function HomePage() {
               <span className="text-blue-500">NORTHWOODS.</span>
             </h1>
             <p className="mt-5 flex flex-wrap gap-x-3 gap-y-1 text-base font-bold text-white">
-              <span>Fast service</span>
-              <span className="text-blue-300">Fair prices</span>
-              <span>Done right</span>
+              <span>Moving</span>
+              <span className="text-blue-300">Junk removal</span>
+              <span>Delivery</span>
+              <span className="text-emerald-300">Cleanup help</span>
             </p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-              <Button onClick={() => openQuoteStart("moving")} className="h-12 rounded-lg bg-blue-600 px-8 text-base font-black hover:bg-blue-500">
-                Get My Price <ArrowRight className="ml-2 h-5 w-5" />
+              <Button onClick={() => setLocation("/book?mode=quick&service=moving")} className="h-12 rounded-lg bg-blue-600 px-8 text-base font-black hover:bg-blue-500">
+                Request A Callback <ArrowRight className="ml-2 h-5 w-5" />
+              </Button>
+              <Button onClick={() => openQuoteStart("moving")} variant="outline" className="h-12 rounded-lg border-white/40 bg-black/30 px-8 text-base font-black text-white hover:bg-white/10">
+                Build My Quote
               </Button>
               <a href="sms:+19062859312">
                 <Button variant="outline" className="h-12 rounded-lg border-white/40 bg-black/30 px-8 text-base font-black text-white hover:bg-white/10">
@@ -366,12 +368,12 @@ export default function HomePage() {
             </div>
             <p className="mb-4 text-sm font-semibold text-white">{availabilityLine}</p>
             <div className="space-y-3 text-sm text-slate-200">
-              <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-blue-300" /> Fast quotes</p>
-              <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-blue-300" /> Local crew</p>
-              <p className="flex items-center gap-2"><Gift className="h-4 w-4 text-yellow-300" /> Earn JCMOVES rewards</p>
+              <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-blue-300" /> Quick callback or guided quote</p>
+              <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-blue-300" /> Upload photos and notes</p>
+              <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-blue-300" /> Local crew confirmation</p>
             </div>
-            <Button onClick={() => openQuoteStart("moving")} className="mt-6 h-12 w-full rounded-lg bg-emerald-600 font-black hover:bg-emerald-500">
-              Book Now
+            <Button onClick={() => setLocation("/book?mode=quick&service=moving")} className="mt-6 h-12 w-full rounded-lg bg-emerald-600 font-black hover:bg-emerald-500">
+              Start In 60 Seconds
             </Button>
           </div>
         </div>
@@ -392,7 +394,7 @@ export default function HomePage() {
         <div className="mx-auto max-w-6xl">
           <div className="mb-7 flex items-center justify-center gap-5">
             <span className="h-px w-16 bg-white/20" />
-            <p className="text-sm font-black uppercase tracking-[0.25em]">Our Services</p>
+            <p className="text-sm font-black uppercase tracking-[0.25em]">Choose Service</p>
             <span className="h-px w-16 bg-white/20" />
           </div>
           <div className="grid gap-4 md:grid-cols-4">
@@ -439,6 +441,31 @@ export default function HomePage() {
               ))}
             </div>
           )}
+        </div>
+      </section>
+
+      <section className="border-y border-white/10 bg-white px-4 py-10 text-slate-950 md:py-12">
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-7">
+            <p className="text-sm font-black uppercase tracking-[0.24em] text-blue-700">How It Works</p>
+            <h2 className="mt-2 text-3xl font-black tracking-tight md:text-4xl">Choose the work. Show the job. Get confirmed.</h2>
+          </div>
+          <div className="grid gap-4 md:grid-cols-4">
+            {[
+              { title: "Choose", text: "Pick moving, junk removal, delivery, cleanup, or labor help.", icon: Truck },
+              { title: "Request", text: "Use quick callback or build a detailed quote with guided cards.", icon: PhoneCall },
+              { title: "Show", text: "Add photos, address, timing, and notes so we send the right crew.", icon: CalendarCheck },
+              { title: "Confirm", text: "We review, schedule, complete the job, then rewards can apply.", icon: CheckCircle2 },
+            ].map(({ title, text, icon: Icon }) => (
+              <div key={title} className="rounded-lg border border-slate-200 bg-slate-50 p-5">
+                <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-lg bg-blue-600 text-white">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <p className="text-lg font-black">{title}</p>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">{text}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 

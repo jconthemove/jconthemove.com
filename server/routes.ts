@@ -4570,6 +4570,8 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
     phone: z.string().trim().min(7).max(40),
     serviceCode: z.string().trim().min(1).max(80),
     notes: z.string().trim().max(2500).optional().default(""),
+    promoCode: z.string().trim().max(50).optional().default(""),
+    referralSlug: z.string().trim().max(80).optional().default(""),
     photos: z.array(z.object({
       name: z.string().max(255),
       type: z.string().max(100).optional().default(""),
@@ -4617,12 +4619,16 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
           serviceType: parsed.serviceCode,
           label: parsed.serviceCode.replace(/_/g, " "),
         };
+        const normalizedPromoCode = parsed.promoCode ? parsed.promoCode.toUpperCase().trim() : "";
+        const referralSlug = parsed.referralSlug ? parsed.referralSlug.toLowerCase().trim() : "";
         const photoNames = parsed.photos.map((photo) => photo.name).filter(Boolean);
         const details = [
           "[QUICK REQUEST - CALL REQUIRED]",
           "Customer needs quote",
           `Service: ${service.label}`,
           "Source: 60-second quick request",
+          normalizedPromoCode ? `Referral code: ${normalizedPromoCode}` : "",
+          referralSlug ? `Rep page: ${referralSlug}` : "",
           parsed.notes ? `Notes: ${parsed.notes}` : "",
           photoNames.length ? `Photo files mentioned: ${photoNames.join(", ")}` : "",
         ].filter(Boolean).join("\n");
@@ -4648,6 +4654,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
           })),
           urgency: "normal",
           source: "quick_request",
+          promoCode: normalizedPromoCode || null,
         });
 
         let lead = await storage.createLead(leadData);
@@ -4657,6 +4664,33 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
             .where(eq(leads.id, lead.id))
             .returning();
           if (quoteRequestedLead) lead = quoteRequestedLead;
+        }
+        if (normalizedPromoCode || referralSlug) {
+          try {
+            let repUserId: string | null = null;
+            if (normalizedPromoCode || referralSlug) {
+              const [rep] = await db.select().from(marketingReps)
+                .where(normalizedPromoCode
+                  ? eq(marketingReps.promoCode, normalizedPromoCode)
+                  : eq(marketingReps.slug, referralSlug))
+                .limit(1);
+              if (rep) {
+                await db.insert(quoteAttributions).values({
+                  leadId: lead.id,
+                  userId: repUserId,
+                  attributionType: "marketing_rep_quick_request",
+                  promoCode: rep.promoCode,
+                  metadata: {
+                    source: "quick_request",
+                    referralSlug: rep.slug,
+                    serviceCode: parsed.serviceCode,
+                  },
+                });
+              }
+            }
+          } catch (attrErr) {
+            console.error("[quick-request] marketing attribution failed:", (attrErr as Error).message);
+          }
         }
         const creatorUserId = (req.session as any)?.userId || req.user?.id || null;
         if (creatorUserId) {

@@ -3004,6 +3004,8 @@ export type BookingQuoteItemInput = z.infer<typeof bookingQuoteItemInputSchema>;
 export const bookingQuoteRequestSchema = z.object({
   items: z.array(bookingQuoteItemInputSchema).min(1),
   source: z.string().optional(),
+  promoCode: z.string().trim().max(50).optional(),
+  referralSlug: z.string().trim().max(80).optional(),
   // Task #175 — JCMOVES tokens the customer wants to redeem against this
   // quote. Validated against the redemption rules (min 500 / increment
   // 500 / tier cap) on the server; rejected amounts surface as a quote

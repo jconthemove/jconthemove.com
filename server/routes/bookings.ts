@@ -36,6 +36,7 @@ import {
   serviceCatalog,
   users,
   workerProfiles,
+  marketingReps,
   quoteApprovals,
   quoteAttributions,
   bookingQuoteRequestSchema,
@@ -908,6 +909,8 @@ router.post("/bookings", async (req: Request, res: Response) => {
     const requestUser = await getRequestUser(req);
     const requestAuthority = await getAuthorityForUser(requestUser);
     const isWorkerCreated = body.source === "crew_add_job";
+    const marketingPromoCode = body.promoCode ? body.promoCode.toUpperCase().trim() : "";
+    const marketingReferralSlug = body.referralSlug ? body.referralSlug.toLowerCase().trim() : "";
     if (isWorkerCreated && !requestUser) {
       return res.status(401).json({
         error: "Authentication required",
@@ -981,10 +984,11 @@ router.post("/bookings", async (req: Request, res: Response) => {
           bookingId: booking.id,
           userId: requestUser.id,
           attributionType: requiresQuoteApproval ? "silver_quote_builder" : isWorkerCreated ? "worker_quote_builder" : "customer_quote_request",
-          promoCode: requestUser.referralCode || null,
+          promoCode: marketingPromoCode || requestUser.referralCode || null,
           metadata: {
             source: body.source || "api",
             authorityTier: requestAuthority.tier,
+            referralSlug: marketingReferralSlug || null,
             quoteTotal: quote.finalTotal,
             crewSummary: quote.items.map((item) => item.laborMeta).filter(Boolean),
           },
@@ -1009,6 +1013,28 @@ router.post("/bookings", async (req: Request, res: Response) => {
         }
       } catch (attrErr) {
         console.error("[bookings] worker attribution failed:", attrErr instanceof Error ? attrErr.message : attrErr);
+      }
+    } else if (marketingPromoCode || marketingReferralSlug) {
+      try {
+        const [rep] = await db.select().from(marketingReps)
+          .where(marketingPromoCode
+            ? eq(marketingReps.promoCode, marketingPromoCode)
+            : eq(marketingReps.slug, marketingReferralSlug))
+          .limit(1);
+        await db.insert(quoteAttributions).values({
+          bookingId: booking.id,
+          userId: null,
+          attributionType: "marketing_rep_booking",
+          promoCode: rep?.promoCode || marketingPromoCode || null,
+          metadata: {
+            source: body.source || "api",
+            referralSlug: rep?.slug || marketingReferralSlug || null,
+            quoteTotal: quote.finalTotal,
+            crewSummary: quote.items.map((item) => item.laborMeta).filter(Boolean),
+          },
+        });
+      } catch (attrErr) {
+        console.error("[bookings] marketing attribution failed:", attrErr instanceof Error ? attrErr.message : attrErr);
       }
     }
 

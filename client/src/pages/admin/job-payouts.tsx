@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Calculator, CheckCircle2, Coins, Loader2, Save, Search } from "lucide-react";
+import { Calculator, CheckCircle2, Coins, Download, Loader2, Save, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -182,8 +182,54 @@ export default function AdminJobPayoutsPage() {
 
   const defaultHours = selectedJob?.confirmedHours || 4;
 
+  const exportPayoutReport = () => {
+    if (!preview || !selectedJob) return;
+    const rows = [
+      ["Job", `${selectedJob.firstName} ${selectedJob.lastName}`],
+      ["Status", selectedJob.status],
+      ["Gross Revenue", preview.grossRevenue],
+      ["Guaranteed Labor", preview.guaranteedLaborTotal],
+      ["Total Expenses And Reserves", preview.totalExpensesAndReserves],
+      ["Net Job Profit", preview.netJobProfit],
+      ["Profit Per Labor Hour", preview.profitPerLaborHour],
+      ["Company Profit", preview.companyProfit],
+      ["Crew Bonus Pool", preview.crewBonusPool],
+      ["Referral Payout", preview.referralPayout],
+      ["Growth Fund", preview.growthFund],
+      [],
+      ["Worker", "Role", "Hours", "Hourly Pay", "Bonus Pay", "Total Pay", "JCMOVES"],
+      ...preview.workerPayouts.map((payout) => {
+        const employee = employees.find((item) => item.id === payout.workerId);
+        return [
+          employee ? employeeName(employee) : payout.workerId,
+          ROLE_LABELS[payout.roleOnJob],
+          payout.hoursWorked,
+          payout.hourlyPay,
+          payout.bonusPay,
+          payout.totalPay,
+          payout.jcmovesRewardAmount,
+        ];
+      }),
+    ];
+    const csv = rows.map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `jc-job-payout-${selectedJob.id}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="space-y-5">
+      <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 p-4">
+        <p className="text-xs font-black uppercase tracking-widest text-blue-300">Business cockpit</p>
+        <h2 className="mt-1 text-xl font-black text-white">Profit per labor hour is the main score.</h2>
+        <p className="mt-1 text-sm text-slate-300">
+          Preview payout math anytime. Final payout records stay manual until the job reaches Customer Approved.
+        </p>
+      </div>
       <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
         <Card className="bg-slate-900/50 border-slate-700/60">
           <CardHeader className="pb-3">
@@ -299,6 +345,10 @@ export default function AdminJobPayoutsPage() {
                       <div className="flex flex-wrap gap-2">
                         <Button variant="outline" onClick={seedAssignmentsFromPreview}>
                           Load workers
+                        </Button>
+                        <Button variant="outline" onClick={exportPayoutReport}>
+                          <Download className="h-4 w-4 mr-2" />
+                          Export CSV
                         </Button>
                         <Button onClick={() => assignmentMutation.mutate()} disabled={!assignments.length || assignmentMutation.isPending}>
                           {assignmentMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}

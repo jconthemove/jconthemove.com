@@ -191,10 +191,12 @@ function QuickRequestForm({
   services,
   onBuildQuote,
   onHome,
+  attribution,
 }: {
   services: CatalogService[];
   onBuildQuote: () => void;
   onHome: () => void;
+  attribution: { promoCode: string; referralSlug: string };
 }) {
   const { toast } = useToast();
   const fallbackServices = [
@@ -226,6 +228,8 @@ function QuickRequestForm({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/leads/quick-request", {
         ...form,
+        promoCode: attribution.promoCode || undefined,
+        referralSlug: attribution.referralSlug || undefined,
         photos: photoFiles,
       });
       return res.json() as Promise<QuickRequestResponse>;
@@ -253,7 +257,7 @@ function QuickRequestForm({
           <div>
             <h1 className="text-2xl sm:text-3xl font-black">Quick Request Sent</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Order {submitted.displayOrderNumber} is in the quote-needed queue. A specialist will call to finish the estimate.
+              Order {submitted.displayOrderNumber} is in the quote-needed queue. A coordinator will call or text you shortly to confirm the details.
             </p>
           </div>
           <div className="rounded-xl border border-border bg-card p-4 text-left text-sm">
@@ -273,11 +277,16 @@ function QuickRequestForm({
     <div className="max-w-3xl mx-auto px-4 pt-8">
       <div className="rounded-2xl border border-border bg-card p-5 sm:p-6 space-y-5">
         <div>
-          <p className="text-xs font-black uppercase tracking-widest text-blue-500">Post a job in 60 seconds</p>
-          <h1 className="mt-2 text-2xl sm:text-3xl font-black">Have someone call me</h1>
+          <p className="text-xs font-black uppercase tracking-widest text-blue-500">Fast local help</p>
+          <h1 className="mt-2 text-2xl sm:text-3xl font-black">Request a callback in 60 seconds</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Send the basics now. We keep the request on file and a specialist builds the quote with you.
+            Send the basics now. A coordinator reviews the job, calls or texts you, and finishes the quote with you.
           </p>
+          {attribution.promoCode && (
+            <p className="mt-3 inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-black text-emerald-600 dark:text-emerald-300">
+              Referral code {attribution.promoCode} attached
+            </p>
+          )}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
@@ -337,7 +346,7 @@ function QuickRequestForm({
             <Camera className="h-3.5 w-3.5" /> Photos (optional)
           </Label>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            Add photo names to the request so the specialist knows what to ask about on the callback.
+            Show us what needs moved, removed, delivered, or cleaned. Photos help us send the right crew and avoid surprise pricing.
           </p>
           <label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-bold hover:bg-muted">
             <Upload className="h-4 w-4" />
@@ -470,6 +479,15 @@ export default function MultiServiceBookPage() {
       }
     }
     return { codes: Array.from(codes), jumpStep, serviceAddress, linePrice, lineLabel, lineDetails };
+  }, []);
+
+  const attribution = useMemo(() => {
+    if (typeof window === "undefined") return { promoCode: "", referralSlug: "" };
+    const sp = new URLSearchParams(window.location.search);
+    return {
+      promoCode: (sp.get("promo") || sp.get("promoCode") || "").trim().toUpperCase(),
+      referralSlug: (sp.get("rep") || sp.get("ref") || "").trim().toLowerCase(),
+    };
   }, []);
 
   const [step, setStep] = useState<Step>("services");
@@ -856,6 +874,8 @@ export default function MultiServiceBookPage() {
         serviceAddress: serviceAddress.trim() || undefined,
         notes: combinedNotes || undefined,
         source: isWorker ? "crew_add_job" : "web_multi_book",
+        promoCode: attribution.promoCode || undefined,
+        referralSlug: attribution.referralSlug || undefined,
         ...((() => {
           // Re-clamp at submit so a stale state value can never bypass
           // the slider's tier/wallet cap (defense in depth — the effect
@@ -1082,7 +1102,7 @@ export default function MultiServiceBookPage() {
             </a>
           </div>
         </div>
-        <QuickRequestForm services={services} onBuildQuote={startBuilder} onHome={() => setLocation("/")} />
+        <QuickRequestForm services={services} onBuildQuote={startBuilder} onHome={() => setLocation("/")} attribution={attribution} />
       </div>
     );
   }
@@ -1103,11 +1123,16 @@ export default function MultiServiceBookPage() {
         </div>
         <div className="max-w-5xl mx-auto px-4 pt-8">
           <div className="mb-6 max-w-2xl">
-            <p className="text-xs font-black uppercase tracking-widest text-blue-500">Fast local booking</p>
-            <h1 className="mt-2 text-3xl sm:text-4xl font-black">How do you want to start?</h1>
+            <p className="text-xs font-black uppercase tracking-widest text-blue-500">Fast local help</p>
+            <h1 className="mt-2 text-3xl sm:text-4xl font-black">Tell us what needs done.</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Pick the fastest path. Quick requests get a callback. Build My Quote uses guided cards, icons, and filters.
+              Pick the fastest path. Request a callback in 60 seconds or build a detailed quote with address, schedule, photos, and job scope.
             </p>
+            {attribution.promoCode && (
+              <p className="mt-3 inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-black text-emerald-600 dark:text-emerald-300">
+                Referral code {attribution.promoCode} attached
+              </p>
+            )}
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <button type="button" onClick={() => setBookingMode("quick")} className="text-left rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-5 sm:p-6 transition-all hover:border-emerald-400" data-testid="entry-quick-request">

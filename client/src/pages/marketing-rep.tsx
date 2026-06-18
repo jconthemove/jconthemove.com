@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "wouter";
-import { ArrowLeft, CalendarCheck, CheckCircle2, Phone, Tag, Truck, Users } from "lucide-react";
+import { ArrowLeft, CalendarCheck, CheckCircle2, Copy, Phone, QrCode, Share2, Tag, Truck, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiRequest } from "@/lib/queryClient";
-import heroImage from "@assets/stock_images/professional_moving__96dea4c1.jpg";
+import heroImage from "@assets/IMG_20220818_061221927_HDR_1758501643284.jpg";
 
 type MarketingRep = {
   id: string;
@@ -45,7 +45,9 @@ export default function MarketingRepPage() {
   });
 
   const callHref = rep ? `tel:+${rep.phoneNumber.replace(/\D/g, "")}` : "#";
-  const quoteHref = rep ? `/quote?promo=${encodeURIComponent(rep.promoCode)}` : "/quote";
+  const quoteHref = rep ? `/book?mode=quick&promo=${encodeURIComponent(rep.promoCode)}&rep=${encodeURIComponent(rep.slug)}` : "/book";
+  const builderHref = rep ? `/book?mode=builder&promo=${encodeURIComponent(rep.promoCode)}&rep=${encodeURIComponent(rep.slug)}` : "/book";
+  const shareUrl = rep ? `${window.location.origin}/network/${rep.slug}` : "";
 
   async function trackCall() {
     if (!rep) return;
@@ -56,6 +58,15 @@ export default function MarketingRepPage() {
       });
     } catch {
       // Do not block the phone call if tracking fails.
+    }
+  }
+
+  async function copyShareLink() {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+    } catch {
+      // Clipboard may be blocked in some browsers; the visible URL still works.
     }
   }
 
@@ -98,20 +109,20 @@ export default function MarketingRepPage() {
 
           <div className="flex-1 grid md:grid-cols-[1fr_380px] gap-8 items-center py-10">
             <div className="max-w-2xl">
-              <div className="inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-1 text-xs font-bold text-amber-200 mb-5">
+              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-xs font-bold text-emerald-200 mb-5">
                 <Tag className="h-3.5 w-3.5" />
-                Use code {rep.promoCode} for 10% off
+                Verified JC ON THE MOVE rep - code {rep.promoCode}
               </div>
               <h1 className="text-4xl md:text-6xl font-black leading-tight tracking-normal">
                 {rep.brandName}
               </h1>
-              <p className="mt-4 text-xl md:text-2xl text-amber-200 font-bold">{rep.tagline}</p>
+              <p className="mt-4 text-xl md:text-2xl text-emerald-200 font-bold">{rep.tagline}</p>
               <p className="mt-4 text-zinc-200 text-base md:text-lg max-w-xl leading-relaxed">
-                {rep.audience} Every job is booked and completed through JC ON THE MOVE LLC.
+                {rep.audience} Book through this page and the request stays connected to {rep.displayName}, while scheduling, insurance, payment, and quality control stay with JC ON THE MOVE LLC.
               </p>
               <div className="mt-7 flex flex-col sm:flex-row gap-3">
                 <a href={callHref} onClick={trackCall}>
-                  <Button size="lg" className="w-full sm:w-auto bg-amber-400 hover:bg-amber-300 text-zinc-950 font-black">
+                  <Button size="lg" className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black">
                     <Phone className="mr-2 h-5 w-5" />
                     Call {rep.displayName}
                   </Button>
@@ -119,7 +130,12 @@ export default function MarketingRepPage() {
                 <Link href={quoteHref}>
                   <Button size="lg" variant="outline" className="w-full sm:w-auto border-white/30 bg-white/10 text-white hover:bg-white/20">
                     <CalendarCheck className="mr-2 h-5 w-5" />
-                    {rep.ctaLabel}
+                    Request Callback
+                  </Button>
+                </Link>
+                <Link href={builderHref}>
+                  <Button size="lg" variant="outline" className="w-full sm:w-auto border-white/30 bg-white/10 text-white hover:bg-white/20">
+                    Build Quote
                   </Button>
                 </Link>
               </div>
@@ -147,6 +163,20 @@ export default function MarketingRepPage() {
                   </div>
                   <p className="text-sm text-zinc-400 leading-relaxed">{rep.territory}</p>
                 </div>
+                <div className="mt-5 rounded-lg border border-white/10 bg-white/[0.04] p-3">
+                  <p className="text-xs font-black uppercase tracking-widest text-zinc-400">Shareable link</p>
+                  <p className="mt-2 break-all font-mono text-xs text-zinc-200">{shareUrl}</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <Button type="button" size="sm" variant="outline" className="border-white/20 bg-white/5 text-white hover:bg-white/10" onClick={copyShareLink}>
+                      <Copy className="mr-2 h-3.5 w-3.5" /> Copy
+                    </Button>
+                    <Link href={quoteHref}>
+                      <Button size="sm" className="w-full bg-blue-600 hover:bg-blue-500">
+                        <QrCode className="mr-2 h-3.5 w-3.5" /> Book
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -160,11 +190,11 @@ export default function MarketingRepPage() {
             <h2 className="mt-2 text-2xl font-black">One company, local faces.</h2>
           </div>
           <p className="text-zinc-400 leading-relaxed">
-            {rep.displayName} is the face of this service lane, while scheduling, insurance,
-            crew coordination, payment, and quality control stay under JC ON THE MOVE LLC.
+            {rep.displayName} can share this page anywhere: Facebook, text, QR cards, flyers, and repeat-customer follow-ups.
+            Every request uses code {rep.promoCode}, so leads, booked jobs, revenue, and commission can be measured in admin.
           </p>
           <div className="rounded-lg border border-white/10 bg-white/[0.03] p-4">
-            <p className="text-xs text-zinc-500 uppercase font-bold">This week&apos;s post idea</p>
+            <p className="text-xs text-zinc-500 uppercase font-bold flex items-center gap-2"><Share2 className="h-3.5 w-3.5" /> This week&apos;s post idea</p>
             <p className="mt-2 text-sm text-zinc-200 leading-relaxed">{weeklyPrompts[0] || rep.contentStrategy?.facebookPersonality}</p>
           </div>
         </div>
