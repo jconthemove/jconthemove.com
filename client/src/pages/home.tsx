@@ -54,6 +54,7 @@ const FALLBACK_TESTIMONIALS: Testimonial[] = [
 
 const HERO_IMAGE = brandedTruckImage;
 const CTA_IMAGE = truckTrailerYardImage;
+const MOVERS_ALBUM_URL = "https://photos.app.goo.gl/taQBHTwyP1z7DjXQA";
 
 const VISUAL_SERVICES = [
   {
@@ -91,6 +92,7 @@ const VISUAL_SERVICES = [
 ];
 
 const MORE_SERVICES = [
+  { label: "Just Ask", href: "/book?mode=quick&service=custom" },
   { label: "Handyman", href: "/book?mode=quick&service=handyman" },
   { label: "Window Cleaning", href: "/book?mode=quick&service=window_cleaning" },
   { label: "Snow", href: "/book?mode=quick&service=snow_removal" },
@@ -174,6 +176,9 @@ function VisualStoryCarousel({ onQuote }: { onQuote: () => void }) {
             <span className="rounded-full border border-white/15 px-3 py-1">Moving</span>
             <span className="rounded-full border border-white/15 px-3 py-1">Junk</span>
             <span className="rounded-full border border-white/15 px-3 py-1">Local Crew</span>
+            <a href={MOVERS_ALBUM_URL} target="_blank" rel="noreferrer" className="rounded-full border border-blue-400/40 bg-blue-500/10 px-3 py-1 text-blue-200 hover:bg-blue-500/20">
+              Movers Album
+            </a>
           </div>
           <Button onClick={onQuote} className="mt-6 h-11 rounded-lg bg-blue-600 px-6 font-black hover:bg-blue-500">
             Get My Price <ArrowRight className="ml-2 h-4 w-4" />
@@ -347,6 +352,9 @@ export default function HomePage() {
               <span className="text-blue-300">Junk removal</span>
               <span>Delivery</span>
               <span className="text-emerald-300">Cleanup help</span>
+              <button type="button" onClick={() => setLocation("/book?mode=quick&service=custom")} className="text-amber-200 underline decoration-amber-300/40 underline-offset-4 hover:text-amber-100">
+                Just ask
+              </button>
             </p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
               <Button onClick={() => setLocation("/book?mode=quick&service=moving")} className="h-12 rounded-lg bg-blue-600 px-8 text-base font-black hover:bg-blue-500">
@@ -374,6 +382,9 @@ export default function HomePage() {
               <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-blue-300" /> Quick callback or guided quote</p>
               <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-blue-300" /> Photos, videos, or album links</p>
               <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-blue-300" /> Local crew confirmation</p>
+              <a href={MOVERS_ALBUM_URL} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-blue-200 hover:text-blue-100">
+                <CheckCircle2 className="h-4 w-4 text-blue-300" /> View real movers album
+              </a>
             </div>
             <Button onClick={() => setLocation("/book?mode=quick&service=moving")} className="mt-6 h-12 w-full rounded-lg bg-emerald-600 font-black hover:bg-emerald-500">
               Start In 60 Seconds
