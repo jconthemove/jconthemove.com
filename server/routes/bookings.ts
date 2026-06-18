@@ -36,6 +36,7 @@ import {
   serviceCatalog,
   users,
   workerProfiles,
+  promoCodes,
   marketingReps,
   quoteApprovals,
   quoteAttributions,
@@ -91,6 +92,20 @@ async function getAuthorityForUser(user: any) {
   const [profile] = await db.select().from(workerProfiles).where(eq(workerProfiles.userId, user.id)).limit(1);
   const tier = normalizeWorkerTier(profile?.authorityTier, user.role);
   return { tier, rank: tierRank[tier], profile };
+}
+
+async function resolveMarketingRepUserId(promoCode: string): Promise<string | null> {
+  const [ownedPromo] = await db.select({ referralUserId: promoCodes.referralUserId })
+    .from(promoCodes)
+    .where(eq(promoCodes.code, promoCode))
+    .limit(1);
+  if (ownedPromo?.referralUserId) return ownedPromo.referralUserId;
+
+  const [workerProfile] = await db.select({ userId: workerProfiles.userId })
+    .from(workerProfiles)
+    .where(eq(workerProfiles.promoCode, promoCode))
+    .limit(1);
+  return workerProfile?.userId || null;
 }
 
 function toBundleLike(row: BundleDefinition): BundleDefinitionLike {
@@ -1014,18 +1029,22 @@ router.post("/bookings", async (req: Request, res: Response) => {
       } catch (attrErr) {
         console.error("[bookings] worker attribution failed:", attrErr instanceof Error ? attrErr.message : attrErr);
       }
-    } else if (marketingPromoCode || marketingReferralSlug) {
+    }
+
+    if (marketingPromoCode || marketingReferralSlug) {
       try {
         const [rep] = await db.select().from(marketingReps)
           .where(marketingPromoCode
             ? eq(marketingReps.promoCode, marketingPromoCode)
             : eq(marketingReps.slug, marketingReferralSlug))
           .limit(1);
+        const repPromoCode = rep?.promoCode || marketingPromoCode || "";
+        const repUserId = repPromoCode ? await resolveMarketingRepUserId(repPromoCode) : null;
         await db.insert(quoteAttributions).values({
           bookingId: booking.id,
-          userId: null,
+          userId: repUserId,
           attributionType: "marketing_rep_booking",
-          promoCode: rep?.promoCode || marketingPromoCode || null,
+          promoCode: repPromoCode || null,
           metadata: {
             source: body.source || "api",
             referralSlug: rep?.slug || marketingReferralSlug || null,
