@@ -13,7 +13,7 @@ import {
   MapPin, Calendar, Loader2, Phone, Mail, Users, DollarSign, Bitcoin,
   CheckCircle2, Clock, Send, Star, ArrowLeftRight, ChevronRight,
   Coins, Search, Truck, Minus, Plus, RefreshCw, Receipt, UserCheck,
-  UserX, XCircle, Check, X
+  UserX, XCircle, Check, X, Image, Tag
 } from "lucide-react";
 import type { User } from "@shared/schema";
 import { PaymentStatusPill } from "@/components/PaymentStatusPill";
@@ -78,6 +78,9 @@ type Lead = {
   details?: string;
   quoteNotes?: string;
   dispatchNotes?: string;
+  source?: string | null;
+  promoCode?: string | null;
+  photos?: Array<{ url?: string; mimeType?: string; name?: string; source?: string; timestamp?: string }>;
   reviewToken?: string;
   archivedAt?: string | null;
 };
@@ -110,6 +113,14 @@ function extractCity(address: string | null | undefined): string {
   return parts[1] || parts[0] || "";
 }
 
+function isQuickRequestLead(lead: Lead): boolean {
+  return lead.source === "quick_request" || (lead.details || "").includes("[QUICK REQUEST");
+}
+
+function leadPhotoCount(lead: Lead): number {
+  return Array.isArray(lead.photos) ? lead.photos.length : 0;
+}
+
 function AdminJobCard({ lead, onClick, employees }: {
   lead: Lead;
   onClick: () => void;
@@ -129,6 +140,8 @@ function AdminJobCard({ lead, onClick, employees }: {
 
   const city = extractCity(lead.fromAddress);
   const hasPremiums = lead.hasHotTub || lead.hasPiano || lead.hasHeavySafe || lead.hasPoolTable;
+  const quickRequest = isQuickRequestLead(lead);
+  const photoCount = leadPhotoCount(lead);
 
   return (
     <Card
@@ -149,6 +162,11 @@ function AdminJobCard({ lead, onClick, employees }: {
                 </div>
                 <div className="flex items-center gap-2 flex-wrap mt-0.5">
                   <p className="text-xs text-slate-400">{SERVICE_LABELS[lead.serviceType] || lead.serviceType}</p>
+                  {quickRequest && (
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-300 bg-emerald-500/10 border border-emerald-500/25 rounded-full px-2 py-0.5">
+                      Quick request
+                    </span>
+                  )}
                   {city && (
                     <span className="text-xs text-slate-500 flex items-center gap-0.5">
                       <MapPin className="h-3 w-3" />{city}
@@ -190,6 +208,18 @@ function AdminJobCard({ lead, onClick, employees }: {
                 {crewSlotsFilled}/{crewSlotsNeeded}
                 {crewFull ? " full" : " open"}
               </span>
+              {photoCount > 0 && (
+                <span className="text-xs text-blue-300 flex items-center gap-1">
+                  <Image className="h-3 w-3" />
+                  {photoCount} photo{photoCount === 1 ? "" : "s"}
+                </span>
+              )}
+              {lead.promoCode && (
+                <span className="text-xs text-amber-300 flex items-center gap-1">
+                  <Tag className="h-3 w-3" />
+                  {lead.promoCode}
+                </span>
+              )}
             </div>
             {hasPremiums && (
               <div className="mt-1.5 flex flex-wrap gap-1">
@@ -447,6 +477,8 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
   const effectiveDate = lead.confirmedDate || lead.moveDate;
   const displayPrice = totalPrice || lead.totalPrice;
   const displayBasePrice = basePrice || lead.basePrice;
+  const quickRequest = isQuickRequestLead(lead);
+  const photos = Array.isArray(lead.photos) ? lead.photos : [];
 
   return (
     <Sheet open={open} onOpenChange={v => !v && onClose()}>
@@ -464,6 +496,11 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
               <div className="flex items-center gap-2 mt-1 flex-wrap">
                 <StatusBadge status={lead.status} />
                 <span className="text-xs text-slate-400">{SERVICE_LABELS[lead.serviceType] || lead.serviceType}</span>
+                {quickRequest && (
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-300 bg-emerald-500/10 border border-emerald-500/25 rounded-full px-2 py-0.5">
+                    Quick request
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -484,6 +521,8 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
             } />
             <POSRow label="Date" value={formatDateShort(effectiveDate)} />
             {lead.arrivalWindow && <POSRow label="Arrival" value={lead.arrivalWindow} />}
+            {lead.promoCode && <POSRow label="Referral Code" value={<span className="font-mono text-amber-300">{lead.promoCode}</span>} />}
+            {photos.length > 0 && <POSRow label="Photos" value={`${photos.length} attached`} />}
             {lead.fromAddress && <POSRow label="From" value={<span className="text-xs text-right max-w-[200px] block">{lead.fromAddress}</span>} />}
             {lead.toAddress && <POSRow label="To" value={<span className="text-xs text-right max-w-[200px] block">{lead.toAddress}</span>} />}
           </div>
@@ -911,6 +950,27 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
             <div className="bg-slate-800/40 rounded-xl p-3">
               <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Quote Notes</p>
               <p className="text-sm text-slate-300">{lead.quoteNotes}</p>
+            </div>
+          )}
+          {photos.length > 0 && (
+            <div className="bg-slate-800/40 rounded-xl p-3">
+              <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2 flex items-center gap-1">
+                <Image className="h-3 w-3" /> Photos
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                {photos.slice(0, 6).map((photo, index) => (
+                  <div key={`${photo.name || "photo"}-${index}`} className="relative aspect-square overflow-hidden rounded-lg border border-slate-700 bg-slate-900">
+                    {photo.url ? (
+                      <img src={photo.url} alt={photo.name || `Job photo ${index + 1}`} className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-xs text-slate-500">No preview</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {photos.length > 6 && (
+                <p className="mt-2 text-xs text-slate-500">{photos.length - 6} more photo{photos.length - 6 === 1 ? "" : "s"} on the full lead.</p>
+              )}
             </div>
           )}
           {lead.details && (
