@@ -152,3 +152,176 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+.marketing-rep-print {
+  display: none;
+}
+
+@media print {
+  @page {
+    margin: 0.35in;
+  }
+
+  .marketing-rep-screen {
+    display: none !important;
+  }
+
+  .marketing-rep-print {
+    display: block;
+    background: #ffffff;
+    color: #111827;
+    font-family: Inter, system-ui, sans-serif;
+  }
+
+  .marketing-rep-print-card {
+    border: 3px solid #111827;
+    border-radius: 14px;
+    padding: 28px;
+    min-height: calc(100vh - 0.7in);
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .marketing-rep-print-header,
+  .marketing-rep-print-main,
+  .marketing-rep-print-footer {
+    display: grid;
+    gap: 20px;
+  }
+
+  .marketing-rep-print-header {
+    grid-template-columns: 1fr auto;
+    align-items: start;
+    border-bottom: 2px solid #111827;
+    padding-bottom: 20px;
+  }
+
+  .marketing-rep-print-kicker {
+    margin: 0 0 8px;
+    color: #047857;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 0.18em;
+  }
+
+  .marketing-rep-print h1 {
+    margin: 0;
+    font-size: 42px;
+    line-height: 1;
+    font-weight: 900;
+    letter-spacing: 0;
+  }
+
+  .marketing-rep-print-tagline {
+    margin: 10px 0 0;
+    font-size: 16px;
+    font-weight: 800;
+    color: #374151;
+  }
+
+  .marketing-rep-print-code {
+    border: 2px solid #047857;
+    border-radius: 10px;
+    padding: 12px 16px;
+    text-align: center;
+    min-width: 150px;
+  }
+
+  .marketing-rep-print-code span,
+  .marketing-rep-print-footer span {
+    display: block;
+    color: #6b7280;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .marketing-rep-print-code strong {
+    display: block;
+    margin-top: 4px;
+    color: #047857;
+    font-size: 24px;
+    font-weight: 900;
+  }
+
+  .marketing-rep-print-main {
+    grid-template-columns: 1fr 220px;
+    align-items: start;
+    flex: 1;
+  }
+
+  .marketing-rep-print-copy {
+    margin: 0;
+    max-width: 560px;
+    font-size: 17px;
+    line-height: 1.45;
+    color: #1f2937;
+  }
+
+  .marketing-rep-print-services {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 22px;
+  }
+
+  .marketing-rep-print-services div {
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    padding: 12px;
+    break-inside: avoid;
+  }
+
+  .marketing-rep-print-services strong {
+    display: block;
+    font-size: 14px;
+    font-weight: 900;
+    color: #111827;
+  }
+
+  .marketing-rep-print-services span {
+    display: block;
+    margin-top: 4px;
+    font-size: 11px;
+    line-height: 1.35;
+    color: #4b5563;
+  }
+
+  .marketing-rep-print-qr {
+    border: 2px solid #111827;
+    border-radius: 12px;
+    padding: 14px;
+    text-align: center;
+  }
+
+  .marketing-rep-print-qr img,
+  .marketing-rep-print-qr svg {
+    width: 180px;
+    height: 180px;
+    margin: 0 auto;
+  }
+
+  .marketing-rep-print-qr p {
+    margin: 10px 0 0;
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .marketing-rep-print-footer {
+    grid-template-columns: minmax(180px, 0.55fr) 1fr;
+    border-top: 2px solid #111827;
+    padding-top: 18px;
+  }
+
+  .marketing-rep-print-footer strong {
+    display: block;
+    margin-top: 6px;
+    font-size: 15px;
+    font-weight: 900;
+    word-break: break-word;
+  }
+}

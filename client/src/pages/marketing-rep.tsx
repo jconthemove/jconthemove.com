@@ -156,7 +156,8 @@ export default function MarketingRepPage() {
   const weeklyPrompts = rep.contentStrategy?.weeklyPrompts || [];
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white">
+    <>
+    <div className="marketing-rep-screen min-h-screen bg-zinc-950 text-white">
       <section className="relative min-h-[88vh] overflow-hidden">
         <img src={heroImage} alt="" className="absolute inset-0 h-full w-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-r from-zinc-950 via-zinc-950/78 to-zinc-950/30" />
@@ -339,5 +340,56 @@ export default function MarketingRepPage() {
         </div>
       </section>
     </div>
+    <section className="marketing-rep-print" aria-label={`Printable referral sheet for ${rep.displayName}`}>
+      <div className="marketing-rep-print-card">
+        <div className="marketing-rep-print-header">
+          <div>
+            <p className="marketing-rep-print-kicker">JC ON THE MOVE VERIFIED REP</p>
+            <h1>{rep.brandName}</h1>
+            <p className="marketing-rep-print-tagline">{rep.tagline}</p>
+          </div>
+          <div className="marketing-rep-print-code">
+            <span>Code</span>
+            <strong>{rep.promoCode}</strong>
+          </div>
+        </div>
+
+        <div className="marketing-rep-print-main">
+          <div>
+            <p className="marketing-rep-print-copy">
+              Fast local help for moving, junk removal, delivery, cleanup, and labor work. Scan the code or use the link to request a callback with {rep.displayName}.
+            </p>
+            <div className="marketing-rep-print-services">
+              {coreServiceLinks.map((service) => (
+                <div key={service.service}>
+                  <strong>{service.label}</strong>
+                  <span>{service.note}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="marketing-rep-print-qr">
+            {qrImageUrl ? (
+              <img src={qrImageUrl} alt={`QR code for ${rep.displayName}`} />
+            ) : (
+              <QrCode />
+            )}
+            <p>Scan to book</p>
+          </div>
+        </div>
+
+        <div className="marketing-rep-print-footer">
+          <div>
+            <span>Call or text</span>
+            <strong>{formatPhone(rep.phoneNumber)}</strong>
+          </div>
+          <div>
+            <span>Booking page</span>
+            <strong>{shareUrl}</strong>
+          </div>
+        </div>
+      </div>
+    </section>
+    </>
   );
 }
