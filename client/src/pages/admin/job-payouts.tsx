@@ -149,6 +149,26 @@ export default function AdminJobPayoutsPage() {
     );
   }, [jobs, search]);
 
+  const payoutQueueSummary = useMemo(() => {
+    const finalized = jobs.filter((job) => !!job.payout);
+    const totalNetProfit = finalized.reduce((sum, job) => sum + numberValue(job.payout?.netJobProfit), 0);
+    const averageProfitPerLaborHour = finalized.length
+      ? finalized.reduce((sum, job) => sum + numberValue(job.payout?.profitPerLaborHour), 0) / finalized.length
+      : 0;
+    const customerApprovedAwaitingPayout = jobs.filter((job) => canFinalizeProfitSharePayout(job.status) && !job.payout).length;
+    const manualPendingWorkers = finalized.reduce(
+      (sum, job) => sum + (job.payout?.workerPayouts || []).filter((payout) => payout.payoutStatus === "manual_pending").length,
+      0,
+    );
+    return {
+      finalizedCount: finalized.length,
+      totalNetProfit,
+      averageProfitPerLaborHour,
+      customerApprovedAwaitingPayout,
+      manualPendingWorkers,
+    };
+  }, [jobs]);
+
   const exportVisibleJobsReport = () => {
     const rows = [
       [
@@ -318,6 +338,13 @@ export default function AdminJobPayoutsPage() {
         <p className="mt-1 text-sm text-slate-300">
           Preview payout math anytime. Final payout records stay manual until the job reaches Customer Approved.
         </p>
+      </div>
+      <div className="grid gap-3 md:grid-cols-5">
+        <Metric label="Payout reports" value={String(payoutQueueSummary.finalizedCount)} />
+        <Metric label="Net profit tracked" value={money(payoutQueueSummary.totalNetProfit)} accent={payoutQueueSummary.totalNetProfit >= 0 ? "green" : "red"} />
+        <Metric label="Avg profit / labor hour" value={money(payoutQueueSummary.averageProfitPerLaborHour)} accent="blue" />
+        <Metric label="Approved awaiting payout" value={String(payoutQueueSummary.customerApprovedAwaitingPayout)} />
+        <Metric label="Worker payouts pending" value={String(payoutQueueSummary.manualPendingWorkers)} />
       </div>
       <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
         <Card className="bg-slate-900/50 border-slate-700/60">
