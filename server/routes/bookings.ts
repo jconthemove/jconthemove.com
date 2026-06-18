@@ -1267,10 +1267,54 @@ function rollupBookingStatus(
 type BookingWithItems = Booking & {
   items: BookingServiceItem[];
   rolledUpStatus: string;
+  attributions?: BookingAttribution[];
+  attributionSummary?: BookingAttributionSummary;
 };
+
+type BookingAttribution = typeof quoteAttributions.$inferSelect;
+
+type BookingAttributionSummary = {
+  source: string | null;
+  promoCode: string | null;
+  referralSlug: string | null;
+  attributionTypes: string[];
+  hasMarketingRep: boolean;
+  hasWorkerCreator: boolean;
+};
+
+function getAttributionMetadata(attr: BookingAttribution): Record<string, unknown> {
+  if (attr.metadata && typeof attr.metadata === "object" && !Array.isArray(attr.metadata)) {
+    return attr.metadata as Record<string, unknown>;
+  }
+  return {};
+}
+
+function firstStringValue(values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function summarizeBookingAttribution(attrs: BookingAttribution[]): BookingAttributionSummary {
+  const metadata = attrs.map(getAttributionMetadata);
+  const attributionTypes = Array.from(new Set(attrs.map((attr) => attr.attributionType)));
+
+  return {
+    source: firstStringValue(metadata.map((meta) => meta.source)),
+    promoCode: firstStringValue(attrs.map((attr) => attr.promoCode)),
+    referralSlug: firstStringValue(metadata.map((meta) => meta.referralSlug)),
+    attributionTypes,
+    hasMarketingRep: attributionTypes.some((type) => type.includes("marketing_rep")),
+    hasWorkerCreator: attributionTypes.some(
+      (type) => type.includes("worker") || type.includes("silver_quote_builder"),
+    ),
+  };
+}
 
 async function loadBookingsWithChildren(
   parents: Booking[],
+  options: { includeAttribution?: boolean } = {},
 ): Promise<BookingWithItems[]> {
   if (parents.length === 0) return [];
   const ids = parents.map((p) => p.id);
@@ -1285,9 +1329,33 @@ async function loadBookingsWithChildren(
     arr.push(it);
     byBooking.set(it.bookingId, arr);
   }
+
+  const byBookingAttribution = new Map<string, BookingAttribution[]>();
+  if (options.includeAttribution) {
+    const attributions = await db
+      .select()
+      .from(quoteAttributions)
+      .where(inArray(quoteAttributions.bookingId, ids))
+      .orderBy(asc(quoteAttributions.createdAt));
+
+    for (const attr of attributions) {
+      if (!attr.bookingId) continue;
+      const arr = byBookingAttribution.get(attr.bookingId) ?? [];
+      arr.push(attr);
+      byBookingAttribution.set(attr.bookingId, arr);
+    }
+  }
+
   return parents.map((p) => {
     const children = byBooking.get(p.id) ?? [];
-    return { ...p, items: children, rolledUpStatus: rollupBookingStatus(p.status, children) };
+    const base = { ...p, items: children, rolledUpStatus: rollupBookingStatus(p.status, children) };
+    if (!options.includeAttribution) return base;
+    const attributions = byBookingAttribution.get(p.id) ?? [];
+    return {
+      ...base,
+      attributions,
+      attributionSummary: summarizeBookingAttribution(attributions),
+    };
   });
 }
 
@@ -1332,7 +1400,7 @@ router.get("/admin/bookings", isAuthenticated, async (req: any, res: Response) =
       .orderBy(desc(bookings.createdAt))
       .limit(Number(lim))
       .offset(Number(off));
-    const withChildren = await loadBookingsWithChildren(parents);
+    const withChildren = await loadBookingsWithChildren(parents, { includeAttribution: true });
     return res.json({ bookings: withChildren, total: withChildren.length });
   } catch (err) {
     console.error("[admin/bookings] error:", err);
@@ -1346,7 +1414,7 @@ router.get("/admin/bookings/:id", isAuthenticated, async (req: any, res: Respons
   try {
     const [parent] = await db.select().from(bookings).where(eq(bookings.id, req.params.id)).limit(1);
     if (!parent) return res.status(404).json({ error: "Booking not found" });
-    const [withChildren] = await loadBookingsWithChildren([parent]);
+    const [withChildren] = await loadBookingsWithChildren([parent], { includeAttribution: true });
     const auditLog = await db
       .select()
       .from(bookingDiscountAuditLog)
