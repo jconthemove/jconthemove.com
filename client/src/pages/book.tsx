@@ -123,6 +123,43 @@ type QuickRequestPhoto = {
 const QUICK_REQUEST_MAX_PHOTOS = 5;
 const QUICK_REQUEST_MAX_PHOTO_BYTES = 3 * 1024 * 1024;
 
+const SERVICE_CODE_ALIASES: Record<string, string> = {
+  moving: "moving",
+  move: "moving",
+  movers: "moving",
+  junk: "junk_removal",
+  junk_removal: "junk_removal",
+  "junk-removal": "junk_removal",
+  hauling: "junk_removal",
+  cleanup: "cleaning",
+  cleanout: "cleaning",
+  cleaning: "cleaning",
+  "cleanup-labor": "cleaning",
+  snow: "snow_removal",
+  snow_removal: "snow_removal",
+  "snow-removal": "snow_removal",
+  handyman: "handyman",
+  window: "window_cleaning",
+  windows: "window_cleaning",
+  window_cleaning: "window_cleaning",
+  "window-cleaning": "window_cleaning",
+  "trash-valet": "trash_valet",
+  trash_valet: "trash_valet",
+  demolition: "demolition",
+  demo: "demolition",
+  flooring: "flooring",
+  painting: "painting",
+  roofing: "roofing",
+  labor: "labor",
+  delivery: "delivery",
+  deliveries: "delivery",
+};
+
+function normalizeServiceCodeParam(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  return SERVICE_CODE_ALIASES[normalized] ?? normalized;
+}
+
 const STEPS = ["services", "address", "configure", "contact", "safety", "review"] as const;
 type Step = (typeof STEPS)[number];
 const STEP_LABELS: Record<Step, string> = {
@@ -543,33 +580,18 @@ export default function MultiServiceBookPage() {
     const sp = new URLSearchParams(window.location.search);
     const codes = new Set<string>();
     const multi = sp.get("services");
-    if (multi) multi.split(",").map((c) => c.trim()).filter(Boolean).forEach((c) => codes.add(c));
+    if (multi) {
+      multi.split(",")
+        .map((c) => normalizeServiceCodeParam(c))
+        .filter(Boolean)
+        .forEach((c) => codes.add(c));
+    }
     // Single-service alias used by the existing home tiles (e.g. ?service=moving).
     // Tile values use slug-style codes that may differ from catalog codes; we
     // normalise the few legacy aliases here.
     const single = sp.get("service");
     if (single) {
-      const aliases: Record<string, string> = {
-        moving: "moving",
-        junk: "junk_removal",
-        "junk-removal": "junk_removal",
-        cleaning: "cleaning",
-        snow: "snow_removal",
-        "snow-removal": "snow_removal",
-        handyman: "handyman",
-        window: "window_cleaning",
-        "window-cleaning": "window_cleaning",
-        "trash-valet": "trash_valet",
-        trash_valet: "trash_valet",
-        demolition: "demolition",
-        flooring: "flooring",
-        painting: "painting",
-        roofing: "roofing",
-        labor: "labor",
-        delivery: "delivery",
-      };
-      const resolved = aliases[single.toLowerCase()] ?? single;
-      codes.add(resolved);
+      codes.add(normalizeServiceCodeParam(single));
     }
     const stepParam = sp.get("step");
     const jumpStep = stepParam && (STEPS as readonly string[]).includes(stepParam)
