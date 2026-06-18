@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "wouter";
-import { ArrowLeft, CalendarCheck, CheckCircle2, Copy, Phone, QrCode, Share2, Tag, Truck, Users } from "lucide-react";
+import { ArrowLeft, CalendarCheck, CheckCircle2, Copy, Download, Phone, Printer, QrCode, Share2, Tag, Truck, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiRequest } from "@/lib/queryClient";
@@ -33,7 +33,7 @@ const coreServiceLinks = [
   },
   {
     label: "Junk Removal",
-    service: "junk-removal",
+    service: "junk_removal",
     note: "Cleanouts, furniture, trash piles, and haul-away jobs",
   },
   {
@@ -43,7 +43,7 @@ const coreServiceLinks = [
   },
   {
     label: "Cleanup / Labor",
-    service: "cleanup-labor",
+    service: "cleaning",
     note: "Extra hands for garages, yards, events, and jobsite cleanup",
   },
 ];
@@ -119,6 +119,16 @@ export default function MarketingRepPage() {
       }
     }
     await copyShareLink();
+  }
+
+  function downloadQrCode() {
+    if (!rep || !qrImageUrl) return;
+    const anchor = document.createElement("a");
+    anchor.href = qrImageUrl;
+    anchor.download = `jc-on-the-move-${rep.slug}-qr.svg`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
   }
 
   if (isLoading) {
@@ -255,6 +265,16 @@ export default function MarketingRepPage() {
                   <div className="mt-3 grid grid-cols-[1fr_auto] items-end gap-3">
                     <p className="min-w-0 break-all font-mono text-[11px] text-zinc-200">{shareUrl}</p>
                     <div className="rounded-md bg-zinc-950 px-2.5 py-1.5 text-xs font-black text-amber-200">{rep.promoCode}</div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <Button type="button" size="sm" variant="outline" className="border-white/20 bg-white/5 text-white hover:bg-white/10" onClick={downloadQrCode}>
+                      <Download className="mr-2 h-3.5 w-3.5" />
+                      Save QR
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" className="border-white/20 bg-white/5 text-white hover:bg-white/10" onClick={() => window.print()}>
+                      <Printer className="mr-2 h-3.5 w-3.5" />
+                      Print Page
+                    </Button>
                   </div>
                 </div>
               </CardContent>
