@@ -14,6 +14,7 @@ import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { extractCustomerMediaLink } from "@/lib/lead-details";
 import { formatOrderNumber } from "@shared/schema";
 import { useAuth } from "@/hooks/useAuth";
 import { CrewSuggestionsDialog } from "@/components/crew-suggestions-dialog";
@@ -779,6 +780,7 @@ export default function LeadDetailPage() {
       tokens: Math.round(baseTokens * (1 + onTimeBonus + ratingBonus)) 
     },
   };
+  const customerMediaLink = extractCustomerMediaLink(lead.details);
 
   // Filter rewards related to this lead
   const leadRewards = rewards.filter(r => r.referenceId === lead.id);
@@ -1319,6 +1321,29 @@ export default function LeadDetailPage() {
                     {lead.details && (
                       <>
                         <Separator />
+                        {customerMediaLink && (
+                          <div className="rounded-lg border border-blue-500/25 bg-blue-500/10 p-3">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                              <div className="min-w-0">
+                                <p className="text-xs font-black uppercase tracking-widest text-blue-600 dark:text-blue-300">Customer Media Link</p>
+                                <a
+                                  href={customerMediaLink}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="mt-1 block truncate text-sm font-medium text-blue-700 underline-offset-2 hover:underline dark:text-blue-200"
+                                >
+                                  {customerMediaLink}
+                                </a>
+                              </div>
+                              <Button asChild size="sm" variant="outline" className="shrink-0">
+                                <a href={customerMediaLink} target="_blank" rel="noreferrer">
+                                  <ExternalLink className="mr-2 h-4 w-4" />
+                                  Open Media
+                                </a>
+                              </Button>
+                            </div>
+                          </div>
+                        )}
                         <div>
                           <p className="text-xs text-muted-foreground mb-1.5">Additional Details</p>
                           <p className="text-sm bg-muted p-3 rounded">{lead.details}</p>

@@ -1,9 +1,10 @@
 import { useLocation } from "wouter";
-import { Phone, Mail, MapPin, Calendar, ChevronRight, Trash2, Users, DollarSign, Zap, Copy, Hash } from "lucide-react";
+import { Phone, Mail, MapPin, Calendar, ChevronRight, Trash2, Users, DollarSign, Zap, Copy, Hash, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getStatusColors } from "@/lib/job-status";
+import { extractCustomerMediaLink } from "@/lib/lead-details";
 import { formatOrderNumber } from "@shared/schema";
 
 export const SERVICE_LABELS: Record<string, string> = {
@@ -67,6 +68,7 @@ export function JobCard({ lead, onDelete, showContact = true, showTokens = true,
   const sc = getStatusColors(lead.status ?? "");
   const serviceLabel = SERVICE_LABELS[lead.serviceType ?? ""] ?? (lead.serviceType ?? "Service");
   const badgeColor = getServiceBadgeColor(lead.serviceType ?? "");
+  const customerMediaLink = extractCustomerMediaLink(lead.details);
 
   const displayPrice = lead.totalPrice || lead.estimatedTotal || lead.basePrice;
   const earnTokens = displayPrice ? Math.round(parseFloat(displayPrice) * EARN_RATE) : null;
@@ -193,6 +195,18 @@ export function JobCard({ lead, onDelete, showContact = true, showTokens = true,
         {/* Details snippet */}
         {!compact && lead.details && (
           <div className="mt-3 bg-slate-700/40 px-3 py-2 rounded-lg">
+            {customerMediaLink && (
+              <a
+                href={customerMediaLink}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="mb-2 inline-flex items-center gap-1.5 rounded-md border border-blue-500/30 bg-blue-500/10 px-2 py-1 text-[11px] font-bold text-blue-300 hover:bg-blue-500/20"
+              >
+                <ExternalLink className="h-3 w-3" />
+                Open customer media
+              </a>
+            )}
             <p className="text-xs text-slate-300 line-clamp-2">{lead.details}</p>
           </div>
         )}
