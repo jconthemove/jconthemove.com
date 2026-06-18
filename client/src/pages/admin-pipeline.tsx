@@ -320,9 +320,32 @@ interface AdminBooking {
   rolledUpStatus: string;
   createdAt: string;
   items: BookingChild[];
+  attributionSummary?: {
+    source: string | null;
+    promoCode: string | null;
+    referralSlug: string | null;
+    attributionTypes: string[];
+    hasMarketingRep: boolean;
+    hasWorkerCreator: boolean;
+  };
 }
 
 const CHILD_STATUSES = ["pending", "scheduled", "in_progress", "completed", "cancelled"] as const;
+
+function formatAttributionLabel(value?: string | null): string | null {
+  if (!value) return null;
+  return value
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getBookingSourceLabel(booking: AdminBooking): string {
+  const summary = booking.attributionSummary;
+  if (!summary) return "Direct";
+  if (summary.hasMarketingRep) return "Rep booking";
+  if (summary.hasWorkerCreator) return "Worker quote";
+  return formatAttributionLabel(summary.source) || "Direct";
+}
 
 function ChildRow({ bookingId, item }: { bookingId: string; item: BookingChild }) {
   const { toast } = useToast();
@@ -518,6 +541,8 @@ function DiscountOverrideButton({ booking }: { booking: AdminBooking }) {
 function BookingRow({ booking }: { booking: AdminBooking }) {
   const [open, setOpen] = useState(false);
   const sc = getStatusColors(booking.rolledUpStatus || booking.status);
+  const sourceLabel = getBookingSourceLabel(booking);
+  const attribution = booking.attributionSummary;
   return (
     <div
       data-testid={`booking-row-${booking.id}`}
@@ -538,6 +563,18 @@ function BookingRow({ booking }: { booking: AdminBooking }) {
             {booking.bundleAppliedCode && (
               <Badge variant="outline" className="text-xs border-amber-600/50 text-amber-400 py-0">
                 {booking.bundleAppliedCode}
+              </Badge>
+            )}
+            <Badge
+              variant="outline"
+              className="text-xs border-blue-600/50 text-blue-300 py-0"
+              data-testid={`booking-attribution-${booking.id}`}
+            >
+              {sourceLabel}
+            </Badge>
+            {attribution?.promoCode && (
+              <Badge variant="outline" className="text-xs border-emerald-600/50 text-emerald-300 py-0">
+                Code {attribution.promoCode}
               </Badge>
             )}
           </div>
@@ -573,6 +610,20 @@ function BookingRow({ booking }: { booking: AdminBooking }) {
                 </div>
               )}
             </div>
+            {attribution && (
+              <div
+                className="rounded-lg border border-blue-900/50 bg-blue-950/20 px-3 py-2 text-xs text-slate-300"
+                data-testid={`booking-attribution-detail-${booking.id}`}
+              >
+                <p className="font-semibold uppercase tracking-wider text-blue-300 mb-1">Source</p>
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  <span>{sourceLabel}</span>
+                  {attribution.source && <span>Channel: {formatAttributionLabel(attribution.source)}</span>}
+                  {attribution.promoCode && <span>Promo: {attribution.promoCode}</span>}
+                  {attribution.referralSlug && <span>Rep: {attribution.referralSlug}</span>}
+                </div>
+              </div>
+            )}
             <DiscountOverrideButton booking={booking} />
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-2">
