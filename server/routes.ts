@@ -15571,10 +15571,23 @@ Thank you for your business!
 
         const bookingParams: unknown[] = [rep.promoCode];
         let bookingWhere = "UPPER(qa.promo_code) = UPPER($1)";
-        if (status) { bookingParams.push(status); bookingWhere += ` AND b.status = $${bookingParams.length}`; }
+        let bookingBookedCondition = "status IN ('booked','in_progress','completed')";
+        if (status) {
+          bookingParams.push(status);
+          const statusParam = bookingParams.length;
+          bookingWhere += ` AND b.status = $${statusParam}`;
+          bookingBookedCondition = `status = $${statusParam}`;
+        }
+        if (serviceType) {
+          bookingParams.push(serviceType);
+          bookingWhere += ` AND EXISTS (
+            SELECT 1
+            FROM booking_service_items bsi
+            WHERE bsi.booking_id = b.id AND bsi.service_code = $${bookingParams.length}
+          )`;
+        }
         if (from) { bookingParams.push(from); bookingWhere += ` AND b.created_at >= $${bookingParams.length}`; }
         if (to) { bookingParams.push(to); bookingWhere += ` AND b.created_at <= $${bookingParams.length}`; }
-        const bookingBookedCondition = status ? `status = $2` : "status IN ('booked','in_progress','completed')";
         const bookingStats = await pool.query(`
           WITH attributed_bookings AS (
             SELECT DISTINCT b.id, b.status, b.final_total
