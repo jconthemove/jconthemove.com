@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BarChart3, CalendarDays, DollarSign, Edit3, Eye, Megaphone, Phone, Plus, Save, Tag, Users } from "lucide-react";
+import { BarChart3, CalendarDays, DollarSign, Download, Edit3, Eye, Megaphone, Phone, Plus, Save, Tag, Users } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -81,6 +81,27 @@ function percent(value: number) {
   return Number.isFinite(value) ? `${value.toFixed(1)}%` : "0.0%";
 }
 
+function csvEscape(value: string | number | boolean | null | undefined) {
+  const text = value == null ? "" : String(value);
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function downloadCsv(filename: string, headers: string[], rows: Array<Array<string | number | boolean | null | undefined>>) {
+  const csv = [
+    headers.map(csvEscape).join(","),
+    ...rows.map(row => row.map(csvEscape).join(",")),
+  ].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 function weekNumber() {
   const start = new Date(new Date().getFullYear(), 0, 1);
   const diff = Date.now() - start.getTime();
@@ -126,6 +147,63 @@ export default function AdminMarketingNetworkPage() {
   const totalRoi = totals.commissionPaid > 0 ? totals.revenue / totals.commissionPaid : 0;
   const totalConversionRate = totals.estimates > 0 ? (totals.booked / totals.estimates) * 100 : 0;
   const averageBookedRevenue = totals.booked > 0 ? totals.revenue / totals.booked : 0;
+
+  function exportPerformanceCsv() {
+    const rows = stats.map(row => {
+      const conversionRate = row.estimates > 0 ? (row.booked / row.estimates) * 100 : 0;
+      const averageRevenue = row.booked > 0 ? row.revenue / row.booked : 0;
+      return [
+        row.rep.displayName,
+        row.rep.brandName,
+        row.rep.slug,
+        row.rep.promoCode,
+        row.rep.territory,
+        row.rep.serviceFocus?.join(" | ") || "",
+        row.calls,
+        row.estimates,
+        row.booked,
+        conversionRate.toFixed(1),
+        row.revenue.toFixed(2),
+        averageRevenue.toFixed(2),
+        row.commissionPaid.toFixed(2),
+        row.roi.toFixed(2),
+        row.split.referralSource.toFixed(2),
+        row.split.crewLaborLow.toFixed(2),
+        row.split.crewLaborHigh.toFixed(2),
+        row.split.truckFuel.toFixed(2),
+        row.split.marketingFund.toFixed(2),
+        row.split.companyProfitLow.toFixed(2),
+        row.split.companyProfitHigh.toFixed(2),
+      ];
+    });
+    downloadCsv(
+      `jc-marketing-network-${new Date().toISOString().slice(0, 10)}.csv`,
+      [
+        "Rep Name",
+        "Brand Name",
+        "Slug",
+        "Promo Code",
+        "Territory",
+        "Service Focus",
+        "Calls",
+        "Leads Generated",
+        "Booked Jobs",
+        "Lead Conversion %",
+        "Revenue Generated",
+        "Average Booked Job",
+        "Commission Paid",
+        "ROI",
+        "Referral Source Split",
+        "Crew Labor Low",
+        "Crew Labor High",
+        "Truck Fuel",
+        "Marketing Fund",
+        "Company Profit Low",
+        "Company Profit High",
+      ],
+      rows
+    );
+  }
 
   const saveRep = useMutation({
     mutationFn: async () => {
@@ -228,7 +306,7 @@ export default function AdminMarketingNetworkPage() {
         {tab === "performance" && (
           <div className="space-y-4">
             <Card className="bg-white/[0.04] border-white/10">
-              <CardContent className="p-4 grid md:grid-cols-5 gap-3">
+              <CardContent className="p-4 grid md:grid-cols-6 gap-3">
                 <select value={repId} onChange={e => setRepId(e.target.value)} className="bg-zinc-900 border border-white/10 rounded-md px-3 py-2 text-sm">
                   <option value="">All reps</option>
                   {reps.map(rep => <option key={rep.id} value={rep.id}>{rep.displayName}</option>)}
@@ -237,6 +315,10 @@ export default function AdminMarketingNetworkPage() {
                 <Input placeholder="Status" value={status} onChange={e => setStatus(e.target.value)} className="bg-zinc-900 border-white/10" />
                 <Input type="date" value={from} onChange={e => setFrom(e.target.value)} className="bg-zinc-900 border-white/10" />
                 <Input type="date" value={to} onChange={e => setTo(e.target.value)} className="bg-zinc-900 border-white/10" />
+                <Button type="button" variant="outline" onClick={exportPerformanceCsv} disabled={!stats.length}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Export CSV
+                </Button>
               </CardContent>
             </Card>
 
