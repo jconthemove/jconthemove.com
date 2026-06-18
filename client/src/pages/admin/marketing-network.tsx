@@ -208,7 +208,7 @@ export default function AdminMarketingNetworkPage() {
         "Lead Conversion %",
         "Revenue Generated",
         "Average Booked Job",
-        "Commission Paid",
+        "Estimated Commission",
         "ROI",
         "Referral Source Split",
         "Crew Labor Low",
@@ -307,7 +307,7 @@ export default function AdminMarketingNetworkPage() {
             { label: "Lead Conversion", value: percent(totalConversionRate), icon: BarChart3, color: "text-blue-300" },
             { label: "Revenue Generated", value: money(totals.revenue), icon: BarChart3, color: "text-amber-300" },
             { label: "Avg Booked Job", value: money(averageBookedRevenue), icon: DollarSign, color: "text-green-300" },
-            { label: "Commission Paid", value: money(totals.commissionPaid), icon: Tag, color: "text-rose-300" },
+            { label: "Est. Commission", value: money(totals.commissionPaid), icon: Tag, color: "text-rose-300" },
             { label: "ROI", value: ratio(totalRoi), icon: BarChart3, color: "text-lime-300" },
           ].map((item) => (
             <Card key={item.label} className="bg-white/[0.04] border-white/10">
@@ -336,6 +336,9 @@ export default function AdminMarketingNetworkPage() {
                   <Download className="h-4 w-4 mr-2" />
                   Export CSV
                 </Button>
+                <p className="md:col-span-6 text-xs text-zinc-500">
+                  Commission is estimated at {REFERRAL_COMMISSION_RATE * 100}% of booked attributed revenue until the payout is finalized.
+                </p>
               </CardContent>
             </Card>
 
