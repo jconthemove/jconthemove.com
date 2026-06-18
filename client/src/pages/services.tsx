@@ -8,14 +8,13 @@ import { ShopSwitcher } from "@/components/shop-switcher";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { useCart } from "@/hooks/useCart";
 import { AdminPricingEditor } from "@/components/AdminPricingEditor";
 import {
   Truck, Users, Clock, DollarSign, CheckCircle, Star,
   ChevronRight, ArrowLeft, Phone, Zap, Shield, Award,
   Package, Layers, Wrench, Sparkles, Calculator, ChevronDown, ChevronUp,
   Settings, Save, Plus, Trash2, Pencil, X, Check,
-  Bitcoin, Gem, ShoppingCart, AlertCircle, ChevronsUp,
+  Bitcoin, CalendarCheck, AlertCircle, ChevronsUp,
 } from "lucide-react";
 
 // ─── Static data ──────────────────────────────────────────────────────────────
@@ -81,7 +80,6 @@ export default function ServicesPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
-  const { addItem: addToCart, isInCart, breakdown } = useCart();
 
   const [serviceType, setServiceType]   = useState<"labor" | "truck">("labor");
   const [selectedCrew, setSelectedCrew] = useState<number | null>(null);
@@ -205,11 +203,11 @@ export default function ServicesPage() {
   // ── Book Now handler ─────────────────────────────────────────────────────
   function handleBookNow() {
     if (!selectedCrew) return;
-    const cartId = `service-move-${selectedCrew}-${serviceType}`;
-    const label = `Moving Labor${serviceType === "truck" ? " + Truck" : ""} · ${selectedCrew} Mover${selectedCrew > 1 ? "s" : ""} (min ${minHours} hrs)`;
-    addToCart({ id: cartId, name: label, price: estLow, image: "", type: "service", bookNow: true });
-    toast({ title: "⚡ Crew reserved!", description: "5% instant-book discount applied. Stack more at checkout!" });
-    navigate("/cart");
+    toast({
+      title: "Crew details added",
+      description: "Continue in booking so we can confirm timing, address, photos, truck needs, and final price.",
+    });
+    navigate(bookUrl);
   }
 
   return (
@@ -736,34 +734,22 @@ export default function ServicesPage() {
                 <p className="text-xs text-slate-500 mt-1">Based on {minHours}–{minHours + 2} hrs · Final price depends on actual time</p>
               </div>
 
-              {/* ── Discount Stack Preview ──────────────────────────────── */}
+              {/* ── Booking Preview ─────────────────────────────────────── */}
               <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 mb-4 space-y-2">
                 <p className="text-xs font-bold text-slate-300 mb-3 flex items-center gap-1.5">
-                  <Zap className="h-3.5 w-3.5 text-yellow-400" />
-                  Savings you can stack
+                  <CalendarCheck className="h-3.5 w-3.5 text-blue-400" />
+                  What happens next
                 </p>
                 {[
-                  { label: "⚡ Book Now",            pct: 5,  active: true,  note: "instant discount" },
-                  { label: "💎 Add 1 Jewls item",    pct: 5,  active: breakdown.jewelsCount >= 1, note: "from Ashley's Shop" },
-                  { label: "💎 Add 2 Jewls items",   pct: 10, active: breakdown.jewelsCount >= 2, note: "max jewels bonus" },
-                  { label: "📦 Book 2 services",     pct: 10, active: breakdown.multiService, note: "applied to both jobs" },
-                  { label: "₿ Pay with Bitcoin",     pct: 10, active: false, note: "at checkout" },
-                ].map(({ label, pct, active, note }) => (
-                  <div key={label} className={`flex items-center justify-between text-xs ${active ? "text-green-300" : "text-slate-500"}`}>
-                    <span className="flex items-center gap-1.5">
-                      {active
-                        ? <Check className="h-3 w-3 text-green-400 shrink-0" />
-                        : <div className="h-3 w-3 rounded-full border border-slate-600 shrink-0" />}
-                      {label}
-                      <span className={`text-[10px] ${active ? "text-green-500/70" : "text-slate-600"}`}>· {note}</span>
-                    </span>
-                    <span className={`font-bold ${active ? "text-green-400" : "text-slate-600"}`}>-{pct}%</span>
+                  "Choose service date, address, and job details.",
+                  "Add photos, videos, notes, or an album link.",
+                  "JC ON THE MOVE confirms crew, truck needs, timing, and price.",
+                ].map((item) => (
+                  <div key={item} className="flex items-start gap-2 text-xs text-slate-300">
+                    <Check className="mt-0.5 h-3 w-3 shrink-0 text-emerald-400" />
+                    <span>{item}</span>
                   </div>
                 ))}
-                <div className="border-t border-slate-700 pt-2 mt-1 flex justify-between text-xs">
-                  <span className="text-slate-400">Max stackable savings</span>
-                  <span className="text-green-400 font-black">up to 25% off</span>
-                </div>
               </div>
 
               {/* ── Action Buttons ──────────────────────────────────────── */}
@@ -773,11 +759,11 @@ export default function ServicesPage() {
                   className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-black text-base h-13 shadow-lg shadow-green-500/25 border-0 flex items-center justify-between px-5"
                 >
                   <span className="flex items-center gap-2">
-                    <ShoppingCart className="h-5 w-5" />
-                    Book Now — Save 5%
+                    <CalendarCheck className="h-5 w-5" />
+                    Continue To Booking
                   </span>
                   <span className="text-xs font-medium opacity-80 bg-white/20 px-2 py-0.5 rounded-full">
-                    Save ${Math.round(estLow * 0.05)}
+                    Crew details included
                   </span>
                 </Button>
                 <Link href={bookUrl}>
@@ -792,7 +778,7 @@ export default function ServicesPage() {
               </div>
 
               <p className="text-center text-xs text-slate-500 mt-3">
-                Book Now locks in 5% · Add Jewls items, 2nd service, or pay with Bitcoin to stack up to 25% off
+                Booking starts the request. A coordinator confirms crew, address, timing, truck needs, and final price before the job is locked in.
               </p>
             </div>
           </div>
