@@ -1158,12 +1158,12 @@ export default function MultiServiceBookPage() {
               <CheckCircle2 className="h-9 w-9 text-emerald-500" />
             </div>
             <div>
-              <h1 className="text-2xl sm:text-3xl font-black">Move Request Locked In</h1>
+              <h1 className="text-2xl sm:text-3xl font-black">Service Request Locked In</h1>
               <p className="text-sm text-muted-foreground mt-2">
                 Your crew coordinator will contact you shortly at {c.customerPhone}.
               </p>
               <p className="text-xs text-muted-foreground mt-2">
-                Fast scheduling • Local movers • Rewards earned automatically
+                Fast scheduling • Local crew • Rewards earned automatically
               </p>
             </div>
             <div className="grid grid-cols-3 gap-2 text-[10px] font-bold uppercase tracking-tight text-muted-foreground">
