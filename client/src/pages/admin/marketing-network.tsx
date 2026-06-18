@@ -11,6 +11,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
+const REFERRAL_COMMISSION_RATE = 0.05;
+
 type MarketingRep = {
   id: string;
   slug: string;
@@ -37,6 +39,8 @@ type RepStats = {
   estimates: number;
   booked: number;
   revenue: number;
+  commissionPaid: number;
+  roi: number;
   split: {
     referralSource: number;
     crewLaborLow: number;
@@ -67,6 +71,10 @@ const emptyForm = {
 
 function money(value: number) {
   return value.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+}
+
+function ratio(value: number) {
+  return value > 0 ? `${value.toFixed(1)}x` : "0.0x";
 }
 
 function weekNumber() {
@@ -108,7 +116,10 @@ export default function AdminMarketingNetworkPage() {
     estimates: acc.estimates + row.estimates,
     booked: acc.booked + row.booked,
     revenue: acc.revenue + row.revenue,
-  }), { calls: 0, estimates: 0, booked: 0, revenue: 0 }), [stats]);
+    commissionPaid: acc.commissionPaid + row.commissionPaid,
+  }), { calls: 0, estimates: 0, booked: 0, revenue: 0, commissionPaid: 0 }), [stats]);
+
+  const totalRoi = totals.commissionPaid > 0 ? totals.revenue / totals.commissionPaid : 0;
 
   const saveRep = useMutation({
     mutationFn: async () => {
@@ -187,12 +198,14 @@ export default function AdminMarketingNetworkPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
           {[
             { label: "Calls", value: totals.calls, icon: Phone, color: "text-sky-300" },
-            { label: "Estimates", value: totals.estimates, icon: Users, color: "text-violet-300" },
-            { label: "Booked", value: totals.booked, icon: CalendarDays, color: "text-emerald-300" },
-            { label: "Revenue", value: money(totals.revenue), icon: BarChart3, color: "text-amber-300" },
+            { label: "Leads Generated", value: totals.estimates, icon: Users, color: "text-violet-300" },
+            { label: "Booked Jobs", value: totals.booked, icon: CalendarDays, color: "text-emerald-300" },
+            { label: "Revenue Generated", value: money(totals.revenue), icon: BarChart3, color: "text-amber-300" },
+            { label: "Commission Paid", value: money(totals.commissionPaid), icon: Tag, color: "text-rose-300" },
+            { label: "ROI", value: ratio(totalRoi), icon: BarChart3, color: "text-lime-300" },
           ].map((item) => (
             <Card key={item.label} className="bg-white/[0.04] border-white/10">
               <CardContent className="p-4">
@@ -229,18 +242,20 @@ export default function AdminMarketingNetworkPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="grid grid-cols-4 gap-2 text-center">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-center">
                       <div><p className="text-xl font-black text-sky-300">{row.calls}</p><p className="text-[11px] text-zinc-500">Calls</p></div>
-                      <div><p className="text-xl font-black text-violet-300">{row.estimates}</p><p className="text-[11px] text-zinc-500">Estimates</p></div>
+                      <div><p className="text-xl font-black text-violet-300">{row.estimates}</p><p className="text-[11px] text-zinc-500">Leads</p></div>
                       <div><p className="text-xl font-black text-emerald-300">{row.booked}</p><p className="text-[11px] text-zinc-500">Booked</p></div>
                       <div><p className="text-xl font-black text-amber-300">{money(row.revenue)}</p><p className="text-[11px] text-zinc-500">Revenue</p></div>
+                      <div><p className="text-xl font-black text-lime-300">{ratio(row.roi)}</p><p className="text-[11px] text-zinc-500">ROI</p></div>
                     </div>
                     <div className="rounded-lg bg-zinc-900/70 border border-white/10 p-3 text-sm space-y-1">
-                      <div className="flex justify-between"><span>Referral source 10%</span><span>{money(row.split.referralSource)}</span></div>
+                      <div className="flex justify-between"><span>Estimated referral commission {REFERRAL_COMMISSION_RATE * 100}%</span><span>{money(row.split.referralSource)}</span></div>
                       <div className="flex justify-between"><span>Crew labor 35-45%</span><span>{money(row.split.crewLaborLow)} - {money(row.split.crewLaborHigh)}</span></div>
                       <div className="flex justify-between"><span>Truck/fuel 10%</span><span>{money(row.split.truckFuel)}</span></div>
                       <div className="flex justify-between"><span>Marketing fund 5%</span><span>{money(row.split.marketingFund)}</span></div>
                       <div className="flex justify-between text-zinc-300"><span>Company profit estimate</span><span>{money(row.split.companyProfitLow)} - {money(row.split.companyProfitHigh)}</span></div>
+                      <div className="flex justify-between text-lime-300"><span>Revenue ROI</span><span>{ratio(row.roi)}</span></div>
                     </div>
                     <div className="flex gap-2">
                       <Link href={`/network/${row.rep.slug}`}><Button size="sm" variant="outline"><Eye className="h-4 w-4 mr-1" />Page</Button></Link>

@@ -15509,6 +15509,7 @@ Thank you for your business!
 
   app.get("/api/admin/marketing-network/stats", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
     try {
+      const referralCommissionRate = 0.05;
       const repId = String(req.query.repId || "");
       const serviceType = String(req.query.serviceType || "");
       const status = String(req.query.status || "");
@@ -15568,6 +15569,7 @@ Thank you for your business!
         const estimates = Number(leadStats.rows[0]?.estimates || 0) + Number(bookingStats.rows[0]?.estimates || 0);
         const booked = Number(leadStats.rows[0]?.booked || 0) + Number(bookingStats.rows[0]?.booked || 0);
         const revenue = Number(leadStats.rows[0]?.revenue || 0) + Number(bookingStats.rows[0]?.revenue || 0);
+        const estimatedCommission = revenue * referralCommissionRate;
 
         rows.push({
           rep,
@@ -15575,14 +15577,16 @@ Thank you for your business!
           estimates,
           booked,
           revenue,
+          commissionPaid: estimatedCommission,
+          roi: estimatedCommission > 0 ? revenue / estimatedCommission : 0,
           split: {
-            referralSource: revenue * 0.10,
+            referralSource: estimatedCommission,
             crewLaborLow: revenue * 0.35,
             crewLaborHigh: revenue * 0.45,
             truckFuel: revenue * 0.10,
             marketingFund: revenue * 0.05,
-            companyProfitLow: revenue * 0.30,
-            companyProfitHigh: revenue * 0.40,
+            companyProfitLow: revenue * 0.35,
+            companyProfitHigh: revenue * 0.45,
           },
         });
       }
