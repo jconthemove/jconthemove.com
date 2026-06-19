@@ -1594,7 +1594,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
         { id: "pi_network", label: "Pi Network Revenue", icon: "π", monthlyUsd: 0, enabled: true },
       ]);
       await pool.query(`INSERT INTO spin_config (setting_key, setting_value, description) VALUES ('staking_yield_sources', $1, 'Treasury yield source breakdown') ON CONFLICT DO NOTHING`, [defaultSources]);
-      await pool.query(`INSERT INTO spin_config (setting_key, setting_value, description) VALUES ('staking_treasury_bonus_pct', '0', 'Dynamic treasury bonus % on top of base APR') ON CONFLICT DO NOTHING`);
+      await pool.query(`INSERT INTO spin_config (setting_key, setting_value, description) VALUES ('staking_treasury_bonus_pct', '0', 'Dynamic treasury bonus % on top of base reward tier') ON CONFLICT DO NOTHING`);
     }
     console.log('✅ Staking treasury yield sources ready');
   } catch (compoundErr) {
@@ -20465,7 +20465,7 @@ Thank you for your business!
   // ==================== STAKING TREASURY ROUTES ====================
 
   app.get("/api/staking/tiers", (_req, res) => {
-    res.status(410).json({ error: "Legacy APR staking tiers have been retired. JCMOVES staking now uses a single-pool model with automatic 10% earnings bonus." });
+    res.status(410).json({ error: "Legacy tiered staking has been retired. JCMOVES staking now uses a single-pool model with automatic 10% earnings bonus." });
   });
 
   app.get("/api/staking/my-stakes", isAuthenticated, (_req: any, res) => {
@@ -20562,7 +20562,7 @@ Thank you for your business!
   // ── Legacy per-stake claim/unstake (kept for ETH staking compatibility) ────
 
   app.post("/api/staking/:stakeId/claim", isAuthenticated, (_req: any, res) => {
-    res.status(410).json({ error: "Legacy per-stake APR claims are no longer supported. JCMOVES staking has migrated to the single-pool system with automatic 10% earnings bonuses." });
+    res.status(410).json({ error: "Legacy per-stake claims are no longer supported. JCMOVES staking has migrated to the single-pool system with automatic 10% earnings bonuses." });
   });
 
   app.post("/api/staking/:stakeId/unstake", isAuthenticated, (_req: any, res) => {

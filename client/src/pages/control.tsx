@@ -116,7 +116,7 @@ const SECTIONS = [
         href: "/staking",
         icon: TrendingUp,
         label: "Staking",
-        description: "Token staking tiers, APR, and health monitoring",
+        description: "Token reward tiers and health monitoring",
         color: "from-teal-600 to-teal-700",
       },
     ],

@@ -363,8 +363,8 @@ export default function MiningPage() {
               <div className="flex items-center gap-3 p-3 rounded-xl bg-purple-900/40 border border-purple-700/40 hover:border-purple-500/60 transition-colors cursor-pointer">
                 <TrendingUp className="h-5 w-5 text-purple-400 flex-shrink-0" />
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-white">Stake JCMOVES</p>
-                  <p className="text-xs text-slate-400">Up to 30% APR*</p>
+                  <p className="text-sm font-medium text-white">JCMOVES Boosts</p>
+                  <p className="text-xs text-slate-400">Use rewards for loyalty perks</p>
                 </div>
                 <p className="text-xs text-purple-300 font-medium">→</p>
               </div>
@@ -390,7 +390,6 @@ export default function MiningPage() {
               </div>
             </Link>
           </div>
-          <p className="text-[10px] text-slate-500 mt-2.5 leading-snug">* Variable rewards based on company policy of distribution</p>
         </div>
 
         {/* ── USE YOUR JCMOVES ── */}
@@ -399,7 +398,7 @@ export default function MiningPage() {
           <div className="space-y-2">
             {[
               { icon: Briefcase, label: "Worker bonuses & job rewards", color: "text-yellow-400" },
-              { icon: TrendingUp, label: "Staking rewards (5–30% APR)", color: "text-purple-400" },
+              { icon: TrendingUp, label: "Reward boosts and loyalty perks", color: "text-purple-400" },
               { icon: ShoppingBag, label: "Community marketplace", color: "text-green-400" },
               { icon: Zap, label: "Service discounts (coming soon)", color: "text-orange-400" },
             ].map(({ icon: Icon, label, color }) => (

@@ -1062,7 +1062,7 @@ export default function RewardsDashboard() {
                   { icon: '⭐', label: 'Leave a review', amount: '+150 JCMOVES', color: 'text-amber-400' },
                   { icon: '👥', label: 'Refer a friend', amount: '+2,500 JCMOVES', color: 'text-violet-400' },
                   { icon: '🔗', label: 'Daily mining claim', amount: '+1,728 JCMOVES', color: 'text-orange-400' },
-                  { icon: '💎', label: 'Stake JCMOVES', amount: 'Up to 18% APR*', color: 'text-yellow-400' },
+                  { icon: '💎', label: 'JCMOVES boosts', amount: 'Loyalty perks', color: 'text-yellow-400' },
                 ].map(({ icon, label, amount, color }) => (
                   <div key={label} className="flex items-center justify-between py-1.5 border-b border-slate-800/80 last:border-0">
                     <span className="text-xs text-slate-400 flex items-center gap-2"><span>{icon}</span>{label}</span>
@@ -1070,7 +1070,6 @@ export default function RewardsDashboard() {
                   </div>
                 ))}
               </div>
-              <p className="text-[10px] text-slate-500 mt-2.5 leading-snug">* Variable rewards based on company policy of distribution</p>
             </div>
           </div>
         </TabsContent>

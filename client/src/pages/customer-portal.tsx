@@ -480,7 +480,7 @@ export default function CustomerPortal() {
                 <CardContent className="p-4 flex items-center justify-between">
                   <div>
                     <p className="font-semibold text-white text-sm">Token Staking</p>
-                    <p className="text-slate-500 text-xs">Earn APR on your JCMOVES tokens</p>
+                    <p className="text-slate-500 text-xs">Use JCMOVES for loyalty perks</p>
                   </div>
                   <Link href="/staking">
                     <Button size="sm" variant="outline" className="border-white/10 text-slate-300 hover:text-white">

@@ -91,7 +91,7 @@ export default function PrivacyPolicy() {
               <li>Your wallet address (if associated with your account) may be visible in transaction records</li>
               <li>Token rewards are internal company credits until withdrawn to a personal wallet</li>
               <li>JCMOVES token rewards are variable and subject to company distribution policy</li>
-              <li>Staking APR rates are variable and based on company treasury health and policy</li>
+              <li>JCMOVES reward programs are variable and subject to company policy</li>
             </ul>
           </section>
 

@@ -2905,7 +2905,7 @@ export default function AdminTreasuryPage() {
                       return (
                         <div key={tier.name} className={`p-4 rounded-lg bg-gradient-to-br ${colorClass} border`}>
                           <p className="font-semibold text-white mb-2">{tier.name}</p>
-                          <p className="text-xs text-slate-400">{tier.durationDays === 0 ? "No lockup" : `${tier.durationDays}d lock`} • {tier.apr}% APR</p>
+                          <p className="text-xs text-slate-400">{tier.durationDays === 0 ? "No lockup" : `${tier.durationDays}d lock`} • {tier.apr}% reward tier</p>
                           <p className="text-lg font-bold text-white mt-2">{parseFloat(tier.totalStaked).toLocaleString()}</p>
                           <p className="text-xs text-slate-400">{tier.activeStakes} active stake{tier.activeStakes !== 1 ? "s" : ""}</p>
                         </div>
@@ -3138,8 +3138,8 @@ export default function AdminTreasuryPage() {
 
                 <div className="flex items-center gap-3 p-3 rounded-xl border border-yellow-500/30 bg-yellow-950/20">
                   <div className="flex-1">
-                    <p className="text-sm font-semibold text-yellow-300">Treasury Bonus APR (%)</p>
-                    <p className="text-xs text-slate-500 mt-0.5">Added on top of each tier's base APR. Shows as dynamic bonus on staking page.</p>
+                    <p className="text-sm font-semibold text-yellow-300">Treasury Bonus (%)</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Added on top of each reward tier. Shows as a dynamic bonus on the staking page.</p>
                   </div>
                   <Input
                     type="number"
