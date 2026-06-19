@@ -7259,8 +7259,10 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
     }
   });
 
-  // Protected routes - Update lead status (dashboard only - business owner only)
-  app.patch("/api/leads/:id/status", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+  // Protected routes - Update lead status through the enforced pipeline.
+  // Owner/admin can advance any normal step. Worker authority rails can advance
+  // quote/job stages without needing the separate business_owner role.
+  app.patch("/api/leads/:id/status", isAuthenticated, requireEmployee, async (req: any, res) => {
     try {
       const { id } = req.params;
       const { status } = req.body;
@@ -7291,6 +7293,25 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
         // Status not in the transition map: terminal or legacy — require force
         return res.status(400).json({
           error: `Cannot change status from '${currentStatus}' via this endpoint. Use the force endpoint to correct pipeline stage.`
+        });
+      }
+
+      const user = req.currentUser || req.user || null;
+      const isOwner = user?.role === "admin" || user?.role === "business_owner" || user?.email === "upmichiganstatemovers@gmail.com";
+      const authority = user ? await getWorkerAuthority(user) : { rank: 0 };
+      const isQuoteStage =
+        (["new", "quote_requested", "chatbot_pending", "contacted"].includes(currentStatus) && status === "quoted") ||
+        (currentStatus === "quoted" && status === "available");
+      const canUseWorkerRail =
+        authority.rank >= tierRank.platinum ||
+        (isQuoteStage && authority.rank >= tierRank.silver);
+
+      if (!isOwner && !canUseWorkerRail) {
+        return res.status(403).json({
+          error: "Worker authority required",
+          message: isQuoteStage
+            ? "Silver or higher worker authority is required to quote or confirm jobs."
+            : "Platinum worker authority is required to manage this pipeline transition.",
         });
       }
 
