@@ -14,6 +14,8 @@ npm-debug.log*
 
 # env files (CRITICAL)
 .env
+.env.*
+!.env.example
 .env.local
 .env.production
 .env.backup

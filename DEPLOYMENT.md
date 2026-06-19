@@ -1,5 +1,10 @@
 # Self-Hosting Deployment Guide (Node + Express + Vite)
 
+For the current recommended VPS setup, start with [SELF_HOSTING.md](./SELF_HOSTING.md).
+That runbook includes Docker Compose, Caddy HTTPS, database sync, backups, and the
+staging-to-production cutover checklist. This file is kept as the lower-level
+Node process reference.
+
 This project now supports a standard production deployment flow:
 
 ```bash
@@ -19,7 +24,7 @@ npm start
 
 ## 2) Environment Variables
 
-### Required in production
+### Required for production startup
 
 Set these before running `npm start` in production:
 
@@ -27,10 +32,14 @@ Set these before running `npm start` in production:
 - `PORT` (optional override; defaults to `5000`)
 - `DATABASE_URL`
 - `SESSION_SECRET`
+
+### Required for payment readiness
+
+The app can boot without these so non-payment pages stay online, but `/api/health`
+and launch checks will report payment readiness as incomplete until they are set:
+
 - `SQUARE_ACCESS_TOKEN`
 - `SQUARE_ENVIRONMENT` (`sandbox` or `production`)
-
-> In production, startup intentionally fails fast when any required env var is missing.
 
 ### Optional in development
 
