@@ -5,6 +5,7 @@ import {
   Archive,
   CalendarDays,
   Check,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -194,32 +195,47 @@ function isAssigned(lead: Lead) {
   return ASSIGNED_STATUSES.has(lead.status) || !!dateOnly(lead.confirmedDate) || (lead.crewMembers?.length || 0) > 0;
 }
 
+function isCompletedJob(lead: Lead) {
+  return String(lead.status || "").toLowerCase() === "completed";
+}
+
 function TradingJobCard({ lead, compact = false, onOpen }: { lead: Lead; compact?: boolean; onOpen: (lead: Lead) => void }) {
   const crewCount = lead.crewMembers?.length || 0;
   const needed = lead.crewSize || 2;
   const service = SERVICE_LABELS[lead.serviceType] || lead.serviceType;
   const date = lead.confirmedDate || lead.moveDate || null;
+  const completed = isCompletedJob(lead);
 
   return (
     <button
       onClick={() => onOpen(lead)}
-      className={`group w-full text-left rounded-[8px] border border-slate-700 bg-slate-900 shadow-sm transition hover:border-blue-400/70 hover:bg-slate-800 ${
+      className={`group w-full text-left rounded-[8px] border shadow-sm transition ${
+        completed
+          ? "border-emerald-700/50 bg-emerald-950/20 hover:border-emerald-400/70 hover:bg-emerald-950/35"
+          : "border-slate-700 bg-slate-900 hover:border-blue-400/70 hover:bg-slate-800"
+      } ${
         compact ? "p-2" : "p-3"
       }`}
     >
-      <div className="rounded-[6px] border border-slate-700 bg-gradient-to-br from-slate-950 to-slate-800 p-2">
+      <div className={`rounded-[6px] border p-2 ${
+        completed
+          ? "border-emerald-700/50 bg-emerald-950/30"
+          : "border-slate-700 bg-gradient-to-br from-slate-950 to-slate-800"
+      }`}>
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
-            <div className="grid h-10 w-10 place-items-center rounded-[6px] bg-slate-800 text-xl ring-1 ring-slate-600">
-              {SERVICE_ICON[lead.serviceType] || "JOB"}
+            <div className={`grid h-10 w-10 place-items-center rounded-[6px] text-xl ring-1 ${
+              completed ? "bg-emerald-500/20 text-emerald-300 ring-emerald-500/40" : "bg-slate-800 ring-slate-600"
+            }`}>
+              {completed ? <CheckCircle2 className="h-5 w-5" /> : SERVICE_ICON[lead.serviceType] || "JOB"}
             </div>
             <div className="min-w-0">
               <div className="text-[10px] uppercase tracking-wider text-slate-500">{formatOrder(lead)}</div>
               <div className="truncate text-sm font-black text-white">{service}</div>
             </div>
           </div>
-          <Badge className="border-orange-400/30 bg-orange-500/15 text-orange-200">
-            {formatMoney(lead.totalPrice || lead.basePrice)}
+          <Badge className={completed ? "border-emerald-400/30 bg-emerald-500/15 text-emerald-200" : "border-orange-400/30 bg-orange-500/15 text-orange-200"}>
+            {completed ? "Completed" : formatMoney(lead.totalPrice || lead.basePrice)}
           </Badge>
         </div>
 
@@ -252,7 +268,7 @@ function TradingJobCard({ lead, compact = false, onOpen }: { lead: Lead; compact
       </div>
       <div className="mt-2 flex items-center justify-between px-1 text-[10px] uppercase tracking-wider text-slate-500">
         <span>JC ON THE MOVE</span>
-        <span>{lead.status.replaceAll("_", " ")}</span>
+        <span className={completed ? "text-emerald-300" : ""}>{lead.status.replaceAll("_", " ")}</span>
       </div>
     </button>
   );
@@ -703,20 +719,41 @@ export default function OpsBoardPage() {
             {monthDays.map((day) => {
               const key = dateOnly(day.toISOString());
               const dayJobs = jobsByDate[key] || [];
+              const activeDayJobs = dayJobs.filter((lead) => !isCompletedJob(lead));
+              const completedDayJobs = dayJobs.filter(isCompletedJob);
               const muted = monthKey(day) !== currentMonthKey;
               const today = key === dateOnly(new Date().toISOString());
               return (
                 <div key={key} className={`min-h-32 bg-slate-950 p-2 ${muted ? "opacity-45" : ""} ${today ? "ring-1 ring-inset ring-blue-400" : ""}`}>
                   <div className="mb-2 flex items-center justify-between">
                     <span className={`text-xs font-bold ${today ? "text-blue-200" : "text-slate-400"}`}>{day.getDate()}</span>
-                    {dayJobs.length > 0 && <span className="rounded-full bg-blue-500/20 px-1.5 text-[10px] text-blue-200">{dayJobs.length}</span>}
+                    {dayJobs.length > 0 && (
+                      <span className={`rounded-full px-1.5 text-[10px] ${
+                        activeDayJobs.length > 0 ? "bg-blue-500/20 text-blue-200" : "bg-emerald-500/20 text-emerald-200"
+                      }`}>
+                        {activeDayJobs.length > 0 ? activeDayJobs.length : completedDayJobs.length}
+                      </span>
+                    )}
                   </div>
                   <div className="space-y-1.5">
-                    {dayJobs.slice(0, 3).map((lead) => (
+                    {activeDayJobs.slice(0, 2).map((lead) => (
                       <TradingJobCard key={lead.id} lead={lead} compact onOpen={openDrawer} />
                     ))}
-                    {dayJobs.length > 3 && (
-                      <div className="rounded-[6px] bg-slate-900 px-2 py-1 text-center text-[10px] text-slate-400">+{dayJobs.length - 3} more</div>
+                    {activeDayJobs.length > 2 && (
+                      <div className="rounded-[6px] bg-slate-900 px-2 py-1 text-center text-[10px] text-slate-400">+{activeDayJobs.length - 2} active</div>
+                    )}
+                    {completedDayJobs.slice(0, activeDayJobs.length > 0 ? 1 : 3).map((lead) => (
+                      <button
+                        key={lead.id}
+                        onClick={() => openDrawer(lead)}
+                        className="flex w-full items-center gap-1.5 rounded-[6px] border border-emerald-700/30 bg-emerald-950/25 px-2 py-1 text-left text-[10px] text-emerald-200 hover:border-emerald-500/60"
+                      >
+                        <CheckCircle2 className="h-3 w-3 flex-shrink-0" />
+                        <span className="truncate">{SERVICE_LABELS[lead.serviceType] || lead.serviceType}</span>
+                      </button>
+                    ))}
+                    {completedDayJobs.length > (activeDayJobs.length > 0 ? 1 : 3) && (
+                      <div className="rounded-[6px] bg-emerald-950/20 px-2 py-1 text-center text-[10px] text-emerald-300">+{completedDayJobs.length - (activeDayJobs.length > 0 ? 1 : 3)} completed</div>
                     )}
                   </div>
                 </div>

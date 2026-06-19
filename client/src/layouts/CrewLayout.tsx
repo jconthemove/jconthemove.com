@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { CalendarDays, Briefcase, Calendar, Coins } from "lucide-react";
+import { CalendarDays, Briefcase, Calendar, Coins, Star } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useCrewGpsBeacon } from "@/hooks/useCrewGpsBeacon";
 
@@ -7,6 +7,7 @@ const tabs = [
   { label: "Today", icon: CalendarDays, path: "/crew" },
   { label: "Jobs", icon: Briefcase, path: "/crew/jobs" },
   { label: "Schedule", icon: Calendar, path: "/crew/schedule" },
+  { label: "Reviews", icon: Star, path: "/crew/reviews" },
   { label: "Earnings", icon: Coins, path: "/crew/earnings" },
 ];
 

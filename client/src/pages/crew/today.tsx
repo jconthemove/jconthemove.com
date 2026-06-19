@@ -186,6 +186,26 @@ function writeBeaconToStorage(userId: string | number, isAvailable: boolean, ava
   } catch { /* ignore */ }
 }
 
+function getDashboardDismissKey(userId: string | number, kind: string) {
+  return `jcmoves_dashboard_dismissed_${kind}_${userId}`;
+}
+
+function readDismissedIds(userId: string | number | undefined, kind: string): string[] {
+  if (!userId || typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(getDashboardDismissKey(userId, kind));
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeDismissedIds(userId: string | number | undefined, kind: string, ids: string[]) {
+  if (!userId || typeof window === "undefined") return;
+  localStorage.setItem(getDashboardDismissKey(userId, kind), JSON.stringify(Array.from(new Set(ids))));
+}
+
 type PositioningResponse =
   | { muted: true }
   | {
@@ -276,12 +296,17 @@ export default function CrewTodayPage() {
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [weatherSheetOpen, setWeatherSheetOpen] = useState(false);
   const [assignmentsExpanded, setAssignmentsExpanded] = useState(false);
+  const [dismissedBoardJobIds, setDismissedBoardJobIds] = useState<string[]>(() => readDismissedIds(user?.id, "board_jobs"));
 
   const [calYear, setCalYear] = useState(new Date().getFullYear());
   const [calMonth, setCalMonth] = useState(new Date().getMonth() + 1);
   const [selectedCalDay, setSelectedCalDay] = useState<string | null>(null);
 
   const timeSlots = useMemo(() => getAvailableTimeSlots(), [showTimePicker]);
+
+  useEffect(() => {
+    setDismissedBoardJobIds(readDismissedIds(user?.id, "board_jobs"));
+  }, [user?.id]);
 
   const { data: calendarData, isLoading: calendarLoading } = useQuery<{
     jobs: { id: string; serviceType: string; fromAddress: string | null; confirmedDate: string | null; moveDate: string | null; effectiveDate: string | null; confirmedFromAddress: string | null; status: string; confirmedHours: number | null }[];
@@ -680,6 +705,19 @@ export default function CrewTodayPage() {
         return da - db;
       });
   }, [boardJobs]);
+
+  const visibleUpcomingBoardJobs = useMemo(() => {
+    const dismissed = new Set(dismissedBoardJobIds);
+    return upcomingBoardJobs.filter((job) => !dismissed.has(job.id));
+  }, [upcomingBoardJobs, dismissedBoardJobIds]);
+
+  function dismissBoardJobNotice(jobId: string) {
+    setDismissedBoardJobIds((current) => {
+      const next = Array.from(new Set([...current, jobId]));
+      writeDismissedIds(user?.id, "board_jobs", next);
+      return next;
+    });
+  }
 
   const todayJobs = useMemo(() => {
     const jobsForToday = leads.filter(l => {
@@ -1192,7 +1230,7 @@ export default function CrewTodayPage() {
         </div>
       )}
 
-      {todayJobs.length === 0 && upcomingBoardJobs.length === 0 && myAssignments.length === 0 && trashJobsThisWeek.length === 0 && (
+      {todayJobs.length === 0 && visibleUpcomingBoardJobs.length === 0 && myAssignments.length === 0 && trashJobsThisWeek.length === 0 && (
         <div className="rounded-2xl bg-slate-800/30 border border-slate-700/30 p-6 text-center">
           <Calendar className="h-10 w-10 text-slate-500 mx-auto mb-2" />
           <p className="text-slate-400 font-medium">No jobs scheduled yet</p>
@@ -1284,26 +1322,38 @@ export default function CrewTodayPage() {
       )}
 
       {/* Available Jobs to Sign Up For */}
-      {upcomingBoardJobs.length > 0 && (
+      {visibleUpcomingBoardJobs.length > 0 && (
         <div className="rounded-2xl bg-gradient-to-br from-blue-950/60 via-slate-900 to-slate-950 border border-blue-500/20 p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <Briefcase className="h-4 w-4 text-blue-400" />
               <span className="text-blue-300 text-sm font-bold uppercase tracking-wider">Available Jobs</span>
-              <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30 text-xs">{upcomingBoardJobs.length} open</Badge>
+              <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30 text-xs">{visibleUpcomingBoardJobs.length} open</Badge>
             </div>
             <Link href="/crew/jobs">
               <span className="text-slate-500 text-xs hover:text-slate-300 transition-colors">See all →</span>
             </Link>
           </div>
           <div className="space-y-3">
-            {upcomingBoardJobs.slice(0, 5).map(job => {
+            {visibleUpcomingBoardJobs.slice(0, 5).map(job => {
               const slotsOpen = (job.crewSize || 2) - job.crewSlotsFilled;
               const dateLabel = job.moveDate
                 ? new Date(job.moveDate.split("T")[0] + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
                 : "Date TBD";
               return (
-                <div key={job.id} className="relative bg-white/[0.04] rounded-xl p-3 border border-white/5 space-y-2 overflow-hidden">
+                <div key={job.id} className="relative bg-white/[0.04] rounded-xl p-3 pr-9 border border-white/5 space-y-2 overflow-hidden">
+                  <button
+                    type="button"
+                    aria-label="Dismiss job notice"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      dismissBoardJobNotice(job.id);
+                    }}
+                    className="absolute right-2 top-2 z-10 rounded-full p-1 text-slate-500 hover:bg-white/10 hover:text-white"
+                  >
+                    <XCircle className="h-4 w-4" />
+                  </button>
                   <ConfettiBurst active={claimedJobId === job.id} variant="inline" />
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2">

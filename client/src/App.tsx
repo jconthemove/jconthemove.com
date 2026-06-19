@@ -106,6 +106,7 @@ const CrewTodayPage = lazy(() => import("@/pages/crew/today"));
 const CrewJobsNewPage = lazy(() => import("@/pages/crew/jobs"));
 const CrewSchedulePage = lazy(() => import("@/pages/crew/schedule"));
 const CrewEarningsPage = lazy(() => import("@/pages/crew/earnings"));
+const CrewReviewsPage = lazy(() => import("@/pages/crew/reviews"));
 const AdminOverviewPage = lazy(() => import("@/pages/admin/overview"));
 const AdminOpsBoardPage = lazy(() => import("@/pages/admin/ops-board"));
 const AdminJobsPage = lazy(() => import("@/pages/admin/jobs"));
@@ -474,6 +475,7 @@ function AuthenticatedApp() {
               <Route path="/crew"><CrewTodayPage /></Route>
               <Route path="/crew/jobs"><CrewJobsNewPage /></Route>
               <Route path="/crew/schedule"><CrewSchedulePage /></Route>
+              <Route path="/crew/reviews"><CrewReviewsPage /></Route>
               <Route path="/crew/earnings"><CrewEarningsPage /></Route>
               <Route><Redirect to="/crew" /></Route>
             </Switch>

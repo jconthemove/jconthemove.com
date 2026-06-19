@@ -40,6 +40,10 @@ function formatHour(h: number): string {
   return `${h - 12}pm`;
 }
 
+function isCompletedJob(job: { status?: string | null }) {
+  return String(job.status || "").toLowerCase() === "completed";
+}
+
 type CalendarJob = {
   id: string;
   serviceType: string;
@@ -408,6 +412,7 @@ export default function CrewSchedulePage() {
 
     let bg = "bg-slate-800/30 hover:bg-slate-700/40 border-slate-700/30";
     if (block) bg = "bg-red-950/50 border-red-800/50 hover:bg-red-900/50";
+    else if (jobs.length > 0 && jobs.every(isCompletedJob)) bg = "bg-emerald-950/35 border-emerald-700/40 hover:bg-emerald-900/40";
     else if (jobs.length > 0) bg = "bg-blue-950/50 border-blue-700/40 hover:bg-blue-900/50";
     else if (hourOverride) bg = "bg-amber-950/40 border-amber-700/30 hover:bg-amber-900/40";
     else if (isScheduledOff) bg = "bg-slate-900/30 border-slate-800/30 opacity-40";
@@ -424,13 +429,17 @@ export default function CrewSchedulePage() {
         <div className="flex flex-wrap gap-0.5 justify-center mt-0.5">
           {block && <Ban className="h-3 w-3 text-red-400" />}
           {!block && jobs.map((j, ji) => (
-            <span key={ji} className="text-[10px] leading-none">{SERVICE_ICONS[j.serviceType] || "📦"}</span>
+            isCompletedJob(j) ? (
+              <CheckCircle2 key={ji} className="h-3 w-3 text-emerald-400" />
+            ) : (
+              <span key={ji} className="text-[10px] leading-none">{SERVICE_ICONS[j.serviceType] || "📦"}</span>
+            )
           ))}
           {hourOverride && !block && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-0.5" />}
         </div>
         {jobs.length > 0 && !block && (
           <p className="text-[8px] text-blue-300 mt-0.5 text-center leading-tight truncate w-full px-0.5">
-            {SERVICE_LABELS[jobs[0].serviceType]?.split(" ")[0] || "Job"}
+            {jobs.every(isCompletedJob) ? "Done" : SERVICE_LABELS[jobs[0].serviceType]?.split(" ")[0] || "Job"}
             {jobs.length > 1 ? ` +${jobs.length - 1}` : ""}
           </p>
         )}
@@ -722,12 +731,16 @@ export default function CrewSchedulePage() {
                     const timeWindow = getJobTimeWindow(j, dayModal.forWeek);
                     const pickup = j.confirmedFromAddress || j.fromAddress;
                     return (
-                      <div key={j.id} className="bg-blue-950/40 border border-blue-700/30 rounded-lg p-3 space-y-1.5">
+                      <div key={j.id} className={`${isCompletedJob(j) ? "bg-emerald-950/30 border-emerald-700/30" : "bg-blue-950/40 border-blue-700/30"} border rounded-lg p-3 space-y-1.5`}>
                         <div className="flex items-center gap-2">
-                          <span className="text-lg">{SERVICE_ICONS[j.serviceType] || "📦"}</span>
+                          {isCompletedJob(j) ? (
+                            <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                          ) : (
+                            <span className="text-lg">{SERVICE_ICONS[j.serviceType] || "📦"}</span>
+                          )}
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-white">{SERVICE_LABELS[j.serviceType] || j.serviceType}</p>
-                            <Badge className="text-[10px] bg-blue-900/60 text-blue-300 border-blue-700/30">
+                            <Badge className={`text-[10px] ${isCompletedJob(j) ? "bg-emerald-900/60 text-emerald-300 border-emerald-700/30" : "bg-blue-900/60 text-blue-300 border-blue-700/30"}`}>
                               {j.status.replace(/_/g, " ")}
                             </Badge>
                           </div>
