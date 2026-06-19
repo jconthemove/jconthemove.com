@@ -12,7 +12,8 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   MapPin, Calendar, Loader2, ChevronRight, Briefcase, Coins, Users,
   CheckCircle2, ClipboardList, Plus, Truck, Clock, ArrowLeftRight,
-  Star, AlertCircle, ChevronDown, Navigation, Play, Flag, XCircle, DollarSign
+  Star, AlertCircle, ChevronDown, Navigation, Play, Flag, XCircle, DollarSign,
+  Archive, Trash2
 } from "lucide-react";
 import { useLocation } from "wouter";
 import type { User } from "@shared/schema";
@@ -161,13 +162,17 @@ function JobBoardCard({
   job,
   onApply,
   onViewDetail,
+  onArchive,
   isPending,
+  archivePending,
   crewNames,
 }: {
   job: JobBoardLead;
   onApply: () => void;
   onViewDetail: () => void;
+  onArchive?: () => void;
   isPending: boolean;
+  archivePending?: boolean;
   crewNames: string[];
 }) {
   const isFull = job.crewSlotsFilled >= (job.crewSize || 2);
@@ -308,6 +313,18 @@ function JobBoardCard({
             Details <ChevronRight className="h-3.5 w-3.5 ml-1" />
           </Button>
         </div>
+        {onArchive && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={(e) => { e.stopPropagation(); onArchive(); }}
+            disabled={archivePending}
+            className="mt-2 w-full min-h-[40px] border-red-500/40 bg-red-500/10 text-red-200 hover:bg-red-500/20 hover:text-white text-xs font-semibold"
+          >
+            {archivePending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-3.5 w-3.5 mr-1.5" />}
+            Delete test lead
+          </Button>
+        )}
       </CardContent>
     </Card>
   );
@@ -345,9 +362,11 @@ function MyJobCard({
   onStatus,
   onAccept,
   onDecline,
+  onArchive,
   statusPending,
   acceptPending,
   declinePending,
+  archivePending,
 }: {
   lead: EnrichedLead;
   onViewDetail: () => void;
@@ -357,9 +376,11 @@ function MyJobCard({
   onStatus: (leadId: string, status: "en_route"|"on_site"|"completed") => void;
   onAccept: (leadId: string) => void;
   onDecline: (leadId: string) => void;
+  onArchive?: () => void;
   statusPending: string | null;
   acceptPending: string | null;
   declinePending: string | null;
+  archivePending?: boolean;
 }) {
   const effectiveDate = lead.confirmedDate || lead.moveDate;
   const city = extractCity(lead.fromAddress);
@@ -576,6 +597,28 @@ function MyJobCard({
             </div>
           )}
         </div>
+        {onArchive && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={(e) => { e.stopPropagation(); onArchive(); }}
+            disabled={archivePending}
+            className={`mt-2 w-full min-h-[40px] text-xs font-semibold ${
+              lead.status === "completed"
+                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20 hover:text-white"
+                : "border-red-500/40 bg-red-500/10 text-red-200 hover:bg-red-500/20 hover:text-white"
+            }`}
+          >
+            {archivePending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : lead.status === "completed" ? (
+              <Archive className="h-3.5 w-3.5 mr-1.5" />
+            ) : (
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+            )}
+            {lead.status === "completed" ? "Archive completed lead" : "Delete test lead"}
+          </Button>
+        )}
       </CardContent>
     </Card>
   );
@@ -866,8 +909,10 @@ export default function CrewJobsPage() {
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
   const [applyingId, setApplyingId] = useState<string | null>(null);
+  const [archivingId, setArchivingId] = useState<string | null>(null);
   const [selectedJob, setSelectedJob] = useState<JobBoardLead | EnrichedLead | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const isAdmin = ["admin", "business_owner"].includes(user?.role || "");
 
   const { data: boardJobs = [], isLoading: boardLoading } = useQuery<JobBoardLead[]>({
     queryKey: ["/api/leads/job-board"],
@@ -990,6 +1035,65 @@ export default function CrewJobsPage() {
     },
   });
 
+  const archiveLeadMutation = useMutation({
+    mutationFn: async ({ leadId }: { leadId: string; label: string }) => {
+      const res = await apiRequest("DELETE", `/api/leads/${leadId}`);
+      return res.json();
+    },
+    onMutate: ({ leadId }) => setArchivingId(leadId),
+    onSuccess: (_data, { label }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads/job-board"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads/my-jobs"] });
+      setArchivingId(null);
+      setDetailOpen(false);
+      setSelectedJob(null);
+      toast({ title: label, description: "Lead moved out of active job views." });
+    },
+    onError: (e: Error) => {
+      setArchivingId(null);
+      toast({ title: "Cleanup failed", description: e.message, variant: "destructive" });
+    },
+  });
+
+  const archiveCompletedMutation = useMutation({
+    mutationFn: async (leadIds: string[]) => {
+      const res = await apiRequest("DELETE", "/api/leads", { ids: leadIds });
+      return res.json();
+    },
+    onMutate: () => setArchivingId("completed-bulk"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads/job-board"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads/my-jobs"] });
+      setArchivingId(null);
+      toast({ title: "Completed leads archived", description: "Completed customer leads moved out of active job views." });
+    },
+    onError: (e: Error) => {
+      setArchivingId(null);
+      toast({ title: "Bulk archive failed", description: e.message, variant: "destructive" });
+    },
+  });
+
+  function archiveLead(lead: Pick<EnrichedLead, "id" | "status" | "firstName" | "lastName"> | Pick<JobBoardLead, "id" | "status" | "firstName" | "lastName">) {
+    const isCompleted = lead.status === "completed";
+    const name = `${lead.firstName || ""} ${lead.lastName || ""}`.trim() || "this lead";
+    const prompt = isCompleted
+      ? `Archive completed customer lead for ${name}? It will leave active job screens but stay in archived records.`
+      : `Delete/archive test lead for ${name}? It will leave active job screens but stay in archived records.`;
+    if (!window.confirm(prompt)) return;
+    archiveLeadMutation.mutate({
+      leadId: lead.id,
+      label: isCompleted ? "Completed lead archived" : "Test lead deleted",
+    });
+  }
+
+  function archiveCompletedLeads() {
+    if (completedJobs.length === 0) return;
+    if (!window.confirm(`Archive all ${completedJobs.length} completed customer leads shown here? They will stay in archived records.`)) return;
+    archiveCompletedMutation.mutate(completedJobs.map((lead) => lead.id));
+  }
+
   const activeJobs = useMemo(
     () => myJobs.filter(l => !["completed", "cancelled"].includes(l.status)),
     [myJobs]
@@ -1069,7 +1173,9 @@ export default function CrewJobsPage() {
                 job={job}
                 onApply={() => { setApplyingId(job.id); applyMutation.mutate(job.id); }}
                 onViewDetail={() => openDetail(job)}
+                onArchive={isAdmin ? () => archiveLead(job) : undefined}
                 isPending={applyingId === job.id && applyMutation.isPending}
+                archivePending={archivingId === job.id}
                 crewNames={getCrewNames(job.crewMembers)}
               />
             ))
@@ -1103,9 +1209,11 @@ export default function CrewJobsPage() {
                         onStatus={(leadId, status) => statusMutation.mutate({ leadId, status })}
                         onAccept={(leadId) => acceptOfferMutation.mutate(leadId)}
                         onDecline={(leadId) => declineMutation.mutate(leadId)}
+                        onArchive={isAdmin ? () => archiveLead(lead) : undefined}
                         statusPending={statusPending}
                         acceptPending={acceptPending}
                         declinePending={declinePending}
+                        archivePending={archivingId === lead.id}
                       />
                     );
                   })}
@@ -1113,18 +1221,46 @@ export default function CrewJobsPage() {
               )}
               {completedJobs.length > 0 && (
                 <div className="space-y-2 mt-4">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Completed ({completedJobs.length})</p>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Completed ({completedJobs.length})</p>
+                    {isAdmin && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={archiveCompletedLeads}
+                        disabled={archiveCompletedMutation.isPending}
+                        className="min-h-[36px] border-emerald-500/40 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20 hover:text-white text-xs font-semibold"
+                      >
+                        {archiveCompletedMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Archive className="h-3.5 w-3.5 mr-1.5" />}
+                        Archive all
+                      </Button>
+                    )}
+                  </div>
                   {completedJobs.slice(0, 5).map(lead => (
                     <Card key={lead.id} className="bg-white/[0.02] border border-slate-800/60 cursor-pointer" onClick={() => openDetail(lead)}>
                       <CardContent className="p-3">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-3">
                           <div>
                             <p className="text-sm text-slate-300 font-medium">{lead.firstName} {lead.lastName}</p>
                             <p className="text-xs text-slate-500">
                               {SERVICE_LABELS[lead.serviceType] || lead.serviceType} · {formatDateShort(lead.confirmedDate || lead.moveDate)}
                             </p>
                           </div>
-                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                            <CheckCircle2 className="h-4 w-4 text-green-500" />
+                            {isAdmin && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => archiveLead(lead)}
+                                disabled={archivingId === lead.id}
+                                className="min-h-[34px] border-emerald-500/40 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20 hover:text-white text-xs font-semibold"
+                              >
+                                {archivingId === lead.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Archive className="h-3.5 w-3.5 mr-1" />}
+                                Archive
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       </CardContent>
                     </Card>

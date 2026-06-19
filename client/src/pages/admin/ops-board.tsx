@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Clock,
   DollarSign,
   Filter,
   Loader2,
@@ -18,7 +17,6 @@ import {
   Search,
   Sparkles,
   Truck,
-  Users,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -191,6 +189,27 @@ function cityFrom(address?: string | null) {
   return parts.length >= 2 ? parts[parts.length - 2] : parts[0];
 }
 
+function customerName(lead: Lead) {
+  return `${lead.firstName || ""} ${lead.lastName || ""}`.trim() || "Customer";
+}
+
+function formatPhone(value?: string | null) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (digits.length === 10) return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  if (digits.length === 11 && digits[0] === "1") return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  return value || "No phone";
+}
+
+function shortAddress(value?: string | null) {
+  if (!value) return "Address needed";
+  const parts = value.split(",").map((part) => part.trim()).filter(Boolean);
+  return parts.slice(0, 2).join(", ") || value;
+}
+
+function statusLabel(value?: string | null) {
+  return String(value || "new").replaceAll("_", " ");
+}
+
 function isAssigned(lead: Lead) {
   return ASSIGNED_STATUSES.has(lead.status) || !!dateOnly(lead.confirmedDate) || (lead.crewMembers?.length || 0) > 0;
 }
@@ -205,71 +224,109 @@ function TradingJobCard({ lead, compact = false, onOpen }: { lead: Lead; compact
   const service = SERVICE_LABELS[lead.serviceType] || lead.serviceType;
   const date = lead.confirmedDate || lead.moveDate || null;
   const completed = isCompletedJob(lead);
+  const route = lead.toAddress ? `${cityFrom(lead.fromAddress)} to ${cityFrom(lead.toAddress)}` : cityFrom(lead.fromAddress);
 
   return (
     <button
       onClick={() => onOpen(lead)}
-      className={`group w-full text-left rounded-[8px] border shadow-sm transition ${
+      className={`group w-full text-left rounded-[8px] border shadow-sm transition focus:outline-none focus:ring-2 focus:ring-blue-400 ${
         completed
           ? "border-emerald-700/50 bg-emerald-950/20 hover:border-emerald-400/70 hover:bg-emerald-950/35"
-          : "border-slate-700 bg-slate-900 hover:border-blue-400/70 hover:bg-slate-800"
+          : "border-slate-700 bg-slate-900 hover:border-blue-400/70 hover:bg-slate-800/90"
       } ${
-        compact ? "p-2" : "p-3"
+        compact ? "p-2" : "p-3 sm:p-4"
       }`}
     >
-      <div className={`rounded-[6px] border p-2 ${
-        completed
-          ? "border-emerald-700/50 bg-emerald-950/30"
-          : "border-slate-700 bg-gradient-to-br from-slate-950 to-slate-800"
-      }`}>
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className={`grid h-10 w-10 place-items-center rounded-[6px] text-xl ring-1 ${
-              completed ? "bg-emerald-500/20 text-emerald-300 ring-emerald-500/40" : "bg-slate-800 ring-slate-600"
+      {compact ? (
+        <div className="flex items-center gap-2">
+          <div className={`grid h-9 w-9 flex-shrink-0 place-items-center rounded-[6px] text-xs font-black ring-1 ${
+            completed ? "bg-emerald-500/20 text-emerald-300 ring-emerald-500/40" : "bg-slate-800 text-blue-100 ring-slate-600"
+          }`}>
+            {completed ? <CheckCircle2 className="h-4 w-4" /> : SERVICE_ICON[lead.serviceType] || "JOB"}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-xs font-black text-white">{customerName(lead)}</div>
+            <div className="truncate text-[10px] text-slate-400">{service} - {formatMoney(lead.totalPrice || lead.basePrice)}</div>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-start gap-3">
+            <div className={`grid h-12 w-12 flex-shrink-0 place-items-center rounded-[8px] text-sm font-black ring-1 ${
+              completed ? "bg-emerald-500/20 text-emerald-300 ring-emerald-500/40" : "bg-blue-500/15 text-blue-100 ring-blue-400/30"
             }`}>
-              {completed ? <CheckCircle2 className="h-5 w-5" /> : SERVICE_ICON[lead.serviceType] || "JOB"}
+              {completed ? <CheckCircle2 className="h-6 w-6" /> : SERVICE_ICON[lead.serviceType] || "JOB"}
             </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{formatOrder(lead)}</span>
+                <Badge className={completed ? "border-emerald-400/30 bg-emerald-500/15 text-emerald-200" : "border-orange-400/30 bg-orange-500/15 text-orange-200"}>
+                  {completed ? "Completed" : statusLabel(lead.status)}
+                </Badge>
+              </div>
+              <div className="mt-1 truncate text-lg font-black text-white">{customerName(lead)}</div>
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-300">
+                <span className="inline-flex items-center gap-1.5">
+                  <Phone className="h-3.5 w-3.5 text-blue-300" />
+                  {formatPhone(lead.phone)}
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <Package className="h-3.5 w-3.5 text-blue-300" />
+                  {service}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+            <div className="rounded-[8px] border border-slate-800 bg-slate-950/80 p-3">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Date</div>
+              <div className="mt-1 font-black text-slate-100">{displayDate(date)}</div>
+            </div>
+            <div className="rounded-[8px] border border-slate-800 bg-slate-950/80 p-3">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Price</div>
+              <div className="mt-1 font-black text-emerald-300">{formatMoney(lead.totalPrice || lead.basePrice)}</div>
+            </div>
+            <div className="rounded-[8px] border border-slate-800 bg-slate-950/80 p-3">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Crew</div>
+              <div className={crewCount >= needed ? "mt-1 font-black text-green-300" : "mt-1 font-black text-yellow-300"}>
+                {crewCount}/{needed} movers
+              </div>
+            </div>
+            <div className="rounded-[8px] border border-slate-800 bg-slate-950/80 p-3">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Window</div>
+              <div className="mt-1 truncate font-black text-slate-100">{lead.arrivalWindow || "Set time"}</div>
+            </div>
+          </div>
+
+          <div className="mt-3 grid gap-2 text-sm">
+            <div className="flex min-w-0 items-center gap-2 rounded-[8px] border border-slate-800 bg-slate-950/60 px-3 py-2 text-slate-200">
+              <MapPin className="h-4 w-4 flex-shrink-0 text-blue-300" />
+              <span className="truncate">{route}</span>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="min-w-0 rounded-[8px] border border-slate-800 bg-slate-950/60 px-3 py-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">From</div>
+                <div className="mt-0.5 truncate text-slate-200">{shortAddress(lead.fromAddress)}</div>
+              </div>
+              <div className="min-w-0 rounded-[8px] border border-slate-800 bg-slate-950/60 px-3 py-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">To</div>
+                <div className="mt-0.5 truncate text-slate-200">{shortAddress(lead.toAddress)}</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 flex items-center justify-between gap-3 rounded-[8px] border border-blue-400/25 bg-blue-500/10 px-3 py-3">
             <div className="min-w-0">
-              <div className="text-[10px] uppercase tracking-wider text-slate-500">{formatOrder(lead)}</div>
-              <div className="truncate text-sm font-black text-white">{service}</div>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-blue-200/70">Next tap</div>
+              <div className="truncate text-sm font-black text-white">{isAssigned(lead) ? "Open job controls" : "Build quote"}</div>
+            </div>
+            <div className="flex h-11 min-w-28 items-center justify-center rounded-[8px] bg-blue-600 px-4 text-sm font-black text-white transition group-hover:bg-blue-500">
+              Open
             </div>
           </div>
-          <Badge className={completed ? "border-emerald-400/30 bg-emerald-500/15 text-emerald-200" : "border-orange-400/30 bg-orange-500/15 text-orange-200"}>
-            {completed ? "Completed" : formatMoney(lead.totalPrice || lead.basePrice)}
-          </Badge>
-        </div>
-
-        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-          <div className="rounded-[6px] bg-slate-950/70 p-2">
-            <div className="text-slate-500">Date</div>
-            <div className="font-semibold text-slate-100">{displayDate(date)}</div>
-          </div>
-          <div className="rounded-[6px] bg-slate-950/70 p-2">
-            <div className="text-slate-500">Crew</div>
-            <div className={crewCount >= needed ? "font-semibold text-green-300" : "font-semibold text-yellow-300"}>
-              {crewCount}/{needed} movers
-            </div>
-          </div>
-        </div>
-
-        {!compact && (
-          <>
-            <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
-              <Clock className="h-3.5 w-3.5" />
-              <span>{lead.confirmedHours ? `${lead.confirmedHours} hrs` : "Hours TBD"}</span>
-              <MapPin className="ml-1 h-3.5 w-3.5" />
-              <span className="truncate">{cityFrom(lead.fromAddress)}</span>
-            </div>
-            <p className="mt-2 line-clamp-2 min-h-[2.5rem] text-xs leading-5 text-slate-300">
-              {lead.details || lead.quoteNotes || "Open the fast quote drawer to choose package, crew, truck, and add-ons."}
-            </p>
-          </>
-        )}
-      </div>
-      <div className="mt-2 flex items-center justify-between px-1 text-[10px] uppercase tracking-wider text-slate-500">
-        <span>JC ON THE MOVE</span>
-        <span className={completed ? "text-emerald-300" : ""}>{lead.status.replaceAll("_", " ")}</span>
-      </div>
+        </>
+      )}
     </button>
   );
 }
