@@ -13641,6 +13641,66 @@ Thank you for your business!
   // EOD projection (today's running total scaled by fraction of day
   // elapsed) and the trailing 4-same-weekday average so admin UI can
   // show observed + historical baseline side by side.
+  app.get("/api/admin/marketplace/pricing-zones", isAuthenticated, requireBusinessOwner, async (_req, res) => {
+    try {
+      const { listPricingZones } = await import("./marketplace/zonePricing");
+      res.json({ zones: await listPricingZones() });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message || "Failed to load pricing zones" });
+    }
+  });
+
+  app.post("/api/admin/marketplace/pricing-zones", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const { upsertPricingZone } = await import("./marketplace/zonePricing");
+      const zone = await upsertPricingZone(req.body || {});
+      res.status(201).json({ zone });
+    } catch (e: any) {
+      res.status(400).json({ error: e?.message || "Failed to save pricing zone" });
+    }
+  });
+
+  app.patch("/api/admin/marketplace/pricing-zones/:id", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const { upsertPricingZone } = await import("./marketplace/zonePricing");
+      const zone = await upsertPricingZone({ ...(req.body || {}), id: Number(req.params.id) });
+      res.json({ zone });
+    } catch (e: any) {
+      res.status(400).json({ error: e?.message || "Failed to update pricing zone" });
+    }
+  });
+
+  app.delete("/api/admin/marketplace/pricing-zones/:id", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const { deletePricingZone } = await import("./marketplace/zonePricing");
+      const ok = await deletePricingZone(Number(req.params.id));
+      if (!ok) return res.status(404).json({ error: "Zone not found" });
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message || "Failed to delete pricing zone" });
+    }
+  });
+
+  app.post("/api/admin/marketplace/zone-rates", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const { upsertZoneRate } = await import("./marketplace/zonePricing");
+      const rate = await upsertZoneRate(req.body || {});
+      res.status(201).json({ rate });
+    } catch (e: any) {
+      res.status(400).json({ error: e?.message || "Failed to save zone rate" });
+    }
+  });
+
+  app.post("/api/marketplace/quote-preview", async (req: any, res) => {
+    try {
+      const { previewZoneQuote } = await import("./marketplace/zonePricing");
+      const preview = await previewZoneQuote(req.body || {});
+      res.json(preview);
+    } catch (e: any) {
+      res.status(400).json({ error: e?.message || "Failed to preview quote" });
+    }
+  });
+
   app.get("/api/admin/revenue-projection", isAuthenticated, requireBusinessOwner, async (_req, res) => {
     try {
       const { rows: todayRows } = await pool.query<{ revenue: number }>(`

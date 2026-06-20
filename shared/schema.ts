@@ -130,6 +130,9 @@ export const leads = pgTable("leads", {
   // leads) shares this UUID so we can render them as a single grouped card
   // in /my-jobs and present the bundle as one unit in admin views.
   bundleGroupId: text("bundle_group_id"),
+  bookingId: varchar("booking_id"), // Linked multi-service booking snapshot, if created from /book
+  quoteSnapshot: jsonb("quote_snapshot").default("{}"), // Frozen quote/booking details for ops review
+  zoneSnapshot: jsonb("zone_snapshot").default("{}"), // Frozen pricing-zone match/rate data
 
   // Re-book email attribution (Task #108). Set when a customer arrives at a
   // booking page from a re-book reminder email and is tagged with the

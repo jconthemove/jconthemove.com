@@ -188,6 +188,23 @@ server.listen(port, '0.0.0.0', () => {
       } catch (e) { console.error('demand history columns init error:', e); }
     })();
 
+    // Marketplace card bridge: /book persists a booking snapshot, but ops,
+    // calendar, crew assignment, and payouts run on leads. These additive
+    // columns let every booking create/link a durable operational lead card.
+    (async () => {
+      try {
+        const { pool: dbPool } = await import('./db');
+        await dbPool.query(`
+          ALTER TABLE leads
+            ADD COLUMN IF NOT EXISTS booking_id     VARCHAR,
+            ADD COLUMN IF NOT EXISTS quote_snapshot JSONB DEFAULT '{}'::jsonb,
+            ADD COLUMN IF NOT EXISTS zone_snapshot  JSONB DEFAULT '{}'::jsonb
+        `);
+        await dbPool.query(`CREATE INDEX IF NOT EXISTS idx_leads_booking_id ON leads(booking_id)`);
+        console.log('✅ Marketplace lead bridge columns ready');
+      } catch (e) { console.error('marketplace lead bridge init error:', e); }
+    })();
+
     // Initialize server with comprehensive error handling
     console.log('Initializing application server...');
     const { registerRoutes } = await import('./routes');

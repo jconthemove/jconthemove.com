@@ -35,6 +35,8 @@ import {
   bundleSettingsAuditLog,
   serviceCatalog,
   users,
+  leads,
+  notifications,
   workerProfiles,
   promoCodes,
   marketingReps,
@@ -72,6 +74,7 @@ const router = Router();
 const WORKER_TIERS = ["worker", "bronze", "silver", "gold", "platinum"] as const;
 type WorkerTier = typeof WORKER_TIERS[number];
 const tierRank: Record<WorkerTier, number> = { worker: 0, bronze: 1, silver: 2, gold: 3, platinum: 4 };
+type PersistedBookingInput = BookingPricingItemInput & { serviceLabel: string };
 
 function normalizeWorkerTier(value: unknown, role?: string | null): WorkerTier {
   const raw = String(value || "").toLowerCase();
@@ -92,6 +95,100 @@ async function getAuthorityForUser(user: any) {
   const [profile] = await db.select().from(workerProfiles).where(eq(workerProfiles.userId, user.id)).limit(1);
   const tier = normalizeWorkerTier(profile?.authorityTier, user.role);
   return { tier, rank: tierRank[tier], profile };
+}
+
+function splitCustomerName(name: string): { firstName: string; lastName: string } {
+  const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { firstName: "Customer", lastName: "Request" };
+  if (parts.length === 1) return { firstName: parts[0], lastName: "Request" };
+  return { firstName: parts.slice(0, -1).join(" "), lastName: parts[parts.length - 1] };
+}
+
+function serviceTypeForLead(items: PersistedBookingInput[]): string {
+  const first = items[0]?.serviceCode || "moving";
+  if (first === "junk_removal") return "Junk Removal";
+  if (first === "cleaning" || first === "move_cleaning" || first === "deep_clean_turnover") return "Cleaning";
+  if (first === "delivery") return "Delivery";
+  if (first === "labor") return "Labor";
+  if (first === "moving") return "Residential Move";
+  return items[0]?.serviceLabel || first.replace(/_/g, " ");
+}
+
+function firstDetailValue(items: PersistedBookingInput[], keys: string[]): string | null {
+  for (const item of items) {
+    const details = (item.details || {}) as Record<string, unknown>;
+    for (const key of keys) {
+      const value = details[key];
+      if (typeof value === "string" && value.trim()) return value.trim();
+    }
+  }
+  return null;
+}
+
+function maxCrew(items: BookingPricingResult["items"], fallbackInputs: PersistedBookingInput[]): number {
+  const quotedCrew = items.map((item) => item.laborMeta?.crewSize || 0).filter((n) => n > 0);
+  const inputCrew = fallbackInputs
+    .map((item) => Number((item.details as any)?.crew || (item.details as any)?.crewSize || 0))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  return Math.max(1, ...quotedCrew, ...inputCrew, 2);
+}
+
+function firstHours(items: BookingPricingResult["items"], fallbackInputs: PersistedBookingInput[]): number | null {
+  const quoted = items.map((item) => item.laborMeta?.laborHours || 0).find((n) => n > 0);
+  if (quoted) return Math.ceil(quoted);
+  const input = fallbackInputs
+    .map((item) => Number((item.details as any)?.hours || (item.details as any)?.laborHours || 0))
+    .find((n) => Number.isFinite(n) && n > 0);
+  return input ? Math.ceil(input) : null;
+}
+
+function buildLeadDetails(args: {
+  bookingId: string;
+  bookingReference: string;
+  inputs: PersistedBookingInput[];
+  quote: BookingPricingResult;
+  notes?: string;
+}) {
+  const serviceLines = args.inputs.map((item, idx) => {
+    const details = (item.details || {}) as Record<string, unknown>;
+    const labor = args.quote.items[idx]?.laborMeta;
+    const bits = [
+      item.serviceLabel || item.serviceCode,
+      details.loadType ? `load type: ${details.loadType}` : null,
+      details.truckNeeded === true ? "JC truck" : details.truckNeeded === false ? "customer truck" : null,
+      details.truckSize ? `truck: ${details.truckSize}` : null,
+      labor ? `${labor.crewSize} crew x ${labor.laborHours} hr` : null,
+      details.packageLabel ? `package: ${details.packageLabel}` : null,
+    ].filter(Boolean);
+    return `- ${bits.join(" · ")}`;
+  });
+  return [
+    `[BOOKING ${args.bookingReference}] Linked booking ${args.bookingId}`,
+    `Quote snapshot: subtotal $${args.quote.subtotal.toFixed(2)}, estimate range/final $${args.quote.finalTotal.toFixed(2)}.`,
+    "Requested services:",
+    ...serviceLines,
+    args.notes ? `Customer/crew notes:\n${args.notes}` : null,
+  ].filter(Boolean).join("\n");
+}
+
+async function notifyOwnersOfLead(lead: any) {
+  const ownerRows = await db.select({
+    id: users.id,
+  }).from(users).where(
+    or(
+      inArray(users.role, ["admin", "business_owner"]),
+      eq(users.email, "upmichiganstatemovers@gmail.com"),
+      eq(users.email, "michigankid906@gmail.com"),
+    ),
+  );
+  if (ownerRows.length === 0) return;
+  await db.insert(notifications).values(ownerRows.map((owner) => ({
+    userId: owner.id,
+    type: "quote_request",
+    title: "New Marketplace Job Card",
+    message: `${lead.firstName} ${lead.lastName} submitted a ${lead.serviceType} request.`,
+    data: { leadId: lead.id, orderNumber: lead.orderNumber, bookingId: lead.bookingId },
+  }))).onConflictDoNothing();
 }
 
 async function resolveMarketingRepUserId(promoCode: string): Promise<string | null> {
@@ -147,14 +244,7 @@ async function loadBundles(): Promise<BundleDefinitionLike[]> {
 interface ResolvedItems {
   pricingInputs: BookingPricingItemInput[];
   /** Original per-line snapshot used when persisting the booking. */
-  persistInputs: Array<{
-    serviceCode: string;
-    serviceLabel: string;
-    quantity: number;
-    unitPrice: number;
-    priceMode: "fixed" | "hourly" | "per_unit" | "quote";
-    details: Record<string, unknown>;
-  }>;
+  persistInputs: PersistedBookingInput[];
 }
 
 /** Task #218 — Derive a small/medium/large jobSize hint from the per-line
@@ -533,6 +623,7 @@ function resolveItems(
     });
     persistInputs.push({
       serviceCode: item.serviceCode,
+      label,
       serviceLabel: label,
       quantity: effectiveQuantity,
       unitPrice,
@@ -1065,6 +1156,78 @@ router.post("/bookings", async (req: Request, res: Response) => {
     // Task #146 — auto-provision a Trash Valet subscription when bundled.
     // The helper already swallows its own errors so this call cannot turn a
     // successful booking create into a 500 even if provisioning fails.
+    let linkedLead: typeof leads.$inferSelect | null = null;
+    try {
+      const [existingLinked] = await db
+        .select()
+        .from(leads)
+        .where(eq(leads.bookingId, booking.id))
+        .limit(1);
+      if (existingLinked) {
+        linkedLead = existingLinked;
+      } else {
+        const name = splitCustomerName(body.customerName);
+        const requestedDate = firstDetailValue(persistInputs, ["requestedDate", "moveDate", "date"]);
+        const dropoffAddress = firstDetailValue(persistInputs, ["dropoffAddress", "toAddress", "destinationAddress"]);
+        const serviceType = serviceTypeForLead(persistInputs);
+        const crewSize = maxCrew(quote.items, persistInputs);
+        const confirmedHours = firstHours(quote.items, persistInputs);
+        const bookingReference = `JOB-${booking.id.slice(0, 8).toUpperCase()}`;
+        const quoteSnapshot = {
+          bookingId: booking.id,
+          bookingReference,
+          source: body.source || "api",
+          subtotal: quote.subtotal,
+          discountTotal: quote.discountTotal,
+          finalTotal: quote.finalTotal,
+          tokenEstimate: quote.tokenEstimate,
+          bundleApplied: quote.bundleApplied ?? null,
+          items: quote.items,
+          requestedItems: persistInputs.map((item) => ({
+            serviceCode: item.serviceCode,
+            serviceLabel: item.serviceLabel,
+            quantity: item.quantity,
+            priceMode: item.priceMode,
+            unitPrice: item.unitPrice,
+            details: item.details || {},
+          })),
+        };
+        const [createdLead] = await db.insert(leads).values({
+          firstName: name.firstName,
+          lastName: name.lastName,
+          email: body.customerEmail || `booking-${booking.id}@jconthemove.local`,
+          phone: body.customerPhone,
+          serviceType,
+          fromAddress: body.serviceAddress || "Address TBD",
+          toAddress: dropoffAddress || null,
+          moveDate: requestedDate || null,
+          details: buildLeadDetails({
+            bookingId: booking.id,
+            bookingReference,
+            inputs: persistInputs,
+            quote,
+            notes: body.notes || undefined,
+          }),
+          status: "quote_requested",
+          createdByUserId: requestUser?.id || null,
+          truckConfig: firstDetailValue(persistInputs, ["truckSituation"]) || null,
+          crewSize,
+          confirmedHours,
+          basePrice: money(quote.subtotal),
+          totalPrice: money(quote.finalTotal),
+          quoteNotes: body.notes || null,
+          lastQuoteUpdatedAt: new Date(),
+          bookingId: booking.id,
+          quoteSnapshot,
+          zoneSnapshot: {},
+        }).returning();
+        linkedLead = createdLead;
+        await notifyOwnersOfLead(createdLead);
+      }
+    } catch (leadErr) {
+      console.error("[bookings] marketplace lead bridge failed:", leadErr instanceof Error ? leadErr.message : leadErr);
+    }
+
     const trashItem = persistInputs.find((p) => p.serviceCode === "trash_valet");
     if (trashItem) {
       await autoProvisionTrashSubscriptionFromBooking({
@@ -1110,6 +1273,7 @@ router.post("/bookings", async (req: Request, res: Response) => {
       };
       if (!r.ok) {
         try {
+          await db.delete(leads).where(eq(leads.bookingId, booking.id));
           await db.delete(bookings).where(eq(bookings.id, booking.id));
         } catch (delErr) {
           console.error("[bookings] rollback delete failed for booking", booking.id, delErr);
@@ -1151,7 +1315,7 @@ router.post("/bookings", async (req: Request, res: Response) => {
       console.error("[bookings] admin notification failed:", notifyErr instanceof Error ? notifyErr.message : notifyErr);
     }
 
-    return res.status(201).json({ success: true, booking, quote, walletPay });
+    return res.status(201).json({ success: true, booking, quote, walletPay, lead: linkedLead });
   } catch (err) {
     if (err instanceof ZodError) {
       return res.status(400).json({ error: "Invalid request", details: err.errors });
