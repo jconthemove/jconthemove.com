@@ -15,7 +15,7 @@ import PwaInstallPrompt from "@/components/pwa-install-prompt";
 import { CartProvider } from "@/hooks/useCart";
 import { NotificationPrompt } from "@/components/notification-prompt";
 import { useMiningNotifications } from "@/hooks/useMiningNotifications";
-import { usePageView } from "@/hooks/usePageView";
+import { getVisitorId, usePageView } from "@/hooks/usePageView";
 import CookieBanner from "@/components/CookieBanner";
 
 // Layouts (kept eager — they render the shell before page content)
@@ -202,7 +202,14 @@ class RootErrorBoundary extends ReactComponent<
     this.setState({ componentStack: info?.componentStack || "" });
     fetch("/api/client-error", {
       method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
-      body: JSON.stringify({ boundary: "RootErrorBoundary", error: error?.message, stack: error?.stack, componentStack: info?.componentStack }),
+      body: JSON.stringify({
+        boundary: "RootErrorBoundary",
+        error: error?.message,
+        stack: error?.stack,
+        componentStack: info?.componentStack,
+        visitorId: getVisitorId(),
+        page: window.location.pathname + window.location.search,
+      }),
     }).catch(() => {});
   }
   render() {
@@ -266,7 +273,14 @@ class PageErrorBoundary extends ReactComponent<
     this.setState({ componentStack: info?.componentStack || "" });
     fetch("/api/client-error", {
       method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
-      body: JSON.stringify({ boundary: "PageErrorBoundary", error: error?.message, stack: error?.stack, componentStack: info?.componentStack }),
+      body: JSON.stringify({
+        boundary: "PageErrorBoundary",
+        error: error?.message,
+        stack: error?.stack,
+        componentStack: info?.componentStack,
+        visitorId: getVisitorId(),
+        page: window.location.pathname + window.location.search,
+      }),
     }).catch(() => {});
   }
   render() {

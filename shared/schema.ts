@@ -3050,6 +3050,26 @@ export const pageViews = pgTable("page_views", {
 });
 export type PageView = typeof pageViews.$inferSelect;
 
+export const bookingFunnelEvents = pgTable("booking_funnel_events", {
+  id: serial("id").primaryKey(),
+  visitorId: text("visitor_id"),
+  sessionId: text("session_id"),
+  userId: varchar("user_id"),
+  page: text("page").notNull().default("/book"),
+  eventType: text("event_type").notNull(), // step_snapshot | quote_error | submit_error | submit_success
+  step: text("step"),
+  bookingId: varchar("booking_id"),
+  leadId: varchar("lead_id"),
+  errorMessage: text("error_message"),
+  fieldSnapshot: jsonb("field_snapshot").default("{}"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_booking_funnel_created").on(table.createdAt),
+  index("idx_booking_funnel_visitor").on(table.visitorId),
+  index("idx_booking_funnel_type").on(table.eventType),
+]);
+export type BookingFunnelEvent = typeof bookingFunnelEvents.$inferSelect;
+
 export const calibrationSessions = pgTable("calibration_sessions", {
   id: serial("id").primaryKey(),
   appliedAt: timestamp("applied_at").defaultNow(),

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useLocation } from "wouter";
 
-function getVisitorId(): string {
+export function getVisitorId(): string {
   let id = localStorage.getItem("jc_visitor_id");
   if (!id) {
     id = crypto.randomUUID();

@@ -1768,6 +1768,31 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
 
   try {
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS booking_funnel_events (
+        id SERIAL PRIMARY KEY,
+        visitor_id TEXT,
+        session_id TEXT,
+        user_id VARCHAR(255),
+        page TEXT NOT NULL DEFAULT '/book',
+        event_type TEXT NOT NULL,
+        step TEXT,
+        booking_id VARCHAR(255),
+        lead_id VARCHAR(255),
+        error_message TEXT,
+        field_snapshot JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_booking_funnel_created ON booking_funnel_events(created_at);
+      CREATE INDEX IF NOT EXISTS idx_booking_funnel_visitor ON booking_funnel_events(visitor_id);
+      CREATE INDEX IF NOT EXISTS idx_booking_funnel_type ON booking_funnel_events(event_type);
+    `);
+    console.log('booking_funnel_events analytics table ready');
+  } catch (bfeErr) {
+    console.error('booking_funnel_events migration error (non-fatal):', bfeErr);
+  }
+
+  try {
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS calibration_sessions (
         id SERIAL PRIMARY KEY,
         applied_at TIMESTAMP DEFAULT NOW(),
@@ -1929,11 +1954,32 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
   app.get("/health", sendPlatformHealth);
   app.get("/api/health", sendReadinessHealth);
 
-  app.post("/api/client-error", (req, res) => {
+  app.post("/api/client-error", async (req, res) => {
     const { boundary, error, stack, componentStack } = req.body || {};
     console.error(`[CLIENT-ERROR] Boundary: ${boundary} | Error: ${error}`);
     if (componentStack) console.error(`[CLIENT-ERROR] Component Stack:${componentStack}`);
     if (stack) console.error(`[CLIENT-ERROR] JS Stack: ${String(stack).slice(0, 800)}`);
+    try {
+      await pool.query(
+        `INSERT INTO booking_funnel_events
+          (visitor_id, session_id, user_id, page, event_type, error_message, field_snapshot)
+         VALUES ($1, $2, $3, $4, 'client_error', $5, $6::jsonb)`,
+        [
+          req.body?.visitorId ? String(req.body.visitorId).slice(0, 100) : null,
+          req.body?.sessionId ? String(req.body.sessionId).slice(0, 100) : null,
+          (req as any).user?.id || ((req as any).session as any)?.userId || null,
+          req.body?.page ? String(req.body.page).slice(0, 500) : "/unknown",
+          error ? String(error).slice(0, 1000) : null,
+          JSON.stringify({
+            boundary: boundary ? String(boundary).slice(0, 100) : null,
+            stack: stack ? String(stack).slice(0, 1200) : null,
+            componentStack: componentStack ? String(componentStack).slice(0, 1200) : null,
+          }),
+        ],
+      );
+    } catch (err) {
+      console.error("[CLIENT-ERROR] persist failed:", err instanceof Error ? err.message : err);
+    }
     res.json({ received: true });
   });
 
@@ -13883,6 +13929,59 @@ Thank you for your business!
   });
 
   // GET /api/admin/analytics/traffic — admin only, returns monthly traffic breakdown
+  app.post("/api/analytics/booking-funnel", async (req, res) => {
+    try {
+      const body = req.body || {};
+      const eventType = typeof body.eventType === "string" ? body.eventType.slice(0, 80) : "";
+      if (!eventType) return res.json({ ok: false });
+      const userId = (req as any).user?.id || ((req as any).session as any)?.userId || null;
+      const fieldSnapshot =
+        body.fieldSnapshot && typeof body.fieldSnapshot === "object"
+          ? body.fieldSnapshot
+          : {};
+      await pool.query(
+        `INSERT INTO booking_funnel_events
+          (visitor_id, session_id, user_id, page, event_type, step, booking_id, lead_id, error_message, field_snapshot)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)`,
+        [
+          body.visitorId ? String(body.visitorId).slice(0, 100) : null,
+          body.sessionId ? String(body.sessionId).slice(0, 100) : null,
+          userId,
+          body.page ? String(body.page).slice(0, 500) : "/book",
+          eventType,
+          body.step ? String(body.step).slice(0, 80) : null,
+          body.bookingId ? String(body.bookingId).slice(0, 100) : null,
+          body.leadId ? String(body.leadId).slice(0, 100) : null,
+          body.errorMessage ? String(body.errorMessage).slice(0, 1000) : null,
+          JSON.stringify(fieldSnapshot),
+        ],
+      );
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[booking-funnel] capture error:", err instanceof Error ? err.message : err);
+      res.json({ ok: false });
+    }
+  });
+
+  app.get("/api/admin/analytics/booking-funnel", isAuthenticated, requireBusinessOwner, async (req, res) => {
+    try {
+      const limitRaw = Number(req.query.limit || 100);
+      const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.floor(limitRaw), 1), 250) : 100;
+      const { rows } = await pool.query(
+        `SELECT id, visitor_id, session_id, user_id, page, event_type, step,
+                booking_id, lead_id, error_message, field_snapshot, created_at
+           FROM booking_funnel_events
+          ORDER BY created_at DESC
+          LIMIT $1`,
+        [limit],
+      );
+      res.json({ events: rows });
+    } catch (err) {
+      console.error("[admin/booking-funnel] error:", err);
+      res.status(500).json({ error: "Failed to load booking funnel events" });
+    }
+  });
+
   app.get("/api/admin/analytics/traffic", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
       const { rows: monthly } = await pool.query(`

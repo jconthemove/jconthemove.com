@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import { useAuth } from "@/hooks/useAuth";
+import { getVisitorId } from "@/hooks/usePageView";
 import {
   MIN_REDEMPTION_TOKENS,
   REDEMPTION_INCREMENT,
@@ -94,6 +95,11 @@ interface CreateBookingResponse {
     tokenEstimate: number;
   };
   quote: QuoteResult;
+  lead?: {
+    id: string;
+    orderNumber?: number;
+    status?: string;
+  } | null;
 }
 
 interface QuickRequestResponse {
@@ -772,6 +778,11 @@ export default function MultiServiceBookPage() {
   const [applyTokens, setApplyTokens] = useState(0);
   const [tokenError, setTokenError] = useState<string | null>(null);
   const customerTier = (user?.loyaltyTier as string | undefined) || "bronze";
+  const bookingFunnelSessionIdRef = useRef<string>(
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  );
   const [confirmation, setConfirmation] = useState<
     CreateBookingResponse["booking"] & { items: SelectedItem[]; quote: QuoteResult } | null
   >(null);
@@ -825,6 +836,104 @@ export default function MultiServiceBookPage() {
   const walletCash = walletData ? parseFloat(walletData.cashBalance || "0") : 0;
   const walletTokens = walletData ? Math.floor(parseFloat(walletData.tokenBalance || "0")) : 0;
 
+  function buildBookingFunnelSnapshot() {
+    return {
+      bookingMode,
+      step,
+      serviceAddress: serviceAddress.trim() || null,
+      city: addressCity || null,
+      state: addressState || null,
+      zip: addressZip || zipFromAddress(serviceAddress) || null,
+      contact: {
+        name: contact.customerName.trim() || null,
+        phone: contact.customerPhone.trim() || null,
+        email: contact.customerEmail.trim() || null,
+        hasNotes: contact.notes.trim().length > 0,
+      },
+      workerMode: isWorker,
+      workerFields: isWorker
+        ? {
+            assignedTo: workerFields.assignedTo.trim() || null,
+            leadSource: workerFields.leadSource.trim() || null,
+            hasInternalNotes: workerFields.internalNotes.trim().length > 0,
+          }
+        : null,
+      items: items.map((item) => ({
+        serviceCode: item.serviceCode,
+        label: item.label,
+        movingPath: item.details.movingPath || null,
+        loadType: item.details.loadType || null,
+        truckNeeded: item.details.truckNeeded ?? null,
+        truckSize: item.details.truckSize || null,
+        jobSize: item.details.jobSize || null,
+        requestedDate: item.details.requestedDate || null,
+        requestedStartTime: item.details.requestedStartTime || null,
+        packageId: item.details.packageId || null,
+        packageLabel: item.details.packageLabel || null,
+        crew: item.details.crew || item.details.inventoryCrewRecommendation || null,
+        hours: item.details.hours || item.details.inventoryLaborHours || null,
+        minPrice: item.details.minPrice || item.details.inventoryPriceMin || null,
+        maxPrice: item.details.maxPrice || item.details.inventoryPriceMax || null,
+        verifiedDriveMiles: item.details.verifiedDriveMiles || null,
+        inventoryItemCount: item.details.inventoryItems?.reduce((sum: number, entry: any) => sum + Number(entry.quantity || 0), 0) || 0,
+        specialItemsCount: item.details.specialItems?.length || 0,
+      })),
+      quote: quote
+        ? {
+            subtotal: quote.subtotal,
+            finalTotal: quote.finalTotal,
+            discountTotal: quote.discountTotal,
+            tokenEstimate: quote.tokenEstimate,
+          }
+        : null,
+      marketplacePreview: marketplacePreviewQuery.data
+        ? {
+            matched: marketplacePreviewQuery.data.matched,
+            zone: marketplacePreviewQuery.data.zone?.name || null,
+            estimateLabel: marketplacePreviewQuery.data.estimateLabel,
+            minEstimate: marketplacePreviewQuery.data.minEstimate,
+            maxEstimate: marketplacePreviewQuery.data.maxEstimate,
+          }
+        : null,
+      continueReason: canContinueReason(),
+      tokenError,
+    };
+  }
+
+  function trackBookingFunnel(eventType: string, options: {
+    errorMessage?: string;
+    bookingId?: string;
+    leadId?: string | null;
+  } = {}) {
+    if (typeof window === "undefined") return;
+    const payload = {
+      visitorId: getVisitorId(),
+      sessionId: bookingFunnelSessionIdRef.current,
+      page: window.location.pathname + window.location.search,
+      eventType,
+      step,
+      bookingId: options.bookingId,
+      leadId: options.leadId,
+      errorMessage: options.errorMessage,
+      fieldSnapshot: buildBookingFunnelSnapshot(),
+    };
+    const body = JSON.stringify(payload);
+    try {
+      if (navigator.sendBeacon) {
+        const blob = new Blob([body], { type: "application/json" });
+        if (navigator.sendBeacon("/api/analytics/booking-funnel", blob)) return;
+      }
+    } catch {
+      // Fall through to fetch.
+    }
+    fetch("/api/analytics/booking-funnel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+      keepalive: true,
+    }).catch(() => {});
+  }
+
   const marketplacePreviewQuery = useQuery<MarketplaceQuotePreview | null>({
     queryKey: ["/api/marketplace/quote-preview", marketplacePreviewInput],
     enabled: !!marketplacePreviewInput && hasMovingService && stepIndex(step) >= stepIndex("configure"),
@@ -842,6 +951,35 @@ export default function MultiServiceBookPage() {
   // submit could send an `applyTokens` above the cap, triggering a
   // server rejection the user has no way to recover from once the
   // slider hides.
+  useEffect(() => {
+    if (bookingMode === "choose") return;
+    if (confirmation) return;
+    const timer = window.setTimeout(() => {
+      trackBookingFunnel("step_snapshot");
+    }, 1200);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    bookingMode,
+    step,
+    serviceAddress,
+    addressCity,
+    addressState,
+    addressZip,
+    contact.customerName,
+    contact.customerPhone,
+    contact.customerEmail,
+    contact.notes,
+    workerFields.assignedTo,
+    workerFields.leadSource,
+    workerFields.internalNotes,
+    JSON.stringify(items),
+    quote?.finalTotal,
+    marketplacePreviewQuery.data?.estimateLabel,
+    tokenError,
+    confirmation,
+  ]);
+
   const tokenSliderMax = useMemo(() => {
     const subtotal = quote?.subtotal ?? 0;
     if (subtotal <= 0) return 0;
@@ -917,6 +1055,7 @@ export default function MultiServiceBookPage() {
           msg = parsed.message || parsed.error || msg;
         } catch { /* not json */ }
         setTokenError(msg);
+        trackBookingFunnel("quote_error", { errorMessage: msg });
         return;
       }
       if (data?.quote) {
@@ -1171,6 +1310,10 @@ export default function MultiServiceBookPage() {
     onSuccess: (data) => {
       if (data?.booking) {
         setConfirmation({ ...data.booking, items: [...items], quote: data.quote });
+        trackBookingFunnel("submit_success", {
+          bookingId: data.booking.id,
+          leadId: data.lead?.id || null,
+        });
         queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
         window.scrollTo({ top: 0, behavior: "smooth" });
       }
@@ -1185,6 +1328,9 @@ export default function MultiServiceBookPage() {
       try { parsed = JSON.parse(m ? m[1] : raw); } catch { /* not json */ }
       const errCode = parsed?.error || "";
       const isWalletRedemptionError = /wallet|token|redemption|insufficient|jcmoves/i.test(errCode + " " + (parsed?.message || ""));
+      trackBookingFunnel("submit_error", {
+        errorMessage: parsed?.message || parsed?.error || raw || "Booking submit failed",
+      });
       if (isWalletRedemptionError) {
         setTokenError(parsed?.message || parsed?.error || "Wallet payment was rejected.");
         return;
