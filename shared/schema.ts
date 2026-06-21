@@ -3032,6 +3032,9 @@ export const bookingCreateRequestSchema = bookingQuoteRequestSchema.extend({
   // step. Server attempts an atomic wallet debit; on insufficient
   // balance we mark the booking pending-payment and fall back to Square.
   payFromWallet: z.boolean().optional(),
+  // Marketplace zone estimate shown to the customer at submit time.
+  // Stored on the linked lead so later rate changes do not rewrite history.
+  marketplaceQuotePreview: z.record(z.any()).optional(),
 });
 export type BookingCreateRequest = z.infer<typeof bookingCreateRequestSchema>;
 

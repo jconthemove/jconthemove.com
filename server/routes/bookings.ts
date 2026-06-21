@@ -1173,6 +1173,16 @@ router.post("/bookings", async (req: Request, res: Response) => {
         const crewSize = maxCrew(quote.items, persistInputs);
         const confirmedHours = firstHours(quote.items, persistInputs);
         const bookingReference = `JOB-${booking.id.slice(0, 8).toUpperCase()}`;
+        const marketplaceQuotePreview =
+          body.marketplaceQuotePreview && typeof body.marketplaceQuotePreview === "object"
+            ? body.marketplaceQuotePreview
+            : null;
+        const zoneSnapshot = marketplaceQuotePreview
+          ? {
+              capturedAt: new Date().toISOString(),
+              marketplaceQuotePreview,
+            }
+          : {};
         const quoteSnapshot = {
           bookingId: booking.id,
           bookingReference,
@@ -1182,6 +1192,7 @@ router.post("/bookings", async (req: Request, res: Response) => {
           finalTotal: quote.finalTotal,
           tokenEstimate: quote.tokenEstimate,
           bundleApplied: quote.bundleApplied ?? null,
+          marketplaceQuotePreview,
           items: quote.items,
           requestedItems: persistInputs.map((item) => ({
             serviceCode: item.serviceCode,
@@ -1219,7 +1230,7 @@ router.post("/bookings", async (req: Request, res: Response) => {
           lastQuoteUpdatedAt: new Date(),
           bookingId: booking.id,
           quoteSnapshot,
-          zoneSnapshot: {},
+          zoneSnapshot,
         }).returning();
         linkedLead = createdLead;
         await notifyOwnersOfLead(createdLead);

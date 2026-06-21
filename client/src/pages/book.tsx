@@ -110,6 +110,28 @@ interface QuickRequestResponse {
   };
 }
 
+type MarketplaceQuotePreview = {
+  matched: boolean;
+  reason?: string;
+  zone?: {
+    id: string;
+    code: string;
+    name: string;
+  };
+  serviceCode: string;
+  crewSize: number;
+  requestedHours: number;
+  billableHours: number;
+  hourlyRate: number;
+  discountedHourlyRate?: number | null;
+  laborSubtotal: number;
+  travelFee: number;
+  subtotal: number;
+  minEstimate: number;
+  maxEstimate: number;
+  estimateLabel: string;
+};
+
 type BookingMode = "choose" | "quick" | "builder";
 
 type QuickRequestPhoto = {
@@ -178,6 +200,19 @@ function formatAttributionSummary(attribution: { promoCode: string; referralSlug
     parts.push(`Rep page ${repName}`);
   }
   return parts.length > 0 ? `${parts.join(" - ")} attached` : "";
+}
+
+function zipFromAddress(value: string) {
+  const match = value.match(/\b\d{5}(?:-\d{4})?\b/);
+  return match?.[0]?.slice(0, 5) || "";
+}
+
+function marketplaceServiceCodeForMoving(item: SelectedItem) {
+  const path = item.details.movingPath || "";
+  const loadType = item.details.loadType || "";
+  if (path === "packing_assembly") return "pack_unpack";
+  if (/delivery/i.test(loadType)) return "delivery";
+  return "load_unload";
 }
 
 const STEPS = ["services", "address", "configure", "contact", "safety", "review"] as const;
@@ -746,6 +781,21 @@ export default function MultiServiceBookPage() {
     () => items.some((item) => item.serviceCode === "moving" || item.serviceCode === "junk_removal"),
     [items],
   );
+  const marketplacePreviewInput = useMemo(() => {
+    const moving = items.find((item) => item.serviceCode === "moving");
+    if (!moving) return null;
+    const zip = addressZip || zipFromAddress(serviceAddress);
+    const crewSize = Number(moving.details.crew || moving.details.inventoryCrewRecommendation || 2);
+    const hours = Number(moving.details.hours || moving.details.inventoryLaborHours || 3);
+    if (!zip || !crewSize || !hours) return null;
+    return {
+      zip,
+      serviceCode: marketplaceServiceCodeForMoving(moving),
+      crewSize,
+      hours,
+      distanceMiles: Number(moving.details.verifiedDriveMiles || 0),
+    };
+  }, [items, addressZip, serviceAddress]);
   const [bookingMode, setBookingMode] = useState<BookingMode>(() => {
     if (typeof window === "undefined") return "choose";
     const sp = new URLSearchParams(window.location.search);
@@ -774,6 +824,17 @@ export default function MultiServiceBookPage() {
   });
   const walletCash = walletData ? parseFloat(walletData.cashBalance || "0") : 0;
   const walletTokens = walletData ? Math.floor(parseFloat(walletData.tokenBalance || "0")) : 0;
+
+  const marketplacePreviewQuery = useQuery<MarketplaceQuotePreview | null>({
+    queryKey: ["/api/marketplace/quote-preview", marketplacePreviewInput],
+    enabled: !!marketplacePreviewInput && hasMovingService && stepIndex(step) >= stepIndex("configure"),
+    staleTime: 30_000,
+    queryFn: async () => {
+      if (!marketplacePreviewInput) return null;
+      const res = await apiRequest("POST", "/api/marketplace/quote-preview", marketplacePreviewInput);
+      return res.json() as Promise<MarketplaceQuotePreview>;
+    },
+  });
 
   // Task #181 — normalize the requested redemption whenever the tier cap
   // (driven by quote.subtotal) or wallet token balance shrinks. Without
@@ -1092,6 +1153,7 @@ export default function MultiServiceBookPage() {
         source: isWorker ? "crew_add_job" : "web_multi_book",
         promoCode: attribution.promoCode || undefined,
         referralSlug: attribution.referralSlug || undefined,
+        marketplaceQuotePreview: marketplacePreviewQuery.data || undefined,
         ...((() => {
           // Re-clamp at submit so a stale state value can never bypass
           // the slider's tier/wallet cap (defense in depth — the effect
@@ -1791,6 +1853,37 @@ export default function MultiServiceBookPage() {
                     })}
                   </div>
                 </div>
+                {hasMovingService && (
+                  <div className="border-t border-border pt-3">
+                    <div className="rounded-xl border border-cyan-500/25 bg-cyan-500/10 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-widest text-cyan-300">Marketplace estimate</p>
+                          {marketplacePreviewQuery.isLoading ? (
+                            <p className="mt-1 text-sm font-bold text-cyan-100">Checking zone pricing...</p>
+                          ) : marketplacePreviewQuery.data ? (
+                            <>
+                              <p className="mt-1 text-lg font-black text-white">
+                                {marketplacePreviewQuery.data.estimateLabel}
+                              </p>
+                              <p className="mt-1 text-[11px] text-muted-foreground">
+                                {marketplacePreviewQuery.data.zone?.name || "Out-of-zone quote review"} · {marketplacePreviewQuery.data.crewSize} movers · {marketplacePreviewQuery.data.billableHours} billable hours
+                              </p>
+                            </>
+                          ) : (
+                            <p className="mt-1 text-sm font-bold text-cyan-100">
+                              Zone estimate appears after ZIP, crew, and hours are selected.
+                            </p>
+                          )}
+                        </div>
+                        <MapPin className="h-5 w-5 shrink-0 text-cyan-300" />
+                      </div>
+                      <p className="mt-2 text-[11px] text-cyan-100/80">
+                        This range uses the current zone rate settings. A coordinator confirms final pricing, crew, and schedule on the job card.
+                      </p>
+                    </div>
+                  </div>
+                )}
                 {quote && !hasApprovalOnlyQuoteItems && (
                   <div className="border-t border-border pt-3 space-y-1">
                     <div className="flex justify-between text-sm">
