@@ -1,8 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Eye, Users, TrendingUp, BarChart2, ShoppingBag, ExternalLink } from "lucide-react";
+import { Eye, Users, TrendingUp, BarChart2, ShoppingBag, ExternalLink, AlertCircle, ClipboardList, RotateCcw } from "lucide-react";
 import { Link } from "wouter";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface TrafficData {
   monthly: { month: string; total_views: string; unique_visitors: string }[];
@@ -28,6 +30,68 @@ interface ShopData {
   daily: { day: string; views: string; unique_visitors: string }[];
   monthly: { month: string; total_views: string; unique_visitors: string }[];
 }
+
+type FunnelSnapshot = {
+  bookingMode?: string;
+  step?: string;
+  serviceAddress?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+  contact?: {
+    name?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    hasNotes?: boolean;
+  };
+  items?: Array<{
+    serviceCode?: string;
+    label?: string;
+    movingPath?: string | null;
+    loadType?: string | null;
+    truckNeeded?: boolean | null;
+    truckSize?: string | null;
+    jobSize?: string | null;
+    requestedDate?: string | null;
+    packageLabel?: string | null;
+    crew?: number | string | null;
+    hours?: number | string | null;
+    minPrice?: number | string | null;
+    maxPrice?: number | string | null;
+  }>;
+  quote?: {
+    finalTotal?: number;
+    subtotal?: number;
+  } | null;
+  marketplacePreview?: {
+    matched?: boolean;
+    zone?: string | null;
+    estimateLabel?: string;
+    minEstimate?: number;
+    maxEstimate?: number;
+  } | null;
+  continueReason?: string | null;
+  tokenError?: string | null;
+};
+
+type FunnelEvent = {
+  id: number;
+  visitor_id: string | null;
+  session_id: string | null;
+  user_id: string | null;
+  page: string;
+  event_type: string;
+  step: string | null;
+  booking_id: string | null;
+  lead_id: string | null;
+  error_message: string | null;
+  field_snapshot: FunnelSnapshot;
+  created_at: string;
+};
+
+type FunnelData = {
+  events: FunnelEvent[];
+};
 
 function fmt(n: string | number | undefined) {
   return Number(n || 0).toLocaleString();
@@ -318,8 +382,174 @@ function ShopTab({ data, isLoading }: { data: ShopData | undefined; isLoading: b
   );
 }
 
+function eventLabel(type: string) {
+  return type.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function shortDate(value: string) {
+  try {
+    return new Date(value).toLocaleString();
+  } catch {
+    return value;
+  }
+}
+
+function FunnelTab({ data, isLoading }: { data: FunnelData | undefined; isLoading: boolean }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const events = data?.events ?? [];
+  const recoverMutation = useMutation({
+    mutationFn: async (eventId: number) => {
+      const res = await apiRequest("POST", `/api/admin/analytics/booking-funnel/${eventId}/recover`, {});
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/analytics/booking-funnel"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      toast({
+        title: "Request recovered",
+        description: data?.lead?.orderNumber ? `Created lead JC-${data.lead.orderNumber}.` : "Created a quote-request lead.",
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Could not recover request", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const abandoned = events.filter(e => !e.booking_id && !e.lead_id && e.event_type !== "submit_success").length;
+  const errors = events.filter(e => /error/i.test(e.event_type)).length;
+  const recoverable = events.filter(e => {
+    const contact = e.field_snapshot?.contact;
+    return !e.lead_id && !e.booking_id && Boolean(contact?.phone || contact?.email || contact?.name);
+  }).length;
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: "Recent Events", value: fmt(events.length), color: "text-blue-400", icon: ClipboardList },
+          { label: "Abandoned", value: fmt(abandoned), color: "text-amber-400", icon: AlertCircle },
+          { label: "Errors", value: fmt(errors), color: "text-red-400", icon: AlertCircle },
+          { label: "Recoverable", value: fmt(recoverable), color: "text-emerald-400", icon: RotateCcw },
+        ].map(s => (
+          <Card key={s.label} className="border-white/5 bg-white/[0.03]">
+            <CardContent className="p-4 text-center">
+              <s.icon className={`h-5 w-5 ${s.color} mx-auto mb-1.5`} />
+              <p className={`text-xl font-black ${s.color}`}>{isLoading ? "..." : s.value}</p>
+              <p className="text-xs text-slate-500">{s.label}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Card className="border-white/5 bg-white/[0.03]">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm text-slate-300 flex items-center gap-2">
+            <ClipboardList className="h-4 w-4 text-blue-400" />
+            Booking Funnel Events
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <p className="text-xs text-slate-500 text-center py-8">Loading booking funnel...</p>
+          ) : events.length === 0 ? (
+            <p className="text-xs text-slate-500 text-center py-8">No funnel events yet. New /book attempts will appear here after deploy.</p>
+          ) : (
+            <div className="space-y-3">
+              {events.map((event) => {
+                const snapshot = event.field_snapshot || {};
+                const contact = snapshot.contact || {};
+                const item = snapshot.items?.[0] || {};
+                const canRecover = !event.lead_id && !event.booking_id && Boolean(contact.phone || contact.email || contact.name);
+                return (
+                  <div key={event.id} className="rounded-xl border border-white/10 bg-slate-950/50 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${
+                            /error/i.test(event.event_type)
+                              ? "bg-red-500/15 text-red-300"
+                              : event.event_type === "submit_success"
+                                ? "bg-emerald-500/15 text-emerald-300"
+                                : "bg-blue-500/15 text-blue-300"
+                          }`}>
+                            {eventLabel(event.event_type)}
+                          </span>
+                          <span className="text-[11px] text-slate-500">{shortDate(event.created_at)}</span>
+                          {event.step && <span className="text-[11px] text-slate-500">Step: {event.step}</span>}
+                        </div>
+                        <p className="mt-2 text-sm font-bold text-white">
+                          {contact.name || "Unknown visitor"}
+                          {contact.phone ? ` · ${contact.phone}` : ""}
+                          {contact.email ? ` · ${contact.email}` : ""}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-400 break-words">
+                          {snapshot.serviceAddress || [snapshot.city, snapshot.state, snapshot.zip].filter(Boolean).join(", ") || "No address captured"}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {event.lead_id && (
+                          <a href={`/admin/jobs?lead=${event.lead_id}`} className="rounded-lg border border-emerald-500/30 px-3 py-2 text-xs font-bold text-emerald-300 hover:bg-emerald-500/10">
+                            Lead Created
+                          </a>
+                        )}
+                        {canRecover && (
+                          <button
+                            type="button"
+                            onClick={() => recoverMutation.mutate(event.id)}
+                            disabled={recoverMutation.isPending}
+                            className="rounded-lg bg-orange-600 px-3 py-2 text-xs font-bold text-white hover:bg-orange-500 disabled:opacity-60"
+                          >
+                            Recover This Request
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mt-3 grid gap-2 md:grid-cols-3">
+                      <div className="rounded-lg bg-white/[0.03] p-3">
+                        <p className="text-[10px] uppercase tracking-wide text-slate-500">Service</p>
+                        <p className="mt-1 text-xs text-slate-200">{item.label || item.serviceCode || "Unknown"}</p>
+                        <p className="mt-1 text-[11px] text-slate-500">
+                          {[item.movingPath, item.loadType, item.truckSize].filter(Boolean).join(" · ") || "No flow details"}
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-white/[0.03] p-3">
+                        <p className="text-[10px] uppercase tracking-wide text-slate-500">Package</p>
+                        <p className="mt-1 text-xs text-slate-200">{item.packageLabel || "Not selected"}</p>
+                        <p className="mt-1 text-[11px] text-slate-500">
+                          {[item.crew ? `${item.crew} crew` : null, item.hours ? `${item.hours} hrs` : null].filter(Boolean).join(" · ") || "No crew/hour snapshot"}
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-white/[0.03] p-3">
+                        <p className="text-[10px] uppercase tracking-wide text-slate-500">Estimate / Blocker</p>
+                        <p className="mt-1 text-xs text-slate-200">
+                          {snapshot.marketplacePreview?.estimateLabel || (snapshot.quote?.finalTotal != null ? `$${snapshot.quote.finalTotal}` : "No estimate")}
+                        </p>
+                        <p className="mt-1 text-[11px] text-amber-300">
+                          {event.error_message || snapshot.tokenError || snapshot.continueReason || "No blocker recorded"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-600">
+                      <span>Visitor: {event.visitor_id || "unknown"}</span>
+                      <span>Session: {event.session_id || "unknown"}</span>
+                      <span>Page: {event.page}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function AdminAnalyticsPage() {
-  const [tab, setTab] = useState<"site" | "shop">("site");
+  const [tab, setTab] = useState<"site" | "shop" | "funnel">("site");
 
   const { data: siteData, isLoading: siteLoading } = useQuery<TrafficData>({
     queryKey: ["/api/admin/analytics/traffic"],
@@ -330,6 +560,12 @@ export default function AdminAnalyticsPage() {
     queryKey: ["/api/admin/analytics/shop"],
     refetchInterval: 60000,
     enabled: tab === "shop",
+  });
+
+  const { data: funnelData, isLoading: funnelLoading } = useQuery<FunnelData>({
+    queryKey: ["/api/admin/analytics/booking-funnel"],
+    refetchInterval: 30000,
+    enabled: tab === "funnel",
   });
 
   return (
@@ -352,11 +588,18 @@ export default function AdminAnalyticsPage() {
           >
             💎 Ashley's Shop
           </button>
+          <button
+            onClick={() => setTab("funnel")}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "funnel" ? "bg-orange-600 text-white" : "bg-white/5 text-slate-400 hover:bg-white/10"}`}
+          >
+            Booking Funnel
+          </button>
         </div>
       </div>
 
       {tab === "site" && <SiteTab data={siteData} isLoading={siteLoading} />}
       {tab === "shop" && <ShopTab data={shopData} isLoading={shopLoading} />}
+      {tab === "funnel" && <FunnelTab data={funnelData} isLoading={funnelLoading} />}
     </div>
   );
 }

@@ -13982,6 +13982,99 @@ Thank you for your business!
     }
   });
 
+  app.post("/api/admin/analytics/booking-funnel/:id/recover", isAuthenticated, requireBusinessOwner, async (req: any, res) => {
+    try {
+      const eventId = Number(req.params.id);
+      if (!Number.isFinite(eventId) || eventId <= 0) {
+        return res.status(400).json({ error: "Invalid funnel event id" });
+      }
+      const { rows } = await pool.query(
+        `SELECT id, visitor_id, session_id, event_type, step, lead_id, field_snapshot, created_at
+           FROM booking_funnel_events
+          WHERE id = $1
+          LIMIT 1`,
+        [eventId],
+      );
+      const event = rows[0];
+      if (!event) return res.status(404).json({ error: "Funnel event not found" });
+      if (event.lead_id) return res.status(409).json({ error: "This funnel event has already been recovered", leadId: event.lead_id });
+
+      const snapshot = event.field_snapshot && typeof event.field_snapshot === "object" ? event.field_snapshot : {};
+      const contact = snapshot.contact && typeof snapshot.contact === "object" ? snapshot.contact : {};
+      const items = Array.isArray(snapshot.items) ? snapshot.items : [];
+      const firstItem = items[0] || {};
+      const nameParts = String(contact.name || "Recovered Visitor").trim().split(/\s+/);
+      const firstName = nameParts.shift() || "Recovered";
+      const lastName = nameParts.length > 0 ? nameParts.join(" ") : "Visitor";
+      const phone = String(contact.phone || "").trim() || "unknown";
+      const email = String(contact.email || "").trim() || `recovered-${event.id}@jconthemove.local`;
+      const serviceCode = String(firstItem.serviceCode || "moving");
+      const serviceType =
+        serviceCode === "junk_removal" ? "junk" :
+        serviceCode === "moving" ? "residential" :
+        serviceCode;
+      const fromAddress =
+        String(snapshot.serviceAddress || "").trim() ||
+        [snapshot.city, snapshot.state, snapshot.zip].filter(Boolean).join(", ") ||
+        "Recovered booking funnel request";
+      const details = [
+        "[RECOVERED BOOKING FUNNEL REQUEST]",
+        `Funnel event: ${event.id}`,
+        `Visitor: ${event.visitor_id || "unknown"}`,
+        `Session: ${event.session_id || "unknown"}`,
+        `Last step: ${event.step || "unknown"}`,
+        `Event type: ${event.event_type}`,
+        firstItem.label ? `Service: ${firstItem.label}` : null,
+        firstItem.movingPath ? `Path: ${firstItem.movingPath}` : null,
+        firstItem.loadType ? `Load type: ${firstItem.loadType}` : null,
+        firstItem.truckNeeded != null ? `Truck: ${firstItem.truckNeeded ? "JC provides truck" : "Customer provides truck"}` : null,
+        firstItem.truckSize ? `Truck size: ${firstItem.truckSize}` : null,
+        firstItem.packageLabel ? `Package: ${firstItem.packageLabel}` : null,
+        firstItem.crew ? `Crew: ${firstItem.crew}` : null,
+        firstItem.hours ? `Hours: ${firstItem.hours}` : null,
+        snapshot.marketplacePreview?.estimateLabel ? `Zone estimate: ${snapshot.marketplacePreview.estimateLabel}` : null,
+        snapshot.continueReason ? `Last blocker: ${snapshot.continueReason}` : null,
+      ].filter(Boolean).join("\n");
+
+      const lead = await storage.createLead({
+        firstName,
+        lastName,
+        email,
+        phone,
+        serviceType,
+        fromAddress,
+        toAddress: null,
+        moveDate: firstItem.requestedDate || null,
+        details,
+        status: "quote_requested",
+        createdByUserId: req.user?.id || null,
+        truckConfig: firstItem.truckNeeded != null ? (firstItem.truckNeeded ? "company_truck" : "customer_truck") : null,
+        crewSize: Number(firstItem.crew || 2),
+        confirmedHours: firstItem.hours ? Math.round(Number(firstItem.hours)) : null,
+        basePrice: firstItem.minPrice ? String(firstItem.minPrice) : null,
+        totalPrice: firstItem.maxPrice ? String(firstItem.maxPrice) : null,
+        quoteNotes: snapshot.continueReason ? `Recovered from abandoned booking funnel. Last blocker: ${snapshot.continueReason}` : "Recovered from abandoned booking funnel.",
+        lastQuoteUpdatedAt: new Date(),
+        quoteSnapshot: {
+          recoveredFromFunnelEventId: event.id,
+          visitorId: event.visitor_id,
+          sessionId: event.session_id,
+          snapshot,
+        },
+        zoneSnapshot: snapshot.marketplacePreview ? { marketplaceQuotePreview: snapshot.marketplacePreview } : {},
+      } as any);
+
+      await pool.query(
+        `UPDATE booking_funnel_events SET lead_id = $1 WHERE id = $2`,
+        [lead.id, event.id],
+      );
+      return res.json({ success: true, lead });
+    } catch (err) {
+      console.error("[admin/booking-funnel/recover] error:", err);
+      return res.status(500).json({ error: "Failed to recover funnel request" });
+    }
+  });
+
   app.get("/api/admin/analytics/traffic", isAuthenticated, requireBusinessOwner, async (req, res) => {
     try {
       const { rows: monthly } = await pool.query(`
