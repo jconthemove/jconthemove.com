@@ -17857,8 +17857,28 @@ Thank you for your business!
             if (localInvoice.leadId) {
               const lead = await storage.getLead(localInvoice.leadId);
               if (lead && lead.status !== "paid" && lead.status !== "completed") {
-                await storage.updateLeadStatus(localInvoice.leadId, "paid");
-                console.log(`[Square webhook] Lead ${localInvoice.leadId} status updated to paid`);
+                await pool.query(
+                  `UPDATE leads
+                      SET status = 'paid',
+                          payment_paid_at = COALESCE(payment_paid_at, NOW()),
+                          deposit_paid = CASE WHEN deposit_required THEN true ELSE deposit_paid END,
+                          last_quote_updated_at = NOW()
+                    WHERE id = $1`,
+                  [localInvoice.leadId],
+                );
+                try {
+                  await writeLeadHistory(localInvoice.leadId, lead.status, "paid", null, `Square invoice paid: ${squareInvoiceId}`);
+                } catch (histErr) {
+                  console.error("[Square webhook] paid history write failed:", histErr);
+                }
+                console.log(`[Square webhook] Lead ${localInvoice.leadId} payment stamped and status updated to paid`);
+                await emitJobEvent("job_updated", { ...lead, status: "paid", depositPaid: lead.depositRequired ? true : lead.depositPaid } as any, {
+                  source: "square_webhook",
+                  previousStatus: lead.status,
+                  status: "paid",
+                  note: "Square invoice paid. Job is ready for dispatch/payment paperwork.",
+                  extra: { squareInvoiceId, paymentReceived: true },
+                });
 
                 // Record revenue split on payment confirmation.
                 // Square total_money.amount is always in cents (smallest currency unit).
@@ -17882,6 +17902,16 @@ Thank you for your business!
                   const assignedCrew = await dispatchGenericJob({ leadId: lead.id, kind, crewSize });
                   if (assignedCrew.length > 0) {
                     console.log(`[Square webhook] Auto-dispatched ${assignedCrew.length} crew to lead ${lead.id} after payment`);
+                    const refreshedLead = await storage.getLead(lead.id);
+                    if (refreshedLead) {
+                      await emitJobEvent("crew_assigned", refreshedLead, {
+                        source: "square_webhook_dispatch",
+                        previousStatus: "paid",
+                        status: refreshedLead.status,
+                        note: "Crew auto-dispatched after Square payment.",
+                        extra: { squareInvoiceId, assignedCrewCount: assignedCrew.length },
+                      });
+                    }
                   } else {
                     console.warn(`[Square webhook] No available crew found for auto-dispatch on lead ${lead.id}`);
                   }
@@ -23898,11 +23928,30 @@ Thank you for your business!
 
       // Record 'paid' transition first, then 'dispatched'
       await db.update(leads)
-        .set({ status: "paid" as any, lastQuoteUpdatedAt: new Date() })
+        .set({
+          status: "paid" as any,
+          depositPaid: true as any,
+          lastQuoteUpdatedAt: new Date(),
+        })
         .where(eq(leads.id, req.params.id));
+      await pool.query(
+        `UPDATE leads
+            SET payment_paid_at = COALESCE(payment_paid_at, NOW()),
+                deposit_paid = true
+          WHERE id = $1`,
+        [req.params.id],
+      );
       try {
         await writeLeadHistory(req.params.id, lead.status, "paid", user.id, "Payment confirmed by admin");
       } catch (_) {}
+      await emitJobEvent("job_updated", { ...lead, status: "paid", depositPaid: true } as any, {
+        actorId: user.id,
+        source: "admin_mark_paid",
+        previousStatus: lead.status,
+        status: "paid",
+        note: "Payment confirmed manually. Job is ready for dispatch/payment paperwork.",
+        extra: { paymentReceived: true },
+      });
 
       // Record treasury revenue split on admin payment confirmation
       const totalPriceUsd = parseFloat(lead.totalPrice || lead.basePrice || "0");
@@ -23941,6 +23990,16 @@ Thank you for your business!
       try {
         await writeLeadHistory(req.params.id, "paid", "dispatched", user.id, "Crew dispatched by admin");
       } catch (_) {}
+      const dispatchedLead = await storage.getLead(req.params.id);
+      if (dispatchedLead) {
+        await emitJobEvent("crew_assigned", dispatchedLead, {
+          actorId: user.id,
+          source: "admin_mark_paid_dispatch",
+          previousStatus: "paid",
+          status: "dispatched",
+          note: "Crew dispatched after admin payment confirmation.",
+        });
+      }
 
       // Email assigned crew members if any
       const crewIds: string[] = (lead.crewMembers as string[] | null) || [];
