@@ -198,14 +198,55 @@ function summarizeLead(lead: Lead) {
   };
 }
 
+function formatWebhookBody(url: string, payload: Record<string, unknown>) {
+  const title = String(payload.title || payload.type || "JC Job Event");
+  const message = String(payload.message || "");
+  const lead = payload.lead && typeof payload.lead === "object"
+    ? payload.lead as Record<string, unknown>
+    : {};
+  const order = lead.orderNumber ? `JC-${lead.orderNumber}` : lead.id || "";
+  const service = lead.serviceType ? String(lead.serviceType).replace(/_/g, " ") : "job";
+  const date = lead.moveDate ? String(lead.moveDate) : "date TBD";
+
+  if (url.includes("discord.com/api/webhooks") || url.includes("discordapp.com/api/webhooks")) {
+    return JSON.stringify({
+      username: "JC Job Events",
+      content: `**${title}**\n${message}`,
+      embeds: [{
+        title,
+        description: message,
+        color: payload.type === "job_completed" ? 0x10b981 : payload.type === "job_available" ? 0x3b82f6 : 0xf97316,
+        fields: [
+          { name: "Job", value: String(order || "Unknown"), inline: true },
+          { name: "Service", value: service, inline: true },
+          { name: "Date", value: date, inline: true },
+          { name: "Customer", value: String(lead.customerName || "Customer"), inline: true },
+          { name: "Status", value: String(lead.status || payload.type || "event"), inline: true },
+          { name: "Source", value: String(payload.source || "job_event_bus"), inline: true },
+        ],
+        timestamp: String(payload.createdAt || new Date().toISOString()),
+      }],
+    });
+  }
+
+  if (url.includes("hooks.slack.com")) {
+    return JSON.stringify({
+      text: `*${title}*\n${message}\nJob: ${order || "Unknown"} | ${service} | ${date}`,
+    });
+  }
+
+  return JSON.stringify(payload);
+}
+
 async function deliverWebhooks(payload: Record<string, unknown>) {
   if (webhookUrls.length === 0) return;
-  const body = JSON.stringify(payload);
-  const signature = webhookSecret
-    ? crypto.createHmac("sha256", webhookSecret).update(body).digest("hex")
-    : "";
 
   await Promise.allSettled(webhookUrls.map(async (url) => {
+    const body = formatWebhookBody(url, payload);
+    const signature = webhookSecret
+      ? crypto.createHmac("sha256", webhookSecret).update(body).digest("hex")
+      : "";
+    const isDiscord = url.includes("discord.com/api/webhooks") || url.includes("discordapp.com/api/webhooks");
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
     try {
@@ -213,8 +254,8 @@ async function deliverWebhooks(payload: Record<string, unknown>) {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "x-jc-event": String(payload.type || ""),
-          ...(signature ? { "x-jc-signature": `sha256=${signature}` } : {}),
+          ...(isDiscord ? {} : { "x-jc-event": String(payload.type || "") }),
+          ...(!isDiscord && signature ? { "x-jc-signature": `sha256=${signature}` } : {}),
         },
         body,
         signal: controller.signal,
