@@ -10421,6 +10421,87 @@ Thank you for your business!
     }
   });
 
+  // Create/reuse a Square payment link for a priced job without changing payout mode.
+  // Cash payouts stay manual_pending; this only gives crew/admin a collection link.
+  app.post("/api/leads/:id/payment-link", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const user = req.currentUser || req.user || null;
+      const lead = await storage.getLead(id);
+      if (!lead) return res.status(404).json({ error: "Lead not found" });
+
+      const assignedCrewIds = new Set<string>(
+        [lead.assignedToUserId, ...(lead.crewMembers || [])].filter((value): value is string => typeof value === "string" && value.length > 0),
+      );
+      const authority = user ? await getWorkerAuthority(user) : { rank: 0 };
+      const isOwner = user?.role === "admin" || user?.role === "business_owner" || user?.email === "upmichiganstatemovers@gmail.com";
+      const canCollect =
+        isOwner ||
+        authority.rank >= tierRank.silver ||
+        (user?.id && assignedCrewIds.has(user.id));
+      if (!canCollect) {
+        return res.status(403).json({ error: "Assigned crew, Silver authority, Gold/Platinum, or owner access is required to create payment links." });
+      }
+
+      const price = parseFloat(String(lead.totalPrice || lead.basePrice || "0"));
+      if (!price || price <= 0) {
+        return res.status(400).json({ error: "A final price is required before creating a Square payment link." });
+      }
+
+      const existingPaymentUrl = lead.squarePaymentUrl || null;
+      if (existingPaymentUrl) {
+        return res.json({
+          success: true,
+          reused: true,
+          paymentUrl: existingPaymentUrl,
+          amount: price.toFixed(2),
+          message: `JC ON THE MOVE payment link for ${lead.firstName || "your"} ${lead.serviceType || "service"} job: ${existingPaymentUrl}`,
+        });
+      }
+
+      const { squareInvoiceService } = await import("./services/square-invoice");
+      if (!squareInvoiceService.isConfigured()) {
+        return res.status(503).json({ error: "Square is not configured. Add SQUARE_ACCESS_TOKEN and SQUARE_ENVIRONMENT before collecting online payments." });
+      }
+
+      const customerName = `${lead.firstName || ""} ${lead.lastName || ""}`.trim() || "Customer";
+      const serviceLabel = lead.serviceType
+        ? lead.serviceType.charAt(0).toUpperCase() + lead.serviceType.slice(1).replace(/_/g, " ")
+        : "Service";
+      const invoiceResult = await squareInvoiceService.createItemizedInvoiceForLead(
+        lead,
+        [{ name: `${serviceLabel} - ${customerName}`, qty: 1, unitPrice: price, total: price }],
+        undefined,
+        "none",
+      );
+      const paymentUrl = invoiceResult.invoiceUrl || null;
+      if (!paymentUrl) {
+        return res.status(502).json({ error: "Square created an invoice but did not return a payment URL." });
+      }
+
+      await pool.query(`UPDATE leads SET square_payment_url = $1, last_quote_updated_at = NOW() WHERE id = $2`, [paymentUrl, id]);
+      await emitJobEvent("job_updated", { ...lead, squarePaymentUrl: paymentUrl } as any, {
+        actorId: user?.id || null,
+        source: "payment_link_created",
+        status: lead.status,
+        note: "Square payment link created for job collection.",
+        extra: { squareInvoiceId: invoiceResult.squareInvoiceId, paymentUrl },
+      });
+
+      res.json({
+        success: true,
+        reused: false,
+        paymentUrl,
+        squareInvoiceId: invoiceResult.squareInvoiceId,
+        amount: price.toFixed(2),
+        message: `JC ON THE MOVE payment link for ${lead.firstName || "your"} ${lead.serviceType || "service"} job: ${paymentUrl}`,
+      });
+    } catch (error) {
+      console.error("Error creating payment link:", error);
+      res.status(500).json({ error: "Failed to create payment link" });
+    }
+  });
+
   // Photo management for jobs
   app.post("/api/leads/:id/photos", isAuthenticated, requireEmployee, async (req: any, res) => {
     try {
