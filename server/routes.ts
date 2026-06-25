@@ -44,6 +44,7 @@ import { grantLotteryTicketsForActivity } from "./services/disburse-job-tokens";
 import { getDepositInfo, extractZip } from "@shared/depositRules";
 import { MIN_REDEMPTION_TOKENS, REDEMPTION_INCREMENT, roundToIncrement, validateRedemption, tokensToDollars } from "@shared/tokenRedemptionRules";
 import { buildLeadJobPayoutPreview } from "./services/jobPayoutEngine";
+import { emitJobEvent, eventTypeForStatus } from "./services/jobEventBus";
 import { calculateProfitSharingPayout, defaultBonusWeightsForCrew, defaultHourlyRateForRole, normalizeProfitShareSettings } from "./services/profitSharingPayoutEngine";
 import { canFinalizeProfitSharePayout, shouldIssueJcmovesRewardForPayoutStatus, type ProfitShareRole, type ProfitShareWorkerInput } from "@shared/jobPayout";
 import { QUOTE_HELPER_MESSAGE_LIMIT, summarizeQuoteRequest } from "./services/geminiQuoteHelper";
@@ -4853,32 +4854,16 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
             console.error("[quick-request] admin SMS notification failed:", notifyErr instanceof Error ? notifyErr.message : notifyErr);
           }
         }
-        try {
-          const { notificationService } = await import("./services/notification");
-          const opsUsers = (await storage.getAllUsers()).filter((user) =>
-            ["employee", "admin", "business_owner"].includes(user.role || "") &&
-            user.notificationsEnabled !== false
-          );
-          for (const user of opsUsers) {
-            await notificationService.sendNotification({
-              userId: user.id,
-              type: "system_alert",
-              title: "New Quick Request",
-              message: `${parsed.firstName} ${parsed.lastName} needs a ${service.label} quote. Call ${parsed.phone}.${parsed.mediaLink ? " Customer media link included." : ""}`,
-              data: {
-                type: "quick_request",
-                leadId: lead.id,
-                orderNumber: lead.orderNumber,
-                displayOrderNumber: formatOrderNumber(lead.orderNumber),
-                serviceCode: parsed.serviceCode,
-                serviceType: service.serviceType,
-                mediaLink: parsed.mediaLink || null,
-              },
-            });
-          }
-        } catch (notifyErr) {
-          console.error("[quick-request] in-app notification failed:", (notifyErr as Error).message);
-        }
+        await emitJobEvent("quote_requested", lead, {
+          actorId: creatorUserId,
+          source: "quick_request",
+          extra: {
+            displayOrderNumber: formatOrderNumber(lead.orderNumber),
+            serviceCode: parsed.serviceCode,
+            serviceType: service.serviceType,
+            mediaLink: parsed.mediaLink || null,
+          },
+        });
 
         res.status(201).json({
           success: true,
@@ -5538,9 +5523,18 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
       // Persist acceptance: add to acceptedByEmployees array (idempotent)
       const alreadyAccepted: string[] = Array.isArray(lead.acceptedByEmployees) ? lead.acceptedByEmployees : [];
       if (!alreadyAccepted.includes(userId)) {
-        await db.update(leads)
+        const [updatedLead] = await db.update(leads)
           .set({ acceptedByEmployees: [...alreadyAccepted, userId] })
-          .where(eq(leads.id, leadId));
+          .where(eq(leads.id, leadId))
+          .returning();
+        if (updatedLead) {
+          await emitJobEvent("job_updated", updatedLead, {
+            actorId: userId,
+            source: "assigned_job_accept",
+            note: "Assigned crew member accepted the job.",
+            extra: { acceptedByUserId: userId },
+          });
+        }
       }
 
       // Lock worker — mark unavailable so they won't be dispatched to new jobs
@@ -7222,12 +7216,6 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
       await writeLeadHistory(id, existingLead.status, "available", user?.id ?? null, "Converted to available job from employee dashboard");
 
       try {
-        const { notificationService } = await import("./services/notification");
-        await notificationService.notifyAllEmployees(
-          "New Job Available",
-          `${updatedLead.serviceType} job available for ${updatedLead.firstName} ${updatedLead.lastName}`,
-          { jobId: updatedLead.id, type: "job_available" }
-        );
         const employees = await storage.getEmployees();
         const customerName = `${updatedLead.firstName || ""} ${updatedLead.lastName || ""}`.trim() || "Customer";
         const jobData = {
@@ -7251,6 +7239,14 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
       } catch (notifyError) {
         console.error("Failed to notify employees after lead conversion:", notifyError);
       }
+
+      await emitJobEvent("job_available", updatedLead, {
+        actorId: user?.id ?? null,
+        source: "lead_convert_to_job",
+        previousStatus: existingLead.status,
+        status: "available",
+        note: "Converted to available job from employee dashboard.",
+      });
 
       res.json(updatedLead);
     } catch (error) {
@@ -7297,6 +7293,16 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
       if (!updatedLead) return res.status(404).json({ error: "Lead not found" });
 
       await writeLeadHistory(id, existingLead.status, status, actorId, note || "Admin force override");
+      const eventType = eventTypeForStatus(status);
+      if (eventType) {
+        await emitJobEvent(eventType, updatedLead, {
+          actorId,
+          source: "lead_status_force",
+          previousStatus: existingLead.status,
+          status,
+          note: note || "Admin force override",
+        });
+      }
 
       res.json(updatedLead);
     } catch (error) {
@@ -7368,19 +7374,20 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
 
       // Log the history
       await writeLeadHistory(id, currentStatus, status, actorId);
+      const eventType = eventTypeForStatus(status);
+      if (eventType) {
+        await emitJobEvent(eventType, updatedLead, {
+          actorId,
+          source: "lead_status",
+          previousStatus: currentStatus,
+          status,
+        });
+      }
 
       // Send email notifications for status changes
       try {
-        const { notificationService } = await import("./services/notification");
-        
         // Notify when job becomes available
         if (status === 'available') {
-          await notificationService.notifyAllEmployees(
-            'New Job Available',
-            `${updatedLead.serviceType} job available for ${updatedLead.firstName} ${updatedLead.lastName}`,
-            { jobId: updatedLead.id, type: 'job_available' }
-          );
-          
           // Send email to all employees with email addresses
           try {
             const allUsers = await storage.getAllUsers();
@@ -7489,15 +7496,6 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
           }
         }
         
-        // Notify assigned employee about status changes
-        if (updatedLead.assignedToUserId && ['available', 'completed'].includes(status)) {
-          await notificationService.notifyJobStatusChange(
-            updatedLead.assignedToUserId,
-            updatedLead.id,
-            status,
-            `${updatedLead.firstName} ${updatedLead.lastName}`
-          );
-        }
       } catch (notificationError) {
         console.error("Error sending status change notification:", notificationError);
         // Don't fail the request if notification fails
@@ -8364,6 +8362,17 @@ Thank you for your business!
       if (!updatedLead) {
         return res.status(404).json({ error: "Lead not found" });
       }
+      const actorId = (req.session as any)?.userId ?? (req as any).user?.id ?? null;
+      const changedKeys = Object.keys(quoteData || {});
+      const assignmentChanged = changedKeys.some((key) => ["assignedToUserId", "crewMembers"].includes(key));
+      await emitJobEvent(assignmentChanged ? "crew_assigned" : "job_updated", updatedLead, {
+        actorId,
+        source: "lead_quote_update",
+        previousStatus,
+        status: updatedLead.status,
+        note: changedKeys.length ? `Updated ${changedKeys.join(", ")}` : "Quote updated",
+        extra: { changedKeys },
+      });
       
       // Send email notifications if status changed
       if (newStatus && newStatus !== previousStatus) {
@@ -10094,6 +10103,15 @@ Thank you for your business!
         }
       }
 
+      await emitJobEvent(isCrewFull ? "crew_assigned" : "job_updated", updatedLead, {
+        actorId: employeeId,
+        source: "crew_job_accept",
+        previousStatus,
+        status: updatedLead.status,
+        note: isCrewFull ? "Crew is full and job is accepted." : "Crew member accepted an open job.",
+        extra: { acceptedByUserId: employeeId, acceptedCount: updatedAcceptedBy.length, crewSize },
+      });
+
       // Send notification to employee
       try {
         const { notificationService } = await import("./services/notification");
@@ -10197,6 +10215,13 @@ Thank you for your business!
         console.error("Error disbursing job tokens:", disbursementError);
         // Job is still completed even if token distribution fails — admin can retry
       }
+
+      await emitJobEvent("job_completed", updatedLead, {
+        actorId: employeeId,
+        source: "crew_job_complete",
+        previousStatus: lead.status,
+        status: "completed",
+      });
 
       res.json(updatedLead);
     } catch (error) {

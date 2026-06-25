@@ -18,6 +18,7 @@ import { ZodError, z } from "zod";
 import { db, pool } from "../db";
 import { storage } from "../storage";
 import { isAuthenticated, isAuthenticatedAllowPending } from "../auth";
+import { emitJobEvent } from "../services/jobEventBus";
 
 /** Typed error class so route handlers can signal "this is a 400, not a 500"
  *  without resorting to `any` casts on plain Error objects. */
@@ -1233,7 +1234,11 @@ router.post("/bookings", async (req: Request, res: Response) => {
           zoneSnapshot,
         }).returning();
         linkedLead = createdLead;
-        await notifyOwnersOfLead(createdLead);
+        await emitJobEvent("quote_requested", createdLead, {
+          actorId: requestUser?.id || null,
+          source: "booking_bridge",
+          extra: { bookingId: booking.id, bookingReference },
+        });
       }
     } catch (leadErr) {
       console.error("[bookings] marketplace lead bridge failed:", leadErr instanceof Error ? leadErr.message : leadErr);
