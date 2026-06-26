@@ -695,6 +695,7 @@ export default function MultiServiceBookPage() {
         codes: [] as string[],
         jumpStep: null as Step | null,
         serviceAddress: "",
+        requestedDate: "",
         linePrice: null as number | null,
         lineLabel: "",
         lineDetails: {} as SelectedItem["details"],
@@ -721,6 +722,7 @@ export default function MultiServiceBookPage() {
       ? (stepParam as Step)
       : null;
     const serviceAddress = sp.get("address")?.trim() || "";
+    const requestedDate = (sp.get("date") || sp.get("requestedDate") || sp.get("moveDate") || "").trim();
     const rawPrice = Number(sp.get("price"));
     const linePrice = Number.isFinite(rawPrice) && rawPrice > 0 ? rawPrice : null;
     const lineLabel = sp.get("label")?.trim() || "";
@@ -734,7 +736,7 @@ export default function MultiServiceBookPage() {
         lineDetails = {};
       }
     }
-    return { codes: Array.from(codes), jumpStep, serviceAddress, linePrice, lineLabel, lineDetails };
+    return { codes: Array.from(codes), jumpStep, serviceAddress, requestedDate, linePrice, lineLabel, lineDetails };
   }, []);
 
   const attribution = useMemo(() => {
@@ -1127,6 +1129,7 @@ export default function MultiServiceBookPage() {
       urlPrefill.codes.length === 0 &&
       !urlPrefill.jumpStep &&
       !urlPrefill.serviceAddress &&
+      !urlPrefill.requestedDate &&
       !urlPrefill.linePrice &&
       !urlPrefill.lineLabel &&
       Object.keys(urlPrefill.lineDetails).length === 0
@@ -1153,6 +1156,7 @@ export default function MultiServiceBookPage() {
           unitPrice: urlPrefill.linePrice ?? item.unitPrice,
           details: {
             ...item.details,
+            ...(urlPrefill.requestedDate ? { requestedDate: urlPrefill.requestedDate } : {}),
             ...urlPrefill.lineDetails,
           },
         };

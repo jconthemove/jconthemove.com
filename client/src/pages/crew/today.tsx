@@ -338,6 +338,10 @@ export default function CrewTodayPage() {
     return (j.effectiveDate || j.confirmedDate || j.moveDate || "").slice(0, 10);
   }
 
+  function quickAddJobHref(dateStr: string) {
+    return `/book?worker=1&mode=worker&service=moving&date=${dateStr}&step=configure`;
+  }
+
   function goToPrevCalMonth() {
     if (calMonth === 1) { setCalYear(y => y - 1); setCalMonth(12); }
     else setCalMonth(m => m - 1);
@@ -1108,9 +1112,25 @@ export default function CrewTodayPage() {
           const label = d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
           return (
             <div className="mt-3 border-t border-white/10 pt-3">
-              <p className="text-xs text-slate-400 font-semibold mb-2">{label}</p>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <p className="text-xs text-slate-400 font-semibold">{label}</p>
+                <Link href={quickAddJobHref(selectedCalDay)}>
+                  <Button size="sm" className="h-7 rounded-lg bg-blue-600 px-2 text-[11px] hover:bg-blue-500">
+                    <Plus className="mr-1 h-3 w-3" />
+                    Add
+                  </Button>
+                </Link>
+              </div>
               {dayJobs.length === 0 ? (
-                <p className="text-xs text-slate-500 italic">No jobs scheduled</p>
+                <div className="rounded-xl border border-dashed border-blue-500/30 bg-blue-950/20 p-3">
+                  <p className="text-xs text-slate-500 italic mb-2">No jobs scheduled</p>
+                  <Link href={quickAddJobHref(selectedCalDay)}>
+                    <Button size="sm" className="w-full rounded-lg bg-blue-600 text-xs hover:bg-blue-500">
+                      <Plus className="mr-1.5 h-3.5 w-3.5" />
+                      Add Moving Job For This Day
+                    </Button>
+                  </Link>
+                </div>
               ) : (
                 <div className="space-y-2">
                   {dayJobs.map(job => (
@@ -1133,6 +1153,12 @@ export default function CrewTodayPage() {
                       </div>
                     </Link>
                   ))}
+                  <Link href={quickAddJobHref(selectedCalDay)}>
+                    <Button variant="outline" size="sm" className="w-full border-blue-500/30 bg-blue-950/20 text-xs text-blue-200 hover:bg-blue-900/30 hover:text-white">
+                      <Plus className="mr-1.5 h-3.5 w-3.5" />
+                      Add Another Job This Day
+                    </Button>
+                  </Link>
                 </div>
               )}
             </div>
