@@ -120,6 +120,7 @@ const AdminSponsorsPage = lazy(() => import("@/pages/admin/sponsors"));
 const AdminAnalyticsPage = lazy(() => import("@/pages/admin/analytics"));
 const AdminBookingAnalyticsPage = lazy(() => import("@/pages/admin/booking-analytics"));
 const AdminMarketingNetworkPage = lazy(() => import("@/pages/admin/marketing-network"));
+const AdminMarketingWebhooksPage = lazy(() => import("@/pages/admin/marketing-webhooks"));
 const AdminPaymentsPage = lazy(() => import("@/pages/admin/AdminPaymentsPage"));
 const AdminWalletLedgerPage = lazy(() => import("@/pages/admin/AdminWalletLedgerPage"));
 const AdminCashoutsPage = lazy(() => import("@/pages/admin/AdminCashoutsPage"));
@@ -524,6 +525,7 @@ function AuthenticatedApp() {
               <Route path="/admin/analytics"><AdminAnalyticsPage /></Route>
               <Route path="/admin/booking-analytics"><AdminBookingAnalyticsPage /></Route>
               <Route path="/admin/marketing-network"><AdminMarketingNetworkPage /></Route>
+              <Route path="/admin/marketing-webhooks"><AdminMarketingWebhooksPage /></Route>
               <Route path="/admin/payments"><AdminPaymentsPage /></Route>
               <Route path="/admin/wallet-ledger"><AdminWalletLedgerPage /></Route>
               <Route path="/admin/cashouts"><AdminCashoutsPage /></Route>

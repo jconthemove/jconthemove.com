@@ -68,6 +68,7 @@ const CLOSET = [
   { label: "System", icon: Settings, path: "/admin/system" },
   { label: "Sponsors", icon: Handshake, path: "/admin/sponsors" },
   { label: "Marketing Network", icon: Megaphone, path: "/admin/marketing-network" },
+  { label: "Marketing Ads", icon: Megaphone, path: "/admin/marketing-webhooks" },
   { label: "Analytics", icon: BarChart2, path: "/admin/analytics" },
   { label: "Booking Analytics", icon: FileBarChart, path: "/admin/booking-analytics" },
   { label: "Schedule", icon: CalendarDays, path: "/admin/schedule" },
