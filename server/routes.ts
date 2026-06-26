@@ -51,6 +51,7 @@ import { QUOTE_HELPER_MESSAGE_LIMIT, summarizeQuoteRequest } from "./services/ge
 import lawnCareRouter from "./routes/lawnCare";
 import serviceRebookRouter from "./routes/serviceRebookReminders";
 import serviceRebookPublicRouter from "./routes/serviceRebookPublic";
+import marketingWebhookRemindersRouter from "./routes/marketingWebhookReminders";
 import bookingsRouter from "./routes/bookings";
 import pipelineRouter from "./routes/pipeline";
 import aiBookingRouter from "./routes/aiBooking";
@@ -25738,6 +25739,7 @@ Thank you for your business!
   // Lawn care has its own routes above for historical reasons.
   app.use("/api/admin/service-rebook", serviceRebookRouter);
   app.use("/api/service-rebook", serviceRebookPublicRouter);
+  app.use("/api", marketingWebhookRemindersRouter);
 
   // Multi-Service Booking Foundation (Task #128) — parent bookings table,
   // pricing engine, and the catalog/bundle merchandising endpoints used by

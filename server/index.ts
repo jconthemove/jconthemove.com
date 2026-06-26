@@ -259,6 +259,52 @@ server.listen(port, '0.0.0.0', () => {
       } catch (e) { console.error('lead crew acceptance column init error:', e); }
     })();
 
+    // Custom area/focus marketing webhook reminders. These power Discord,
+    // Slack, Solbot, or generic webhook ad drops with image/text/CTA payloads
+    // while keeping a delivery audit trail.
+    (async () => {
+      try {
+        const { pool: dbPool } = await import('./db');
+        await dbPool.query(`
+          CREATE TABLE IF NOT EXISTS marketing_webhook_campaigns (
+            id VARCHAR PRIMARY KEY,
+            campaign_name TEXT NOT NULL,
+            title TEXT NOT NULL,
+            message TEXT NOT NULL,
+            area TEXT,
+            focus TEXT,
+            audience TEXT,
+            image_url TEXT,
+            cta_url TEXT,
+            cta_label TEXT,
+            promo_code TEXT,
+            rep_slug TEXT,
+            source TEXT NOT NULL DEFAULT 'admin_marketing_webhook',
+            actor_id VARCHAR,
+            scheduled_for TIMESTAMPTZ,
+            payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+          CREATE TABLE IF NOT EXISTS marketing_webhook_deliveries (
+            id SERIAL PRIMARY KEY,
+            campaign_id VARCHAR NOT NULL REFERENCES marketing_webhook_campaigns(id) ON DELETE CASCADE,
+            webhook_url_hash TEXT NOT NULL,
+            status TEXT NOT NULL,
+            response_status INTEGER,
+            error_message TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+          CREATE INDEX IF NOT EXISTS idx_marketing_webhook_campaigns_created
+            ON marketing_webhook_campaigns(created_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_marketing_webhook_campaigns_area_focus
+            ON marketing_webhook_campaigns(area, focus);
+          CREATE INDEX IF NOT EXISTS idx_marketing_webhook_deliveries_campaign
+            ON marketing_webhook_deliveries(campaign_id);
+        `);
+        console.log('Marketing webhook reminder tables ready');
+      } catch (e) { console.error('marketing webhook reminder table init error:', e); }
+    })();
+
     // Initialize server with comprehensive error handling
     console.log('Initializing application server...');
     const { registerRoutes } = await import('./routes');
