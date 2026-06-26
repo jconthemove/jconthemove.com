@@ -111,6 +111,8 @@ const PACKAGES: PackageOption[] = [
   },
 ];
 
+const EXTRA_HOUR_PER_MOVER_RATE = 50;
+
 const SERVICE_LABELS: Record<string, string> = {
   moving: "Moving",
   residential: "Residential Move",
@@ -351,7 +353,7 @@ function FastQuoteDrawer({ lead, employees, open, onClose }: { lead: Lead | null
   const [travelMiles, setTravelMiles] = useState(0);
   const [truck, setTruck] = useState<"none" | "15ft" | "26ft">("none");
   const [truckMiles, setTruckMiles] = useState(0);
-  const [extraMovers, setExtraMovers] = useState(0);
+  const [extraHours, setExtraHours] = useState(0);
   const [blankets, setBlankets] = useState(false);
   const [shrinkwrap, setShrinkwrap] = useState(false);
   const [notes, setNotes] = useState("");
@@ -362,7 +364,9 @@ function FastQuoteDrawer({ lead, employees, open, onClose }: { lead: Lead | null
   const truckOverageMiles = truck === "none" ? 0 : Math.max(0, truckMiles - 50);
   const truckOverage = truckOverageMiles * 5;
   const travel = travelMiles * 5;
-  const addons = extraMovers * 500 + (blankets ? 99 : 0) + (shrinkwrap ? 99 : 0);
+  const extraHoursCharge = extraHours * crewSize * EXTRA_HOUR_PER_MOVER_RATE;
+  const confirmedHours = selectedPackage.jobHours + extraHours;
+  const addons = extraHoursCharge + (blankets ? 99 : 0) + (shrinkwrap ? 99 : 0);
   const total = selectedPackage.base + truckBase + truckOverage + travel + addons;
 
   const convertMutation = useMutation({
@@ -374,7 +378,7 @@ function FastQuoteDrawer({ lead, employees, open, onClose }: { lead: Lead | null
         `Truck: ${truck === "none" ? "No rental truck" : truck === "15ft" ? "15 ft rental truck" : "26 ft rental truck"}`,
         truck !== "none" ? `Truck mileage: ${truckMiles} miles, ${truckOverageMiles} over included 50 at $5/mile` : "",
         travelMiles ? `Mover travel: ${travelMiles} miles at $5/mile` : "",
-        extraMovers ? `Extra movers: ${extraMovers}` : "",
+        extraHours ? `Extra hours: ${extraHours} hr x ${crewSize} mover(s) x $${EXTRA_HOUR_PER_MOVER_RATE}/mover-hour = $${extraHoursCharge}` : "",
         blankets ? "We supply moving blankets: $99" : "",
         shrinkwrap ? "We supply shrinkwrap: $99" : "",
         notes.trim(),
@@ -386,6 +390,7 @@ function FastQuoteDrawer({ lead, employees, open, onClose }: { lead: Lead | null
         confirmedDate: date,
         arrivalWindow,
         crewSize,
+        confirmedHours,
         crewMembers,
         confirmedFromAddress: lead.fromAddress || "",
         confirmedToAddress: lead.toAddress || "",
@@ -413,6 +418,7 @@ function FastQuoteDrawer({ lead, employees, open, onClose }: { lead: Lead | null
     setSelectedPackageId(pkg.id);
     setDate(dateOnly(nextLead.confirmedDate || nextLead.moveDate));
     setCrewSize(nextLead.crewSize || pkg.crewSize);
+    setExtraHours(Math.max(0, Number(nextLead.confirmedHours || pkg.jobHours) - pkg.jobHours));
     setCrewMembers(Array.isArray(nextLead.crewMembers) ? nextLead.crewMembers : []);
     setArrivalWindow(nextLead.arrivalWindow || "Morning");
     setNotes(nextLead.quoteNotes || "");
@@ -444,7 +450,7 @@ function FastQuoteDrawer({ lead, employees, open, onClose }: { lead: Lead | null
                     key={pkg.id}
                     onClick={() => {
                       setSelectedPackageId(pkg.id);
-                      setCrewSize(pkg.crewSize + extraMovers);
+                      setCrewSize(pkg.crewSize);
                     }}
                     className={`rounded-[8px] border p-3 text-left transition ${
                       selectedPackageId === pkg.id ? "border-blue-400 bg-blue-500/15" : "border-slate-700 bg-slate-900 hover:border-slate-500"
@@ -487,11 +493,11 @@ function FastQuoteDrawer({ lead, employees, open, onClose }: { lead: Lead | null
                 <div className="mt-2"><Stepper value={crewSize} min={1} max={8} onChange={setCrewSize} /></div>
               </div>
               <div>
-                <Label className="text-xs uppercase tracking-wider text-slate-500">Extra Movers</Label>
-                <div className="mt-2"><Stepper value={extraMovers} min={0} max={4} onChange={(value) => {
-                  setExtraMovers(value);
-                  setCrewSize(selectedPackage.crewSize + value);
-                }} /></div>
+                <Label className="text-xs uppercase tracking-wider text-slate-500">Extra Hours</Label>
+                <div className="mt-2"><Stepper value={extraHours} min={0} max={8} onChange={setExtraHours} /></div>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  {confirmedHours} job hr total; +${extraHoursCharge.toLocaleString()} at ${crewSize} mover(s)
+                </p>
               </div>
             </div>
 

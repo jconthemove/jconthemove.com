@@ -457,7 +457,12 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(users)
-      .where(and(eq(users.role, 'employee'), sql`${users.email} NOT LIKE '%.internal'`))
+      .where(and(
+        eq(users.role, 'employee'),
+        eq(users.isApproved, true),
+        inArray(users.status, ['approved', 'active']),
+        sql`${users.email} NOT LIKE '%.internal'`,
+      ))
       .orderBy(users.firstName, users.lastName);
   }
 
@@ -719,7 +724,12 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(users)
-      .where(and(eq(users.role, 'employee'), eq(users.isApproved, true), sql`${users.email} NOT LIKE '%.internal'`))
+      .where(and(
+        eq(users.role, 'employee'),
+        eq(users.isApproved, true),
+        inArray(users.status, ['approved', 'active']),
+        sql`${users.email} NOT LIKE '%.internal'`,
+      ))
       .orderBy(users.firstName, users.lastName);
   }
 
