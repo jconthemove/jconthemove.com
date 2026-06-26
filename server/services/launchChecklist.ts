@@ -84,7 +84,20 @@ const SCENARIOS: Scenario[] = [
       const tok = !!process.env.SQUARE_ACCESS_TOKEN;
       const env = !!process.env.SQUARE_ENVIRONMENT;
       if (!tok || !env) return { ok: false, detail: `token=${tok} environment=${env}` };
-      return { ok: true, detail: `environment=${process.env.SQUARE_ENVIRONMENT}` };
+      try {
+        const { squareInvoiceService } = await import("./square-invoice");
+        const locationId = await squareInvoiceService.getLocationId();
+        return {
+          ok: true,
+          detail: `environment=${process.env.SQUARE_ENVIRONMENT}; location=${locationId}`,
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          ok: false,
+          detail: `environment=${process.env.SQUARE_ENVIRONMENT}; auth probe failed: ${message}`,
+        };
+      }
     },
   },
   {
