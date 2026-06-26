@@ -205,6 +205,60 @@ server.listen(port, '0.0.0.0', () => {
       } catch (e) { console.error('marketplace lead bridge init error:', e); }
     })();
 
+    // Crew acceptance routes use text[] operators (ANY(), array appends, and
+    // Drizzle text().array()). Normalize older live DBs that still have the
+    // prototype jsonb column before worker job routes can fail.
+    (async () => {
+      try {
+        const { pool: dbPool } = await import('./db');
+        await dbPool.query(`
+          DO $$
+          DECLARE
+            column_type text;
+          BEGIN
+            SELECT data_type
+              INTO column_type
+              FROM information_schema.columns
+             WHERE table_schema = 'public'
+               AND table_name = 'leads'
+               AND column_name = 'accepted_by_employees';
+
+            IF column_type IS NULL THEN
+              ALTER TABLE leads
+                ADD COLUMN accepted_by_employees TEXT[] DEFAULT ARRAY[]::TEXT[];
+            ELSIF column_type = 'jsonb' THEN
+              ALTER TABLE leads
+                ADD COLUMN IF NOT EXISTS accepted_by_employees_text_migration TEXT[] DEFAULT ARRAY[]::TEXT[];
+
+              UPDATE leads
+                 SET accepted_by_employees_text_migration =
+                       CASE
+                         WHEN accepted_by_employees IS NULL THEN ARRAY[]::TEXT[]
+                         WHEN jsonb_typeof(accepted_by_employees) = 'array' THEN
+                           COALESCE(
+                             ARRAY(
+                               SELECT jsonb_array_elements_text(accepted_by_employees)
+                             ),
+                             ARRAY[]::TEXT[]
+                           )
+                         ELSE ARRAY[]::TEXT[]
+                       END;
+
+              ALTER TABLE leads DROP COLUMN accepted_by_employees;
+              ALTER TABLE leads
+                RENAME COLUMN accepted_by_employees_text_migration TO accepted_by_employees;
+              ALTER TABLE leads
+                ALTER COLUMN accepted_by_employees SET DEFAULT ARRAY[]::TEXT[];
+            ELSE
+              ALTER TABLE leads
+                ALTER COLUMN accepted_by_employees SET DEFAULT ARRAY[]::TEXT[];
+            END IF;
+          END $$;
+        `);
+        console.log('Lead crew acceptance column ready');
+      } catch (e) { console.error('lead crew acceptance column init error:', e); }
+    })();
+
     // Initialize server with comprehensive error handling
     console.log('Initializing application server...');
     const { registerRoutes } = await import('./routes');
