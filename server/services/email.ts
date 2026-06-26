@@ -463,7 +463,7 @@ export function generateBundleFollowupEmail(opts: {
   const spotlight = getSpotlightService(month);
 const BASE_URL = process.env.APP_URL?.trim()
   || process.env.RENDER_EXTERNAL_URL?.trim()
-  || "https://jconthemove.com";
+  || "https://www.jconthemove.com";
   const companyPhone = process.env.COMPANY_PHONE || "(906) 285-9312";
   const companyEmail = process.env.COMPANY_EMAIL || "michigankid906@gmail.com";
   const expiryStr = expiresAt.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });

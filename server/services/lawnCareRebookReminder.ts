@@ -64,7 +64,7 @@ const FROM_EMAIL = process.env.FROM_EMAIL || "michigankid906@gmail.com";
 const COMPANY_PHONE = process.env.COMPANY_PHONE || "(906) 285-9312";
 const APP_URL = process.env.APP_URL?.trim()
   || process.env.RENDER_EXTERNAL_URL?.trim()
-  || "https://jconthemove.com";
+  || "https://www.jconthemove.com";
 
 // HMAC-signed unsubscribe links. Stateless — no token row to store. The
 // secret is shared across the app's signing surfaces; falling back to a

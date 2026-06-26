@@ -1,4 +1,4 @@
-const FALLBACK_APP_URL = "https://jconthemove.com";
+const FALLBACK_APP_URL = "https://www.jconthemove.com";
 
 export function getAppUrl(): string {
   const configuredUrl =

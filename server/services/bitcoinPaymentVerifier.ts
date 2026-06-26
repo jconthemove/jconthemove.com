@@ -243,7 +243,7 @@ export async function verifyBitcoinPayment(
       : "";
   const baseUrl = process.env.APP_URL?.trim()
     || process.env.RENDER_EXTERNAL_URL?.trim()
-    || "https://jconthemove.com";
+    || "https://www.jconthemove.com";
     const receiptUrl = `${baseUrl}/payment-success?btcPaymentId=${encodeURIComponent(payment.id)}`;
     const receiptCta = `
           <div style="text-align:center;margin-top:20px;">
