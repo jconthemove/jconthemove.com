@@ -950,6 +950,10 @@ function CustomZonesPanel() {
 
       {/* Create new */}
       <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl p-3 mb-4">
+        <p className="mb-2 text-[11px] leading-relaxed text-slate-400">
+          Last 3 boxes: center latitude, center longitude, and zone radius in miles. Example: Wausau, WI is about
+          44.9591 latitude, -89.6301 longitude, then choose how many miles around it should count as that zone.
+        </p>
         <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
           <Input
             placeholder="CODE"
@@ -966,24 +970,30 @@ function CustomZonesPanel() {
             data-testid="input-new-zone-name"
           />
           <Input
-            type="number" step="0.0001" placeholder="Lat"
+            type="number" step="0.0001" placeholder="Latitude"
             value={draft.centerLat}
             onChange={e => setDraft(d => ({ ...d, centerLat: e.target.value }))}
             className="bg-slate-900 border-slate-700 text-white text-xs h-9"
+            title="Center latitude, north/south map coordinate"
+            aria-label="New zone center latitude"
             data-testid="input-new-zone-lat"
           />
           <Input
-            type="number" step="0.0001" placeholder="Lng"
+            type="number" step="0.0001" placeholder="Longitude"
             value={draft.centerLng}
             onChange={e => setDraft(d => ({ ...d, centerLng: e.target.value }))}
             className="bg-slate-900 border-slate-700 text-white text-xs h-9"
+            title="Center longitude, east/west map coordinate"
+            aria-label="New zone center longitude"
             data-testid="input-new-zone-lng"
           />
           <Input
-            type="number" step="0.5" min="0.5" placeholder="Mi"
+            type="number" step="0.5" min="0.5" placeholder="Radius mi"
             value={draft.radiusMi}
             onChange={e => setDraft(d => ({ ...d, radiusMi: e.target.value }))}
             className="bg-slate-900 border-slate-700 text-white text-xs h-9"
+            title="Zone radius in miles from the center point"
+            aria-label="New zone radius in miles"
             data-testid="input-new-zone-radius"
           />
         </div>
