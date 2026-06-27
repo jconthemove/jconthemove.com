@@ -10,6 +10,16 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   MapPin, Calendar, Loader2, Phone, Mail, Users, DollarSign, Bitcoin,
   CheckCircle2, Clock, Send, Star, ArrowLeftRight, ChevronRight,
   Coins, Search, Truck, Minus, Plus, RefreshCw, Receipt, UserCheck,
@@ -291,6 +301,7 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
   const [btcLink, setBtcLink] = useState<string | null>(null);
   const [tradeNote, setTradeNote] = useState<Record<string, string>>({});
   const [overrideReason, setOverrideReason] = useState("");
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const jobTradeRequests = tradeRequests.filter(r => r.leadId === lead?.id && r.status === "pending");
 
@@ -501,6 +512,27 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  const archiveLeadMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("DELETE", `/api/leads/${lead!.id}`);
+      if (!res.ok) throw new Error("Failed to delete lead");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads/archived"] });
+      setDeleteConfirmOpen(false);
+      toast({
+        title: "Lead deleted",
+        description: `${lead?.firstName || "Lead"} ${lead?.lastName || ""}`.trim() + " was removed from active jobs.",
+      });
+      onClose();
+    },
+    onError: (e: Error) => {
+      toast({ title: "Delete failed", description: e.message, variant: "destructive" });
+    },
+  });
+
   if (!lead) return null;
 
   const effectiveDate = lead.confirmedDate || lead.moveDate;
@@ -534,6 +566,18 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
                 )}
               </div>
             </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => setDeleteConfirmOpen(true)}
+              className="h-9 w-9 flex-shrink-0 rounded-full border border-red-500/30 bg-red-950/20 text-red-300 hover:bg-red-500/20 hover:text-red-100"
+              title="Delete lead"
+              aria-label="Delete lead"
+              data-testid={`button-delete-lead-${lead.id}`}
+            >
+              <X className="h-4 w-4" />
+            </Button>
           </div>
         </SheetHeader>
 
@@ -1055,6 +1099,34 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
           )}
         </div>
       </SheetContent>
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent className="bg-slate-900 border-slate-700 text-white" data-testid="dialog-admin-job-delete-confirm">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white">Delete this lead?</AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-400">
+              This removes{" "}
+              <strong className="text-slate-100">{lead.firstName} {lead.lastName}</strong>{" "}
+              from active jobs and keeps the record archived for recovery. Click Yes to confirm.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              className="bg-slate-800 border-slate-700 text-white hover:bg-slate-700"
+              data-testid="button-cancel-delete-lead"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => archiveLeadMutation.mutate()}
+              className="bg-red-600 text-white hover:bg-red-500"
+              disabled={archiveLeadMutation.isPending}
+              data-testid="button-confirm-delete-lead"
+            >
+              {archiveLeadMutation.isPending ? "Deleting..." : "Yes, delete lead"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sheet>
   );
 }
