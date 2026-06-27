@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState, type MouseEvent } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -862,6 +862,153 @@ interface AdminZone {
   active: boolean;
 }
 
+type ZoneDraft = {
+  code: string;
+  name: string;
+  centerLat: string;
+  centerLng: string;
+  radiusMi: string;
+};
+
+function ZoneCoverageMap({
+  draft,
+  zones,
+  onPick,
+}: {
+  draft: ZoneDraft;
+  zones: AdminZone[];
+  onPick: (lat: number, lng: number) => void;
+}) {
+  const W = 720;
+  const H = 320;
+  const draftLat = Number.parseFloat(draft.centerLat);
+  const draftLng = Number.parseFloat(draft.centerLng);
+  const draftRadius = Number.parseFloat(draft.radiusMi || "0");
+  const hasDraftPoint = Number.isFinite(draftLat) && Number.isFinite(draftLng);
+
+  const bounds = useMemo(() => {
+    const points = [
+      ...zones.map(z => ({ lat: z.centerLat, lng: z.centerLng, radius: z.radiusMi })),
+      ...(hasDraftPoint ? [{ lat: draftLat, lng: draftLng, radius: draftRadius || 25 }] : []),
+    ].filter(p => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+
+    if (points.length === 0) {
+      return { north: 47.8, south: 43.4, west: -91.8, east: -87.1 };
+    }
+
+    const latPad = Math.max(0.8, Math.max(...points.map(p => p.radius || 25)) / 69 + 0.25);
+    const lngPad = Math.max(0.8, Math.max(...points.map(p => p.radius || 25)) / 48 + 0.25);
+    return {
+      north: Math.max(...points.map(p => p.lat)) + latPad,
+      south: Math.min(...points.map(p => p.lat)) - latPad,
+      west: Math.min(...points.map(p => p.lng)) - lngPad,
+      east: Math.max(...points.map(p => p.lng)) + lngPad,
+    };
+  }, [draftLat, draftLng, draftRadius, hasDraftPoint, zones]);
+
+  const project = (lat: number, lng: number) => ({
+    x: ((lng - bounds.west) / Math.max(0.0001, bounds.east - bounds.west)) * W,
+    y: ((bounds.north - lat) / Math.max(0.0001, bounds.north - bounds.south)) * H,
+  });
+
+  const unproject = (x: number, y: number) => ({
+    lat: bounds.north - (y / H) * (bounds.north - bounds.south),
+    lng: bounds.west + (x / W) * (bounds.east - bounds.west),
+  });
+
+  const radiusPx = (lat: number, radiusMi: number) => {
+    const milesPerLngDegree = Math.max(20, 69 * Math.cos((lat * Math.PI) / 180));
+    return (radiusMi / milesPerLngDegree / Math.max(0.0001, bounds.east - bounds.west)) * W;
+  };
+
+  const handlePick = (event: MouseEvent<SVGSVGElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * W;
+    const y = ((event.clientY - rect.top) / rect.height) * H;
+    const p = unproject(x, y);
+    onPick(Number(p.lat.toFixed(4)), Number(p.lng.toFixed(4)));
+  };
+
+  const draftPoint = hasDraftPoint ? project(draftLat, draftLng) : null;
+  const gridLines = [0.2, 0.4, 0.6, 0.8];
+
+  return (
+    <div className="mb-3 overflow-hidden rounded-xl border border-slate-700/50 bg-slate-950/60">
+      <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-3 py-2">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-emerald-300">Coverage Map</p>
+          <p className="text-[11px] text-slate-500">Click the map to ping the base point. Radius highlights instantly.</p>
+        </div>
+        <div className="text-right text-[11px] text-slate-400">
+          <p>{hasDraftPoint ? `${draftLat.toFixed(4)}, ${draftLng.toFixed(4)}` : "No base point set"}</p>
+          <p className="text-emerald-300">{Number.isFinite(draftRadius) ? `${draftRadius} mi radius` : "Set radius"}</p>
+        </div>
+      </div>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="block h-72 w-full cursor-crosshair select-none touch-none"
+        role="img"
+        aria-label="Click map to choose zone base location"
+        onClick={handlePick}
+        data-testid="zone-coverage-map"
+      >
+        <defs>
+          <linearGradient id="zoneMapBg" x1="0" x2="1" y1="0" y2="1">
+            <stop offset="0%" stopColor="#0f2a3d" />
+            <stop offset="48%" stopColor="#102033" />
+            <stop offset="100%" stopColor="#13241c" />
+          </linearGradient>
+          <radialGradient id="zoneWater" cx="18%" cy="10%" r="70%">
+            <stop offset="0%" stopColor="#164e63" stopOpacity="0.85" />
+            <stop offset="100%" stopColor="#0f172a" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <rect width={W} height={H} fill="url(#zoneMapBg)" />
+        <path d="M0,34 C120,20 170,68 280,48 C395,28 470,6 720,28 L720,0 L0,0 Z" fill="url(#zoneWater)" opacity="0.9" />
+        <path d="M34,245 C140,210 214,230 312,198 C410,166 480,178 560,140 C632,104 678,108 720,92" fill="none" stroke="#334155" strokeWidth="16" opacity="0.24" />
+        <path d="M12,250 C128,218 214,238 314,202 C408,168 486,184 562,144 C630,108 682,112 720,94" fill="none" stroke="#64748b" strokeWidth="2" opacity="0.35" />
+        {gridLines.map(g => (
+          <g key={`grid-${g}`} opacity="0.18">
+            <line x1={W * g} x2={W * g} y1="0" y2={H} stroke="#94a3b8" strokeDasharray="6 8" />
+            <line x1="0" x2={W} y1={H * g} y2={H * g} stroke="#94a3b8" strokeDasharray="6 8" />
+          </g>
+        ))}
+        <text x="28" y="42" fill="#7dd3fc" fontSize="14" fontWeight="700" opacity="0.8">Lake Superior / UP</text>
+        <text x="520" y="276" fill="#94a3b8" fontSize="13" fontWeight="700" opacity="0.65">Wisconsin</text>
+        {zones.map(zone => {
+          const p = project(zone.centerLat, zone.centerLng);
+          const r = radiusPx(zone.centerLat, zone.radiusMi);
+          return (
+            <g key={zone.id} opacity={zone.active === false ? 0.35 : 0.72}>
+              <circle cx={p.x} cy={p.y} r={r} fill="#38bdf8" opacity="0.10" stroke="#38bdf8" strokeWidth="2" strokeDasharray="5 5" />
+              <circle cx={p.x} cy={p.y} r="4" fill="#38bdf8" />
+              <text x={p.x + 8} y={p.y - 8} fill="#cbd5e1" fontSize="11" fontWeight="700">{zone.code}</text>
+            </g>
+          );
+        })}
+        {draftPoint && Number.isFinite(draftRadius) && draftRadius > 0 && (
+          <g>
+            <circle
+              cx={draftPoint.x}
+              cy={draftPoint.y}
+              r={radiusPx(draftLat, draftRadius)}
+              fill="#10b981"
+              opacity="0.18"
+              stroke="#34d399"
+              strokeWidth="3"
+            />
+            <circle cx={draftPoint.x} cy={draftPoint.y} r="8" fill="#020617" stroke="#34d399" strokeWidth="4" />
+            <path d={`M${draftPoint.x - 18},${draftPoint.y} L${draftPoint.x + 18},${draftPoint.y} M${draftPoint.x},${draftPoint.y - 18} L${draftPoint.x},${draftPoint.y + 18}`} stroke="#34d399" strokeWidth="2" strokeLinecap="round" />
+            <text x={draftPoint.x + 14} y={draftPoint.y + 26} fill="#d1fae5" fontSize="13" fontWeight="800">
+              {draft.code || "NEW"} - {draftRadius} mi
+            </text>
+          </g>
+        )}
+      </svg>
+    </div>
+  );
+}
+
 function CustomZonesPanel() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -950,9 +1097,13 @@ function CustomZonesPanel() {
 
       {/* Create new */}
       <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl p-3 mb-4">
+        <ZoneCoverageMap
+          draft={draft}
+          zones={zones}
+          onPick={(lat, lng) => setDraft(d => ({ ...d, centerLat: String(lat), centerLng: String(lng) }))}
+        />
         <p className="mb-2 text-[11px] leading-relaxed text-slate-400">
-          Last 3 boxes: center latitude, center longitude, and zone radius in miles. Example: Wausau, WI is about
-          44.9591 latitude, -89.6301 longitude, then choose how many miles around it should count as that zone.
+          Click the map to set the base point, or type coordinates directly. Radius controls the highlighted service area.
         </p>
         <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
           <Input
