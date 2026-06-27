@@ -1998,11 +1998,13 @@ export function MovingJunkPackagePicker({
       {(needsDropoffAddress || showDropoffForPath) && (
         <div>
           <Label className="text-xs">Drop-off address</Label>
-          <Input
+          <PlacesAutocomplete
             value={item.details.dropoffAddress || ""}
-            onChange={(e) => patch({ dropoffAddress: e.target.value || undefined })}
-            placeholder="Destination address"
-            data-testid={`pkg-dropoff-${item.serviceCode}`}
+            onChange={(value) => patch({ dropoffAddress: value || undefined })}
+            onPlaceSelect={(place) => patch({ dropoffAddress: place.fullAddress || undefined })}
+            placeholder="Start typing the destination address"
+            inputClassName="w-full h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-orange-500/30"
+            inputTestId={`pkg-dropoff-${item.serviceCode}`}
           />
           <p className="mt-1 text-[10px] text-muted-foreground">
             We use this with the verified pickup address to estimate drive time.

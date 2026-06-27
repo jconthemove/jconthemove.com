@@ -14,6 +14,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Home, Building, Trash2, Send, Snowflake, Sparkles, Wrench, HardHat, Layers, PaintBucket } from "lucide-react";
 import { DatePicker } from "@/components/ui/date-picker";
+import { PlacesAutocomplete } from "@/components/places-autocomplete";
 
 export default function QuoteForm() {
   const { toast } = useToast();
@@ -180,11 +181,12 @@ export default function QuoteForm() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <Label htmlFor="fromAddress">From Address *</Label>
-                  <Input
-                    id="fromAddress"
+                  <PlacesAutocomplete
+                    value={form.watch("fromAddress") || ""}
+                    onChange={(value) => form.setValue("fromAddress", value, { shouldDirty: true, shouldValidate: true })}
                     placeholder="Current address"
-                    {...form.register("fromAddress")}
-                    data-testid="input-from-address"
+                    inputClassName="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    inputTestId="input-from-address"
                   />
                   {form.formState.errors.fromAddress && (
                     <p className="text-destructive text-sm mt-1" data-testid="error-from-address">{form.formState.errors.fromAddress.message}</p>
@@ -192,11 +194,12 @@ export default function QuoteForm() {
                 </div>
                 <div>
                   <Label htmlFor="toAddress">To Address</Label>
-                  <Input
-                    id="toAddress"
+                  <PlacesAutocomplete
+                    value={form.watch("toAddress") || ""}
+                    onChange={(value) => form.setValue("toAddress", value, { shouldDirty: true, shouldValidate: true })}
                     placeholder="Destination address"
-                    {...form.register("toAddress")}
-                    data-testid="input-to-address"
+                    inputClassName="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    inputTestId="input-to-address"
                   />
                 </div>
               </div>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { MapPin, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -56,6 +56,21 @@ interface PlaceResult {
   state: string;
 }
 
+interface FallbackAddressResult {
+  place_id: number;
+  display_name: string;
+  address: {
+    house_number?: string;
+    road?: string;
+    city?: string;
+    town?: string;
+    village?: string;
+    state?: string;
+    postcode?: string;
+    country_code?: string;
+  };
+}
+
 interface PlacesAutocompleteProps {
   value: string;
   onChange: (value: string) => void;
@@ -63,6 +78,7 @@ interface PlacesAutocompleteProps {
   placeholder?: string;
   className?: string;
   inputClassName?: string;
+  inputTestId?: string;
   autoFocus?: boolean;
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   /** Task #164 — when true (default), if the user types / pastes / autofills
@@ -158,6 +174,20 @@ function extractComponents(
   };
 }
 
+function fallbackToPlaceResult(result: FallbackAddressResult): PlaceResult {
+  const a = result.address || {};
+  const street = [a.house_number, a.road].filter(Boolean).join(" ");
+  const city = a.city || a.town || a.village || "";
+  const state = a.state || "";
+  const zip = a.postcode || "";
+  return {
+    fullAddress: street ? [street, city, state, zip].filter(Boolean).join(", ") : result.display_name,
+    city,
+    state,
+    zip,
+  };
+}
+
 /** Returns true when the geocoded result is a real US street-level address
  *  (street_number + route + city + state + ZIP). Anything less specific —
  *  city-only, ZIP-only, or county-level matches — is rejected so the
@@ -182,6 +212,7 @@ export function PlacesAutocomplete({
   placeholder = "Start typing an address…",
   className,
   inputClassName,
+  inputTestId,
   autoFocus,
   onKeyDown,
   resolveOnBlur = true,
@@ -198,6 +229,57 @@ export function PlacesAutocomplete({
   // immediate blur from kicking off a duplicate Geocoder lookup.
   const justSelectedRef = useRef<boolean>(false);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [fallbackSuggestions, setFallbackSuggestions] = useState<FallbackAddressResult[]>([]);
+  const [fallbackOpen, setFallbackOpen] = useState(false);
+  const [fallbackLoading, setFallbackLoading] = useState(false);
+  const fallbackDebounceRef = useRef<number | null>(null);
+
+  const searchFallbackAddresses = useCallback(async (query: string) => {
+    const q = query.trim();
+    if (q.length < 4 || status === "ready") {
+      setFallbackSuggestions([]);
+      setFallbackOpen(false);
+      return;
+    }
+    setFallbackLoading(true);
+    try {
+      const params = new URLSearchParams({
+        q: `${q} USA`,
+        format: "json",
+        addressdetails: "1",
+        limit: "6",
+        countrycodes: "us",
+      });
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
+        headers: { "Accept-Language": "en" },
+      });
+      if (!res.ok) return;
+      const data: FallbackAddressResult[] = await res.json();
+      const suggestions = data
+        .filter((r) => r.address?.country_code === "us" && r.address?.road)
+        .slice(0, 5);
+      setFallbackSuggestions(suggestions);
+      setFallbackOpen(suggestions.length > 0);
+    } catch {
+      setFallbackSuggestions([]);
+      setFallbackOpen(false);
+    } finally {
+      setFallbackLoading(false);
+    }
+  }, [status]);
+
+  useEffect(() => {
+    if (fallbackDebounceRef.current) window.clearTimeout(fallbackDebounceRef.current);
+    if (status === "ready") {
+      setFallbackSuggestions([]);
+      setFallbackOpen(false);
+      return;
+    }
+    fallbackDebounceRef.current = window.setTimeout(() => searchFallbackAddresses(value), 260);
+    return () => {
+      if (fallbackDebounceRef.current) window.clearTimeout(fallbackDebounceRef.current);
+    };
+  }, [searchFallbackAddresses, status, value]);
 
   useEffect(() => {
     ensureAutofillAnimationCss();
@@ -299,17 +381,27 @@ export function PlacesAutocomplete({
       .catch(() => onResolveAttempt?.(false));
   }
 
+  function pickFallbackAddress(result: FallbackAddressResult) {
+    const place = fallbackToPlaceResult(result);
+    lastResolvedRef.current = place.fullAddress;
+    onChange(place.fullAddress);
+    onPlaceSelect?.(place);
+    onResolveAttempt?.(!!(place.city && place.state && place.zip));
+    setFallbackSuggestions([]);
+    setFallbackOpen(false);
+  }
+
   const baseInput =
     "w-full bg-slate-800 border border-slate-700 text-white placeholder:text-slate-500 text-base rounded-md px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500/60 transition-all";
 
   return (
     <div className={`relative ${className || ""}`}>
-      {status === "loading" && (
+      {(status === "loading" || fallbackLoading) && (
         <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
           <Loader2 className="h-3.5 w-3.5 text-slate-500 animate-spin" />
         </div>
       )}
-      {status === "ready" && (
+      {(status === "ready" || fallbackOpen) && (
         <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
           <MapPin className="h-4 w-4 text-teal-400" />
         </div>
@@ -321,6 +413,7 @@ export function PlacesAutocomplete({
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={onKeyDown}
         onBlur={(e) => handleResolveAttempt(e.target.value)}
+        onFocus={() => fallbackSuggestions.length > 0 && setFallbackOpen(true)}
         // Browser autofill (Chrome/Safari) can fire `change` without ever
         // focusing the field. The `-webkit-autofill` animation gives us a
         // reliable hook to retry resolution in that case.
@@ -331,10 +424,31 @@ export function PlacesAutocomplete({
         }}
         placeholder={status === "loading" ? "Loading maps…" : placeholder}
         autoFocus={autoFocus}
-        className={cn(inputClassName || baseInput, status === "ready" && "pl-9")}
+        className={cn(inputClassName || baseInput, (status === "ready" || fallbackOpen) && "pl-9")}
         name="street-address"
         autoComplete="street-address"
+        data-testid={inputTestId}
       />
+      {fallbackOpen && fallbackSuggestions.length > 0 && (
+        <ul className="absolute left-0 right-0 top-full z-50 mt-1 max-h-64 overflow-auto rounded-xl border border-slate-700 bg-slate-950 shadow-2xl">
+          {fallbackSuggestions.map((result) => {
+            const place = fallbackToPlaceResult(result);
+            return (
+              <li
+                key={result.place_id}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  pickFallbackAddress(result);
+                }}
+                className="flex cursor-pointer items-start gap-2 px-3 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-800"
+              >
+                <MapPin className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-teal-400" />
+                <span className="leading-tight">{place.fullAddress}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }

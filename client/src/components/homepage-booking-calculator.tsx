@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { PlacesAutocomplete } from "@/components/places-autocomplete";
 import {
   calculateMovingPrice,
   DEFAULT_ADD_ONS,
@@ -868,11 +869,23 @@ export function HomepageBookingCalculator({ preset }: Props) {
             </div>
             <div className="space-y-2">
               <Label className="text-slate-200">Pickup address</Label>
-              <Input value={booking.fromAddress} onChange={(e) => updateField("fromAddress", e.target.value)} className="border-slate-700 bg-slate-900 text-white" />
+              <PlacesAutocomplete
+                value={booking.fromAddress}
+                onChange={(value) => updateField("fromAddress", value)}
+                placeholder="Start typing pickup address"
+                inputClassName="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500/60"
+                inputTestId="input-booking-from-address"
+              />
             </div>
             <div className="space-y-2 md:col-span-2">
               <Label className="text-slate-200">Drop-off address</Label>
-              <Input value={booking.toAddress} onChange={(e) => updateField("toAddress", e.target.value)} className="border-slate-700 bg-slate-900 text-white" />
+              <PlacesAutocomplete
+                value={booking.toAddress}
+                onChange={(value) => updateField("toAddress", value)}
+                placeholder="Start typing drop-off address"
+                inputClassName="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500/60"
+                inputTestId="input-booking-to-address"
+              />
             </div>
             <div className="space-y-2 md:col-span-2">
               <Label className="text-slate-200">Move notes</Label>
