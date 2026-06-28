@@ -1,18 +1,26 @@
 import { useLocation } from "wouter";
-import { CalendarDays, Briefcase, Calendar, Coins, Star } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { CalendarDays, Briefcase, Calendar, Coins, Star, Settings2, PlusCircle, ChevronRight } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useCrewGpsBeacon } from "@/hooks/useCrewGpsBeacon";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 
-const tabs = [
-  { label: "Today", icon: CalendarDays, path: "/crew" },
-  { label: "Jobs", icon: Briefcase, path: "/crew/jobs" },
-  { label: "Schedule", icon: Calendar, path: "/crew/schedule" },
-  { label: "Reviews", icon: Star, path: "/crew/reviews" },
-  { label: "Earnings", icon: Coins, path: "/crew/earnings" },
+const optionLinks = [
+  { label: "Job Board", description: "Open jobs and assignment details", icon: Briefcase, path: "/crew/jobs" },
+  { label: "Schedule", description: "Availability and blocked days", icon: Calendar, path: "/crew/schedule" },
+  { label: "Reviews", description: "Customer feedback and rating", icon: Star, path: "/crew/reviews" },
+  { label: "Earnings", description: "Payouts and JCMOVES", icon: Coins, path: "/crew/earnings" },
+  { label: "Add Job", description: "Create a customer request", icon: PlusCircle, path: "/book?worker=1" },
 ];
 
-export default function CrewLayout({ children }: { children: React.ReactNode }) {
+export default function CrewLayout({ children }: { children: ReactNode }) {
   const [location, setLocation] = useLocation();
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const { user } = useAuth();
   // Task #173 — GPS beacon at the app-shell layer so tracking continues
   // across every /crew/* tab while the worker is on duty, not just on
@@ -24,30 +32,67 @@ export default function CrewLayout({ children }: { children: React.ReactNode }) 
       new Date(user.availableUntil).getTime() > Date.now(),
   );
   useCrewGpsBeacon({ enabled: isOnDuty });
+  const tasksActive = location === "/crew" || location === "/crew/" || location.startsWith("/crew/jobs");
+  const optionsActive = location.startsWith("/crew/schedule") || location.startsWith("/crew/reviews") || location.startsWith("/crew/earnings");
+
+  function go(path: string) {
+    setOptionsOpen(false);
+    setLocation(path);
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white pb-20">
       {children}
       <nav className="fixed bottom-0 left-0 right-0 z-50 bg-slate-900/95 backdrop-blur-sm border-t border-slate-700/50 safe-area-bottom">
-        <div className="flex items-stretch justify-around h-16">
-          {tabs.map(({ label, icon: Icon, path }) => {
-            const isActive = path === "/crew" ? (location === "/crew" || location === "/crew/") : location.startsWith(path);
-            return (
-              <button
-                key={path}
-                onClick={() => setLocation(path)}
-                aria-label={label}
-                className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-1 transition-colors ${
-                  isActive ? "text-blue-400" : "text-slate-500 hover:text-slate-300"
-                }`}
-              >
-                <Icon className={`h-5 w-5 ${isActive ? "stroke-[2.5]" : ""}`} />
-                <span className={`text-[10px] ${isActive ? "font-bold" : "font-medium"}`}>{label}</span>
-              </button>
-            );
-          })}
+        <div className="grid h-16 grid-cols-2">
+          <button
+            type="button"
+            onClick={() => go("/crew")}
+            aria-label="Tasks"
+            className={`flex flex-col items-center justify-center gap-0.5 transition-colors ${
+              tasksActive ? "text-blue-400" : "text-slate-500 hover:text-slate-300"
+            }`}
+          >
+            <CalendarDays className={`h-5 w-5 ${tasksActive ? "stroke-[2.5]" : ""}`} />
+            <span className={`text-[10px] ${tasksActive ? "font-bold" : "font-medium"}`}>Tasks</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setOptionsOpen(true)}
+            aria-label="Options"
+            className={`flex flex-col items-center justify-center gap-0.5 transition-colors ${
+              optionsActive || optionsOpen ? "text-blue-400" : "text-slate-500 hover:text-slate-300"
+            }`}
+          >
+            <Settings2 className={`h-5 w-5 ${optionsActive || optionsOpen ? "stroke-[2.5]" : ""}`} />
+            <span className={`text-[10px] ${optionsActive || optionsOpen ? "font-bold" : "font-medium"}`}>Options</span>
+          </button>
         </div>
       </nav>
+      <Sheet open={optionsOpen} onOpenChange={setOptionsOpen}>
+        <SheetContent side="bottom" className="border-slate-700 bg-slate-950 text-white">
+          <SheetHeader className="text-left">
+            <SheetTitle className="text-white">Options</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4 grid gap-2">
+            {optionLinks.map(({ label, description, icon: Icon, path }) => (
+              <button
+                key={path}
+                type="button"
+                onClick={() => go(path)}
+                className="flex items-center gap-3 rounded-lg border border-slate-800 bg-slate-900/80 p-3 text-left transition-colors hover:border-blue-500/50 hover:bg-slate-900"
+              >
+                <Icon className="h-5 w-5 text-blue-300" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-bold text-white">{label}</span>
+                  <span className="block truncate text-xs text-slate-400">{description}</span>
+                </span>
+                <ChevronRight className="h-4 w-4 text-slate-500" />
+              </button>
+            ))}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
