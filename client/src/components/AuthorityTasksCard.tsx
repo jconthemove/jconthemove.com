@@ -77,12 +77,19 @@ export default function AuthorityTasksCard({ className = "" }: { className?: str
     refetchInterval: 60_000,
   });
 
+  const defaultTab = useMemo(() => {
+    if (typeof window === "undefined") return "tasks";
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    return tab === "done" || tab === "options" || tab === "tasks" ? tab : "tasks";
+  }, []);
+
   const tasks = useMemo(() => {
     const list = data?.tasks || [];
-    return [...list].sort((a, b) => Number(a.completed) - Number(b.completed)).slice(0, 6);
+    return [...list].sort((a, b) => Number(a.completed) - Number(b.completed));
   }, [data?.tasks]);
-  const openTasks = tasks.filter((task) => !task.completed);
-  const doneTasks = tasks.filter((task) => task.completed);
+  const openCount = tasks.filter((task) => !task.completed).length;
+  const openTasks = tasks.filter((task) => !task.completed).slice(0, 6);
+  const doneTasks = tasks.filter((task) => task.completed).slice(0, 6);
   const options = data?.options || [];
 
   const completeMutation = useMutation({
@@ -118,7 +125,7 @@ export default function AuthorityTasksCard({ className = "" }: { className?: str
   }
 
   const authority = data?.authority;
-  if (!authority || authority.tier === "worker" || authority.tier === "bronze") return null;
+  if (!authority || authority.tier === "worker") return null;
 
   return (
     <Card className={`border-blue-500/25 bg-slate-900/70 ${className}`}>
@@ -134,11 +141,11 @@ export default function AuthorityTasksCard({ className = "" }: { className?: str
             </p>
           </div>
           <Badge className="border border-blue-400/30 bg-blue-500/10 text-blue-200">
-            {openTasks.length} open
+            {openCount} open
           </Badge>
         </div>
 
-        <Tabs defaultValue="tasks" className="mt-4">
+        <Tabs defaultValue={defaultTab} className="mt-4">
           <TabsList className="grid w-full grid-cols-3 border border-slate-800 bg-slate-950/60">
             <TabsTrigger value="tasks" className="text-xs">Tasks</TabsTrigger>
             <TabsTrigger value="done" className="text-xs">Done</TabsTrigger>
