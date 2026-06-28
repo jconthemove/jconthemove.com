@@ -62,6 +62,7 @@ import {
   type FlooringAnswers,
 } from "../services/pricingEngine";
 import { quoteByLaborHours, LABOR_RATE_PER_HOUR, quoteMovingFromTable } from "@shared/pricingTables";
+import { getMarketplaceShapeForServiceCode } from "@shared/marketplaceShapes";
 
 // Task #218 spec line 44: small moving = "$300 (or $340 if floor lifted;
 // we keep $300)". The labor math 2×2×$85 naturally produces $340, but
@@ -146,6 +147,7 @@ function firstHours(items: BookingPricingResult["items"], fallbackInputs: Persis
 function buildLeadDetails(args: {
   bookingId: string;
   bookingReference: string;
+  marketplaceShape?: string;
   inputs: PersistedBookingInput[];
   quote: BookingPricingResult;
   notes?: string;
@@ -165,6 +167,7 @@ function buildLeadDetails(args: {
   });
   return [
     `[BOOKING ${args.bookingReference}] Linked booking ${args.bookingId}`,
+    args.marketplaceShape ? `Marketplace shape: ${args.marketplaceShape}.` : null,
     `Quote snapshot: subtotal $${args.quote.subtotal.toFixed(2)}, estimate range/final $${args.quote.finalTotal.toFixed(2)}.`,
     "Requested services:",
     ...serviceLines,
@@ -1171,6 +1174,7 @@ router.post("/bookings", async (req: Request, res: Response) => {
         const requestedDate = firstDetailValue(persistInputs, ["requestedDate", "moveDate", "date"]);
         const dropoffAddress = firstDetailValue(persistInputs, ["dropoffAddress", "toAddress", "destinationAddress"]);
         const serviceType = serviceTypeForLead(persistInputs);
+        const marketplaceShape = getMarketplaceShapeForServiceCode(persistInputs[0]?.serviceCode || serviceType);
         const crewSize = maxCrew(quote.items, persistInputs);
         const confirmedHours = firstHours(quote.items, persistInputs);
         const bookingReference = `JOB-${booking.id.slice(0, 8).toUpperCase()}`;
@@ -1188,6 +1192,15 @@ router.post("/bookings", async (req: Request, res: Response) => {
           bookingId: booking.id,
           bookingReference,
           source: body.source || "api",
+          marketplaceShapeId: marketplaceShape.id,
+          marketplaceShape: {
+            id: marketplaceShape.id,
+            shape: marketplaceShape.shape,
+            references: marketplaceShape.references,
+            customer: marketplaceShape.customer,
+            worker: marketplaceShape.worker,
+            company: marketplaceShape.company,
+          },
           subtotal: quote.subtotal,
           discountTotal: quote.discountTotal,
           finalTotal: quote.finalTotal,
@@ -1216,6 +1229,7 @@ router.post("/bookings", async (req: Request, res: Response) => {
           details: buildLeadDetails({
             bookingId: booking.id,
             bookingReference,
+            marketplaceShape: marketplaceShape.shape,
             inputs: persistInputs,
             quote,
             notes: body.notes || undefined,

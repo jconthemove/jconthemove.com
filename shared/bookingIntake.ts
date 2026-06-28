@@ -1,4 +1,5 @@
 import type { BookingQuoteRequest } from "./schema";
+import { getMarketplaceShapeForServiceCode } from "./marketplaceShapes";
 
 type ChatbotAnswers = Record<string, unknown>;
 
@@ -65,10 +66,13 @@ export function buildBookingIntakeFromChatbot(
   serviceLabel?: string,
 ): BookingIntakeResult {
   const serviceCode = mapServiceCode(answers, serviceLabel);
+  const marketplaceShape = getMarketplaceShapeForServiceCode(serviceCode);
   const missing: string[] = [];
   const notes: string[] = [];
   const details: Record<string, unknown> = {
     source: "chatbot",
+    marketplaceShapeId: marketplaceShape.id,
+    marketplaceShape: marketplaceShape.shape,
     serviceAddress: text(answers.serviceAddress) || undefined,
     fromAddress: text(answers.fromZip) || text(answers.serviceAddress) || undefined,
     toAddress: text(answers.toZip) || undefined,

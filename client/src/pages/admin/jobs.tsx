@@ -26,6 +26,11 @@ import {
   UserX, XCircle, Check, X, Image, Tag, ExternalLink
 } from "lucide-react";
 import type { User } from "@shared/schema";
+import {
+  getMarketplaceRequestShape,
+  getMarketplaceShapeForServiceCode,
+  type MarketplaceRequestShapeId,
+} from "@shared/marketplaceShapes";
 import { PaymentStatusPill } from "@/components/PaymentStatusPill";
 import JobLifecycleRail from "@/components/JobLifecycleRail";
 import { extractCustomerMediaLink } from "@/lib/lead-details";
@@ -92,6 +97,7 @@ type Lead = {
   dispatchNotes?: string;
   source?: string | null;
   promoCode?: string | null;
+  quoteSnapshot?: LeadQuoteSnapshot | null;
   attribution?: {
     attributionType: string;
     promoCode: string | null;
@@ -103,6 +109,21 @@ type Lead = {
   photos?: Array<{ url?: string; mimeType?: string; name?: string; source?: string; timestamp?: string }>;
   reviewToken?: string;
   archivedAt?: string | null;
+};
+
+type LeadQuoteSnapshot = {
+  marketplaceShapeId?: string;
+  marketplaceShape?: {
+    id?: string;
+    shape?: string;
+    customer?: string;
+    worker?: string;
+    company?: string;
+  };
+  requestedItems?: Array<{
+    serviceCode?: string;
+    serviceLabel?: string;
+  }>;
 };
 
 type EnrichedTradeRequest = {
@@ -147,6 +168,20 @@ function leadAttributionLabel(lead: Lead): string | null {
   return attribution.repName || attribution.referralSlug || attribution.promoCode || null;
 }
 
+function leadMarketplaceShape(lead: Lead) {
+  const snapshot = lead.quoteSnapshot && typeof lead.quoteSnapshot === "object" && !Array.isArray(lead.quoteSnapshot)
+    ? lead.quoteSnapshot
+    : null;
+  const snapshotShapeId = snapshot?.marketplaceShapeId || snapshot?.marketplaceShape?.id;
+  if (snapshotShapeId) {
+    const shape = getMarketplaceRequestShape(snapshotShapeId as MarketplaceRequestShapeId);
+    if (shape) return shape;
+  }
+
+  const firstItem = Array.isArray(snapshot?.requestedItems) ? snapshot?.requestedItems[0] : undefined;
+  return getMarketplaceShapeForServiceCode(firstItem?.serviceCode || firstItem?.serviceLabel || lead.serviceType);
+}
+
 function AdminJobCard({ lead, onClick, employees }: {
   lead: Lead;
   onClick: () => void;
@@ -170,6 +205,7 @@ function AdminJobCard({ lead, onClick, employees }: {
   const photoCount = leadPhotoCount(lead);
   const attributionLabel = leadAttributionLabel(lead);
   const customerMediaLink = extractCustomerMediaLink(lead.details);
+  const marketplaceShape = leadMarketplaceShape(lead);
 
   return (
     <Card
@@ -193,6 +229,11 @@ function AdminJobCard({ lead, onClick, employees }: {
                   {quickRequest && (
                     <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-300 bg-emerald-500/10 border border-emerald-500/25 rounded-full px-2 py-0.5">
                       Quick request
+                    </span>
+                  )}
+                  {marketplaceShape && (
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-blue-300 bg-blue-500/10 border border-blue-500/25 rounded-full px-2 py-0.5">
+                      {marketplaceShape.shape}
                     </span>
                   )}
                   {city && (
@@ -543,6 +584,7 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
   const photos = Array.isArray(lead.photos) ? lead.photos : [];
   const attribution = lead.attribution;
   const customerMediaLink = extractCustomerMediaLink(lead.details);
+  const marketplaceShape = leadMarketplaceShape(lead);
 
   return (
     <Sheet open={open} onOpenChange={v => !v && onClose()}>
@@ -563,6 +605,11 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
                 {quickRequest && (
                   <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-300 bg-emerald-500/10 border border-emerald-500/25 rounded-full px-2 py-0.5">
                     Quick request
+                  </span>
+                )}
+                {marketplaceShape && (
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-blue-300 bg-blue-500/10 border border-blue-500/25 rounded-full px-2 py-0.5">
+                    {marketplaceShape.shape}
                   </span>
                 )}
               </div>
@@ -599,6 +646,7 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
             } />
             <POSRow label="Date" value={formatDateShort(effectiveDate)} />
             {lead.arrivalWindow && <POSRow label="Arrival" value={lead.arrivalWindow} />}
+            {marketplaceShape && <POSRow label="Shape" value={marketplaceShape.shape} />}
             {lead.promoCode && <POSRow label="Referral Code" value={<span className="font-mono text-amber-300">{lead.promoCode}</span>} />}
             {attribution && (
               <POSRow

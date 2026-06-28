@@ -145,3 +145,65 @@ export function getMarketplaceRequestShape(id: MarketplaceRequestShapeId) {
   return MARKETPLACE_REQUEST_SHAPES.find((shape) => shape.id === id);
 }
 
+export function getMarketplaceShapeForServiceCode(serviceCode: string | null | undefined) {
+  const normalized = String(serviceCode || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+
+  if (!normalized) return getMarketplaceRequestShape("fast_quote")!;
+
+  if (
+    normalized.includes("rebook") ||
+    normalized.includes("review") ||
+    normalized.includes("reward") ||
+    normalized.includes("rep_link") ||
+    normalized.includes("referral")
+  ) {
+    return getMarketplaceRequestShape("repeat_loop")!;
+  }
+
+  if (
+    normalized.includes("clean") ||
+    normalized.includes("junk") ||
+    normalized.includes("trash") ||
+    normalized.includes("snow") ||
+    normalized.includes("lawn") ||
+    normalized.includes("paint") ||
+    normalized.includes("floor") ||
+    normalized.includes("roof") ||
+    normalized.includes("handyman") ||
+    normalized.includes("demo")
+  ) {
+    return getMarketplaceRequestShape("fast_quote")!;
+  }
+
+  if (
+    normalized.includes("ubox") ||
+    normalized.includes("u_box") ||
+    normalized.includes("moving") ||
+    normalized.includes("move") ||
+    normalized.includes("residential") ||
+    normalized.includes("commercial") ||
+    normalized.includes("load_unload") ||
+    normalized.includes("unload") ||
+    normalized.includes("pack_unpack") ||
+    normalized.includes("packing") ||
+    normalized === "labor"
+  ) {
+    return getMarketplaceRequestShape("moving_help")!;
+  }
+
+  if (
+    normalized.includes("delivery") ||
+    normalized.includes("pickup") ||
+    normalized.includes("pods") ||
+    normalized.includes("store") ||
+    normalized.includes("reuse") ||
+    normalized.includes("haul")
+  ) {
+    return getMarketplaceRequestShape("delivery_reuse")!;
+  }
+
+  return getMarketplaceRequestShape("fast_quote")!;
+}
