@@ -105,6 +105,58 @@ const blueprint = [
   },
 ];
 
+const requestShapes = [
+  {
+    shape: "Fast Quote",
+    references: "Google, Yelp, Facebook, Craigslist",
+    customer: "ZIP/date, service, contact, notes, optional photos.",
+    worker: "Hidden until staff prices or opens the card.",
+    company: "Owner alert, funnel tracking, quote_requested lead card.",
+  },
+  {
+    shape: "Moving Help",
+    references: "U-Haul, MovingHelp, MovingHelper, HireAHelper",
+    customer: "Load, unload, or both; truck provider; truck size; crew package.",
+    worker: "Available job or assigned job with calendar and dispatch steps.",
+    company: "Zone rate, minimum hours, Square link, crew payout preview.",
+  },
+  {
+    shape: "Delivery / Reuse",
+    references: "Target, Walmart, Goodwill, PODS",
+    customer: "Pickup, drop-off, item size, photos, timing window.",
+    worker: "Driver/helper task with route, access notes, and completion proof.",
+    company: "Travel variables, item handling, route bundling, reuse leads.",
+  },
+  {
+    shape: "Repeat Loop",
+    references: "McDonald's, JCMOVES, reviews, rep links",
+    customer: "Simple offer, review, reward credit, next-service shortcut.",
+    worker: "Advertise, accept, complete, earn task and job bonuses.",
+    company: "Webhook ads, payout safety, referral attribution, review follow-up.",
+  },
+];
+
+const simpleSides = [
+  {
+    side: "Customer",
+    tabs: "Book, Track",
+    tasks: "Request help, review estimate, pay link, leave review.",
+    options: "Contact info, photos, notes, rewards.",
+  },
+  {
+    side: "Worker",
+    tabs: "Today, Jobs, Schedule, Earnings",
+    tasks: "Accept, navigate, start, complete, advertise.",
+    options: "Availability, profile, payout, notifications.",
+  },
+  {
+    side: "Company",
+    tabs: "Ops Board, Dispatch, Jobs, Schedule",
+    tasks: "Price, assign, notify, collect, complete, payout.",
+    options: "Pricing, People, Finance, Funnel, Marketing, Launch.",
+  },
+];
+
 export default function AdminMarketplacePlaybookPage() {
   return (
     <div className="min-h-screen">
@@ -163,6 +215,71 @@ export default function AdminMarketplacePlaybookPage() {
                   <p className="text-slate-400"><span className="font-bold text-slate-200">References:</span> {sources}</p>
                   <p className="text-slate-400"><span className="font-bold text-slate-200">Keep:</span> {keep}</p>
                   <p className="text-slate-300"><span className="font-bold text-emerald-300">JC move:</span> {build}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="mt-5 rounded-lg border border-slate-800 bg-slate-900/70 p-5">
+          <div className="flex items-center gap-2">
+            <ClipboardList className="h-5 w-5 text-blue-300" />
+            <h2 className="font-black text-white">Request Shapes</h2>
+          </div>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
+            Different jobs can be different shapes, but they should still land in the same card pipeline.
+          </p>
+          <div className="mt-4 grid gap-3">
+            {requestShapes.map((item) => (
+              <div key={item.shape} className="rounded-md border border-slate-800 bg-slate-950/60 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-black text-white">{item.shape}</p>
+                    <p className="mt-1 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">{item.references}</p>
+                  </div>
+                  <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-200">
+                    lead card
+                  </span>
+                </div>
+                <div className="mt-3 grid gap-2 md:grid-cols-3">
+                  {[
+                    ["Customer", item.customer],
+                    ["Worker", item.worker],
+                    ["Company", item.company],
+                  ].map(([label, detail]) => (
+                    <div key={label} className="rounded-md border border-slate-800 bg-slate-900/50 p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{label}</p>
+                      <p className="mt-1 text-sm leading-6 text-slate-300">{detail}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="mt-5 rounded-lg border border-blue-400/20 bg-blue-500/10 p-5">
+          <div className="flex items-center gap-2">
+            <Users className="h-5 w-5 text-blue-300" />
+            <h2 className="font-black text-white">Simple Sides</h2>
+          </div>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
+            Keep every side lean: only the tabs people need, the tasks they do daily, and the options they change.
+          </p>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            {simpleSides.map((item) => (
+              <div key={item.side} className="rounded-md border border-slate-800 bg-slate-950/60 p-4">
+                <p className="text-sm font-black text-white">{item.side}</p>
+                <div className="mt-3 space-y-3 text-sm leading-6">
+                  <p className="text-slate-300">
+                    <span className="font-bold text-blue-200">Tabs:</span> {item.tabs}
+                  </p>
+                  <p className="text-slate-300">
+                    <span className="font-bold text-emerald-200">Tasks:</span> {item.tasks}
+                  </p>
+                  <p className="text-slate-300">
+                    <span className="font-bold text-orange-200">Options:</span> {item.options}
+                  </p>
                 </div>
               </div>
             ))}
