@@ -70,8 +70,17 @@ function StepIcon({ state }: { state: StepState }) {
   return <Circle className="h-3.5 w-3.5" />;
 }
 
-export default function JobLifecycleRail({ lead, className = "" }: { lead: LifecycleLead; className?: string }) {
+export default function JobLifecycleRail({
+  lead,
+  className = "",
+  audience = "ops",
+}: {
+  lead: LifecycleLead;
+  className?: string;
+  audience?: "ops" | "customer";
+}) {
   const state = lifecycleState(lead);
+  const finalStepLabel = audience === "customer" ? "Rewards" : "Payout";
   const steps = [
     { label: "Request", done: true, detail: "Card made" },
     { label: "Quote", done: state.quoteDone, detail: state.price > 0 ? `$${state.price.toFixed(0)}` : "Price/date" },
@@ -81,7 +90,7 @@ export default function JobLifecycleRail({ lead, className = "" }: { lead: Lifec
       detail: state.crewNeeded > 0 ? `${state.crewMembers.length}/${state.crewNeeded}` : `${state.crewMembers.length}`,
     },
     { label: "Complete", done: state.completeDone, detail: state.completeDone ? "Done" : "Work job" },
-    { label: "Payout", done: state.payoutDone, detail: state.payoutDone ? "Ready" : "Review" },
+    { label: finalStepLabel, done: state.payoutDone, detail: state.payoutDone ? "Ready" : "Review" },
   ];
   const firstOpenIndex = steps.findIndex((step) => !step.done);
   const activeIndex = firstOpenIndex === -1 ? steps.length - 1 : firstOpenIndex;

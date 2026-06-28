@@ -21,6 +21,7 @@ import { formatOrderNumber } from "@shared/schema";
 import QuoteForm from "@/components/QuoteForm";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { LotteryPanel } from "@/components/lottery-panel";
+import JobLifecycleRail from "@/components/JobLifecycleRail";
 
 interface WalletAccount {
   id: string;
@@ -62,11 +63,19 @@ interface CustomerJob {
   email: string;
   phone: string;
   moveDate: string;
+  confirmedDate?: string;
+  arrivalWindow?: string;
   serviceType: string;
   pickupAddress: string;
   dropoffAddress: string;
   status: string;
+  dispatchState?: string;
   estimatedTotal?: string;
+  basePrice?: string;
+  totalPrice?: string;
+  crewSize?: number | null;
+  crewMembers?: string[];
+  completedAt?: string | null;
   createdAt: string;
 }
 
@@ -122,6 +131,12 @@ function pendingStakeRewards(stake: Stake) {
 
 function JobStatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
+    quote_requested: "border-amber-500 text-amber-400 bg-amber-500/10",
+    chatbot_pending: "border-teal-500 text-teal-400 bg-teal-500/10",
+    quoted:      "border-blue-500 text-blue-400 bg-blue-500/10",
+    available:   "border-blue-500 text-blue-400 bg-blue-500/10",
+    assigned:    "border-purple-500 text-purple-400 bg-purple-500/10",
+    accepted:    "border-purple-500 text-purple-400 bg-purple-500/10",
     completed:   "border-green-500 text-green-400 bg-green-500/10",
     in_progress: "border-blue-500 text-blue-400 bg-blue-500/10",
     confirmed:   "border-purple-500 text-purple-400 bg-purple-500/10",
@@ -132,6 +147,75 @@ function JobStatusBadge({ status }: { status: string }) {
     <Badge variant="outline" className={`text-xs ${styles[status] || styles.pending}`}>
       {status.replace(/_/g, " ").toUpperCase()}
     </Badge>
+  );
+}
+
+function CustomerJobCard({ job }: { job: CustomerJob }) {
+  const effectiveDate = job.confirmedDate || job.moveDate;
+
+  return (
+    <Card className="border-white/5 bg-white/[0.03]">
+      <CardContent className="p-4">
+        <div className="mb-3 flex items-start justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            <JobStatusBadge status={job.status} />
+            <Badge variant="secondary" className="bg-slate-700/50 text-slate-300 text-xs">
+              {job.serviceType}
+            </Badge>
+            {job.orderNumber != null && (
+              <span className="font-mono text-xs font-semibold text-blue-400">
+                {formatOrderNumber(job.orderNumber)}
+              </span>
+            )}
+          </div>
+          <span className="text-xs text-slate-500">{new Date(job.createdAt).toLocaleDateString()}</span>
+        </div>
+
+        <JobLifecycleRail
+          audience="customer"
+          className="mb-3"
+          lead={{
+            status: job.status,
+            dispatchState: job.dispatchState,
+            basePrice: job.basePrice,
+            totalPrice: job.totalPrice || job.estimatedTotal,
+            confirmedDate: job.confirmedDate,
+            moveDate: job.moveDate,
+            crewSize: job.crewSize,
+            crewMembers: job.crewMembers,
+            completedAt: job.completedAt,
+          }}
+        />
+
+        <div className="space-y-1.5 text-sm">
+          {job.pickupAddress && (
+            <div className="flex items-start gap-2">
+              <MapPin className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-green-400" />
+              <span className="text-slate-300">{job.pickupAddress}</span>
+            </div>
+          )}
+          {job.dropoffAddress && (
+            <div className="flex items-start gap-2">
+              <MapPin className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-red-400" />
+              <span className="text-slate-300">{job.dropoffAddress}</span>
+            </div>
+          )}
+          {effectiveDate && (
+            <div className="flex items-center gap-2">
+              <Calendar className="h-3.5 w-3.5 text-blue-400" />
+              <span className="text-slate-300">{new Date(effectiveDate).toLocaleDateString()}</span>
+              {job.arrivalWindow && <span className="text-slate-500">- {job.arrivalWindow}</span>}
+            </div>
+          )}
+          {job.estimatedTotal && (
+            <div className="flex items-center justify-between border-t border-white/5 pt-2">
+              <span className="text-xs text-slate-500">Estimated</span>
+              <span className="font-bold text-green-400">${job.estimatedTotal}</span>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -305,50 +389,7 @@ export default function CustomerPortal() {
             ) : (
               <div className="space-y-3">
                 {customerJobs.map((job) => (
-                  <Card key={job.id} className="border-white/5 bg-white/[0.03]">
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <JobStatusBadge status={job.status} />
-                          <Badge variant="secondary" className="bg-slate-700/50 text-slate-300 text-xs">
-                            {job.serviceType}
-                          </Badge>
-                          {job.orderNumber != null && (
-                            <span className="text-xs font-mono text-blue-400 font-semibold">
-                              {formatOrderNumber(job.orderNumber)}
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-xs text-slate-500">{new Date(job.createdAt).toLocaleDateString()}</span>
-                      </div>
-                      <div className="space-y-1.5 text-sm">
-                        {job.pickupAddress && (
-                          <div className="flex items-start gap-2">
-                            <MapPin className="h-3.5 w-3.5 text-green-400 mt-0.5 flex-shrink-0" />
-                            <span className="text-slate-300">{job.pickupAddress}</span>
-                          </div>
-                        )}
-                        {job.dropoffAddress && (
-                          <div className="flex items-start gap-2">
-                            <MapPin className="h-3.5 w-3.5 text-red-400 mt-0.5 flex-shrink-0" />
-                            <span className="text-slate-300">{job.dropoffAddress}</span>
-                          </div>
-                        )}
-                        {job.moveDate && (
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-3.5 w-3.5 text-blue-400" />
-                            <span className="text-slate-300">{new Date(job.moveDate).toLocaleDateString()}</span>
-                          </div>
-                        )}
-                        {job.estimatedTotal && (
-                          <div className="pt-2 border-t border-white/5 flex items-center justify-between">
-                            <span className="text-slate-500 text-xs">Estimated</span>
-                            <span className="text-green-400 font-bold">${job.estimatedTotal}</span>
-                          </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
+                  <CustomerJobCard key={job.id} job={job} />
                 ))}
               </div>
             )}

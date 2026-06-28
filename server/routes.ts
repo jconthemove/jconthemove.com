@@ -7442,12 +7442,19 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
         email: lead.email,
         phone: lead.phone || '',
         moveDate: lead.moveDate || '',
+        confirmedDate: lead.confirmedDate || '',
+        arrivalWindow: lead.arrivalWindow || '',
         serviceType: lead.serviceType,
         pickupAddress: lead.fromAddress || '',
         dropoffAddress: lead.toAddress || '',
         status: lead.status,
-        estimatedTotal: lead.totalPrice || '',
+        dispatchState: lead.dispatchState || '',
+        estimatedTotal: lead.totalPrice || lead.basePrice || '',
+        basePrice: lead.basePrice || '',
+        totalPrice: lead.totalPrice || '',
         crewSize: lead.crewSize || null,
+        crewMembers: Array.isArray(lead.crewMembers) ? lead.crewMembers : [],
+        completedAt: lead.completedAt?.toISOString?.() || null,
         createdAt: lead.createdAt?.toISOString() || ''
       }));
       
