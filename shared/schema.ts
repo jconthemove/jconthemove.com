@@ -3047,6 +3047,8 @@ export const bookingCreateRequestSchema = bookingQuoteRequestSchema.extend({
   customerPhone: z.string().min(7),
   serviceAddress: z.string().optional(),
   notes: z.string().optional(),
+  marketingCampaignId: z.string().trim().max(120).optional(),
+  marketingTracking: z.record(z.any()).optional(),
   // Task #175 — Customer chose "Pay from JCMOVES wallet" on the review
   // step. Server attempts an atomic wallet debit; on insufficient
   // balance we mark the booking pending-payment and fall back to Square.

@@ -38,6 +38,19 @@ type FunnelSnapshot = {
   city?: string | null;
   state?: string | null;
   zip?: string | null;
+  attribution?: {
+    promoCode?: string | null;
+    referralSlug?: string | null;
+    marketingCampaignId?: string | null;
+    marketingTracking?: {
+      utmSource?: string;
+      utmMedium?: string;
+      utmCampaign?: string;
+      utmContent?: string;
+      jcCampaign?: string;
+      referrer?: string;
+    };
+  };
   contact?: {
     name?: string | null;
     phone?: string | null;
@@ -531,6 +544,17 @@ function FunnelTab({ data, isLoading }: { data: FunnelData | undefined; isLoadin
                         </p>
                       </div>
                     </div>
+                    {(snapshot.attribution?.marketingCampaignId || snapshot.attribution?.promoCode || snapshot.attribution?.marketingTracking?.utmCampaign) && (
+                      <div className="mt-3 rounded-lg border border-blue-500/20 bg-blue-500/10 p-3 text-xs text-blue-100">
+                        <span className="font-bold text-blue-200">Marketing:</span>{" "}
+                        {[
+                          snapshot.attribution?.marketingCampaignId ? `Campaign ${snapshot.attribution.marketingCampaignId}` : null,
+                          snapshot.attribution?.promoCode ? `Promo ${snapshot.attribution.promoCode}` : null,
+                          snapshot.attribution?.referralSlug ? `Rep ${snapshot.attribution.referralSlug}` : null,
+                          snapshot.attribution?.marketingTracking?.utmCampaign ? `UTM ${snapshot.attribution.marketingTracking.utmCampaign}` : null,
+                        ].filter(Boolean).join(" | ")}
+                      </div>
+                    )}
 
                     <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-600">
                       <span>Visitor: {event.visitor_id || "unknown"}</span>

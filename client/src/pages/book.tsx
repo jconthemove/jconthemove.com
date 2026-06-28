@@ -113,8 +113,26 @@ interface QuickRequestResponse {
     photoCount?: number;
     promoCode?: string | null;
     referralSlug?: string | null;
+    marketingCampaignId?: string | null;
   };
 }
+
+type MarketingTracking = {
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  utmContent?: string;
+  jcCampaign?: string;
+  fbclid?: string;
+  referrer?: string;
+};
+
+type BookingAttribution = {
+  promoCode: string;
+  referralSlug: string;
+  marketingCampaignId: string;
+  marketingTracking: MarketingTracking;
+};
 
 type MarketplaceQuotePreview = {
   matched: boolean;
@@ -196,7 +214,7 @@ function normalizeServiceCodeParam(value: string): string {
   return SERVICE_CODE_ALIASES[normalized] ?? normalized.replace(/-/g, "_");
 }
 
-function formatAttributionSummary(attribution: { promoCode: string; referralSlug: string }) {
+function formatAttributionSummary(attribution: Pick<BookingAttribution, "promoCode" | "referralSlug">) {
   const parts: string[] = [];
   if (attribution.promoCode) parts.push(`Referral code ${attribution.promoCode}`);
   if (attribution.referralSlug) {
@@ -340,7 +358,7 @@ function QuickRequestForm({
   services: CatalogService[];
   onBuildQuote: () => void;
   onHome: () => void;
-  attribution: { promoCode: string; referralSlug: string };
+  attribution: BookingAttribution;
   initialServiceCode?: string;
 }) {
   const { toast } = useToast();
@@ -386,6 +404,8 @@ function QuickRequestForm({
         ...form,
         promoCode: attribution.promoCode || undefined,
         referralSlug: attribution.referralSlug || undefined,
+        marketingCampaignId: attribution.marketingCampaignId || undefined,
+        marketingTracking: attribution.marketingTracking,
         photos: photoFiles,
       });
       return res.json() as Promise<QuickRequestResponse>;
@@ -412,6 +432,7 @@ function QuickRequestForm({
       `Photos: ${lead.photoCount || 0}`,
       lead.promoCode ? `Referral code: ${lead.promoCode}` : "",
       lead.referralSlug ? `Rep page: ${lead.referralSlug}` : "",
+      lead.marketingCampaignId ? `Campaign: ${lead.marketingCampaignId}` : "",
       form.mediaLink.trim() ? `Photo/video/album link: ${form.mediaLink.trim()}` : "",
       form.notes.trim() ? `Notes: ${form.notes.trim()}` : "",
     ].filter(Boolean);
@@ -748,11 +769,24 @@ export default function MultiServiceBookPage() {
   }, []);
 
   const attribution = useMemo(() => {
-    if (typeof window === "undefined") return { promoCode: "", referralSlug: "" };
+    if (typeof window === "undefined") {
+      return { promoCode: "", referralSlug: "", marketingCampaignId: "", marketingTracking: {} };
+    }
     const sp = new URLSearchParams(window.location.search);
+    const marketingTracking: MarketingTracking = {
+      utmSource: (sp.get("utm_source") || "").trim(),
+      utmMedium: (sp.get("utm_medium") || "").trim(),
+      utmCampaign: (sp.get("utm_campaign") || "").trim(),
+      utmContent: (sp.get("utm_content") || "").trim(),
+      jcCampaign: (sp.get("jc_campaign") || "").trim(),
+      fbclid: (sp.get("fbclid") || "").trim(),
+      referrer: document.referrer || "",
+    };
     return {
       promoCode: (sp.get("promo") || sp.get("promoCode") || "").trim().toUpperCase(),
       referralSlug: (sp.get("rep") || sp.get("ref") || "").trim().toLowerCase(),
+      marketingCampaignId: marketingTracking.jcCampaign || marketingTracking.utmContent || "",
+      marketingTracking,
     };
   }, []);
   const attributionSummary = formatAttributionSummary(attribution);
@@ -854,6 +888,12 @@ export default function MultiServiceBookPage() {
       city: addressCity || null,
       state: addressState || null,
       zip: addressZip || zipFromAddress(serviceAddress) || null,
+      attribution: {
+        promoCode: attribution.promoCode || null,
+        referralSlug: attribution.referralSlug || null,
+        marketingCampaignId: attribution.marketingCampaignId || null,
+        marketingTracking: attribution.marketingTracking,
+      },
       contact: {
         name: contact.customerName.trim() || null,
         phone: contact.customerPhone.trim() || null,
@@ -1304,6 +1344,8 @@ export default function MultiServiceBookPage() {
         source: isWorker ? "crew_add_job" : "web_multi_book",
         promoCode: attribution.promoCode || undefined,
         referralSlug: attribution.referralSlug || undefined,
+        marketingCampaignId: attribution.marketingCampaignId || undefined,
+        marketingTracking: attribution.marketingTracking,
         marketplaceQuotePreview: marketplacePreviewQuery.data || undefined,
         ...((() => {
           // Re-clamp at submit so a stale state value can never bypass

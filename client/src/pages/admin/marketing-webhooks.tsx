@@ -19,6 +19,7 @@ type CampaignRow = {
   cta_url: string | null;
   promo_code: string | null;
   rep_slug: string | null;
+  source: string | null;
   created_at: string;
   deliveries: number;
   sent: number;
@@ -307,7 +308,10 @@ export default function AdminMarketingWebhooksPage() {
                   <td className="py-3 pr-3">
                     <span className="text-emerald-300">{campaign.sent} sent</span>
                     {campaign.failed > 0 && <span className="text-red-300 ml-2">{campaign.failed} failed</span>}
-                    <div className="text-xs text-slate-500">{campaign.deliveries} total</div>
+                    <div className="text-xs text-slate-500">
+                      {campaign.deliveries > 0 ? `${campaign.deliveries} total` : "draft / copied"}
+                      {campaign.source ? ` - ${campaign.source.replace(/_/g, " ")}` : ""}
+                    </div>
                   </td>
                   <td className="py-3 pr-3 text-slate-400 whitespace-nowrap">{formatDate(campaign.created_at)}</td>
                 </tr>

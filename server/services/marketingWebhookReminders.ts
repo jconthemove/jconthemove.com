@@ -218,7 +218,7 @@ export async function sendMarketingWebhookReminder(input: MarketingWebhookRemind
 export async function listRecentMarketingWebhookCampaigns(limit = 25) {
   const result = await pool.query(
     `SELECT c.id, c.campaign_name, c.title, c.area, c.focus, c.audience, c.image_url,
-            c.cta_url, c.promo_code, c.rep_slug, c.created_at,
+            c.cta_url, c.promo_code, c.rep_slug, c.source, c.created_at,
             COUNT(d.id)::int AS deliveries,
             COUNT(d.id) FILTER (WHERE d.status = 'sent')::int AS sent,
             COUNT(d.id) FILTER (WHERE d.status <> 'sent')::int AS failed

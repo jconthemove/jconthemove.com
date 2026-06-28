@@ -78,6 +78,16 @@ type WorkerTier = typeof WORKER_TIERS[number];
 const tierRank: Record<WorkerTier, number> = { worker: 0, bronze: 1, silver: 2, gold: 3, platinum: 4 };
 type PersistedBookingInput = BookingPricingItemInput & { serviceLabel: string };
 
+function safeMarketingTracking(raw: unknown) {
+  const input = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+  const picked: Record<string, string> = {};
+  for (const key of ["utmSource", "utmMedium", "utmCampaign", "utmContent", "jcCampaign", "fbclid", "referrer"]) {
+    const value = input[key];
+    if (typeof value === "string" && value.trim()) picked[key] = value.trim().slice(0, 500);
+  }
+  return picked;
+}
+
 function normalizeWorkerTier(value: unknown, role?: string | null): WorkerTier {
   const raw = String(value || "").toLowerCase();
   if (WORKER_TIERS.includes(raw as WorkerTier)) return raw as WorkerTier;
@@ -1021,6 +1031,8 @@ router.post("/bookings", async (req: Request, res: Response) => {
     const isWorkerCreated = body.source === "crew_add_job";
     const marketingPromoCode = body.promoCode ? body.promoCode.toUpperCase().trim() : "";
     const marketingReferralSlug = body.referralSlug ? body.referralSlug.toLowerCase().trim() : "";
+    const marketingCampaignId = body.marketingCampaignId ? body.marketingCampaignId.trim() : "";
+    const marketingTracking = safeMarketingTracking(body.marketingTracking);
     if (isWorkerCreated && !requestUser) {
       return res.status(401).json({
         error: "Authentication required",
@@ -1099,6 +1111,8 @@ router.post("/bookings", async (req: Request, res: Response) => {
             source: body.source || "api",
             authorityTier: requestAuthority.tier,
             referralSlug: marketingReferralSlug || null,
+            marketingCampaignId: marketingCampaignId || null,
+            marketingTracking,
             quoteTotal: quote.finalTotal,
             crewSummary: quote.items.map((item) => item.laborMeta).filter(Boolean),
           },
@@ -1126,23 +1140,27 @@ router.post("/bookings", async (req: Request, res: Response) => {
       }
     }
 
-    if (marketingPromoCode || marketingReferralSlug) {
+    if (marketingPromoCode || marketingReferralSlug || marketingCampaignId) {
       try {
-        const [rep] = await db.select().from(marketingReps)
-          .where(marketingPromoCode
-            ? eq(marketingReps.promoCode, marketingPromoCode)
-            : eq(marketingReps.slug, marketingReferralSlug))
-          .limit(1);
+        const [rep] = marketingPromoCode || marketingReferralSlug
+          ? await db.select().from(marketingReps)
+              .where(marketingPromoCode
+                ? eq(marketingReps.promoCode, marketingPromoCode)
+                : eq(marketingReps.slug, marketingReferralSlug))
+              .limit(1)
+          : [];
         const repPromoCode = rep?.promoCode || marketingPromoCode || "";
         const repUserId = repPromoCode ? await resolveMarketingRepUserId(repPromoCode) : null;
         await db.insert(quoteAttributions).values({
           bookingId: booking.id,
           userId: repUserId,
-          attributionType: "marketing_rep_booking",
+          attributionType: repPromoCode || marketingReferralSlug ? "marketing_rep_booking" : "marketing_campaign_booking",
           promoCode: repPromoCode || null,
           metadata: {
             source: body.source || "api",
             referralSlug: rep?.slug || marketingReferralSlug || null,
+            marketingCampaignId: marketingCampaignId || null,
+            marketingTracking,
             quoteTotal: quote.finalTotal,
             crewSummary: quote.items.map((item) => item.laborMeta).filter(Boolean),
           },
@@ -1205,6 +1223,8 @@ router.post("/bookings", async (req: Request, res: Response) => {
           discountTotal: quote.discountTotal,
           finalTotal: quote.finalTotal,
           tokenEstimate: quote.tokenEstimate,
+          marketingCampaignId: marketingCampaignId || null,
+          marketingTracking,
           bundleApplied: quote.bundleApplied ?? null,
           marketplaceQuotePreview,
           items: quote.items,
@@ -1251,7 +1271,7 @@ router.post("/bookings", async (req: Request, res: Response) => {
         await emitJobEvent("quote_requested", createdLead, {
           actorId: requestUser?.id || null,
           source: "booking_bridge",
-          extra: { bookingId: booking.id, bookingReference },
+          extra: { bookingId: booking.id, bookingReference, marketingCampaignId: marketingCampaignId || null, marketingTracking },
         });
       }
     } catch (leadErr) {

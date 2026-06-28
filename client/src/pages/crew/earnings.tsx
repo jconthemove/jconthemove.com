@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Textarea } from "@/components/ui/textarea";
 import {
   Coins, Zap, Clock, TrendingUp, Loader2, Lock, Link as LinkIcon, Share2, MessageCircle,
-  Dumbbell, Truck, KeyRound, Wrench, Copy, Image as ImageIcon, Sparkles
+  Dumbbell, Truck, KeyRound, Wrench, Copy, Image as ImageIcon, Sparkles, Upload
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Link } from "wouter";
@@ -75,6 +75,8 @@ interface MarketingAdDraft {
   hashtags: string[];
   ctaLabel: string;
   photoSuggestion: string;
+  campaignId?: string;
+  trackedLink?: string;
   provider: string;
   fallbackUsed: boolean;
   reason?: string;
@@ -135,6 +137,8 @@ export default function CrewEarningsPage() {
   const [adFocus, setAdFocus] = useState("Moving help");
   const [adNotes, setAdNotes] = useState("");
   const [adPhotoUrl, setAdPhotoUrl] = useState("");
+  const [adPhotoFileName, setAdPhotoFileName] = useState("");
+  const [adPhotoPreview, setAdPhotoPreview] = useState("");
   const [adDraft, setAdDraft] = useState<MarketingAdDraft | null>(null);
 
   const { data: wallet } = useQuery<{ balance: string; tokenBalance?: string; totalEarned?: string }>({ queryKey: ["/api/rewards/wallet"] });
@@ -179,7 +183,8 @@ export default function CrewEarningsPage() {
       return referralLink;
     }
   }, [adArea, adFocus, referralLink]);
-  const facebookShareHref = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(trackedAdLink)}`;
+  const adShareLink = adDraft?.trackedLink || trackedAdLink;
+  const facebookShareHref = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(adShareLink)}`;
 
   useEffect(() => {
     if (!miningStatus?.currentSession) { setAnimatedTokens(0); return; }
@@ -230,7 +235,7 @@ export default function CrewEarningsPage() {
       const response = await apiRequest("POST", "/api/crew/marketing/ad-draft", {
         area: adArea,
         focus: adFocus,
-        rawText: adNotes,
+        rawText: [adNotes, adPhotoFileName ? `Photo selected by crew: ${adPhotoFileName}` : ""].filter(Boolean).join("\n"),
         photoUrl: adPhotoUrl,
         referralLink: trackedAdLink,
         promoCode: referralCode,
@@ -372,6 +377,29 @@ export default function CrewEarningsPage() {
           </div>
 
           <div className="space-y-1.5">
+            <Label className="text-xs text-slate-300">Photo from device</Label>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-blue-500/40 bg-slate-950/40 px-3 py-2 text-xs font-black text-blue-200 hover:bg-blue-500/10">
+                <Upload className="h-3.5 w-3.5" /> Choose photo
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    setAdPhotoFileName(file.name);
+                    const reader = new FileReader();
+                    reader.onload = () => setAdPhotoPreview(String(reader.result || ""));
+                    reader.readAsDataURL(file);
+                  }}
+                />
+              </label>
+              {adPhotoFileName && <span className="max-w-full truncate text-xs text-slate-400">{adPhotoFileName}</span>}
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
             <Label htmlFor="ad-notes" className="text-xs text-slate-300">Post note</Label>
             <Textarea
               id="ad-notes"
@@ -397,8 +425,8 @@ export default function CrewEarningsPage() {
           <div className="mt-4 rounded-xl border border-white/10 bg-slate-950/50 p-3">
             <div className="flex items-start gap-3">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-700 bg-slate-900">
-                {adPhotoUrl ? (
-                  <img src={adPhotoUrl} alt="" className="h-full w-full object-cover" />
+                {adPhotoUrl || adPhotoPreview ? (
+                  <img src={adPhotoUrl || adPhotoPreview} alt="" className="h-full w-full object-cover" />
                 ) : (
                   <ImageIcon className="h-5 w-5 text-slate-500" />
                 )}
@@ -414,12 +442,23 @@ export default function CrewEarningsPage() {
             {adDraft.hashtags?.length > 0 && (
               <p className="mt-2 text-xs font-semibold text-blue-200">{adDraft.hashtags.join(" ")}</p>
             )}
+            {(adDraft.campaignId || adDraft.trackedLink) && (
+              <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3">
+                {adDraft.campaignId && (
+                  <p className="text-[10px] font-black uppercase tracking-widest text-emerald-300">Campaign {adDraft.campaignId}</p>
+                )}
+                {adDraft.trackedLink && (
+                  <p className="mt-1 break-all font-mono text-[11px] text-emerald-100">{adDraft.trackedLink}</p>
+                )}
+              </div>
+            )}
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
                 className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-3 py-2 text-xs font-black text-white hover:bg-blue-400"
                 onClick={() => {
-                  const post = `${adDraft.facebookPost}\n\n${adDraft.hashtags?.join(" ") || ""}`.trim();
+                  const linkLine = adDraft.trackedLink && !adDraft.facebookPost.includes(adDraft.trackedLink) ? `\n\n${adDraft.trackedLink}` : "";
+                  const post = `${adDraft.facebookPost}${linkLine}\n\n${adDraft.hashtags?.join(" ") || ""}`.trim();
                   navigator.clipboard?.writeText(post)
                     .then(() => toast({ title: "Ad copied", description: "Paste it into Facebook, Messenger, or a local group." }))
                     .catch(() => toast({ title: "Copy failed", description: "Long-press the post text to copy it.", variant: "destructive" }));

@@ -67,6 +67,16 @@ const CHATBOT_DRIVE_BASE_LNG = -90.1715;
 const CHATBOT_JUNK_TRAVEL_TIER_MILES = 25;
 const CHATBOT_JUNK_TRAVEL_CHARGE_PER_TIER = 50;
 
+function safeMarketingTracking(raw: unknown) {
+  const input = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+  const picked: Record<string, string> = {};
+  for (const key of ["utmSource", "utmMedium", "utmCampaign", "utmContent", "jcCampaign", "fbclid", "referrer"]) {
+    const value = input[key];
+    if (typeof value === "string" && value.trim()) picked[key] = value.trim().slice(0, 500);
+  }
+  return picked;
+}
+
 function formatLoggableError(error: unknown): string {
   if (error instanceof Error) {
     return error.stack || `${error.name}: ${error.message}`;
@@ -4689,6 +4699,8 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
     mediaLink: z.string().trim().max(1000).optional().default(""),
     promoCode: z.string().trim().max(50).optional().default(""),
     referralSlug: z.string().trim().max(80).optional().default(""),
+    marketingCampaignId: z.string().trim().max(120).optional().default(""),
+    marketingTracking: z.record(z.any()).optional().default({}),
     photos: z.array(z.object({
       name: z.string().max(255),
       type: z.string().max(100).optional().default(""),
@@ -4765,6 +4777,8 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
         };
         const normalizedPromoCode = parsed.promoCode ? parsed.promoCode.toUpperCase().trim() : "";
         const referralSlug = parsed.referralSlug ? parsed.referralSlug.toLowerCase().trim() : "";
+        const marketingCampaignId = parsed.marketingCampaignId ? parsed.marketingCampaignId.trim() : "";
+        const marketingTracking = safeMarketingTracking(parsed.marketingTracking);
         const photoNames = parsed.photos.map((photo) => photo.name).filter(Boolean);
         const details = [
           "[QUICK REQUEST - CALL REQUIRED]",
@@ -4773,6 +4787,8 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
           "Source: 60-second quick request",
           normalizedPromoCode ? `Referral code: ${normalizedPromoCode}` : "",
           referralSlug ? `Rep page: ${referralSlug}` : "",
+          marketingCampaignId ? `Marketing campaign: ${marketingCampaignId}` : "",
+          marketingTracking.utmCampaign ? `UTM campaign: ${marketingTracking.utmCampaign}` : "",
           parsed.mediaLink ? `Photo/video/album link: ${parsed.mediaLink}` : "",
           parsed.notes ? `Notes: ${parsed.notes}` : "",
           photoNames.length ? `Photo files mentioned: ${photoNames.join(", ")}` : "",
@@ -4803,6 +4819,12 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
           urgency: "normal",
           source: "quick_request",
           promoCode: normalizedPromoCode || null,
+          quoteSnapshot: marketingCampaignId || Object.keys(marketingTracking).length
+            ? {
+                marketingCampaignId: marketingCampaignId || null,
+                marketingTracking,
+              }
+            : {},
         });
 
         let lead = await storage.createLead(leadData);
@@ -4813,9 +4835,10 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
             .returning();
           if (quoteRequestedLead) lead = quoteRequestedLead;
         }
-        if (normalizedPromoCode || referralSlug) {
+        if (normalizedPromoCode || referralSlug || marketingCampaignId) {
           try {
             let repUserId: string | null = null;
+            let marketingAttributionInserted = false;
             if (normalizedPromoCode || referralSlug) {
               const [rep] = await db.select().from(marketingReps)
                 .where(normalizedPromoCode
@@ -4845,9 +4868,26 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
                     source: "quick_request",
                     referralSlug: rep.slug,
                     serviceCode: parsed.serviceCode,
+                    marketingCampaignId: marketingCampaignId || null,
+                    marketingTracking,
                   },
                 });
+                marketingAttributionInserted = true;
               }
+            }
+            if (!marketingAttributionInserted && marketingCampaignId) {
+              await db.insert(quoteAttributions).values({
+                leadId: lead.id,
+                userId: null,
+                attributionType: "marketing_campaign_quick_request",
+                promoCode: null,
+                metadata: {
+                  source: "quick_request",
+                  serviceCode: parsed.serviceCode,
+                  marketingCampaignId,
+                  marketingTracking,
+                },
+              });
             }
           } catch (attrErr) {
             console.error("[quick-request] marketing attribution failed:", (attrErr as Error).message);
@@ -4877,7 +4917,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
                 leadId: lead.id,
                 userId: creatorUserId,
                 attributionType: "quick_request_creator",
-                metadata: { source: "quick_request", serviceCode: parsed.serviceCode },
+                metadata: { source: "quick_request", serviceCode: parsed.serviceCode, marketingCampaignId: marketingCampaignId || null, marketingTracking },
               });
               await pool.query(`
                 INSERT INTO worker_profiles (user_id, authority_tier, leads_posted_count, updated_at)
@@ -4930,6 +4970,8 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
             serviceCode: parsed.serviceCode,
             serviceType: service.serviceType,
             mediaLink: parsed.mediaLink || null,
+            marketingCampaignId: marketingCampaignId || null,
+            marketingTracking,
           },
         });
 
@@ -4944,6 +4986,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
             photoCount: parsed.photos.length,
             promoCode: normalizedPromoCode || null,
             referralSlug: referralSlug || null,
+            marketingCampaignId: marketingCampaignId || null,
           },
         });
       } catch (error) {
@@ -5467,6 +5510,75 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
     return authority.rank >= tierRank.gold;
   };
 
+  const campaignSlug = (area: string, focus: string) => (
+    `${area}-${focus}`
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 90) || "local-service"
+  );
+
+  const addCampaignTrackingToUrl = (rawUrl: string, campaignId: string, area: string, focus: string) => {
+    try {
+      const url = new URL(rawUrl);
+      if (!url.searchParams.get("utm_source")) url.searchParams.set("utm_source", "crew_ad");
+      if (!url.searchParams.get("utm_medium")) url.searchParams.set("utm_medium", "facebook");
+      if (!url.searchParams.get("utm_campaign")) url.searchParams.set("utm_campaign", campaignSlug(area, focus));
+      url.searchParams.set("utm_content", campaignId);
+      url.searchParams.set("jc_campaign", campaignId);
+      return url.toString();
+    } catch {
+      return rawUrl;
+    }
+  };
+
+  const logCrewMarketingCampaign = async (input: {
+    campaignId: string;
+    actorId: string | null;
+    workerName: string;
+    area: string;
+    focus: string;
+    photoUrl?: string;
+    promoCode?: string;
+    trackedLink: string;
+    draft: Awaited<ReturnType<typeof generateMarketingAdDraft>>;
+  }) => {
+    try {
+      await pool.query(
+        `INSERT INTO marketing_webhook_campaigns
+          (id, campaign_name, title, message, area, focus, audience, image_url, cta_url, cta_label,
+           promo_code, rep_slug, source, actor_id, payload)
+         VALUES
+          ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+           $11, $12, $13, $14, $15::jsonb)`,
+        [
+          input.campaignId,
+          `Crew Facebook Ad - ${input.focus}`,
+          input.draft.headline,
+          input.draft.facebookPost,
+          input.area,
+          input.focus,
+          "Local Facebook / community groups",
+          input.photoUrl || null,
+          input.trackedLink,
+          input.draft.ctaLabel || "Book / Quote",
+          input.promoCode || null,
+          null,
+          "crew_facebook_ad",
+          input.actorId,
+          JSON.stringify({
+            workerName: input.workerName,
+            campaignId: input.campaignId,
+            trackedLink: input.trackedLink,
+            draft: input.draft,
+          }),
+        ],
+      );
+    } catch (error) {
+      console.error("[crew/marketing/ad-draft] campaign log failed:", error instanceof Error ? error.message : error);
+    }
+  };
+
   app.post("/api/crew/marketing/ad-draft", isAuthenticated, requireEmployee, async (req: any, res) => {
     try {
       const user = req.currentUser || req.user || {};
@@ -5475,8 +5587,21 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
         ...(req.body || {}),
         workerName: req.body?.workerName || workerName,
       });
-      const draft = await generateMarketingAdDraft(payload);
-      res.json({ success: true, draft });
+      const campaignId = crypto.randomUUID();
+      const trackedLink = addCampaignTrackingToUrl(payload.referralLink, campaignId, payload.area, payload.focus);
+      const draft = await generateMarketingAdDraft({ ...payload, referralLink: trackedLink });
+      await logCrewMarketingCampaign({
+        campaignId,
+        actorId: user.id || null,
+        workerName,
+        area: payload.area,
+        focus: payload.focus,
+        photoUrl: payload.photoUrl,
+        promoCode: payload.promoCode,
+        trackedLink,
+        draft,
+      });
+      res.json({ success: true, draft: { ...draft, campaignId, trackedLink } });
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: "Invalid ad request", issues: error.issues });
