@@ -14,6 +14,7 @@ import {
   Users,
   WalletCards,
 } from "lucide-react";
+import { MARKETPLACE_REQUEST_SHAPES, MARKETPLACE_SIMPLE_SIDES } from "@shared/marketplaceShapes";
 import AuthorityTasksCard from "@/components/AuthorityTasksCard";
 
 const steps = [
@@ -105,58 +106,6 @@ const blueprint = [
   },
 ];
 
-const requestShapes = [
-  {
-    shape: "Fast Quote",
-    references: "Google, Yelp, Facebook, Craigslist",
-    customer: "ZIP/date, service, contact, notes, optional photos.",
-    worker: "Hidden until staff prices or opens the card.",
-    company: "Owner alert, funnel tracking, quote_requested lead card.",
-  },
-  {
-    shape: "Moving Help",
-    references: "U-Haul, MovingHelp, MovingHelper, HireAHelper",
-    customer: "Load, unload, or both; truck provider; truck size; crew package.",
-    worker: "Available job or assigned job with calendar and dispatch steps.",
-    company: "Zone rate, minimum hours, Square link, crew payout preview.",
-  },
-  {
-    shape: "Delivery / Reuse",
-    references: "Target, Walmart, Goodwill, PODS",
-    customer: "Pickup, drop-off, item size, photos, timing window.",
-    worker: "Driver/helper task with route, access notes, and completion proof.",
-    company: "Travel variables, item handling, route bundling, reuse leads.",
-  },
-  {
-    shape: "Repeat Loop",
-    references: "McDonald's, JCMOVES, reviews, rep links",
-    customer: "Simple offer, review, reward credit, next-service shortcut.",
-    worker: "Advertise, accept, complete, earn task and job bonuses.",
-    company: "Webhook ads, payout safety, referral attribution, review follow-up.",
-  },
-];
-
-const simpleSides = [
-  {
-    side: "Customer",
-    tabs: "Book, Track",
-    tasks: "Request help, review estimate, pay link, leave review.",
-    options: "Contact info, photos, notes, rewards.",
-  },
-  {
-    side: "Worker",
-    tabs: "Today, Jobs, Schedule, Earnings",
-    tasks: "Accept, navigate, start, complete, advertise.",
-    options: "Availability, profile, payout, notifications.",
-  },
-  {
-    side: "Company",
-    tabs: "Ops Board, Dispatch, Jobs, Schedule",
-    tasks: "Price, assign, notify, collect, complete, payout.",
-    options: "Pricing, People, Finance, Funnel, Marketing, Launch.",
-  },
-];
-
 export default function AdminMarketplacePlaybookPage() {
   return (
     <div className="min-h-screen">
@@ -230,7 +179,7 @@ export default function AdminMarketplacePlaybookPage() {
             Different jobs can be different shapes, but they should still land in the same card pipeline.
           </p>
           <div className="mt-4 grid gap-3">
-            {requestShapes.map((item) => (
+            {MARKETPLACE_REQUEST_SHAPES.map((item) => (
               <div key={item.shape} className="rounded-md border border-slate-800 bg-slate-950/60 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
@@ -267,7 +216,7 @@ export default function AdminMarketplacePlaybookPage() {
             Keep every side lean: only the tabs people need, the tasks they do daily, and the options they change.
           </p>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
-            {simpleSides.map((item) => (
+            {MARKETPLACE_SIMPLE_SIDES.map((item) => (
               <div key={item.side} className="rounded-md border border-slate-800 bg-slate-950/60 p-4">
                 <p className="text-sm font-black text-white">{item.side}</p>
                 <div className="mt-3 space-y-3 text-sm leading-6">

@@ -1,6 +1,11 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Calculator, Map, Save, Settings2 } from "lucide-react";
+import { Calculator, ClipboardList, Map, Save, Settings2 } from "lucide-react";
+import {
+  getMarketplaceRequestShape,
+  MARKETPLACE_REQUEST_SHAPES,
+  MARKETPLACE_ZONE_SERVICE_OPTIONS,
+} from "@shared/marketplaceShapes";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -58,13 +63,6 @@ type PreviewResponse = {
   estimateLabel: string;
 };
 
-const SERVICE_OPTIONS = [
-  { code: "load_unload", label: "Load/Unload" },
-  { code: "pack_unpack", label: "Pack/Unpack" },
-  { code: "delivery", label: "Delivery" },
-  { code: "ubox", label: "U-Box Style" },
-];
-
 function money(value: string | number | null | undefined) {
   const n = Number(value ?? 0);
   return Number.isFinite(n) ? `$${n.toFixed(2)}` : "$0.00";
@@ -94,9 +92,11 @@ export default function MarketplaceZonePricingPage() {
   const zones = zonesQuery.data?.zones ?? [];
   const activeZone = zones[0] ?? null;
   const selectedService = useMemo(
-    () => SERVICE_OPTIONS.find((s) => s.code === preview.serviceCode) ?? SERVICE_OPTIONS[0],
+    () => MARKETPLACE_ZONE_SERVICE_OPTIONS.find((s) => s.code === preview.serviceCode) ?? MARKETPLACE_ZONE_SERVICE_OPTIONS[0],
     [preview.serviceCode],
   );
+  const selectedShape = selectedService ? getMarketplaceRequestShape(selectedService.shapeId) : undefined;
+  const pricingShapes = MARKETPLACE_REQUEST_SHAPES.filter((shape) => shape.pricingServices.length > 0);
 
   const previewMutation = useMutation({
     mutationFn: async () => {
@@ -152,6 +152,36 @@ export default function MarketplaceZonePricingPage() {
 
   return (
     <div className="space-y-5">
+      <section className="rounded-xl border border-slate-700/60 bg-slate-900/50 p-4">
+        <div className="flex items-center gap-2">
+          <ClipboardList className="h-5 w-5 text-blue-300" />
+          <h2 className="text-lg font-black text-white">Pricing Shapes</h2>
+        </div>
+        <p className="mt-1 text-sm text-slate-400">
+          Keep pricing simple: pick the job shape, set the zone rate, then the lead card carries the quote snapshot.
+        </p>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {pricingShapes.map((shape) => (
+            <div key={shape.id} className="rounded-lg border border-slate-800 bg-slate-950/50 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="text-sm font-black text-white">{shape.shape}</p>
+                  <p className="mt-1 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">{shape.references}</p>
+                </div>
+                <span className="rounded-full border border-blue-400/30 bg-blue-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-blue-200">
+                  zone priced
+                </span>
+              </div>
+              <div className="mt-3 grid gap-2 text-xs leading-5 text-slate-300">
+                <p><span className="font-bold text-blue-200">Customer:</span> {shape.customer}</p>
+                <p><span className="font-bold text-emerald-200">Worker:</span> {shape.worker}</p>
+                <p><span className="font-bold text-orange-200">Company:</span> {shape.company}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
         <section className="rounded-xl border border-slate-700/60 bg-slate-900/50 p-4">
           <div className="flex items-start gap-3">
@@ -286,14 +316,35 @@ export default function MarketplaceZonePricingPage() {
               <Label className="text-xs text-slate-400">Service</Label>
               <select
                 value={preview.serviceCode}
-                onChange={(e) => setPreview((p) => ({ ...p, serviceCode: e.target.value }))}
+                onChange={(e) => {
+                  const service = MARKETPLACE_ZONE_SERVICE_OPTIONS.find((option) => option.code === e.target.value);
+                  setPreview((p) => ({
+                    ...p,
+                    serviceCode: e.target.value,
+                    crewSize: String(service?.defaultCrewSize ?? p.crewSize),
+                    hours: String(service?.defaultHours ?? p.hours),
+                  }));
+                }}
                 className="mt-1 h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-white"
               >
-                {SERVICE_OPTIONS.map((service) => (
+                {MARKETPLACE_ZONE_SERVICE_OPTIONS.map((service) => (
                   <option key={service.code} value={service.code}>{service.label}</option>
                 ))}
               </select>
+              {selectedService && (
+                <p className="mt-1 text-xs text-slate-500">
+                  Default: {selectedService.defaultCrewSize} crew, {selectedService.defaultHours} hours.
+                </p>
+              )}
             </div>
+            {selectedShape && selectedService && (
+              <div className="rounded-lg border border-blue-500/25 bg-blue-500/10 p-3 text-xs leading-5 text-slate-200">
+                <p className="font-black text-blue-200">{selectedShape.shape}</p>
+                <p className="mt-1"><span className="font-bold">Ask:</span> {selectedService.customerPrompt}</p>
+                <p><span className="font-bold">Crew:</span> {selectedService.workerReality}</p>
+                <p><span className="font-bold">Ops:</span> {selectedService.companyReality}</p>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs text-slate-400">Crew size</Label>
