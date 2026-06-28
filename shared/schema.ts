@@ -31,6 +31,7 @@ export const leads = pgTable("leads", {
   moveDate: text("move_date"),
   propertySize: text("property_size"),
   details: text("details"),
+  source: text("source"), // 'quick_request', 'web_multi_book', 'crew_add_job', etc. for funnel/source reporting
   status: text("status").notNull().default("quote_requested"), // 'quote_requested', 'available', 'completed'
   assignedToUserId: varchar("assigned_to_user_id").references(() => users.id),
   createdByUserId: varchar("created_by_user_id").references(() => users.id), // Track employee who created the job for rewards

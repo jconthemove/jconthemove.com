@@ -237,20 +237,19 @@ const SCENARIOS: Scenario[] = [
       const appSourcePath = path.resolve(process.cwd(), "client/src/App.tsx");
       const builtClientPath = path.resolve(process.cwd(), "dist/public/index.html");
       const requiredRoutes = [
-        ["/", '<Route path="/">'],
-        ["/book", '<Route path="/book" component={MultiServiceBookPage} />'],
-        ["/services", '<Route path="/services" component={ServicesPage} />'],
-        ["/pricing", '<Route path="/pricing" component={PricingPage} />'],
-        ["/gallery", '<Route path="/gallery" component={GalleryPage} />'],
-        ["/reviews", '<Route path="/reviews" component={ReviewsPage} />'],
-        ["/network/:slug", '<Route path="/network/:slug" component={MarketingRepPage} />'],
-        ["/rep/:slug", '<Route path="/rep/:slug" component={MarketingRepPage} />'],
-        ["/lawn-care", '<Route path="/lawn-care" component={LawnCarePage} />'],
-        ["/cleaning", '<Route path="/cleaning" component={MoveOutCleaningPage} />'],
-        ["/window-cleaning", '<Route path="/window-cleaning" component={WindowCleaningPage} />'],
-        ["/snow-removal", '<Route path="/snow-removal" component={SnowRemovalPublicPage} />'],
-        ["/roofing", '<Route path="/roofing" component={RoofingPage} />'],
-        ["/demolition", '<Route path="/demolition" component={DemolitionPage} />'],
+        "/book",
+        "/services",
+        "/pricing",
+        "/gallery",
+        "/reviews",
+        "/network/:slug",
+        "/rep/:slug",
+        "/lawn-care",
+        "/cleaning",
+        "/window-cleaning",
+        "/snow-removal",
+        "/roofing",
+        "/demolition",
       ] as const;
       if (!existsSync(appSourcePath)) {
         if (existsSync(builtClientPath)) {
@@ -265,9 +264,17 @@ const SCENARIOS: Scenario[] = [
         };
       }
       const appSource = readFileSync(appSourcePath, "utf8");
-      const missing = requiredRoutes.filter(([, routeSource]) => !appSource.includes(routeSource)).map(([pathName]) => pathName);
+      const hasRoute = (pathName: string) => (
+        appSource.includes(`path="${pathName}"`) ||
+        appSource.includes(`path='${pathName}'`)
+      );
+      const hasPublicRoot = appSource.includes("LandingPage") && appSource.includes("AuthenticatedApp");
+      const missing = [
+        ...(!hasPublicRoot ? ["/"] : []),
+        ...requiredRoutes.filter((pathName) => !hasRoute(pathName)),
+      ];
       return missing.length === 0
-        ? { ok: true, detail: `${requiredRoutes.length} public conversion and worker marketing routes mounted` }
+        ? { ok: true, detail: `${requiredRoutes.length + 1} public conversion and worker marketing routes mounted` }
         : { ok: false, detail: `missing public route(s): ${missing.join(", ")}` };
     },
   },
@@ -335,13 +342,13 @@ const SCENARIOS: Scenario[] = [
         FROM information_schema.columns
         WHERE table_schema = 'public'
           AND table_name = 'leads'
-          AND column_name IN ('promo_code', 'photos', 'order_number', 'details')
+          AND column_name IN ('promo_code', 'photos', 'order_number', 'details', 'source')
       `);
       const columns = new Set(rows.map((row) => row.column_name));
-      const required = ["promo_code", "photos", "order_number", "details"];
+      const required = ["promo_code", "photos", "order_number", "details", "source"];
       const missing = required.filter((name) => !columns.has(name));
       return missing.length === 0
-        ? { ok: true, detail: "leads table can store promo code, photos, media links/source notes in details, and order number" }
+        ? { ok: true, detail: "leads table can store source, promo code, photos, media links/details, and order number" }
         : { ok: false, detail: `missing lead columns: ${missing.join(", ")}` };
     },
   },

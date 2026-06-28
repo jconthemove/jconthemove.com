@@ -1467,6 +1467,9 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
       ALTER TABLE leads ADD COLUMN IF NOT EXISTS deposit_amount_gate NUMERIC(10,2);
       ALTER TABLE leads ADD COLUMN IF NOT EXISTS deposit_paid BOOLEAN NOT NULL DEFAULT false;
       ALTER TABLE leads ADD COLUMN IF NOT EXISTS is_quote_only BOOLEAN NOT NULL DEFAULT false;
+      -- Public/crew request source marker for funnel reporting and quick-request filtering
+      ALTER TABLE leads ADD COLUMN IF NOT EXISTS source TEXT;
+      CREATE INDEX IF NOT EXISTS idx_leads_source ON leads(source) WHERE source IS NOT NULL;
       -- Task #108: per-send re-book email attribution
       ALTER TABLE leads ADD COLUMN IF NOT EXISTS rebook_source TEXT;
       ALTER TABLE leads ADD COLUMN IF NOT EXISTS rebook_sent_at TIMESTAMP;
