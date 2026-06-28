@@ -30,6 +30,22 @@ type CampaignsResponse = {
   campaigns: CampaignRow[];
 };
 
+type CampaignPerformanceRow = CampaignRow & {
+  actor_id: string | null;
+  funnel_events: number;
+  submit_successes: number;
+  errors: number;
+  recovered_or_linked: number;
+  attributed_cards: number;
+  attributed_leads: number;
+  attributed_bookings: number;
+  last_activity_at: string;
+};
+
+type CampaignPerformanceResponse = {
+  campaigns: CampaignPerformanceRow[];
+};
+
 const defaults = {
   campaignName: "Area Focus Reminder",
   title: "Moving help available this week",
@@ -71,7 +87,13 @@ export default function AdminMarketingWebhooksPage() {
     queryKey: ["/api/admin/marketing/webhook-reminders"],
   });
 
+  const performanceQuery = useQuery<CampaignPerformanceResponse>({
+    queryKey: ["/api/admin/marketing/campaign-performance"],
+    refetchInterval: 60000,
+  });
+
   const campaigns = campaignsQuery.data?.campaigns || [];
+  const performance = performanceQuery.data?.campaigns || [];
 
   const canSend = form.title.trim().length > 0 && form.message.trim().length > 0;
 
@@ -136,6 +158,70 @@ export default function AdminMarketingWebhooksPage() {
           </div>
         )}
       </div>
+
+      <section className="mb-5 rounded-xl border border-slate-800 bg-slate-900/70 p-4 md:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-white">Campaign Performance</h2>
+            <p className="text-sm text-slate-400">Tracks ad drafts and webhook posts into booking activity from the last 90 days.</p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border-slate-700 bg-slate-950/40"
+            onClick={() => performanceQuery.refetch()}
+          >
+            Refresh
+          </Button>
+        </div>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-800 text-left text-slate-500">
+                <th className="py-2 pr-3">Campaign</th>
+                <th className="py-2 pr-3">Source</th>
+                <th className="py-2 pr-3 text-right">Funnel</th>
+                <th className="py-2 pr-3 text-right">Requests</th>
+                <th className="py-2 pr-3 text-right">Cards</th>
+                <th className="py-2 pr-3 text-right">Errors</th>
+                <th className="py-2 pr-3">Last Activity</th>
+              </tr>
+            </thead>
+            <tbody>
+              {performance.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-slate-500">
+                    No campaign activity yet. Crew ad drafts and webhook posts will appear here after traffic lands on /book.
+                  </td>
+                </tr>
+              ) : performance.map((campaign) => (
+                <tr key={campaign.id} className="border-b border-slate-800/70 last:border-0">
+                  <td className="py-3 pr-3">
+                    <div className="font-semibold text-slate-100">{campaign.title}</div>
+                    <div className="max-w-[320px] truncate font-mono text-xs text-slate-500">{campaign.id}</div>
+                    <div className="text-xs text-slate-500">{campaign.area || "Any area"} - {campaign.focus || "Any focus"}</div>
+                  </td>
+                  <td className="py-3 pr-3 text-slate-300">
+                    <div>{campaign.source ? campaign.source.replace(/_/g, " ") : "manual"}</div>
+                    <div className="text-xs text-slate-500">{campaign.promo_code || campaign.rep_slug || "-"}</div>
+                  </td>
+                  <td className="py-3 pr-3 text-right font-semibold text-blue-300">{campaign.funnel_events}</td>
+                  <td className="py-3 pr-3 text-right font-semibold text-emerald-300">{campaign.submit_successes}</td>
+                  <td className="py-3 pr-3 text-right font-semibold text-orange-300">
+                    {Math.max(campaign.attributed_cards, campaign.recovered_or_linked)}
+                    <div className="text-[10px] font-normal text-slate-500">
+                      {campaign.attributed_leads} leads / {campaign.attributed_bookings} bookings
+                    </div>
+                  </td>
+                  <td className={`py-3 pr-3 text-right font-semibold ${campaign.errors > 0 ? "text-red-300" : "text-slate-500"}`}>{campaign.errors}</td>
+                  <td className="py-3 pr-3 whitespace-nowrap text-slate-400">{formatDate(campaign.last_activity_at || campaign.created_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <div className="grid lg:grid-cols-[minmax(0,1fr)_420px] gap-4">
         <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 md:p-5">

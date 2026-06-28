@@ -4,6 +4,7 @@ import { db } from "../db";
 import { users } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import {
+  listMarketingCampaignPerformance,
   listRecentMarketingWebhookCampaigns,
   marketingWebhookReminderSchema,
   sendMarketingWebhookReminder,
@@ -38,6 +39,17 @@ router.get("/admin/marketing/webhook-reminders", requireOwner, async (req, res) 
   } catch (error) {
     console.error("[marketing-webhooks] list failed:", error instanceof Error ? error.message : error);
     res.status(500).json({ error: "Failed to load marketing webhook reminders" });
+  }
+});
+
+router.get("/admin/marketing/campaign-performance", requireOwner, async (req, res) => {
+  try {
+    const limit = Number(req.query.limit || 50);
+    const campaigns = await listMarketingCampaignPerformance(Number.isFinite(limit) ? limit : 50);
+    res.json({ campaigns });
+  } catch (error) {
+    console.error("[marketing-webhooks] performance failed:", error instanceof Error ? error.message : error);
+    res.status(500).json({ error: "Failed to load marketing campaign performance" });
   }
 });
 

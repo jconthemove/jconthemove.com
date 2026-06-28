@@ -231,3 +231,68 @@ export async function listRecentMarketingWebhookCampaigns(limit = 25) {
   );
   return result.rows;
 }
+
+export async function listMarketingCampaignPerformance(limit = 50) {
+  const result = await pool.query(
+    `WITH funnel AS (
+       SELECT
+         COALESCE(
+           NULLIF(field_snapshot #>> '{attribution,marketingCampaignId}', ''),
+           NULLIF(field_snapshot #>> '{attribution,marketingTracking,jcCampaign}', ''),
+           NULLIF(field_snapshot #>> '{attribution,marketingTracking,utmContent}', '')
+         ) AS campaign_id,
+         COUNT(*)::int AS funnel_events,
+         COUNT(*) FILTER (WHERE event_type = 'submit_success')::int AS submit_successes,
+         COUNT(*) FILTER (WHERE event_type ILIKE '%error%')::int AS errors,
+         COUNT(*) FILTER (WHERE lead_id IS NOT NULL)::int AS recovered_or_linked,
+         MAX(created_at) AS last_funnel_at
+       FROM booking_funnel_events
+       WHERE created_at >= NOW() - INTERVAL '90 days'
+       GROUP BY 1
+     ),
+     attributions AS (
+       SELECT
+         NULLIF(metadata->>'marketingCampaignId', '') AS campaign_id,
+         COUNT(*)::int AS attributed_cards,
+         COUNT(*) FILTER (WHERE lead_id IS NOT NULL)::int AS attributed_leads,
+         COUNT(*) FILTER (WHERE booking_id IS NOT NULL)::int AS attributed_bookings,
+         MAX(created_at) AS last_attributed_at
+       FROM quote_attributions
+       WHERE created_at >= NOW() - INTERVAL '90 days'
+       GROUP BY 1
+     )
+     SELECT
+       c.id,
+       c.campaign_name,
+       c.title,
+       c.area,
+       c.focus,
+       c.audience,
+       c.image_url,
+       c.cta_url,
+       c.promo_code,
+       c.rep_slug,
+       c.source,
+       c.actor_id,
+       c.created_at,
+       COALESCE(f.funnel_events, 0)::int AS funnel_events,
+       COALESCE(f.submit_successes, 0)::int AS submit_successes,
+       COALESCE(f.errors, 0)::int AS errors,
+       COALESCE(f.recovered_or_linked, 0)::int AS recovered_or_linked,
+       COALESCE(a.attributed_cards, 0)::int AS attributed_cards,
+       COALESCE(a.attributed_leads, 0)::int AS attributed_leads,
+       COALESCE(a.attributed_bookings, 0)::int AS attributed_bookings,
+       GREATEST(
+         COALESCE(f.last_funnel_at, c.created_at),
+         COALESCE(a.last_attributed_at, c.created_at),
+         c.created_at
+       ) AS last_activity_at
+     FROM marketing_webhook_campaigns c
+     LEFT JOIN funnel f ON f.campaign_id = c.id
+     LEFT JOIN attributions a ON a.campaign_id = c.id
+     ORDER BY last_activity_at DESC
+     LIMIT $1`,
+    [Math.max(1, Math.min(100, limit))],
+  );
+  return result.rows;
+}
