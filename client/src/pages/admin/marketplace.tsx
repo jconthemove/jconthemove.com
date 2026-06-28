@@ -13,22 +13,25 @@ export default function AdminMarketplacePage() {
           <p className="text-slate-400 text-sm">Reward shop, lottery, and zone-priced job marketplace controls</p>
         </div>
         <Tabs defaultValue="zones">
-          <TabsList className="bg-slate-800/50 border border-slate-700/50 mb-6 flex-wrap">
-            <TabsTrigger value="zones" className="data-[state=active]:bg-blue-600/20 data-[state=active]:text-blue-300">Zone Pricing</TabsTrigger>
-            <TabsTrigger value="shop" className="data-[state=active]:bg-blue-600/20 data-[state=active]:text-blue-300">Reward Catalog</TabsTrigger>
-            <TabsTrigger value="lottery" className="data-[state=active]:bg-blue-600/20 data-[state=active]:text-blue-300">Lottery</TabsTrigger>
-            <TabsTrigger value="view" className="data-[state=active]:bg-blue-600/20 data-[state=active]:text-blue-300">View Marketplace</TabsTrigger>
+          <TabsList className="mb-6 grid w-full grid-cols-3 border border-slate-700/50 bg-slate-800/50 sm:w-auto">
+            <TabsTrigger value="zones" className="data-[state=active]:bg-blue-600/20 data-[state=active]:text-blue-300">Zones</TabsTrigger>
+            <TabsTrigger value="rewards" className="data-[state=active]:bg-blue-600/20 data-[state=active]:text-blue-300">Rewards</TabsTrigger>
+            <TabsTrigger value="preview" className="data-[state=active]:bg-blue-600/20 data-[state=active]:text-blue-300">Preview</TabsTrigger>
           </TabsList>
           <TabsContent value="zones">
             <MarketplaceZonePricingPage />
           </TabsContent>
-          <TabsContent value="shop">
-            <AdminRewardShopPage />
+          <TabsContent value="rewards" className="space-y-8">
+            <section>
+              <h2 className="mb-3 text-sm font-black uppercase tracking-[0.18em] text-slate-400">Catalog</h2>
+              <AdminRewardShopPage />
+            </section>
+            <section>
+              <h2 className="mb-3 text-sm font-black uppercase tracking-[0.18em] text-slate-400">Lottery</h2>
+              <AdminLotteryPage />
+            </section>
           </TabsContent>
-          <TabsContent value="lottery">
-            <AdminLotteryPage />
-          </TabsContent>
-          <TabsContent value="view">
+          <TabsContent value="preview">
             <RewardsMarketplacePage />
           </TabsContent>
         </Tabs>
